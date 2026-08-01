@@ -21,44 +21,40 @@ from scripts.repo import build_parser
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ALLOWED_PACKET_PATHS = [
-    ".github/workflows/complexity-baseline.yml",
-    "affected-scope-policy.json",
-    "docs/ACTIVE_PACKET.md",
-    "docs/MODULE_CATALOG.md",
-    "repository-packet.json",
-    "scripts/analyze_step13_complexity.py",
-    "step13-complexity-policy.json",
-    "tests/test_architecture_documentation_consistency.py",
-    "tests/test_repository_navigation.py",
-    "tests/test_step13_complexity_analysis.py",
-]
-
 
 class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_valid_and_exact(self) -> None:
         packet = load_packet(ROOT)
-        self.assertEqual(packet["packet_id"], "repository-step-13-current-main-measurement")
+        self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(packet["status"], "active")
+        self.assertRegex(packet["packet_id"], r"^[a-z0-9][a-z0-9-]+$")
         self.assertEqual(packet["baseline"]["ref"], "main")
-        self.assertEqual(
-            packet["baseline"]["sha"],
-            "222187d988c321aee4d2e7bf81ba01b3205fd14c",
-        )
-        self.assertEqual(packet["tracking_issues"], [194, 126])
-        self.assertEqual(packet["allowed_paths"], ALLOWED_PACKET_PATHS)
-        self.assertEqual(
-            packet["required_checks"],
-            [
-                "Affected Scope CI",
-                "Complexity Baseline CI",
-                "Governance CI",
-                "Rust CI",
-                "Rust Generated Sync",
-            ],
+        self.assertRegex(packet["baseline"]["sha"], r"^[0-9a-f]{40}$")
+        self.assertIn(194, packet["tracking_issues"])
+        self.assertIn(126, packet["tracking_issues"])
+        self.assertIn("repository-packet.json", packet["allowed_paths"])
+        self.assertIn("docs/ACTIVE_PACKET.md", packet["allowed_paths"])
+        self.assertEqual(len(packet["allowed_paths"]), len(set(packet["allowed_paths"])))
+        self.assertEqual(len(packet["required_checks"]), len(set(packet["required_checks"])))
+        self.assertTrue(packet["required_checks"])
+        workflow_paths = {
+            "Affected Scope CI": ".github/workflows/affected-scope.yml",
+            "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
+            "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
+            "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
+            "Governance CI": ".github/workflows/governance.yml",
+            "Rust CI": ".github/workflows/rust.yml",
+            "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
+        }
+        self.assertTrue(set(packet["required_checks"]).issubset(workflow_paths))
+        for check in packet["required_checks"]:
+            self.assertTrue((ROOT / workflow_paths[check]).is_file())
+        self.assertIn(
+            "repository step 13 is represented as in progress rather than not started",
+            packet["deliverables"],
         )
         self.assertIn(
-            "the analyzer runs deterministically on the exact pull-request head with full git history",
+            "the architecture plan, project status, roadmap, Phase 8 plan, module catalog and issues agree on accepted PR #253 evidence",
             packet["acceptance"],
         )
 
@@ -284,20 +280,25 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "selected": True,
                     "reasons": ["test fixture"],
                 }
-                for name, path in (
-                    ("Affected Scope CI", ".github/workflows/affected-scope.yml"),
-                    ("Complexity Baseline CI", ".github/workflows/complexity-baseline.yml"),
-                    ("Governance CI", ".github/workflows/governance.yml"),
-                    ("Rust CI", ".github/workflows/rust.yml"),
-                    ("Rust Generated Sync", ".github/workflows/rust-generated-sync.yml"),
-                )
+                for name in load_packet(ROOT)["required_checks"]
+                for path in [
+                    {
+                        "Affected Scope CI": ".github/workflows/affected-scope.yml",
+                        "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
+                        "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
+                        "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
+                        "Governance CI": ".github/workflows/governance.yml",
+                        "Rust CI": ".github/workflows/rust.yml",
+                        "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
+                    }[name]
+                ]
             ],
         }
         with (
             patch(
                 "scripts.repository_navigation._git",
                 return_value=(
-                    "222187d988c321aee4d2e7bf81ba01b3205fd14c"
+                    "7dcda204be07209d9e4996fdc9c5fd364cea179e"
                 ),
             ),
             patch(

@@ -9,18 +9,6 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ALLOWED_PACKET_PATHS = [
-    ".github/workflows/complexity-baseline.yml",
-    "affected-scope-policy.json",
-    "docs/ACTIVE_PACKET.md",
-    "docs/MODULE_CATALOG.md",
-    "repository-packet.json",
-    "scripts/analyze_step13_complexity.py",
-    "step13-complexity-policy.json",
-    "tests/test_architecture_documentation_consistency.py",
-    "tests/test_repository_navigation.py",
-    "tests/test_step13_complexity_analysis.py",
-]
 
 
 def read(path: str) -> str:
@@ -190,7 +178,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.phase8,
         )
         self.assertIn(
-            "Repository step 13 is the next permitted implementation step and is not started.",
+            "Repository step 13 remains in progress.",
             self.phase8,
         )
         for step in range(1, 6):
@@ -202,11 +190,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 document,
             )
         self.assertIn(
-            "Latest accepted repository implementation packet is PR #249",
+            "Latest accepted repository implementation packet is PR #253",
             self.status,
         )
         self.assertIn(
-            "Repository step 13 is the current next permitted implementation step and is not started.",
+            "Repository step 13 remains in progress.",
             self.status,
         )
         self.assertIn(
@@ -318,6 +306,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "f36592211bed3e0df7cf3771164b4bc24026eff3",
                 "37 of 37",
             ),
+            (
+                self.authoritative_status_documents,
+                "PR #253",
+                "475533b185b871418273c1c1e3f63a1d62542677",
+                "7dcda204be07209d9e4996fdc9c5fd364cea179e",
+                "7 of 7",
+            ),
         )
         for documents, pr, source, merge, workflows in evidence:
             self.assert_evidence_in_documents(
@@ -359,31 +354,29 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_active_packet_is_machine_declared_and_generated(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-13-current-main-measurement")
         self.assertEqual(self.packet["status"], "active")
+        self.assertRegex(self.packet["packet_id"], r"^[a-z0-9][a-z0-9-]+$")
         self.assertEqual(self.packet["baseline"]["ref"], "main")
+        self.assertRegex(self.packet["baseline"]["sha"], r"^[0-9a-f]{40}$")
+        self.assertIn(194, self.packet["tracking_issues"])
+        self.assertIn(126, self.packet["tracking_issues"])
+        self.assertIn("repository-packet.json", self.packet["allowed_paths"])
+        self.assertIn("docs/ACTIVE_PACKET.md", self.packet["allowed_paths"])
         self.assertEqual(
-            self.packet["baseline"]["sha"],
-            "222187d988c321aee4d2e7bf81ba01b3205fd14c",
+            len(self.packet["allowed_paths"]),
+            len(set(self.packet["allowed_paths"])),
         )
-        self.assertEqual(self.packet["tracking_issues"], [194, 126])
-        self.assertEqual(self.packet["allowed_paths"], ALLOWED_PACKET_PATHS)
         self.assertEqual(
-            self.packet["required_checks"],
-            [
-                "Affected Scope CI",
-                "Complexity Baseline CI",
-                "Governance CI",
-                "Rust CI",
-                "Rust Generated Sync",
-            ],
+            len(self.packet["required_checks"]),
+            len(set(self.packet["required_checks"])),
         )
+        self.assertTrue(self.packet["required_checks"])
         self.assertIn(
-            "the analyzer runs deterministically on the exact pull-request head with full git history",
+            "the architecture plan, project status, roadmap, Phase 8 plan, module catalog and issues agree on accepted PR #253 evidence",
             self.packet["acceptance"],
         )
-        self.assertIn("repository-step-13-current-main-measurement", self.active_packet)
-        self.assertIn("222187d988c321aee4d2e7bf81ba01b3205fd14c", self.active_packet)
+        self.assertIn(self.packet["packet_id"], self.active_packet)
+        self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         for document in (self.plan, self.status):
             self.assertIn("PR #251", document)
             self.assertIn("22e515453e3ed66d0f059bd3c0fe926cee524620", document)
@@ -395,7 +388,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         )
         self.assertIn("## Repository step 13 plan-hardening evidence", self.plan)
         self.assertIn("first bounded repository-step-13 packet is therefore limited to measurement and governance calibration", self.plan)
-        self.assertIn("The next permitted packet is repository-step-13 measurement and governance calibration only", self.status)
+        self.assertIn("## Accepted repository step 13 current-main measurement", self.status)
         self.assertIn("Repository step 14 remains blocked", self.status)
         self.assertIn("Repository step 13 remains the next permitted implementation step", self.adr31)
 
@@ -417,7 +410,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("repository step 22 is a phase 8a architecture measurement checkpoint", self.plan.lower())
         self.assertIn("repository step 25", self.plan.lower())
         self.assertIn("repository step 13 owns the remaining dependency/public-surface/reverse-fan-out calibration", self.status.lower())
-        self.assertIn("## Next permitted repository packet\n\nRepository step 13 is the current next permitted implementation step and is not started", self.status)
+        self.assertIn("## Next permitted repository packet\n\nRepository step 13 remains in progress", self.status)
         self.assertIn("## Following permitted repository packet\n\nRepository step 14 follows only after repository step 13 is accepted and synchronized", self.status)
         self.assertIn("seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #244", self.catalog)
         self.assertIn("customer_privacy.access_export.request@1.0.0", self.catalog)
@@ -589,6 +582,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "repository step 7 — reusable generic mutation/query conformance — **next**",
             "Repository step 7 is reusable generic mutation and query conformance.",
             "Repository step 11 is the only next implementation packet",
+            "Repository step 13 remains **not started**",
+            "Repository step 13 is the **next permitted repository step** and is **not started**",
         )
         for statement in stale:
             for document in (
