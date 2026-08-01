@@ -150,7 +150,7 @@ Repository step 11 is accepted through PR #244 / accepted source `405d2dbb97bb37
 
 Repository step 12 batch 1 is accepted through PR #246 / accepted source `3b4fe7cdf458daac9c12f816d0d6a87039e613f3` / squash merge `f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978` / 37 of 37 applicable permanent workflows on one unchanged exact head. It moves Parties, Consents, Contact Points and Party Relationships exact mutation/query inventories and activation-gated contribution builders behind `crm-first-party-modules`, preserves the already aggregated Customer Accounts contribution, exact public coordinates and ordering, activation, authorization, Party-reference validation, persistence, workers, package count and external dependency versions, and removes their ordinary registration/inventory bypasses from generic native composition. The exact native-composition guard path is classified under the existing operations scope while unknown sibling scripts remain fail closed. Repository step 12 is complete; repository step 13 is the next permitted implementation step and is not started.
 
-Repository step 13 is the current next permitted implementation step and is not started. Its bounded packet must complete calibrated dependency, Rust public-surface, reverse-fan-out and exception governance, including removal of the three direct lint exceptions.
+Repository step 13 remains in progress. The next permitted implementation packet registers the accepted suppression baseline, mechanically blocks every new unregistered equivalent bypass while allowing reductions, removes the three direct lint-table exceptions without hidden replacements and calibrates role-aware dependency, public-surface, central-LOC, reverse-impact and change-cost budgets. Repository step 14 remains blocked.
 
 ### 2.4 Single repository execution order
 
@@ -636,6 +636,16 @@ The decision closes a governance gap in the earlier step-13 wording. Passing exi
 
 That first packet MUST NOT centralize dependency features, consolidate crates, remove exceptions, change runtime composition or modify product behavior. Those changes remain later bounded step-13 work and require before/after evidence. Repository step 13 is still **not started** by PR #251 or this documentation synchronization; repository step 14 remains blocked.
 
+## Repository step 13 current-main measurement evidence
+
+PR #253 / accepted source `475533b185b871418273c1c1e3f63a1d62542677` / squash merge `7dcda204be07209d9e4996fdc9c5fd364cea179e` / 7 of 7 applicable permanent workflows on one unchanged exact head. The accepted exact current-main baseline contains 113 workspace packages, 841 internal dependency edges, maximum dependency depth 18, maximum direct dependents 105, maximum transitive reverse impact 106, a conservative public Rust surface of 5,377 items, 40 permanent workflows, 41 jobs, 1,712 path-filter entries, 31 PostgreSQL workflows and 94 equivalent suppression entries (3 direct lint tables, 87 source-level `allow` attributes, 0 `expect` attributes and 4 ignored foundation tests).
+
+Role-aware central measurements include `crm-application-runtime` at 63 direct dependencies, dependency depth 17 and 7,243 non-comment LOC; `crm-api` at 19 direct dependencies, depth 18 and 9 non-comment LOC; `crm-first-party-modules` at 16 direct dependencies and 204 non-comment LOC; and `crm-core-data` at 71 direct consumers, reverse impact 76 and 9,922 non-comment LOC. High fan-out stable contract/SDK boundaries remain distinct from mutable implementation and composition risks.
+
+The accepted representative change-cost measurements are 35 files / 10 packages / 6 central files / 2 workflow files for an ordinary capability, 206 / 22 / 52 / 4 for a new owner wave, and 21 / 5 / 5 / 0 for final contribution aggregation.
+
+Repository step 13 remains in progress. The next permitted implementation packet registers the accepted suppression baseline, mechanically blocks every new unregistered equivalent bypass while allowing reductions, removes the three direct lint-table exceptions without hidden replacements and calibrates role-aware dependency, public-surface, central-LOC, reverse-impact and change-cost budgets. Repository step 14 remains blocked. Later evidence-driven remediation remains permitted without an arbitrary duration or packet-count cap; completion is governed only by the ADR-031 exit evidence.
+
 ## Repository step 12 completion evidence
 
 Repository step 12 and Stage D — contribution aggregation are **complete**. All currently active first-party owners now expose owner-owned production contribution boundaries aggregated through `crm-first-party-modules`; generic native composition retains platform-level composition only.
@@ -648,4 +658,4 @@ Accepted implementation evidence:
 
 The accepted batches are behavior-neutral: public coordinates and ordering, tenant activation, authorization, governed Party/Consent reads, persistence, projections and workers remain unchanged; workspace package count and external dependency versions remain unchanged.
 
-Repository step 13 is the **next permitted repository step** and is **not started**. Its first packet is the ADR-031 current-main remeasurement and governance-calibration packet described above; structural remediation follows only after that evidence is accepted and synchronized. No later repository step may start before step 13 is complete. Customer Privacy and Phase 8A product readiness remain unchanged; current product-complete expert modules remain **0**.
+Repository step 13 is **in progress**. Its ADR-031 current-main measurement and governance-calibration packet is accepted through PR #253; suppression enforcement, direct-lint removal and calibrated remediation remain next. No later repository step may start before step 13 is complete. Customer Privacy and Phase 8A product readiness remain unchanged; current product-complete expert modules remain **0**.
