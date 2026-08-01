@@ -34,10 +34,16 @@ def synchronize_common(path: Path, allowed: list[str], checks: list[str]) -> str
         "ALLOWED_PACKET_PATHS = " + python_list(allowed) + "\n\n",
         f"allowed paths in {path}",
     )
+    required_assertion = (
+        'self.assertEqual(\n'
+        '            packet["required_checks"],\n'
+        '            ' + python_list(checks, 12) + ',\n'
+        '        )'
+    )
     text = replace_once(
         text,
-        r'packet\["required_checks"\],\n\s*\[.*?\]\n\s*,?\n\s*\)',
-        'packet["required_checks"],\n            ' + python_list(checks, 12) + "\n        )",
+        r'self\.assertEqual\(\n\s*packet\["required_checks"\],\n\s*\[.*?\],\n\s*\)',
+        required_assertion,
         f"required checks in {path}",
     )
     return text
