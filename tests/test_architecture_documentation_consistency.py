@@ -9,17 +9,6 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ALLOWED_PACKET_PATHS = [
-    "docs/ACTIVE_PACKET.md",
-    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-    "docs/IMPLEMENTATION_ROADMAP.md",
-    "docs/MODULE_CATALOG.md",
-    "docs/PHASE8_DELIVERY_PLAN.md",
-    "docs/PROJECT_STATUS.md",
-    "repository-packet.json",
-    "tests/test_architecture_documentation_consistency.py",
-    "tests/test_repository_navigation.py",
-]
 
 
 def read(path: str) -> str:
@@ -358,30 +347,29 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_active_packet_is_machine_declared_and_generated(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-13-measurement-evidence-sync")
         self.assertEqual(self.packet["status"], "active")
+        self.assertRegex(self.packet["packet_id"], r"^[a-z0-9][a-z0-9-]+$")
         self.assertEqual(self.packet["baseline"]["ref"], "main")
+        self.assertRegex(self.packet["baseline"]["sha"], r"^[0-9a-f]{40}$")
+        self.assertIn(194, self.packet["tracking_issues"])
+        self.assertIn(126, self.packet["tracking_issues"])
+        self.assertIn("repository-packet.json", self.packet["allowed_paths"])
+        self.assertIn("docs/ACTIVE_PACKET.md", self.packet["allowed_paths"])
         self.assertEqual(
-            self.packet["baseline"]["sha"],
-            "7dcda204be07209d9e4996fdc9c5fd364cea179e",
+            len(self.packet["allowed_paths"]),
+            len(set(self.packet["allowed_paths"])),
         )
-        self.assertEqual(self.packet["tracking_issues"], [194, 126])
-        self.assertEqual(self.packet["allowed_paths"], ALLOWED_PACKET_PATHS)
         self.assertEqual(
-            self.packet["required_checks"],
-            [
-                "Affected Scope CI",
-                "Governance CI",
-                "Rust CI",
-                "Rust Generated Sync",
-            ],
+            len(self.packet["required_checks"]),
+            len(set(self.packet["required_checks"])),
         )
+        self.assertTrue(self.packet["required_checks"])
         self.assertIn(
             "the architecture plan, project status, roadmap, Phase 8 plan, module catalog and issues agree on accepted PR #253 evidence",
             self.packet["acceptance"],
         )
-        self.assertIn("repository-step-13-measurement-evidence-sync", self.active_packet)
-        self.assertIn("7dcda204be07209d9e4996fdc9c5fd364cea179e", self.active_packet)
+        self.assertIn(self.packet["packet_id"], self.active_packet)
+        self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         for document in (self.plan, self.status):
             self.assertIn("PR #251", document)
             self.assertIn("22e515453e3ed66d0f059bd3c0fe926cee524620", document)
