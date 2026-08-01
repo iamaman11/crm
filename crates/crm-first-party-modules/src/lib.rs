@@ -27,11 +27,11 @@ pub use crm_customer_360_query_adapter::query_capability_definitions as customer
 use crm_customer_360_query_adapter::{
     Customer360ProductionDependencies, build_contribution as build_customer_360_contribution,
 };
-use crm_customer_accounts_capability_composition::{
+use crm_customer_accounts_query_adapter::{
     CustomerAccountsProductionDependencies,
     build_contribution as build_customer_accounts_contribution,
 };
-pub use crm_customer_accounts_capability_composition::{
+pub use crm_customer_accounts_query_adapter::{
     mutation_capability_definitions as customer_accounts_mutation_capability_definitions,
     query_capability_definitions as customer_accounts_query_capability_definitions,
 };

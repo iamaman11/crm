@@ -719,20 +719,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crm-customer-accounts-capability-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-accounts-capability-adapter",
- "crm-customer-accounts-query-adapter",
- "crm-module-sdk",
- "crm-party-reference-composition",
- "crm-query-runtime",
-]
-
-[[package]]
 name = "crm-customer-accounts-privacy-scope-adapter"
 version = "0.1.0"
 dependencies = [
@@ -759,12 +745,14 @@ dependencies = [
 name = "crm-customer-accounts-query-adapter"
 version = "0.1.0"
 dependencies = [
+ "crm-application-composition",
  "crm-capability-plan-support",
  "crm-capability-runtime",
  "crm-core-data",
  "crm-customer-accounts",
  "crm-customer-accounts-capability-adapter",
  "crm-module-sdk",
+ "crm-party-reference-composition",
  "crm-proto-contracts",
  "crm-query-runtime",
  "prost",
@@ -1477,7 +1465,7 @@ dependencies = [
  "crm-contact-points-capability-composition",
  "crm-core-data",
  "crm-customer-360-query-adapter",
- "crm-customer-accounts-capability-composition",
+ "crm-customer-accounts-query-adapter",
  "crm-customer-data-operations-execution-composition",
  "crm-customer-enrichment-capability-composition",
  "crm-data-quality-source-composition",

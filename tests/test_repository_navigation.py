@@ -39,6 +39,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertTrue(packet["required_checks"])
         workflow_paths = {
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
+            "Application Runtime CI": ".github/workflows/application-runtime.yml",
             "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
             "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
             "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
@@ -49,12 +50,17 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertTrue(set(packet["required_checks"]).issubset(workflow_paths))
         for check in packet["required_checks"]:
             self.assertTrue((ROOT / workflow_paths[check]).is_file())
-        self.assertIn(
-            "repository step 13 is marked complete only through the combined PR #253 measurement, PR #255 suppression/direct-lint enforcement, PR #257 remaining exit-evidence enforcement and this exact-head synchronization",
-            packet["deliverables"],
+        self.assertEqual(
+            packet["packet_id"],
+            "repository-step-14-customer-accounts-consolidation",
         )
         self.assertIn(
-            "all live normative sources agree that repository step 13 and Stage B are complete while repository step 14 is next and not started",
+            "leave repository-step-14 completion and Stage G evidence synchronization to a separate post-merge documentation packet",
+            packet["deliverables"],
+        )
+        self.assertIn("start repository step 15", packet["non_goals"])
+        self.assertIn(
+            "the exact pull-request head reports 112 workspace packages, no more than 835 internal dependency edges, dependency depth no greater than 18, no more than 5377 conservative public Rust items and exactly 270 dependency declarations",
             packet["acceptance"],
         )
 
@@ -107,6 +113,35 @@ class RepositoryNavigationTests(unittest.TestCase):
             repo_runner,
         )
 
+    def test_step14_permanent_workflow_package_baselines_are_exact(self) -> None:
+        workflow_expectations = {
+            ".github/workflows/customer-privacy-approval.yml": (
+                'test "${package_count}" = "112"',
+                "Verify real crm-api approval process",
+                "Repeat approval library and real-process acceptance",
+            ),
+            ".github/workflows/customer-privacy-discovery.yml": (
+                'if [ "${package_count}" != "112" ]; then',
+                "Verify discovery packages and production inventory",
+                "Reapply and repeat acceptance",
+            ),
+            ".github/workflows/customer-privacy-planning.yml": (
+                'test "${package_count}" = "112"',
+                "Verify planning and read packages and production inventory",
+                "Reapply and repeat acceptance",
+            ),
+        }
+        for path, required_markers in workflow_expectations.items():
+            workflow = (ROOT / path).read_text(encoding="utf-8")
+            with self.subTest(workflow=path):
+                for marker in required_markers:
+                    self.assertIn(marker, workflow)
+                self.assertNotIn('test "${package_count}" = "113"', workflow)
+                self.assertNotIn(
+                    'if [ "${package_count}" != "113" ]; then',
+                    workflow,
+                )
+
     def test_module_explanation_traces_customer_privacy_owner(self) -> None:
         explanation = explain_target(ROOT, "crm.customer-privacy")
         self.assertEqual(explanation["schema_version"], NAVIGATION_SCHEMA)
@@ -151,7 +186,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 content,
             )
             self.assertIn("source-digest: sha256:", content)
-        self.assertIn("**Workspace packages:** 113", first[REPOSITORY_MAP_PATH])
+        self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
         self.assertIn("`crm.customer-privacy`", first[REPOSITORY_MAP_PATH])
         self.assertEqual(stale_generated_documents(ROOT), [])
 
@@ -186,6 +221,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 for path in [
                     {
                         "Affected Scope CI": ".github/workflows/affected-scope.yml",
+                        "Application Runtime CI": ".github/workflows/application-runtime.yml",
                         "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
                         "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
                         "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
@@ -199,7 +235,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="10516e84ea3c2d0fa8ee0c61c9eeec7e96a6273c",
+                return_value="34469f37475d0268376414cf275a5f2cd9216655",
             ),
             patch(
                 "scripts.repository_navigation.build_report",
