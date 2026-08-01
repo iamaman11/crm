@@ -7,7 +7,10 @@
     "ref": "main",
     "sha": "3d51d03e809cfee5ebf418e82df8da3673ce6b92"
   },
-  "tracking_issues": [194, 126],
+  "tracking_issues": [
+    194,
+    126
+  ],
   "objective": "Register the accepted PR #253 equivalent-bypass inventory as a complete stable multiset, mechanically reject new or growing unregistered suppressions, remove all three direct package lint tables without hidden source-level replacements, and calibrate role-aware no-growth budgets without product behavior changes.",
   "allowed_paths": [
     ".github/workflows/complexity-baseline.yml",
@@ -30,7 +33,6 @@
   ],
   "forbidden_paths": [
     "Cargo.lock",
-    "Cargo.toml",
     "apps/**",
     "contracts/**",
     "database/**",
@@ -46,6 +48,7 @@
     "the three affected packages inherit canonical workspace lint policy and pass full Clippy without new allow or expect attributes",
     "rust governance baseline records zero direct lint tables and zero active rust-governance exceptions",
     "role-aware dependency, public-surface, central-LOC, reverse-impact and change-cost budgets are calibrated from accepted PR #253 evidence",
+    "repository step 13 is represented as in progress rather than not started",
     "repository step 13 remains in progress and repository step 14 remains blocked"
   ],
   "required_checks": [
@@ -61,6 +64,7 @@
     "the accepted historical baseline remains immutable after the three direct lint entries are retired from current code",
     "canonical workspace Clippy and all affected tests pass on the unchanged exact pull-request head",
     "no source-level allow or expect is added to replace any removed manifest lint table",
+    "the architecture plan, project status, roadmap, Phase 8 plan, module catalog and issues agree on accepted PR #253 evidence",
     "the final diff changes no product contract, route, schema, migration, persistence semantics, authorization, tenant isolation, audit lineage or worker behavior",
     "repository step 13 is not declared complete by this packet unless every remaining ADR-031 exit criterion is separately proven"
   ],
