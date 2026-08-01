@@ -7,7 +7,7 @@
 - **Status:** `active`
 - **Tracking:** #194, #126
 - **Baseline:** `main` / `393b60bdcfad6e92fc37eacabe0920645d530f6b`
-- **Source digest:** `259e359fd64ae100ff634e9217921984241cc7f64ba187473d03c1d5b449aa7f`
+- **Source digest:** `sha256:259e359fd64ae100ff634e9217921984241cc7f64ba187473d03c1d5b449aa7f`
 
 ## Objective
 
@@ -15,12 +15,12 @@ Synchronize every live normative repository and Phase 8 source with accepted PR 
 
 ## Deliverables
 
-- PR #255 accepted source 4c80546283af9c869a28c2da9c8697b203d0c327, squash merge 393b60bdcfad6e92fc37eacabe0920645d530f6b and 21-of-21 unchanged exact-head evidence are recorded in all live normative sources
-- blocking suppression-multiset enforcement, canonical formatting, zero direct lint tables, zero matching governance exceptions and no source-level replacement suppressions are represented consistently
-- the immutable PR #253 baseline remains historical evidence with 113 packages, 841 internal edges, depth 18, public surface 5377 and 94 accepted suppression occurrences across 66 stable keys
-- repository step 13 remains in progress and the next bounded packet closes only remaining ADR-031 central process-host dependency and representative change-cost/dependency-version-feature exit evidence
-- repository step 14 remains blocked, Customer Privacy and Phase 8A product readiness remain unchanged, and product-complete expert modules remain zero
-- generated active-packet navigation is synchronized with the source packet
+- `PR #255 accepted source 4c80546283af9c869a28c2da9c8697b203d0c327, squash merge 393b60bdcfad6e92fc37eacabe0920645d530f6b and 21-of-21 unchanged exact-head evidence are recorded in all live normative sources`
+- `blocking suppression-multiset enforcement, canonical formatting, zero direct lint tables, zero matching governance exceptions and no source-level replacement suppressions are represented consistently`
+- `the immutable PR #253 baseline remains historical evidence with 113 packages, 841 internal edges, depth 18, public surface 5377 and 94 accepted suppression occurrences across 66 stable keys`
+- `repository step 13 remains in progress and the next bounded packet closes only remaining ADR-031 central process-host dependency and representative change-cost/dependency-version-feature exit evidence`
+- `repository step 14 remains blocked, Customer Privacy and Phase 8A product readiness remain unchanged, and product-complete expert modules remain zero`
+- `generated active-packet navigation is synchronized with the source packet`
 
 ## Allowed paths
 
@@ -81,4 +81,4 @@ Synchronize every live normative repository and Phase 8 source with accepted PR 
 - start repository step 14
 - claim repository step 13, Phase 8A, the product or architecture 10/10 complete
 
-This file is generated orientation. `repository-packet.json` remains authoritative.
+This generated file is orientation only. `repository-packet.json` and the normative architecture plan remain authoritative.
