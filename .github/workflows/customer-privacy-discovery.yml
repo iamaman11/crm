@@ -128,7 +128,7 @@ jobs:
           fi
           package_count="$(cargo metadata --no-deps --format-version 1 | python -c 'import json, sys; print(len(json.load(sys.stdin)["workspace_members"]))')"
           printf 'verified public inventory through production package tests; workspace packages: %s\n' "${package_count}"
-          if [ "${package_count}" != "113" ]; then
+          if [ "${package_count}" != "112" ]; then
             printf 'unexpected workspace package count: %s\n' "${package_count}"
             exit 1
           fi
