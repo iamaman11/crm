@@ -104,17 +104,6 @@
       ]
     },
     {
-      "id": "architecture_complexity",
-      "owner": "architecture-governance",
-      "path_patterns": [
-        "scripts/analyze_step13_complexity.py",
-        "step13-complexity-policy.json"
-      ],
-      "required_workflows": [
-        "Complexity Baseline CI"
-      ]
-    },
-    {
       "id": "operations",
       "owner": "platform-operations",
       "path_patterns": [
@@ -125,8 +114,10 @@
         "docs/DELIVERY_GOVERNANCE.md",
         "docs/POSTGRESQL_PROCESS_ISOLATION_PILOT.md",
         "docs/RUST_CI_CACHE_PILOT.md",
+        "scripts/analyze_step13_complexity.py",
         "scripts/check_native_module_composition.py",
-        "scripts/prepare_isolated_process_database.sh"
+        "scripts/prepare_isolated_process_database.sh",
+        "step13-complexity-policy.json"
       ],
       "required_workflows": [
         "Governance CI"
