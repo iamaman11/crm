@@ -1,6 +1,6 @@
 {
   "schema_version": "crm.step13-complexity-policy/v1",
-  "measurement_status": "initial-calibration",
+  "measurement_status": "calibrated-blocking-enforcement",
   "tracking_issue": "#194",
   "governing_adr": "docs/adr/ADR-031-step-13-complexity-remeasurement-and-anti-circumvention.md",
   "representative_changes": [
@@ -39,9 +39,14 @@
     "ci_regression_blocking_percent": 25,
     "thin_wrapper_maximum_non_comment_loc": 250
   },
-  "initial_enforcement": {
-    "mode": "measurement-only",
-    "reason": "ADR-031 requires the first packet to inventory and calibrate before new unregistered equivalent bypasses become blocking.",
-    "next_packet": "Register the accepted exact-head suppression baseline and enforce zero new unregistered equivalent bypasses."
+  "enforcement": {
+    "mode": "blocking",
+    "registered_suppression_multiset": "step13-suppression-baseline.json",
+    "new_suppression_keys": 0,
+    "suppression_occurrence_growth": 0,
+    "direct_lint_tables": 0,
+    "workspace_package_growth": 0,
+    "role_aware_budget_growth_requires_evidence": true,
+    "remaining_step13_work": "Only evidence-driven bounded remediation and the remaining ADR-031 exit criteria may continue before repository step 14."
   }
 }
