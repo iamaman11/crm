@@ -50,11 +50,11 @@ class RepositoryNavigationTests(unittest.TestCase):
         for check in packet["required_checks"]:
             self.assertTrue((ROOT / workflow_paths[check]).is_file())
         self.assertIn(
-            "production and test-only process-host dependency surfaces are measured separately: crm-api remains one runtime dependency plus eighteen acceptance-only dev dependencies, while crm-application-runtime remains sixty-two runtime plus one dev dependency",
+            "repository step 13 is marked complete only through the combined PR #253 measurement, PR #255 suppression/direct-lint enforcement, PR #257 remaining exit-evidence enforcement and this exact-head synchronization",
             packet["deliverables"],
         )
         self.assertIn(
-            "the checker passes the unchanged exact head and reports the accepted 113-package, 841-edge, aggregate process-host and section-aware manifest baseline",
+            "all live normative sources agree that repository step 13 and Stage B are complete while repository step 14 is next and not started",
             packet["acceptance"],
         )
 
@@ -199,7 +199,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="9ba5f3e1744a2c9896c4ea910266d971d16c230f",
+                return_value="10516e84ea3c2d0fa8ee0c61c9eeec7e96a6273c",
             ),
             patch(
                 "scripts.repository_navigation.build_report",
