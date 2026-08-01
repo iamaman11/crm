@@ -241,8 +241,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             )
 
         for document in self.authoritative_status_documents:
+            lowered = document.lower()
             self.assertIn("1.97.1", document)
-            self.assertIn("zero direct lint tables", document.lower())
+            self.assertTrue(
+                "zero direct lint tables" in lowered
+                or "removes all three direct lint tables" in lowered
+                or "removed all three historical direct-lint exceptions" in lowered
+            )
             self.assertIn("94", document)
             self.assertIn("66", document)
         for document in self.privacy_status_documents:
