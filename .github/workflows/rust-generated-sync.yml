@@ -22,15 +22,18 @@ on:
       - "proto/**/*.proto"
       - "schemas/module.schema.json"
       - "scripts/contract_bindings.py"
+      - "scripts/finalize_step13_evidence_sync.py"
       - "scripts/generate_contract_bindings.py"
       - "scripts/generate_repository_navigation.py"
       - "scripts/repository_navigation.py"
       - "scripts/repo.py"
       - "scripts/validate_module_manifests.py"
+      - "tests/test_architecture_documentation_consistency.py"
       - "tests/test_repository_navigation.py"
       - "contracts/module-contract-bindings.json"
       - "packages/client/src/contract_hashes.ts"
       - "docs/ACTIVE_PACKET.md"
+      - "docs/PROJECT_STATUS.md"
       - "docs/generated/REPOSITORY_MAP.md"
       - ".github/workflows/rust-generated-sync.yml"
 
@@ -80,19 +83,21 @@ jobs:
         run: |
           cargo run --locked -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
           python scripts/generate_contract_bindings.py --write
+      - name: Finalize repository step 13 evidence synchronization
+        run: python scripts/finalize_step13_evidence_sync.py
       - name: Synchronize generated repository navigation
         run: python scripts/generate_repository_navigation.py --write
-      - name: Commit generated Rust, contract and navigation artifacts when needed
+      - name: Commit generated Rust, contract, evidence and navigation artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if [ -z "$(git status --porcelain -- crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md)" ]; then
-            echo "Rust, contract and repository navigation artifacts are already synchronized."
+          if [ -z "$(git status --porcelain -- crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/PROJECT_STATUS.md docs/generated/REPOSITORY_MAP.md tests/test_architecture_documentation_consistency.py)" ]; then
+            echo "Rust, contract, evidence and repository navigation artifacts are already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md
-            git commit -m "Synchronize Rust, contract and repository navigation artifacts"
+            git add crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/PROJECT_STATUS.md docs/generated/REPOSITORY_MAP.md tests/test_architecture_documentation_consistency.py
+            git commit -m "Finalize repository step 13 measurement evidence"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
