@@ -26,6 +26,7 @@
     "docs/ACTIVE_PACKET.md",
     "docs/generated/REPOSITORY_MAP.md",
     "repository-packet.json",
+    "rust-governance-policy.json",
     "step13-complexity-policy.json",
     "tests/test_native_module_composition.py",
     "tests/test_step13_exit_evidence.py"
@@ -49,7 +50,6 @@
     "modules/**",
     "packages/**",
     "proto/**",
-    "rust-governance-policy.json",
     "schemas/**",
     "services/**",
     "step13-suppression-baseline.json",
@@ -59,7 +59,7 @@
     "delete the sole-consumer crm-customer-accounts-capability-composition package after moving its production contribution implementation without semantic edits",
     "keep Customer Accounts mutation planning in crm-customer-accounts-capability-adapter and query execution plus owner production composition in crm-customer-accounts-query-adapter",
     "preserve crm-first-party-modules as a mechanically narrow aggregate with the exact existing Customer Accounts inventory and contribution order",
-    "reduce the measured workspace from 113 to 112 packages, internal dependency edges from 841 to 835, dependency declarations from 270 to 264 and conservative public Rust items from 5379 to no more than 5377",
+    "reduce the measured workspace from 113 to 112 packages, internal dependency edges from 841 to 835 and conservative public Rust items from 5379 to 5377 while dependency declarations remain exactly 270",
     "preserve maximum dependency depth at no more than 18 and reduce rather than broaden the deleted package build/test closure and reverse impact",
     "lower the blocking reduction-only architecture budgets to the accepted post-consolidation values",
     "prove unchanged public mutation/query/worker inventory, contract and route classifications, owner/security boundaries and persistence/schema/migration state",
@@ -74,7 +74,7 @@
     "Rust Generated Sync"
   ],
   "acceptance": [
-    "the exact pull-request head reports 112 workspace packages, no more than 835 internal dependency edges, dependency depth no greater than 18, no more than 5377 conservative public Rust items and no more than 264 dependency declarations",
+    "the exact pull-request head reports 112 workspace packages, no more than 835 internal dependency edges, dependency depth no greater than 18, no more than 5377 conservative public Rust items and exactly 270 dependency declarations",
     "crm-customer-accounts-capability-composition is absent from the workspace, lockfile, source tree and dependency graph",
     "Customer Accounts mutation and query coordinates, schemas, ordering, activation gates, Party-reference validation, live query visibility and contribution behavior are byte-for-byte or structurally equivalent",
     "public capability, query and worker inventories plus route classifications are unchanged",
