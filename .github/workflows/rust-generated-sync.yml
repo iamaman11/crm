@@ -82,50 +82,17 @@ jobs:
           python scripts/generate_contract_bindings.py --write
       - name: Synchronize generated repository navigation
         run: python scripts/generate_repository_navigation.py --write
-      - name: Apply temporary stale checkpoint cleanup
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md")
-          text = path.read_text(encoding="utf-8")
-          stale = (
-              "Repository step 13 remains in progress after accepted PR #255 / source `4c80546283af9c869a28c2da9c8697b203d0c327` / squash merge `393b60bdcfad6e92fc37eacabe0920645d530f6b` / 21 of 21 applicable permanent workflows. The next permitted implementation packet remeasures accepted `main` against every remaining ADR-031 exit criterion, proves central process-host dependency reduction or justified non-growth and representative change-cost/dependency-version-feature budgets, and performs only evidence-required bounded remediation. Repository step 14 remains blocked."
-          )
-          stale_second = (
-              "Repository step 13 remains in progress. The next permitted implementation packet remeasures accepted `main` against every remaining ADR-031 exit criterion, proves central process-host dependency reduction or justified non-growth and representative change-cost/dependency-version-feature budgets, and performs only evidence-required bounded remediation. Repository step 14 remains blocked. Later evidence-driven remediation remains permitted without an arbitrary duration or packet-count cap; completion is governed only by the ADR-031 exit evidence."
-          )
-          current = (
-              "Repository step 13 is complete through PRs #253, #255 and #257 after this exact-head synchronization. Repository step 14 is the next permitted implementation packet and remains not started."
-          )
-          for old in (stale, stale_second):
-              if old not in text:
-                  raise SystemExit(f"missing stale architecture checkpoint: {old[:80]}")
-              text = text.replace(old, current, 1)
-          path.write_text(text, encoding="utf-8")
-          PY
-      - name: Commit generated Rust, contract, navigation and checkpoint cleanup when needed
+      - name: Commit generated Rust, contract and navigation artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          TRACKED_PATHS=(
-            crates
-            modules
-            services
-            packages/client/src/contract_hashes.ts
-            contracts/module-contract-bindings.json
-            docs/ACTIVE_PACKET.md
-            docs/generated/REPOSITORY_MAP.md
-            docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md
-          )
-          if [ -z "$(git status --porcelain -- "${TRACKED_PATHS[@]}")" ]; then
-            echo "Rust, contract, repository navigation and checkpoint evidence are already synchronized."
+          if [ -z "$(git status --porcelain -- crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md)" ]; then
+            echo "Rust, contract and repository navigation artifacts are already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add "${TRACKED_PATHS[@]}"
-            git commit -m "Synchronize Rust, contract, repository navigation and step 13 checkpoint evidence"
+            git add crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md
+            git commit -m "Synchronize Rust, contract and repository navigation artifacts"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
