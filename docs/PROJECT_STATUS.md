@@ -218,9 +218,9 @@ Current product-complete expert modules: **0**.
 
 ADR-031 is accepted through PR #251 / accepted source `22e515453e3ed66d0f059bd3c0fe926cee524620` / squash merge `be1411136fd36397b22e26737b441351894fdb66` / 5 of 5 applicable permanent workflows on one unchanged exact head.
 
-The next permitted packet is repository-step-13 measurement and governance calibration only. It must regenerate the exact 113-package complexity baseline, inventory equivalent manifest/source bypass forms, classify central systems by role, measure ordinary-capability and new-owner change cost, and calibrate budgets before any structural remediation. It must not centralize dependency features, consolidate crates, remove exceptions or change runtime/product behavior.
+At the historical PR #251 boundary, the next permitted packet was repository-step-13 measurement and governance calibration only. That packet is now accepted through PR #253 / accepted source `475533b185b871418273c1c1e3f63a1d62542677` / squash merge `7dcda204be07209d9e4996fdc9c5fd364cea179e` / 7 of 7 applicable permanent workflows on one unchanged exact head.
 
-Repository step 13 remains **not started**. Repository step 14 remains blocked. Customer Privacy and Phase 8A remain incomplete.
+Repository step 13 remains **in progress**. The next permitted implementation packet registers and enforces the accepted suppression baseline, removes the three direct lint-table exceptions without hidden replacements and calibrates role-aware dependency, public-surface, central-LOC, reverse-impact and change-cost budgets. Repository step 14 remains blocked. Customer Privacy and Phase 8A remain incomplete.
 
 ## Repository step 12 completion evidence
 
@@ -234,4 +234,4 @@ Accepted implementation evidence:
 
 The accepted batches are behavior-neutral: public coordinates and ordering, tenant activation, authorization, governed Party/Consent reads, persistence, projections and workers remain unchanged; workspace package count and external dependency versions remain unchanged.
 
-Repository step 13 is the **next permitted repository step** and is **not started**. Its first bounded packet is measurement and governance calibration only; dependency, crate, exception and runtime remediation remain later step-13 work after accepted evidence. Repository step 14 remains blocked. Customer Privacy and Phase 8A product readiness remain unchanged; current product-complete expert modules remain **0**.
+Repository step 13 is **in progress** after accepted PR #253 measurement and governance calibration. Its next bounded implementation packet registers and enforces the accepted suppression baseline, removes the three direct lint-table exceptions without hidden replacements and calibrates role-aware budgets; evidence-driven later step-13 remediation remains permitted until every ADR-031 exit criterion is proven. Repository step 14 remains blocked. Customer Privacy and Phase 8A product readiness remain unchanged; current product-complete expert modules remain **0**.

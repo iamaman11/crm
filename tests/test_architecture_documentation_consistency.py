@@ -190,7 +190,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 document,
             )
         self.assertIn(
-            "Latest accepted repository implementation packet is PR #249",
+            "Latest accepted repository implementation packet is PR #253",
             self.status,
         )
         self.assertIn(
@@ -305,6 +305,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "7876945586e5a6cc94f8d3b0f6ba2b57316484d2",
                 "f36592211bed3e0df7cf3771164b4bc24026eff3",
                 "37 of 37",
+            ),
+            (
+                self.authoritative_status_documents,
+                "PR #253",
+                "475533b185b871418273c1c1e3f63a1d62542677",
+                "7dcda204be07209d9e4996fdc9c5fd364cea179e",
+                "7 of 7",
             ),
         )
         for documents, pr, source, merge, workflows in evidence:
@@ -575,6 +582,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "repository step 7 — reusable generic mutation/query conformance — **next**",
             "Repository step 7 is reusable generic mutation and query conformance.",
             "Repository step 11 is the only next implementation packet",
+            "Repository step 13 remains **not started**",
+            "Repository step 13 is the **next permitted repository step** and is **not started**",
         )
         for statement in stale:
             for document in (
