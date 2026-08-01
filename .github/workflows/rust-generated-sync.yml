@@ -26,6 +26,7 @@ on:
       - "scripts/generate_repository_navigation.py"
       - "scripts/repository_navigation.py"
       - "scripts/repo.py"
+      - "scripts/tmp_step13_sync.py"
       - "scripts/validate_module_manifests.py"
       - "tests/test_repository_navigation.py"
       - "contracts/module-contract-bindings.json"
@@ -82,17 +83,33 @@ jobs:
           python scripts/generate_contract_bindings.py --write
       - name: Synchronize generated repository navigation
         run: python scripts/generate_repository_navigation.py --write
-      - name: Commit generated Rust, contract and navigation artifacts when needed
+      - name: Apply temporary normative evidence transport
+        run: python scripts/tmp_step13_sync.py
+      - name: Commit generated Rust, contract, navigation and transported evidence when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if [ -z "$(git status --porcelain -- crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md)" ]; then
-            echo "Rust, contract and repository navigation artifacts are already synchronized."
+          TRACKED_PATHS=(
+            crates
+            modules
+            services
+            packages/client/src/contract_hashes.ts
+            contracts/module-contract-bindings.json
+            docs/ACTIVE_PACKET.md
+            docs/generated/REPOSITORY_MAP.md
+            docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md
+            docs/IMPLEMENTATION_ROADMAP.md
+            docs/PHASE8_DELIVERY_PLAN.md
+            docs/PROJECT_STATUS.md
+            tests/test_architecture_documentation_consistency.py
+          )
+          if [ -z "$(git status --porcelain -- "${TRACKED_PATHS[@]}")" ]; then
+            echo "Rust, contract, repository navigation and normative evidence are already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md
-            git commit -m "Synchronize Rust, contract and repository navigation artifacts"
+            git add "${TRACKED_PATHS[@]}"
+            git commit -m "Synchronize Rust, contract, repository navigation and step 13 evidence"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
