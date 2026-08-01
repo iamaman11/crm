@@ -28,7 +28,10 @@
     "repository-packet.json",
     "rust-governance-policy.json",
     "step13-complexity-policy.json",
+    "tests/test_architecture_documentation_consistency.py",
     "tests/test_native_module_composition.py",
+    "tests/test_repository_navigation.py",
+    "tests/test_rust_governance.py",
     "tests/test_step13_exit_evidence.py"
   ],
   "forbidden_paths": [
