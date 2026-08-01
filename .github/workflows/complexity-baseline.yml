@@ -9,16 +9,20 @@ on:
       - "Cargo.lock"
       - "architecture-governance.json"
       - "workspace-dependency-policy.json"
+      - "step13-complexity-policy.json"
       - "crates/**/Cargo.toml"
       - "modules/**/Cargo.toml"
       - "services/**/Cargo.toml"
-      - "crates/crm-application-composition/src/**"
-      - "crates/crm-application-runtime/src/**"
+      - "crates/**/src/**"
+      - "modules/**/src/**"
+      - "services/**/src/**"
       - ".github/workflows/**"
       - "scripts/analyze_workspace.py"
+      - "scripts/analyze_step13_complexity.py"
       - "scripts/analyze_workspace_governance.py"
       - "scripts/check_workspace_dependency_policy.py"
       - "tests/test_workspace_analysis.py"
+      - "tests/test_step13_complexity_analysis.py"
       - "tests/test_workspace_governance.py"
       - "tests/test_workspace_dependency_policy.py"
       - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
@@ -28,16 +32,20 @@ on:
       - "Cargo.lock"
       - "architecture-governance.json"
       - "workspace-dependency-policy.json"
+      - "step13-complexity-policy.json"
       - "crates/**/Cargo.toml"
       - "modules/**/Cargo.toml"
       - "services/**/Cargo.toml"
-      - "crates/crm-application-composition/src/**"
-      - "crates/crm-application-runtime/src/**"
+      - "crates/**/src/**"
+      - "modules/**/src/**"
+      - "services/**/src/**"
       - ".github/workflows/**"
       - "scripts/analyze_workspace.py"
+      - "scripts/analyze_step13_complexity.py"
       - "scripts/analyze_workspace_governance.py"
       - "scripts/check_workspace_dependency_policy.py"
       - "tests/test_workspace_analysis.py"
+      - "tests/test_step13_complexity_analysis.py"
       - "tests/test_workspace_governance.py"
       - "tests/test_workspace_dependency_policy.py"
       - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
@@ -69,6 +77,7 @@ jobs:
           set -o pipefail
           python -m unittest -v \
             tests.test_workspace_analysis \
+            tests.test_step13_complexity_analysis \
             tests.test_workspace_governance \
             tests.test_workspace_dependency_policy \
             2>&1 | tee artifacts/workspace-analyzer-tests.log
@@ -79,6 +88,13 @@ jobs:
             --json-output artifacts/workspace-complexity-baseline.json \
             --markdown-output artifacts/workspace-complexity-baseline.md
           cat artifacts/workspace-complexity-baseline.md >> "${GITHUB_STEP_SUMMARY}"
+      - name: Generate ADR-031 current-main calibration baseline
+        run: |
+          set -euo pipefail
+          python scripts/analyze_step13_complexity.py \
+            --json-output artifacts/step13-complexity-baseline.json \
+            --markdown-output artifacts/step13-complexity-baseline.md
+          cat artifacts/step13-complexity-baseline.md >> "${GITHUB_STEP_SUMMARY}"
       - name: Validate dependency, crate and exception governance
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
