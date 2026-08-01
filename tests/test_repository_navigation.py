@@ -22,6 +22,7 @@ from scripts.repo import build_parser
 ROOT = Path(__file__).resolve().parents[1]
 
 ALLOWED_PACKET_PATHS = [
+    ".github/workflows/rust-generated-sync.yml",
     "docs/ACTIVE_PACKET.md",
     "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
     "docs/IMPLEMENTATION_ROADMAP.md",
@@ -29,6 +30,7 @@ ALLOWED_PACKET_PATHS = [
     "docs/PHASE8_DELIVERY_PLAN.md",
     "docs/PROJECT_STATUS.md",
     "repository-packet.json",
+    "scripts/fix_step13_evidence_checks.py",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py",
 ]
@@ -50,8 +52,6 @@ class RepositoryNavigationTests(unittest.TestCase):
             packet["required_checks"],
             [
                 "Affected Scope CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Owner Execution CI",
                 "Governance CI",
                 "Rust CI",
                 "Rust Generated Sync",
@@ -286,8 +286,6 @@ class RepositoryNavigationTests(unittest.TestCase):
                 }
                 for name, path in (
                     ("Affected Scope CI", ".github/workflows/affected-scope.yml"),
-                    ("Customer Privacy Access Export CI", ".github/workflows/customer-privacy-access-export.yml"),
-                    ("Customer Privacy Owner Execution CI", ".github/workflows/customer-privacy-owner-execution.yml"),
                     ("Governance CI", ".github/workflows/governance.yml"),
                     ("Rust CI", ".github/workflows/rust.yml"),
                     ("Rust Generated Sync", ".github/workflows/rust-generated-sync.yml"),
