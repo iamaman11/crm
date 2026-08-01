@@ -4,13 +4,18 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[lib]
+path = "src/root.rs"
+
 [dependencies]
+crm-application-composition = { path = "../crm-application-composition" }
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
 crm-capability-runtime = { path = "../crm-capability-runtime" }
 crm-core-data = { path = "../crm-core-data" }
 crm-customer-accounts = { path = "../../modules/crm-customer-accounts" }
 crm-customer-accounts-capability-adapter = { path = "../crm-customer-accounts-capability-adapter" }
 crm-module-sdk = { path = "../crm-module-sdk" }
+crm-party-reference-composition = { path = "../crm-party-reference-composition" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
 crm-query-runtime = { path = "../crm-query-runtime" }
 prost = "0.14"
