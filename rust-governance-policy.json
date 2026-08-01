@@ -21,19 +21,19 @@
   "measured_baseline": {
     "effective_workspace_packages": 113,
     "minimum_rust_version_inherited_packages": 0,
-    "minimum_workspace_lints_inherited_packages": 0,
+    "minimum_workspace_lints_inherited_packages": 3,
     "maximum_missing_rust_version_packages": 113,
-    "maximum_missing_workspace_lints_packages": 110,
+    "maximum_missing_workspace_lints_packages": 107,
     "maximum_direct_rust_version_declarations": 0,
-    "maximum_direct_lint_tables": 3,
+    "maximum_direct_lint_tables": 0,
     "maximum_workspace_rustc_warnings": 0,
     "maximum_workspace_clippy_warnings": 0,
-    "active_rust_governance_exceptions": 3
+    "active_rust_governance_exceptions": 0
   },
   "adoption_policy": {
-    "legacy_cohort": "The 113 packages accepted before this policy are a measured migration cohort. Missing inheritance and the three exact direct-lint exceptions may only decrease in homogeneous behavior-neutral packets.",
+    "legacy_cohort": "The remaining packages accepted before this policy are a measured migration cohort. Missing workspace inheritance may only decrease in homogeneous behavior-neutral packets.",
     "new_workspace_members": "Every new workspace package must set rust-version.workspace = true and [lints] workspace = true before acceptance.",
-    "direct_overrides": "Direct package rust-version declarations are forbidden. The three measured direct lint tables require exact active architecture-governance exceptions and are frozen by permanent tests; no additional direct lint table is permitted.",
+    "direct_overrides": "Direct package rust-version declarations and package-local lint tables are forbidden. Equivalent source-level allow or expect replacements are governed by the registered repository-step-13 suppression multiset.",
     "target": "All workspace packages inherit the workspace rust-version and lint policy.",
     "tracking_issue": "#194"
   },
