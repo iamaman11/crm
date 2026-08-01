@@ -45,7 +45,7 @@ Current merged business-module total: **13** — twelve authoritative/coordinati
 
 Phase 8A.11 / issue #126 remains **In progress**.
 
-Latest accepted public inventory is **seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #244**. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, replay-safe owner execution, `customer_privacy.access_export.request@1.0.0` and authoritative exact-nine owner-action execution have no public ingress.
+Latest accepted public inventory is **seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #244**. Public placement coordinates include `customer_privacy.restriction.place@1.0.0` and `customer_privacy.legal_hold.place@1.0.0`. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, replay-safe owner execution, `customer_privacy.access_export.request@1.0.0` and authoritative exact-nine owner-action execution have no public ingress.
 
 Scope discovery and immutable snapshot execution remain accepted through PR #206 and are the authoritative foundation for planning, owner execution and access/export evidence. Historical packet claims remain immutable, while this catalog records the latest merged aggregate state.
 
@@ -67,18 +67,20 @@ Accepted Customer Privacy architecture/runtime evidence now includes:
 - PR #209 — deterministic planning runtime;
 - PR #211 — permission-aware plan/outcome reads;
 - PR #220 — public approval;
-- PR #222 — first bounded contribution aggregation;
-- PR #224 — final customer-subject policy prerequisite;
-- PR #226 — public restriction placement and first protected-owner enforcement;
+- PR #222 / accepted source `b5651e784a156758b39eaa04abc1124c7c0832f9` / merge `fd86ab1408e435ccc9f47b7a86ab3dd66df64ec1` / 16 of 16 permanent workflows — first bounded contribution aggregation;
+- PR #224 / accepted source `e57307fcb1b5192d5e6340247cb6633f32b7ba34` / merge `67804d9478b2bbaf342a398b649e23bd5ead6c08` / 28 of 28 permanent workflows — final customer-subject policy prerequisite;
+- PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows — public `customer_privacy.restriction.place@1.0.0` and first protected-owner enforcement;
 - PR #230 — public legal hold and mandatory-retention precedence;
 - PR #235 — reusable mutation/query conformance;
 - PR #237 — durable replay-safe owner execution, checkpoints and real owner outcomes;
 - PR #239 — multi-plane affected-scope enforcement;
-- PR #241 — governed access/export assembly with Customer Data Operations artifact ownership and crash recovery;
-- PR #244 / accepted source `405d2dbb97bb371b51cfb1d4ffb5549a57262878` / merge `4b08202fe9dd0c0df83567e24e6b9d86fb79c9db` / 34 of 34 — authoritative owner-specific anonymization and supported deletion execution with immutable lineage and fail-closed unsupported actions;
-- PRs #246, #248 and #249 — complete first-party production contribution aggregation through `crm-first-party-modules` without behavior changes.
+- PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 permanent workflows — governed access/export assembly with Customer Data Operations artifact ownership and crash recovery;
+- PR #244 / accepted source `405d2dbb97bb371b51cfb1d4ffb5549a57262878` / merge `4b08202fe9dd0c0df83567e24e6b9d86fb79c9db` / 34 of 34 permanent workflows — authoritative owner-specific anonymization and supported deletion execution with immutable lineage and fail-closed unsupported actions;
+- PR #246 / accepted source `3b4fe7cdf458daac9c12f816d0d6a87039e613f3` / merge `f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978` / 37 of 37 permanent workflows;
+- PR #248 / accepted source `b15482361ab2b322591d488843ab9b46ff676dba` / merge `b4222364c21cb74127834f5ff4f0739343d26379` / 37 of 37 permanent workflows;
+- PR #249 / accepted source `7876945586e5a6cc94f8d3b0f6ba2b57316484d2` / merge `f36592211bed3e0df7cf3771164b4bc24026eff3` / 37 of 37 permanent workflows — complete first-party production contribution aggregation through `crm-first-party-modules` without behavior changes.
 
-Repository steps 1–12 and Stage D are complete. Repository step 13 is the only next permitted repository step and is in its current-main measurement and governance-calibration packet. Repository step 14 remains blocked. This architecture work does not advance Customer Privacy product readiness.
+Repository steps 1–12 and Stage D are complete. Repository step 13 is the only next permitted repository step and is executing its current-main measurement and governance-calibration packet. Repository step 14 remains blocked. This architecture work does not advance Customer Privacy product readiness.
 
 ## 5. Phase 8A packet accounting
 
