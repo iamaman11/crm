@@ -97,7 +97,8 @@ The complete order is normative in the architecture plan. The remaining sequence
 20. Phase 8A frontend, accessibility, browser and operations evidence;
 21. Phase 8A closure;
 22. Phase 8A architecture remeasurement — checkpoint, not final 10/10;
-23–24. two contrasting later expert-domain waves;
+23. Step 23 — first contrasting later expert-domain wave;
+24. Step 24 — second contrasting later expert-domain wave;
 25. final architecture 10/10 closure review only when every criterion is mechanically proven.
 
 No later packet may start while an earlier item remains unfinished.
@@ -114,13 +115,17 @@ Completed product slices:
 
 All nine Customer Privacy owner-scope implementations are accepted: Parties, Consents, Customer Accounts, Contact Points, Party Relationships, Identity Resolution, Customer Data Operations, Data Quality and Customer Enrichment.
 
+Customer Enrichment owner-scope evidence is accepted through PR #192 / accepted source `e90e36027de18a07be68e43327ea732810ff332a` / squash merge `e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c` / 28 of 28 permanent workflows.
+
+Scope discovery and immutable snapshot execution is accepted through PR #206 / accepted source `086b17a95058eee285fcb67a903bd21d9263d357` / squash merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`.
+
 ## 5. Phase 8A.11 Customer Privacy — current boundary
 
 Issue #126 remains **In progress**.
 
 Accepted runtime and architecture evidence includes:
 
-- exact-nine discovery and immutable snapshots through PR #206;
+- scope discovery and immutable snapshot execution accepted through PR #206;
 - deterministic planning through PR #209;
 - permission-aware plan and outcome reads through PR #211;
 - public approval through PR #220;
@@ -176,7 +181,7 @@ Phase 8A remains incomplete until these criteria are met for the current custome
 
 ## 7. Phase 8B and later product domains
 
-Phase 8B remains planned and blocked on completed Phase 8A plus the Step 22 measurement checkpoint. Steps 23 and 24 must prove that two contrasting later expert-domain waves keep extension cost bounded.
+Phase 8B remains planned and blocked on completed Phase 8A plus the Step 22 measurement checkpoint. Step 23 must prove that a first later expert-domain wave keeps extension cost bounded. Step 24 must add a contrasting expert-domain wave and prove that extension cost remains bounded as module count grows.
 
 Independent owner domains still planned or incomplete include:
 
