@@ -21,6 +21,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.roadmap = read("docs/IMPLEMENTATION_ROADMAP.md")
         cls.phase8 = read("docs/PHASE8_DELIVERY_PLAN.md")
         cls.plan = read("docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md")
+        cls.delivery = read("docs/DELIVERY_GOVERNANCE.md")
+        cls.adr32 = read(
+            "docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md"
+        )
         cls.catalog = read("docs/MODULE_CATALOG.md")
         cls.active_packet = read("docs/ACTIVE_PACKET.md")
         cls.repository_map = read("docs/generated/REPOSITORY_MAP.md")
@@ -151,15 +155,85 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         ):
             self.assertIn(marker.lower(), self.status.lower())
 
-    def test_active_evidence_packet_is_exact_and_bounded(self) -> None:
+    def test_step22_runtime_fanin_decision_is_binding(self) -> None:
+        documents = (self.plan, self.roadmap, self.phase8, self.status, self.adr32)
+        for document in documents:
+            lowered = document.lower()
+            with self.subTest(document=document[:60]):
+                self.assertIn("crm-application-runtime", document)
+                self.assertIn("owner-specific", lowered)
+                self.assertIn("process-composition", lowered)
+                self.assertIn("non-growth", lowered)
+
+        for classification in (
+            "removed",
+            "platform-generic",
+            "owner-specific-unavoidable",
+            "test-only",
+        ):
+            self.assertIn(classification, self.adr32)
+            self.assertIn(classification, self.plan)
+
+        self.assertIn("Mere non-growth is insufficient", self.plan)
+        self.assertIn("Every safely removable owner-specific dependency must be removed", self.adr32)
+        self.assertIn("zero unresolved runtime-fan-in", self.status)
+        self.assertIn("Steps 23 and 24", self.adr32)
+        self.assertIn("crm-application-runtime/Cargo.toml", self.adr32)
+
+    def test_step22_permanent_gate_value_review_is_binding(self) -> None:
+        documents = (
+            self.plan,
+            self.roadmap,
+            self.phase8,
+            self.status,
+            self.delivery,
+            self.adr32,
+        )
+        for document in documents:
+            lowered = document.lower()
+            with self.subTest(document=document[:60]):
+                self.assertIn("failure mode", lowered)
+                self.assertIn("execution cost", lowered)
+                self.assertIn("retirement", lowered)
+                self.assertIn("duplicate", lowered)
+
+        for disposition in ("retain", "simplify", "merge", "remove"):
+            self.assertIn(disposition, self.adr32)
+            self.assertIn(disposition, self.delivery)
+
+        self.assertIn("machine-readable ledger", self.adr32)
+        self.assertIn("observed defect evidence", self.plan)
+        self.assertIn("A gate without a concrete failure mode", self.delivery)
+        self.assertIn("Step 22 cannot close with an unresolved permanent-gate value decision", self.delivery)
+
+    def test_new_permanent_gate_entry_contract_is_explicit(self) -> None:
+        required = (
+            "concrete failure mode",
+            "why existing gates do not already prevent",
+            "expected affected scope",
+            "named owner",
+            "false-positive controls",
+            "retirement/review condition",
+        )
+        for marker in required:
+            self.assertIn(marker, self.adr32)
+
+        self.assertIn("## 6. Permanent-gate entry contract", self.delivery)
+        self.assertIn("must not be created merely because another governance mechanism exists", self.delivery)
+        self.assertIn("Temporary inspection, migration or diagnostic workflows", self.delivery)
+
+    def test_active_planning_packet_is_exact_and_bounded(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-14-exit-evidence-sync")
+        self.assertEqual(
+            self.packet["packet_id"],
+            "architecture-step-22-runtime-fanin-gate-value-hardening",
+        )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
             {
                 "ref": "main",
-                "sha": "2b0b558077c444d44691371c8a2bcca2c14ae426",
+                "sha": "fa55e50f356b9a54712843038f763741898534b8",
             },
         )
         self.assertEqual(
@@ -167,10 +241,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             {
                 "docs/ACTIVE_PACKET.md",
                 "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/DELIVERY_GOVERNANCE.md",
                 "docs/IMPLEMENTATION_ROADMAP.md",
-                "docs/MODULE_CATALOG.md",
                 "docs/PHASE8_DELIVERY_PLAN.md",
                 "docs/PROJECT_STATUS.md",
+                "docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
@@ -181,8 +256,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             ["Affected Scope CI", "Governance CI", "Rust Generated Sync"],
         )
         self.assertIn("start Repository Step 15", self.packet["non_goals"])
+        self.assertIn("add, remove or modify a permanent workflow", self.packet["non_goals"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
+        self.assertIn(
+            "require a complete permanent-gate ledger",
+            "\n".join(self.packet["deliverables"]),
+        )
 
     def test_repository_map_reflects_current_workspace(self) -> None:
         self.assertIn("Generated by scripts/generate_repository_navigation.py", self.repository_map)
@@ -207,11 +287,12 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("Step 24", self.roadmap)
 
     def test_final_10_10_boundary_is_mechanical(self) -> None:
-        self.assertIn("## 12. Final architecture 10/10 closure criteria", self.plan)
+        self.assertIn("## 13. Final architecture 10/10 closure criteria", self.plan)
         self.assertIn("Step 22", self.plan)
         self.assertIn("Steps 23 and 24", self.plan)
         self.assertIn("Step 25", self.plan)
         self.assertIn("mechanically proven", self.plan)
+        self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
         self.assertIn("Issue #194", self.status)
         self.assertIn("Issue #126", self.status)
 
