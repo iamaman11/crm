@@ -49,21 +49,35 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
             self.assertEqual(find_legacy_composition_violations(root), [])
 
     def test_customer_accounts_registration_is_aggregated_without_reordering(self) -> None:
-        owner = (
+        production = (
             ROOT
-            / "crates/crm-customer-accounts-capability-composition/src/lib.rs"
+            / "crates/crm-customer-accounts-query-adapter/src/production_contribution.rs"
+        ).read_text(encoding="utf-8")
+        query = (
+            ROOT / "crates/crm-customer-accounts-query-adapter/src/lib.rs"
+        ).read_text(encoding="utf-8")
+        adapter_root = (
+            ROOT / "crates/crm-customer-accounts-query-adapter/src/root.rs"
         ).read_text(encoding="utf-8")
         aggregate = (ROOT / "crates/crm-first-party-modules/src/lib.rs").read_text(
             encoding="utf-8"
         )
+        aggregate_cargo = (
+            ROOT / "crates/crm-first-party-modules/Cargo.toml"
+        ).read_text(encoding="utf-8")
         runtime = (
             ROOT / "crates/crm-application-runtime/src/native_composition.rs"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("pub fn mutation_capability_definitions()", owner)
-        self.assertIn("adapter_mutation_capability_definitions()", owner)
-        self.assertIn("pub fn query_capability_definitions()", owner)
-        self.assertIn("adapter_query_capability_definitions()", owner)
+        self.assertFalse(
+            (ROOT / "crates/crm-customer-accounts-capability-composition").exists()
+        )
+        self.assertIn("pub fn mutation_capability_definitions()", production)
+        self.assertIn("adapter_mutation_capability_definitions()", production)
+        self.assertIn("pub fn query_capability_definitions()", query)
+        self.assertIn("QUERY_CAPABILITY_IDS", query)
+        self.assertIn("mod production_contribution;", adapter_root)
+        self.assertIn("pub use production_contribution::", adapter_root)
         self.assertIn(
             "mutation_capability_definitions as "
             "customer_accounts_mutation_capability_definitions",
@@ -73,6 +87,12 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
             "query_capability_definitions as "
             "customer_accounts_query_capability_definitions",
             aggregate,
+        )
+        self.assertIn(
+            "crm-customer-accounts-query-adapter =", aggregate_cargo
+        )
+        self.assertNotIn(
+            "crm-customer-accounts-capability-composition =", aggregate_cargo
         )
         self.assertNotIn("customer_accounts.", aggregate)
         self.assertNotIn("@1.0.0", aggregate)
@@ -110,8 +130,8 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
         consent_contribution = aggregate.index("build_consents_contribution(")
         self.assertLess(account_contribution, consent_contribution)
         self.assertIn("activation: activation.clone(),", aggregate)
-        self.assertIn("ActivationGatedMutationValidator::new", owner)
-        self.assertIn("ActivationGatedQueryValidator::new", owner)
+        self.assertIn("ActivationGatedMutationValidator::new", production)
+        self.assertIn("ActivationGatedQueryValidator::new", production)
 
     def test_relationship_owner_batch_is_aggregated_without_behavior_reordering(self) -> None:
         parties = (ROOT / "crates/crm-party-reference-composition/src/lib.rs").read_text(
@@ -200,7 +220,6 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
             "crm-party-relationships-projection =",
         ):
             self.assertIn(dependency, runtime_cargo)
-
 
     def test_identity_data_operations_and_quality_batch_is_owner_aggregated(self) -> None:
         identity = (
@@ -321,6 +340,7 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
                 / "crates/crm-customer-enrichment-capability-composition/src/reference_guards.rs"
             ).exists()
         )
+
 
 if __name__ == "__main__":
     unittest.main()
