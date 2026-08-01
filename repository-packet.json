@@ -61,7 +61,7 @@
     "Rust Generated Sync"
   ],
   "acceptance": [
-    "the architecture plan, project status, roadmap, Phase 8 delivery plan, module catalog and tracked issues agree on accepted PR #255 evidence",
+    "the architecture plan, project status, roadmap, Phase 8 delivery plan and module catalog agree on accepted PR #255 evidence; tracked issues are synchronized only after this exact-head documentation packet is accepted",
     "no live normative source says repository step 13 is not started, that three direct lint exceptions remain, or that suppression registration and direct-lint removal are the next packet",
     "historical PR #253 measurements remain unchanged while PR #255 is represented as blocking remediation against that evidence",
     "the next implementation packet is bounded by remaining ADR-031 exit evidence and repository step 13 completion remains tied only to mechanically proven exit criteria",
