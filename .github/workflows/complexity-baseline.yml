@@ -88,6 +88,25 @@ jobs:
             tests.test_workspace_governance \
             tests.test_workspace_dependency_policy \
             2>&1 | tee artifacts/workspace-analyzer-tests.log
+      - name: Enforce canonical suppression registry formatting
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          source = Path("step13-suppression-baseline.json")
+          current = source.read_text(encoding="utf-8")
+          canonical = json.dumps(
+              json.loads(current), indent=2, sort_keys=True
+          ) + "\n"
+          output = Path("artifacts/step13-suppression-baseline.canonical.json")
+          output.write_text(canonical, encoding="utf-8")
+          if current != canonical:
+              raise SystemExit(
+                  "step13-suppression-baseline.json is not canonical pretty-printed JSON"
+              )
+          PY
       - name: Generate measurement-only workspace and CI baseline
         run: |
           set -euo pipefail
