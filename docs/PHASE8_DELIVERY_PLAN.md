@@ -81,17 +81,19 @@ Repository step 10 is accepted through PR #241 / accepted source `2bb3a671deb18a
 
 Repository step 11 is accepted through PR #244 / accepted source `405d2dbb97bb371b51cfb1d4ffb5549a57262878` / squash merge `4b08202fe9dd0c0df83567e24e6b9d86fb79c9db` / 34 of 34 applicable permanent workflows on one unchanged exact head. It executes approved owner-specific anonymization and supported deletion through the exact nine authoritative owner boundaries, binds every call to canonical immutable case/snapshot/plan/retention/attempt lineage, and persists replay-safe tenant-bound mutation, idempotency, business transaction, audit and outbox evidence atomically under FORCE RLS. Real Parties acceptance proves mutation, exact replay, stale and cross-tenant rejection, clean PostgreSQL, rollback/reapply and repeated execution. Unsupported owner/action combinations and unavailable crypto-shred fail closed before mutation. Public inventory remains 7 mutations / 4 permission-aware queries / 0 workers; no crate, dependency, contract, migration, Cargo.lock, workspace-package or generic-runtime business-switch change was introduced.
 
-Repository step 12 batch 1 is accepted through PR #246 / accepted source `3b4fe7cdf458daac9c12f816d0d6a87039e613f3` / squash merge `f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978` / 37 of 37 applicable permanent workflows on one unchanged exact head. It moves Parties, Consents, Contact Points and Party Relationships exact mutation/query inventories and activation-gated contribution builders behind `crm-first-party-modules`, preserves the already aggregated Customer Accounts contribution, exact public coordinates and ordering, activation, authorization, Party-reference validation, persistence, workers, package count and external dependency versions, and removes their ordinary registration/inventory bypasses from generic native composition. Repository step 12 is complete through the three accepted batches ending in PR #249; repository step 13 is in progress after accepted PRs #253 and #255.
+Repository step 12 batch 1 is accepted through PR #246 / accepted source `3b4fe7cdf458daac9c12f816d0d6a87039e613f3` / squash merge `f090fa8785ac2bbb7e5cf186b4c5011cb9aeb978` / 37 of 37 applicable permanent workflows on one unchanged exact head. It moves Parties, Consents, Contact Points and Party Relationships exact mutation/query inventories and activation-gated contribution builders behind `crm-first-party-modules`, preserves the already aggregated Customer Accounts contribution, exact public coordinates and ordering, activation, authorization, Party-reference validation, persistence, workers, package count and external dependency versions, and removes their ordinary registration/inventory bypasses from generic native composition. Repository step 12 is complete through the three accepted batches ending in PR #249; repository step 13 is complete through PRs #253, #255 and #257.
 
-Repository step 13 remains in progress after accepted suppression enforcement and direct-lint removal. The next permitted implementation packet remeasures accepted `main` against the remaining ADR-031 exit criteria, proves central process-host dependency reduction or justified non-growth and representative change-cost/dependency-version-feature budgets, and performs only evidence-required bounded remediation. Repository step 14 remains blocked.
+Repository step 13 is complete through PRs #253, #255 and #257. This exact-head documentation packet synchronizes the accepted closure evidence across all live normative sources. Repository step 14 is the next permitted implementation step and remains not started until this packet is accepted and merged.
 
-## 5.1 Accepted repository step 13 measurement and suppression enforcement
+## 5.1 Accepted repository step 13 closure evidence
 
 PR #253 / accepted source `475533b185b871418273c1c1e3f63a1d62542677` / squash merge `7dcda204be07209d9e4996fdc9c5fd364cea179e` / 7 of 7 applicable permanent workflows established the exact baseline: 113 workspace packages, 841 internal dependency edges, maximum dependency depth 18, maximum direct dependents 105, maximum transitive reverse impact 106, conservative public Rust surface 5,377, 40 permanent workflows, 41 jobs, 1,712 path-filter entries, 31 PostgreSQL workflows and 94 equivalent suppression occurrences across 66 stable keys.
 
 PR #255 / accepted source `4c80546283af9c869a28c2da9c8697b203d0c327` / squash merge `393b60bdcfad6e92fc37eacabe0920645d530f6b` / 21 of 21 applicable permanent workflows registers that historical multiset, blocks new stable keys and occurrence growth while allowing reductions and line movement, enforces canonical formatting, removes all three direct lint tables and matching architecture exceptions, moves the affected packages to workspace lint inheritance, and activates calibrated blocking governance. Exact-head Rust compile, Clippy, workspace tests, generated sync, affected scope, database and applicable process/privacy workflows all passed.
 
-Repository step 13 remains in progress. Its next bounded packet closes only the remaining ADR-031 exit-evidence gaps. PR #255 changes no Customer Privacy behavior, public inventory, worker, route, contract, persistence semantics or Phase 8A readiness; repository step 14 remains blocked.
+PR #257 / accepted source `6cde72d7fc9a442018c51fd6e6772e626b26e307` / squash merge `10516e84ea3c2d0fa8ee0c61c9eeec7e96a6273c` / 7 of 7 applicable permanent workflows on one unchanged exact head completes the remaining ADR-031 blocking exit evidence. It freezes reduction-only workspace and role-aware central-system budgets; separately proves `crm-api` remains production-thin at one runtime internal dependency plus eighteen acceptance-only dev dependencies and `crm-application-runtime` remains at sixty-two runtime plus one dev internal dependency; and blocks unmeasured process-host, representative change-cost, dependency-version/feature, heavy-feature, declaration and workspace-centralization growth while permitting reductions. The nine-file packet changes no product/runtime source, Cargo manifest, dependency declaration, package, route, contract, schema, migration, persistence or worker behavior.
+
+Repository step 13 is complete through PRs #253, #255 and #257. None of those architecture packets changes Customer Privacy behavior, public inventory, worker, route, contract, persistence semantics or Phase 8A readiness. Repository step 14 is next and remains not started until this documentation packet is accepted.
 
 ## 6. Accepted scope discovery and immutable snapshot
 
@@ -197,8 +199,8 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 10. repository step 10 — governed access/export assembly — **complete through PR #241**;
 11. repository step 11 — owner-specific deletion, anonymization and supported crypto-shred execution — **complete through PR #244**;
 12. repository step 12 — complete first-party contribution aggregation for all currently active owners without behavior changes — **complete through PR #249**;
-13. repository step 13 — calibrated dependency, Rust public-surface, reverse-fan-out and exception governance — **in progress: measurement accepted through PR #253 and blocking suppression/direct-lint enforcement accepted through PR #255; remaining ADR-031 exit evidence is next**;
-14. repository step 14 — first measured behavior-neutral consolidation;
+13. repository step 13 — calibrated dependency, Rust public-surface, reverse-fan-out and exception governance — **complete through PR #257**;
+14. repository step 14 — first measured behavior-neutral consolidation — **next, not started**;
 15. repository step 15 — Party tombstone, no-orphan proof and projection/search/cache convergence;
 16. repository step 16 — reusable generic worker conformance;
 17. repository step 17 — contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;
@@ -211,7 +213,7 @@ The complete order is maintained in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLA
 24. repository step 24 — second contrasting expert-domain wave;
 25. repository step 25 — final architecture 10/10 closure review only after every criterion is mechanically proven.
 
-The inserted prerequisites did not renumber the normative master sequence. Repository step 13 remains the only active implementation step; its next bounded packet closes only the remaining ADR-031 exit-evidence gaps. Repository step 14 remains blocked.
+The inserted prerequisites did not renumber the normative master sequence. Repository step 13 is complete through PR #257 after this synchronization. Repository step 14 is next and remains not started.
 
 
 ### 9.1 Stage accountability for the remaining Phase 8 sequence
@@ -233,7 +235,7 @@ The inserted prerequisites did not renumber the normative master sequence. Repos
 | 23–24 | later-domain proof that extension cost remains bounded |
 | 25 | final architecture closure review |
 
-Step 12 is architecture refactoring only and does not change Customer Privacy product behavior. Step 13 is a separate governance program: PR #253 accepted measurement and PR #255 accepted blocking suppression/direct-lint enforcement; only the remaining ADR-031 exit evidence may continue before step 14. Step 14 is physical consolidation only and remains separate from feature behavior. Step 17 separately enforces contract lifecycle. Step 22 cannot close issue #194 or declare 10/10 before steps 23 and 24 provide contrasting later-domain evidence.
+Step 12 is architecture refactoring only and does not change Customer Privacy product behavior. Step 13 is a separate governance program completed through PRs #253, #255 and #257 after this synchronization. Step 14 is next, remains not started, and is physical consolidation only, separate from feature behavior. Step 17 separately enforces contract lifecycle. Step 22 cannot close issue #194 or declare 10/10 before steps 23 and 24 provide contrasting later-domain evidence.
 
 ## 10. Frozen ownership
 

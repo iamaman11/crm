@@ -153,7 +153,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "10. governed Customer Privacy access/export assembly — **Complete through PR #241**;",
             "11. owner-specific deletion, anonymization and supported crypto-shred execution — **Complete through PR #244**;",
             "12. complete first-party contribution aggregation for all currently active owners without behavior changes — **Complete through PR #249**;",
-            "13. complete ADR-031 governance closure: measurement and blocking suppression/direct-lint governance are accepted through PRs #253 and #255; remaining central process-host dependency and representative change-cost/dependency-version-feature exit proof is unfinished;",
+            "13. complete ADR-031 governance closure: measurement, blocking suppression/direct-lint governance and remaining process-host/change-cost/dependency-governance exit evidence — **Complete through PR #257**;",
             "14. first measured behavior-neutral transitional domain-cluster consolidation;",
             "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;",
             "18. deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke`;",
@@ -183,7 +183,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "10. repository step 10 — governed access/export assembly — **next**;",
             self.phase8,
         )
-        self.assertIn("Repository step 13 remains in progress.", self.phase8)
+        self.assertIn("Repository step 13 is complete through PRs #253, #255 and #257", self.phase8)
         for step in range(1, 6):
             self.assertIn(f"Repository step {step}", self.roadmap)
 
@@ -193,12 +193,12 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 document,
             )
         self.assertIn(
-            "Latest accepted repository implementation packet is PR #255",
+            "Latest accepted repository implementation packet is PR #257",
             self.status,
         )
-        self.assertIn("Repository step 13 remains in progress.", self.status)
+        self.assertIn("Repository step 13 is complete after this exact-head synchronization", self.status)
         self.assertIn(
-            "Repository step 14 follows only after repository step 13 is accepted and synchronized.",
+            "Repository step 14 is the next permitted implementation packet",
             self.status,
         )
         self.assertIn("- Stage D is complete:", self.status)
@@ -230,6 +230,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             (self.authoritative_status_documents, "PR #249", "7876945586e5a6cc94f8d3b0f6ba2b57316484d2", "f36592211bed3e0df7cf3771164b4bc24026eff3", "37 of 37"),
             (self.authoritative_status_documents, "PR #253", "475533b185b871418273c1c1e3f63a1d62542677", "7dcda204be07209d9e4996fdc9c5fd364cea179e", "7 of 7"),
             (self.privacy_status_documents, "PR #255", "4c80546283af9c869a28c2da9c8697b203d0c327", "393b60bdcfad6e92fc37eacabe0920645d530f6b", "21 of 21"),
+            (self.privacy_status_documents, "PR #257", "6cde72d7fc9a442018c51fd6e6772e626b26e307", "10516e84ea3c2d0fa8ee0c61c9eeec7e96a6273c", "7 of 7"),
         )
         for documents, pr, source, merge, workflows in evidence:
             self.assert_evidence_in_documents(
@@ -291,11 +292,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(len(self.packet["required_checks"]), len(set(self.packet["required_checks"])))
         self.assertTrue(self.packet["required_checks"])
         self.assertIn(
-            "the checker passes the unchanged exact head and reports the accepted 113-package, 841-edge, aggregate process-host and section-aware manifest baseline",
+            "all live normative sources agree that repository step 13 and Stage B are complete while repository step 14 is next and not started",
             self.packet["acceptance"],
         )
         self.assertIn(
-            "production and test-only process-host dependency surfaces are measured separately: crm-api remains one runtime dependency plus eighteen acceptance-only dev dependencies, while crm-application-runtime remains sixty-two runtime plus one dev dependency",
+            "repository step 13 is marked complete only through the combined PR #253 measurement, PR #255 suppression/direct-lint enforcement, PR #257 remaining exit-evidence enforcement and this exact-head synchronization",
             self.packet["deliverables"],
         )
         self.assertIn(self.packet["packet_id"], self.active_packet)
@@ -315,14 +316,14 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.plan,
         )
         self.assertIn(
-            "## Repository step 13 measurement and suppression-enforcement evidence",
+            "## Repository step 13 closure evidence",
             self.plan,
         )
         self.assertIn(
-            "## Accepted repository step 13 measurement and suppression enforcement",
+            "## Accepted repository step 13 closure evidence",
             self.status,
         )
-        self.assertIn("Repository step 14 remains blocked", self.status)
+        self.assertIn("Repository step 14 is the next permitted implementation packet", self.status)
         self.assertIn(
             "Repository step 13 remains the next permitted implementation step",
             self.adr31,
@@ -349,15 +350,15 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         )
         self.assertIn("repository step 25", self.plan.lower())
         self.assertIn(
-            "repository step 13 owns the remaining central process-host dependency and representative change-cost/dependency-version-feature exit evidence",
+            "stage b dependency/crate/exception governance is complete through prs #253, #255 and #257",
             self.status.lower(),
         )
         self.assertIn(
-            "## Next permitted repository packet\n\nRepository step 13 remains in progress",
+            "## Next permitted repository packet\n\nRepository step 14 is the next permitted implementation packet",
             self.status,
         )
         self.assertIn(
-            "## Following permitted repository packet\n\nRepository step 14 follows only after repository step 13 is accepted and synchronized",
+            "## Following permitted repository packet\n\nRepository step 15 follows only after repository step 14 is accepted and synchronized",
             self.status,
         )
         self.assertIn(
@@ -550,6 +551,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Repository step 13 remains **not started**",
             "Repository step 13 is the **next permitted repository step** and is **not started**",
             "Latest accepted repository implementation packet is PR #253",
+            "Repository step 13 remains in progress",
+            "Repository step 14 remains blocked",
             "registers the accepted suppression baseline, mechanically blocks every new unregistered equivalent bypass",
             "removes the three direct lint-table exceptions without hidden replacements and calibrates role-aware",
         )
