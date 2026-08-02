@@ -4,29 +4,22 @@ use crm_customer_360_composition::{
     CUSTOMER_360_CONTRIBUTION_RESOURCE_TYPE, CUSTOMER_360_PROJECTION_ID,
     Customer360ProjectionWorker,
 };
-use crm_customer_privacy::{
+use crm_customer_privacy_production::{
     ACTION_PLAN_RECORD_TYPE, ACTION_PLAN_STATE_MAXIMUM_BYTES,
     ACTION_PLAN_STATE_RETENTION_POLICY_ID, ACTION_PLAN_STATE_SCHEMA_ID,
     ACTION_PLAN_STATE_SCHEMA_VERSION, ActionPlanningPolicy, ContributionCompletenessProof,
-    DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot, EvidenceClass, OwnerScopeContract,
-    OwnerScopeContribution, OwnerScopeRegistry, PrivacyActionPlan, PrivacyCase, PrivacyCaseKind,
-    PrivacyRetentionDecisionSet, RETENTION_DECISION_RECORD_TYPE,
-    RETENTION_DECISION_STATE_MAXIMUM_BYTES, RETENTION_DECISION_STATE_RETENTION_POLICY_ID,
-    RETENTION_DECISION_STATE_SCHEMA_ID, RETENTION_DECISION_STATE_SCHEMA_VERSION,
-    ScopeDiscoveryLineage, ScopeResource, SubjectVerificationMethod,
-    action_plan_state_descriptor_hash, encode_action_plan_state, encode_privacy_case_state,
-    encode_retention_decision_state, privacy_case_state_descriptor_hash,
-    retention_decision_state_descriptor_hash,
-};
-use crm_customer_privacy_production::{
-    CustomerPrivacyProductionDependencies, OwnerExecutionInvocation, PrivacyOwnerOutcomeStatus,
-    build_canonical_internal_owner_execution,
+    CustomerPrivacyProductionDependencies, DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot,
+    EvidenceClass, OwnerExecutionInvocation, OwnerScopeContract, OwnerScopeContribution,
+    OwnerScopeRegistry, PrivacyActionPlan, PrivacyCase, PrivacyCaseKind, PrivacyOwnerOutcomeStatus,
+    PrivacyRetentionDecisionSet, ScopeDiscoveryLineage, ScopeResource, SubjectVerificationMethod,
+    action_plan_state_descriptor_hash, build_canonical_internal_owner_execution,
+    encode_action_plan_state, privacy_case_persisted_payload, retention_decision_persisted_payload,
 };
 use crm_global_search_composition::{GlobalSearchWorker, INITIAL_GLOBAL_SEARCH_GENERATION_ID};
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ModuleId, PayloadEncoding,
-    PortFuture, RecordId, RecordRef, RetentionPolicyId, SchemaId, SchemaVersion, SdkError,
-    TenantId, TraceId, TypedPayload,
+    PortFuture, RecordId, RecordRef, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TenantId,
+    TraceId, TypedPayload,
 };
 use crm_parties_capability_adapter::{RECORD_TYPE as PARTY_RECORD_TYPE, persisted_contract};
 use crm_query_runtime::{QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision};
@@ -70,7 +63,7 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
         "customer-privacy.case",
         &case_id,
         privacy_case.version(),
-        privacy_case_payload(&privacy_case),
+        privacy_case_persisted_payload(&privacy_case).expect("encode privacy case fixture"),
         &format!("fixture-case-{run_id}"),
     )
     .await;
@@ -79,7 +72,7 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
         &tenant,
         ACTION_PLAN_RECORD_TYPE,
         plan.plan_id().as_str(),
-        privacy_case.version(),
+        1,
         action_plan_payload(&plan),
         &format!("fixture-plan-{run_id}"),
     )
@@ -87,10 +80,11 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
     seed_record(
         &admin,
         &tenant,
-        RETENTION_DECISION_RECORD_TYPE,
+        "customer-privacy.retention-decision",
         decision.decision_id().as_str(),
-        privacy_case.version(),
-        retention_decision_payload(&decision),
+        1,
+        retention_decision_persisted_payload(&decision)
+            .expect("encode retention decision fixture"),
         &format!("fixture-decision-{run_id}"),
     )
     .await;
@@ -341,20 +335,6 @@ fn build_case_plan_and_decision(
     (privacy_case, plan, decision)
 }
 
-fn privacy_case_payload(privacy_case: &PrivacyCase) -> TypedPayload {
-    TypedPayload {
-        owner: ModuleId::try_new("crm.customer-privacy").unwrap(),
-        schema_id: SchemaId::try_new("crm.customer-privacy.case.state").unwrap(),
-        schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
-        descriptor_hash: privacy_case_state_descriptor_hash(),
-        data_class: DataClass::Confidential,
-        encoding: PayloadEncoding::Json,
-        maximum_size_bytes: 64 * 1024,
-        retention_policy_id: RetentionPolicyId::try_new("crm.customer_privacy.case").unwrap(),
-        bytes: encode_privacy_case_state(privacy_case).unwrap(),
-    }
-}
-
 fn action_plan_payload(plan: &PrivacyActionPlan) -> TypedPayload {
     TypedPayload {
         owner: ModuleId::try_new("crm.customer-privacy").unwrap(),
@@ -367,23 +347,6 @@ fn action_plan_payload(plan: &PrivacyActionPlan) -> TypedPayload {
         retention_policy_id: RetentionPolicyId::try_new(ACTION_PLAN_STATE_RETENTION_POLICY_ID)
             .unwrap(),
         bytes: encode_action_plan_state(plan).unwrap(),
-    }
-}
-
-fn retention_decision_payload(decision: &PrivacyRetentionDecisionSet) -> TypedPayload {
-    TypedPayload {
-        owner: ModuleId::try_new("crm.customer-privacy").unwrap(),
-        schema_id: SchemaId::try_new(RETENTION_DECISION_STATE_SCHEMA_ID).unwrap(),
-        schema_version: SchemaVersion::try_new(RETENTION_DECISION_STATE_SCHEMA_VERSION).unwrap(),
-        descriptor_hash: retention_decision_state_descriptor_hash(),
-        data_class: DataClass::Confidential,
-        encoding: PayloadEncoding::Json,
-        maximum_size_bytes: RETENTION_DECISION_STATE_MAXIMUM_BYTES,
-        retention_policy_id: RetentionPolicyId::try_new(
-            RETENTION_DECISION_STATE_RETENTION_POLICY_ID,
-        )
-        .unwrap(),
-        bytes: encode_retention_decision_state(decision).unwrap(),
     }
 }
 
