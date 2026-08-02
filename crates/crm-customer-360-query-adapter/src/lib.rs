@@ -837,6 +837,7 @@ mod tests {
             snapshot: Customer360ContributionSnapshot::Party(PartyContributionSnapshot {
                 kind: "person".to_owned(),
                 display_name: "Ada".to_owned(),
+                privacy_lifecycle: "active".to_owned(),
             }),
         };
         assert_eq!(

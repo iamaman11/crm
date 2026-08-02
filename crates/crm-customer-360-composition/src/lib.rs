@@ -5,8 +5,8 @@
 //! This crate owns no authoritative customer state. It validates immutable owner
 //! events and materializes exactly one current contribution document per source
 //! aggregate. Each document carries the complete current set of Party roots it
-//! contributes to, so mutable Account associations replace stale root membership
-//! atomically instead of requiring projection delete-writes.
+//! contributes to, so mutable owner associations and Party privacy outcomes
+//! replace stale root membership atomically without projection delete-writes.
 
 use crm_core_data::PostgresDataStore;
 use crm_core_events::ProjectionDocumentWrite;
@@ -41,8 +41,21 @@ const PARTIES_MODULE_ID: &str = "crm.parties";
 const PARTY_RECORD_TYPE: &str = "parties.party";
 const PARTY_CREATED: &str = "parties.party.created";
 const PARTY_UPDATED: &str = "parties.party.updated";
+const PARTY_PRIVACY_ACTION_COMPLETED: &str = "parties.privacy.action.apply.completed";
 const PARTY_CREATED_SCHEMA: &str = "crm.parties.v1.PartyCreatedEvent";
 const PARTY_UPDATED_SCHEMA: &str = "crm.parties.v1.PartyUpdatedEvent";
+const PARTY_PRIVACY_ACTION_CAPABILITY: &str = "parties.privacy.action.apply";
+const OWNER_ACTION_EVENT_SCHEMA: &str = "crm.customer-privacy.owner_action.event";
+const OWNER_ACTION_EVENT_DESCRIPTOR_HASH: [u8; 32] = [
+    213, 213, 180, 13, 242, 156, 208, 33, 85, 11, 63, 152, 114, 199, 7, 154, 115, 225, 181, 172,
+    233, 62, 83, 56, 65, 78, 35, 3, 176, 230, 31, 123,
+];
+const OWNER_ACTION_EVENT_MAXIMUM_BYTES: u64 = 32 * 1024;
+const OWNER_ACTION_EVENT_RETENTION_POLICY: &str = "crm.customer_privacy.owner_action_command";
+const PARTY_PRIVACY_ACTIVE: &str = "active";
+const PARTY_PRIVACY_ERASED: &str = "erased";
+const PARTY_PRIVACY_MINIMIZED: &str = "privacy_minimized";
+const PARTY_PRIVACY_SUPPRESSED: &str = "suppressed";
 
 const ACCOUNTS_MODULE_ID: &str = "crm.customer-accounts";
 const ACCOUNT_RECORD_TYPE: &str = "accounts.account";
@@ -69,9 +82,10 @@ const PARTY_RELATIONSHIP_CREATED_SCHEMA: &str =
 const PARTY_RELATIONSHIP_UPDATED_SCHEMA: &str =
     "crm.party_relationships.v1.PartyRelationshipUpdatedEvent";
 
-const ALL_EVENT_TYPES: [&str; 9] = [
+const ALL_EVENT_TYPES: [&str; 10] = [
     PARTY_CREATED,
     PARTY_UPDATED,
+    PARTY_PRIVACY_ACTION_COMPLETED,
     ACCOUNT_CREATED,
     ACCOUNT_UPDATED,
     CONTACT_POINT_CREATED,
@@ -125,7 +139,6 @@ impl Customer360ContributionDocument {
 
     pub fn validate(&self) -> Result<(), SdkError> {
         if self.projection_schema_version != CUSTOMER_360_PROJECTION_SCHEMA_VERSION
-            || self.root_party_ids.is_empty()
             || self.source_owner_module_id.is_empty()
             || self.source_resource_type.is_empty()
             || self.source_resource_id.is_empty()
@@ -151,6 +164,23 @@ impl Customer360ContributionDocument {
         {
             return Err(contribution_invalid(
                 "Customer 360 root Party ids are not canonical",
+            ));
+        }
+        let privacy_suppressed = matches!(
+            &self.snapshot,
+            Customer360ContributionSnapshot::Party(snapshot)
+                if self.contribution_kind == Customer360ContributionKind::Party
+                    && self.root_party_ids.is_empty()
+                    && snapshot.kind == PARTY_PRIVACY_SUPPRESSED
+                    && snapshot.display_name == PARTY_PRIVACY_SUPPRESSED
+                    && matches!(
+                        snapshot.privacy_lifecycle.as_str(),
+                        PARTY_PRIVACY_ERASED | PARTY_PRIVACY_MINIMIZED
+                    )
+        );
+        if self.root_party_ids.is_empty() && !privacy_suppressed {
+            return Err(contribution_invalid(
+                "Only a strict Party privacy tombstone may have no root membership",
             ));
         }
         Ok(())
@@ -185,6 +215,12 @@ pub enum Customer360ContributionSnapshot {
 pub struct PartyContributionSnapshot {
     pub kind: String,
     pub display_name: String,
+    #[serde(default = "active_privacy_lifecycle")]
+    pub privacy_lifecycle: String,
+}
+
+fn active_privacy_lifecycle() -> String {
+    PARTY_PRIVACY_ACTIVE.to_owned()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -268,6 +304,7 @@ impl ProjectionHandler for Customer360ProjectionHandler {
                         .ok_or_else(|| event_invalid("Party updated event is missing Party"))?,
                 )?
             }
+            PARTY_PRIVACY_ACTION_COMPLETED => party_privacy_contribution(delivery)?,
             ACCOUNT_CREATED => {
                 validate_contract(
                     delivery,
@@ -479,6 +516,24 @@ fn party_contribution(
         Customer360ContributionSnapshot::Party(PartyContributionSnapshot {
             kind: kind.to_owned(),
             display_name,
+            privacy_lifecycle: PARTY_PRIVACY_ACTIVE.to_owned(),
+        }),
+    ))
+}
+
+fn party_privacy_contribution(
+    delivery: &EventDelivery,
+) -> Result<Customer360ContributionDocument, SdkError> {
+    let lifecycle = validate_party_privacy_action(delivery)?;
+    Ok(contribution_document(
+        delivery,
+        Customer360ContributionKind::Party,
+        Vec::new(),
+        delivery.aggregate_version,
+        Customer360ContributionSnapshot::Party(PartyContributionSnapshot {
+            kind: PARTY_PRIVACY_SUPPRESSED.to_owned(),
+            display_name: PARTY_PRIVACY_SUPPRESSED.to_owned(),
+            privacy_lifecycle: lifecycle.to_owned(),
         }),
     ))
 }
@@ -691,6 +746,100 @@ fn contribution_document(
         source_event_id: delivery.event_id.as_str().to_owned(),
         snapshot,
     }
+}
+
+fn validate_party_privacy_action(delivery: &EventDelivery) -> Result<&'static str, SdkError> {
+    if delivery.validate().is_err()
+        || delivery.source_module_id.as_str() != PARTIES_MODULE_ID
+        || delivery.aggregate.record_type.as_str() != PARTY_RECORD_TYPE
+        || delivery.event_version.as_str() != CONTRACT_VERSION
+        || delivery.payload.owner.as_str() != PARTIES_MODULE_ID
+        || delivery.payload.schema_id.as_str() != OWNER_ACTION_EVENT_SCHEMA
+        || delivery.payload.schema_version.as_str() != CONTRACT_VERSION
+        || delivery.payload.descriptor_hash != OWNER_ACTION_EVENT_DESCRIPTOR_HASH
+        || delivery.payload.data_class != DataClass::Restricted
+        || delivery.payload.encoding != PayloadEncoding::Json
+        || delivery.payload.maximum_size_bytes != OWNER_ACTION_EVENT_MAXIMUM_BYTES
+        || delivery.payload.retention_policy_id.as_str() != OWNER_ACTION_EVENT_RETENTION_POLICY
+    {
+        return Err(event_invalid(
+            "Party privacy owner-action event contract identity is invalid",
+        ));
+    }
+
+    let bytes = delivery.payload.bytes.as_slice();
+    require_canonical_json_field(bytes, "tenant_id", delivery.tenant_id.as_str())?;
+    require_canonical_json_field(bytes, "owner_module_id", PARTIES_MODULE_ID)?;
+    require_canonical_json_field(
+        bytes,
+        "owner_capability_id",
+        PARTY_PRIVACY_ACTION_CAPABILITY,
+    )?;
+    require_canonical_json_field(bytes, "owner_capability_version", CONTRACT_VERSION)?;
+    require_canonical_json_field(bytes, "resource_type", PARTY_RECORD_TYPE)?;
+    require_canonical_json_field(bytes, "resource_id", delivery.aggregate.record_id.as_str())?;
+
+    let encoded_previous_version = canonical_json_string_field(bytes, "resource_version")?;
+    let previous_version = encoded_previous_version
+        .parse::<i64>()
+        .map_err(|error| event_invalid(error.to_string()))?;
+    if previous_version <= 0
+        || previous_version.to_string() != encoded_previous_version
+        || previous_version
+            .checked_add(1)
+            .is_none_or(|next| next != delivery.aggregate_version)
+    {
+        return Err(event_invalid(
+            "Party privacy owner-action version lineage is invalid",
+        ));
+    }
+
+    match canonical_json_string_field(bytes, "action_code")?.as_str() {
+        "delete" => Ok(PARTY_PRIVACY_ERASED),
+        "anonymize" => Ok(PARTY_PRIVACY_MINIMIZED),
+        _ => Err(event_invalid(
+            "Party privacy owner-action kind is unsupported by Customer 360 convergence",
+        )),
+    }
+}
+
+fn require_canonical_json_field(bytes: &[u8], field: &str, expected: &str) -> Result<(), SdkError> {
+    if canonical_json_string_field(bytes, field)? != expected {
+        return Err(event_invalid(format!(
+            "Party privacy owner-action field {field} is invalid"
+        )));
+    }
+    Ok(())
+}
+
+fn canonical_json_string_field(bytes: &[u8], field: &str) -> Result<String, SdkError> {
+    let text = std::str::from_utf8(bytes).map_err(|error| event_invalid(error.to_string()))?;
+    let needle = format!("\"{field}\":\"");
+    let mut positions = text.match_indices(&needle);
+    let Some((start, _)) = positions.next() else {
+        return Err(event_invalid(format!(
+            "Party privacy owner-action field {field} is missing"
+        )));
+    };
+    if positions.next().is_some() {
+        return Err(event_invalid(format!(
+            "Party privacy owner-action field {field} is duplicated"
+        )));
+    }
+    let value_start = start + needle.len();
+    let remainder = &text[value_start..];
+    let value_end = remainder.find('"').ok_or_else(|| {
+        event_invalid(format!(
+            "Party privacy owner-action field {field} is unterminated"
+        ))
+    })?;
+    let value = &remainder[..value_end];
+    if value.contains('\\') {
+        return Err(event_invalid(format!(
+            "Party privacy owner-action field {field} is not canonical"
+        )));
+    }
+    Ok(value.to_owned())
 }
 
 fn validate_contract(
@@ -972,12 +1121,166 @@ mod tests {
     }
 
     #[test]
-    fn registry_subscribes_to_all_owner_snapshot_events() {
+    fn active_party_documents_and_legacy_json_default_to_active_lifecycle() {
+        let delivery = delivery(
+            PARTIES_MODULE_ID,
+            PARTY_RECORD_TYPE,
+            PARTY_UPDATED,
+            PARTY_UPDATED_SCHEMA,
+            "party-1",
+            2,
+            parties::PartyUpdatedEvent {
+                party: Some(parties::Party {
+                    party_ref: Some(customer::PartyRef {
+                        party_id: "party-1".to_owned(),
+                    }),
+                    kind: parties::PartyKind::Person as i32,
+                    display_name: "Ada Customer".to_owned(),
+                    resource_version: Some(customer::CustomerResourceVersion {
+                        version: 2,
+                        ..Default::default()
+                    }),
+                }),
+                changed_fields: Vec::new(),
+            },
+        );
+        let write = Customer360ProjectionHandler
+            .project(&delivery)
+            .unwrap()
+            .remove(0);
+        let document = Customer360ContributionDocument::from_json(&write.document).unwrap();
+        let Customer360ContributionSnapshot::Party(snapshot) = document.snapshot else {
+            panic!("expected Party contribution")
+        };
+        assert_eq!(snapshot.privacy_lifecycle, PARTY_PRIVACY_ACTIVE);
+
+        let legacy = serde_json::json!({
+            "projection_schema_version": "1",
+            "contribution_kind": "party",
+            "root_party_ids": ["party-legacy"],
+            "source_owner_module_id": "crm.parties",
+            "source_resource_type": "parties.party",
+            "source_resource_id": "party-legacy",
+            "source_version": 1,
+            "source_event_id": "event-party-legacy-1",
+            "snapshot": {
+                "snapshot_kind": "party",
+                "kind": "person",
+                "display_name": "Legacy Customer"
+            }
+        });
+        let document = Customer360ContributionDocument::from_json(&legacy).unwrap();
+        let Customer360ContributionSnapshot::Party(snapshot) = document.snapshot else {
+            panic!("expected legacy Party contribution")
+        };
+        assert_eq!(snapshot.privacy_lifecycle, PARTY_PRIVACY_ACTIVE);
+    }
+
+    #[test]
+    fn privacy_actions_replace_party_root_membership_with_non_personal_tombstones() {
+        for (action, expected_lifecycle) in [
+            ("delete", PARTY_PRIVACY_ERASED),
+            ("anonymize", PARTY_PRIVACY_MINIMIZED),
+        ] {
+            let delivery = privacy_delivery(action, 4, 5);
+            let write = Customer360ProjectionHandler
+                .project(&delivery)
+                .unwrap()
+                .remove(0);
+            assert_eq!(write.resource_id, "party:party-1");
+            assert_eq!(write.source_version, 5);
+            let document = Customer360ContributionDocument::from_json(&write.document).unwrap();
+            assert!(document.root_party_ids.is_empty());
+            assert!(!document.affects_party("party-1"));
+            let Customer360ContributionSnapshot::Party(snapshot) = document.snapshot else {
+                panic!("expected Party tombstone")
+            };
+            assert_eq!(snapshot.kind, PARTY_PRIVACY_SUPPRESSED);
+            assert_eq!(snapshot.display_name, PARTY_PRIVACY_SUPPRESSED);
+            assert_eq!(snapshot.privacy_lifecycle, expected_lifecycle);
+        }
+    }
+
+    #[test]
+    fn privacy_action_rejects_noncanonical_fields_and_invalid_version_lineage() {
+        let duplicate = privacy_delivery_with_bytes(
+            br#"{"action_code":"delete","action_code":"anonymize","owner_capability_id":"parties.privacy.action.apply","owner_capability_version":"1.0.0","owner_module_id":"crm.parties","resource_id":"party-1","resource_type":"parties.party","resource_version":"4","tenant_id":"tenant-a"}"#.to_vec(),
+            5,
+        );
+        assert!(Customer360ProjectionHandler.project(&duplicate).is_err());
+
+        let escaped = privacy_delivery_with_bytes(
+            br#"{"action_code":"dele\u0074e","owner_capability_id":"parties.privacy.action.apply","owner_capability_version":"1.0.0","owner_module_id":"crm.parties","resource_id":"party-1","resource_type":"parties.party","resource_version":"4","tenant_id":"tenant-a"}"#.to_vec(),
+            5,
+        );
+        assert!(Customer360ProjectionHandler.project(&escaped).is_err());
+
+        let stale = privacy_delivery("delete", 3, 5);
+        assert!(Customer360ProjectionHandler.project(&stale).is_err());
+    }
+
+    #[test]
+    fn registry_subscribes_to_owner_snapshots_and_party_privacy_actions() {
         let registry = customer_360_projection_registry().unwrap();
         let definition = registry
             .get(CUSTOMER_360_PROJECTION_ID)
             .expect("Customer 360 projection definition");
         assert_eq!(definition.event_types().len(), ALL_EVENT_TYPES.len());
+        assert!(
+            definition
+                .event_types()
+                .iter()
+                .any(|event_type| event_type.as_str() == PARTY_PRIVACY_ACTION_COMPLETED)
+        );
+    }
+
+    fn privacy_delivery(
+        action: &str,
+        previous_version: i64,
+        aggregate_version: i64,
+    ) -> EventDelivery {
+        let bytes = format!(
+            "{{\"action_code\":\"{action}\",\"owner_capability_id\":\"{PARTY_PRIVACY_ACTION_CAPABILITY}\",\"owner_capability_version\":\"{CONTRACT_VERSION}\",\"owner_module_id\":\"{PARTIES_MODULE_ID}\",\"resource_id\":\"party-1\",\"resource_type\":\"{PARTY_RECORD_TYPE}\",\"resource_version\":\"{previous_version}\",\"tenant_id\":\"tenant-a\"}}"
+        )
+        .into_bytes();
+        privacy_delivery_with_bytes(bytes, aggregate_version)
+    }
+
+    fn privacy_delivery_with_bytes(bytes: Vec<u8>, aggregate_version: i64) -> EventDelivery {
+        let module_id = ModuleId::try_new(PARTIES_MODULE_ID).unwrap();
+        EventDelivery {
+            delivery_id: DeliveryId::try_new(format!("delivery-party-1-{aggregate_version}"))
+                .unwrap(),
+            event_id: EventId::try_new(format!("event-party-1-{aggregate_version}")).unwrap(),
+            tenant_id: TenantId::try_new("tenant-a").unwrap(),
+            source_module_id: module_id.clone(),
+            consumer_module_id: ModuleId::try_new(CUSTOMER_360_CONSUMER_MODULE_ID).unwrap(),
+            source_actor_id: ActorId::try_new("actor-a").unwrap(),
+            event_type: EventType::try_new(PARTY_PRIVACY_ACTION_COMPLETED).unwrap(),
+            event_version: EventVersion::try_new(CONTRACT_VERSION).unwrap(),
+            aggregate: RecordRef {
+                record_type: RecordType::try_new(PARTY_RECORD_TYPE).unwrap(),
+                record_id: RecordId::try_new("party-1").unwrap(),
+            },
+            aggregate_version,
+            occurred_at_unix_nanos: 100,
+            correlation_id: CorrelationId::try_new("customer-360-correlation").unwrap(),
+            trace_id: TraceId::try_new("customer-360-trace").unwrap(),
+            payload: TypedPayload {
+                owner: module_id,
+                schema_id: SchemaId::try_new(OWNER_ACTION_EVENT_SCHEMA).unwrap(),
+                schema_version: SchemaVersion::try_new(CONTRACT_VERSION).unwrap(),
+                descriptor_hash: OWNER_ACTION_EVENT_DESCRIPTOR_HASH,
+                data_class: DataClass::Restricted,
+                encoding: PayloadEncoding::Json,
+                maximum_size_bytes: OWNER_ACTION_EVENT_MAXIMUM_BYTES,
+                retention_policy_id: RetentionPolicyId::try_new(
+                    OWNER_ACTION_EVENT_RETENTION_POLICY,
+                )
+                .unwrap(),
+                bytes,
+            },
+        }
     }
 
     fn delivery<M: Message>(

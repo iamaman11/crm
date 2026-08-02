@@ -28,27 +28,26 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             packet["packet_id"],
-            "repository-step-15-party-tombstone-search-convergence",
+            "repository-step-15-party-tombstone-customer360-convergence",
         )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
             {
                 "ref": "main",
-                "sha": "5bc885c6a311cbe95eb6e5ba1a85d10aed400650",
+                "sha": "bd205e0af77b676654dff8ddf26d3b5b195880b2",
             },
         )
         self.assertEqual(packet["tracking_issues"], [126, 194])
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
-                "crates/crm-core-data/src/search_store.rs",
-                "crates/crm-core-data/tests/postgres_search.rs",
-                "crates/crm-global-search-composition/src/lib.rs",
+                "crates/crm-customer-360-composition/src/lib.rs",
+                "crates/crm-customer-360-query-adapter/src/lib.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
-                "tests/test_party_tombstone_search_convergence.py",
+                "tests/test_party_tombstone_customer_360_convergence.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -57,24 +56,27 @@ class RepositoryNavigationTests(unittest.TestCase):
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
+                "Customer Privacy Access Export CI",
+                "Customer Privacy Owner Execution CI",
                 "Rust Generated Sync",
                 "Rust CI",
-                "Search Runtime CI",
-                "Database CI",
-                "Parties Privacy Scope CI",
             ],
         )
         self.assertIn("complete Repository Step 15", packet["non_goals"][0])
         self.assertIn(
-            "subscribe global search generation g3 to parties.privacy.action.apply.completed without adding a dependency or changing the public Party contract",
+            "subscribe the existing Customer 360 projection to parties.privacy.action.apply.completed without adding a dependency or public contract",
             packet["deliverables"],
         )
         self.assertIn(
-            "add PostgreSQL acceptance proving stale erased and privacy-minimized Party names cannot become search candidates",
+            "remove root Party membership from the privacy tombstone so ordinary Customer 360 selection cannot load or disclose it",
             packet["deliverables"],
         )
         self.assertIn(
-            "synchronize repository packet and navigation fixtures with the exact Step 15 slice",
+            "keep existing query-adapter test fixtures synchronized with the additive internal Party contribution field",
+            packet["deliverables"],
+        )
+        self.assertIn(
+            "synchronize repository packet and navigation fixtures with the exact Customer 360 slice",
             packet["deliverables"],
         )
 
@@ -90,11 +92,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-15-party-tombstone-search-convergence",
+            "repository-step-15-party-tombstone-customer360-convergence",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "5bc885c6a311cbe95eb6e5ba1a85d10aed400650",
+            "bd205e0af77b676654dff8ddf26d3b5b195880b2",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -149,11 +151,10 @@ class RepositoryNavigationTests(unittest.TestCase):
         workflow_paths = {
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
             "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
+            "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
+            "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
             "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
             "Rust CI": ".github/workflows/rust.yml",
-            "Search Runtime CI": ".github/workflows/search-runtime.yml",
-            "Database CI": ".github/workflows/database.yml",
-            "Parties Privacy Scope CI": ".github/workflows/parties-privacy-scope.yml",
         }
         affected = {
             "head_sha": "b" * 40,
@@ -164,7 +165,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Party tombstone search convergence packet"],
+                    "reasons": ["Party tombstone Customer 360 convergence packet"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -172,7 +173,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="5bc885c6a311cbe95eb6e5ba1a85d10aed400650",
+                return_value="bd205e0af77b676654dff8ddf26d3b5b195880b2",
             ),
             patch(
                 "scripts.repository_navigation.build_report",
