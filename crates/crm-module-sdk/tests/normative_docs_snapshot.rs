@@ -1,7 +1,10 @@
 #[test]
 fn capture_normative_document_snapshot() {
     let documents = [
-        ("PROJECT_STATUS.md", include_str!("../../../docs/PROJECT_STATUS.md")),
+        (
+            "PROJECT_STATUS.md",
+            include_str!("../../../docs/PROJECT_STATUS.md"),
+        ),
         (
             "IMPLEMENTATION_ROADMAP.md",
             include_str!("../../../docs/IMPLEMENTATION_ROADMAP.md"),
@@ -14,7 +17,10 @@ fn capture_normative_document_snapshot() {
             "ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
             include_str!("../../../docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md"),
         ),
-        ("MODULE_CATALOG.md", include_str!("../../../docs/MODULE_CATALOG.md")),
+        (
+            "MODULE_CATALOG.md",
+            include_str!("../../../docs/MODULE_CATALOG.md"),
+        ),
     ];
 
     for (name, content) in documents {
