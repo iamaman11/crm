@@ -5,7 +5,6 @@ pub struct WorkerConformanceSuite {
     representative: &'static str,
 }
 
-#[allow(dead_code)]
 impl WorkerConformanceSuite {
     pub const fn new(representative: &'static str) -> Self {
         Self { representative }
