@@ -232,28 +232,27 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "architecture-step-22-runtime-fanin-gate-value-hardening",
+            "product-development-10-of-10-plan",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
             {
                 "ref": "main",
-                "sha": "fa55e50f356b9a54712843038f763741898534b8",
+                "sha": "dbba30de911bef10149342ac0490c00ec858d42f",
             },
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
                 "docs/ACTIVE_PACKET.md",
-                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-                "docs/DELIVERY_GOVERNANCE.md",
                 "docs/IMPLEMENTATION_ROADMAP.md",
                 "docs/PHASE8_DELIVERY_PLAN.md",
-                "docs/PROJECT_STATUS.md",
-                "docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md",
+                "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
+                "docs/README.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
+                "tests/test_product_development_plan.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -261,7 +260,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.packet["required_checks"],
             ["Affected Scope CI", "Governance CI", "Rust Generated Sync"],
         )
-        self.assertIn("start Repository Step 15", self.packet["non_goals"])
+        self.assertIn("start Repository Step 15", "\n".join(self.packet["non_goals"]))
         self.assertTrue(
             any(
                 "add, remove or modify a permanent workflow" in non_goal
@@ -271,7 +270,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "require a complete permanent-gate ledger",
+            "define Phase 8C universal automation",
             "\n".join(self.packet["deliverables"]),
         )
 
