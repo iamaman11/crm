@@ -200,16 +200,18 @@ impl ApplicationRuntime {
         }
         let mutation_definitions = composition.mutation_definitions().to_vec();
         let query_definitions = composition.query_definitions().to_vec();
-        let ([mutation_registry, query_registry], contract_usage_metrics_text) =
-            meter_contract_registries(
-                DEPRECATED_CONTRACTS,
-                [
-                    composition.mutation_registry(),
-                    composition.query_registry(),
-                ],
-                [&mutation_definitions, &query_definitions],
-            )
-            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let mut contract_usage_metrics_text: Arc<dyn Fn() -> String + Send + Sync> =
+            Arc::new(String::new);
+        let [mutation_registry, query_registry] = meter_contract_registries(
+            DEPRECATED_CONTRACTS,
+            [
+                composition.mutation_registry(),
+                composition.query_registry(),
+            ],
+            [&mutation_definitions, &query_definitions],
+            |renderer| contract_usage_metrics_text = renderer,
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_import_outcome_definitions = internal_capability_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_export_selection_definitions =
