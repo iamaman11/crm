@@ -42,10 +42,16 @@ class PartyTombstoneCustomer360ConvergenceTests(unittest.TestCase):
             "owner_capability_version",
             "resource_type",
             "resource_id",
-            "resource_version",
-            "action_code",
         ):
-            self.assertIn(f'canonical_json_string_field(bytes, "{field}")', self.composition)
+            self.assertIn(
+                f'require_canonical_json_field(bytes, "{field}"',
+                self.composition,
+            )
+        for field in ("resource_version", "action_code"):
+            self.assertIn(
+                f'canonical_json_string_field(bytes, "{field}")',
+                self.composition,
+            )
 
         self.assertIn("checked_add(1)", self.composition)
         self.assertIn("next != delivery.aggregate_version", self.composition)
@@ -60,9 +66,15 @@ class PartyTombstoneCustomer360ConvergenceTests(unittest.TestCase):
         self.assertIn("Vec::new()", self.composition)
         self.assertIn("delivery.aggregate_version", self.composition)
         self.assertIn("kind: PARTY_PRIVACY_SUPPRESSED.to_owned()", self.composition)
-        self.assertIn("display_name: PARTY_PRIVACY_SUPPRESSED.to_owned()", self.composition)
+        self.assertIn(
+            "display_name: PARTY_PRIVACY_SUPPRESSED.to_owned()",
+            self.composition,
+        )
         self.assertIn("privacy_lifecycle: lifecycle.to_owned()", self.composition)
-        self.assertNotIn("Ada Customer", self.composition.split("fn party_privacy_contribution", 1)[1].split("fn account_contribution", 1)[0])
+        privacy_function = self.composition.split(
+            "fn party_privacy_contribution", 1
+        )[1].split("fn account_contribution", 1)[0]
+        self.assertNotIn("Ada Customer", privacy_function)
 
     def test_only_strict_privacy_tombstone_may_have_empty_root_membership(self) -> None:
         for marker in (
@@ -75,14 +87,26 @@ class PartyTombstoneCustomer360ConvergenceTests(unittest.TestCase):
             self.assertIn(marker, self.composition)
 
     def test_historical_party_documents_remain_replay_compatible(self) -> None:
-        self.assertIn('#[serde(default = "active_privacy_lifecycle")]', self.composition)
+        self.assertIn(
+            '#[serde(default = "active_privacy_lifecycle")]',
+            self.composition,
+        )
         self.assertIn("PARTY_PRIVACY_ACTIVE.to_owned()", self.composition)
         self.assertIn("legacy Party contribution", self.composition)
 
     def test_customer_360_query_requires_root_membership_and_party_root(self) -> None:
-        self.assertIn("(document -> 'root_party_ids') @> jsonb_build_array($4::text)", self.query_adapter)
-        self.assertIn("let party = party.ok_or_else(resource_not_found)?;", self.query_adapter)
-        self.assertIn("document.affects_party(request.root_party_id.as_str())", self.query_adapter)
+        self.assertIn(
+            "(document -> 'root_party_ids') @> jsonb_build_array($4::text)",
+            self.query_adapter,
+        )
+        self.assertIn(
+            "let party = party.ok_or_else(resource_not_found)?;",
+            self.query_adapter,
+        )
+        self.assertIn(
+            "document.affects_party(request.root_party_id.as_str())",
+            self.query_adapter,
+        )
 
     def test_packet_is_bounded_and_step_remains_incomplete(self) -> None:
         self.assertEqual(
@@ -104,7 +128,9 @@ class PartyTombstoneCustomer360ConvergenceTests(unittest.TestCase):
                 "tests/test_repository_navigation.py",
             },
         )
-        combined = "\n".join(self.packet["objective"] for _ in range(1)) + "\n" + "\n".join(self.packet["non_goals"])
+        combined = self.packet["objective"] + "\n" + "\n".join(
+            self.packet["non_goals"]
+        )
         self.assertIn("does not complete Step 15", combined)
         self.assertIn("complete Repository Step 15", combined)
 
