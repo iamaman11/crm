@@ -76,6 +76,7 @@ class GenericConformanceAdoptionTests(unittest.TestCase):
         self.assertIn("WITH RECURSIVE direct_party_waiters", import_recovery)
         self.assertIn("blocking_chain(waiter_pid, blocker_pid)", import_recovery)
         self.assertIn("pg_blocking_pids", import_recovery)
+        self.assertIn("count(DISTINCT chain.waiter_pid)", import_recovery)
         self.assertIn("transitive_executor_waiters", import_recovery)
         self.assertIn("competing recovered executor A", import_recovery)
         self.assertIn("competing recovered executor B", import_recovery)
