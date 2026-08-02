@@ -7,13 +7,17 @@
     "ref": "main",
     "sha": "1f889a810c82da3d0fee12427eacccbe43613bac"
   },
-  "tracking_issues": [126, 194],
+  "tracking_issues": [
+    126,
+    194
+  ],
   "objective": "Complete the final implementation boundary of Repository Step 15 with a bounded real-process no-orphan acceptance. Create a Party through the public gateway of a real crm-api process, establish an accepted production-shaped Party privacy owner-action state/event while the process is stopped, remove authoritative Customer 360 v2 derived state and retain a stale legacy v1 document, then restart the real crm-api binary and prove its production background worker automatically restores the non-disclosing v2 tombstone. Execute the process acceptance on clean and rollback/reapplied PostgreSQL schemas through the existing Customer Privacy Owner Execution gate. This packet does not change owner-action, projection, query, contract, migration or worker semantics and does not synchronize final Step 15 acceptance evidence into normative planning documents.",
   "allowed_paths": [
     ".github/workflows/customer-privacy-owner-execution.yml",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
     "services/crm-api/tests/customer_360_privacy_no_orphan_process_e2e.rs",
+    "services/crm-api/tests/support.rs",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_party_tombstone_rebuild_convergence.py",
     "tests/test_repository_navigation.py"
@@ -54,6 +58,7 @@
     "restart the real crm-api binary without bootstrap and wait for its production Customer360BackgroundWorker cycle",
     "prove the restarted process automatically materializes the source-version-2 privacy-minimized v2 tombstone with empty root membership and no original name",
     "prove the stale legacy v1 document remains unchanged and the authoritative Party record remains minimized",
+    "reuse the existing crm-api process support through a test-only module shim without changing the service manifest or production source",
     "extend the existing Customer Privacy Owner Execution workflow to compile, lint and execute the process test on clean and rollback/reapplied schemas",
     "add permanent repository guards for real binary restart, public gateway creation, process-owned repair, exact workflow execution and explicit non-goals",
     "synchronize repository packet, generated navigation and exact packet fixtures"
@@ -75,6 +80,7 @@
     "the restarted production process materializes customer.customer-360.v2 source version 2 with privacy_minimized lifecycle, empty root membership and no original display name",
     "the legacy customer.customer-360.v1 document remains source version 1 with its original name and root membership, proving it is historical but non-authoritative",
     "the authoritative Party record remains version 2 and contains no original display name",
+    "the test-only support shim resolves the existing shared crm-api process harness and adds no manifest or production dependency",
     "the existing Customer Privacy Owner Execution CI compiles, lints and executes the process acceptance on both clean and rollback/reapplied schemas",
     "no new permanent workflow is created and no accepted owner-action, Customer 360 v2, query or background-worker semantics are modified",
     "this packet does not claim final normative evidence synchronization, Architecture 10/10, product completion or Phase 8A closure",
