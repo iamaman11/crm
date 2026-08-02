@@ -26,41 +26,50 @@ class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(packet["packet_id"], "product-development-10-of-10-plan")
+        self.assertEqual(
+            packet["packet_id"],
+            "repository-step-15-party-tombstone-search-convergence",
+        )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
             {
                 "ref": "main",
-                "sha": "dbba30de911bef10149342ac0490c00ec858d42f",
+                "sha": "5bc885c6a311cbe95eb6e5ba1a85d10aed400650",
             },
         )
-        self.assertEqual(packet["tracking_issues"], [2, 11, 29, 194])
+        self.assertEqual(packet["tracking_issues"], [126, 194])
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
+                "crates/crm-core-data/src/search_store.rs",
+                "crates/crm-global-search-composition/src/lib.rs",
                 "docs/ACTIVE_PACKET.md",
-                "docs/IMPLEMENTATION_ROADMAP.md",
-                "docs/PHASE8_DELIVERY_PLAN.md",
-                "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
-                "docs/README.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
-                "tests/test_product_development_plan.py",
+                "tests/test_party_tombstone_search_convergence.py",
                 "tests/test_repository_navigation.py",
             },
         )
         self.assertEqual(
             packet["required_checks"],
-            ["Affected Scope CI", "Governance CI", "Rust Generated Sync"],
+            [
+                "Affected Scope CI",
+                "Complexity Baseline CI",
+                "Rust Generated Sync",
+                "Rust CI",
+                "Search Runtime CI",
+                "Database CI",
+                "Parties Privacy Scope CI",
+            ],
         )
-        self.assertIn("start Repository Step 15", packet["non_goals"][0])
+        self.assertIn("complete Repository Step 15", packet["non_goals"][0])
         self.assertIn(
-            "add PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md as the normative product-portfolio, automation-semantics and functional-completion plan",
+            "subscribe global search generation g3 to parties.privacy.action.apply.completed without adding a dependency or changing the public Party contract",
             packet["deliverables"],
         )
         self.assertIn(
-            "define Phase 8C universal automation with typed triggers, conditions, governed robot actions, durable execution, approvals, visual workflow authoring and sandboxed programmable extensions",
+            "synchronize repository packet and navigation fixtures with the exact Step 15 slice",
             packet["deliverables"],
         )
 
@@ -76,11 +85,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "product-development-10-of-10-plan",
+            "repository-step-15-party-tombstone-search-convergence",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "dbba30de911bef10149342ac0490c00ec858d42f",
+            "5bc885c6a311cbe95eb6e5ba1a85d10aed400650",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -134,8 +143,12 @@ class RepositoryNavigationTests(unittest.TestCase):
         changed_paths = packet["allowed_paths"]
         workflow_paths = {
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
-            "Governance CI": ".github/workflows/governance.yml",
+            "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
             "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
+            "Rust CI": ".github/workflows/rust.yml",
+            "Search Runtime CI": ".github/workflows/search-runtime.yml",
+            "Database CI": ".github/workflows/database.yml",
+            "Parties Privacy Scope CI": ".github/workflows/parties-privacy-scope.yml",
         }
         affected = {
             "head_sha": "b" * 40,
@@ -146,7 +159,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["product planning packet"],
+                    "reasons": ["Party tombstone search convergence packet"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -154,7 +167,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="dbba30de911bef10149342ac0490c00ec858d42f",
+                return_value="5bc885c6a311cbe95eb6e5ba1a85d10aed400650",
             ),
             patch(
                 "scripts.repository_navigation.build_report",
