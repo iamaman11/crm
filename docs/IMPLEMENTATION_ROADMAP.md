@@ -62,7 +62,7 @@ Issue #194 remains open. The architecture stage ledger is:
 
 - Stage A documentation/navigation baseline — **Complete**;
 - Stage B dependency, crate and exception governance — **Complete through PRs #253, #255 and #257; ADR-032 Step 22 decision remains future closure evidence**;
-- Stage C Customer Privacy golden owner and persistence model — **In progress**;
+- Stage C Customer Privacy golden owner and persistence model — **In progress; Party tombstone/no-orphan convergence accepted through Step 15**;
 - Stage D contribution aggregation — **Complete through PR #249**;
 - Stage E affected-scope CI — **Complete through PR #239; permanent-gate value review remains mandatory at Step 22**;
 - Stage F generic conformance and contract lifecycle — **In progress**;
@@ -70,7 +70,7 @@ Issue #194 remains open. The architecture stage ledger is:
 - Stage H reproducible environment and navigation — **In progress**;
 - Stage I frontend and operations parity — **Incomplete**.
 
-Repository Steps 1–14 are complete. Repository Step 15 is the next permitted implementation step and is **not started**.
+Repository Steps 1–15 are complete. Repository Step 16 is the next permitted implementation step and is **not started**.
 
 ### 3.1 Accepted Repository Step 14 closure
 
@@ -88,7 +88,7 @@ The behavior-neutral Customer Accounts consolidation:
 
 Exact current metrics:
 
-| Metric | Step 13 historical baseline | Current after Step 14 |
+| Metric | Step 13 historical baseline | Current after Step 15 |
 |---|---:|---:|
 | Workspace packages | 113 | **112** |
 | Internal dependency edges | 841 | **835** |
@@ -97,14 +97,25 @@ Exact current metrics:
 | Dependency declarations | 270 | **270** |
 | Suppression occurrences | 91 | **91** |
 
-This architecture reduction does not advance Customer Privacy product readiness and does not declare architecture 10/10.
+This architecture reduction does not by itself complete Customer Privacy product readiness and does not declare architecture 10/10.
 
-### 3.2 Binding next repository sequence
+### 3.2 Accepted Repository Step 15 closure
+
+Step 15 is accepted through five bounded slices:
+
+- PR #263 / source `6c2a54f6780988a12fec3cd77ca2cd39ad349140` / merge `bd205e0af77b676654dff8ddf26d3b5b195880b2` / 32 of 32 — global-search tombstone convergence;
+- PR #264 / source `e6c9d2901109c8d5b9e0f3cf783214407e26451a` / merge `e9fe1f352386d80a29d122db5d1ed6c47266bfaf` / 6 of 6 — Customer 360 tombstone convergence and root-membership removal;
+- PR #265 / source `ef572bdf31c584c397c215cd1b62ee47cad54e64` / merge `2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a` / 19 of 19 — canonical owner execution, immutable-history rebuild and Search replay;
+- PR #266 / source `ded5d80ae11bbf044b5bfe5b572e8dab521f884a` / merge `1f889a810c82da3d0fee12427eacccbe43613bac` / 19 of 19 — automatic Customer 360 generation rollover to `customer.customer-360.v2`;
+- PR #267 / source `f1b72dbee09f152005cb3584b9bcc1573bf2c4fe` / merge `4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf` / 19 of 19 — real `crm-api` restart and process-host no-orphan convergence on clean and rollback/reapplied PostgreSQL schemas.
+
+The combined evidence proves stable non-reusable Party privacy tombstones, strict event/version lineage, non-disclosure in Search and Customer 360, deterministic rebuild/replay, automatic fresh-generation rollout and process-owned repair without package, dependency-edge, public-contract, route or migration growth.
+
+### 3.3 Binding next repository sequence
 
 The complete order is normative in the architecture plan. The remaining sequence begins:
 
-15. Party tombstone, no-orphan proof and projection/search/cache convergence — **next, not started**;
-16. reusable generic worker conformance;
+16. reusable generic worker conformance — **next, not started**;
 17. contract compatibility, deprecation, consumer-migration and retirement enforcement;
 18. deterministic local lifecycle commands;
 19. Customer Privacy worker and full process/end-to-end acceptance;
@@ -157,7 +168,8 @@ Accepted runtime and architecture evidence includes:
 - authoritative exact-nine owner-specific anonymization/deletion through PR #244;
 - complete first-party contribution aggregation through PR #249;
 - architecture governance closure through PR #257;
-- first measured transitional consolidation through PR #259.
+- first measured transitional consolidation through PR #259;
+- Party tombstone, Search/Customer 360 convergence, immutable-history replay, automatic v2 rollover and real process-host no-orphan closure through PRs #263–#267.
 
 Current public Customer Privacy inventory remains:
 
@@ -169,17 +181,15 @@ Trusted-internal planning, retention evaluation, replay-safe owner execution, ac
 
 ### 5.1 Remaining Phase 8A.11 product work
 
-The remaining product work is not satisfied by Step 14:
+The remaining product work after Step 15 is:
 
 - restriction and legal-hold release/read lifecycle where required;
-- Party tombstone and no-orphan semantics;
-- projection/search/cache convergence;
 - reusable worker conformance and a real Customer Privacy worker lifecycle;
 - disable/uninstall fail-closed semantics;
 - frontend, accessibility and browser acceptance;
 - production restore, SLO, observability, performance, security and supply-chain evidence.
 
-Repository Step 15 owns only the first bounded tombstone/no-orphan/convergence packet. It must not absorb Steps 16–21.
+Repository Step 16 owns only reusable generic worker conformance. It must not absorb Steps 17–21 or claim a Customer Privacy worker before Step 19.
 
 ## 6. Module-readiness accounting
 
@@ -280,7 +290,7 @@ The complete binding rules are in ADR-032.
 
 Architecture 10/10 remains reserved for Step 25 after:
 
-- Steps 15–21 close their mechanical criteria;
+- Steps 16–21 close their mechanical criteria;
 - Phase 8A is complete;
 - Step 22 leaves zero unresolved runtime-fan-in or permanent-gate value decisions;
 - the pre-registered Step 23 Catalog/Pricing wave and Step 24 Quote/CPQ orchestration wave prove bounded extension cost and validate the Step 22 decisions;
