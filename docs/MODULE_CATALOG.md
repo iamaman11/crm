@@ -72,6 +72,8 @@ Accepted Customer Privacy architecture/runtime evidence now includes:
 - PR #226 / accepted source `ad08a691ec759b8b3b523fa66a034cecf4138ff0` / merge `a46460623e90c5649d36bedba055fb55023d9349` / 34 of 34 permanent workflows — public `customer_privacy.restriction.place@1.0.0` and first protected-owner enforcement;
 - PR #230 — public legal hold and mandatory-retention precedence;
 - PR #235 — reusable mutation/query conformance;
+- PR #269 / source `74b1d7b0f8764fcd90839b7aab25f8f82fe5e552` / merge `6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd` / 20 of 20 — reusable worker conformance and representative Customer Enrichment / CRM API import adoption;
+- PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17 — two live production import executors serialize and converge to exactly one durable Party effect;
 - PR #237 — durable replay-safe owner execution, checkpoints and real owner outcomes;
 - PR #239 — multi-plane affected-scope enforcement;
 - PR #241 / accepted source `2bb3a671deb18a6ae3bcea228ed01ed287b9de6a` / merge `19232f6f3e2ae87aabeb080257c1aac5477a6616` / 34 of 34 permanent workflows — governed access/export assembly with Customer Data Operations artifact ownership and crash recovery;
@@ -90,7 +92,7 @@ Repository Step 15 is accepted through:
 - PR #266 / source `ded5d80ae11bbf044b5bfe5b572e8dab521f884a` / merge `1f889a810c82da3d0fee12427eacccbe43613bac` / 19 of 19 — automatic Customer 360 v2 generation rollover;
 - PR #267 / source `f1b72dbee09f152005cb3584b9bcc1573bf2c4fe` / merge `4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf` / 19 of 19 — real `crm-api` process-host no-orphan repair on clean and rollback/reapplied schemas.
 
-The accepted Step 15 result preserves the current measured repository at **112 workspace packages**, **835 internal dependency edges**, maximum dependency depth **18**, **5,377** conservative public Rust items, **270** dependency declarations and **91** suppression occurrences. Repository Step 16 is next and not started. This architecture/runtime evidence does not advance Customer Privacy to Product complete.
+The accepted Step 15 result preserves the current measured repository at **112 workspace packages**, **835 internal dependency edges**, maximum dependency depth **18**, **5,377** conservative public Rust items, **270** dependency declarations and **91** suppression occurrences. Repository Step 16 is complete through PRs #269 and #270; reusable worker conformance, retry/restart recovery, tenant isolation and exactly-once contention convergence are accepted. Repository Step 17 is next and not started. This architecture/runtime evidence does not add a Customer Privacy worker or advance Customer Privacy to Product complete.
 
 ## 5. Phase 8A packet accounting
 
@@ -104,7 +106,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Discovery, immutable snapshots, deterministic planning, permission-aware reads, approval, restriction placement/final enforcement, legal-hold placement, mandatory-retention adjudication, durable owner execution/outcomes, governed access/export assembly, authoritative owner-specific anonymization/deletion and Party tombstone/no-orphan convergence are accepted. Remaining product work includes restriction and legal-hold release/read lifecycle where required, reusable worker conformance, a real Customer Privacy worker lifecycle, disable/uninstall fail-closed semantics, frontend/accessibility/browser proof and production operations evidence.
+- 8A.11 / #126 — Customer Privacy. Discovery, immutable snapshots, deterministic planning, permission-aware reads, approval, restriction placement/final enforcement, legal-hold placement, mandatory-retention adjudication, durable owner execution/outcomes, governed access/export assembly, authoritative owner-specific anonymization/deletion and Party tombstone/no-orphan convergence are accepted. Remaining product work includes restriction and legal-hold release/read lifecycle where required, a real Customer Privacy worker lifecycle using the accepted reusable conformance, disable/uninstall fail-closed semantics, frontend/accessibility/browser proof and production operations evidence.
 
 Current workspace packages: **112**. Current product-complete expert modules: **0**.
 
