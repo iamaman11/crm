@@ -232,26 +232,24 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-15-party-tombstone-search-convergence",
+            "repository-step-15-party-tombstone-customer360-convergence",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
             {
                 "ref": "main",
-                "sha": "5bc885c6a311cbe95eb6e5ba1a85d10aed400650",
+                "sha": "bd205e0af77b676654dff8ddf26d3b5b195880b2",
             },
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                "crates/crm-core-data/src/search_store.rs",
-                "crates/crm-core-data/tests/postgres_search.rs",
-                "crates/crm-global-search-composition/src/lib.rs",
+                "crates/crm-customer-360-composition/src/lib.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
-                "tests/test_party_tombstone_search_convergence.py",
+                "tests/test_party_tombstone_customer_360_convergence.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -262,9 +260,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "Complexity Baseline CI",
                 "Rust Generated Sync",
                 "Rust CI",
-                "Search Runtime CI",
-                "Database CI",
+                "Projection Runtime CI",
+                "Application Runtime CI",
                 "Parties Privacy Scope CI",
+                "Customer Privacy Owner Execution CI",
             ],
         )
         self.assertIn("complete Repository Step 15", "\n".join(self.packet["non_goals"]))
@@ -277,11 +276,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "subscribe global search generation g3",
+            "subscribe the existing Customer 360 projection",
             "\n".join(self.packet["deliverables"]),
         )
         self.assertIn(
-            "add PostgreSQL acceptance proving stale erased and privacy-minimized Party names cannot become search candidates",
+            "remove root Party membership from the privacy tombstone so ordinary Customer 360 selection cannot load or disclose it",
             self.packet["deliverables"],
         )
         self.assertIn(
