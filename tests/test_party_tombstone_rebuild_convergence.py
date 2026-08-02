@@ -78,6 +78,16 @@ class PartyTombstoneRebuildConvergenceTests(unittest.TestCase):
         ):
             self.assertIn(marker, self.acceptance)
 
+    def test_repeat_search_rebuild_uses_a_fresh_generation(self) -> None:
+        for marker in (
+            'REPEAT_SEARCH_GENERATION_ID: &str = "g4"',
+            'REPEAT_SEARCH_PROJECTION_ID: &str = "search.global.g4"',
+            "GlobalSearchWorker::for_generation(store, REPEAT_SEARCH_GENERATION_ID)",
+            "repeat global search reindex in fresh generation",
+            "REPEAT_SEARCH_PROJECTION_ID",
+        ):
+            self.assertIn(marker, self.acceptance)
+
     def test_repeat_rebuild_preserves_authoritative_evidence(self) -> None:
         for marker in (
             "authoritative_before_repeat",
