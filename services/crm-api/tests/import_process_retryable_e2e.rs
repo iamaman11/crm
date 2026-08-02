@@ -296,25 +296,57 @@ mod retryable_process {
     async fn wait_for_party_contention_waiters(admin: &PgPool, expected: i64) {
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
-            let waiters: i64 = sqlx::query_scalar(
-                r#"
-                SELECT count(*)::bigint
-                FROM pg_stat_activity
-                WHERE datname = current_database()
-                  AND wait_event_type = 'Lock'
-                  AND wait_event = 'advisory'
-                  AND query ILIKE '%crm.records%'
-                "#,
-            )
-            .fetch_one(admin)
-            .await
-            .expect("count Party target contention waiters");
-            if waiters >= expected {
+            let (direct_party_waiters, transitive_executor_waiters): (i64, i64) =
+                sqlx::query_as(
+                    r#"
+                    WITH RECURSIVE direct_party_waiters AS (
+                      SELECT
+                        activity.pid AS waiter_pid,
+                        blocker.pid AS root_blocker_pid
+                      FROM pg_stat_activity AS activity
+                      CROSS JOIN LATERAL
+                        unnest(pg_blocking_pids(activity.pid)) AS blocker(pid)
+                      WHERE activity.datname = current_database()
+                        AND activity.wait_event_type = 'Lock'
+                        AND activity.wait_event = 'advisory'
+                        AND activity.query ILIKE '%crm.records%'
+                    ),
+                    blocking_chain(waiter_pid, blocker_pid) AS (
+                      SELECT
+                        activity.pid,
+                        blocker.pid
+                      FROM pg_stat_activity AS activity
+                      CROSS JOIN LATERAL
+                        unnest(pg_blocking_pids(activity.pid)) AS blocker(pid)
+                      WHERE activity.datname = current_database()
+                      UNION
+                      SELECT
+                        chain.waiter_pid,
+                        blocker.pid
+                      FROM blocking_chain AS chain
+                      CROSS JOIN LATERAL
+                        unnest(pg_blocking_pids(chain.blocker_pid)) AS blocker(pid)
+                    )
+                    SELECT
+                      (SELECT count(*)::bigint FROM direct_party_waiters),
+                      (
+                        SELECT count(DISTINCT chain.waiter_pid)::bigint
+                        FROM blocking_chain AS chain
+                        WHERE chain.blocker_pid IN (
+                          SELECT root_blocker_pid FROM direct_party_waiters
+                        )
+                      )
+                    "#,
+                )
+                .fetch_one(admin)
+                .await
+                .expect("observe Party target contention chain");
+            if direct_party_waiters >= 1 && transitive_executor_waiters >= expected {
                 return;
             }
             assert!(
                 Instant::now() < deadline,
-                "expected {expected} competing Party target executors, observed {waiters}"
+                "expected one direct Party waiter and {expected} competing executors in the same blocking chain, observed {direct_party_waiters} direct and {transitive_executor_waiters} transitive waiters"
             );
             sleep(Duration::from_millis(50)).await;
         }
