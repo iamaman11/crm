@@ -244,7 +244,6 @@ async fn seed_non_active_party(
     stale_display_name: &str,
     lifecycle: &str,
 ) {
-    let source_event_id = format!("event-{resource_id}");
     sqlx::query(
         r#"
         INSERT INTO crm.projection_documents (
@@ -252,17 +251,17 @@ async fn seed_non_active_party(
           source_version, source_event_id, document
         )
         VALUES (
-          $1, $2, 'parties.party', $3, $4, $5,
+          $1, $2, 'parties.party', $3, $4, 'event-bootstrap-a',
           jsonb_build_object(
-            'index_id', $6::text,
-            'generation_id', $7::text,
+            'index_id', $5::text,
+            'generation_id', $6::text,
             'schema_version', '1',
             'owner_module_id', 'crm.parties',
-            'search_text', $8::text,
-            'searchable_fields', jsonb_build_object('display_name', $8::text),
+            'search_text', $7::text,
+            'searchable_fields', jsonb_build_object('display_name', $7::text),
             'display_fields', jsonb_build_object(
-              'display_name', $8::text,
-              'privacy_lifecycle', $9::text
+              'display_name', $7::text,
+              'privacy_lifecycle', $8::text
             )
           )
         )
@@ -272,7 +271,6 @@ async fn seed_non_active_party(
     .bind(projection_id)
     .bind(resource_id)
     .bind(source_version)
-    .bind(source_event_id)
     .bind(INDEX_ID)
     .bind(projection_id)
     .bind(stale_display_name)
