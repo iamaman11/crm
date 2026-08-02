@@ -10,6 +10,7 @@ ACCEPTANCE = (
     ROOT
     / "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs"
 )
+WORKFLOW = ROOT / ".github/workflows/customer-privacy-owner-execution.yml"
 PACKET = ROOT / "repository-packet.json"
 
 
@@ -17,6 +18,7 @@ class PartyTombstoneRebuildConvergenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.acceptance = ACCEPTANCE.read_text(encoding="utf-8")
+        cls.workflow = WORKFLOW.read_text(encoding="utf-8")
         cls.packet = json.loads(PACKET.read_text(encoding="utf-8"))
 
     def test_packet_forbids_dependency_and_lockfile_changes(self) -> None:
@@ -81,6 +83,21 @@ class PartyTombstoneRebuildConvergenceTests(unittest.TestCase):
         ):
             self.assertIn(marker, self.acceptance)
 
+    def test_existing_owner_execution_gate_runs_acceptance_twice(self) -> None:
+        test_target = "--test party_tombstone_rebuild_convergence_postgres"
+        self.assertIn(
+            '"crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs"',
+            self.workflow,
+        )
+        self.assertEqual(self.workflow.count(test_target), 4)
+        for marker in (
+            "Verify clean Party tombstone rebuild convergence",
+            "Repeat Party tombstone rebuild convergence after reapply",
+            "customer-privacy-party-rebuild-clean.log",
+            "customer-privacy-party-rebuild-reapplied.log",
+        ):
+            self.assertIn(marker, self.workflow)
+
     def test_packet_is_exact_and_does_not_claim_rollout_or_step_completion(self) -> None:
         self.assertEqual(
             self.packet["packet_id"],
@@ -96,6 +113,7 @@ class PartyTombstoneRebuildConvergenceTests(unittest.TestCase):
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
+                ".github/workflows/customer-privacy-owner-execution.yml",
                 "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
@@ -115,6 +133,8 @@ class PartyTombstoneRebuildConvergenceTests(unittest.TestCase):
         self.assertIn("does not claim automatic checkpoint rollover", combined)
         self.assertIn("complete Repository Step 15", combined)
         self.assertIn("process-host", combined)
+        self.assertIn("clean schema", combined)
+        self.assertIn("rollback/reapplied schema", combined)
 
 
 if __name__ == "__main__":
