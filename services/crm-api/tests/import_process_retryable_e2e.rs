@@ -163,7 +163,7 @@ mod retryable_process {
             completed_rows[0].status,
             cdo::ImportRowStatus::Succeeded as i32
         );
-        assert!(completed_rows[0].execution_attempts >= failed_attempts + 1);
+        assert!(completed_rows[0].execution_attempts > failed_attempts);
         assert!(completed_rows[0].last_execution_error_code.is_empty());
         assert_eq!(party_record_count(&admin, &target_party_id).await, 1);
 
