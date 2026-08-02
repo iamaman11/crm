@@ -15,6 +15,8 @@ PACKET = ROOT / "repository-packet.json"
 
 
 class PartyTombstoneRebuildConvergenceTests(unittest.TestCase):
+    """Bind real PostgreSQL repair evidence to its permanent execution gate."""
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.acceptance = ACCEPTANCE.read_text(encoding="utf-8")
