@@ -16,6 +16,7 @@
     ".github/workflows/contracts.yml",
     "affected-scope-policy.json",
     "crates/crm-application-runtime/src/generated_contract_telemetry.rs",
+    "crates/crm-application-runtime/src/lib.rs",
     "crates/crm-application-runtime/src/runtime.rs",
     "crates/crm-capability-adapters/src/contract_usage_telemetry.rs",
     "crates/crm-capability-adapters/src/lib.rs",
@@ -65,7 +66,7 @@
     "Rust CI"
   ],
   "acceptance": [
-    "the branch is based exactly on main commit a9d6a3c58dc0418343a8919ae731aa5c8b3f92e8 and contains only the twelve declared telemetry packet files",
+    "the branch is based exactly on main commit a9d6a3c58dc0418343a8919ae731aa5c8b3f92e8 and contains only the thirteen declared telemetry packet files",
     "the current empty deprecation policy produces a deterministic empty runtime catalog and no fabricated usage series",
     "a synthetic deprecated capability resolves through the metered registry and increments exactly once before any later gateway checks",
     "unknown, active or wrong-surface coordinates do not increment deprecated usage counters",
