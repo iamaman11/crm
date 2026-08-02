@@ -1,0 +1,78 @@
+name: Step 17 Packet Finalize
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/step17-packet-finalize.yml"
+
+concurrency:
+  group: step17-packet-finalize-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: step17-contract-usage-telemetry
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install validation dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+      - name: Synchronize exact allowed paths
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for filename in (
+              "tests/test_repository_navigation.py",
+              "tests/test_architecture_documentation_consistency.py",
+          ):
+              path = Path(filename)
+              text = path.read_text(encoding="utf-8")
+              old = (
+                  '                "crates/crm-application-runtime/src/generated_contract_telemetry.rs",\n'
+                  '                "crates/crm-application-runtime/src/runtime.rs",\n'
+              )
+              new = (
+                  '                "crates/crm-application-runtime/src/generated_contract_telemetry.rs",\n'
+                  '                "crates/crm-application-runtime/src/lib.rs",\n'
+                  '                "crates/crm-application-runtime/src/runtime.rs",\n'
+              )
+              if text.count(old) != 1:
+                  raise SystemExit(f"{filename}: expected one exact allowed-path insertion point, found {text.count(old)}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+      - name: Regenerate active packet
+        run: python scripts/generate_repository_navigation.py --write
+      - name: Run exact packet guards
+        run: |
+          python -m unittest \
+            tests/test_contract_telemetry_catalog.py \
+            tests/test_repository_navigation.py \
+            tests/test_architecture_documentation_consistency.py
+      - name: Commit synchronized packet files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout HEAD -- .github/workflows/step17-packet-finalize.yml
+          git add docs/ACTIVE_PACKET.md \
+            tests/test_repository_navigation.py \
+            tests/test_architecture_documentation_consistency.py
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Step 17: synchronize exact telemetry packet scope"
+          git push origin HEAD:step17-contract-usage-telemetry
