@@ -45,10 +45,12 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "scripts/contract_lifecycle.py",
+                "scripts/contract_lifecycle_transitions.py",
                 "scripts/generate_contract_lifecycle.py",
                 "services/crm-api/tests/support/generic_worker_conformance.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_contract_lifecycle.py",
+                "tests/test_contract_lifecycle_transitions.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -170,6 +172,8 @@ class RepositoryNavigationTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("tests/test_contract_lifecycle.py", contract_ci)
+        self.assertIn("tests/test_contract_lifecycle_transitions.py", contract_ci)
+        self.assertIn("scripts/contract_lifecycle_transitions.py", contract_ci)
         self.assertIn("scripts/generate_contract_lifecycle.py", contract_ci)
         self.assertIn('--base-ref "origin/${BASE_REF}"', contract_ci)
         parser = build_parser()
