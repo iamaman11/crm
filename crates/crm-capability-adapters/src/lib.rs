@@ -7,6 +7,7 @@
 mod approval;
 mod authorization;
 mod client;
+mod contract_usage_telemetry;
 mod query_visibility;
 mod rate_limit;
 mod registry;
@@ -15,10 +16,8 @@ mod signed_approval;
 pub use approval::*;
 pub use authorization::*;
 pub use client::*;
+pub use contract_usage_telemetry::meter_contract_registries;
 pub use query_visibility::*;
 pub use rate_limit::*;
 pub use registry::*;
 pub use signed_approval::*;
-
-/// Architecture marker for `crm-capability-adapters`.
-pub const CRATE_NAME: &str = "crm-capability-adapters";

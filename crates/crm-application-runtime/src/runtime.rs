@@ -1,4 +1,5 @@
 use crate::export_selection_bootstrap::ExportSelectionWorkerAccess;
+include!("generated_contract_telemetry.rs");
 use crate::{
     ApplicationConfig, ApplicationGatewayService, BootstrapVisibilityResource,
     CustomerEnrichmentApplicationWorkerDependencies,
@@ -24,7 +25,7 @@ use crm_capability_adapters::{
     AuthorizationGrant, FixedWindowRateLimiter, GatewayCapabilityClient,
     HmacSha256ApprovalVerifier, LiveAuthorizationStore, LiveCapabilityAuthorizer,
     LiveQueryVisibilityAuthorizer, LiveQueryVisibilityStore, QueryVisibilityGrant,
-    RateLimitPolicyStore,
+    RateLimitPolicyStore, meter_contract_registries,
 };
 use crm_capability_ingress::{
     AccessTokenGrant, AccessTokenStore, BearerTokenAuthenticator, CapabilityIngress,
@@ -97,6 +98,7 @@ pub struct ApplicationComponents {
     pub query_grpc: Arc<GrpcQueryMiddleware>,
     pub background_workers: BackgroundWorkerRegistry,
     pub export_artifact_download: Arc<PartyExportArtifactDownloadService>,
+    contract_usage_metrics_text: Arc<dyn Fn() -> String + Send + Sync>,
     readiness: Arc<AtomicBool>,
     workers_healthy: Arc<AtomicBool>,
     last_worker_error: Arc<Mutex<Option<String>>>,
@@ -108,10 +110,7 @@ impl fmt::Debug for ApplicationComponents {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ApplicationComponents")
-            .field("module_count", &self.module_ids.len())
-            .field("tenant_count", &self.tenant_ids.len())
-            .field("ready", &self.is_ready())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -121,32 +120,19 @@ impl ApplicationComponents {
     }
 
     pub fn last_worker_error(&self) -> Option<String> {
-        self.last_worker_error
-            .lock()
-            .ok()
-            .and_then(|value| value.clone())
+        self.last_worker_error.lock().ok()?.clone()
     }
 }
 
+#[derive(Debug)]
 pub struct ApplicationRuntime {
     config: ApplicationConfig,
     components: Arc<ApplicationComponents>,
 }
 
-impl fmt::Debug for ApplicationRuntime {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("ApplicationRuntime")
-            .field("http_bind", &self.config.http_bind)
-            .field("grpc_bind", &self.config.grpc_bind)
-            .field("components", &self.components)
-            .finish()
-    }
-}
-
 impl ApplicationRuntime {
     pub async fn assemble(config: ApplicationConfig) -> Result<Self, ApplicationRuntimeError> {
-        config.validate()?;
+        config.validate().map_err(ApplicationRuntimeError::Config)?;
         let store = PostgresDataStore::connect(&config.database_url, config.maximum_connections)
             .await
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
@@ -214,6 +200,18 @@ impl ApplicationRuntime {
         }
         let mutation_definitions = composition.mutation_definitions().to_vec();
         let query_definitions = composition.query_definitions().to_vec();
+        let mut contract_usage_metrics_text: Arc<dyn Fn() -> String + Send + Sync> =
+            Arc::new(String::new);
+        let [mutation_registry, query_registry] = meter_contract_registries(
+            DEPRECATED_CONTRACTS,
+            [
+                composition.mutation_registry(),
+                composition.query_registry(),
+            ],
+            [&mutation_definitions, &query_definitions],
+            |renderer| contract_usage_metrics_text = renderer,
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_import_outcome_definitions = internal_capability_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_export_selection_definitions =
@@ -310,7 +308,7 @@ impl ApplicationRuntime {
         }
 
         let mutation_gateway = Arc::new(CapabilityGateway::new(
-            composition.mutation_registry(),
+            mutation_registry,
             composition.mutation_validator(),
             Arc::new(FixedWindowRateLimiter::new(
                 RateLimitPolicyStore::default(),
@@ -440,7 +438,7 @@ impl ApplicationRuntime {
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
         let query_gateway = Arc::new(QueryGateway::new(
-            composition.query_registry(),
+            query_registry,
             composition.query_validator(),
             authorizer.clone(),
             composition.query_executor(),
@@ -519,6 +517,7 @@ impl ApplicationRuntime {
             query_grpc: Arc::new(GrpcQueryMiddleware::new(query_ingress)),
             background_workers,
             export_artifact_download,
+            contract_usage_metrics_text,
             readiness: Arc::new(AtomicBool::new(false)),
             workers_healthy: Arc::new(AtomicBool::new(true)),
             last_worker_error: Arc::new(Mutex::new(None)),
@@ -594,12 +593,6 @@ impl fmt::Display for ApplicationRuntimeError {
 
 impl Error for ApplicationRuntimeError {}
 
-impl From<crate::ApplicationConfigError> for ApplicationRuntimeError {
-    fn from(value: crate::ApplicationConfigError) -> Self {
-        Self::Config(value)
-    }
-}
-
 #[derive(Clone)]
 struct HttpState {
     components: Arc<ApplicationComponents>,
@@ -668,6 +661,7 @@ async fn run_http_server(
     let router = Router::new()
         .route("/healthz", get(health))
         .route("/readyz", get(ready))
+        .route("/metrics", get(metrics))
         .route(
             "/v1/mutations/{owner_module_id}/{capability_id}/{capability_version}",
             post(mutation),
@@ -713,6 +707,10 @@ async fn run_grpc_server(
 
 async fn health() -> impl IntoResponse {
     (StatusCode::OK, Json(json!({"status": "ok"})))
+}
+
+async fn metrics(State(state): State<HttpState>) -> String {
+    (state.components.contract_usage_metrics_text)()
 }
 
 async fn ready(State(state): State<HttpState>) -> impl IntoResponse {

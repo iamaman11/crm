@@ -82,8 +82,6 @@ pub use platform::*;
 pub use process::*;
 pub use runtime::*;
 
-pub const CRATE_NAME: &str = "crm-application-runtime";
-
 pub fn declared_business_module_ids() -> std::collections::BTreeSet<String> {
     let mut module_ids = native_composition::declared_business_module_ids();
     module_ids.insert("crm.customer-privacy".to_owned());
