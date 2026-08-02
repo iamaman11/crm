@@ -210,7 +210,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "hold both real Party target inserts behind one PostgreSQL advisory-lock barrier and mechanically observe at least two blocked executor sessions before release",
+            "hold the first real Party target insert behind one PostgreSQL advisory-lock barrier and mechanically observe one direct Party waiter plus at least two executor sessions in the same transitive blocking chain",
             self.packet["deliverables"],
         )
         self.assertIn(
