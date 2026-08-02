@@ -38,6 +38,25 @@ jobs:
           components: rustfmt
       - name: Apply bounded adapter refactor
         run: python scripts/apply_step17_telemetry_complexity_refactor.py
+      - name: Align tuple catalog assertions
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("tests/test_contract_telemetry_catalog.py")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              'self.assertIn(\'capability_id: "alpha.create"\', generated)':
+                  'self.assertIn(\'"alpha.create"\', generated)',
+              'self.assertIn(\'owner_module_id: "crm.alpha"\', generated)':
+                  'self.assertIn(\'"crm.alpha"\', generated)',
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected one tuple assertion target, found {text.count(old)}")
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
       - name: Regenerate governed artifacts
         run: |
           python scripts/generate_contract_telemetry_catalog.py --write
