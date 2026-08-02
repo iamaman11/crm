@@ -1,14 +1,15 @@
 use crate::export_selection_bootstrap::ExportSelectionWorkerAccess;
+use crate::generated_contract_telemetry::DEPRECATED_CONTRACTS;
 use crate::{
     ApplicationConfig, ApplicationGatewayService, BootstrapVisibilityResource,
-    ContractUsageMetrics, ContractUsageSurface, CustomerEnrichmentApplicationWorkerDependencies,
+    CustomerEnrichmentApplicationWorkerDependencies,
     CustomerEnrichmentMaterializationProcessDependencies,
     CustomerEnrichmentProviderProcessDependencies, CustomerEnrichmentProviderWorkerDependencies,
-    GovernedPartyExportSelectionSource, MeteredCapabilityRegistry,
-    PartyExportArtifactDownloadService, PostgresModuleActivation, ProcessIdentitySource,
-    ProcessProviderSecretValueSource, ProductionBackgroundWorkerDependencies,
-    ProductionCompositionDependencies, SystemClock, bootstrap_export_selection_worker_access,
-    build_bootstrap_visibility_registry, build_customer_enrichment_application_worker,
+    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService,
+    PostgresModuleActivation, ProcessIdentitySource, ProcessProviderSecretValueSource,
+    ProductionBackgroundWorkerDependencies, ProductionCompositionDependencies, SystemClock,
+    bootstrap_export_selection_worker_access, build_bootstrap_visibility_registry,
+    build_customer_enrichment_application_worker,
     build_customer_enrichment_materialization_process, build_customer_enrichment_provider_process,
     build_customer_enrichment_provider_registry, build_customer_enrichment_provider_worker,
     build_process_customer_enrichment_provider_transport_catalog,
@@ -24,7 +25,7 @@ use crm_capability_adapters::{
     AuthorizationGrant, FixedWindowRateLimiter, GatewayCapabilityClient,
     HmacSha256ApprovalVerifier, LiveAuthorizationStore, LiveCapabilityAuthorizer,
     LiveQueryVisibilityAuthorizer, LiveQueryVisibilityStore, QueryVisibilityGrant,
-    RateLimitPolicyStore,
+    RateLimitPolicyStore, meter_contract_registries,
 };
 use crm_capability_ingress::{
     AccessTokenGrant, AccessTokenStore, BearerTokenAuthenticator, CapabilityIngress,
@@ -97,7 +98,7 @@ pub struct ApplicationComponents {
     pub query_grpc: Arc<GrpcQueryMiddleware>,
     pub background_workers: BackgroundWorkerRegistry,
     pub export_artifact_download: Arc<PartyExportArtifactDownloadService>,
-    pub contract_usage_metrics: Arc<ContractUsageMetrics>,
+    contract_usage_metrics_text: Arc<dyn Fn() -> String + Send + Sync>,
     readiness: Arc<AtomicBool>,
     workers_healthy: Arc<AtomicBool>,
     last_worker_error: Arc<Mutex<Option<String>>>,
@@ -215,10 +216,18 @@ impl ApplicationRuntime {
         }
         let mutation_definitions = composition.mutation_definitions().to_vec();
         let query_definitions = composition.query_definitions().to_vec();
-        let contract_usage_metrics = Arc::new(
-            ContractUsageMetrics::production(&mutation_definitions, &query_definitions)
-                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
-        );
+        let mut contract_usage_metrics_text: Arc<dyn Fn() -> String + Send + Sync> =
+            Arc::new(String::new);
+        let [mutation_registry, query_registry] = meter_contract_registries(
+            DEPRECATED_CONTRACTS,
+            [
+                composition.mutation_registry(),
+                composition.query_registry(),
+            ],
+            [&mutation_definitions, &query_definitions],
+            |renderer| contract_usage_metrics_text = renderer,
+        )
+        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_import_outcome_definitions = internal_capability_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_export_selection_definitions =
@@ -315,11 +324,7 @@ impl ApplicationRuntime {
         }
 
         let mutation_gateway = Arc::new(CapabilityGateway::new(
-            Arc::new(MeteredCapabilityRegistry::new(
-                composition.mutation_registry(),
-                Arc::clone(&contract_usage_metrics),
-                ContractUsageSurface::Mutation,
-            )),
+            mutation_registry,
             composition.mutation_validator(),
             Arc::new(FixedWindowRateLimiter::new(
                 RateLimitPolicyStore::default(),
@@ -449,11 +454,7 @@ impl ApplicationRuntime {
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
         let query_gateway = Arc::new(QueryGateway::new(
-            Arc::new(MeteredCapabilityRegistry::new(
-                composition.query_registry(),
-                Arc::clone(&contract_usage_metrics),
-                ContractUsageSurface::Query,
-            )),
+            query_registry,
             composition.query_validator(),
             authorizer.clone(),
             composition.query_executor(),
@@ -532,7 +533,7 @@ impl ApplicationRuntime {
             query_grpc: Arc::new(GrpcQueryMiddleware::new(query_ingress)),
             background_workers,
             export_artifact_download,
-            contract_usage_metrics,
+            contract_usage_metrics_text,
             readiness: Arc::new(AtomicBool::new(false)),
             workers_healthy: Arc::new(AtomicBool::new(true)),
             last_worker_error: Arc::new(Mutex::new(None)),
@@ -733,7 +734,7 @@ async fn health() -> impl IntoResponse {
 async fn metrics(State(state): State<HttpState>) -> impl IntoResponse {
     (
         StatusCode::OK,
-        state.components.contract_usage_metrics.render_prometheus(),
+        (state.components.contract_usage_metrics_text)(),
     )
 }
 

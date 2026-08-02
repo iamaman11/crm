@@ -198,9 +198,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             {
                 ".github/workflows/contracts.yml",
                 "affected-scope-policy.json",
-                "crates/crm-application-runtime/src/contract_usage_telemetry.rs",
+                "crates/crm-capability-adapters/src/contract_usage_telemetry.rs",
                 "crates/crm-application-runtime/src/generated_contract_telemetry.rs",
-                "crates/crm-application-runtime/src/lib.rs",
+                "crates/crm-capability-adapters/src/lib.rs",
                 "crates/crm-application-runtime/src/runtime.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",

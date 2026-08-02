@@ -65,6 +65,7 @@
       "id": "process_runtime_acceptance",
       "owner": "runtime-platform",
       "path_patterns": [
+        "crates/crm-capability-adapters/**",
         "services/crm-api/**",
         "crates/crm-application-runtime/**",
         "crates/crm-capability-ingress/**",

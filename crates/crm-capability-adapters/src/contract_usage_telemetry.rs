@@ -1,13 +1,12 @@
-use crate::generated_contract_telemetry::DEPRECATED_CONTRACTS;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRegistryPort};
-use crm_module_sdk::{CapabilityId, CapabilityVersion, PortFuture, SdkError};
+use crm_module_sdk::{CapabilityId, CapabilityVersion, ErrorCategory, PortFuture, SdkError};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ContractUsageSurface {
+enum ContractUsageSurface {
     Mutation,
     Query,
 }
@@ -19,15 +18,6 @@ impl ContractUsageSurface {
             Self::Query => "query",
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct DeprecatedContractTelemetry {
-    pub capability_id: &'static str,
-    pub capability_version: &'static str,
-    pub owner_module_id: &'static str,
-    pub metric: &'static str,
-    pub lookback_days: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -44,7 +34,7 @@ impl Coordinate {
         }
     }
 
-    fn from_catalog(entry: &DeprecatedContractTelemetry) -> Self {
+    fn from_catalog(entry: &DeprecatedContract) -> Self {
         Self {
             capability_id: entry.capability_id.to_owned(),
             capability_version: entry.capability_version.to_owned(),
@@ -53,6 +43,29 @@ impl Coordinate {
 
     fn display(&self) -> String {
         format!("{}@{}", self.capability_id, self.capability_version)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct DeprecatedContract {
+    capability_id: &'static str,
+    capability_version: &'static str,
+    owner_module_id: &'static str,
+    metric: &'static str,
+    lookback_days: u32,
+}
+
+impl From<&'static (&'static str, &'static str, &'static str, &'static str, u32)>
+    for DeprecatedContract
+{
+    fn from(value: &'static (&'static str, &'static str, &'static str, &'static str, u32)) -> Self {
+        Self {
+            capability_id: value.0,
+            capability_version: value.1,
+            owner_module_id: value.2,
+            metric: value.3,
+            lookback_days: value.4,
+        }
     }
 }
 
@@ -72,27 +85,16 @@ struct MetricSeries {
 }
 
 #[derive(Debug, Default)]
-pub struct ContractUsageMetrics {
+struct ContractUsageMetrics {
     series: BTreeMap<Coordinate, MetricSeries>,
 }
 
 impl ContractUsageMetrics {
-    pub fn production(
+    fn new(
+        catalog: &'static [(&'static str, &'static str, &'static str, &'static str, u32)],
         mutation_definitions: &[CapabilityDefinition],
         query_definitions: &[CapabilityDefinition],
-    ) -> Result<Self, ContractUsageTelemetryError> {
-        Self::from_catalog(
-            DEPRECATED_CONTRACTS,
-            mutation_definitions,
-            query_definitions,
-        )
-    }
-
-    fn from_catalog(
-        catalog: &'static [DeprecatedContractTelemetry],
-        mutation_definitions: &[CapabilityDefinition],
-        query_definitions: &[CapabilityDefinition],
-    ) -> Result<Self, ContractUsageTelemetryError> {
+    ) -> Result<Self, SdkError> {
         let mut published = BTreeMap::new();
         add_published_definitions(
             &mut published,
@@ -106,17 +108,22 @@ impl ContractUsageMetrics {
         )?;
 
         let mut series = BTreeMap::new();
-        for entry in catalog {
-            let coordinate = Coordinate::from_catalog(entry);
+        for raw_entry in catalog {
+            let entry = DeprecatedContract::from(raw_entry);
+            let coordinate = Coordinate::from_catalog(&entry);
             let definition = published.get(&coordinate).ok_or_else(|| {
-                ContractUsageTelemetryError::UnpublishedContract(coordinate.display())
+                configuration_error(format!(
+                    "deprecated telemetry contract is not published: {}",
+                    coordinate.display()
+                ))
             })?;
             if definition.owner_module_id != entry.owner_module_id {
-                return Err(ContractUsageTelemetryError::OwnerMismatch {
-                    coordinate: coordinate.display(),
-                    expected: entry.owner_module_id.to_owned(),
-                    actual: definition.owner_module_id.clone(),
-                });
+                return Err(configuration_error(format!(
+                    "deprecated telemetry owner mismatch for {}: expected {}, got {}",
+                    coordinate.display(),
+                    entry.owner_module_id,
+                    definition.owner_module_id
+                )));
             }
             let metric_series = MetricSeries {
                 owner_module_id: entry.owner_module_id,
@@ -126,9 +133,10 @@ impl ContractUsageMetrics {
                 count: AtomicU64::new(0),
             };
             if series.insert(coordinate.clone(), metric_series).is_some() {
-                return Err(ContractUsageTelemetryError::DuplicateContract(
-                    coordinate.display(),
-                ));
+                return Err(configuration_error(format!(
+                    "deprecated telemetry contract is duplicated: {}",
+                    coordinate.display()
+                )));
             }
         }
         Ok(Self { series })
@@ -151,7 +159,7 @@ impl ContractUsageMetrics {
             });
     }
 
-    pub fn render_prometheus(&self) -> String {
+    fn render_prometheus(&self) -> String {
         let metrics: BTreeSet<_> = self.series.values().map(|series| series.metric).collect();
         let mut output = String::new();
         for metric in metrics {
@@ -185,23 +193,13 @@ impl ContractUsageMetrics {
         }
         output
     }
-
-    #[cfg(test)]
-    fn count(&self, capability_id: &str, capability_version: &str) -> Option<u64> {
-        self.series
-            .get(&Coordinate {
-                capability_id: capability_id.to_owned(),
-                capability_version: capability_version.to_owned(),
-            })
-            .map(|series| series.count.load(Ordering::Relaxed))
-    }
 }
 
 fn add_published_definitions(
     published: &mut BTreeMap<Coordinate, PublishedDefinition>,
     definitions: &[CapabilityDefinition],
     surface: ContractUsageSurface,
-) -> Result<(), ContractUsageTelemetryError> {
+) -> Result<(), SdkError> {
     for definition in definitions {
         let coordinate = Coordinate::from_definition(definition);
         let entry = PublishedDefinition {
@@ -209,60 +207,27 @@ fn add_published_definitions(
             surface,
         };
         if published.insert(coordinate.clone(), entry).is_some() {
-            return Err(ContractUsageTelemetryError::DuplicatePublishedContract(
-                coordinate.display(),
-            ));
+            return Err(configuration_error(format!(
+                "published contract is duplicated: {}",
+                coordinate.display()
+            )));
         }
     }
     Ok(())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ContractUsageTelemetryError {
-    DuplicatePublishedContract(String),
-    DuplicateContract(String),
-    UnpublishedContract(String),
-    OwnerMismatch {
-        coordinate: String,
-        expected: String,
-        actual: String,
-    },
+fn configuration_error(internal_reference: String) -> SdkError {
+    SdkError::new(
+        "CONTRACT_USAGE_TELEMETRY_INVALID",
+        ErrorCategory::Internal,
+        false,
+        "Contract usage telemetry configuration is invalid.",
+    )
+    .with_internal_reference(internal_reference)
 }
-
-impl fmt::Display for ContractUsageTelemetryError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::DuplicatePublishedContract(coordinate) => {
-                write!(formatter, "published contract is duplicated: {coordinate}")
-            }
-            Self::DuplicateContract(coordinate) => {
-                write!(
-                    formatter,
-                    "deprecated telemetry contract is duplicated: {coordinate}"
-                )
-            }
-            Self::UnpublishedContract(coordinate) => {
-                write!(
-                    formatter,
-                    "deprecated telemetry contract is not published: {coordinate}"
-                )
-            }
-            Self::OwnerMismatch {
-                coordinate,
-                expected,
-                actual,
-            } => write!(
-                formatter,
-                "deprecated telemetry owner mismatch for {coordinate}: expected {expected}, got {actual}"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for ContractUsageTelemetryError {}
 
 #[derive(Clone)]
-pub struct MeteredCapabilityRegistry {
+struct MeteredCapabilityRegistry {
     inner: Arc<dyn CapabilityRegistryPort>,
     metrics: Arc<ContractUsageMetrics>,
     surface: ContractUsageSurface,
@@ -275,20 +240,6 @@ impl fmt::Debug for MeteredCapabilityRegistry {
             .field("inner", &"dyn CapabilityRegistryPort")
             .field("surface", &self.surface)
             .finish()
-    }
-}
-
-impl MeteredCapabilityRegistry {
-    pub fn new(
-        inner: Arc<dyn CapabilityRegistryPort>,
-        metrics: Arc<ContractUsageMetrics>,
-        surface: ContractUsageSurface,
-    ) -> Self {
-        Self {
-            inner,
-            metrics,
-            surface,
-        }
     }
 }
 
@@ -311,23 +262,59 @@ impl CapabilityRegistryPort for MeteredCapabilityRegistry {
     }
 }
 
+/// Wrap exact mutation/query registries with PII-free deprecated-contract counters.
+///
+/// The callback receives a deterministic Prometheus renderer sharing the same
+/// counters. Recording remains synchronous and cannot alter gateway outcomes.
+pub fn meter_contract_registries<F>(
+    catalog: &'static [(&'static str, &'static str, &'static str, &'static str, u32)],
+    registries: [Arc<dyn CapabilityRegistryPort>; 2],
+    definitions: [&[CapabilityDefinition]; 2],
+    publish_metrics: F,
+) -> Result<[Arc<dyn CapabilityRegistryPort>; 2], SdkError>
+where
+    F: FnOnce(Arc<dyn Fn() -> String + Send + Sync>),
+{
+    let metrics = Arc::new(ContractUsageMetrics::new(
+        catalog,
+        definitions[0],
+        definitions[1],
+    )?);
+    let renderer_metrics = Arc::clone(&metrics);
+    let renderer: Arc<dyn Fn() -> String + Send + Sync> =
+        Arc::new(move || renderer_metrics.render_prometheus());
+    publish_metrics(renderer);
+
+    let mutation: Arc<dyn CapabilityRegistryPort> = Arc::new(MeteredCapabilityRegistry {
+        inner: Arc::clone(&registries[0]),
+        metrics: Arc::clone(&metrics),
+        surface: ContractUsageSurface::Mutation,
+    });
+    let query: Arc<dyn CapabilityRegistryPort> = Arc::new(MeteredCapabilityRegistry {
+        inner: Arc::clone(&registries[1]),
+        metrics,
+        surface: ContractUsageSurface::Query,
+    });
+    Ok([mutation, query])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crm_capability_runtime::{CapabilityRisk, PayloadContract};
     use crm_module_sdk::{DataClass, ModuleId, PayloadEncoding, SchemaId, SchemaVersion};
 
-    static CATALOG: &[DeprecatedContractTelemetry] = &[DeprecatedContractTelemetry {
-        capability_id: "test.record.create",
-        capability_version: "1.0.0",
-        owner_module_id: "crm.test",
-        metric: "crm_contract_invocations_total",
-        lookback_days: 30,
-    }];
+    static CATALOG: &[(&str, &str, &str, &str, u32)] = &[(
+        "test.record.create",
+        "1.0.0",
+        "crm.test",
+        "crm_contract_invocations_total",
+        30,
+    )];
 
     #[derive(Debug)]
     struct Registry {
-        definition: CapabilityDefinition,
+        definition: Option<CapabilityDefinition>,
     }
 
     impl CapabilityRegistryPort for Registry {
@@ -337,99 +324,123 @@ mod tests {
             capability_version: &'a CapabilityVersion,
         ) -> PortFuture<'a, Result<Option<CapabilityDefinition>, SdkError>> {
             Box::pin(async move {
-                if &self.definition.capability_id == capability_id
-                    && &self.definition.capability_version == capability_version
-                {
-                    Ok(Some(self.definition.clone()))
-                } else {
-                    Ok(None)
-                }
+                Ok(self.definition.as_ref().and_then(|definition| {
+                    (&definition.capability_id == capability_id
+                        && &definition.capability_version == capability_version)
+                        .then(|| definition.clone())
+                }))
             })
         }
     }
 
     #[tokio::test]
-    async fn exact_deprecated_resolution_increments_before_later_gateway_checks() {
-        let definition = definition(true, "crm.test");
-        let metrics = Arc::new(
-            ContractUsageMetrics::from_catalog(CATALOG, std::slice::from_ref(&definition), &[])
-                .unwrap(),
-        );
-        let registry = MeteredCapabilityRegistry::new(
+    async fn exact_resolution_increments_and_wrong_surface_does_not() {
+        let definition = definition("crm.test");
+        let mut render = None;
+        let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
             Arc::new(Registry {
-                definition: definition.clone(),
+                definition: Some(definition.clone()),
             }),
-            Arc::clone(&metrics),
-            ContractUsageSurface::Mutation,
-        );
+            Arc::new(Registry {
+                definition: Some(definition.clone()),
+            }),
+        ];
+        let [mutation, query] = meter_contract_registries(
+            CATALOG,
+            registries,
+            [&[definition.clone()], &[]],
+            |renderer| render = Some(renderer),
+        )
+        .unwrap();
+        let render = render.unwrap();
+        assert!(render().ends_with(" 0\n"));
 
-        assert_eq!(metrics.count("test.record.create", "1.0.0"), Some(0));
         assert!(
-            registry
+            query
                 .resolve(&definition.capability_id, &definition.capability_version)
                 .await
                 .unwrap()
                 .is_some()
         );
-        assert_eq!(metrics.count("test.record.create", "1.0.0"), Some(1));
+        assert!(render().ends_with(" 0\n"));
+        assert!(
+            mutation
+                .resolve(&definition.capability_id, &definition.capability_version)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(render().ends_with(" 1\n"));
     }
 
     #[tokio::test]
-    async fn unknown_or_wrong_surface_resolution_does_not_increment() {
-        let definition = definition(true, "crm.test");
-        let metrics = Arc::new(
-            ContractUsageMetrics::from_catalog(CATALOG, std::slice::from_ref(&definition), &[])
-                .unwrap(),
-        );
-        let registry = MeteredCapabilityRegistry::new(
+    async fn unknown_resolution_does_not_increment() {
+        let definition = definition("crm.test");
+        let mut render = None;
+        let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
             Arc::new(Registry {
-                definition: definition.clone(),
+                definition: Some(definition.clone()),
             }),
-            Arc::clone(&metrics),
-            ContractUsageSurface::Query,
-        );
+            Arc::new(Registry { definition: None }),
+        ];
+        let [mutation, _] = meter_contract_registries(
+            CATALOG,
+            registries,
+            [&[definition.clone()], &[]],
+            |renderer| render = Some(renderer),
+        )
+        .unwrap();
         let missing = CapabilityId::try_new("test.record.missing").unwrap();
-
         assert!(
-            registry
+            mutation
                 .resolve(&missing, &definition.capability_version)
                 .await
                 .unwrap()
                 .is_none()
         );
-        assert!(
-            registry
-                .resolve(&definition.capability_id, &definition.capability_version)
-                .await
-                .unwrap()
-                .is_some()
-        );
-        assert_eq!(metrics.count("test.record.create", "1.0.0"), Some(0));
+        assert!(render.unwrap()().ends_with(" 0\n"));
     }
 
     #[test]
     fn catalog_is_fail_closed_against_live_owner_and_coordinate() {
-        let wrong_owner = definition(true, "crm.other");
-        let owner_error =
-            ContractUsageMetrics::from_catalog(CATALOG, &[wrong_owner], &[]).unwrap_err();
-        assert!(matches!(
-            owner_error,
-            ContractUsageTelemetryError::OwnerMismatch { .. }
-        ));
+        let no_registry: Arc<dyn CapabilityRegistryPort> = Arc::new(Registry { definition: None });
+        let error = meter_contract_registries(
+            CATALOG,
+            [Arc::clone(&no_registry), Arc::clone(&no_registry)],
+            [&[], &[]],
+            |_| {},
+        )
+        .err()
+        .expect("invalid telemetry catalog must fail");
+        assert_eq!(error.code, "CONTRACT_USAGE_TELEMETRY_INVALID");
 
-        let missing_error = ContractUsageMetrics::from_catalog(CATALOG, &[], &[]).unwrap_err();
-        assert!(matches!(
-            missing_error,
-            ContractUsageTelemetryError::UnpublishedContract(_)
-        ));
+        let wrong_owner = definition("crm.other");
+        let error = meter_contract_registries(
+            CATALOG,
+            [Arc::clone(&no_registry), no_registry],
+            [&[wrong_owner], &[]],
+            |_| {},
+        )
+        .err()
+        .expect("invalid telemetry catalog must fail");
+        assert_eq!(error.code, "CONTRACT_USAGE_TELEMETRY_INVALID");
     }
 
     #[test]
     fn prometheus_output_is_deterministic_zero_seeded_and_pii_free() {
-        let definition = definition(true, "crm.test");
-        let metrics = ContractUsageMetrics::from_catalog(CATALOG, &[definition], &[]).unwrap();
-        let first = metrics.render_prometheus();
-        let second = metrics.render_prometheus();
+        let definition = definition("crm.test");
+        let no_registry: Arc<dyn CapabilityRegistryPort> = Arc::new(Registry { definition: None });
+        let mut render = None;
+        meter_contract_registries(
+            CATALOG,
+            [Arc::clone(&no_registry), no_registry],
+            [&[definition], &[]],
+            |renderer| render = Some(renderer),
+        )
+        .unwrap();
+        let render = render.unwrap();
+        let first = render();
+        let second = render();
 
         assert_eq!(first, second);
         assert!(first.contains("crm_contract_invocations_total"));
@@ -441,7 +452,7 @@ mod tests {
         assert!(!first.contains("request_id"));
     }
 
-    fn definition(mutation: bool, owner: &str) -> CapabilityDefinition {
+    fn definition(owner: &str) -> CapabilityDefinition {
         let contract = PayloadContract {
             owner: ModuleId::try_new(owner).unwrap(),
             schema_id: SchemaId::try_new("crm.test.v1.RecordRequest").unwrap(),
@@ -458,8 +469,8 @@ mod tests {
             input_contract: contract.clone(),
             output_contract: Some(contract),
             risk: CapabilityRisk::Low,
-            mutation,
-            requires_idempotency: mutation,
+            mutation: true,
+            requires_idempotency: true,
             requires_approval: false,
             authorization_policy_id: "test.record.create".to_owned(),
             rate_limit_policy_id: None,

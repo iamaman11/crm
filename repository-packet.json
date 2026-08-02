@@ -11,14 +11,14 @@
     126,
     194
   ],
-  "objective": "Continue Repository Step 17 with deterministic, production-shaped usage telemetry for deprecated exact-version capability contracts. Generate a typed runtime catalog from the governed lifecycle policy, wrap the existing mutation and query registries without changing generic gateway APIs, count every successfully resolved deprecated coordinate before later semantic or authorization decisions, preseed zero series for retirement evidence and expose low-cardinality Prometheus text without tenant, actor, request or payload data.",
+  "objective": "Continue Repository Step 17 with deterministic, production-shaped usage telemetry for deprecated exact-version capability contracts. Generate a typed runtime catalog from the governed lifecycle policy, wrap the existing mutation and query registries without changing generic gateway APIs, count every successfully resolved deprecated coordinate before later semantic or authorization decisions, preseed zero series for retirement evidence and expose low-cardinality Prometheus text without tenant, actor, request or payload data. Keep process-host LOC and workspace public surface at or below their accepted ceilings by placing reusable registry decoration in the existing capability-adapters package.",
   "allowed_paths": [
     ".github/workflows/contracts.yml",
     "affected-scope-policy.json",
-    "crates/crm-application-runtime/src/contract_usage_telemetry.rs",
     "crates/crm-application-runtime/src/generated_contract_telemetry.rs",
-    "crates/crm-application-runtime/src/lib.rs",
     "crates/crm-application-runtime/src/runtime.rs",
+    "crates/crm-capability-adapters/src/contract_usage_telemetry.rs",
+    "crates/crm-capability-adapters/src/lib.rs",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
     "scripts/generate_contract_telemetry_catalog.py",
@@ -52,7 +52,8 @@
     "expose deterministic Prometheus text with capability id, version, owner, surface and lookback only",
     "prove telemetry never includes tenant, actor, request id, correlation id, trace id, payload or record identifiers",
     "preserve existing authorization ordering, transactional execution, public mutation/query responses, protobuf contracts, manifests and dependencies",
-    "regenerate docs/ACTIVE_PACKET.md and bind repository guards to the exact merged Step 17 foundation baseline"
+    "regenerate docs/ACTIVE_PACKET.md and bind repository guards to the exact merged Step 17 foundation baseline",
+    "preserve process-host LOC and workspace public-item ceilings by locating reusable telemetry mechanics in crm-capability-adapters"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -74,7 +75,8 @@
     "no new crate, package, dependency, Cargo.lock entry, database schema, migration, protobuf coordinate, module manifest or business route",
     "the operational /metrics endpoint changes no health, readiness, mutation, query or gRPC response contract",
     "one unchanged meaningful user-authored head passes every applicable permanent workflow and final changed-file, comment, review and thread inspection",
-    "Repository Step 17 remains in progress; event-delivery telemetry, a representative real deprecation/migration and final evidence synchronization are not falsely claimed"
+    "Repository Step 17 remains in progress; event-delivery telemetry, a representative real deprecation/migration and final evidence synchronization are not falsely claimed",
+    "crm-application-runtime stays at or below 7269 non-comment LOC and 130 public items, while workspace public items stay at or below 5377"
   ],
   "non_goals": [
     "complete Repository Step 17 or synchronize final Step 17 closure evidence",
