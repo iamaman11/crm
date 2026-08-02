@@ -85,7 +85,9 @@ jobs:
         run: |
           cargo test --locked -p crm-capability-adapters contract_usage_telemetry
           cargo check --locked -p crm-application-runtime --all-targets
-      - name: Enforce accepted complexity ceilings
+      - name: Measure accepted complexity ceilings
+        id: complexity
+        continue-on-error: true
         run: |
           mkdir -p artifacts
           python scripts/analyze_workspace.py \
@@ -98,6 +100,17 @@ jobs:
             --check \
             --json-output artifacts/step13-exit-evidence.json \
             --markdown-output artifacts/step13-exit-evidence.md
+      - name: Upload exact complexity diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: telemetry-budget-diagnostics
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Fail if complexity ceilings are exceeded
+        if: steps.complexity.outcome == 'failure'
+        run: exit 1
       - name: Commit non-workflow budget refactor
         shell: bash
         run: |
