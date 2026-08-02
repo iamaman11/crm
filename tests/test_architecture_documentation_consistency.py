@@ -37,7 +37,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         required = (
             "PR #259",
             "8aa0b33c6609e74f98363071c6e7c44ec59fc098",
-            "2b0b558077c444d44691371c8a2bcca2c14ae426",
+            "2b0b558077c444d4469137c8a2bcca2c14ae426",
             "36 of 36",
         )
         for document in self.normative_documents:
@@ -191,7 +191,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(forbidden, self.packet["forbidden_paths"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
-        self.assertIn("mark Repository Steps 1 through 15 complete", self.packet["deliverables"])
+        self.assertIn(
+            "mark Repository Steps 1 through 15 complete and Step 16 next, not started",
+            self.packet["deliverables"],
+        )
         self.assertIn("implement Repository Step 16 worker conformance", self.packet["non_goals"])
 
     def test_repository_map_and_product_inventory_remain_exact(self) -> None:
