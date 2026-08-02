@@ -25,6 +25,8 @@ Do not reconstruct current status from historical packet documents, old PR descr
 | Task | Read first | Then inspect |
 |---|---|---|
 | Understand what is being built now | `PROJECT_STATUS.md`, `ACTIVE_PACKET.md` | `IMPLEMENTATION_ROADMAP.md`, `PHASE8_DELIVERY_PLAN.md`, active issue |
+| Understand the complete future CRM product | `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md` | `CRM_CAPABILITY_COVERAGE.md`, `IMPLEMENTATION_ROADMAP.md`, `MODULE_CATALOG.md` |
+| Understand automation, triggers, robots, pipelines or Kanban | `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md` sections 7–9 | `SYSTEM_INVARIANTS.md`, `APPLICATION_ARCHITECTURE.md`, owner capability contracts |
 | Understand architecture boundaries | `SYSTEM_INVARIANTS.md` | `APPLICATION_ARCHITECTURE.md`, accepted ADRs |
 | Add or change a capability | `DEVELOPMENT_WORKFLOW.md` | `MODULE_DEVELOPMENT.md`, `repo.py explain`, owner manifest and generated map |
 | Add a new owner domain | `MODULE_DEVELOPMENT.md` | `MODULE_CATALOG.md`, architecture plan, relevant ADRs |
@@ -35,7 +37,7 @@ Do not reconstruct current status from historical packet documents, old PR descr
 | Improve architecture or developer experience | `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` | issue #194 and measured baseline |
 | Prepare or review a PR | `DEVELOPMENT_WORKFLOW.md` | `DELIVERY_GOVERNANCE.md`, `repo.py packet-check`, affected-scope report |
 | Coordinate multiple agents | `MULTI_AGENT_DEVELOPMENT.md` | `CODEX_AGENT_QUALIFICATION.md`, exact-SHA handoff |
-| Check product completeness | `MODULE_CATALOG.md` | `CRM_CAPABILITY_COVERAGE.md`, roadmap and status |
+| Check product completeness | `MODULE_CATALOG.md` | `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md`, `CRM_CAPABILITY_COVERAGE.md`, roadmap and status |
 
 ## 3. Source-of-truth hierarchy
 
@@ -46,6 +48,8 @@ Do not reconstruct current status from historical packet documents, old PR descr
 | Stable application layering and composition | `APPLICATION_ARCHITECTURE.md` and accepted ADRs |
 | Single repository implementation order | `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4 |
 | Product delivery order | `IMPLEMENTATION_ROADMAP.md` |
+| Complete product portfolio, automation semantics and 10/10 completion contract | `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md` |
+| Functional no-omission baseline | `CRM_CAPABILITY_COVERAGE.md` |
 | Active Phase 8 sequence | `PHASE8_DELIVERY_PLAN.md` |
 | Current merged state and next packet | `PROJECT_STATUS.md` |
 | Active packet declaration | `repository-packet.json` rendered as `ACTIVE_PACKET.md` |
@@ -135,7 +139,7 @@ Generated outputs use deterministic ordering and embedded SHA-256 source digests
 
 ## 7. Documentation classes
 
-- **Normative:** invariants, accepted ADRs, architecture, delivery governance and workflow rules.
+- **Normative:** invariants, accepted ADRs, architecture, delivery governance, product portfolio and workflow rules.
 - **Current state:** project status, active phase plan, module catalog and active issues.
 - **Generated navigation:** active packet, repository map and explain/packet-check reports.
 - **Historical:** accepted packet documents and merged PR evidence.
@@ -154,6 +158,7 @@ Navigation reaches 10/10 only when a new contributor can, without repository arc
 5. see the active packet and explicit exclusions;
 6. reproduce the local environment;
 7. obtain an explainable affected scope;
-8. complete a representative leaf change without touching generic runtime or unrelated modules.
+8. complete a representative leaf change without touching generic runtime or unrelated modules;
+9. identify the product wave, user journey and product-completion evidence required for the feature.
 
 The target is not more documentation. The target is fewer decisions, fewer contradictory entry points and a mechanically explainable path from intent to verified change.

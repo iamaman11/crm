@@ -7,6 +7,7 @@ Governing rules: `SYSTEM_INVARIANTS.md`
 Delivery-control policy: `DELIVERY_GOVERNANCE.md`  
 Current concise state: `PROJECT_STATUS.md`  
 Detailed Phase 8 sequence: `PHASE8_DELIVERY_PLAN.md`  
+Product portfolio and functional 10/10 sequence: `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md`  
 Architecture/developer-experience program and repository order: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` / issue #194  
 Step 22 decision: `adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md`  
 Accepted Rust boundary: `RUST_TOOLCHAIN_AND_LINT_BASELINE.md` / `rust-governance-policy.json`  
@@ -32,6 +33,8 @@ This roadmap defines dependency order for a universal modular expert CRM platfor
 13. Only merged `main` work may be represented as complete.
 14. A new permanent gate requires a concrete failure mode, non-duplication rationale, expected cost, named owner and retirement/review condition before acceptance.
 15. Repository Step 22 cannot close on non-growth alone; ADR-032 runtime fan-in and permanent-gate decisions are mandatory.
+16. Product scope follows `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md`; a coverage bullet is not complete without owner/runtime/UX/accessibility/browser/operations evidence.
+17. Workflow, trigger, robot, pipeline, Kanban, cadence, AI and low-code behavior must use governed capabilities and may not create an alternate mutation, authorization, privacy or audit path.
 
 ## 2. Product phase map
 
@@ -40,10 +43,18 @@ This roadmap defines dependency order for a universal modular expert CRM platfor
 | 0.1–7 | #3–#10 | Governed platform, Sales/Activities proof, search, product shell and native composition | **Complete** |
 | 8 | #11 | Expert modules and product-quality CRM experience | **In progress** |
 | 8A | #28 | Canonical customer master, identity, consent and governed customer-data lifecycle | **In progress** |
-| 8B | #29 | Product Catalog, CPQ and quote-to-revenue lifecycle | **Planned; blocked on completed Phase 8A and Repository Step 22 runtime-fan-in/gate-value decisions; first extension wave is Step 23** |
+| 8B | #29 | Product Catalog, Pricing, CPQ, Quotes and quote-to-revenue lifecycle | **Planned; blocked on completed Phase 8A and Repository Step 22; first extension wave is Step 23** |
+| 8C | future bounded issues | Universal workflow automation, triggers, robots, approvals, programmable actions, pipelines, funnels, Kanban and configurable work | **Planned; minimum process primitives are first proven in Step 24** |
+| 8D | future bounded issues | Expanded sales execution, cadences, territories, quotas, forecasting and revenue operations | **Planned** |
+| 8E | future bounded issues | Omnichannel service, conversations, knowledge, SLA and field service | **Planned** |
+| 8F | future bounded issues | Marketing automation, segmentation, campaigns and lifecycle journeys | **Planned** |
+| 8G | future bounded issues | Customer Success, partner management, projects, documents and e-signature | **Planned** |
+| 8H | future bounded issues | Analytics, reporting, data/integration platform, Admin Studio, low-code and mobile maturity | **Planned** |
 | 9 | #12 | AI-native governed actor/tool layer | **Planned** |
 | 10 | #13 | Signed marketplace and sandboxed untrusted extensions | **Planned** |
-| 11 | #14 | Enterprise security, resilience and production proof | **Planned / continuous** |
+| 11 | #14 | Enterprise security, resilience, vertical and production proof | **Planned / continuous** |
+
+The complete functional scope, wave boundaries, automation semantics and product-completion contract are normative in `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md`. `CRM_CAPABILITY_COVERAGE.md` remains the no-omission coverage baseline.
 
 ## 3. Architecture and repository program
 
@@ -100,11 +111,11 @@ The complete order is normative in the architecture plan. The remaining sequence
 20. Phase 8A frontend, accessibility, browser and operations evidence;
 21. Phase 8A closure;
 22. Phase 8A architecture remeasurement, `crm-application-runtime` direct-dependency decision and permanent-gate value/cost review — checkpoint, not final 10/10;
-23. Step 23 — first contrasting later expert-domain wave validating bounded extension cost and the Step 22 runtime/gate conclusions;
-24. Step 24 — second contrasting later expert-domain wave validating bounded extension cost and the Step 22 runtime/gate conclusions;
+23. Step 23 — Phase 8B.1 Catalog and effective-dated Pricing foundation, the first contrasting expert-domain wave;
+24. Step 24 — Phase 8B.2 Quote/CPQ approval and process-heavy orchestration foundation, the second contrasting expert-domain wave;
 25. final architecture 10/10 closure review only when every criterion is mechanically proven.
 
-No later packet may start while an earlier item remains unfinished.
+No later packet may start while an earlier item remains unfinished. Step 24 proves only the minimum reusable process primitives needed for the bounded CPQ slice; the complete universal workflow/robot/pipeline product remains Phase 8C.
 
 ## 4. Phase 8A completed foundation
 
@@ -186,21 +197,68 @@ A module is not product-complete merely because a crate, schema, manifest or bac
 
 Phase 8A remains incomplete until these criteria are met for the current customer-master/privacy scope.
 
-## 7. Phase 8B and later product domains
+## 7. Product development program after Phase 8A
 
-Phase 8B remains planned and blocked on completed Phase 8A plus the Step 22 measurement and decision checkpoint. Step 23 must prove that a first later expert-domain wave keeps extension cost bounded, avoids owner-specific `crm-application-runtime` edits and does not add an unjustified permanent gate. Step 24 must add a contrasting expert-domain wave and prove that the same properties remain true as module count grows.
+The complete product-portfolio program is normative in `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md`.
 
-Independent owner domains still planned or incomplete include:
+### 7.1 Phase 8B — commercial lifecycle
+
+Planned independent owners and coordination boundaries include:
 
 - Product Catalog and variants;
-- Pricing and promotions;
-- CPQ and Quotes;
+- effective-dated Pricing, price books and promotions;
+- CPQ configuration and validation;
+- Quotes, revisions, expiry and approvals;
 - Orders and fulfillment coordination;
-- Contracts;
+- Contracts, amendments, renewals and termination;
 - Subscriptions, Entitlements and Usage;
-- Billing plus governed ERP/payment/tax integration;
-- expanded Sales, Activities, Service, Knowledge, Field Service, Marketing and Customer Success;
-- projects/configurable work, documents/e-signature, analytics, workflow/collaboration, AI governance and marketplace capabilities.
+- governed Billing/ERP/payment/tax/fulfillment integration.
+
+Step 23 pre-registers Catalog/Pricing as the reference-heavy extension test. Step 24 pre-registers Quote/CPQ approval and orchestration as the process-heavy contrast. These choices may not be replaced by easier demonstration modules merely to improve architecture scores.
+
+### 7.2 Phase 8C — automation, workflows and configurable work
+
+The universal automation product must include:
+
+- record/event/webhook/time/inactivity/SLA/manual/API triggers;
+- typed conditions, branches, decision tables and business calendars;
+- governed robot actions invoking exact domain capabilities;
+- waits, timers, parallel branches, joins, reusable subflows and bounded loops;
+- human tasks, serial/parallel approvals, delegation and escalation;
+- durable execution, retry, idempotency, replay, crash recovery and dead-letter handling;
+- versioned definitions, simulation, dry run, publication, rollback and run diagnostics;
+- allowlisted connectors and sandboxed typed custom functions;
+- no arbitrary SQL, unrestricted HTTP, raw secret access or hidden mutation bypass.
+
+### 7.3 Pipelines, funnels and Kanban
+
+Pipelines must be configurable for supported business objects with versioned stages, entry/exit rules, allowed transitions, required fields/checklists, stage history, duration and conversion analytics.
+
+Kanban/board UX must support drag-and-drop with server-authoritative transition validation, customizable cards, swimlanes, filters, saved views, aggregates, WIP/staleness/SLA indicators, bulk movement with preview/partial-failure reporting, authorization-aware cards, accessibility and large-board performance.
+
+The same authoritative state must also support list, table, calendar, timeline, workload and reporting views.
+
+### 7.4 Sales cadences and guided execution
+
+The product must support enrollment, email/call/task/meeting/manual/wait steps, conditional branching, automatic stop conditions, consent and quiet-hours enforcement, work queues, playbooks, reassignment, A/B variants, analytics and governed AI-assisted drafting.
+
+### 7.5 Remaining product trains
+
+Later expert waves cover:
+
+- expanded Sales and Revenue Operations;
+- omnichannel Communications, Service, Knowledge and Field Service;
+- Marketing segmentation, campaigns and journeys;
+- Customer Success, partner/channel management and retention;
+- projects/configurable work, documents and e-signature;
+- analytics, reporting, data platform and integrations;
+- Admin Studio, custom objects/fields, layouts, rules and controlled low-code;
+- responsive/mobile/offline product maturity;
+- Phase 9 AI governance and tools;
+- Phase 10 marketplace and sandboxed extensions;
+- Phase 11 enterprise/vertical production proof.
+
+No product wave is complete without the cross-wave acceptance contract in the product plan.
 
 ## 8. Repository Step 22 decision boundary
 
@@ -218,15 +276,17 @@ Before Step 22 can close:
 
 The complete binding rules are in ADR-032.
 
-## 9. Architecture 10/10 declaration boundary
+## 9. Architecture and product 10/10 declaration boundaries
 
 Architecture 10/10 remains reserved for Step 25 after:
 
 - Steps 15–21 close their mechanical criteria;
 - Phase 8A is complete;
 - Step 22 leaves zero unresolved runtime-fan-in or permanent-gate value decisions;
-- two contrasting later expert-domain waves at Steps 23 and 24 prove bounded extension cost and validate the Step 22 decisions;
+- the pre-registered Step 23 Catalog/Pricing wave and Step 24 Quote/CPQ orchestration wave prove bounded extension cost and validate the Step 22 decisions;
 - dependency, package, public-surface, change-locality, CI, local-development, contract-lifecycle, frontend and operations measurements show no regression;
 - every final criterion in the architecture plan is mechanically reproduced.
+
+Product-level 10/10 is a later portfolio claim. It additionally requires every applicable family in `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md` and `CRM_CAPABILITY_COVERAGE.md` to be production-complete or explicitly classified as optional/vertical/external integration with a proven boundary.
 
 Until then issue #194 remains open, Phase 8A and Customer Privacy remain incomplete, and current product-complete expert modules remain **0**.

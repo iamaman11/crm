@@ -26,31 +26,27 @@ class RepositoryNavigationTests(unittest.TestCase):
     def test_active_packet_declaration_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(
-            packet["packet_id"],
-            "architecture-step-22-runtime-fanin-gate-value-hardening",
-        )
+        self.assertEqual(packet["packet_id"], "product-development-10-of-10-plan")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
             {
                 "ref": "main",
-                "sha": "fa55e50f356b9a54712843038f763741898534b8",
+                "sha": "dbba30de911bef10149342ac0490c00ec858d42f",
             },
         )
-        self.assertEqual(packet["tracking_issues"], [194, 126])
+        self.assertEqual(packet["tracking_issues"], [2, 11, 29, 194])
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
                 "docs/ACTIVE_PACKET.md",
-                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-                "docs/DELIVERY_GOVERNANCE.md",
                 "docs/IMPLEMENTATION_ROADMAP.md",
                 "docs/PHASE8_DELIVERY_PLAN.md",
-                "docs/PROJECT_STATUS.md",
-                "docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md",
+                "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
+                "docs/README.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
+                "tests/test_product_development_plan.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -58,13 +54,13 @@ class RepositoryNavigationTests(unittest.TestCase):
             packet["required_checks"],
             ["Affected Scope CI", "Governance CI", "Rust Generated Sync"],
         )
-        self.assertIn("start Repository Step 15", packet["non_goals"])
+        self.assertIn("start Repository Step 15", packet["non_goals"][0])
         self.assertIn(
-            "add ADR-032 as the binding decision for Step 22 runtime fan-in and permanent-gate value review",
+            "add PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md as the normative product-portfolio, automation-semantics and functional-completion plan",
             packet["deliverables"],
         )
         self.assertIn(
-            "require every new permanent gate to declare the same value, cost, overlap, ownership and retirement fields before acceptance",
+            "define Phase 8C universal automation with typed triggers, conditions, governed robot actions, durable execution, approvals, visual workflow authoring and sandboxed programmable extensions",
             packet["deliverables"],
         )
 
@@ -80,11 +76,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "architecture-step-22-runtime-fanin-gate-value-hardening",
+            "product-development-10-of-10-plan",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "fa55e50f356b9a54712843038f763741898534b8",
+            "dbba30de911bef10149342ac0490c00ec858d42f",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -150,7 +146,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["architecture planning packet"],
+                    "reasons": ["product planning packet"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -158,7 +154,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="fa55e50f356b9a54712843038f763741898534b8",
+                return_value="dbba30de911bef10149342ac0490c00ec858d42f",
             ),
             patch(
                 "scripts.repository_navigation.build_report",

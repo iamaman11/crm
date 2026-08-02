@@ -2,6 +2,7 @@
 
 Status: **Normative Phase 8 delivery sequence**  
 Parent roadmap: `IMPLEMENTATION_ROADMAP.md`  
+Product portfolio sequence: `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md`  
 Architecture order: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4  
 Step 22 decision: `adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md`  
 Current state: `PROJECT_STATUS.md`
@@ -10,12 +11,18 @@ Current state: `PROJECT_STATUS.md`
 
 Phase 8 delivers expert CRM domains and product-quality cross-domain journeys on top of the governed platform completed in Phases 0.1–7.
 
-Phase 8 is split into:
+Phase 8 is split into a sequenced portfolio:
 
 - **Phase 8A** — canonical customer master, identity, consent, governed customer-data operations, enrichment and privacy;
-- **Phase 8B** — Product Catalog, Pricing, CPQ and quote-to-revenue, followed by later expert domains.
+- **Phase 8B** — Product Catalog, Pricing, CPQ and quote-to-revenue;
+- **Phase 8C** — universal workflow automation, triggers, robots, approvals, programmable actions, pipelines, funnels, Kanban and configurable work;
+- **Phase 8D** — expanded sales execution, cadences, forecasting and revenue operations;
+- **Phase 8E** — omnichannel service, knowledge and field service;
+- **Phase 8F** — marketing automation and lifecycle journeys;
+- **Phase 8G** — Customer Success, partner management, projects, documents and e-signature;
+- **Phase 8H** — analytics, integrations, Admin Studio, low-code and product-surface maturity.
 
-Phase 8A remains **In progress**. It must close before Phase 8B implementation begins. Repository Step 22 then remeasures architecture, resolves `crm-application-runtime` fan-in and reviews permanent-gate value/cost; it does not automatically declare 10/10.
+The complete functional and completion contract for these waves is normative in `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md`. Phase 8A remains **In progress**. It must close before Phase 8B implementation begins. Repository Step 22 then remeasures architecture, resolves `crm-application-runtime` fan-in and reviews permanent-gate value/cost; it does not automatically declare 10/10.
 
 ## 2. Delivery rules
 
@@ -29,6 +36,8 @@ Phase 8A remains **In progress**. It must close before Phase 8B implementation b
 8. Product behavior, physical package consolidation and evidence synchronization remain separate when packet discipline requires it.
 9. Architecture reductions do not advance module product readiness without separate product/UX/operations evidence.
 10. Step 22 cannot close through non-growth alone; ADR-032 requires dependency-by-dependency and gate-by-gate decisions.
+11. Workflow, trigger, robot, pipeline, Kanban, cadence and low-code behavior must use exact governed domain capabilities and may not bypass owner, authorization, privacy, audit or idempotency boundaries.
+12. A product wave closes only with backend, worker/process, frontend, accessibility, browser, import/migration and operations evidence for representative real journeys.
 
 ## 3. Phase 8A delivery map
 
@@ -206,7 +215,7 @@ Duplicate or low-value gates must be simplified, merged or removed unless indepe
 
 Step 22 closes only with zero unresolved runtime-fan-in classifications and zero unresolved permanent-gate value decisions.
 
-## 9. Phase 8B entry
+## 9. Phase 8B entry and pre-registered architecture proof waves
 
 Phase 8B / issue #29 remains planned. Entry requires:
 
@@ -214,11 +223,56 @@ Phase 8B / issue #29 remains planned. Entry requires:
 2. Repository Step 22 architecture remeasurement, runtime fan-in decision and permanent-gate value/cost review with no hidden regression or unresolved decision;
 3. a bounded Step 23 first expert-domain wave.
 
-Planned independent owner domains include Product Catalog, Pricing, Promotions, CPQ, Quotes, Orders, Contracts, Subscriptions, Entitlements, Usage and governed Billing/ERP/payment/tax/fulfillment integration.
+### Step 23 / Phase 8B.1 — Catalog and Pricing
 
-Step 23 must avoid owner-specific `crm-application-runtime` edits and unjustified permanent-gate growth. Step 24 must add a contrasting expert-domain wave and prove that the same extension cost and governance properties remain bounded as module count grows.
+The first later-domain proof is pre-registered as Product Catalog plus effective-dated Pricing. It must prove stable references, version/effective-date behavior, bounded extension cost, owner-owned production contribution, frontend administration/lookup and no owner-specific `crm-application-runtime` edit.
 
-## 10. Binding repository continuation
+### Step 24 / Phase 8B.2 — Quote/CPQ approvals and orchestration
+
+The second contrasting proof is pre-registered as Quote/CPQ with discount/exception rules, serial/parallel approvals, human tasks, waits/timers, retry/recovery and Kanban/list work queues. It must prove the process-heavy worker/orchestration case without central owner-specific runtime growth or an unjustified new permanent gate.
+
+Step 24 establishes only the minimum reusable process primitives required by its bounded product slice. Full automation authoring, universal trigger/action catalog, programmable robots, general pipelines/Kanban, cadences and configurable work remain Phase 8C.
+
+After Step 25, remaining Phase 8B packets complete CPQ depth, Quotes, Orders, Contracts, Subscriptions, Entitlements, Usage and governed Billing/ERP/payment/tax/fulfillment integration.
+
+## 10. Phase 8C — automation, pipelines, Kanban and programmable work
+
+The full automation product must cover:
+
+- record/field/stage/event/webhook/time/inactivity/SLA/manual/API/import triggers;
+- typed conditions, branches, decision tables and business calendars;
+- governed actions that invoke exact owner capabilities;
+- assignment, task, notification, communication, document, connector and AI-tool actions;
+- waits, timers, parallel branches, joins, reusable subflows and bounded loops;
+- human tasks, serial/parallel approvals, delegation, expiry and escalation;
+- durable instances, retries, idempotency, replay, crash recovery and dead letters;
+- definition versioning, simulation, dry run, impact analysis, publication and rollback;
+- run explorer, diagnostics, metrics, quotas and operator recovery;
+- sandboxed typed custom functions without raw SQL, unrestricted network or secret access.
+
+Pipelines must support versioned stages, required fields/checklists, allowed transitions, automatic/manual stage changes, history and conversion/duration analytics.
+
+Kanban must support validated drag/drop, customizable cards, swimlanes, filters, saved views, aggregates, WIP/staleness/SLA indicators, bulk movement with preview and partial-failure results, authorization-aware disclosure, accessibility and large-board performance.
+
+Sales/service/success cadences must support enrollment, activity/wait steps, branches, automatic stop conditions, consent/quiet-hour/frequency controls, work queues, playbooks, versioning and analytics.
+
+The complete semantics and acceptance targets are in `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md`.
+
+## 11. Later Phase 8 product trains
+
+Following the product plan:
+
+- **8D:** expanded Sales, Revenue Operations, territories, quotas, forecasting, pipeline inspection and guided execution;
+- **8E:** omnichannel Communications, Service, Knowledge, SLA and Field Service;
+- **8F:** Marketing campaigns, segmentation, journeys, experiments and attribution;
+- **8G:** Customer Success, PRM, projects/configurable work, documents and e-signature;
+- **8H:** analytics/reporting, data/integration platform, Admin Studio, custom objects/fields, low-code, responsive/mobile/offline maturity.
+
+Phases 9–11 then add governed AI, signed marketplace/sandboxed extensions and enterprise/vertical production proof.
+
+No later product train may be represented as complete from backend/platform work alone.
+
+## 12. Binding repository continuation
 
 Repository Steps 1–14 are complete.
 
@@ -230,8 +284,8 @@ Repository Steps 1–14 are complete.
 20. Repository Step 20 — frontend and operations evidence;
 21. Repository Step 21 — Phase 8A closure;
 22. Repository Step 22 — architecture remeasurement, `crm-application-runtime` fan-in decision and permanent-gate value/cost review, not final 10/10;
-23. Repository Step 23 — first contrasting Phase 8B expert-domain wave validating Step 22;
-24. Repository Step 24 — second contrasting Phase 8B expert-domain wave validating Step 22;
+23. Repository Step 23 — Phase 8B.1 Catalog/Pricing wave validating Step 22;
+24. Repository Step 24 — Phase 8B.2 Quote/CPQ orchestration wave validating Step 22;
 25. Repository Step 25 — final architecture 10/10 review only if every normative criterion is mechanically proven.
 
-Architecture 10/10 remains unclaimed. Issue #194 and issue #126 remain open. Current product-complete expert modules: **0**.
+Architecture 10/10 remains unclaimed. Product-level 10/10 remains a later portfolio result governed by `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md`. Issue #194 and issue #126 remain open. Current product-complete expert modules: **0**.
