@@ -21,6 +21,4 @@ sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "r
 
 [dev-dependencies]
 crm-capability-plan-support = { path = "../crm-capability-plan-support" }
-crm-customer-360-composition = { path = "../crm-customer-360-composition" }
-crm-global-search-composition = { path = "../crm-global-search-composition" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
