@@ -70,7 +70,7 @@ Issue #194 remains open. The architecture stage ledger is:
 - Stage H reproducible environment and navigation — **In progress**;
 - Stage I frontend and operations parity — **Incomplete**.
 
-Repository Steps 1–15 are complete. Repository Step 16 is the next permitted implementation step and is **not started**.
+Repository Steps 1–16 are complete. Repository Step 17 is the next permitted implementation step and is **not started**.
 
 ### 3.1 Accepted Repository Step 14 closure
 
@@ -111,12 +111,21 @@ Step 15 is accepted through five bounded slices:
 
 The combined evidence proves stable non-reusable Party privacy tombstones, strict event/version lineage, non-disclosure in Search and Customer 360, deterministic rebuild/replay, automatic fresh-generation rollout and process-owned repair without package, dependency-edge, public-contract, route or migration growth.
 
-### 3.3 Binding next repository sequence
+### 3.3 Accepted Repository Step 16 closure
+
+Step 16 is accepted through two bounded slices:
+
+- PR #269 / source `74b1d7b0f8764fcd90839b7aab25f8f82fe5e552` / merge `6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd` / 20 of 20 — business-neutral worker conformance plus representative Customer Enrichment and CRM API import adoption, including no-side-effect denial, retryable preservation, exact restart recovery, completed replay and tenant isolation;
+- PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17 — two live `crm-api` executors mechanically proven to serialize the same durable Party-import work and converge to exactly one committed Party/idempotency/event/audit effect with no duplicate replay.
+
+The accepted worker suite keeps owner-specific semantics outside the generic algorithms, adds no generic lease API, and changes no production algorithm, public contract, route, schema, migration, package, dependency or permanent workflow. Customer Privacy remains at zero workers until Step 19.
+
+### 3.4 Binding next repository sequence
 
 The complete order is normative in the architecture plan. The remaining sequence begins:
 
-16. reusable generic worker conformance — **next, not started**;
-17. contract compatibility, deprecation, consumer-migration and retirement enforcement;
+16. reusable generic worker conformance — **complete through PR #270**;
+17. contract compatibility, deprecation, consumer-migration and retirement enforcement — **next, not started**;
 18. deterministic local lifecycle commands;
 19. Customer Privacy worker and full process/end-to-end acceptance;
 20. Phase 8A frontend, accessibility, browser and operations evidence;
@@ -162,6 +171,7 @@ Accepted runtime and architecture evidence includes:
 - public restriction placement and first protected-owner enforcement through PR #226;
 - public legal-hold placement and mandatory-retention precedence through PR #230;
 - reusable mutation/query conformance through PR #235;
+- reusable worker conformance and representative real-worker adoption through PRs #269 and #270;
 - durable replay-safe owner execution, checkpoints and real outcomes through PR #237;
 - multi-plane affected-scope enforcement through PR #239;
 - governed access/export assembly through PR #241;
@@ -181,15 +191,15 @@ Trusted-internal planning, retention evaluation, replay-safe owner execution, ac
 
 ### 5.1 Remaining Phase 8A.11 product work
 
-The remaining product work after Step 15 is:
+The remaining product work after Step 16 is:
 
 - restriction and legal-hold release/read lifecycle where required;
-- reusable worker conformance and a real Customer Privacy worker lifecycle;
+- a real Customer Privacy worker lifecycle using the accepted reusable conformance;
 - disable/uninstall fail-closed semantics;
 - frontend, accessibility and browser acceptance;
 - production restore, SLO, observability, performance, security and supply-chain evidence.
 
-Repository Step 16 owns only reusable generic worker conformance. It must not absorb Steps 17–21 or claim a Customer Privacy worker before Step 19.
+Repository Step 17 owns only contract lifecycle enforcement. It must not absorb Steps 18–21 or claim a Customer Privacy worker before Step 19.
 
 ## 6. Module-readiness accounting
 
