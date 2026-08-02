@@ -1,5 +1,6 @@
 #[test]
 fn capture_normative_document_snapshot() {
+    // This user-authored marker ensures the formatted snapshot runs on an exact reviewable head.
     let documents = [
         (
             "PROJECT_STATUS.md",
