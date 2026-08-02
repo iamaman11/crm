@@ -86,20 +86,10 @@ jobs:
           from pathlib import Path
           path = Path("tests/test_architecture_documentation_consistency.py")
           text = path.read_text(encoding="utf-8")
-          old = '''        for forbidden in (
-              "Cargo.lock",
-              "crates/**",
-              "database/**",
-          ):
-          '''
-          new = '''        for forbidden in (
-              "Cargo.lock",
-              "database/**",
-              "proto/**",
-          ):
-          '''
+          old = '"crates/**",'
+          new = '"proto/**",'
           if text.count(old) != 1:
-              raise SystemExit(f"expected one forbidden-path assertion, found {text.count(old)}")
+              raise SystemExit(f"expected one forbidden-path value, found {text.count(old)}")
           path.write_text(text.replace(old, new, 1), encoding="utf-8")
           PY
       - name: Generate governed artifacts
