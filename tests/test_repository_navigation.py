@@ -43,6 +43,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             set(packet["allowed_paths"]),
             {
                 "crates/crm-core-data/src/search_store.rs",
+                "crates/crm-core-data/tests/postgres_search.rs",
                 "crates/crm-global-search-composition/src/lib.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
@@ -66,6 +67,10 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertIn("complete Repository Step 15", packet["non_goals"][0])
         self.assertIn(
             "subscribe global search generation g3 to parties.privacy.action.apply.completed without adding a dependency or changing the public Party contract",
+            packet["deliverables"],
+        )
+        self.assertIn(
+            "add PostgreSQL acceptance proving stale erased and privacy-minimized Party names cannot become search candidates",
             packet["deliverables"],
         )
         self.assertIn(
