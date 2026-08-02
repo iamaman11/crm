@@ -49,15 +49,11 @@ jobs:
           from pathlib import Path
           path = Path("scripts/apply_step17_telemetry_patch.py")
           text = path.read_text(encoding="utf-8")
-          replacements = {
-              r'(set\(packet\["allowed_paths"\],\n\s*)': r'(set\((?:self\.)?packet["allowed_paths"],\n\s*)',
-              r'\}(,?\n\s*\),)': r'\}(,?\n\s*\))',
-          }
-          for old, new in replacements.items():
-              if text.count(old) != 1:
-                  raise SystemExit(f"expected one matcher target, found {text.count(old)}: {old}")
-              text = text.replace(old, new, 1)
-          path.write_text(text, encoding="utf-8")
+          old = r'''r'(set\\(packet\\["allowed_paths"\\]\\),\\n\\s*)\\{.*?\\}(,?\\n\\s*\\),)' '''.rstrip()
+          new = r'''r'(set\\((?:self\\.)?packet\\["allowed_paths"\\]\\),\\n\\s*)\\{.*?\\}(,?\\n\\s*\\))' '''.rstrip()
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one complete matcher target, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
           PY
       - name: Apply deterministic telemetry patch
         run: python scripts/apply_step17_telemetry_patch.py
