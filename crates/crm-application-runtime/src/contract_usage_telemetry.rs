@@ -352,7 +352,7 @@ mod tests {
     async fn exact_deprecated_resolution_increments_before_later_gateway_checks() {
         let definition = definition(true, "crm.test");
         let metrics = Arc::new(
-            ContractUsageMetrics::from_catalog(CATALOG, &[definition.clone()], &[]).unwrap(),
+            ContractUsageMetrics::from_catalog(CATALOG, std::slice::from_ref(&definition), &[]).unwrap(),
         );
         let registry = MeteredCapabilityRegistry::new(
             Arc::new(Registry {
@@ -377,7 +377,7 @@ mod tests {
     async fn unknown_or_wrong_surface_resolution_does_not_increment() {
         let definition = definition(true, "crm.test");
         let metrics = Arc::new(
-            ContractUsageMetrics::from_catalog(CATALOG, &[definition.clone()], &[]).unwrap(),
+            ContractUsageMetrics::from_catalog(CATALOG, std::slice::from_ref(&definition), &[]).unwrap(),
         );
         let registry = MeteredCapabilityRegistry::new(
             Arc::new(Registry {
