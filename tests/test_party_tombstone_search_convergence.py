@@ -18,6 +18,9 @@ class PartyTombstoneSearchConvergenceTests(unittest.TestCase):
         cls.search_store = (ROOT / "crates/crm-core-data/src/search_store.rs").read_text(
             encoding="utf-8"
         )
+        cls.postgres_search = (
+            ROOT / "crates/crm-core-data/tests/postgres_search.rs"
+        ).read_text(encoding="utf-8")
         cls.owner_executor = (
             ROOT / "crates/crm-core-data/src/privacy_owner_action.rs"
         ).read_text(encoding="utf-8")
@@ -38,6 +41,7 @@ class PartyTombstoneSearchConvergenceTests(unittest.TestCase):
             set(self.packet["allowed_paths"]),
             {
                 "crates/crm-core-data/src/search_store.rs",
+                "crates/crm-core-data/tests/postgres_search.rs",
                 "crates/crm-global-search-composition/src/lib.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
@@ -56,6 +60,10 @@ class PartyTombstoneSearchConvergenceTests(unittest.TestCase):
         )
         self.assertIn(
             "the Step 13 crm-core-data non-comment LOC budget remains at or below the accepted 9922-line ceiling",
+            self.packet["acceptance"],
+        )
+        self.assertIn(
+            "PostgreSQL integration acceptance proves both erased and privacy-minimized Party documents remain undiscoverable even when stale searchable text still contains the query",
             self.packet["acceptance"],
         )
 
@@ -133,6 +141,21 @@ class PartyTombstoneSearchConvergenceTests(unittest.TestCase):
             "AND COALESCE(document -> 'display_fields' ->> 'privacy_lifecycle', 'active') = 'active'",
             query,
         )
+
+    def test_postgres_acceptance_seeds_both_non_active_party_states(self) -> None:
+        source = self.postgres_search
+        for marker in (
+            'const ERASED_PARTY_ID: &str = "party-acme-erased";',
+            'const MINIMIZED_PARTY_ID: &str = "party-acme-minimized";',
+            '"Acme Erased Person"',
+            '"erased"',
+            '"Acme Privacy Minimized Person"',
+            '"privacy_minimized"',
+            "unfiltered_request(TENANT_A, None, 10)",
+            'candidate.resource.record_type.as_str() == "sales.deal"',
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, source)
 
     def test_authoritative_party_delete_remains_a_minimized_soft_tombstone(self) -> None:
         source = self.owner_executor
