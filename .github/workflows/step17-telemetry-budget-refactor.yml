@@ -133,14 +133,47 @@ jobs:
       - name: Format Rust source
         run: cargo fmt --all
       - name: Test telemetry and runtime integration
+        id: rust
+        continue-on-error: true
+        shell: bash
         run: |
-          cargo test --locked -p crm-capability-adapters contract_usage_telemetry
-          cargo check --locked -p crm-application-runtime --all-targets
+          mkdir -p artifacts
+          set +e
+          cargo test --locked -p crm-capability-adapters contract_usage_telemetry \
+            >artifacts/adapter-test.txt 2>&1
+          adapter_status=$?
+          cargo check --locked -p crm-application-runtime --all-targets \
+            >artifacts/runtime-check.txt 2>&1
+          runtime_status=$?
+          cat artifacts/adapter-test.txt
+          cat artifacts/runtime-check.txt
+          printf 'adapter=%s runtime=%s\n' "${adapter_status}" "${runtime_status}"
+          if [ "${adapter_status}" -ne 0 ] || [ "${runtime_status}" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Upload exact Rust diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: telemetry-budget-rust-diagnostics
+          path: artifacts/*-test.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload runtime check diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: telemetry-budget-runtime-diagnostics
+          path: artifacts/runtime-check.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Fail if Rust integration fails
+        if: steps.rust.outcome == 'failure'
+        run: exit 1
       - name: Measure accepted complexity ceilings
         id: complexity
         continue-on-error: true
         run: |
-          mkdir -p artifacts
           python scripts/analyze_workspace.py \
             --json-output artifacts/workspace-complexity-baseline.json \
             --markdown-output artifacts/workspace-complexity-baseline.md
@@ -156,8 +189,8 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: telemetry-budget-diagnostics
-          path: artifacts/
-          if-no-files-found: error
+          path: artifacts/*complexity*.*
+          if-no-files-found: warn
           retention-days: 14
       - name: Fail if complexity ceilings are exceeded
         if: steps.complexity.outcome == 'failure'
