@@ -7,6 +7,12 @@ on:
     paths:
       - ".github/workflows/step17-telemetry-bootstrap.yml"
       - "scripts/apply_step17_telemetry_patch.py"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/step17-telemetry-bootstrap.yml"
+      - "scripts/apply_step17_telemetry_patch.py"
 
 concurrency:
   group: step17-telemetry-bootstrap
@@ -17,6 +23,7 @@ permissions:
 
 jobs:
   patch:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
