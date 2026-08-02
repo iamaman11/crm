@@ -296,9 +296,8 @@ mod retryable_process {
     async fn wait_for_party_contention_waiters(admin: &PgPool, expected: i64) {
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
-            let (direct_party_waiters, transitive_executor_waiters): (i64, i64) =
-                sqlx::query_as(
-                    r#"
+            let (direct_party_waiters, transitive_executor_waiters): (i64, i64) = sqlx::query_as(
+                r#"
                     WITH RECURSIVE direct_party_waiters AS (
                       SELECT
                         activity.pid AS waiter_pid,
@@ -337,10 +336,10 @@ mod retryable_process {
                         )
                       )
                     "#,
-                )
-                .fetch_one(admin)
-                .await
-                .expect("observe Party target contention chain");
+            )
+            .fetch_one(admin)
+            .await
+            .expect("observe Party target contention chain");
             if direct_party_waiters >= 1 && transitive_executor_waiters >= expected {
                 return;
             }
