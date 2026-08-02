@@ -232,23 +232,24 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-15-customer360-generation-rollover",
+            "repository-step-15-crm-api-no-orphan-closure",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
             {
                 "ref": "main",
-                "sha": "2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a",
+                "sha": "1f889a810c82da3d0fee12427eacccbe43613bac",
             },
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
-                "crates/crm-customer-360-composition/src/lib.rs",
+                ".github/workflows/customer-privacy-owner-execution.yml",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
+                "services/crm-api/tests/customer_360_privacy_no_orphan_process_e2e.rs",
+                "services/crm-api/tests/support.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_party_tombstone_rebuild_convergence.py",
                 "tests/test_repository_navigation.py",
@@ -265,29 +266,36 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "Customer Privacy Owner Execution CI",
             ],
         )
-        self.assertIn("complete Repository Step 15", "\n".join(self.packet["non_goals"]))
+        self.assertIn(
+            "synchronize final Repository Step 15 acceptance SHAs",
+            "\n".join(self.packet["non_goals"]),
+        )
         self.assertTrue(
             any(
-                "permanent CI workflow" in non_goal
+                "new permanent CI workflow" in non_goal
                 for non_goal in self.packet["non_goals"]
             )
         )
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "change the shared Customer 360 production projection identity from customer.customer-360.v1 to customer.customer-360.v2",
+            "create a Party through the public application gateway of a real crm-api process",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "invoke the normal Customer360ProjectionWorker run_batch path rather than a manual initial rebuild",
+            "restart the real crm-api binary without bootstrap and wait for its production Customer360BackgroundWorker cycle",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "workspace package count, internal dependency edges, manifests, Cargo.lock, migrations, contracts, routes and permanent workflows remain unchanged",
+            "reuse the existing crm-api process support through a test-only module shim without changing the service manifest or production source",
+            self.packet["deliverables"],
+        )
+        self.assertIn(
+            "workspace package count, internal dependency edges, manifests, Cargo.lock, migrations, contracts, routes and production Rust source remain unchanged",
             self.packet["acceptance"],
         )
-        self.assertIn("customer.customer-360.v2", self.packet["objective"])
-        self.assertIn("document schema version 1", self.packet["objective"])
+        self.assertIn("real-process no-orphan", self.packet["objective"])
+        self.assertIn("customer.customer-360.v2", "\n".join(self.packet["acceptance"]))
         self.assertIn("legacy v1", self.packet["objective"])
 
     def test_repository_map_reflects_current_workspace(self) -> None:
