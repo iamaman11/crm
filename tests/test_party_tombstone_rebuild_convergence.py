@@ -51,14 +51,15 @@ class PartyTombstoneRebuildConvergenceTests(unittest.TestCase):
 
     def test_acceptance_persists_canonical_source_state(self) -> None:
         for marker in (
-            "encode_privacy_case_state",
+            "privacy_case_persisted_payload",
             "encode_action_plan_state",
-            "encode_retention_decision_state",
+            "retention_decision_persisted_payload",
             "persisted_contract()",
             '"schema_version": "crm.parties.state/v1"',
             "EvidenceClass::RetainMinimizedEvidence",
         ):
             self.assertIn(marker, self.acceptance)
+        self.assertNotIn("use crm_customer_privacy::{", self.acceptance)
 
     def test_acceptance_proves_stale_state_then_rebuild_convergence(self) -> None:
         for marker in (
