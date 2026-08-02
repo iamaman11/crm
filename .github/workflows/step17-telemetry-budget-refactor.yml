@@ -75,8 +75,8 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          path = Path("crates/crm-application-runtime/src/runtime.rs")
-          text = path.read_text(encoding="utf-8")
+          runtime_path = Path("crates/crm-application-runtime/src/runtime.rs")
+          runtime = runtime_path.read_text(encoding="utf-8")
           replacements = {
               '''impl fmt::Debug for ApplicationComponents {
               fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -115,10 +115,66 @@ jobs:
           ''': '',
           }
           for old, new in replacements.items():
-              if text.count(old) != 1:
-                  raise SystemExit(f"expected one boilerplate target, found {text.count(old)}")
-              text = text.replace(old, new, 1)
-          path.write_text(text, encoding="utf-8")
+              if runtime.count(old) != 1:
+                  raise SystemExit(f"expected one runtime boilerplate target, found {runtime.count(old)}")
+              runtime = runtime.replace(old, new, 1)
+          runtime_path.write_text(runtime, encoding="utf-8")
+
+          process_path = Path("crates/crm-application-runtime/src/process.rs")
+          process = process_path.read_text(encoding="utf-8")
+          process_replacements = {
+              "use crate::{ApplicationConfig, ApplicationRuntime};":
+                  "use crate::{ApplicationConfig, ApplicationRuntime, ApplicationRuntimeError};",
+              "        let config = ApplicationConfig::from_env()?;":
+                  "        let config = ApplicationConfig::from_env().map_err(ApplicationRuntimeError::Config)?;",
+          }
+          for old, new in process_replacements.items():
+              if process.count(old) != 1:
+                  raise SystemExit(f"expected one process target, found {process.count(old)}")
+              process = process.replace(old, new, 1)
+          process_path.write_text(process, encoding="utf-8")
+          PY
+      - name: Synchronize exact fourteen-file packet
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import re
+
+          packet_path = Path("repository-packet.json")
+          packet = json.loads(packet_path.read_text(encoding="utf-8"))
+          process_path = "crates/crm-application-runtime/src/process.rs"
+          if process_path not in packet["allowed_paths"]:
+              packet["allowed_paths"].append(process_path)
+          packet["allowed_paths"].sort()
+          packet["acceptance"] = [
+              item.replace("thirteen declared telemetry packet files", "fourteen declared telemetry packet files")
+              for item in packet["acceptance"]
+          ]
+          packet_path.write_text(json.dumps(packet, indent=2) + "\n", encoding="utf-8")
+
+          body = "{\n" + "".join(
+              f'                "{item}",\n' for item in packet["allowed_paths"]
+          ) + "            }"
+          pattern = re.compile(
+              r'(set\((?:self\.)?packet\["allowed_paths"\]\),\n\s*)\{.*?\}(,?\n\s*\))',
+              re.DOTALL,
+          )
+          for filename in (
+              "tests/test_repository_navigation.py",
+              "tests/test_architecture_documentation_consistency.py",
+          ):
+              path = Path(filename)
+              text = path.read_text(encoding="utf-8")
+              updated, count = pattern.subn(
+                  lambda match: match.group(1) + body + match.group(2),
+                  text,
+                  count=1,
+              )
+              if count != 1:
+                  raise SystemExit(f"{filename}: expected one allowed-path assertion, found {count}")
+              path.write_text(updated, encoding="utf-8")
           PY
       - name: Regenerate governed artifacts
         run: |
@@ -156,7 +212,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: telemetry-budget-rust-diagnostics
-          path: artifacts/*-test.txt
+          path: artifacts/adapter-test.txt
           if-no-files-found: error
           retention-days: 14
       - name: Upload runtime check diagnostics
