@@ -103,7 +103,7 @@ Trusted-internal planning, retention evaluation, replay-safe owner execution, ac
 
 ## 5. Accepted Repository Step 14 and Step 15 architecture results
 
-Repository Step 14 and architecture Stage G are complete through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d44691371c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
+Repository Step 14 and architecture Stage G are complete through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
 
 The packet is behavior-neutral. It removes `crm-customer-accounts-capability-composition`, moves the owner production contribution into `crm-customer-accounts-query-adapter`, preserves mutation planning and exact first-party inventory, and changes no public contract, route, schema, migration, persistence or worker behavior.
 
