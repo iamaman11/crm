@@ -501,6 +501,28 @@ async fn seed_stale_customer_360(
 ) {
     sqlx::query(
         r#"
+        INSERT INTO crm.projection_checkpoints (
+          tenant_id, projection_id, last_occurred_at, last_event_id,
+          applied_event_count, status
+        ) VALUES ($1, $2, TIMESTAMPTZ 'epoch', $3, 0, 'active')
+        ON CONFLICT (tenant_id, projection_id) DO UPDATE
+        SET last_occurred_at = EXCLUDED.last_occurred_at,
+            last_event_id = EXCLUDED.last_event_id,
+            applied_event_count = 0,
+            status = 'active',
+            failure_event_id = NULL,
+            failure_code = NULL
+        "#,
+    )
+    .bind(tenant)
+    .bind(CUSTOMER_360_PROJECTION_ID)
+    .bind(source_event_id)
+    .execute(admin)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        r#"
         INSERT INTO crm.projection_documents (
           tenant_id, projection_id, resource_type, resource_id,
           source_version, source_event_id, document
