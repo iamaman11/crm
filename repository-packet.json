@@ -17,7 +17,9 @@
     "crates/crm-global-search-composition/src/lib.rs",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
-    "tests/test_party_tombstone_search_convergence.py"
+    "tests/test_architecture_documentation_consistency.py",
+    "tests/test_party_tombstone_search_convergence.py",
+    "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
     ".github/**",
@@ -53,14 +55,17 @@
     "exclude every non-active lifecycle marker in the PostgreSQL search candidate query before live visibility evaluation",
     "retain the existing soft-deleted minimized Party row and stable identifier as the no-reuse tombstone rather than physically deleting it",
     "add permanent tests for generation rollover, exact event validation, stale-name replacement and SQL exclusion",
+    "synchronize repository packet and navigation fixtures with the exact Step 15 slice",
     "regenerate ACTIVE_PACKET.md from the exact packet declaration"
   ],
   "required_checks": [
     "Affected Scope CI",
-    "Governance CI",
+    "Complexity Baseline CI",
     "Rust Generated Sync",
-    "Rust Unit Test Matrix",
-    "PostgreSQL Integration"
+    "Rust CI",
+    "Search Runtime CI",
+    "Database CI",
+    "Parties Privacy Scope CI"
   ],
   "acceptance": [
     "the accepted head is based exactly on main commit 5bc885c6a311cbe95eb6e5ba1a85d10aed400650 and contains no unrelated change",
@@ -68,6 +73,7 @@
     "only tenant-bound exact Parties owner-action events with canonical owner, capability, resource, resource version and supported delete/anonymize action are accepted",
     "a delete action replaces the prior searchable Party name with an erased marker and an anonymize action replaces it with a privacy-minimized marker",
     "PostgreSQL search candidate selection excludes non-active lifecycle documents before any result or match metadata can escape",
+    "the Step 13 crm-core-data non-comment LOC budget remains at or below the accepted 9922-line ceiling",
     "no new crate, dependency declaration, public route, Protobuf contract, database migration, worker or permanent workflow is added",
     "Repository Step 15 remains incomplete after this slice; Customer 360, other derived-state/cache evidence and exact process-level no-orphan acceptance remain next",
     "one unchanged exact head passes every applicable permanent workflow and final changed-file/thread review"
