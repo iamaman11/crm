@@ -410,13 +410,6 @@ async fn application_attempt_version(admin: &PgPool) -> i64 {
     .expect("application attempt version")
 }
 
-async fn party_version(
-    store: &PostgresDataStore,
-    suggestion: &crm_customer_enrichment::Suggestion,
-) -> i64 {
-    party_state(store, suggestion).await.0
-}
-
 async fn party_state(
     store: &PostgresDataStore,
     suggestion: &crm_customer_enrichment::Suggestion,
