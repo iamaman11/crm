@@ -59,6 +59,19 @@ jobs:
               text = text.replace(old, new, 1)
           path.write_text(text, encoding="utf-8")
           PY
+      - name: Align non-Debug error assertions
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("crates/crm-capability-adapters/src/contract_usage_telemetry.rs")
+          text = path.read_text(encoding="utf-8")
+          old = "        .unwrap_err();"
+          new = "        .err()\n        .expect(\"invalid telemetry catalog must fail\");"
+          if text.count(old) != 2:
+              raise SystemExit(f"expected two unwrap_err assertions, found {text.count(old)}")
+          path.write_text(text.replace(old, new), encoding="utf-8")
+          PY
       - name: Regenerate governed artifacts
         run: |
           python scripts/generate_contract_telemetry_catalog.py --write
