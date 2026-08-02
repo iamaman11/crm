@@ -8,6 +8,7 @@ Delivery-control policy: `DELIVERY_GOVERNANCE.md`
 Current concise state: `PROJECT_STATUS.md`  
 Detailed Phase 8 sequence: `PHASE8_DELIVERY_PLAN.md`  
 Architecture/developer-experience program and repository order: `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` / issue #194  
+Step 22 decision: `adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md`  
 Accepted Rust boundary: `RUST_TOOLCHAIN_AND_LINT_BASELINE.md` / `rust-governance-policy.json`  
 Functional completeness guardrail: `CRM_CAPABILITY_COVERAGE.md`  
 Business-module accounting: `MODULE_CATALOG.md`
@@ -29,6 +30,8 @@ This roadmap defines dependency order for a universal modular expert CRM platfor
 11. Repository implementation is strictly sequential: only the first unfinished item in the architecture plan section 2.4 may start.
 12. Only one implementation packet may be active; evidence synchronization closes the accepted packet before the next implementation begins.
 13. Only merged `main` work may be represented as complete.
+14. A new permanent gate requires a concrete failure mode, non-duplication rationale, expected cost, named owner and retirement/review condition before acceptance.
+15. Repository Step 22 cannot close on non-growth alone; ADR-032 runtime fan-in and permanent-gate decisions are mandatory.
 
 ## 2. Product phase map
 
@@ -37,7 +40,7 @@ This roadmap defines dependency order for a universal modular expert CRM platfor
 | 0.1–7 | #3–#10 | Governed platform, Sales/Activities proof, search, product shell and native composition | **Complete** |
 | 8 | #11 | Expert modules and product-quality CRM experience | **In progress** |
 | 8A | #28 | Canonical customer master, identity, consent and governed customer-data lifecycle | **In progress** |
-| 8B | #29 | Product Catalog, CPQ and quote-to-revenue lifecycle | **Planned; blocked on completed Phase 8A and Repository Step 22; first extension wave is Step 23** |
+| 8B | #29 | Product Catalog, CPQ and quote-to-revenue lifecycle | **Planned; blocked on completed Phase 8A and Repository Step 22 runtime-fan-in/gate-value decisions; first extension wave is Step 23** |
 | 9 | #12 | AI-native governed actor/tool layer | **Planned** |
 | 10 | #13 | Signed marketplace and sandboxed untrusted extensions | **Planned** |
 | 11 | #14 | Enterprise security, resilience and production proof | **Planned / continuous** |
@@ -47,10 +50,10 @@ This roadmap defines dependency order for a universal modular expert CRM platfor
 Issue #194 remains open. The architecture stage ledger is:
 
 - Stage A documentation/navigation baseline — **Complete**;
-- Stage B dependency, crate and exception governance — **Complete through PRs #253, #255 and #257**;
+- Stage B dependency, crate and exception governance — **Complete through PRs #253, #255 and #257; ADR-032 Step 22 decision remains future closure evidence**;
 - Stage C Customer Privacy golden owner and persistence model — **In progress**;
 - Stage D contribution aggregation — **Complete through PR #249**;
-- Stage E affected-scope CI — **Complete through PR #239**;
+- Stage E affected-scope CI — **Complete through PR #239; permanent-gate value review remains mandatory at Step 22**;
 - Stage F generic conformance and contract lifecycle — **In progress**;
 - Stage G transitional consolidation — **Complete through PR #259**;
 - Stage H reproducible environment and navigation — **In progress**;
@@ -96,9 +99,9 @@ The complete order is normative in the architecture plan. The remaining sequence
 19. Customer Privacy worker and full process/end-to-end acceptance;
 20. Phase 8A frontend, accessibility, browser and operations evidence;
 21. Phase 8A closure;
-22. Phase 8A architecture remeasurement — checkpoint, not final 10/10;
-23. Step 23 — first contrasting later expert-domain wave;
-24. Step 24 — second contrasting later expert-domain wave;
+22. Phase 8A architecture remeasurement, `crm-application-runtime` direct-dependency decision and permanent-gate value/cost review — checkpoint, not final 10/10;
+23. Step 23 — first contrasting later expert-domain wave validating bounded extension cost and the Step 22 runtime/gate conclusions;
+24. Step 24 — second contrasting later expert-domain wave validating bounded extension cost and the Step 22 runtime/gate conclusions;
 25. final architecture 10/10 closure review only when every criterion is mechanically proven.
 
 No later packet may start while an earlier item remains unfinished.
@@ -185,7 +188,7 @@ Phase 8A remains incomplete until these criteria are met for the current custome
 
 ## 7. Phase 8B and later product domains
 
-Phase 8B remains planned and blocked on completed Phase 8A plus the Step 22 measurement checkpoint. Step 23 must prove that a first later expert-domain wave keeps extension cost bounded. Step 24 must add a contrasting expert-domain wave and prove that extension cost remains bounded as module count grows.
+Phase 8B remains planned and blocked on completed Phase 8A plus the Step 22 measurement and decision checkpoint. Step 23 must prove that a first later expert-domain wave keeps extension cost bounded, avoids owner-specific `crm-application-runtime` edits and does not add an unjustified permanent gate. Step 24 must add a contrasting expert-domain wave and prove that the same properties remain true as module count grows.
 
 Independent owner domains still planned or incomplete include:
 
@@ -199,13 +202,30 @@ Independent owner domains still planned or incomplete include:
 - expanded Sales, Activities, Service, Knowledge, Field Service, Marketing and Customer Success;
 - projects/configurable work, documents/e-signature, analytics, workflow/collaboration, AI governance and marketplace capabilities.
 
-## 8. Architecture 10/10 declaration boundary
+## 8. Repository Step 22 decision boundary
 
-Repository Step 22 is a measurement checkpoint, not an automatic completion declaration. Architecture 10/10 remains reserved for Step 25 after:
+Repository Step 22 is a measurement and remediation checkpoint, not an automatic completion declaration.
+
+Before Step 22 can close:
+
+- every internal direct dependency of `crm-application-runtime` must be classified as removed, platform-generic, owner-specific-unavoidable or test-only;
+- every safely removable owner-specific dependency must be removed;
+- each retained owner-specific dependency must prove an unavoidable stable process-composition boundary and prove that ordinary owner changes do not modify the runtime manifest or owner-specific runtime source;
+- mere non-growth against the current direct-dependency budget is insufficient;
+- every permanent workflow, job and gate must record its concrete failure mode, observed defect evidence or preventive rationale, duplication/overlap, execution cost, owner, retain/simplify/merge/remove decision and retirement condition;
+- duplicate or low-value gates must be simplified, merged or removed unless independent value is proven;
+- every new permanent gate must satisfy the same entry contract.
+
+The complete binding rules are in ADR-032.
+
+## 9. Architecture 10/10 declaration boundary
+
+Architecture 10/10 remains reserved for Step 25 after:
 
 - Steps 15–21 close their mechanical criteria;
 - Phase 8A is complete;
-- two contrasting later expert-domain waves at Steps 23 and 24 prove bounded extension cost;
+- Step 22 leaves zero unresolved runtime-fan-in or permanent-gate value decisions;
+- two contrasting later expert-domain waves at Steps 23 and 24 prove bounded extension cost and validate the Step 22 decisions;
 - dependency, package, public-surface, change-locality, CI, local-development, contract-lifecycle, frontend and operations measurements show no regression;
 - every final criterion in the architecture plan is mechanically reproduced.
 

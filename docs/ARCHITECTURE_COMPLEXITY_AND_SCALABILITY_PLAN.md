@@ -10,7 +10,7 @@ This plan governs repository structure, Rust workspace packaging, module composi
 Governing precedence:
 
 1. `SYSTEM_INVARIANTS.md`;
-2. published contracts and accepted ADRs;
+2. published contracts and accepted ADRs, including ADR-031 and ADR-032;
 3. `APPLICATION_ARCHITECTURE.md` and accepted readiness evidence;
 4. this execution plan;
 5. descriptive module, packet and orientation documentation.
@@ -88,10 +88,10 @@ An ordinary capability added to an existing owner creates **zero new crates** by
 | Stage | Current state | Accepted evidence | Remaining exit work |
 |---|---|---|---|
 | A — documentation and policy baseline | **Complete** | one source hierarchy, stable index, generated navigation and permanent consistency guards | preserve freshness and avoid duplicate live roadmaps |
-| B — dependency, crate and exception governance | **Complete** | PRs #253, #255 and #257: reproducible measurement, exact Rust 1.97.1, zero-warning Rust/Clippy, lockfile preservation, blocking suppression/direct-lint/process-host/change-cost/dependency governance | preserve non-growth and remeasure at Steps 22 and 25 |
+| B — dependency, crate and exception governance | **Complete** | PRs #253, #255 and #257: reproducible measurement, exact Rust 1.97.1, zero-warning Rust/Clippy, lockfile preservation, blocking suppression/direct-lint/process-host/change-cost/dependency governance | preserve non-growth; complete ADR-032 runtime fan-in and gate-value decisions at Step 22 |
 | C — golden owner package and persistence model | **In progress** | Customer Privacy golden package, final subject policy, restriction/legal-hold placement, retention precedence, durable owner execution/outcomes, governed access/export and owner actions | Party tombstone/convergence at Step 15, worker lifecycle at Step 19, Phase 8A closure at Step 21 |
 | D — contribution aggregation | **Complete** | all active first-party owner contributions aggregated through `crm-first-party-modules` by PRs #246, #248 and #249 | preserve bounded owner-owned contribution boundaries |
-| E — affected-scope CI | **Complete** | PR #239: deterministic Rust closure and declarative contract/API/migration/PostgreSQL/process/product/frontend/operations ownership with unknown-path fail closed | preserve policy/workflow compatibility |
+| E — affected-scope CI | **Complete** | PR #239: deterministic Rust closure and declarative contract/API/migration/PostgreSQL/process/product/frontend/operations ownership with unknown-path fail closed | preserve policy/workflow compatibility and review gate value/cost at Step 22 |
 | F — generic conformance and contract lifecycle | **In progress** | reusable mutation/query conformance accepted through PR #235 | worker conformance Step 16, contract lifecycle Step 17, real worker adoption Step 19 |
 | G — transitional consolidation | **Complete** | PR #259 removes one redundant Customer Accounts package behavior-neutrally and lowers measured budgets | preserve the reduction and prove later changes remain bounded |
 | H — reproducible environment and navigation | **In progress** | `affected`, `check-affected`, `explain`, fail-closed `packet-check`, generated active packet and repository map | deterministic `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke` at Step 18 |
@@ -124,10 +124,10 @@ At most one implementation packet may be active. The next permitted packet is th
 19. real Customer Privacy worker lifecycle and complete process/end-to-end acceptance;
 20. Phase 8A frontend, accessibility, browser and operations evidence;
 21. Phase 8A closure;
-22. Phase 8A architecture remeasurement and remaining-gate review — **checkpoint, not final 10/10**;
-23. first Phase 8B expert-domain wave proving bounded extension cost;
-24. second contrasting expert-domain wave proving bounded extension cost as module count grows;
-25. final architecture 10/10 closure review only when every Section 12 criterion is mechanically proven.
+22. Phase 8A architecture remeasurement, `crm-application-runtime` fan-in decision and permanent-gate value/cost review — **checkpoint, not final 10/10**;
+23. first Phase 8B expert-domain wave proving bounded extension cost and validating the Step 22 runtime/gate conclusions;
+24. second contrasting expert-domain wave proving bounded extension cost as module count grows and validating the Step 22 runtime/gate conclusions;
+25. final architecture 10/10 closure review only when every Section 13 criterion is mechanically proven.
 
 Feature behavior and crate consolidation must be separate PRs. Documentation evidence synchronization must be separate from implementation when the packet rules require an accepted implementation merge first.
 
@@ -184,6 +184,16 @@ Stop immediately when a candidate owns:
 
 PR #259 is the first accepted proof: `crm-customer-accounts-capability-composition` had one production consumer and no independent boundary, so its contribution moved into `crm-customer-accounts-query-adapter` without behavior change.
 
+### 4.4 `crm-application-runtime` closure obligation
+
+The current broad `crm-application-runtime` direct dependency surface is a controlled architecture debt, not a completed simplification claim.
+
+ADR-032 governs its Step 22 resolution. Every internal direct dependency must finish Step 22 as exactly one of `removed`, `platform-generic`, `owner-specific-unavoidable` or `test-only`. Mere non-growth is insufficient.
+
+Every safely removable owner-specific dependency must be removed or moved behind an existing owner-owned production boundary. Every retained owner-specific dependency must prove a concrete unavoidable process, trust, security, provider, persistence, projection or ownership boundary and must not participate in ordinary owner changes.
+
+An ordinary capability in an existing owner, and the Step 23–24 expert-domain waves, must not require edits to `crm-application-runtime/Cargo.toml` or owner-specific process-composition source. Any contrary evidence reopens Step 22 and blocks Step 25.
+
 ## 5. Dependency, public-surface and exception governance
 
 Blocking policies must permit reductions and reject unmeasured growth.
@@ -194,13 +204,16 @@ Required controls:
 - accepted version/feature divergence recorded explicitly;
 - no direct package lint tables outside an exact time-bounded exception;
 - no new source-level `allow` or `expect` equivalent to a retired suppression;
+- complete inventory of source-level `allow`, `expect`, ignored tests and equivalent bypass forms;
 - role-aware budgets for central runtimes, SDK/contracts, infrastructure ports and process hosts;
 - direct dependency and transitive reverse-impact non-growth;
 - conservative public Rust item non-growth unless a versioned public API need is proven;
 - exact exception owner, scope, reason, compensating checks, expiry and removal condition;
 - expired exceptions equal zero.
 
-Current exact reduction budgets are stored in `step13-complexity-policy.json`; Rust adoption cohorts are stored in `rust-governance-policy.json`.
+Current exact reduction budgets are stored in `step13-complexity-policy.json`; Rust adoption cohorts are stored in `rust-governance-policy.json`; the registered source-level suppression multiset is stored in `step13-suppression-baseline.json`.
+
+These policies are floors for safe change, not proof that every retained dependency or suppression is optimal.
 
 ## 6. Affected-scope and CI scalability
 
@@ -216,6 +229,35 @@ Every changed path must resolve to:
 Contracts, Protobuf/API, migrations, PostgreSQL, process/runtime, product, frontend and operations changes have explicit planes. Workflow filters and policy selections must remain mechanically compatible.
 
 Representative leaf changes should avoid unrelated full-workspace fan-out. Any broadening requires a machine-readable reason and must be remeasured at Steps 22–24.
+
+### 6.1 Permanent-gate value and cost governance
+
+A permanent gate is justified only by a concrete prevented failure mode, distinct value and acceptable execution/maintenance cost.
+
+Every new permanent gate proposal must declare before acceptance:
+
+- concrete prevented failure mode;
+- why existing gates do not already prevent it;
+- expected affected scope, duration, runner cost and expensive environment setup;
+- named owner;
+- false-positive controls;
+- emitted success/failure evidence;
+- review and retirement condition.
+
+A gate must not become permanent merely because it checks another governance mechanism.
+
+Before Step 22 remeasurement is accepted, every existing permanent workflow, job and repository gate must appear in a complete value/cost ledger recording:
+
+- failure mode;
+- observed defect evidence or specific preventive rationale;
+- authoritative inputs and scope;
+- overlap and duplication;
+- execution cost and operational maintenance;
+- retain, simplify, merge or remove decision;
+- owner and retirement/re-review condition;
+- compensating checks for any simplification, merge or removal.
+
+Duplicate or low-value gates must be simplified, merged or removed unless an independent failure mode and cost justification is proven. A gate without a concrete failure mode cannot remain permanent.
 
 ## 7. Generic conformance and contract lifecycle
 
@@ -298,24 +340,58 @@ Required scope:
 
 The packet must start from current `main`, declare exact allowed/forbidden paths and pass every applicable permanent workflow on one unchanged meaningful user-authored head.
 
-## 12. Final architecture 10/10 closure criteria
+## 12. Repository Step 22 mandatory decision and review
+
+Step 22 is not a passive dashboard refresh. It must execute ADR-032 before its architecture remeasurement can be accepted.
+
+### 12.1 Runtime fan-in decision
+
+Step 22 must:
+
+1. inventory every internal direct dependency of `crm-application-runtime`;
+2. separate production and test-only surfaces;
+3. classify every dependency as `removed`, `platform-generic`, `owner-specific-unavoidable` or `test-only`;
+4. remove every safely removable owner-specific dependency;
+5. prove every retained owner-specific dependency protects a concrete unavoidable boundary;
+6. prove ordinary owner changes do not modify the runtime manifest or owner-specific runtime source;
+7. leave zero unresolved dependency classifications.
+
+The current maximum direct-dependency budget is not sufficient completion evidence by itself.
+
+### 12.2 Permanent-gate review
+
+Step 22 must review every permanent workflow, job and gate for:
+
+- real prevented failure mode;
+- defects actually detected or exact preventive rationale;
+- duplicate/overlapping results;
+- duration, runner and environment cost;
+- false-positive and maintenance history where measurable;
+- retain, simplify, merge or remove disposition;
+- named owner and retirement condition.
+
+All immediately safe simplifications, merges and removals must be completed before Step 22 closes. A deferred action requires a named owner, exact rationale and deadline before Step 25; known safe simplification cannot be deferred merely to preserve the current gate count.
+
+## 13. Final architecture 10/10 closure criteria
 
 Issue #194 may close and architecture 10/10 may be declared only when all are mechanically proven:
 
 1. one authoritative current-state hierarchy with no contradictory live roadmap;
 2. ordinary existing-owner capabilities add zero crates and avoid generic-runtime edits;
 3. new owner waves remain within the measured three-to-five-package target unless an independent boundary is proven;
-4. central dependency, reverse-impact, public-surface and process-host budgets do not regress;
-5. expired exceptions, hidden suppressions and unregistered lint bypasses are zero;
-6. affected-scope policy and permanent workflow filters remain exact and fail closed;
-7. reusable mutation, query and worker conformance are adopted by contrasting real owners;
-8. contract compatibility, deprecation, consumer migration and retirement are permanently enforced;
-9. local lifecycle commands are deterministic on a clean machine;
-10. frontend, accessibility, browser and production operations proof exists for critical journeys;
-11. Phase 8A closes without weakening owner, tenant, RLS, authorization, audit, rollback or route invariants;
-12. Step 22 remeasurement shows no hidden regression;
-13. two contrasting later expert-domain waves at Steps 23 and 24 keep extension cost bounded as module count grows;
-14. a separate Step 25 review reproduces the metrics and confirms every prior criterion.
+4. every `crm-application-runtime` internal direct dependency has a final Step 22 classification, every safely removable owner-specific dependency is removed, and every retained owner-specific dependency has unavoidable-boundary evidence;
+5. central dependency, reverse-impact, public-surface and process-host budgets do not regress;
+6. expired exceptions, hidden suppressions and unregistered lint bypasses are zero;
+7. every permanent gate has a complete value/cost/overlap/owner/retirement entry and duplicate or low-value gates have been simplified, merged or removed unless independent value is proven;
+8. affected-scope policy and permanent workflow filters remain exact and fail closed;
+9. reusable mutation, query and worker conformance are adopted by contrasting real owners;
+10. contract compatibility, deprecation, consumer migration and retirement are permanently enforced;
+11. local lifecycle commands are deterministic on a clean machine;
+12. frontend, accessibility, browser and production operations proof exists for critical journeys;
+13. Phase 8A closes without weakening owner, tenant, RLS, authorization, audit, rollback or route invariants;
+14. Step 22 remeasurement shows no hidden regression and zero unresolved runtime-fan-in or gate-value decisions;
+15. two contrasting later expert-domain waves at Steps 23 and 24 keep extension cost bounded, avoid `crm-application-runtime` owner-specific edits and validate the Step 22 gate decisions as module count grows;
+16. a separate Step 25 review reproduces the metrics and confirms every prior criterion.
 
 Until then:
 

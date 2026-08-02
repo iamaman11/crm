@@ -8,6 +8,7 @@ This document is the concise authoritative current-state snapshot. Product depen
 
 - `SYSTEM_INVARIANTS.md`, `APPLICATION_ARCHITECTURE.md`, `DELIVERY_GOVERNANCE.md`;
 - `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` for architecture stages, metrics and the only permitted repository-step order;
+- ADR-031 for complexity remeasurement/anti-circumvention and ADR-032 for the mandatory Step 22 runtime-fan-in and permanent-gate value decisions;
 - `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md` for product sequencing;
 - `MODULE_CATALOG.md` and `CRM_CAPABILITY_COVERAGE.md` for module ownership and product readiness;
 - `repository-packet.json`, generated `ACTIVE_PACKET.md` and generated `generated/REPOSITORY_MAP.md` for the active bounded packet;
@@ -102,16 +103,26 @@ Customer Privacy and Phase 8A remain incomplete. Current product-complete expert
 ## Architecture-stage position
 
 - **Stage A — complete:** source hierarchy, status authority and stable navigation are enforced.
-- **Stage B — complete:** dependency, crate, exception, Rust, suppression, process-host and change-cost governance are blocking and reduction-aware.
+- **Stage B — complete:** dependency, crate, exception, Rust, suppression, process-host and change-cost governance are blocking and reduction-aware; Step 22 must still resolve remaining runtime fan-in rather than merely freeze it.
 - **Stage C — in progress:** the Customer Privacy golden owner package is advanced, but wider adoption and visibility/migration generalization remain.
 - **Stage D — complete:** all active first-party owner contributions are aggregated through `crm-first-party-modules`.
-- **Stage E — complete:** affected-scope selection covers Rust, contracts, Protobuf/API, migrations, PostgreSQL, process, product, frontend and operations planes.
+- **Stage E — complete:** affected-scope selection covers Rust, contracts, Protobuf/API, migrations, PostgreSQL, process, product, frontend and operations planes; Step 22 must review value, duplication and cost of every permanent gate.
 - **Stage F — in progress:** mutation/query conformance is accepted; worker conformance and contract lifecycle remain.
 - **Stage G — complete:** PR #259 proves the first measured behavior-neutral transitional consolidation.
 - **Stage H — in progress:** explanation, packet checking and generated navigation exist; deterministic local lifecycle commands remain.
 - **Stage I — incomplete:** frontend and operations parity remain future work.
 
-Architecture 10/10 is **not declared**. Repository Step 22 is a measurement checkpoint, and final closure remains reserved for Step 25 after every criterion and two contrasting expert-domain waves are mechanically proven.
+Architecture 10/10 is **not declared**. Repository Step 22 is a measurement and decision checkpoint, and final closure remains reserved for Step 25 after every criterion and two contrasting expert-domain waves are mechanically proven.
+
+## Hardened Repository Step 22 boundary
+
+ADR-032 makes two formerly implicit risks explicit and blocking.
+
+First, `crm-application-runtime` remains a broad process-composition surface. Step 22 must classify every internal direct dependency as removed, platform-generic, owner-specific-unavoidable or test-only. Every safely removable owner-specific dependency must be removed. Every retained owner-specific dependency must prove an unavoidable stable process-composition boundary and prove that ordinary owner changes do not modify the runtime manifest or owner-specific runtime source. Mere non-growth is insufficient.
+
+Second, Step 22 must review every permanent workflow, job and gate. The review must record the concrete prevented failure mode, observed defects or preventive rationale, overlap/duplication, execution cost, owner, retain/simplify/merge/remove decision and retirement condition. Duplicate or low-value gates must be simplified, merged or removed unless independent value is proven. Every new permanent gate must satisfy the same entry contract.
+
+Step 22 cannot close with an unresolved runtime dependency classification or unresolved gate-value decision. Steps 23 and 24 must validate these conclusions under contrasting expert-domain waves.
 
 ## Next permitted repository packet
 
@@ -130,9 +141,9 @@ No Step 16 or later implementation may start while Step 15 remains unfinished.
 -> 19. Customer Privacy worker and complete process/end-to-end acceptance
 -> 20. Phase 8A frontend and operations evidence
 -> 21. Phase 8A closure
--> 22. Phase 8A architecture remeasurement — checkpoint, not final 10/10
--> 23. first contrasting later expert-domain wave
--> 24. second contrasting later expert-domain wave
+-> 22. architecture remeasurement + crm-application-runtime fan-in decision + permanent-gate value/cost review — checkpoint, not final 10/10
+-> 23. first contrasting later expert-domain wave validating Step 22
+-> 24. second contrasting later expert-domain wave validating Step 22
 -> 25. final architecture 10/10 closure review only if every criterion is mechanically proven
 ```
 
