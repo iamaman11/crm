@@ -31,6 +31,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const ORIGINAL_NAME: &str = "Ada Historical Projection";
 const SEARCH_PROJECTION_ID: &str = "search.global.g3";
+const REPEAT_SEARCH_GENERATION_ID: &str = "g4";
+const REPEAT_SEARCH_PROJECTION_ID: &str = "search.global.g4";
 const OWNER_ACTION_COMMAND_DESCRIPTOR: &[u8] = b"crm.customer-privacy.owner_action.command/v1:tenant_id,privacy_case_id,action_plan_id,action_plan_digest,retention_decision_id,retention_decision_digest,attempt_id,attempt_digest,item_sequence,attempt_generation,item_digest,owner_module_id,owner_capability_id,owner_capability_version,target_idempotency_key,resource_type,resource_id,resource_version_decimal_string,action_code,planned_at_unix_nanos_decimal_string";
 const CAPTURED_AT: i64 = 8_000_000;
 const PLANNED_AT: i64 = 9_000_000;
@@ -184,7 +186,8 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
 
     assert_authoritative_party_minimized(&admin, &tenant, &party_id).await;
     assert_customer_360_tombstone(&admin, &tenant, &party_id).await;
-    assert_search_tombstone(&admin, &tenant, &party_id).await;
+    assert_eq!(INITIAL_GLOBAL_SEARCH_GENERATION_ID, "g3");
+    assert_search_tombstone(&admin, &tenant, &party_id, SEARCH_PROJECTION_ID).await;
 
     let authoritative_before_repeat = authoritative_counts(&admin, &tenant).await;
     Customer360ProjectionWorker::new(store.clone())
@@ -192,18 +195,24 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
         .rebuild(tenant_id.clone(), 200)
         .await
         .expect("repeat Customer 360 rebuild");
-    GlobalSearchWorker::new(store)
-        .expect("construct repeat global search worker")
+    GlobalSearchWorker::for_generation(store, REPEAT_SEARCH_GENERATION_ID)
+        .expect("construct fresh-generation repeat global search worker")
         .reindex(tenant_id, 200)
         .await
-        .expect("repeat global search reindex");
+        .expect("repeat global search reindex in fresh generation");
     assert_eq!(
         authoritative_counts(&admin, &tenant).await,
         authoritative_before_repeat,
         "derived-state rebuilds must not mutate authoritative Party, outbox or audit evidence"
     );
     assert_customer_360_tombstone(&admin, &tenant, &party_id).await;
-    assert_search_tombstone(&admin, &tenant, &party_id).await;
+    assert_search_tombstone(
+        &admin,
+        &tenant,
+        &party_id,
+        REPEAT_SEARCH_PROJECTION_ID,
+    )
+    .await;
 }
 
 #[derive(Debug)]
@@ -661,8 +670,12 @@ async fn assert_customer_360_tombstone(admin: &PgPool, tenant: &str, party_id: &
     assert_eq!(selectable, 0);
 }
 
-async fn assert_search_tombstone(admin: &PgPool, tenant: &str, party_id: &str) {
-    assert_eq!(INITIAL_GLOBAL_SEARCH_GENERATION_ID, "g3");
+async fn assert_search_tombstone(
+    admin: &PgPool,
+    tenant: &str,
+    party_id: &str,
+    projection_id: &str,
+) {
     let row = sqlx::query(
         r#"
         SELECT source_version,
@@ -674,7 +687,7 @@ async fn assert_search_tombstone(admin: &PgPool, tenant: &str, party_id: &str) {
         "#,
     )
     .bind(tenant)
-    .bind(SEARCH_PROJECTION_ID)
+    .bind(projection_id)
     .bind(PARTY_RECORD_TYPE)
     .bind(party_id)
     .bind(ORIGINAL_NAME)
