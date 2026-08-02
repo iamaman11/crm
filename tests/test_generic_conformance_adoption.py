@@ -71,7 +71,16 @@ class GenericConformanceAdoptionTests(unittest.TestCase):
         self.assertIn("completed replay", production)
         self.assertIn("retryable failure checkpoint preservation", suite)
         self.assertIn("stop crm-api after durable retryable import failure", import_recovery)
-        self.assertIn("post-restart completed replay", import_recovery)
+        self.assertIn("wait_for_party_contention_waiters(&admin, 2)", import_recovery)
+        self.assertIn("wait_event = 'advisory'", import_recovery)
+        self.assertIn("WITH RECURSIVE direct_party_waiters", import_recovery)
+        self.assertIn("blocking_chain(waiter_pid, blocker_pid)", import_recovery)
+        self.assertIn("pg_blocking_pids", import_recovery)
+        self.assertIn("count(DISTINCT chain.waiter_pid)", import_recovery)
+        self.assertIn("transitive_executor_waiters", import_recovery)
+        self.assertIn("competing recovered executor A", import_recovery)
+        self.assertIn("competing recovered executor B", import_recovery)
+        self.assertIn("post-contention completed replay", import_recovery)
 
     def test_existing_permanent_gates_execute_worker_representatives(self) -> None:
         enrichment_workflow = ENRICHMENT_WORKFLOW.read_text(encoding="utf-8")

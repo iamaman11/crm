@@ -165,26 +165,23 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_worker_conformance_packet_is_exact(self) -> None:
+    def test_active_worker_contention_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-16-worker-conformance-adoption",
+            "repository-step-16-worker-contention",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "0f38247d24a709afec9136b7a7ef44230837ebd0"},
+            {"ref": "main", "sha": "6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd"},
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                "crates/crm-application-runtime/tests/postgres_customer_enrichment_application_worker.rs",
-                "crates/crm-customer-enrichment-application-composition/tests/postgres_application_worker_process.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "services/crm-api/tests/import_process_retryable_e2e.rs",
-                "services/crm-api/tests/support/generic_worker_conformance.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_generic_conformance_adoption.py",
                 "tests/test_repository_navigation.py",
@@ -194,10 +191,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.packet["required_checks"],
             [
                 "Affected Scope CI",
-                "Application Runtime CI",
                 "Complexity Baseline CI",
-                "Customer Enrichment Review Process Runtime CI",
                 "Generic Mutation Query Conformance CI",
+                "Governance CI",
                 "Import Retryable Process Runtime CI",
                 "Rust Generated Sync",
                 "Rust CI",
@@ -205,19 +201,20 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         )
         for forbidden in (
             ".github/workflows/**",
-            "crates/**/src/**",
+            "crates/**",
             "database/**",
             "services/crm-api/src/**",
+            "services/crm-api/tests/support/**",
         ):
             self.assertIn(forbidden, self.packet["forbidden_paths"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "add one std-only business-neutral WorkerConformanceSuite with reusable no-side-effect, retryable-progress and exact-recovery assertions",
+            "hold the first real Party target insert behind one PostgreSQL advisory-lock barrier and mechanically observe one direct Party waiter plus at least two executor sessions in the same transitive blocking chain",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "declare Repository Step 16 complete, Phase 8A complete, Architecture 10/10 or any product-complete expert module",
+            "declare Repository Step 16 fully complete, Phase 8A complete, Architecture 10/10 or any product-complete expert module before separate evidence synchronization",
             self.packet["non_goals"],
         )
 

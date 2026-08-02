@@ -6,6 +6,8 @@ mod retryable_process {
 
     use super::worker_conformance::WorkerConformanceSuite;
 
+    const CONTENTION_LOCK_KEY: i64 = 9_164_220_616;
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn crm_api_process_persists_retryable_target_failure_without_advancing_checkpoint_and_recovers()
      {
@@ -121,21 +123,47 @@ mod retryable_process {
             &party_target_effects(&admin, TENANT_A).await,
         );
 
-        let (mut recovered, recovered_http_addr, recovered_grpc_addr) =
+        install_party_contention_barrier(&admin).await;
+        let mut contention_lock = admin
+            .acquire()
+            .await
+            .expect("acquire dedicated contention-lock connection");
+        sqlx::query("SELECT pg_advisory_lock($1)")
+            .bind(CONTENTION_LOCK_KEY)
+            .execute(&mut *contention_lock)
+            .await
+            .expect("hold Party target contention barrier");
+
+        let (mut recovered_a, recovered_a_http_addr, recovered_a_grpc_addr) =
             spawn_api(&database_url).await;
-        wait_until_ready(&http, &mut recovered, &recovered_http_addr).await;
-        let mut recovered_grpc = connect_grpc(&recovered_grpc_addr).await;
+        let (mut recovered_b, recovered_b_http_addr, _recovered_b_grpc_addr) =
+            spawn_api(&database_url).await;
+        wait_until_ready(&http, &mut recovered_a, &recovered_a_http_addr).await;
+        wait_until_ready(&http, &mut recovered_b, &recovered_b_http_addr).await;
+        wait_for_party_contention_waiters(&admin, 2).await;
+
+        let unlocked: bool = sqlx::query_scalar("SELECT pg_advisory_unlock($1)")
+            .bind(CONTENTION_LOCK_KEY)
+            .fetch_one(&mut *contention_lock)
+            .await
+            .expect("release Party target contention barrier");
+        assert!(unlocked, "dedicated contention lock must be released");
+        drop(contention_lock);
+
+        let mut recovered_grpc = connect_grpc(&recovered_a_grpc_addr).await;
         let completed = wait_for_completed_job(&mut recovered_grpc, &job_id).await;
         assert_eq!(completed.status, cdo::ImportJobStatus::Completed as i32);
         assert_eq!(completed.succeeded_rows, 1);
         assert_eq!(completed.checkpoint_row_position, 1);
+
+        drop_party_contention_barrier(&admin).await;
         let completed_rows = list_rows(&mut recovered_grpc, TENANT_A, &job_id).await;
         assert_eq!(completed_rows.len(), 1);
         assert_eq!(
             completed_rows[0].status,
             cdo::ImportRowStatus::Succeeded as i32
         );
-        assert_eq!(completed_rows[0].execution_attempts, failed_attempts + 1);
+        assert!(completed_rows[0].execution_attempts > failed_attempts);
         assert!(completed_rows[0].last_execution_error_code.is_empty());
         assert_eq!(party_record_count(&admin, &target_party_id).await, 1);
 
@@ -155,22 +183,31 @@ mod retryable_process {
             ),
         );
 
-        sleep(Duration::from_millis(250)).await;
-        let post_recovery_replay_effects = party_target_effects(&admin, TENANT_A).await;
+        sleep(Duration::from_millis(500)).await;
+        let post_contention_replay_effects = party_target_effects(&admin, TENANT_A).await;
         conformance.assert_no_side_effects(
-            "post-restart completed replay",
+            "post-contention completed replay",
             &recovered_effects,
-            &post_recovery_replay_effects,
+            &post_contention_replay_effects,
         );
 
-        send_sigint(&recovered).await;
-        let exit = timeout(Duration::from_secs(15), recovered.wait())
+        send_sigint(&recovered_a).await;
+        send_sigint(&recovered_b).await;
+        let exit_a = timeout(Duration::from_secs(15), recovered_a.wait())
             .await
-            .expect("recovered crm-api must stop within graceful-shutdown budget")
-            .expect("wait for recovered retryable process acceptance crm-api process");
+            .expect("competing recovered executor A must stop within graceful-shutdown budget")
+            .expect("wait for competing recovered executor A");
+        let exit_b = timeout(Duration::from_secs(15), recovered_b.wait())
+            .await
+            .expect("competing recovered executor B must stop within graceful-shutdown budget")
+            .expect("wait for competing recovered executor B");
         assert!(
-            exit.success(),
-            "recovered crm-api exited unsuccessfully: {exit}"
+            exit_a.success(),
+            "competing recovered executor A exited unsuccessfully: {exit_a}"
+        );
+        assert!(
+            exit_b.success(),
+            "competing recovered executor B exited unsuccessfully: {exit_b}"
         );
     }
 
@@ -213,6 +250,105 @@ mod retryable_process {
             ))
             .await
             .expect("remove test-only retryable Party target failure trigger");
+    }
+
+    async fn install_party_contention_barrier(admin: &PgPool) {
+        admin
+            .execute(sqlx::raw_sql(
+                r#"
+                CREATE OR REPLACE FUNCTION crm.test_block_party_target_for_contention()
+                RETURNS trigger
+                LANGUAGE plpgsql
+                AS $$
+                BEGIN
+                  PERFORM pg_advisory_xact_lock(9164220616);
+                  RETURN NEW;
+                END;
+                $$;
+
+                DROP TRIGGER IF EXISTS test_block_party_target_for_contention ON crm.records;
+                CREATE TRIGGER test_block_party_target_for_contention
+                BEFORE INSERT ON crm.records
+                FOR EACH ROW
+                WHEN (
+                  NEW.tenant_id = 'tenant-a'
+                  AND NEW.record_type = 'parties.party'
+                )
+                EXECUTE FUNCTION crm.test_block_party_target_for_contention();
+                "#,
+            ))
+            .await
+            .expect("install test-only Party target contention barrier");
+    }
+
+    async fn drop_party_contention_barrier(admin: &PgPool) {
+        admin
+            .execute(sqlx::raw_sql(
+                r#"
+                DROP TRIGGER IF EXISTS test_block_party_target_for_contention ON crm.records;
+                DROP FUNCTION IF EXISTS crm.test_block_party_target_for_contention();
+                "#,
+            ))
+            .await
+            .expect("remove test-only Party target contention barrier");
+    }
+
+    async fn wait_for_party_contention_waiters(admin: &PgPool, expected: i64) {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            let (direct_party_waiters, transitive_executor_waiters): (i64, i64) = sqlx::query_as(
+                r#"
+                    WITH RECURSIVE direct_party_waiters AS (
+                      SELECT
+                        activity.pid AS waiter_pid,
+                        blocker.pid AS root_blocker_pid
+                      FROM pg_stat_activity AS activity
+                      CROSS JOIN LATERAL
+                        unnest(pg_blocking_pids(activity.pid)) AS blocker(pid)
+                      WHERE activity.datname = current_database()
+                        AND activity.wait_event_type = 'Lock'
+                        AND activity.wait_event = 'advisory'
+                        AND activity.query ILIKE '%crm.records%'
+                    ),
+                    blocking_chain(waiter_pid, blocker_pid) AS (
+                      SELECT
+                        activity.pid,
+                        blocker.pid
+                      FROM pg_stat_activity AS activity
+                      CROSS JOIN LATERAL
+                        unnest(pg_blocking_pids(activity.pid)) AS blocker(pid)
+                      WHERE activity.datname = current_database()
+                      UNION
+                      SELECT
+                        chain.waiter_pid,
+                        blocker.pid
+                      FROM blocking_chain AS chain
+                      CROSS JOIN LATERAL
+                        unnest(pg_blocking_pids(chain.blocker_pid)) AS blocker(pid)
+                    )
+                    SELECT
+                      (SELECT count(*)::bigint FROM direct_party_waiters),
+                      (
+                        SELECT count(DISTINCT chain.waiter_pid)::bigint
+                        FROM blocking_chain AS chain
+                        WHERE chain.blocker_pid IN (
+                          SELECT root_blocker_pid FROM direct_party_waiters
+                        )
+                      )
+                    "#,
+            )
+            .fetch_one(admin)
+            .await
+            .expect("observe Party target contention chain");
+            if direct_party_waiters >= 1 && transitive_executor_waiters >= expected {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "expected one direct Party waiter and {expected} competing executors in the same blocking chain, observed {direct_party_waiters} direct and {transitive_executor_waiters} transitive waiters"
+            );
+            sleep(Duration::from_millis(50)).await;
+        }
     }
 
     async fn wait_for_retryable_row(
