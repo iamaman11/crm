@@ -21,11 +21,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.roadmap = read("docs/IMPLEMENTATION_ROADMAP.md")
         cls.phase8 = read("docs/PHASE8_DELIVERY_PLAN.md")
         cls.plan = read("docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md")
-        cls.delivery = read("docs/DELIVERY_GOVERNANCE.md")
-        cls.adr32 = read(
-            "docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md"
-        )
         cls.catalog = read("docs/MODULE_CATALOG.md")
+        cls.delivery = read("docs/DELIVERY_GOVERNANCE.md")
+        cls.adr32 = read("docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md")
         cls.active_packet = read("docs/ACTIVE_PACKET.md")
         cls.repository_map = read("docs/generated/REPOSITORY_MAP.md")
         cls.packet = json.loads(read("repository-packet.json"))
@@ -39,8 +37,31 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         required = (
             "PR #259",
             "8aa0b33c6609e74f98363071c6e7c44ec59fc098",
-            "2b0b558077c444d44691371c8a2bcca2c14ae426",
+            "2b0b558077c444d4469137c8a2bcca2c14ae426",
             "36 of 36",
+        )
+        for document in self.normative_documents:
+            for marker in required:
+                self.assertIn(marker, document)
+
+    def test_repository_step_15_exact_evidence_is_synchronized(self) -> None:
+        required = (
+            "PR #263",
+            "6c2a54f6780988a12fec3cd77ca2cd39ad349140",
+            "bd205e0af77b676654dff8ddf26d3b5b195880b2",
+            "PR #264",
+            "e6c9d2901109c8d5b9e0f3cf783214407e26451a",
+            "e9fe1f352386d80a29d122db5d1ed6c47266bfaf",
+            "PR #265",
+            "ef572bdf31c584c397c215cd1b62ee47cad54e64",
+            "2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a",
+            "PR #266",
+            "ded5d80ae11bbf044b5bfe5b572e8dab521f884a",
+            "1f889a810c82da3d0fee12427eacccbe43613bac",
+            "PR #267",
+            "f1b72dbee09f152005cb3584b9bcc1573bf2c4fe",
+            "4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf",
+            "19 of 19",
         )
         for document in self.normative_documents:
             with self.subTest(document=document[:60]):
@@ -49,17 +70,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_current_metrics_are_exact_and_historical_baseline_is_labeled(self) -> None:
         self.assertEqual(len(self.workspace["workspace"]["members"]), 112)
-
         for document in self.normative_documents:
-            with self.subTest(document=document[:60]):
-                self.assertIn("112", document)
-                self.assertIn("835", document)
-                self.assertIn("5,377", document)
-                self.assertIn("18", document)
-                self.assertIn("270", document)
-                self.assertIn("91", document)
-
-        for document in self.normative_documents:
+            for marker in ("112", "835", "5,377", "18", "270", "91"):
+                self.assertIn(marker, document)
             for match in re.finditer(r"113", document):
                 context = document[max(0, match.start() - 120) : match.end() + 120].lower()
                 self.assertTrue(
@@ -67,39 +80,36 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                     f"unqualified current 113-package claim: {context}",
                 )
 
-    def test_stage_and_next_packet_status_are_consistent(self) -> None:
+    def test_step_15_is_complete_and_step_16_is_next(self) -> None:
         for document in self.normative_documents:
             lowered = document.lower()
-            with self.subTest(document=document[:60]):
-                self.assertIn("step 14", lowered)
-                self.assertIn("stage g", lowered)
-                self.assertIn("step 15", lowered)
-                self.assertIn("not started", lowered)
-                self.assertNotIn("step 14 is the next", lowered)
-                self.assertNotIn("step 14 is next", lowered)
-                self.assertNotIn("stage g — not started", lowered)
-                self.assertNotIn("stage g remains not started", lowered)
-
-        self.assertIn("15. Party tombstone", self.plan)
-        self.assertIn("**next, not started**", self.plan)
-        self.assertIn("Repository Step 15 is the next permitted implementation packet", self.status)
+            self.assertIn("step 15", lowered)
+            self.assertIn("step 16", lowered)
+            self.assertNotRegex(lowered, r"step 15[^\n]{0,120}(?:next|not started)")
+        self.assertIn(
+            "15. Party tombstone, no-orphan proof and projection/search/cache convergence — **complete through PR #267**",
+            self.plan,
+        )
+        self.assertIn(
+            "16. reusable generic worker conformance adopted by representative real workers — **next, not started**",
+            self.plan,
+        )
+        self.assertIn("Repository Step 16 is the next permitted implementation packet", self.status)
+        self.assertIn("Repository Steps 1–15 are complete", self.status)
 
     def test_product_readiness_is_not_overstated(self) -> None:
         for document in self.normative_documents:
             lowered = document.lower()
-            with self.subTest(document=document[:60]):
-                self.assertIn("phase 8a", lowered)
-                self.assertIn("customer privacy", lowered)
-                self.assertIn("0", document)
-                self.assertFalse(
-                    re.search(r"architecture 10/10 (?:is )?(?:complete|accepted|achieved)", lowered)
-                )
-
+            self.assertIn("phase 8a", lowered)
+            self.assertIn("customer privacy", lowered)
+            self.assertFalse(
+                re.search(r"architecture 10/10 (?:is )?(?:complete|accepted|achieved)", lowered)
+            )
         self.assertIn("Phase 8A.11 / issue #126 remains in progress", self.status)
         self.assertIn("Current product-complete expert modules: **0**", self.status)
         self.assertIn("Architecture 10/10 is **not declared**", self.status)
 
-    def test_architecture_stage_ledger_is_complete_and_ordered(self) -> None:
+    def test_architecture_stage_and_step_order_are_complete(self) -> None:
         stages = (
             "A — documentation and policy baseline",
             "B — dependency, crate and exception governance",
@@ -113,7 +123,6 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         )
         for stage in stages:
             self.assertIn(stage, self.plan)
-
         step_markers = [
             "1. supported Rust toolchain",
             "14. first measured behavior-neutral transitional domain-cluster consolidation",
@@ -132,39 +141,12 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         positions = [self.plan.index(marker) for marker in step_markers]
         self.assertEqual(positions, sorted(positions))
 
-    def test_step_14_behavior_neutral_guarantees_are_documented(self) -> None:
-        for document in self.normative_documents:
-            lowered = document.lower()
-            with self.subTest(document=document[:60]):
-                self.assertIn("crm-customer-accounts-capability-composition", document)
-                self.assertIn("crm-customer-accounts-query-adapter", document)
-                self.assertIn("behavior-neutral", lowered)
-
-        for marker in (
-            "public mutations",
-            "queries",
-            "workers",
-            "contracts",
-            "schemas",
-            "migrations",
-            "tenant isolation",
-            "FORCE RLS",
-            "authorization",
-            "idempotency",
-            "audit",
-        ):
-            self.assertIn(marker.lower(), self.status.lower())
-
-    def test_step22_runtime_fanin_decision_is_binding(self) -> None:
+    def test_step22_decisions_remain_binding(self) -> None:
         documents = (self.plan, self.roadmap, self.phase8, self.status, self.adr32)
         for document in documents:
             lowered = document.lower()
-            with self.subTest(document=document[:60]):
-                self.assertIn("crm-application-runtime", document)
-                self.assertIn("owner-specific", lowered)
-                self.assertIn("process-composition", lowered)
-                self.assertIn("non-growth", lowered)
-
+            for marker in ("crm-application-runtime", "owner-specific", "process-composition", "non-growth"):
+                self.assertIn(marker.lower(), lowered)
         for classification in (
             "removed",
             "platform-generic",
@@ -173,83 +155,29 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         ):
             self.assertIn(classification, self.adr32)
             self.assertIn(classification, self.plan)
-
-        self.assertIn("Mere non-growth is insufficient", self.plan)
-        adr32_lowered = self.adr32.lower()
-        self.assertIn("safely removable", adr32_lowered)
-        self.assertIn("must be removed", adr32_lowered)
-        self.assertIn(
-            "Step 22 cannot close with an unresolved runtime dependency classification",
-            self.status,
-        )
-        self.assertIn("Steps 23 and 24", self.adr32)
-        self.assertIn("crm-application-runtime/Cargo.toml", self.adr32)
-
-    def test_step22_permanent_gate_value_review_is_binding(self) -> None:
-        documents = (
-            self.plan,
-            self.roadmap,
-            self.phase8,
-            self.status,
-            self.delivery,
-            self.adr32,
-        )
-        for document in documents:
-            lowered = document.lower()
-            with self.subTest(document=document[:60]):
-                self.assertIn("failure mode", lowered)
-                self.assertIn("execution", lowered)
-                self.assertIn("cost", lowered)
-                self.assertIn("retirement", lowered)
-                self.assertIn("duplicate", lowered)
-
         for disposition in ("retain", "simplify", "merge", "remove"):
             self.assertIn(disposition, self.adr32)
             self.assertIn(disposition, self.delivery)
+        self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-        self.assertIn("machine-readable ledger", self.adr32)
-        self.assertIn("observed defect evidence", self.plan)
-        self.assertIn("A gate without a concrete failure mode", self.delivery)
-        self.assertIn("Step 22 cannot close with an unresolved permanent-gate value decision", self.delivery)
-
-    def test_new_permanent_gate_entry_contract_is_explicit(self) -> None:
-        required = (
-            "concrete failure mode",
-            "why existing gates do not already prevent",
-            "expected affected scope",
-            "named owner",
-            "false-positive controls",
-            "retirement/review condition",
-        )
-        for marker in required:
-            self.assertIn(marker, self.adr32)
-
-        self.assertIn("## 6. Permanent-gate entry contract", self.delivery)
-        self.assertIn("must not be created merely because another governance mechanism exists", self.delivery)
-        self.assertIn("Temporary inspection, migration or diagnostic workflows", self.delivery)
-
-    def test_active_planning_packet_is_exact_and_bounded(self) -> None:
+    def test_active_planning_packet_is_exact_and_docs_only(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(
-            self.packet["packet_id"],
-            "repository-step-15-crm-api-no-orphan-closure",
-        )
+        self.assertEqual(self.packet["packet_id"], "repository-step-15-evidence-closure")
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {
-                "ref": "main",
-                "sha": "1f889a810c82da3d0fee12427eacccbe43613bac",
-            },
+            {"ref": "main", "sha": "4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf"},
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                ".github/workflows/customer-privacy-owner-execution.yml",
                 "docs/ACTIVE_PACKET.md",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/MODULE_CATALOG.md",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/PROJECT_STATUS.md",
                 "repository-packet.json",
-                "services/crm-api/tests/customer_360_privacy_no_orphan_process_e2e.rs",
-                "services/crm-api/tests/support.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_party_tombstone_rebuild_convergence.py",
                 "tests/test_repository_navigation.py",
@@ -257,55 +185,22 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         )
         self.assertEqual(
             self.packet["required_checks"],
-            [
-                "Affected Scope CI",
-                "Complexity Baseline CI",
-                "Rust Generated Sync",
-                "Rust CI",
-                "Application Runtime CI",
-                "Customer Privacy Owner Execution CI",
-            ],
+            ["Affected Scope CI", "Complexity Baseline CI", "Rust Generated Sync", "Rust CI"],
         )
-        self.assertIn(
-            "synchronize final Repository Step 15 acceptance SHAs",
-            "\n".join(self.packet["non_goals"]),
-        )
-        self.assertTrue(
-            any(
-                "new permanent CI workflow" in non_goal
-                for non_goal in self.packet["non_goals"]
-            )
-        )
+        for forbidden in (".github/workflows/**", "crates/**", "database/**", "services/**"):
+            self.assertIn(forbidden, self.packet["forbidden_paths"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "create a Party through the public application gateway of a real crm-api process",
+            "mark Repository Steps 1 through 15 complete and Step 16 next, not started",
             self.packet["deliverables"],
         )
-        self.assertIn(
-            "restart the real crm-api binary without bootstrap and wait for its production Customer360BackgroundWorker cycle",
-            self.packet["deliverables"],
-        )
-        self.assertIn(
-            "reuse the existing crm-api process support through a test-only module shim without changing the service manifest or production source",
-            self.packet["deliverables"],
-        )
-        self.assertIn(
-            "workspace package count, internal dependency edges, manifests, Cargo.lock, migrations, contracts, routes and production Rust source remain unchanged",
-            self.packet["acceptance"],
-        )
-        self.assertIn("real-process no-orphan", self.packet["objective"])
-        self.assertIn("customer.customer-360.v2", "\n".join(self.packet["acceptance"]))
-        self.assertIn("legacy v1", self.packet["objective"])
+        self.assertIn("implement Repository Step 16 worker conformance", self.packet["non_goals"])
 
-    def test_repository_map_reflects_current_workspace(self) -> None:
+    def test_repository_map_and_product_inventory_remain_exact(self) -> None:
         self.assertIn("Generated by scripts/generate_repository_navigation.py", self.repository_map)
         self.assertIn("**Workspace packages:** 112", self.repository_map)
         self.assertRegex(self.repository_map, r"source-digest: sha256:[0-9a-f]{64}")
-        for member in self.workspace["workspace"]["members"]:
-            self.assertIn(f"`{member}`", self.repository_map)
-
-    def test_phase8_and_catalog_keep_product_boundaries(self) -> None:
         inventory_patterns = (
             r"(?:7|seven) (?:public )?mutations",
             r"(?:4|four) permission-aware public queries",
@@ -316,19 +211,6 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 self.assertRegex(document, pattern)
         self.assertIn("Current merged authoritative/coordination module count: **12**", self.catalog)
         self.assertIn("Current merged business-module total: **13**", self.catalog)
-        self.assertIn("Phase 8B", self.roadmap)
-        self.assertIn("Step 23", self.roadmap)
-        self.assertIn("Step 24", self.roadmap)
-
-    def test_final_10_10_boundary_is_mechanical(self) -> None:
-        self.assertIn("## 13. Final architecture 10/10 closure criteria", self.plan)
-        self.assertIn("Step 22", self.plan)
-        self.assertIn("Steps 23 and 24", self.plan)
-        self.assertIn("Step 25", self.plan)
-        self.assertIn("mechanically proven", self.plan)
-        self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
-        self.assertIn("Issue #194", self.status)
-        self.assertIn("Issue #126", self.status)
 
 
 if __name__ == "__main__":

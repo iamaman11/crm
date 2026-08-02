@@ -22,7 +22,7 @@ Architecture and governance steps 12–25 may reduce extension cost or prove pla
 |---|---|---|---|---|
 | `crm.sales` | Sales owner domain | **Vertical slice** | Deal create/update/stage/get/list | Leads, richer pipelines, territories, quotas and forecasting |
 | `crm.activities` | Activities/productivity owner | **Vertical slice** | Task create/update/complete/reminder/get/list | Appointments, recurring work and calendar synchronization |
-| `crm.parties` | Canonical person/organization identity | **Expert expansion** | Party create/update/get/list/search | Structured profile depth and source identifiers |
+| `crm.parties` | Canonical person/organization identity | **Expert expansion** | Party create/update/get/list/search plus accepted privacy tombstone convergence | Structured profile depth and source identifiers |
 | `crm.customer-accounts` | Customer/commercial relationship | **Vertical slice** | Account create/update/get/list with Party associations | Advanced hierarchy and product UX |
 | `crm.contact-points` | Canonical communication endpoints | **Vertical slice** | Create/update/verify/get/list; create is protected by the final Customer Privacy restriction guard | Broader channel UX and omnichannel use |
 | `crm.party-relationships` | Typed temporal Party relationships | **Vertical slice** | Create/update/get/list and hierarchy foundation | Additional relationship semantics |
@@ -31,7 +31,7 @@ Architecture and governance steps 12–25 may reduce extension cost or prove pla
 | `crm.customer-data-operations` | Governed import/export coordination | **Expert expansion** | Resumable import, deterministic export and recovery | More profiles and privacy execution integration |
 | `crm.data-quality` | Customer-data quality coordinator | **Vertical slice** | Evaluation, findings/completeness, stewardship and remediation | Additional owner-resource profiles |
 | `crm.customer-enrichment` | Provider-neutral enrichment coordinator | **Production integration slice** | Provider boundary, provenance, review and deterministic owner application | Additional providers, fields, UX and privacy interaction |
-| `crm.customer-privacy` | Privacy case and owner-orchestration coordinator | **Expert expansion** | Case lifecycle, approval, permission-aware get/list/plan/outcome reads, exact-nine discovery and immutable snapshots, deterministic planning, restriction/legal-hold placement, retention precedence, durable owner execution/outcomes, governed access/export assembly and authoritative owner-specific anonymization/deletion execution | Restriction/legal-hold release and reads where required, Party tombstone/convergence, workers, frontend and operations proof |
+| `crm.customer-privacy` | Privacy case and owner-orchestration coordinator | **Expert expansion** | Case lifecycle, approval, permission-aware get/list/plan/outcome reads, exact-nine discovery and immutable snapshots, deterministic planning, restriction/legal-hold placement, retention precedence, durable owner execution/outcomes, governed access/export assembly, authoritative owner-specific anonymization/deletion and Party tombstone/no-orphan convergence | Restriction/legal-hold release and reads where required, workers, disable/uninstall proof, frontend and operations proof |
 
 Current merged authoritative/coordination module count: **12**.
 
@@ -45,7 +45,7 @@ Current merged business-module total: **13** — twelve authoritative/coordinati
 
 Phase 8A.11 / issue #126 remains **In progress**.
 
-Latest accepted public inventory is **seven mutations, four permission-aware public queries and zero Customer Privacy workers through PR #244**. Public placement coordinates include `customer_privacy.restriction.place@1.0.0` and `customer_privacy.legal_hold.place@1.0.0`. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, replay-safe owner execution, `customer_privacy.access_export.request@1.0.0` and authoritative exact-nine owner-action execution have no public ingress.
+Latest accepted public inventory is **seven mutations, four permission-aware public queries and zero Customer Privacy workers**. Public placement coordinates include `customer_privacy.restriction.place@1.0.0` and `customer_privacy.legal_hold.place@1.0.0`. Trusted-internal `customer_privacy.plan.build@1.0.0`, `customer_privacy.retention.evaluate@1.0.0`, replay-safe owner execution, `customer_privacy.access_export.request@1.0.0` and authoritative exact-nine owner-action execution have no public ingress.
 
 Scope discovery and immutable snapshot execution remain accepted through PR #206 and are the authoritative foundation for planning, owner execution and access/export evidence. At the historical PR #206 boundary, planning and action execution remain not started; PR #209 and later accepted packets subsequently implemented those capabilities without rewriting the historical claim. This catalog records the latest merged aggregate state below.
 
@@ -80,13 +80,17 @@ Accepted Customer Privacy architecture/runtime evidence now includes:
 - PR #248 / accepted source `b15482361ab2b322591d488843ab9b46ff676dba` / merge `b4222364c21cb74127834f5ff4f0739343d26379` / 37 of 37 permanent workflows;
 - PR #249 / accepted source `7876945586e5a6cc94f8d3b0f6ba2b57316484d2` / merge `f36592211bed3e0df7cf3771164b4bc24026eff3` / 37 of 37 permanent workflows — complete first-party production contribution aggregation through `crm-first-party-modules` without behavior changes.
 
-Repository steps 1–14 are complete. PR #253 / accepted source `475533b185b871418273c1c1e3f63a1d62542677` / squash merge `7dcda204be07209d9e4996fdc9c5fd364cea179e` / 7 of 7 applicable permanent workflows established the historical Step 13 architecture baseline: 113 workspace packages, 841 internal dependency edges, maximum dependency depth 18, maximum direct dependents 105, maximum transitive reverse impact 106, conservative public Rust surface 5,377, 40 permanent workflows, 41 jobs, 1,712 path-filter entries, 31 PostgreSQL workflows and 94 equivalent suppression occurrences across 66 stable keys.
+Repository Step 13 architecture governance is accepted through PRs #253, #255 and #257. Repository Step 14 and architecture Stage G are accepted through PR #259 / source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36.
 
-PR #255 / accepted source `4c80546283af9c869a28c2da9c8697b203d0c327` / squash merge `393b60bdcfad6e92fc37eacabe0920645d530f6b` / 21 of 21 applicable permanent workflows registers the historical suppression multiset, blocks new stable keys and occurrence growth while allowing reductions, removes all three direct lint tables and matching governance exceptions without source-level replacements, moves the affected packages to workspace lint inheritance and activates calibrated blocking governance.
+Repository Step 15 is accepted through:
 
-PR #257 / accepted source `6cde72d7fc9a442018c51fd6e6772e626b26e307` / squash merge `10516e84ea3c2d0fa8ee0c61c9eeec7e96a6273c` / 7 of 7 applicable permanent workflows on one unchanged exact head completes the remaining ADR-031 blocking exit evidence. It freezes reduction-only workspace and role-aware central-system budgets; separately proves `crm-api` remains production-thin at one runtime internal dependency plus eighteen acceptance-only dev dependencies and `crm-application-runtime` remains at sixty-two runtime plus one dev internal dependency; and blocks unmeasured process-host, representative change-cost, dependency-version/feature, heavy-feature, declaration and workspace-centralization growth while permitting reductions.
+- PR #263 / source `6c2a54f6780988a12fec3cd77ca2cd39ad349140` / merge `bd205e0af77b676654dff8ddf26d3b5b195880b2` / 32 of 32 — Search convergence;
+- PR #264 / source `e6c9d2901109c8d5b9e0f3cf783214407e26451a` / merge `e9fe1f352386d80a29d122db5d1ed6c47266bfaf` / 6 of 6 — Customer 360 tombstone convergence;
+- PR #265 / source `ef572bdf31c584c397c215cd1b62ee47cad54e64` / merge `2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a` / 19 of 19 — canonical execution and rebuild/Search replay;
+- PR #266 / source `ded5d80ae11bbf044b5bfe5b572e8dab521f884a` / merge `1f889a810c82da3d0fee12427eacccbe43613bac` / 19 of 19 — automatic Customer 360 v2 generation rollover;
+- PR #267 / source `f1b72dbee09f152005cb3584b9bcc1573bf2c4fe` / merge `4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf` / 19 of 19 — real `crm-api` process-host no-orphan repair on clean and rollback/reapplied schemas.
 
-Repository Step 14 and architecture Stage G are accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d44691371c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged exact head. The behavior-neutral Customer Accounts consolidation removes `crm-customer-accounts-capability-composition`, moves its production contribution into `crm-customer-accounts-query-adapter`, preserves public inventory and owner/security/persistence semantics, and lowers the current measured repository to 112 workspace packages, 835 internal dependency edges and 5,377 conservative public Rust items. Maximum dependency depth remains 18, dependency declarations remain 270 and suppression occurrences remain 91. Repository Step 15 is next and not started. This architecture work does not advance Customer Privacy product readiness.
+The accepted Step 15 result preserves the current measured repository at **112 workspace packages**, **835 internal dependency edges**, maximum dependency depth **18**, **5,377** conservative public Rust items, **270** dependency declarations and **91** suppression occurrences. Repository Step 16 is next and not started. This architecture/runtime evidence does not advance Customer Privacy to Product complete.
 
 ## 5. Phase 8A packet accounting
 
@@ -100,7 +104,7 @@ Completed:
 
 In progress:
 
-- 8A.11 / #126 — Customer Privacy. Discovery, immutable snapshots, deterministic planning, permission-aware reads, approval, restriction placement/final enforcement, legal-hold placement, mandatory-retention adjudication, durable owner execution/outcomes, governed access/export assembly and authoritative owner-specific anonymization/deletion are accepted. Remaining product work includes restriction and legal-hold release/read lifecycle where required, Party tombstone/no-orphan and projection/search/cache convergence, Customer Privacy worker lifecycle, disable/uninstall fail-closed semantics, frontend/accessibility/browser proof and production operations evidence.
+- 8A.11 / #126 — Customer Privacy. Discovery, immutable snapshots, deterministic planning, permission-aware reads, approval, restriction placement/final enforcement, legal-hold placement, mandatory-retention adjudication, durable owner execution/outcomes, governed access/export assembly, authoritative owner-specific anonymization/deletion and Party tombstone/no-orphan convergence are accepted. Remaining product work includes restriction and legal-hold release/read lifecycle where required, reusable worker conformance, a real Customer Privacy worker lifecycle, disable/uninstall fail-closed semantics, frontend/accessibility/browser proof and production operations evidence.
 
 Current workspace packages: **112**. Current product-complete expert modules: **0**.
 

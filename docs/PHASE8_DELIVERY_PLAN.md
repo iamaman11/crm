@@ -75,7 +75,7 @@ Data Quality owner-scope evidence is accepted through PR #190 / accepted source 
 
 Customer Enrichment owner-scope evidence is accepted through PR #192 / accepted source `e90e36027de18a07be68e43327ea732810ff332a` / squash merge `e41cbab0cd30819fcbe2e3c5f2c7415fc6de3e8c` / 28 of 28 permanent workflows.
 
-Scope discovery and immutable snapshot execution is Accepted through PR #206 / accepted source `086b17a95058eee285fcb67a903bd21d9263d357` / squash merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`.
+Scope discovery and immutable snapshot execution — Accepted through PR #206 / accepted source `086b17a95058eee285fcb67a903bd21d9263d357` / squash merge `95818fd3aeb54a9593a45642583f0b7224d5ecfe`.
 
 Accepted Customer Privacy evidence includes:
 
@@ -90,7 +90,8 @@ Accepted Customer Privacy evidence includes:
 - governed access/export assembly with Customer Data Operations ownership;
 - authoritative exact-nine owner-specific anonymization and supported deletion;
 - complete first-party production contribution aggregation;
-- blocking architecture, dependency, suppression and affected-scope governance.
+- blocking architecture, dependency, suppression and affected-scope governance;
+- Party tombstone, Search/Customer 360 convergence, immutable-history rebuild, automatic Customer 360 v2 rollover and real process-host no-orphan repair through Repository Step 15.
 
 Latest accepted public Customer Privacy inventory remains:
 
@@ -100,13 +101,23 @@ Latest accepted public Customer Privacy inventory remains:
 
 Trusted-internal planning, retention evaluation, replay-safe owner execution, access/export assembly and exact-nine action execution remain non-public.
 
-## 5. Accepted Repository Step 14 architecture result
+## 5. Accepted Repository Step 14 and Step 15 architecture results
 
-Repository Step 14 and architecture Stage G are complete through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d44691371c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
+Repository Step 14 and architecture Stage G are complete through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
 
 The packet is behavior-neutral. It removes `crm-customer-accounts-capability-composition`, moves the owner production contribution into `crm-customer-accounts-query-adapter`, preserves mutation planning and exact first-party inventory, and changes no public contract, route, schema, migration, persistence or worker behavior.
 
-Exact measured result:
+Repository Step 15 is complete through:
+
+- PR #263 / source `6c2a54f6780988a12fec3cd77ca2cd39ad349140` / merge `bd205e0af77b676654dff8ddf26d3b5b195880b2` / 32 of 32;
+- PR #264 / source `e6c9d2901109c8d5b9e0f3cf783214407e26451a` / merge `e9fe1f352386d80a29d122db5d1ed6c47266bfaf` / 6 of 6;
+- PR #265 / source `ef572bdf31c584c397c215cd1b62ee47cad54e64` / merge `2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a` / 19 of 19;
+- PR #266 / source `ded5d80ae11bbf044b5bfe5b572e8dab521f884a` / merge `1f889a810c82da3d0fee12427eacccbe43613bac` / 19 of 19;
+- PR #267 / source `f1b72dbee09f152005cb3584b9bcc1573bf2c4fe` / merge `4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf` / 19 of 19.
+
+The combined Step 15 evidence proves stable Party privacy tombstones, strict lineage, Search and Customer 360 non-disclosure, deterministic rebuild/replay, automatic `customer.customer-360.v2` rollout and real `crm-api` process-owned no-orphan repair on clean and rollback/reapplied schemas.
+
+Exact measured result remains:
 
 - workspace packages: **113 → 112**;
 - internal dependency edges: **841 → 835**;
@@ -115,26 +126,17 @@ Exact measured result:
 - dependency declarations: **270 → 270**;
 - suppression occurrences: **91 → 91**.
 
-Approval, Discovery and Planning permanent workflows were synchronized to the accepted 112-package workspace while retaining their existing clean-database, E2E, frozen-non-effect, rollback, reapply and repeated-acceptance checks.
-
-This result completes an architecture stage only. Phase 8A.11 remains in progress, Customer Privacy remains incomplete and Current product-complete expert modules: **0**.
+These results do not complete Phase 8A.11. Customer Privacy remains incomplete and Current product-complete expert modules: **0**.
 
 ## 6. Remaining Phase 8A.11 product work
 
 The remaining work is sequenced, not parallel:
 
-### Repository Step 15 — next, not started
-
-- authoritative Party tombstone semantics;
-- no-orphan proof across owned and referencing records;
-- deterministic projection, search and cache convergence;
-- tenant/RLS/authorization/audit/idempotency preservation;
-- rollback, replay and crash-window acceptance.
-
-### Repository Step 16
+### Repository Step 16 — next, not started
 
 - reusable generic worker conformance;
-- representative real-worker adoption without owner-specific logic in generic algorithms.
+- activation, authorization, tenant, replay, lease/crash and no-side-effect guarantees;
+- representative contrasting real-worker adoption without owner-specific logic in generic algorithms.
 
 ### Repository Step 17
 
@@ -163,16 +165,16 @@ The remaining work is sequenced, not parallel:
 
 - final Phase 8A product and operations closure against every accepted invariant.
 
-No Step 16 or later implementation may begin before Step 15 is accepted and synchronized.
+No Step 17 or later implementation may begin before Step 16 is accepted and synchronized.
 
 ## 7. Phase 8A closure criteria
 
 Phase 8A is complete only when:
 
 - Customer Privacy required lifecycle behavior is complete;
-- Party tombstone/no-orphan and all projection/search/cache convergence are proven;
+- accepted Party tombstone/no-orphan and projection/search/cache convergence remain protected by permanent evidence;
 - public and internal route inventories are exact and intentional;
-- a real worker lifecycle is accepted;
+- a real Customer Privacy worker lifecycle is accepted;
 - disable/uninstall and recovery fail closed;
 - critical frontend journeys pass browser and accessibility acceptance;
 - production restore, SLO, observability, performance, security and supply-chain gates are executable;
@@ -274,10 +276,9 @@ No later product train may be represented as complete from backend/platform work
 
 ## 12. Binding repository continuation
 
-Repository Steps 1–14 are complete.
+Repository Steps 1–15 are complete.
 
-15. Repository Step 15 — Party tombstone, no-orphan proof and projection/search/cache convergence — **next, not started**;
-16. Repository Step 16 — reusable worker conformance;
+16. Repository Step 16 — reusable worker conformance — **next, not started**;
 17. Repository Step 17 — contract lifecycle enforcement;
 18. Repository Step 18 — deterministic local lifecycle;
 19. Repository Step 19 — Customer Privacy worker and full E2E;
