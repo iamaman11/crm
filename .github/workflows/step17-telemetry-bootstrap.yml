@@ -106,11 +106,11 @@ jobs:
         run: cargo fmt --all
       - name: Test telemetry module
         run: cargo test --locked -p crm-application-runtime contract_usage_telemetry
-      - name: Commit clean bounded packet
+      - name: Commit non-workflow implementation files
         shell: bash
         run: |
           set -euo pipefail
-          git rm .github/workflows/step17-telemetry-bootstrap.yml
+          git checkout HEAD -- .github/workflows/contracts.yml
           git rm -f scripts/apply_step17_telemetry_patch.py
           git add -A
           git diff --cached --check
