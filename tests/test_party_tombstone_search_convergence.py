@@ -9,7 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 class PartyTombstoneSearchConvergenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.packet = json.loads((ROOT / "repository-packet.json").read_text(encoding="utf-8"))
+        cls.packet = json.loads(
+            (ROOT / "repository-packet.json").read_text(encoding="utf-8")
+        )
         cls.search_composition = (
             ROOT / "crates/crm-global-search-composition/src/lib.rs"
         ).read_text(encoding="utf-8")
@@ -63,7 +65,10 @@ class PartyTombstoneSearchConvergenceTests(unittest.TestCase):
         )
         self.assertIn("PARTY_PRIVACY_ACTION_COMPLETED,", source)
         self.assertIn("assert_eq!(event_types.len(), 7);", source)
-        self.assertIn('assert_eq!(generation.projection_id.as_str(), "search.global.g3")', source)
+        self.assertIn(
+            'assert_eq!(generation.projection_id.as_str(), "search.global.g3")',
+            source,
+        )
 
     def test_party_owner_action_event_is_strictly_bound_without_new_dependencies(self) -> None:
         source = self.search_composition
@@ -105,21 +110,24 @@ class PartyTombstoneSearchConvergenceTests(unittest.TestCase):
         self.assertIn('"delete" => Ok(PARTY_SEARCH_ERASED)', source)
         self.assertIn('"anonymize" => Ok(PARTY_SEARCH_MINIMIZED)', source)
         self.assertIn(
-            "PARTY_SEARCH_LIFECYCLE_FIELD.to_owned(),\n                PARTY_SEARCH_ACTIVE.to_owned()",
+            "PARTY_SEARCH_LIFECYCLE_FIELD.to_owned(),\n"
+            "                PARTY_SEARCH_ACTIVE.to_owned()",
             source,
         )
 
-    def test_postgres_excludes_non_active_documents_before_text_matching(self) -> None:
+    def test_postgres_excludes_non_active_documents_in_the_where_clause(self) -> None:
         sql_start = self.search_store.index("WITH ranked AS")
         sql_end = self.search_store.index('"#,', sql_start)
         query = self.search_store[sql_start:sql_end]
         lifecycle_filter = query.index("privacy_lifecycle")
-        first_match_evaluation = query.index("to_tsvector")
+        where_match_predicate = query.index("AND to_tsvector", lifecycle_filter)
 
-        self.assertLess(lifecycle_filter, first_match_evaluation)
+        self.assertLess(lifecycle_filter, where_match_predicate)
         self.assertIn(
-            "COALESCE(\n                      document -> 'display_fields' ->> 'privacy_lifecycle',\n"
-            "                      'active'\n                    ) = 'active'",
+            "COALESCE(\n"
+            "                      document -> 'display_fields' ->> 'privacy_lifecycle',\n"
+            "                      'active'\n"
+            "                    ) = 'active'",
             query,
         )
 
