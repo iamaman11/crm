@@ -28,24 +28,25 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             packet["packet_id"],
-            "repository-step-15-customer360-generation-rollover",
+            "repository-step-15-crm-api-no-orphan-closure",
         )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
             {
                 "ref": "main",
-                "sha": "2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a",
+                "sha": "1f889a810c82da3d0fee12427eacccbe43613bac",
             },
         )
         self.assertEqual(packet["tracking_issues"], [126, 194])
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
-                "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
-                "crates/crm-customer-360-composition/src/lib.rs",
+                ".github/workflows/customer-privacy-owner-execution.yml",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
+                "services/crm-api/tests/customer_360_privacy_no_orphan_process_e2e.rs",
+                "services/crm-api/tests/support.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_party_tombstone_rebuild_convergence.py",
                 "tests/test_repository_navigation.py",
@@ -62,17 +63,20 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "Customer Privacy Owner Execution CI",
             ],
         )
-        self.assertIn("complete Repository Step 15", packet["non_goals"][0])
         self.assertIn(
-            "change the shared Customer 360 production projection identity from customer.customer-360.v1 to customer.customer-360.v2",
+            "synchronize final Repository Step 15 acceptance SHAs",
+            "\n".join(packet["non_goals"]),
+        )
+        self.assertIn(
+            "create a Party through the public application gateway of a real crm-api process",
             packet["deliverables"],
         )
         self.assertIn(
-            "invoke the normal Customer360ProjectionWorker run_batch path rather than a manual initial rebuild",
+            "restart the real crm-api binary without bootstrap and wait for its production Customer360BackgroundWorker cycle",
             packet["deliverables"],
         )
         self.assertIn(
-            "prove the legacy v1 checkpoint and document remain unchanged but are no longer read by the shared production identity",
+            "reuse the existing crm-api process support through a test-only module shim without changing the service manifest or production source",
             packet["deliverables"],
         )
 
@@ -88,11 +92,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-15-customer360-generation-rollover",
+            "repository-step-15-crm-api-no-orphan-closure",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a",
+            "1f889a810c82da3d0fee12427eacccbe43613bac",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -161,7 +165,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Customer 360 generation rollover packet"],
+                    "reasons": ["crm-api Party privacy no-orphan process packet"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -169,7 +173,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a",
+                return_value="1f889a810c82da3d0fee12427eacccbe43613bac",
             ),
             patch(
                 "scripts.repository_navigation.build_report",
