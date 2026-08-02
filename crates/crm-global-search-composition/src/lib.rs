@@ -60,12 +60,11 @@ const PARTY_PRIVACY_ACTION_COMPLETED: &str = "parties.privacy.action.apply.compl
 const PARTY_PRIVACY_ACTION_CAPABILITY: &str = "parties.privacy.action.apply";
 const OWNER_ACTION_EVENT_SCHEMA: &str = "crm.customer-privacy.owner_action.event";
 const OWNER_ACTION_EVENT_DESCRIPTOR_HASH: [u8; 32] = [
-    213, 213, 180, 13, 242, 156, 208, 33, 85, 11, 63, 152, 114, 199, 7, 154, 115, 225, 181,
-    172, 233, 62, 83, 56, 65, 78, 35, 3, 176, 230, 31, 123,
+    213, 213, 180, 13, 242, 156, 208, 33, 85, 11, 63, 152, 114, 199, 7, 154, 115, 225, 181, 172,
+    233, 62, 83, 56, 65, 78, 35, 3, 176, 230, 31, 123,
 ];
 const OWNER_ACTION_EVENT_MAXIMUM_BYTES: u64 = 32 * 1024;
-const OWNER_ACTION_EVENT_RETENTION_POLICY: &str =
-    "crm.customer_privacy.owner_action_command";
+const OWNER_ACTION_EVENT_RETENTION_POLICY: &str = "crm.customer_privacy.owner_action_command";
 const PARTY_SEARCH_LIFECYCLE_FIELD: &str = "privacy_lifecycle";
 const PARTY_SEARCH_ACTIVE: &str = "active";
 const PARTY_SEARCH_ERASED: &str = "erased";
@@ -352,11 +351,7 @@ fn validate_party_privacy_action(delivery: &EventDelivery) -> Result<&'static st
     )?;
     require_canonical_json_field(bytes, "owner_capability_version", CONTRACT_VERSION)?;
     require_canonical_json_field(bytes, "resource_type", PARTY_RESOURCE_TYPE)?;
-    require_canonical_json_field(
-        bytes,
-        "resource_id",
-        delivery.aggregate.record_id.as_str(),
-    )?;
+    require_canonical_json_field(bytes, "resource_id", delivery.aggregate.record_id.as_str())?;
 
     let encoded_previous_version = canonical_json_string_field(bytes, "resource_version")?;
     let previous_version = encoded_previous_version
@@ -382,11 +377,7 @@ fn validate_party_privacy_action(delivery: &EventDelivery) -> Result<&'static st
     }
 }
 
-fn require_canonical_json_field(
-    bytes: &[u8],
-    field: &str,
-    expected: &str,
-) -> Result<(), SdkError> {
+fn require_canonical_json_field(bytes: &[u8], field: &str, expected: &str) -> Result<(), SdkError> {
     if canonical_json_string_field(bytes, field)? != expected {
         return Err(search_event_invalid(format!(
             "Party privacy owner-action field {field} is invalid"
