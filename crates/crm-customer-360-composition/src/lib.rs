@@ -1233,7 +1233,11 @@ mod tests {
         );
     }
 
-    fn privacy_delivery(action: &str, previous_version: i64, aggregate_version: i64) -> EventDelivery {
+    fn privacy_delivery(
+        action: &str,
+        previous_version: i64,
+        aggregate_version: i64,
+    ) -> EventDelivery {
         let bytes = format!(
             "{{\"action_code\":\"{action}\",\"owner_capability_id\":\"{PARTY_PRIVACY_ACTION_CAPABILITY}\",\"owner_capability_version\":\"{CONTRACT_VERSION}\",\"owner_module_id\":\"{PARTIES_MODULE_ID}\",\"resource_id\":\"party-1\",\"resource_type\":\"{PARTY_RECORD_TYPE}\",\"resource_version\":\"{previous_version}\",\"tenant_id\":\"tenant-a\"}}"
         )
@@ -1246,8 +1250,7 @@ mod tests {
         EventDelivery {
             delivery_id: DeliveryId::try_new(format!("delivery-party-1-{aggregate_version}"))
                 .unwrap(),
-            event_id: EventId::try_new(format!("event-party-1-{aggregate_version}"))
-                .unwrap(),
+            event_id: EventId::try_new(format!("event-party-1-{aggregate_version}")).unwrap(),
             tenant_id: TenantId::try_new("tenant-a").unwrap(),
             source_module_id: module_id.clone(),
             consumer_module_id: ModuleId::try_new(CUSTOMER_360_CONSUMER_MODULE_ID).unwrap(),
