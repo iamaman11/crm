@@ -20,7 +20,7 @@ This document is the concise authoritative current-state snapshot. Product depen
 
 Phase 8A.11 / issue #126 is in progress.
 
-Repository Steps 1–15 are complete. Architecture Stages A, B, D, E and G are complete. Stages C, F, H and I remain incomplete or in progress according to the architecture plan.
+Repository Steps 1–16 are complete. Architecture Stages A, B, D, E and G are complete. Stages C, F, H and I remain incomplete or in progress according to the architecture plan.
 
 Repository Step 14 and Stage G are accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
 
@@ -42,6 +42,13 @@ Repository Step 15 is accepted through five bounded implementation slices:
 - PR #267 / source `f1b72dbee09f152005cb3584b9bcc1573bf2c4fe` / merge `4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf` / 19 of 19: a real `crm-api` restart repairs missing Customer 360 v2 derived state through the production background-worker cycle on clean and rollback/reapplied PostgreSQL schemas.
 
 Step 15 proves stable non-reusable Party identity tombstones, strict privacy-event lineage, Search and Customer 360 non-disclosure, deterministic rebuild/replay, automatic fresh-generation rollover and real process-host no-orphan convergence. It adds no workspace package or dependency edge and does not change public contracts, routes or migrations.
+
+Repository Step 16 is accepted through two bounded implementation slices:
+
+- PR #269 / source `74b1d7b0f8764fcd90839b7aab25f8f82fe5e552` / merge `6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd` / 20 of 20: a business-neutral standard-library worker conformance helper proves no-side-effect denial, retryable progress/effect preservation and exact recovery; representative Customer Enrichment and CRM API import processes adopt the helper with activation, live authorization, tenant, replay and crash/restart evidence;
+- PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17: two simultaneously live production `crm-api` import executors contend for the same durable Party-import work, PostgreSQL blocking evidence proves serialization before a second target effect, and release converges to one completed checkpoint and exactly one Party record, idempotency record, event and audit record with no duplicate replay.
+
+Step 16 proves reusable worker conformance across contrasting real workers without adding a generic lease API or changing production algorithms, contracts, schemas, migrations, crates, dependencies or permanent workflows. Customer Privacy still publishes zero workers; its real worker lifecycle remains reserved for Step 19.
 
 ## Current measured repository baseline
 
@@ -77,6 +84,7 @@ The earlier 113-package and 841-edge measurements remain immutable historical St
 | 13 | PR #253 / source `475533b185b871418273c1c1e3f63a1d62542677` / merge `7dcda204be07209d9e4996fdc9c5fd364cea179e`; PR #255 / source `4c80546283af9c869a28c2da9c8697b203d0c327` / merge `393b60bdcfad6e92fc37eacabe0920645d530f6b`; PR #257 / source `6cde72d7fc9a442018c51fd6e6772e626b26e307` / merge `10516e84ea3c2d0fa8ee0c61c9eeec7e96a6273c` | Measurement, suppression/direct-lint governance and remaining ADR-031 exit evidence; Stage B complete |
 | 14 | PR #259 / source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 | First measured behavior-neutral transitional consolidation; Stage G complete |
 | 15 | PRs #263–#267 / exact sources and merges listed above / final closure 19 of 19 | Party tombstone, Search/Customer 360 convergence, immutable-history rebuild, automatic v2 rollover and real `crm-api` no-orphan proof |
+| 16 | PR #269 / source `74b1d7b0f8764fcd90839b7aab25f8f82fe5e552` / merge `6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd` / 20 of 20; PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17 | Reusable worker conformance, representative real-worker adoption, retry/restart recovery and exactly-once contention convergence |
 
 ## Customer Privacy product boundary
 
@@ -103,7 +111,7 @@ Accepted product/runtime evidence includes scope discovery and immutable snapsho
 Still required before Phase 8A.11 can close:
 
 - restriction and legal-hold release/read lifecycle where required;
-- reusable worker conformance and a real Customer Privacy worker lifecycle;
+- a real Customer Privacy worker lifecycle using the accepted reusable conformance;
 - disable/uninstall fail-closed semantics;
 - frontend, accessibility and browser acceptance;
 - production operations, restore, SLO, security and performance evidence.
@@ -117,7 +125,7 @@ Customer Privacy and Phase 8A remain incomplete. Current product-complete expert
 - **Stage C — in progress:** the Customer Privacy golden owner package now includes accepted Party tombstone/no-orphan convergence, but wider adoption and visibility/migration generalization remain.
 - **Stage D — complete:** all active first-party owner contributions are aggregated through `crm-first-party-modules`.
 - **Stage E — complete:** affected-scope selection covers Rust, contracts, Protobuf/API, migrations, PostgreSQL, process, product, frontend and operations planes; Step 22 must review value, duplication and cost of every permanent gate.
-- **Stage F — in progress:** mutation/query conformance is accepted; worker conformance and contract lifecycle remain.
+- **Stage F — in progress:** mutation/query and worker conformance are accepted; contract lifecycle remains.
 - **Stage G — complete:** PR #259 proves the first measured behavior-neutral transitional consolidation.
 - **Stage H — in progress:** explanation, packet checking and generated navigation exist; deterministic local lifecycle commands remain.
 - **Stage I — incomplete:** frontend and operations parity remain future work.
@@ -136,16 +144,15 @@ Step 22 cannot close with an unresolved runtime dependency classification or unr
 
 ## Next permitted repository packet
 
-Repository Step 16 is the next permitted implementation packet and is **not started**. Its bounded scope is reusable generic worker conformance adopted by representative real workers.
+Repository Step 17 is the next permitted implementation packet and is **not started**. Its bounded scope is contract compatibility, published-version gates, deprecation telemetry, consumer migration evidence and governed retirement enforcement.
 
-No Step 17 or later implementation may start while Step 16 remains unfinished.
+No Step 18 or later implementation may start while Step 17 remains unfinished.
 
 ## Repository continuation order
 
 ```text
-1–15. accepted and complete
--> 16. reusable generic worker conformance — next, not started
--> 17. contract compatibility, deprecation, consumer migration and retirement enforcement
+1–16. accepted and complete
+-> 17. contract compatibility, deprecation, consumer migration and retirement enforcement — next, not started
 -> 18. deterministic local lifecycle commands
 -> 19. Customer Privacy worker and complete process/end-to-end acceptance
 -> 20. Phase 8A frontend and operations evidence

@@ -68,6 +68,22 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 for marker in required:
                     self.assertIn(marker, document)
 
+    def test_repository_step_16_exact_evidence_is_synchronized(self) -> None:
+        required = (
+            "PR #269",
+            "74b1d7b0f8764fcd90839b7aab25f8f82fe5e552",
+            "6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd",
+            "20 of 20",
+            "PR #270",
+            "8e2baac0822eefbb6d3c474ffce0cee69e3e4e98",
+            "ce0ca881461d1ee8964a11b28c1fcff46cf145cb",
+            "17 of 17",
+        )
+        for document in self.normative_documents:
+            with self.subTest(document=document[:60]):
+                for marker in required:
+                    self.assertIn(marker, document)
+
     def test_current_metrics_are_exact_and_historical_baseline_is_labeled(self) -> None:
         self.assertEqual(len(self.workspace["workspace"]["members"]), 112)
         for document in self.normative_documents:
@@ -80,22 +96,23 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                     f"unqualified current 113-package claim: {context}",
                 )
 
-    def test_step_15_is_complete_and_step_16_is_next(self) -> None:
+    def test_step_16_is_complete_and_step_17_is_next(self) -> None:
         for document in self.normative_documents:
             lowered = document.lower()
-            self.assertIn("step 15", lowered)
             self.assertIn("step 16", lowered)
-            self.assertNotRegex(lowered, r"step 15[^\n]{0,120}(?:next|not started)")
+            self.assertIn("step 17", lowered)
+            self.assertNotRegex(lowered, r"step 16 (?:is )?(?:the )?next")
+            self.assertNotRegex(lowered, r"step 16[^\n.;]{0,80}not started")
         self.assertIn(
-            "15. Party tombstone, no-orphan proof and projection/search/cache convergence — **complete through PR #267**",
+            "16. reusable generic worker conformance adopted by representative real workers — **complete through PR #270**",
             self.plan,
         )
         self.assertIn(
-            "16. reusable generic worker conformance adopted by representative real workers — **next, not started**",
+            "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement — **next, not started**",
             self.plan,
         )
-        self.assertIn("Repository Step 16 is the next permitted implementation packet", self.status)
-        self.assertIn("Repository Steps 1–15 are complete", self.status)
+        self.assertIn("Repository Step 17 is the next permitted implementation packet", self.status)
+        self.assertIn("Repository Steps 1–16 are complete", self.status)
 
     def test_product_readiness_is_not_overstated(self) -> None:
         for document in self.normative_documents:
@@ -165,25 +182,25 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_worker_contention_packet_is_exact(self) -> None:
+    def test_active_step_16_evidence_sync_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(
-            self.packet["packet_id"],
-            "repository-step-16-worker-contention",
-        )
+        self.assertEqual(self.packet["packet_id"], "repository-step-16-evidence-sync")
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd"},
+            {"ref": "main", "sha": "ce0ca881461d1ee8964a11b28c1fcff46cf145cb"},
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
                 "docs/ACTIVE_PACKET.md",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/MODULE_CATALOG.md",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/PROJECT_STATUS.md",
                 "repository-packet.json",
-                "services/crm-api/tests/import_process_retryable_e2e.rs",
                 "tests/test_architecture_documentation_consistency.py",
-                "tests/test_generic_conformance_adoption.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -192,9 +209,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
-                "Generic Mutation Query Conformance CI",
                 "Governance CI",
-                "Import Retryable Process Runtime CI",
                 "Rust Generated Sync",
                 "Rust CI",
             ],
@@ -203,18 +218,17 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             ".github/workflows/**",
             "crates/**",
             "database/**",
-            "services/crm-api/src/**",
-            "services/crm-api/tests/support/**",
+            "services/**",
         ):
             self.assertIn(forbidden, self.packet["forbidden_paths"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "hold the first real Party target insert behind one PostgreSQL advisory-lock barrier and mechanically observe one direct Party waiter plus at least two executor sessions in the same transitive blocking chain",
+            "declare Repository Steps 1–16 complete and Repository Step 17 next and not started without overstating Stage F, Phase 8A, Customer Privacy, product completeness or architecture 10/10",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "declare Repository Step 16 fully complete, Phase 8A complete, Architecture 10/10 or any product-complete expert module before separate evidence synchronization",
+            "implement Repository Step 17 contract compatibility, deprecation, consumer migration or retirement behavior",
             self.packet["non_goals"],
         )
 
