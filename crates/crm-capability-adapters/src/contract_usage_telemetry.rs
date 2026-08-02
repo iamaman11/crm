@@ -348,7 +348,7 @@ mod tests {
         let [mutation, query] = meter_contract_registries(
             CATALOG,
             registries,
-            [&[definition.clone()], &[]],
+            [std::slice::from_ref(&definition), &[]],
             |renderer| render = Some(renderer),
         )
         .unwrap();
@@ -386,7 +386,7 @@ mod tests {
         let [mutation, _] = meter_contract_registries(
             CATALOG,
             registries,
-            [&[definition.clone()], &[]],
+            [std::slice::from_ref(&definition), &[]],
             |renderer| render = Some(renderer),
         )
         .unwrap();
