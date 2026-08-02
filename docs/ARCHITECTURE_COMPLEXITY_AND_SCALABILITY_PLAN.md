@@ -68,7 +68,9 @@ The historical Step 13 measurement established 113 workspace packages, 841 inter
 
 Repository Step 14 is accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d44691371c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
 
-Current blocking baseline after Step 14:
+Repository Step 15 is accepted through PRs #263–#267. The final process-host closure is PR #267 / accepted source `f1b72dbee09f152005cb3584b9bcc1573bf2c4fe` / squash merge `4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf` / 19 of 19 applicable permanent workflows. The complete exact evidence ledger is recorded in Section 11 and `PROJECT_STATUS.md`.
+
+Current blocking baseline after Step 15:
 
 | Metric | Historical Step 13 | Current |
 |---|---:|---:|
@@ -89,7 +91,7 @@ An ordinary capability added to an existing owner creates **zero new crates** by
 |---|---|---|---|
 | A — documentation and policy baseline | **Complete** | one source hierarchy, stable index, generated navigation and permanent consistency guards | preserve freshness and avoid duplicate live roadmaps |
 | B — dependency, crate and exception governance | **Complete** | PRs #253, #255 and #257: reproducible measurement, exact Rust 1.97.1, zero-warning Rust/Clippy, lockfile preservation, blocking suppression/direct-lint/process-host/change-cost/dependency governance | preserve non-growth; complete ADR-032 runtime fan-in and gate-value decisions at Step 22 |
-| C — golden owner package and persistence model | **In progress** | Customer Privacy golden package, final subject policy, restriction/legal-hold placement, retention precedence, durable owner execution/outcomes, governed access/export and owner actions | Party tombstone/convergence at Step 15, worker lifecycle at Step 19, Phase 8A closure at Step 21 |
+| C — golden owner package and persistence model | **In progress** | Customer Privacy golden package, final subject policy, restriction/legal-hold placement, retention precedence, durable owner execution/outcomes, governed access/export, owner actions and accepted Party tombstone/no-orphan convergence through Step 15 | worker lifecycle at Step 19 and Phase 8A closure at Step 21 |
 | D — contribution aggregation | **Complete** | all active first-party owner contributions aggregated through `crm-first-party-modules` by PRs #246, #248 and #249 | preserve bounded owner-owned contribution boundaries |
 | E — affected-scope CI | **Complete** | PR #239: deterministic Rust closure and declarative contract/API/migration/PostgreSQL/process/product/frontend/operations ownership with unknown-path fail closed | preserve policy/workflow compatibility and review gate value/cost at Step 22 |
 | F — generic conformance and contract lifecycle | **In progress** | reusable mutation/query conformance accepted through PR #235 | worker conformance Step 16, contract lifecycle Step 17, real worker adoption Step 19 |
@@ -117,8 +119,8 @@ At most one implementation packet may be active. The next permitted packet is th
 12. complete first-party contribution aggregation for all currently active owners — **complete through PR #249**;
 13. complete ADR-031 governance closure: measurement, blocking suppression/direct-lint governance and remaining process-host/change-cost/dependency exit evidence — **complete through PR #257**;
 14. first measured behavior-neutral transitional domain-cluster consolidation — **complete through PR #259**;
-15. Party tombstone, no-orphan proof and projection/search/cache convergence — **next, not started**;
-16. reusable generic worker conformance adopted by representative real workers;
+15. Party tombstone, no-orphan proof and projection/search/cache convergence — **complete through PR #267**;
+16. reusable generic worker conformance adopted by representative real workers — **next, not started**;
 17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;
 18. deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke`;
 19. real Customer Privacy worker lifecycle and complete process/end-to-end acceptance;
@@ -249,7 +251,7 @@ A gate must not become permanent merely because it checks another governance mec
 Before Step 22 remeasurement is accepted, every existing permanent workflow, job and repository gate must appear in a complete value/cost ledger recording:
 
 - failure mode;
-- observed defect evidence or specific preventive rationale;
+- observed defects or specific preventive rationale;
 - authoritative inputs and scope;
 - overlap and duplication;
 - execution cost and operational maintenance;
@@ -325,18 +327,31 @@ PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash me
 
 This completes Repository Step 14 and Stage G only. It does not complete Customer Privacy, Phase 8A or architecture 10/10.
 
-## 11. Next bounded packet — Repository Step 15
+## 11. Accepted Step 15 closure evidence
 
-Repository Step 15 is **next and not started**.
+Repository Step 15 is complete through five bounded accepted slices:
+
+1. PR #263 / source `6c2a54f6780988a12fec3cd77ca2cd39ad349140` / merge `bd205e0af77b676654dff8ddf26d3b5b195880b2` / 32 of 32 — stable Party privacy tombstones converge into Search generation `g3`, and inactive lifecycle documents are excluded before text matching and disclosure.
+2. PR #264 / source `e6c9d2901109c8d5b9e0f3cf783214407e26451a` / merge `e9fe1f352386d80a29d122db5d1ed6c47266bfaf` / 6 of 6 — Customer 360 replaces the stable `party:<id>` contribution with a non-personal tombstone, records erased/privacy-minimized lifecycle and removes root membership.
+3. PR #265 / source `ef572bdf31c584c397c215cd1b62ee47cad54e64` / merge `2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a` / 19 of 19 — canonical owner execution emits the immutable event; Customer 360 rebuild and Search replay remove stale personal data while preserving authoritative Party, outbox and audit evidence.
+4. PR #266 / source `ded5d80ae11bbf044b5bfe5b572e8dab521f884a` / merge `1f889a810c82da3d0fee12427eacccbe43613bac` / 19 of 19 — the production Customer 360 identity advances to `customer.customer-360.v2`; normal `run_batch` replays immutable history while legacy `v1` remains historical and non-authoritative.
+5. PR #267 / source `f1b72dbee09f152005cb3584b9bcc1573bf2c4fe` / merge `4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf` / 19 of 19 — a real `crm-api` restart automatically repairs missing Customer 360 v2 derived state through the production background-worker cycle on clean and rollback/reapplied PostgreSQL schemas.
+
+The combined evidence proves authoritative stable non-reusable Party identity tombstones, strict event/version lineage, non-disclosure in Search and Customer 360, deterministic replay/rebuild, automatic fresh-generation rollout and real process-host no-orphan convergence. No workspace package, internal dependency edge, public route, public contract or migration was added by Step 15.
+
+This completes Repository Step 15 only. Customer Privacy, Phase 8A, worker conformance, contract lifecycle, frontend/operations evidence and architecture 10/10 remain incomplete.
+
+### 11.1 Next bounded packet — Repository Step 16
+
+Repository Step 16 is **next and not started**.
 
 Required scope:
 
-- authoritative Party tombstone semantics;
-- no-orphan proof for owned and referencing records;
-- deterministic projection, search and cache convergence;
-- tenant/RLS/authorization/audit/idempotency preservation;
-- rollback, replay and crash-window evidence;
-- no unrelated worker, contract-lifecycle, local-environment, frontend or operations work.
+- reusable generic worker conformance;
+- activation, authorization, tenant, replay, lease/crash and no-side-effect guarantees;
+- adoption by representative contrasting real workers;
+- owner-specific semantics kept outside the generic algorithms;
+- no unrelated contract-lifecycle, local-environment, frontend or operations work.
 
 The packet must start from current `main`, declare exact allowed/forbidden paths and pass every applicable permanent workflow on one unchanged meaningful user-authored head.
 
