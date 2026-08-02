@@ -66,6 +66,7 @@ class PartyTombstoneRebuildConvergenceTests(unittest.TestCase):
     def test_acceptance_proves_stale_state_then_rebuild_convergence(self) -> None:
         for marker in (
             "seed_stale_customer_360",
+            "projection_checkpoints",
             "assert_customer_360_stale",
             ".rebuild(tenant_id.clone(), 200)",
             ".reindex(tenant_id.clone(), 200)",
