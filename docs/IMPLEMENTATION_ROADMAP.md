@@ -74,7 +74,7 @@ Repository Steps 1–15 are complete. Repository Step 16 is the next permitted i
 
 ### 3.1 Accepted Repository Step 14 closure
 
-PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d44691371c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head completes Repository Step 14 and Stage G.
+PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head completes Repository Step 14 and Stage G.
 
 The behavior-neutral Customer Accounts consolidation:
 
