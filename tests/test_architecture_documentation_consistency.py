@@ -232,46 +232,56 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "product-development-10-of-10-plan",
+            "repository-step-15-party-tombstone-search-convergence",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
             {
                 "ref": "main",
-                "sha": "dbba30de911bef10149342ac0490c00ec858d42f",
+                "sha": "5bc885c6a311cbe95eb6e5ba1a85d10aed400650",
             },
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
+                "crates/crm-core-data/src/search_store.rs",
+                "crates/crm-global-search-composition/src/lib.rs",
                 "docs/ACTIVE_PACKET.md",
-                "docs/IMPLEMENTATION_ROADMAP.md",
-                "docs/PHASE8_DELIVERY_PLAN.md",
-                "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
-                "docs/README.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
-                "tests/test_product_development_plan.py",
+                "tests/test_party_tombstone_search_convergence.py",
                 "tests/test_repository_navigation.py",
             },
         )
         self.assertEqual(
             self.packet["required_checks"],
-            ["Affected Scope CI", "Governance CI", "Rust Generated Sync"],
+            [
+                "Affected Scope CI",
+                "Complexity Baseline CI",
+                "Rust Generated Sync",
+                "Rust CI",
+                "Search Runtime CI",
+                "Database CI",
+                "Parties Privacy Scope CI",
+            ],
         )
-        self.assertIn("start Repository Step 15", "\n".join(self.packet["non_goals"]))
+        self.assertIn("complete Repository Step 15", "\n".join(self.packet["non_goals"]))
         self.assertTrue(
             any(
-                "add, remove or modify a permanent workflow" in non_goal
+                "permanent CI workflows" in non_goal
                 for non_goal in self.packet["non_goals"]
             )
         )
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "define Phase 8C universal automation",
+            "subscribe global search generation g3",
             "\n".join(self.packet["deliverables"]),
+        )
+        self.assertIn(
+            "does not complete Step 15",
+            self.packet["objective"],
         )
 
     def test_repository_map_reflects_current_workspace(self) -> None:
