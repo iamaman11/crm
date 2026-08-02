@@ -49,11 +49,33 @@ jobs:
           from pathlib import Path
           path = Path("scripts/apply_step17_telemetry_patch.py")
           text = path.read_text(encoding="utf-8")
-          old = r'''r'(set\\(packet\\["allowed_paths"\\]\\),\\n\\s*)\\{.*?\\}(,?\\n\\s*\\),)' '''.rstrip()
-          new = r'''r'(set\\((?:self\\.)?packet\\["allowed_paths"\\]\\),\\n\\s*)\\{.*?\\}(,?\\n\\s*\\))' '''.rstrip()
-          if text.count(old) != 1:
-              raise SystemExit(f"expected one complete matcher target, found {text.count(old)}")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          start_marker = "def replace_allowed_set(path: str, items: list[str]) -> None:\n"
+          end_marker = "def replace_required_checks(path: str, checks: list[str]) -> None:\n"
+          if text.count(start_marker) != 1 or text.count(end_marker) != 1:
+              raise SystemExit("expected exactly one pair of packet helper boundaries")
+          start = text.index(start_marker)
+          end = text.index(end_marker)
+          if start >= end:
+              raise SystemExit("packet helper boundaries are out of order")
+          replacement = r'''def replace_allowed_set(path: str, items: list[str]) -> None:
+              content = read(path)
+              pattern = re.compile(
+                  r'(set\((?:self\.)?packet\["allowed_paths"\]\),\n\s*)\{.*?\}(,?\n\s*\))',
+                  re.DOTALL,
+              )
+              body = "{\n" + "".join(f'                "{item}",\n' for item in items) + "            }"
+              replaced, count = pattern.subn(
+                  lambda match: match.group(1) + body + match.group(2),
+                  content,
+                  count=1,
+              )
+              if count != 1:
+                  raise RuntimeError(f"{path}: could not replace allowed path assertion")
+              write(path, replaced)
+
+
+          '''
+          path.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
           PY
       - name: Apply deterministic telemetry patch
         run: python scripts/apply_step17_telemetry_patch.py
