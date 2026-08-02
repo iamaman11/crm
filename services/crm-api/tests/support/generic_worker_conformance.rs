@@ -54,3 +54,13 @@ impl WorkerConformanceSuite {
         );
     }
 }
+
+// This source file is included by several independent integration-test crates.
+// Each crate uses a different subset, so anchor every generic entrypoint to keep
+// the shared API type-checked without suppressing legitimate dead-code lints.
+const _: fn(&WorkerConformanceSuite, &str, &(), &()) =
+    WorkerConformanceSuite::assert_no_side_effects::<()>;
+const _: fn(&WorkerConformanceSuite, &(), &(), &(), &()) =
+    WorkerConformanceSuite::assert_retryable_failure_preserves_progress::<(), ()>;
+const _: fn(&WorkerConformanceSuite, &(), &()) =
+    WorkerConformanceSuite::assert_exact_recovery::<()>;
