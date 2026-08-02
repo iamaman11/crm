@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import tomllib
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST = ROOT / "crates/crm-parties-privacy-scope-adapter/Cargo.toml"
 ACCEPTANCE = (
     ROOT
-    / "crates/crm-parties-privacy-scope-adapter/tests/postgres_projection_replay_convergence.rs"
+    / "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs"
 )
 PACKET = ROOT / "repository-packet.json"
 
@@ -18,35 +16,45 @@ PACKET = ROOT / "repository-packet.json"
 class PartyTombstoneRebuildConvergenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.manifest = tomllib.loads(MANIFEST.read_text(encoding="utf-8"))
         cls.acceptance = ACCEPTANCE.read_text(encoding="utf-8")
         cls.packet = json.loads(PACKET.read_text(encoding="utf-8"))
 
-    def test_cross_projection_links_are_test_only(self) -> None:
-        dependencies = self.manifest.get("dependencies", {})
-        dev_dependencies = self.manifest.get("dev-dependencies", {})
-        for package in (
-            "crm-customer-360-composition",
-            "crm-global-search-composition",
-        ):
-            self.assertNotIn(package, dependencies)
-            self.assertIn(package, dev_dependencies)
+    def test_packet_forbids_dependency_and_lockfile_changes(self) -> None:
+        allowed = set(self.packet["allowed_paths"])
+        forbidden = set(self.packet["forbidden_paths"])
+        self.assertNotIn("Cargo.lock", allowed)
+        self.assertNotIn("Cargo.toml", allowed)
+        self.assertNotIn("crates/crm-application-runtime/Cargo.toml", allowed)
+        self.assertIn("Cargo.lock", forbidden)
+        self.assertIn("Cargo.toml", forbidden)
+        self.assertIn("crates/crm-application-runtime/Cargo.toml", forbidden)
+        self.assertIn("crates/crm-parties-privacy-scope-adapter/**", forbidden)
 
-    def test_acceptance_uses_real_owner_action_executor_and_event(self) -> None:
+    def test_acceptance_uses_canonical_production_owner_execution(self) -> None:
         for marker in (
-            "PostgresPrivacyOwnerActionExecutor::new",
-            ".execute(&definition, request)",
+            "build_canonical_internal_owner_execution",
+            ".execute_next(OwnerExecutionInvocation",
+            "execution.owner_invoked",
+            "PrivacyOwnerOutcomeStatus::Succeeded",
             "parties.privacy.action.apply.completed",
-            "PrivacyOwnerActionAttempt::build",
-            "PrivacyOwnerActionCommand::from_attempt",
-            "owner_action_input_payload",
         ):
             self.assertIn(marker, self.acceptance)
         self.assertNotIn(
             "INSERT INTO crm.outbox_events",
             self.acceptance,
-            "the privacy event must come from the production owner-action executor",
+            "the privacy event must come from canonical production owner execution",
         )
+
+    def test_acceptance_persists_canonical_source_state(self) -> None:
+        for marker in (
+            "encode_privacy_case_state",
+            "encode_action_plan_state",
+            "encode_retention_decision_state",
+            "persisted_contract()",
+            '"schema_version": "crm.parties.state/v1"',
+            "EvidenceClass::RetainMinimizedEvidence",
+        ):
+            self.assertIn(marker, self.acceptance)
 
     def test_acceptance_proves_stale_state_then_rebuild_convergence(self) -> None:
         for marker in (
@@ -88,9 +96,7 @@ class PartyTombstoneRebuildConvergenceTests(unittest.TestCase):
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                "Cargo.lock",
-                "crates/crm-parties-privacy-scope-adapter/Cargo.toml",
-                "crates/crm-parties-privacy-scope-adapter/tests/postgres_projection_replay_convergence.rs",
+                "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
