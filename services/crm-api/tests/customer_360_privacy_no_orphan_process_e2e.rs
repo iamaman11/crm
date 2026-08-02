@@ -213,14 +213,14 @@ async fn seed_privacy_orphan(
           tenant_id, event_id, business_transaction_id,
           aggregate_type, aggregate_id, aggregate_version, event_sequence,
           event_type, schema_id, schema_version, descriptor_hash,
-          data_class, payload_encoding, maximum_payload_size, retention_policy_id,
-          payload_bytes, occurred_at
+          data_class, payload_encoding, deduplication_key,
+          maximum_payload_size, retention_policy_id, payload_bytes, occurred_at
         ) VALUES (
           $1, $2, $3, 'parties.party', $4, 2, 2,
           'parties.privacy.action.apply.completed',
           'crm.customer-privacy.owner_action.event', '1.0.0', $5,
-          'restricted', 'restricted_json', 32768, 'crm.customer_privacy.owner_action_command',
-          $6, clock_timestamp()
+          'restricted', 'restricted_json', $2,
+          32768, 'crm.customer_privacy.owner_action_command', $6, clock_timestamp()
         )
         "#,
     )
