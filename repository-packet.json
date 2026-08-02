@@ -11,7 +11,7 @@
     126,
     194
   ],
-  "objective": "Begin Repository Step 17 with a deterministic lifecycle registry for every published capability and event, exact internal and declared external consumer inventory, governed deprecation metadata and a fail-closed retirement gate. Preserve the existing Buf compatibility checks, forbid silent reactivation or lifecycle-window rewrites, and prevent removal until prior deprecation, consumer migration and a full zero-usage telemetry lookback are proven. The packet also removes one unnecessary unregistered dead-code suppression discovered in the accepted Step 16 generic worker helper, preserving the reduction-only suppression ceiling instead of raising it. This bounded foundation does not add production telemetry and does not complete Step 17.",
+  "objective": "Begin Repository Step 17 with a deterministic lifecycle registry for every published capability and event, exact internal and declared external consumer inventory, governed deprecation metadata and a fail-closed retirement gate. Preserve the existing Buf compatibility checks, freeze the provider and binding of every published coordinate, forbid silent consumer disappearance, reactivation or lifecycle-evidence rewrites, and prevent removal until prior deprecation, consumer migration and a full zero-usage telemetry lookback are proven. The packet also removes one unnecessary unregistered dead-code suppression discovered in the accepted Step 16 generic worker helper, preserving the reduction-only suppression ceiling instead of raising it. This bounded foundation does not add production telemetry and does not complete Step 17.",
   "allowed_paths": [
     ".github/workflows/contracts.yml",
     "affected-scope-policy.json",
@@ -20,10 +20,12 @@
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
     "scripts/contract_lifecycle.py",
+    "scripts/contract_lifecycle_transitions.py",
     "scripts/generate_contract_lifecycle.py",
     "services/crm-api/tests/support/generic_worker_conformance.rs",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_contract_lifecycle.py",
+    "tests/test_contract_lifecycle_transitions.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
@@ -51,6 +53,9 @@
     "block retirement while live internal or external consumers remain or migration and zero-usage lookback evidence is incomplete",
     "extend the existing Contract CI and affected-scope ownership instead of adding a duplicate permanent workflow",
     "regenerate docs/ACTIVE_PACKET.md and bind packet/navigation guards to the exact Step 17 baseline",
+    "freeze the provider module and RPC or event binding of every published coordinate until a separately versioned replacement is introduced",
+    "preserve external-consumer lifecycle records across base-to-head transitions and reject missing active history, owner changes or regressing migration evidence",
+    "reject future-dated lifecycle evidence, decreasing policy or telemetry windows and missing repository migration guides",
     "remove the unnecessary Step 16 generic worker dead-code suppression and preserve the accepted suppression ceiling of 91 occurrences"
   ],
   "required_checks": [
@@ -62,7 +67,7 @@
     "Rust CI"
   ],
   "acceptance": [
-    "the branch is based exactly on main commit 5dca69fa7af24bd32d635b80849d47ff54cebd3e and contains only the twelve declared Step 17 foundation files",
+    "the branch is based exactly on main commit 5dca69fa7af24bd32d635b80849d47ff54cebd3e and contains only the fourteen declared Step 17 foundation files",
     "the existing Buf build, format, lint, binding-generation and breaking-change checks remain intact",
     "the generated lifecycle registry contains every currently published capability and event exactly once with its provider, canonical contract-binding registry digest and sorted consumer inventory",
     "an unpublished internal or external coordinate fails closed and generated lifecycle drift is a Contract CI failure",
@@ -72,6 +77,9 @@
     "current production contracts remain active and no public coordinate, Protobuf schema, descriptor hash, route, module manifest or runtime behavior changes",
     "no new permanent workflow, package, dependency, Cargo.lock change, database schema, migration, worker or Customer Privacy behavior",
     "the unnecessary generic worker dead-code suppression is removed, no replacement suppression is added and the accepted repository ceiling remains 91 occurrences",
+    "the provider module and RPC or event binding of an already published coordinate cannot change under the same id and version",
+    "external-consumer records cannot disappear, change owner, regress evidence or appear already migrated without active base history",
+    "deprecation and migration evidence cannot be future-dated, minimum windows cannot decrease and every declared migration guide must exist in the repository",
     "one unchanged meaningful user-authored head passes every applicable permanent workflow and final changed-file, comment, review and thread inspection",
     "Repository Step 17 remains in progress; production deprecation telemetry, representative consumer migration and final evidence synchronization are not falsely claimed"
   ],
