@@ -245,9 +245,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                "Cargo.lock",
-                "crates/crm-parties-privacy-scope-adapter/Cargo.toml",
-                "crates/crm-parties-privacy-scope-adapter/tests/postgres_projection_replay_convergence.rs",
+                "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
@@ -262,7 +260,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "Complexity Baseline CI",
                 "Rust Generated Sync",
                 "Rust CI",
-                "Parties Privacy Scope CI",
+                "Application Runtime CI",
+                "Customer Privacy Owner Execution CI",
             ],
         )
         self.assertIn("complete Repository Step 15", "\n".join(self.packet["non_goals"]))
@@ -275,12 +274,16 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "PostgresPrivacyOwnerActionExecutor",
+            "build_canonical_internal_owner_execution",
             "\n".join(self.packet["deliverables"]),
         )
         self.assertIn(
             "rebuild Customer 360 from immutable history and prove the stale document becomes a source-version-2 privacy-minimized tombstone with empty root membership",
             self.packet["deliverables"],
+        )
+        self.assertIn(
+            "workspace package count, internal dependency edges, manifests and Cargo.lock remain unchanged",
+            self.packet["acceptance"],
         )
         self.assertIn(
             "automatic fresh-generation rollout",
