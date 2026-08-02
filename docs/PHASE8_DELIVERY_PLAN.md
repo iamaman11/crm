@@ -101,7 +101,7 @@ Latest accepted public Customer Privacy inventory remains:
 
 Trusted-internal planning, retention evaluation, replay-safe owner execution, access/export assembly and exact-nine action execution remain non-public.
 
-## 5. Accepted Repository Step 14 and Step 15 architecture results
+## 5. Accepted Repository Steps 14–16 architecture results
 
 Repository Step 14 and architecture Stage G are complete through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
 
@@ -116,6 +116,13 @@ Repository Step 15 is complete through:
 - PR #267 / source `f1b72dbee09f152005cb3584b9bcc1573bf2c4fe` / merge `4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf` / 19 of 19.
 
 The combined Step 15 evidence proves stable Party privacy tombstones, strict lineage, Search and Customer 360 non-disclosure, deterministic rebuild/replay, automatic `customer.customer-360.v2` rollout and real `crm-api` process-owned no-orphan repair on clean and rollback/reapplied schemas.
+
+Repository Step 16 is complete through:
+
+- PR #269 / source `74b1d7b0f8764fcd90839b7aab25f8f82fe5e552` / merge `6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd` / 20 of 20 — reusable business-neutral worker conformance and representative Customer Enrichment / CRM API import adoption;
+- PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17 — mechanically observed two-executor contention and exactly-once Party import convergence.
+
+Step 16 proves denial without side effects, retryable progress preservation, exact restart recovery, completed replay, tenant isolation and contention convergence without a generic lease API or production-algorithm change. Customer Privacy still has **0 Customer Privacy workers**; its real worker lifecycle remains Step 19.
 
 Exact measured result remains:
 
@@ -132,13 +139,13 @@ These results do not complete Phase 8A.11. Customer Privacy remains incomplete a
 
 The remaining work is sequenced, not parallel:
 
-### Repository Step 16 — next, not started
+### Repository Step 16 — complete through PR #270
 
-- reusable generic worker conformance;
-- activation, authorization, tenant, replay, lease/crash and no-side-effect guarantees;
-- representative contrasting real-worker adoption without owner-specific logic in generic algorithms.
+- reusable generic worker conformance is accepted;
+- activation, authorization, tenant, replay, crash/restart and no-side-effect guarantees are proven;
+- representative contrasting real-worker adoption and exactly-once contention convergence are accepted without owner-specific logic in generic algorithms.
 
-### Repository Step 17
+### Repository Step 17 — next, not started
 
 - contract compatibility and published-version gates;
 - deprecation telemetry;
@@ -165,7 +172,7 @@ The remaining work is sequenced, not parallel:
 
 - final Phase 8A product and operations closure against every accepted invariant.
 
-No Step 17 or later implementation may begin before Step 16 is accepted and synchronized.
+No Step 18 or later implementation may begin before Step 17 is accepted and synchronized.
 
 ## 7. Phase 8A closure criteria
 
@@ -276,10 +283,10 @@ No later product train may be represented as complete from backend/platform work
 
 ## 12. Binding repository continuation
 
-Repository Steps 1–15 are complete.
+Repository Steps 1–16 are complete.
 
-16. Repository Step 16 — reusable worker conformance — **next, not started**;
-17. Repository Step 17 — contract lifecycle enforcement;
+16. Repository Step 16 — reusable worker conformance — **complete through PR #270**;
+17. Repository Step 17 — contract lifecycle enforcement — **next, not started**;
 18. Repository Step 18 — deterministic local lifecycle;
 19. Repository Step 19 — Customer Privacy worker and full E2E;
 20. Repository Step 20 — frontend and operations evidence;
