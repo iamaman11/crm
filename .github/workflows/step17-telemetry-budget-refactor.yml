@@ -69,6 +69,45 @@ jobs:
           PY
       - name: Apply budget-neutral refactor
         run: python scripts/apply_step17_telemetry_budget_refactor.py
+      - name: Remove final process-host boilerplate
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/crm-application-runtime/src/runtime.rs")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              '''impl fmt::Debug for ApplicationComponents {
+              fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                  formatter
+                      .debug_struct("ApplicationComponents")
+                      .finish_non_exhaustive()
+              }
+          }
+          ''': '''impl fmt::Debug for ApplicationComponents {
+              fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                  formatter.debug_struct("ApplicationComponents").finish_non_exhaustive()
+              }
+          }
+          ''',
+              '''    pub fn last_worker_error(&self) -> Option<String> {
+                  self.last_worker_error
+                      .lock()
+                      .ok()
+                      .and_then(|value| value.clone())
+              }
+          ''': '''    pub fn last_worker_error(&self) -> Option<String> {
+                  self.last_worker_error.lock().ok()?.clone()
+              }
+          ''',
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected one boilerplate target, found {text.count(old)}")
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
       - name: Regenerate governed artifacts
         run: |
           python scripts/generate_contract_telemetry_catalog.py --write
