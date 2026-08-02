@@ -44,9 +44,8 @@ mod retryable_process {
         )
         .into_bytes();
         let baseline = party_target_effects(&admin, TENANT_A).await;
-        let conformance = WorkerConformanceSuite::new(
-            "crm.customer-data-operations/party-import-execution",
-        );
+        let conformance =
+            WorkerConformanceSuite::new("crm.customer-data-operations/party-import-execution");
 
         let (mut process, http_addr, grpc_addr) = spawn_api(&database_url).await;
         wait_until_ready(&http, &mut process, &http_addr).await;

@@ -97,9 +97,8 @@ mod process {
             ModuleId::try_new(MODULE_ID).unwrap(),
             worker.clone(),
         );
-        let conformance = WorkerConformanceSuite::new(
-            "crm.customer-enrichment/party-display-name-application",
-        );
+        let conformance =
+            WorkerConformanceSuite::new("crm.customer-enrichment/party-display-name-application");
 
         set_status(&admin, "suspended").await;
         let inactive_before = worker_state(&store, &admin, &owner).await;
@@ -175,7 +174,11 @@ mod process {
             .await
             .unwrap()
             .map(|value| value.applied_event_count);
-        (attempt_count(admin).await, checkpoint, owner.0.lock().unwrap().len())
+        (
+            attempt_count(admin).await,
+            checkpoint,
+            owner.0.lock().unwrap().len(),
+        )
     }
 
     async fn set_status(admin: &PgPool, status: &str) {
