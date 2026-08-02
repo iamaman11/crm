@@ -18,8 +18,8 @@ use crm_customer_privacy_production::{
 use crm_global_search_composition::{GlobalSearchWorker, INITIAL_GLOBAL_SEARCH_GENERATION_ID};
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ModuleId, PayloadEncoding,
-    PortFuture, RecordId, RecordRef, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TenantId,
-    TraceId, TypedPayload,
+    PortFuture, RecordId, RecordRef, RetentionPolicyId, SchemaId, SchemaVersion, SdkError,
+    TenantId, TraceId, TypedPayload,
 };
 use crm_parties_capability_adapter::{RECORD_TYPE as PARTY_RECORD_TYPE, persisted_contract};
 use crm_query_runtime::{QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision};
@@ -83,8 +83,7 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
         "customer-privacy.retention-decision",
         decision.decision_id().as_str(),
         1,
-        retention_decision_persisted_payload(&decision)
-            .expect("encode retention decision fixture"),
+        retention_decision_persisted_payload(&decision).expect("encode retention decision fixture"),
         &format!("fixture-decision-{run_id}"),
     )
     .await;
