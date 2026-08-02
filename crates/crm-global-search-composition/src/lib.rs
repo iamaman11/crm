@@ -31,7 +31,7 @@ use std::sync::Arc;
 pub const GLOBAL_SEARCH_INDEX_ID: &str = "crm.global-search";
 pub const GLOBAL_SEARCH_SCHEMA_VERSION: &str = "1";
 pub const SEARCH_INDEXER_CONSUMER_MODULE_ID: &str = "crm.search-indexer";
-pub const INITIAL_GLOBAL_SEARCH_GENERATION_ID: &str = "g2";
+pub const INITIAL_GLOBAL_SEARCH_GENERATION_ID: &str = "g3";
 
 const SALES_MODULE_ID: &str = "crm.sales";
 const ACTIVITIES_MODULE_ID: &str = "crm.activities";
@@ -56,6 +56,19 @@ const PARTY_CREATED: &str = "parties.party.created";
 const PARTY_UPDATED: &str = "parties.party.updated";
 const PARTY_CREATED_SCHEMA: &str = "crm.parties.v1.PartyCreatedEvent";
 const PARTY_UPDATED_SCHEMA: &str = "crm.parties.v1.PartyUpdatedEvent";
+const PARTY_PRIVACY_ACTION_COMPLETED: &str = "parties.privacy.action.apply.completed";
+const PARTY_PRIVACY_ACTION_CAPABILITY: &str = "parties.privacy.action.apply";
+const OWNER_ACTION_EVENT_SCHEMA: &str = "crm.customer-privacy.owner_action.event";
+const OWNER_ACTION_EVENT_DESCRIPTOR_HASH: [u8; 32] = [
+    213, 213, 180, 13, 242, 156, 208, 33, 85, 11, 63, 152, 114, 199, 7, 154, 115, 225, 181, 172,
+    233, 62, 83, 56, 65, 78, 35, 3, 176, 230, 31, 123,
+];
+const OWNER_ACTION_EVENT_MAXIMUM_BYTES: u64 = 32 * 1024;
+const OWNER_ACTION_EVENT_RETENTION_POLICY: &str = "crm.customer_privacy.owner_action_command";
+const PARTY_SEARCH_LIFECYCLE_FIELD: &str = "privacy_lifecycle";
+const PARTY_SEARCH_ACTIVE: &str = "active";
+const PARTY_SEARCH_ERASED: &str = "erased";
+const PARTY_SEARCH_MINIMIZED: &str = "privacy_minimized";
 
 #[derive(Debug, Clone)]
 pub struct SearchProjectionGeneration {
@@ -80,6 +93,7 @@ impl SearchProjectionGeneration {
                 TASK_UPDATED,
                 PARTY_CREATED,
                 PARTY_UPDATED,
+                PARTY_PRIVACY_ACTION_COMPLETED,
             ])?,
             Arc::new(GlobalSearchProjectionHandler {
                 generation_id: generation_id.clone(),
@@ -221,6 +235,9 @@ impl ProjectionHandler for GlobalSearchProjectionHandler {
                     })?,
                 )?
             }
+            PARTY_PRIVACY_ACTION_COMPLETED => {
+                party_privacy_action_document(&self.generation_id, delivery)?
+            }
             _ => {
                 return Err(search_event_invalid(
                     "Global search projection event type is unsupported",
@@ -275,8 +292,129 @@ fn party_document(
         BTreeMap::from([
             ("display_name".to_owned(), display_name),
             ("kind".to_owned(), kind.to_owned()),
+            (
+                PARTY_SEARCH_LIFECYCLE_FIELD.to_owned(),
+                PARTY_SEARCH_ACTIVE.to_owned(),
+            ),
         ]),
     )
+}
+
+fn party_privacy_action_document(
+    generation_id: &str,
+    delivery: &EventDelivery,
+) -> Result<ProjectionDocumentWrite, SdkError> {
+    let lifecycle = validate_party_privacy_action(delivery)?;
+    search_document(
+        generation_id,
+        PARTIES_MODULE_ID,
+        PARTY_RESOURCE_TYPE,
+        delivery.aggregate.record_id.as_str(),
+        delivery.aggregate_version,
+        BTreeMap::from([(
+            PARTY_SEARCH_LIFECYCLE_FIELD.to_owned(),
+            "suppressed".to_owned(),
+        )]),
+        BTreeMap::from([(
+            PARTY_SEARCH_LIFECYCLE_FIELD.to_owned(),
+            lifecycle.to_owned(),
+        )]),
+    )
+}
+
+fn validate_party_privacy_action(delivery: &EventDelivery) -> Result<&'static str, SdkError> {
+    if delivery.validate().is_err()
+        || delivery.source_module_id.as_str() != PARTIES_MODULE_ID
+        || delivery.aggregate.record_type.as_str() != PARTY_RESOURCE_TYPE
+        || delivery.event_version.as_str() != CONTRACT_VERSION
+        || delivery.payload.owner.as_str() != PARTIES_MODULE_ID
+        || delivery.payload.schema_id.as_str() != OWNER_ACTION_EVENT_SCHEMA
+        || delivery.payload.schema_version.as_str() != CONTRACT_VERSION
+        || delivery.payload.descriptor_hash != OWNER_ACTION_EVENT_DESCRIPTOR_HASH
+        || delivery.payload.data_class != DataClass::Restricted
+        || delivery.payload.encoding != PayloadEncoding::Json
+        || delivery.payload.maximum_size_bytes != OWNER_ACTION_EVENT_MAXIMUM_BYTES
+        || delivery.payload.retention_policy_id.as_str() != OWNER_ACTION_EVENT_RETENTION_POLICY
+    {
+        return Err(search_event_invalid(
+            "Party privacy owner-action event contract identity is invalid",
+        ));
+    }
+
+    let bytes = delivery.payload.bytes.as_slice();
+    require_canonical_json_field(bytes, "tenant_id", delivery.tenant_id.as_str())?;
+    require_canonical_json_field(bytes, "owner_module_id", PARTIES_MODULE_ID)?;
+    require_canonical_json_field(
+        bytes,
+        "owner_capability_id",
+        PARTY_PRIVACY_ACTION_CAPABILITY,
+    )?;
+    require_canonical_json_field(bytes, "owner_capability_version", CONTRACT_VERSION)?;
+    require_canonical_json_field(bytes, "resource_type", PARTY_RESOURCE_TYPE)?;
+    require_canonical_json_field(bytes, "resource_id", delivery.aggregate.record_id.as_str())?;
+
+    let encoded_previous_version = canonical_json_string_field(bytes, "resource_version")?;
+    let previous_version = encoded_previous_version
+        .parse::<i64>()
+        .map_err(|error| search_event_invalid(error.to_string()))?;
+    if previous_version <= 0
+        || previous_version.to_string() != encoded_previous_version
+        || previous_version
+            .checked_add(1)
+            .is_none_or(|next| next != delivery.aggregate_version)
+    {
+        return Err(search_event_invalid(
+            "Party privacy owner-action version lineage is invalid",
+        ));
+    }
+
+    match canonical_json_string_field(bytes, "action_code")?.as_str() {
+        "delete" => Ok(PARTY_SEARCH_ERASED),
+        "anonymize" => Ok(PARTY_SEARCH_MINIMIZED),
+        _ => Err(search_event_invalid(
+            "Party privacy owner-action kind is unsupported by search convergence",
+        )),
+    }
+}
+
+fn require_canonical_json_field(bytes: &[u8], field: &str, expected: &str) -> Result<(), SdkError> {
+    if canonical_json_string_field(bytes, field)? != expected {
+        return Err(search_event_invalid(format!(
+            "Party privacy owner-action field {field} is invalid"
+        )));
+    }
+    Ok(())
+}
+
+fn canonical_json_string_field(bytes: &[u8], field: &str) -> Result<String, SdkError> {
+    let text =
+        std::str::from_utf8(bytes).map_err(|error| search_event_invalid(error.to_string()))?;
+    let needle = format!("\"{field}\":\"");
+    let mut positions = text.match_indices(&needle);
+    let Some((start, _)) = positions.next() else {
+        return Err(search_event_invalid(format!(
+            "Party privacy owner-action field {field} is missing"
+        )));
+    };
+    if positions.next().is_some() {
+        return Err(search_event_invalid(format!(
+            "Party privacy owner-action field {field} is duplicated"
+        )));
+    }
+    let value_start = start + needle.len();
+    let remainder = &text[value_start..];
+    let value_end = remainder.find('"').ok_or_else(|| {
+        search_event_invalid(format!(
+            "Party privacy owner-action field {field} is unterminated"
+        ))
+    })?;
+    let value = &remainder[..value_end];
+    if value.contains('\\') {
+        return Err(search_event_invalid(format!(
+            "Party privacy owner-action field {field} is not canonical"
+        )));
+    }
+    Ok(value.to_owned())
 }
 
 fn single_title_document(
@@ -491,11 +629,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generation_registry_subscribes_to_six_authoritative_snapshot_events() {
-        let generation = SearchProjectionGeneration::new("g2-test").unwrap();
-        assert_eq!(generation.projection_id.as_str(), "search.global.g2-test");
+    fn generation_registry_subscribes_to_owner_snapshots_and_party_privacy_actions() {
+        let generation = SearchProjectionGeneration::new("g3-test").unwrap();
+        assert_eq!(generation.projection_id.as_str(), "search.global.g3-test");
         assert_eq!(generation.registry.len(), 1);
-        let definition = generation.registry.get("search.global.g2-test").unwrap();
+        let definition = generation.registry.get("search.global.g3-test").unwrap();
         assert_eq!(
             definition.consumer_module_id().as_str(),
             SEARCH_INDEXER_CONSUMER_MODULE_ID
@@ -505,28 +643,48 @@ mod tests {
             .iter()
             .map(|event_type| event_type.as_str())
             .collect::<Vec<_>>();
-        assert_eq!(event_types.len(), 6);
+        assert_eq!(event_types.len(), 7);
         assert!(event_types.contains(&SALES_CREATED));
         assert!(event_types.contains(&SALES_UPDATED));
         assert!(event_types.contains(&TASK_CREATED));
         assert!(event_types.contains(&TASK_UPDATED));
         assert!(event_types.contains(&PARTY_CREATED));
         assert!(event_types.contains(&PARTY_UPDATED));
+        assert!(event_types.contains(&PARTY_PRIVACY_ACTION_COMPLETED));
         assert!(!event_types.contains(&"sales.deal.stage_changed"));
         assert!(!event_types.contains(&"activities.task.completed"));
     }
 
     #[test]
-    fn production_generation_advances_to_g2_for_subscription_rebuild() {
-        assert_eq!(INITIAL_GLOBAL_SEARCH_GENERATION_ID, "g2");
+    fn production_generation_advances_to_g3_for_privacy_event_replay() {
+        assert_eq!(INITIAL_GLOBAL_SEARCH_GENERATION_ID, "g3");
         let generation = SearchProjectionGeneration::new(INITIAL_GLOBAL_SEARCH_GENERATION_ID)
             .expect("valid production search generation");
-        assert_eq!(generation.projection_id.as_str(), "search.global.g2");
+        assert_eq!(generation.projection_id.as_str(), "search.global.g3");
+    }
+
+    #[test]
+    fn canonical_owner_action_fields_are_unique_and_unescaped() {
+        let bytes = br#"{"action_code":"delete","owner_module_id":"crm.parties"}"#;
+        assert_eq!(
+            canonical_json_string_field(bytes, "action_code").unwrap(),
+            "delete"
+        );
+        assert_eq!(
+            canonical_json_string_field(bytes, "owner_module_id").unwrap(),
+            "crm.parties"
+        );
+
+        let duplicate = br#"{"action_code":"delete","action_code":"anonymize"}"#;
+        assert!(canonical_json_string_field(duplicate, "action_code").is_err());
+
+        let escaped = br#"{"action_code":"dele\u0074e"}"#;
+        assert!(canonical_json_string_field(escaped, "action_code").is_err());
     }
 
     #[test]
     fn generation_id_rejects_path_or_whitespace_characters() {
-        let error = SearchProjectionGeneration::new("g2/../../bad generation").unwrap_err();
+        let error = SearchProjectionGeneration::new("g3/../../bad generation").unwrap_err();
         assert_eq!(error.code, "GLOBAL_SEARCH_CONFIGURATION_INVALID");
     }
 }
