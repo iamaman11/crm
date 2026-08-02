@@ -42,6 +42,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
+                ".github/workflows/customer-privacy-owner-execution.yml",
                 "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
@@ -72,6 +73,10 @@ class RepositoryNavigationTests(unittest.TestCase):
         )
         self.assertIn(
             "repeat rebuild and reindex and prove authoritative Party, outbox and audit evidence counts remain unchanged",
+            packet["deliverables"],
+        )
+        self.assertIn(
+            "extend the existing Customer Privacy Owner Execution CI gate to compile, lint and execute this PostgreSQL acceptance on clean and reapplied schemas",
             packet["deliverables"],
         )
 
