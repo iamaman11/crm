@@ -16,6 +16,8 @@ const GENERATION_TWO: &str = "generation-2";
 const PROJECTION_ONE: &str = "search.global.g1";
 const PROJECTION_TWO: &str = "search.global.g2";
 const PROJECTION_B: &str = "search.global.b1";
+const ERASED_PARTY_ID: &str = "party-acme-erased";
+const MINIMIZED_PARTY_ID: &str = "party-acme-minimized";
 
 #[tokio::test(flavor = "current_thread")]
 async fn active_generation_search_is_deterministic_switchable_and_tenant_isolated() {
@@ -43,6 +45,24 @@ async fn active_generation_search_is_deterministic_switchable_and_tenant_isolate
         ],
     )
     .await;
+    seed_non_active_party(
+        &admin,
+        PROJECTION_ONE,
+        ERASED_PARTY_ID,
+        2,
+        "Acme Erased Person",
+        "erased",
+    )
+    .await;
+    seed_non_active_party(
+        &admin,
+        PROJECTION_ONE,
+        MINIMIZED_PARTY_ID,
+        3,
+        "Acme Privacy Minimized Person",
+        "privacy_minimized",
+    )
+    .await;
     seed_projection_generation(
         &admin,
         PROJECTION_TWO,
@@ -59,6 +79,19 @@ async fn active_generation_search_is_deterministic_switchable_and_tenant_isolate
         .activate_search_generation(&tenant_a, INDEX_ID, GENERATION_ONE)
         .await
         .expect("activate generation one");
+
+    let privacy_safe = SearchCandidateStore::search_candidates(
+        &store,
+        unfiltered_request(TENANT_A, None, 10),
+    )
+    .await
+    .expect("search must exclude non-active Party documents");
+    assert_eq!(privacy_safe.candidates.len(), 2);
+    assert!(privacy_safe.candidates.iter().all(|candidate| {
+        candidate.resource.record_type.as_str() == "sales.deal"
+            && candidate.resource.record_id.as_str() != ERASED_PARTY_ID
+            && candidate.resource.record_id.as_str() != MINIMIZED_PARTY_ID
+    }));
 
     let first = SearchCandidateStore::search_candidates(&store, request(TENANT_A, None, 1))
         .await
@@ -134,6 +167,21 @@ fn request(
     }
 }
 
+fn unfiltered_request(
+    tenant_id: &str,
+    after: Option<SearchCandidateCursor>,
+    page_size: u32,
+) -> SearchCandidateRequest {
+    SearchCandidateRequest {
+        tenant_id: TenantId::try_new(tenant_id).unwrap(),
+        index_id: SearchIndexId::try_new(INDEX_ID).unwrap(),
+        normalized_text: "acme".to_owned(),
+        resource_types: BTreeSet::new(),
+        after,
+        page_size,
+    }
+}
+
 async fn seed_projection_generation(
     admin: &PgPool,
     projection_id: &str,
@@ -188,6 +236,52 @@ async fn seed_projection_generation(
         .await
         .expect("seed search projection document");
     }
+}
+
+async fn seed_non_active_party(
+    admin: &PgPool,
+    projection_id: &str,
+    resource_id: &str,
+    source_version: i64,
+    stale_display_name: &str,
+    lifecycle: &str,
+) {
+    let source_event_id = format!("event-{resource_id}");
+    sqlx::query(
+        r#"
+        INSERT INTO crm.projection_documents (
+          tenant_id, projection_id, resource_type, resource_id,
+          source_version, source_event_id, document
+        )
+        VALUES (
+          $1, $2, 'parties.party', $3, $4, $5,
+          jsonb_build_object(
+            'index_id', $6::text,
+            'generation_id', $7::text,
+            'schema_version', '1',
+            'owner_module_id', 'crm.parties',
+            'search_text', $8::text,
+            'searchable_fields', jsonb_build_object('display_name', $8::text),
+            'display_fields', jsonb_build_object(
+              'display_name', $8::text,
+              'privacy_lifecycle', $9::text
+            )
+          )
+        )
+        "#,
+    )
+    .bind(TENANT_A)
+    .bind(projection_id)
+    .bind(resource_id)
+    .bind(source_version)
+    .bind(source_event_id)
+    .bind(INDEX_ID)
+    .bind(projection_id)
+    .bind(stale_display_name)
+    .bind(lifecycle)
+    .execute(admin)
+    .await
+    .expect("seed non-active Party search projection document");
 }
 
 async fn cleanup(admin: &PgPool) {
