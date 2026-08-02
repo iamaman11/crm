@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -486,16 +487,67 @@ def build_registry(
                 if key not in {"kind", "id", "version", "state"}
             }
         contracts.append(entry)
+    bindings_digest = hashlib.sha256(
+        json.dumps(
+            bindings, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    ).hexdigest()
     registry = {
         "schema_version": SCHEMA_VERSION,
         "policy_schema_version": POLICY_SCHEMA_VERSION,
+        "contract_bindings_digest": f"sha256:{bindings_digest}",
         "contracts": contracts,
     }
     return registry, sorted(set(errors))
 
 
 def render_registry(registry: dict[str, Any]) -> bytes:
-    return (json.dumps(registry, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    columns = ["id", "version", "provider_module_id", "internal_consumers"]
+    published = {"capabilities": [], "events": []}
+    external_consumers: list[dict[str, Any]] = []
+    lifecycle: list[dict[str, Any]] = []
+    for contract in registry["contracts"]:
+        if contract["provider_module_id"] is not None:
+            key = "capabilities" if contract["kind"] == "capability" else "events"
+            published[key].append(
+                [
+                    contract["id"],
+                    contract["version"],
+                    contract["provider_module_id"],
+                    contract["internal_consumers"],
+                ]
+            )
+        for consumer in contract["external_consumers"]:
+            external_consumers.append(
+                {
+                    "kind": contract["kind"],
+                    "id": contract["id"],
+                    "version": contract["version"],
+                    **consumer,
+                }
+            )
+        if "lifecycle" in contract:
+            lifecycle.append(
+                {
+                    "kind": contract["kind"],
+                    "id": contract["id"],
+                    "version": contract["version"],
+                    "state": contract["state"],
+                    **contract["lifecycle"],
+                }
+            )
+    compact = {
+        "schema_version": registry["schema_version"],
+        "policy_schema_version": registry["policy_schema_version"],
+        "contract_bindings_digest": registry["contract_bindings_digest"],
+        "published_columns": columns,
+        "published": published,
+        "external_consumers": external_consumers,
+        "lifecycle": lifecycle,
+    }
+    return (
+        json.dumps(compact, ensure_ascii=False, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
 
 
 def registry_counts(registry: dict[str, Any]) -> tuple[int, int, int, int]:
