@@ -36,6 +36,39 @@ jobs:
         with:
           toolchain: 1.97.1
           components: rustfmt
+      - name: Correct duplicate test setup matcher
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/apply_step17_telemetry_budget_refactor.py")
+          text = path.read_text(encoding="utf-8")
+          call = '''replace_once(
+              adapter,
+              ''' + "'''" + '''        let mut render = None;
+              let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
+          ''' + "'''" + ''',
+              ''' + "'''" + '''        let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
+          ''' + "'''" + ''',
+          )
+          '''
+          if text.count(call) != 2:
+              raise SystemExit(f"expected two duplicate setup calls, found {text.count(call)}")
+          replacement = '''content = read(adapter)
+          old_render_setup = ''' + "'''" + '''        let mut render = None;
+              let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
+          ''' + "'''" + '''
+          new_render_setup = ''' + "'''" + '''        let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
+          ''' + "'''" + '''
+          if content.count(old_render_setup) != 2:
+              raise RuntimeError(
+                  f"{adapter}: expected two render setups, found {content.count(old_render_setup)}"
+              )
+          write(adapter, content.replace(old_render_setup, new_render_setup))
+          '''
+          text = text.replace(call, replacement, 1).replace(call, "", 1)
+          path.write_text(text, encoding="utf-8")
+          PY
       - name: Apply budget-neutral refactor
         run: python scripts/apply_step17_telemetry_budget_refactor.py
       - name: Regenerate governed artifacts
