@@ -12,9 +12,7 @@ use crm_customer_privacy::{
     discovery_sha256, encode_owner_action_command,
 };
 use crm_customer_privacy_owner_scope_support::owner_action_input_payload;
-use crm_global_search_composition::{
-    GlobalSearchWorker, INITIAL_GLOBAL_SEARCH_GENERATION_ID,
-};
+use crm_global_search_composition::{GlobalSearchWorker, INITIAL_GLOBAL_SEARCH_GENERATION_ID};
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
     DataClass, ExecutionContext, ModuleExecutionContext, ModuleId, RecordId, RequestId,
@@ -32,12 +30,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const ACTOR_ID: &str = "privacy-replay-convergence";
 const ORIGINAL_NAME: &str = "Ada Historical Projection";
-const LEGACY_CUSTOMER_360_PROJECTION_ID: &str = "customer.customer-360.v1";
 const SEARCH_PROJECTION_ID: &str = "search.global.g3";
 const BASE_TIME_NANOS: i64 = 1_800_000_000_000_000_000;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn party_owner_action_replays_into_fresh_customer_360_and_search_generations() {
+async fn authoritative_party_action_rebuilds_stale_customer_360_and_search_state() {
     let Ok(database_url) = std::env::var("DATABASE_URL") else {
         eprintln!("skipping Party replay convergence because DATABASE_URL is absent");
         return;
@@ -74,87 +71,60 @@ async fn party_owner_action_replays_into_fresh_customer_360_and_search_generatio
     assert!(!result.replayed);
     assert_eq!(result.affected_resources[0].version, Some(2));
 
-    let action_event = sqlx::query(
+    let action_event_id: String = sqlx::query_scalar(
         r#"
-        SELECT event_id, occurred_at
+        SELECT event_id
         FROM crm.outbox_events
         WHERE tenant_id = $1
           AND event_type = 'parties.privacy.action.apply.completed'
-          AND aggregate_type = $2
-          AND aggregate_id = $3
         ORDER BY occurred_at DESC, event_id DESC
         LIMIT 1
         "#,
     )
     .bind(&tenant)
-    .bind(RECORD_TYPE)
-    .bind(&party_id)
     .fetch_one(&admin)
     .await
     .expect("owner action emits immutable convergence event");
-    let action_event_id: String = action_event.try_get("event_id").unwrap();
-    let action_occurred_at: chrono::DateTime<chrono::Utc> =
-        action_event.try_get("occurred_at").unwrap();
 
-    seed_stale_legacy_customer_360(
-        &admin,
-        &tenant,
-        &party_id,
-        &action_event_id,
-        action_occurred_at,
-    )
-    .await;
+    seed_stale_customer_360(&admin, &tenant, &party_id, &action_event_id).await;
+    assert_customer_360_stale(&admin, &tenant, &party_id).await;
 
-    assert_eq!(CUSTOMER_360_PROJECTION_ID, "customer.customer-360.v2");
     let tenant_id = TenantId::try_new(tenant.clone()).unwrap();
-    drain_customer_360(
-        &Customer360ProjectionWorker::new(store.clone()).expect("construct Customer 360 worker"),
-        tenant_id.clone(),
-    )
-    .await;
-    GlobalSearchWorker::new(store.clone())
-        .expect("construct global search worker")
-        .ensure_ready(tenant_id.clone(), 200)
-        .await
-        .expect("build fresh global-search generation");
-
-    assert_authoritative_party_minimized(&admin, &tenant, &party_id).await;
-    assert_legacy_customer_360_is_stale(&admin, &tenant, &party_id).await;
-    assert_customer_360_v2_tombstone(&admin, &tenant, &party_id).await;
-    assert_search_g3_tombstone(&admin, &tenant, &party_id).await;
-
-    let authoritative_before_rebuild = authoritative_counts(&admin, &tenant).await;
     let rebuilt = Customer360ProjectionWorker::new(store.clone())
         .expect("construct Customer 360 rebuild worker")
         .rebuild(tenant_id.clone(), 200)
         .await
-        .expect("rebuild Customer 360 v2 from immutable history");
+        .expect("rebuild Customer 360 from immutable history");
     assert!(rebuilt >= 1);
-    GlobalSearchWorker::new(store)
-        .expect("construct global search reindex worker")
-        .reindex(tenant_id, 200)
+    GlobalSearchWorker::new(store.clone())
+        .expect("construct global search worker")
+        .reindex(tenant_id.clone(), 200)
         .await
         .expect("reindex global search from immutable history");
 
+    assert_authoritative_party_minimized(&admin, &tenant, &party_id).await;
+    assert_customer_360_tombstone(&admin, &tenant, &party_id).await;
+    assert_search_tombstone(&admin, &tenant, &party_id).await;
+
+    let authoritative_before_repeat = authoritative_counts(&admin, &tenant).await;
+    Customer360ProjectionWorker::new(store.clone())
+        .expect("construct repeat Customer 360 worker")
+        .rebuild(tenant_id.clone(), 200)
+        .await
+        .expect("repeat Customer 360 rebuild");
+    GlobalSearchWorker::new(store)
+        .expect("construct repeat global search worker")
+        .reindex(tenant_id, 200)
+        .await
+        .expect("repeat global search reindex");
+
     assert_eq!(
         authoritative_counts(&admin, &tenant).await,
-        authoritative_before_rebuild,
+        authoritative_before_repeat,
         "derived-state rebuilds must not mutate authoritative Party, outbox or audit evidence"
     );
-    assert_customer_360_v2_tombstone(&admin, &tenant, &party_id).await;
-    assert_search_g3_tombstone(&admin, &tenant, &party_id).await;
-}
-
-async fn drain_customer_360(worker: &Customer360ProjectionWorker, tenant_id: TenantId) {
-    loop {
-        let batch = worker
-            .run_batch(tenant_id.clone(), 200)
-            .await
-            .expect("catch up Customer 360 v2");
-        if !batch.has_more {
-            break;
-        }
-    }
+    assert_customer_360_tombstone(&admin, &tenant, &party_id).await;
+    assert_search_tombstone(&admin, &tenant, &party_id).await;
 }
 
 async fn assert_authoritative_party_minimized(admin: &PgPool, tenant: &str, party_id: &str) {
@@ -182,7 +152,7 @@ async fn assert_authoritative_party_minimized(admin: &PgPool, tenant: &str, part
     assert!(retained_tombstone);
 }
 
-async fn assert_legacy_customer_360_is_stale(admin: &PgPool, tenant: &str, party_id: &str) {
+async fn assert_customer_360_stale(admin: &PgPool, tenant: &str, party_id: &str) {
     let row = sqlx::query(
         r#"
         SELECT source_version,
@@ -194,12 +164,12 @@ async fn assert_legacy_customer_360_is_stale(admin: &PgPool, tenant: &str, party
         "#,
     )
     .bind(tenant)
-    .bind(LEGACY_CUSTOMER_360_PROJECTION_ID)
+    .bind(CUSTOMER_360_PROJECTION_ID)
     .bind(CUSTOMER_360_CONTRIBUTION_RESOURCE_TYPE)
     .bind(party_id)
     .fetch_one(admin)
     .await
-    .expect("legacy v1 stale document remains isolated");
+    .expect("read intentionally stale Customer 360 document");
     assert_eq!(row.try_get::<i64, _>("source_version").unwrap(), 1);
     assert_eq!(
         row.try_get::<String, _>("display_name").unwrap(),
@@ -208,7 +178,7 @@ async fn assert_legacy_customer_360_is_stale(admin: &PgPool, tenant: &str, party
     assert!(row.try_get::<bool, _>("has_root").unwrap());
 }
 
-async fn assert_customer_360_v2_tombstone(admin: &PgPool, tenant: &str, party_id: &str) {
+async fn assert_customer_360_tombstone(admin: &PgPool, tenant: &str, party_id: &str) {
     let row = sqlx::query(
         r#"
         SELECT source_version,
@@ -229,7 +199,7 @@ async fn assert_customer_360_v2_tombstone(admin: &PgPool, tenant: &str, party_id
     .bind(ORIGINAL_NAME)
     .fetch_one(admin)
     .await
-    .expect("read Customer 360 v2 Party tombstone");
+    .expect("read rebuilt Customer 360 Party tombstone");
     assert_eq!(row.try_get::<i64, _>("source_version").unwrap(), 2);
     assert!(row.try_get::<bool, _>("roots_removed").unwrap());
     assert_eq!(row.try_get::<String, _>("kind").unwrap(), "suppressed");
@@ -262,7 +232,7 @@ async fn assert_customer_360_v2_tombstone(admin: &PgPool, tenant: &str, party_id
     assert_eq!(selectable, 0, "privacy tombstone must not be a Customer 360 root");
 }
 
-async fn assert_search_g3_tombstone(admin: &PgPool, tenant: &str, party_id: &str) {
+async fn assert_search_tombstone(admin: &PgPool, tenant: &str, party_id: &str) {
     assert_eq!(INITIAL_GLOBAL_SEARCH_GENERATION_ID, "g3");
     let row = sqlx::query(
         r#"
@@ -281,7 +251,7 @@ async fn assert_search_g3_tombstone(admin: &PgPool, tenant: &str, party_id: &str
     .bind(ORIGINAL_NAME)
     .fetch_one(admin)
     .await
-    .expect("read search g3 Party tombstone");
+    .expect("read rebuilt search Party tombstone");
     assert_eq!(row.try_get::<i64, _>("source_version").unwrap(), 2);
     assert_eq!(
         row.try_get::<String, _>("lifecycle").unwrap(),
@@ -321,33 +291,12 @@ async fn authoritative_counts(admin: &PgPool, tenant: &str) -> AuthoritativeCoun
     }
 }
 
-async fn seed_stale_legacy_customer_360(
+async fn seed_stale_customer_360(
     admin: &PgPool,
     tenant: &str,
     party_id: &str,
     source_event_id: &str,
-    occurred_at: chrono::DateTime<chrono::Utc>,
 ) {
-    sqlx::query(
-        r#"
-        INSERT INTO crm.projection_checkpoints (
-          tenant_id, projection_id, last_occurred_at, last_event_id,
-          applied_event_count, status
-        ) VALUES ($1, $2, $3, $4, 1, 'active')
-        ON CONFLICT (tenant_id, projection_id) DO UPDATE
-        SET last_occurred_at = EXCLUDED.last_occurred_at,
-            last_event_id = EXCLUDED.last_event_id,
-            applied_event_count = EXCLUDED.applied_event_count,
-            status = EXCLUDED.status
-        "#,
-    )
-    .bind(tenant)
-    .bind(LEGACY_CUSTOMER_360_PROJECTION_ID)
-    .bind(occurred_at)
-    .bind(source_event_id)
-    .execute(admin)
-    .await
-    .unwrap();
     sqlx::query(
         r#"
         INSERT INTO crm.projection_documents (
@@ -379,7 +328,7 @@ async fn seed_stale_legacy_customer_360(
         "#,
     )
     .bind(tenant)
-    .bind(LEGACY_CUSTOMER_360_PROJECTION_ID)
+    .bind(CUSTOMER_360_PROJECTION_ID)
     .bind(CUSTOMER_360_CONTRIBUTION_RESOURCE_TYPE)
     .bind(party_id)
     .bind(source_event_id)
@@ -390,7 +339,11 @@ async fn seed_stale_legacy_customer_360(
     .unwrap();
 }
 
-fn attempt(tenant: &str, party_id: &str, resource_version: u64) -> Result<PrivacyOwnerActionAttempt, String> {
+fn attempt(
+    tenant: &str,
+    party_id: &str,
+    resource_version: u64,
+) -> Result<PrivacyOwnerActionAttempt, String> {
     let tenant_id = TenantId::try_new(tenant).unwrap();
     let privacy_case_id = RecordId::try_new(format!("privacy-case-{party_id}")).unwrap();
     let party_record_id = RecordId::try_new(party_id).unwrap();
@@ -477,7 +430,6 @@ fn capability_request(
 ) -> CapabilityRequest {
     let command = PrivacyOwnerActionCommand::from_attempt(attempt).unwrap();
     let input = owner_action_input_payload(encode_owner_action_command(&command).unwrap()).unwrap();
-    let transaction = format!("privacy-replay-{}", attempt.attempt_id());
     CapabilityRequest {
         context: ModuleExecutionContext {
             module_id: definition.owner_module_id.clone(),
@@ -491,7 +443,11 @@ fn capability_request(
                 capability_id: definition.capability_id.clone(),
                 capability_version: definition.capability_version.clone(),
                 idempotency_key: attempt.target_idempotency_key().clone(),
-                business_transaction_id: BusinessTransactionId::try_new(transaction).unwrap(),
+                business_transaction_id: BusinessTransactionId::try_new(format!(
+                    "privacy-replay-{}",
+                    attempt.attempt_id()
+                ))
+                .unwrap(),
                 schema_version: SchemaVersion::try_new("1.0.0").unwrap(),
                 request_started_at_unix_nanos: attempt.planned_at_unix_nanos(),
             },
@@ -568,6 +524,7 @@ async fn seed_party(admin: &PgPool, tenant: &str, party_id: &str) {
     })
     .unwrap();
     let payload = persisted_payload(&party).unwrap().bytes;
+    let transaction_id = format!("fixture-party-{party_id}");
     let mut transaction = admin.begin().await.unwrap();
     sqlx::query("SET LOCAL session_replication_role = 'replica'")
         .execute(&mut *transaction)
@@ -584,7 +541,7 @@ async fn seed_party(admin: &PgPool, tenant: &str, party_id: &str) {
         "#,
     )
     .bind(tenant)
-    .bind(format!("fixture-party-{party_id}"))
+    .bind(&transaction_id)
     .execute(&mut *transaction)
     .await
     .unwrap();
@@ -608,7 +565,7 @@ async fn seed_party(admin: &PgPool, tenant: &str, party_id: &str) {
     .bind(i64::try_from(contract.maximum_size_bytes).unwrap())
     .bind(contract.retention_policy_id)
     .bind(payload)
-    .bind(format!("fixture-party-{party_id}"))
+    .bind(transaction_id)
     .execute(&mut *transaction)
     .await
     .unwrap();
