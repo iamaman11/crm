@@ -41,19 +41,25 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+
           path = Path("scripts/apply_step17_telemetry_budget_refactor.py")
           text = path.read_text(encoding="utf-8")
-          call = '''replace_once(
-              adapter,
-              ''' + "'''" + '''        let mut render = None;
-              let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
-          ''' + "'''" + ''',
-              ''' + "'''" + '''        let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
-          ''' + "'''" + ''',
-          )
-          '''
-          if text.count(call) != 2:
-              raise SystemExit(f"expected two duplicate setup calls, found {text.count(call)}")
+          start_marker = "replace_once(\n    adapter,\n    '''        let mut render = None;\n"
+          end_marker = "''',\n)\n"
+          starts = []
+          cursor = 0
+          while True:
+              start = text.find(start_marker, cursor)
+              if start < 0:
+                  break
+              end = text.find(end_marker, start)
+              if end < 0:
+                  raise SystemExit("duplicate setup block has no exact end marker")
+              starts.append((start, end + len(end_marker)))
+              cursor = end + len(end_marker)
+          if len(starts) != 2:
+              raise SystemExit(f"expected two duplicate setup blocks, found {len(starts)}")
+
           replacement = '''content = read(adapter)
           old_render_setup = ''' + "'''" + '''        let mut render = None;
               let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
@@ -66,8 +72,16 @@ jobs:
               )
           write(adapter, content.replace(old_render_setup, new_render_setup))
           '''
-          text = text.replace(call, replacement, 1).replace(call, "", 1)
-          path.write_text(text, encoding="utf-8")
+
+          first_start, first_end = starts[0]
+          second_start, second_end = starts[1]
+          updated = (
+              text[:first_start]
+              + replacement
+              + text[first_end:second_start]
+              + text[second_end:]
+          )
+          path.write_text(updated, encoding="utf-8")
           PY
       - name: Apply budget-neutral refactor
         run: python scripts/apply_step17_telemetry_budget_refactor.py
