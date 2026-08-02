@@ -1,0 +1,65 @@
+name: Step 17 Telemetry Bootstrap
+
+on:
+  push:
+    branches:
+      - step17-contract-usage-telemetry
+    paths:
+      - ".github/workflows/step17-telemetry-bootstrap.yml"
+      - "scripts/apply_step17_telemetry_patch.py"
+
+concurrency:
+  group: step17-telemetry-bootstrap
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: step17-contract-usage-telemetry
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install validation dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # exact Rust 1.97.1 policy
+        with:
+          toolchain: 1.97.1
+          components: rustfmt
+      - name: Apply deterministic telemetry patch
+        run: python scripts/apply_step17_telemetry_patch.py
+      - name: Generate governed artifacts
+        run: |
+          python scripts/generate_contract_telemetry_catalog.py --write
+          python scripts/generate_repository_navigation.py --write
+      - name: Run packet and generator tests
+        run: |
+          python -m unittest \
+            tests/test_contract_telemetry_catalog.py \
+            tests/test_repository_navigation.py \
+            tests/test_architecture_documentation_consistency.py
+      - name: Format Rust source
+        run: cargo fmt --all
+      - name: Test telemetry module
+        run: cargo test --locked -p crm-application-runtime contract_usage_telemetry
+      - name: Commit clean bounded packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/step17-telemetry-bootstrap.yml
+          git rm scripts/apply_step17_telemetry_patch.py
+          git add -A
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Repository Step 17: instrument deprecated capability usage"
+          git push origin HEAD:step17-contract-usage-telemetry
