@@ -232,6 +232,7 @@ class ContractLifecycleTransitionTests(unittest.TestCase):
         current = empty_policy()
         entry = lifecycle()
         entry["deprecated_on"] = "2026-08-03"
+        entry["removal_not_before"] = "2026-09-02"
         current["contracts"] = [entry]
         current["external_consumers"] = [external(last_seen_on="2026-08-03")]
         errors = validate_transition_integrity(bindings(), current, today=TODAY)
