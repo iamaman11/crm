@@ -22,7 +22,7 @@ Phase 8A.11 / issue #126 is in progress.
 
 Repository Steps 1–15 are complete. Architecture Stages A, B, D, E and G are complete. Stages C, F, H and I remain incomplete or in progress according to the architecture plan.
 
-Repository Step 14 and Stage G are accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d44691371c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
+Repository Step 14 and Stage G are accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
 
 The accepted Step 14 consolidation is behavior-neutral:
 
@@ -75,7 +75,7 @@ The earlier 113-package and 841-edge measurements remain immutable historical St
 | 11 | PR #244 / source `405d2dbb97bb371b51cfb1d4ffb5549a57262878` / merge `4b08202fe9dd0c0df83567e24e6b9d86fb79c9db` / 34 of 34 | Authoritative owner-specific anonymization/deletion |
 | 12 | PRs #246, #248, #249 / 37 of 37 on each accepted head | Complete first-party contribution aggregation; Stage D complete |
 | 13 | PR #253 / source `475533b185b871418273c1c1e3f63a1d62542677` / merge `7dcda204be07209d9e4996fdc9c5fd364cea179e`; PR #255 / source `4c80546283af9c869a28c2da9c8697b203d0c327` / merge `393b60bdcfad6e92fc37eacabe0920645d530f6b`; PR #257 / source `6cde72d7fc9a442018c51fd6e6772e626b26e307` / merge `10516e84ea3c2d0fa8ee0c61c9eeec7e96a6273c` | Measurement, suppression/direct-lint governance and remaining ADR-031 exit evidence; Stage B complete |
-| 14 | PR #259 / source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / merge `2b0b558077c444d44691371c8a2bcca2c14ae426` / 36 of 36 | First measured behavior-neutral transitional consolidation; Stage G complete |
+| 14 | PR #259 / source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 | First measured behavior-neutral transitional consolidation; Stage G complete |
 | 15 | PRs #263–#267 / exact sources and merges listed above / final closure 19 of 19 | Party tombstone, Search/Customer 360 convergence, immutable-history rebuild, automatic v2 rollover and real `crm-api` no-orphan proof |
 
 ## Customer Privacy product boundary
