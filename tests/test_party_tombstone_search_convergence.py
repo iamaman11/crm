@@ -93,7 +93,7 @@ class PartyTombstoneSearchConvergenceTests(unittest.TestCase):
             '"resource_type"',
             '"resource_id"',
             'canonical_json_string_field(bytes, "resource_version")',
-            "previous_version.checked_add(1)",
+            "previous_version\n            .checked_add(1)",
             'canonical_json_string_field(bytes, "action_code")',
         )
         for binding in required_bindings:
