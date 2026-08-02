@@ -101,6 +101,18 @@ jobs:
                   self.last_worker_error.lock().ok()?.clone()
               }
           ''',
+              '''        config.validate()?;
+          ''': '''        config
+                  .validate()
+                  .map_err(ApplicationRuntimeError::Config)?;
+          ''',
+              '''impl From<crate::ApplicationConfigError> for ApplicationRuntimeError {
+              fn from(value: crate::ApplicationConfigError) -> Self {
+                  Self::Config(value)
+              }
+          }
+
+          ''': '',
           }
           for old, new in replacements.items():
               if text.count(old) != 1:
