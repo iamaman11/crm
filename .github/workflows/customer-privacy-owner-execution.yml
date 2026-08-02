@@ -13,6 +13,7 @@ on:
       - "crates/crm-customer-privacy-postgres/**"
       - "crates/crm-customer-privacy-production/**"
       - "modules/crm-customer-privacy/**"
+      - "services/crm-api/tests/customer_360_privacy_no_orphan_process_e2e.rs"
       - "database/migrations/**"
       - "tests/test_customer_privacy_plan_reads_implementation.py"
       - "tests/test_generic_conformance_adoption.py"
@@ -27,6 +28,7 @@ on:
       - "crates/crm-customer-privacy-postgres/**"
       - "crates/crm-customer-privacy-production/**"
       - "modules/crm-customer-privacy/**"
+      - "services/crm-api/tests/customer_360_privacy_no_orphan_process_e2e.rs"
       - "database/migrations/**"
       - "tests/test_customer_privacy_plan_reads_implementation.py"
       - "tests/test_generic_conformance_adoption.py"
@@ -42,7 +44,7 @@ permissions:
 jobs:
   owner-execution:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 60
     services:
       postgres:
         image: postgres:17-alpine
@@ -104,10 +106,14 @@ jobs:
             --test customer_privacy_owner_execution_postgres --no-run
           cargo test --locked -p crm-application-runtime \
             --test party_tombstone_rebuild_convergence_postgres --no-run
+          cargo test --locked -p crm-api \
+            --test customer_360_privacy_no_orphan_process_e2e --no-run
           cargo clippy --locked -p crm-application-runtime \
             --test customer_privacy_owner_execution_postgres -- -D warnings
           cargo clippy --locked -p crm-application-runtime \
             --test party_tombstone_rebuild_convergence_postgres -- -D warnings
+          cargo clippy --locked -p crm-api \
+            --test customer_360_privacy_no_orphan_process_e2e -- -D warnings
       - name: Prove active packet boundaries and owner-execution non-effects
         shell: bash
         env:
@@ -142,6 +148,13 @@ jobs:
           cargo test --locked -p crm-application-runtime \
             --test party_tombstone_rebuild_convergence_postgres -- --nocapture \
             2>&1 | tee database/customer-privacy-party-rebuild-clean.log
+      - name: Verify clean crm-api privacy no-orphan process
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p crm-api \
+            --test customer_360_privacy_no_orphan_process_e2e -- --nocapture \
+            2>&1 | tee database/customer-privacy-no-orphan-process-clean.log
       - name: Roll back authoritative schema
         shell: bash
         run: |
@@ -178,6 +191,13 @@ jobs:
           cargo test --locked -p crm-application-runtime \
             --test party_tombstone_rebuild_convergence_postgres -- --nocapture \
             2>&1 | tee database/customer-privacy-party-rebuild-reapplied.log
+      - name: Repeat crm-api privacy no-orphan process after reapply
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p crm-api \
+            --test customer_360_privacy_no_orphan_process_e2e -- --nocapture \
+            2>&1 | tee database/customer-privacy-no-orphan-process-reapplied.log
       - name: Capture PostgreSQL diagnostics
         if: failure()
         shell: bash
@@ -198,7 +218,9 @@ jobs:
             crates/crm-customer-privacy-production/
             crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs
             crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs
+            services/crm-api/tests/customer_360_privacy_no_orphan_process_e2e.rs
             database/customer-privacy-owner-execution-*.log
             database/customer-privacy-party-rebuild-*.log
+            database/customer-privacy-no-orphan-process-*.log
           if-no-files-found: warn
           retention-days: 7
