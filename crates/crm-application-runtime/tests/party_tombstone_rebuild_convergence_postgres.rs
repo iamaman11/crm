@@ -5,19 +5,19 @@ use crm_customer_360_composition::{
     Customer360ProjectionWorker,
 };
 use crm_customer_privacy_production::{
-    ACTION_PLAN_RECORD_TYPE, ACTION_PLAN_STATE_MAXIMUM_BYTES, ACTION_PLAN_STATE_RETENTION_POLICY_ID,
-    ACTION_PLAN_STATE_SCHEMA_ID, ACTION_PLAN_STATE_SCHEMA_VERSION, ActionPlanningPolicy,
-    ContributionCompletenessProof, CustomerPrivacyProductionDependencies,
-    DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot, EvidenceClass, OwnerExecutionInvocation,
-    OwnerScopeContract, OwnerScopeContribution, OwnerScopeRegistry, PrivacyActionPlan, PrivacyCase,
-    PrivacyCaseKind, PrivacyOwnerOutcomeStatus, PrivacyRetentionDecisionSet,
-    RETENTION_DECISION_RECORD_TYPE, RETENTION_DECISION_STATE_MAXIMUM_BYTES,
-    RETENTION_DECISION_STATE_RETENTION_POLICY_ID, RETENTION_DECISION_STATE_SCHEMA_ID,
-    RETENTION_DECISION_STATE_SCHEMA_VERSION, ScopeDiscoveryLineage, ScopeResource,
-    SubjectVerificationMethod, action_plan_state_descriptor_hash,
-    build_canonical_internal_owner_execution, encode_action_plan_state, encode_privacy_case_state,
-    encode_retention_decision_state, privacy_case_state_descriptor_hash,
-    retention_decision_state_descriptor_hash,
+    ACTION_PLAN_RECORD_TYPE, ACTION_PLAN_STATE_MAXIMUM_BYTES,
+    ACTION_PLAN_STATE_RETENTION_POLICY_ID, ACTION_PLAN_STATE_SCHEMA_ID,
+    ACTION_PLAN_STATE_SCHEMA_VERSION, ActionPlanningPolicy, ContributionCompletenessProof,
+    CustomerPrivacyProductionDependencies, DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot,
+    EvidenceClass, OwnerExecutionInvocation, OwnerScopeContract, OwnerScopeContribution,
+    OwnerScopeRegistry, PrivacyActionPlan, PrivacyCase, PrivacyCaseKind, PrivacyOwnerOutcomeStatus,
+    PrivacyRetentionDecisionSet, RETENTION_DECISION_RECORD_TYPE,
+    RETENTION_DECISION_STATE_MAXIMUM_BYTES, RETENTION_DECISION_STATE_RETENTION_POLICY_ID,
+    RETENTION_DECISION_STATE_SCHEMA_ID, RETENTION_DECISION_STATE_SCHEMA_VERSION,
+    ScopeDiscoveryLineage, ScopeResource, SubjectVerificationMethod,
+    action_plan_state_descriptor_hash, build_canonical_internal_owner_execution,
+    encode_action_plan_state, encode_privacy_case_state, encode_retention_decision_state,
+    privacy_case_state_descriptor_hash, retention_decision_state_descriptor_hash,
 };
 use crm_global_search_composition::{GlobalSearchWorker, INITIAL_GLOBAL_SEARCH_GENERATION_ID};
 use crm_module_sdk::{
@@ -124,10 +124,8 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
                 "party-rebuild-request-{run_id}"
             ))
             .unwrap(),
-            correlation_id: CorrelationId::try_new(format!(
-                "party-rebuild-correlation-{run_id}"
-            ))
-            .unwrap(),
+            correlation_id: CorrelationId::try_new(format!("party-rebuild-correlation-{run_id}"))
+                .unwrap(),
             trace_id: TraceId::try_new(format!("party-rebuild-trace-{run_id}")).unwrap(),
             initiating_capability_id: CapabilityId::try_new("customer_privacy.case.approve")
                 .unwrap(),
@@ -145,7 +143,10 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
         Some(PrivacyOwnerOutcomeStatus::Succeeded)
     );
     assert_eq!(
-        execution.attempt.as_ref().map(|attempt| attempt.action_code()),
+        execution
+            .attempt
+            .as_ref()
+            .map(|attempt| attempt.action_code()),
         Some("anonymize")
     );
 
@@ -592,7 +593,10 @@ async fn assert_customer_360_stale(admin: &PgPool, tenant: &str, party_id: &str)
     .await
     .unwrap();
     assert_eq!(row.try_get::<i64, _>("source_version").unwrap(), 1);
-    assert_eq!(row.try_get::<String, _>("display_name").unwrap(), ORIGINAL_NAME);
+    assert_eq!(
+        row.try_get::<String, _>("display_name").unwrap(),
+        ORIGINAL_NAME
+    );
     assert!(row.try_get::<bool, _>("has_root").unwrap());
 }
 
@@ -606,8 +610,8 @@ async fn assert_authoritative_party_minimized(admin: &PgPool, tenant: &str, part
     .fetch_one(admin)
     .await
     .unwrap();
-    let state: Value = serde_json::from_slice(&row.try_get::<Vec<u8>, _>("payload_bytes").unwrap())
-        .unwrap();
+    let state: Value =
+        serde_json::from_slice(&row.try_get::<Vec<u8>, _>("payload_bytes").unwrap()).unwrap();
     assert_eq!(row.try_get::<i64, _>("version").unwrap(), 2);
     assert_eq!(state["version"], 2);
     let display_name = state["display_name"].as_str().unwrap();
@@ -641,8 +645,14 @@ async fn assert_customer_360_tombstone(admin: &PgPool, tenant: &str, party_id: &
     assert_eq!(row.try_get::<i64, _>("source_version").unwrap(), 2);
     assert!(row.try_get::<bool, _>("roots_removed").unwrap());
     assert_eq!(row.try_get::<String, _>("kind").unwrap(), "suppressed");
-    assert_eq!(row.try_get::<String, _>("display_name").unwrap(), "suppressed");
-    assert_eq!(row.try_get::<String, _>("lifecycle").unwrap(), "privacy_minimized");
+    assert_eq!(
+        row.try_get::<String, _>("display_name").unwrap(),
+        "suppressed"
+    );
+    assert_eq!(
+        row.try_get::<String, _>("lifecycle").unwrap(),
+        "privacy_minimized"
+    );
     assert!(!row.try_get::<bool, _>("leaks_original").unwrap());
 
     let selectable: i64 = sqlx::query_scalar(
@@ -683,7 +693,10 @@ async fn assert_search_tombstone(admin: &PgPool, tenant: &str, party_id: &str) {
     .await
     .unwrap();
     assert_eq!(row.try_get::<i64, _>("source_version").unwrap(), 2);
-    assert_eq!(row.try_get::<String, _>("lifecycle").unwrap(), "privacy_minimized");
+    assert_eq!(
+        row.try_get::<String, _>("lifecycle").unwrap(),
+        "privacy_minimized"
+    );
     assert!(!row.try_get::<bool, _>("leaks_original").unwrap());
 }
 
