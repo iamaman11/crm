@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   package:
@@ -131,3 +131,20 @@ jobs:
             artifacts/step13-exit-evidence.*
           if-no-files-found: error
           retention-days: 14
+      - name: Publish verified non-workflow tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout HEAD -- \
+            .github/workflows/contracts.yml \
+            .github/workflows/step17-budget-package.yml \
+            .github/workflows/step17-telemetry-budget-refactor.yml
+          git rm -f \
+            scripts/apply_step17_telemetry_budget_refactor.py \
+            scripts/finalize_step17_budget_refactor.py
+          git add -A
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Step 17: publish proven telemetry runtime tree"
+          git push origin HEAD:step17-contract-usage-telemetry
