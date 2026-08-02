@@ -361,10 +361,11 @@ fn party_payload(party_id: &str) -> TypedPayload {
         maximum_size_bytes: contract.maximum_size_bytes,
         retention_policy_id: RetentionPolicyId::try_new(contract.retention_policy_id).unwrap(),
         bytes: serde_json::to_vec(&json!({
-            "schema_version": "crm.parties.state/v1",
             "party_id": party_id,
             "kind": "person",
             "display_name": ORIGINAL_NAME,
+            "created_at_unix_nanos": 1,
+            "updated_at_unix_nanos": 1,
             "version": 1
         }))
         .unwrap(),
