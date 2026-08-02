@@ -66,7 +66,7 @@ No score is raised by declaration. The same dimensions must be mechanically reme
 
 The historical Step 13 measurement established 113 workspace packages, 841 internal dependency edges, maximum dependency depth 18 and a conservative public Rust surface of 5,379 items before the accepted consolidation.
 
-Repository Step 14 is accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d44691371c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
+Repository Step 14 is accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
 
 Repository Step 15 is accepted through PRs #263–#267. The final process-host closure is PR #267 / accepted source `f1b72dbee09f152005cb3584b9bcc1573bf2c4fe` / squash merge `4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf` / 19 of 19 applicable permanent workflows. The complete exact evidence ledger is recorded in Section 11 and `PROJECT_STATUS.md`.
 
@@ -310,7 +310,7 @@ Backend completeness alone cannot close a product module or Phase 8A.
 
 ## 10. Accepted Step 14 closure evidence
 
-PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d44691371c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged exact head proves:
+PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged exact head proves:
 
 - one redundant transitional package removed;
 - exact Customer Accounts mutation/query inventory and contribution ordering preserved;
