@@ -172,7 +172,10 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
     seed_stale_customer_360(&admin, &tenant, &party_id, &action_event_id).await;
     assert_legacy_customer_360_stale(&admin, &tenant, &party_id).await;
     assert_eq!(CUSTOMER_360_PROJECTION_ID, "customer.customer-360.v2");
-    assert_ne!(CUSTOMER_360_PROJECTION_ID, LEGACY_CUSTOMER_360_PROJECTION_ID);
+    assert_ne!(
+        CUSTOMER_360_PROJECTION_ID,
+        LEGACY_CUSTOMER_360_PROJECTION_ID
+    );
 
     let tenant_id = TenantId::try_new(tenant.clone()).unwrap();
     let customer_360_worker = Customer360ProjectionWorker::new(store.clone())
