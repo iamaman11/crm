@@ -246,6 +246,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             set(self.packet["allowed_paths"]),
             {
                 "crates/crm-core-data/src/search_store.rs",
+                "crates/crm-core-data/tests/postgres_search.rs",
                 "crates/crm-global-search-composition/src/lib.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
@@ -278,6 +279,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(
             "subscribe global search generation g3",
             "\n".join(self.packet["deliverables"]),
+        )
+        self.assertIn(
+            "add PostgreSQL acceptance proving stale erased and privacy-minimized Party names cannot become search candidates",
+            self.packet["deliverables"],
         )
         self.assertIn(
             "does not complete Step 15",
