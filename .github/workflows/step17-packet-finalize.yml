@@ -35,25 +35,32 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
+          import json
           from pathlib import Path
+          import re
+
+          packet = json.loads(Path("repository-packet.json").read_text(encoding="utf-8"))
+          body = "{\n" + "".join(
+              f'                "{item}",\n' for item in packet["allowed_paths"]
+          ) + "            }"
+          pattern = re.compile(
+              r'(set\((?:self\.)?packet\["allowed_paths"\]\),\n\s*)\{.*?\}(,?\n\s*\))',
+              re.DOTALL,
+          )
           for filename in (
               "tests/test_repository_navigation.py",
               "tests/test_architecture_documentation_consistency.py",
           ):
               path = Path(filename)
               text = path.read_text(encoding="utf-8")
-              old = (
-                  '                "crates/crm-application-runtime/src/generated_contract_telemetry.rs",\n'
-                  '                "crates/crm-application-runtime/src/runtime.rs",\n'
+              updated, count = pattern.subn(
+                  lambda match: match.group(1) + body + match.group(2),
+                  text,
+                  count=1,
               )
-              new = (
-                  '                "crates/crm-application-runtime/src/generated_contract_telemetry.rs",\n'
-                  '                "crates/crm-application-runtime/src/lib.rs",\n'
-                  '                "crates/crm-application-runtime/src/runtime.rs",\n'
-              )
-              if text.count(old) != 1:
-                  raise SystemExit(f"{filename}: expected one exact allowed-path insertion point, found {text.count(old)}")
-              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+              if count != 1:
+                  raise SystemExit(f"{filename}: expected one allowed-path assertion, found {count}")
+              path.write_text(updated, encoding="utf-8")
           PY
       - name: Regenerate active packet
         run: python scripts/generate_repository_navigation.py --write
