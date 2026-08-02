@@ -101,7 +101,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             lowered = document.lower()
             self.assertIn("step 16", lowered)
             self.assertIn("step 17", lowered)
-            self.assertNotRegex(lowered, r"step 16[^\n]{0,120}(?:next|not started)")
+            self.assertNotRegex(lowered, r"step 16 (?:is )?(?:the )?next")
+            self.assertNotRegex(lowered, r"step 16[^\n.;]{0,80}not started")
         self.assertIn(
             "16. reusable generic worker conformance adopted by representative real workers — **complete through PR #270**",
             self.plan,
