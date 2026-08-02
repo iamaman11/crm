@@ -40,8 +40,7 @@
     "modules/**",
     "packages/**",
     "proto/**",
-    "schemas/**",
-    "services/**"
+    "schemas/**"
   ],
   "deliverables": [
     "generate one canonical lifecycle record for every published capability and event coordinate",
