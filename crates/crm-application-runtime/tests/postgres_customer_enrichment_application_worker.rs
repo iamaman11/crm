@@ -1,5 +1,7 @@
 #[path = "support/customer_enrichment_suggestion_get.rs"]
 mod support;
+#[path = "../../../services/crm-api/tests/support/generic_worker_conformance.rs"]
+mod worker_conformance;
 
 use crm_application_runtime::{
     CustomerEnrichmentApplicationWorkerDependencies, PostgresModuleActivation,
@@ -52,6 +54,7 @@ use sqlx::PgPool;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use support::*;
+use worker_conformance::WorkerConformanceSuite;
 
 const CURSOR_KEY: [u8; 32] = [0x7a; 32];
 const REVIEW_SEED_CAPABILITY: &str = "customer_enrichment.application.worker.seed";
@@ -136,7 +139,11 @@ async fn production_application_worker_uses_governed_party_gateway_and_recovers_
         },
     )
     .expect("assemble production application worker");
+    let conformance = WorkerConformanceSuite::new(
+        "crm.customer-enrichment/party-display-name-application-production",
+    );
 
+    let party_before_denial = party_state(&store, &suggestion).await;
     let denied = worker
         .run_cycle(tenant(TENANT), NOW + 2_000_000)
         .await
@@ -146,7 +153,12 @@ async fn production_application_worker_uses_governed_party_gateway_and_recovers_
         "CUSTOMER_ENRICHMENT_APPLICATION_PARTY_PERMISSION_DENIED"
     );
     assert_eq!(application_attempt_version(&admin).await, 1);
-    assert_eq!(party_version(&store, &suggestion).await, 7);
+    let party_after_denial = party_state(&store, &suggestion).await;
+    conformance.assert_no_side_effects(
+        "live authorization denial target isolation",
+        &party_before_denial,
+        &party_after_denial,
+    );
 
     store
         .reset_projection(
@@ -184,8 +196,10 @@ async fn production_application_worker_uses_governed_party_gateway_and_recovers_
     );
     assert_eq!(application_attempt_version(&admin).await, 1);
     let party_after_owner_success = party_state(&store, &suggestion).await;
-    assert_eq!(party_after_owner_success.0, 8);
-    assert_eq!(party_after_owner_success.1, suggestion.proposed_value());
+    conformance.assert_exact_recovery(
+        &(8, suggestion.proposed_value().to_owned()),
+        &party_after_owner_success,
+    );
 
     store
         .reset_projection(
@@ -210,8 +224,7 @@ async fn production_application_worker_uses_governed_party_gateway_and_recovers_
     assert_eq!(applied.replayed_attempts, 1);
     assert_eq!(application_attempt_version(&admin).await, 2);
     let party = party_state(&store, &suggestion).await;
-    assert_eq!(party.0, 8);
-    assert_eq!(party.1, suggestion.proposed_value());
+    conformance.assert_exact_recovery(&(8, suggestion.proposed_value().to_owned()), &party);
 
     let evidence_after_application = evidence_counts(&admin).await;
     let replay = worker
@@ -219,14 +232,31 @@ async fn production_application_worker_uses_governed_party_gateway_and_recovers_
         .await
         .expect("completed application replay");
     assert_eq!(replay.reviewed_events, 0);
-    assert_eq!(evidence_counts(&admin).await, evidence_after_application);
+    let evidence_after_replay = evidence_counts(&admin).await;
+    conformance.assert_no_side_effects(
+        "completed replay",
+        &evidence_after_application,
+        &evidence_after_replay,
+    );
 
+    let cross_tenant_before = (
+        evidence_counts(&admin).await,
+        party_state(&store, &suggestion).await,
+    );
     let cross_tenant = worker
         .run_cycle(tenant(OTHER_TENANT), NOW + 6_000_000)
         .await
         .expect("cross-tenant worker scan");
     assert_eq!(cross_tenant.reviewed_events, 0);
-    assert_eq!(party_version(&store, &suggestion).await, 8);
+    let cross_tenant_after = (
+        evidence_counts(&admin).await,
+        party_state(&store, &suggestion).await,
+    );
+    conformance.assert_no_side_effects(
+        "cross-tenant scan isolation",
+        &cross_tenant_before,
+        &cross_tenant_after,
+    );
 }
 
 async fn activate_modules(store: &PostgresDataStore) {
