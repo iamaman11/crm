@@ -111,7 +111,7 @@ jobs:
         run: |
           set -euo pipefail
           git rm .github/workflows/step17-telemetry-bootstrap.yml
-          git rm scripts/apply_step17_telemetry_patch.py
+          git rm -f scripts/apply_step17_telemetry_patch.py
           git add -A
           git diff --cached --check
           git config user.name "github-actions[bot]"
