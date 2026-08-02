@@ -4,26 +4,29 @@ use crm_customer_360_composition::{
     CUSTOMER_360_CONTRIBUTION_RESOURCE_TYPE, CUSTOMER_360_PROJECTION_ID,
     Customer360ProjectionWorker,
 };
-use crm_customer_privacy_production::{
+use crm_customer_privacy::{
     ACTION_PLAN_RECORD_TYPE, ACTION_PLAN_STATE_MAXIMUM_BYTES,
     ACTION_PLAN_STATE_RETENTION_POLICY_ID, ACTION_PLAN_STATE_SCHEMA_ID,
     ACTION_PLAN_STATE_SCHEMA_VERSION, ActionPlanningPolicy, ContributionCompletenessProof,
-    CustomerPrivacyProductionDependencies, DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot,
-    EvidenceClass, OwnerExecutionInvocation, OwnerScopeContract, OwnerScopeContribution,
-    OwnerScopeRegistry, PrivacyActionPlan, PrivacyCase, PrivacyCaseKind, PrivacyOwnerOutcomeStatus,
+    DiscoveryOwnerScopeContribution, DiscoveryScopeSnapshot, EvidenceClass, OwnerScopeContract,
+    OwnerScopeContribution, OwnerScopeRegistry, PrivacyActionPlan, PrivacyCase, PrivacyCaseKind,
     PrivacyRetentionDecisionSet, RETENTION_DECISION_RECORD_TYPE,
     RETENTION_DECISION_STATE_MAXIMUM_BYTES, RETENTION_DECISION_STATE_RETENTION_POLICY_ID,
     RETENTION_DECISION_STATE_SCHEMA_ID, RETENTION_DECISION_STATE_SCHEMA_VERSION,
     ScopeDiscoveryLineage, ScopeResource, SubjectVerificationMethod,
-    action_plan_state_descriptor_hash, build_canonical_internal_owner_execution,
-    encode_action_plan_state, encode_privacy_case_state, encode_retention_decision_state,
-    privacy_case_state_descriptor_hash, retention_decision_state_descriptor_hash,
+    action_plan_state_descriptor_hash, encode_action_plan_state, encode_privacy_case_state,
+    encode_retention_decision_state, privacy_case_state_descriptor_hash,
+    retention_decision_state_descriptor_hash,
+};
+use crm_customer_privacy_production::{
+    CustomerPrivacyProductionDependencies, OwnerExecutionInvocation, PrivacyOwnerOutcomeStatus,
+    build_canonical_internal_owner_execution,
 };
 use crm_global_search_composition::{GlobalSearchWorker, INITIAL_GLOBAL_SEARCH_GENERATION_ID};
 use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ErrorCategory, ModuleId,
-    PayloadEncoding, PortFuture, RecordId, RecordRef, RetentionPolicyId, SchemaId, SchemaVersion,
-    SdkError, TenantId, TraceId, TypedPayload,
+    ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ModuleId, PayloadEncoding,
+    PortFuture, RecordId, RecordRef, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TenantId,
+    TraceId, TypedPayload,
 };
 use crm_parties_capability_adapter::{RECORD_TYPE as PARTY_RECORD_TYPE, persisted_contract};
 use crm_query_runtime::{QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision};
@@ -106,7 +109,7 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
         .await
         .expect("connect Party rebuild convergence application pool");
     let store = PostgresDataStore::from_pool(application);
-    let service = build_canonical_internal_owner_execution(CustomerPrivacyProductionDependencies {
+    let service = build_canonical_internal_owner_execution(&CustomerPrivacyProductionDependencies {
         store: store.clone(),
         activation: Arc::new(AlwaysActive),
         cursor_key: [0x71; 32],
@@ -276,7 +279,7 @@ fn build_case_plan_and_decision(
         canonical_party_id.clone(),
         1,
         [ScopeResource::new(
-            PARTY_RECORD_TYPE,
+            PARTY_RECORD_TYPE.to_owned(),
             canonical_party_id.clone(),
             1,
             DataClass::Personal,
@@ -386,14 +389,14 @@ fn retention_decision_payload(decision: &PrivacyRetentionDecisionSet) -> TypedPa
 fn party_payload(party_id: &str) -> TypedPayload {
     let contract = persisted_contract();
     TypedPayload {
-        owner: contract.owner,
-        schema_id: contract.schema_id,
-        schema_version: contract.schema_version,
+        owner: ModuleId::try_new(contract.owner).unwrap(),
+        schema_id: SchemaId::try_new(contract.schema_id).unwrap(),
+        schema_version: SchemaVersion::try_new(contract.schema_version).unwrap(),
         descriptor_hash: contract.descriptor_hash,
-        data_class: contract.data_class,
-        encoding: contract.encoding,
+        data_class: DataClass::Personal,
+        encoding: PayloadEncoding::Json,
         maximum_size_bytes: contract.maximum_size_bytes,
-        retention_policy_id: contract.retention_policy_id,
+        retention_policy_id: RetentionPolicyId::try_new(contract.retention_policy_id).unwrap(),
         bytes: serde_json::to_vec(&json!({
             "schema_version": "crm.parties.state/v1",
             "party_id": party_id,
