@@ -80,12 +80,10 @@ async fn active_generation_search_is_deterministic_switchable_and_tenant_isolate
         .await
         .expect("activate generation one");
 
-    let privacy_safe = SearchCandidateStore::search_candidates(
-        &store,
-        unfiltered_request(TENANT_A, None, 10),
-    )
-    .await
-    .expect("search must exclude non-active Party documents");
+    let privacy_safe =
+        SearchCandidateStore::search_candidates(&store, unfiltered_request(TENANT_A, None, 10))
+            .await
+            .expect("search must exclude non-active Party documents");
     assert_eq!(privacy_safe.candidates.len(), 2);
     assert!(privacy_safe.candidates.iter().all(|candidate| {
         candidate.resource.record_type.as_str() == "sales.deal"
