@@ -40,26 +40,14 @@ async fn crm_api_background_worker_repairs_party_privacy_orphan_into_v2() {
     let http_addr = format!("127.0.0.1:{http_port}");
     let grpc_addr = format!("127.0.0.1:{grpc_port}");
     let http = HttpClient::new();
-    let mut first_process = spawn_crm_api(
-        &database_url,
-        &http_addr,
-        &grpc_addr,
-        true,
-        None,
-    );
+    let mut first_process = spawn_crm_api(&database_url, &http_addr, &grpc_addr, true, None);
     wait_until_ready(&http, &mut first_process, &http_addr, true).await;
     let mut gateway = connect_grpc(&grpc_addr).await;
     create_party(&mut gateway, &party_id).await;
     wait_for_party_record(&admin, &party_id).await;
     stop_process(&mut first_process).await;
 
-    seed_privacy_orphan(
-        &admin,
-        &party_id,
-        &event_id,
-        &business_transaction_id,
-    )
-    .await;
+    seed_privacy_orphan(&admin, &party_id, &event_id, &business_transaction_id).await;
     assert_no_v2_document(&admin, &party_id).await;
     assert_legacy_v1_stale(&admin, &party_id).await;
 
@@ -74,13 +62,7 @@ async fn crm_api_background_worker_repairs_party_privacy_orphan_into_v2() {
         false,
         None,
     );
-    wait_until_ready(
-        &http,
-        &mut restarted_process,
-        &restart_http_addr,
-        true,
-    )
-    .await;
+    wait_until_ready(&http, &mut restarted_process, &restart_http_addr, true).await;
     wait_for_v2_tombstone(&admin, &party_id).await;
     assert_legacy_v1_stale(&admin, &party_id).await;
     assert_authoritative_party_minimized(&admin, &party_id).await;
@@ -128,7 +110,10 @@ async fn wait_for_party_record(admin: &PgPool, party_id: &str) {
         if count == 1 {
             return;
         }
-        assert!(Instant::now() < deadline, "Party record did not become visible");
+        assert!(
+            Instant::now() < deadline,
+            "Party record did not become visible"
+        );
         sleep(Duration::from_millis(100)).await;
     }
 }
@@ -248,14 +233,12 @@ async fn seed_privacy_orphan(
     .execute(&mut *transaction)
     .await
     .unwrap();
-    sqlx::query(
-        "DELETE FROM crm.projection_documents WHERE tenant_id = $1 AND projection_id = $2",
-    )
-    .bind(TENANT_A)
-    .bind(CUSTOMER_360_PROJECTION_ID)
-    .execute(&mut *transaction)
-    .await
-    .unwrap();
+    sqlx::query("DELETE FROM crm.projection_documents WHERE tenant_id = $1 AND projection_id = $2")
+        .bind(TENANT_A)
+        .bind(CUSTOMER_360_PROJECTION_ID)
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
     sqlx::query(
         "DELETE FROM crm.projection_checkpoints WHERE tenant_id = $1 AND projection_id = $2",
     )
@@ -396,7 +379,10 @@ async fn assert_legacy_v1_stale(admin: &PgPool, party_id: &str) {
     .await
     .unwrap();
     assert_eq!(row.try_get::<i64, _>("source_version").unwrap(), 1);
-    assert_eq!(row.try_get::<String, _>("display_name").unwrap(), ORIGINAL_NAME);
+    assert_eq!(
+        row.try_get::<String, _>("display_name").unwrap(),
+        ORIGINAL_NAME
+    );
     assert!(row.try_get::<bool, _>("has_root").unwrap());
 }
 
@@ -409,14 +395,16 @@ async fn assert_authoritative_party_minimized(admin: &PgPool, party_id: &str) {
     .fetch_one(admin)
     .await
     .unwrap();
-    let state: Value = serde_json::from_slice(&row.try_get::<Vec<u8>, _>("payload_bytes").unwrap())
-        .unwrap();
+    let state: Value =
+        serde_json::from_slice(&row.try_get::<Vec<u8>, _>("payload_bytes").unwrap()).unwrap();
     assert_eq!(row.try_get::<i64, _>("version").unwrap(), 2);
     assert_eq!(state["version"], 2);
-    assert!(!state["display_name"]
-        .as_str()
-        .unwrap()
-        .contains(ORIGINAL_NAME));
+    assert!(
+        !state["display_name"]
+            .as_str()
+            .unwrap()
+            .contains(ORIGINAL_NAME)
+    );
 }
 
 fn unique_id() -> u128 {
