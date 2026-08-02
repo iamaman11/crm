@@ -18,7 +18,7 @@ PACKET = ROOT / "repository-packet.json"
 
 
 class PartyTombstoneRebuildConvergenceTests(unittest.TestCase):
-    """Bind automatic Customer 360 generation rollover to durable evidence."""
+    """Bind fresh Customer 360 checkpoint identity to production replay paths."""
 
     @classmethod
     def setUpClass(cls) -> None:
