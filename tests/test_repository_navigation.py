@@ -52,7 +52,10 @@ class RepositoryNavigationTests(unittest.TestCase):
             packet["required_checks"],
             ["Affected Scope CI", "Complexity Baseline CI", "Rust Generated Sync", "Rust CI"],
         )
-        self.assertIn("mark Repository Steps 1 through 15 complete", packet["deliverables"])
+        self.assertIn(
+            "mark Repository Steps 1 through 15 complete and Step 16 next, not started",
+            packet["deliverables"],
+        )
         self.assertIn("implement Repository Step 16 worker conformance", packet["non_goals"])
 
     def test_generated_navigation_is_deterministic_and_current(self) -> None:
