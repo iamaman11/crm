@@ -245,6 +245,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
+                ".github/workflows/customer-privacy-owner-execution.yml",
                 "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
