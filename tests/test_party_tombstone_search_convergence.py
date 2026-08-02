@@ -41,7 +41,9 @@ class PartyTombstoneSearchConvergenceTests(unittest.TestCase):
                 "crates/crm-global-search-composition/src/lib.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
+                "tests/test_architecture_documentation_consistency.py",
                 "tests/test_party_tombstone_search_convergence.py",
+                "tests/test_repository_navigation.py",
             },
         )
         objective = self.packet["objective"]
@@ -51,6 +53,10 @@ class PartyTombstoneSearchConvergenceTests(unittest.TestCase):
                 "Customer 360" in criterion and "remain next" in criterion
                 for criterion in self.packet["acceptance"]
             )
+        )
+        self.assertIn(
+            "the Step 13 crm-core-data non-comment LOC budget remains at or below the accepted 9922-line ceiling",
+            self.packet["acceptance"],
         )
 
     def test_fresh_generation_replays_the_existing_party_owner_action_event(self) -> None:
@@ -124,10 +130,7 @@ class PartyTombstoneSearchConvergenceTests(unittest.TestCase):
 
         self.assertLess(lifecycle_filter, where_match_predicate)
         self.assertIn(
-            "COALESCE(\n"
-            "                      document -> 'display_fields' ->> 'privacy_lifecycle',\n"
-            "                      'active'\n"
-            "                    ) = 'active'",
+            "AND COALESCE(document -> 'display_fields' ->> 'privacy_lifecycle', 'active') = 'active'",
             query,
         )
 
