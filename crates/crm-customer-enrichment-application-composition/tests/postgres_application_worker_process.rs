@@ -1,6 +1,10 @@
+#[path = "../../../services/crm-api/tests/support/generic_worker_conformance.rs"]
+mod worker_conformance;
+
 mod process {
     include!("postgres_application_orchestration_process.rs");
 
+    use super::worker_conformance::WorkerConformanceSuite;
     use crm_application_composition::{
         ActivationGatedBackgroundWorker, ModuleActivationPort, TenantBackgroundWorker,
     };
@@ -93,22 +97,20 @@ mod process {
             ModuleId::try_new(MODULE_ID).unwrap(),
             worker.clone(),
         );
+        let conformance =
+            WorkerConformanceSuite::new("crm.customer-enrichment/party-display-name-application");
 
         set_status(&admin, "suspended").await;
+        let inactive_before = worker_state(&store, &admin, &owner).await;
         gated
             .run_tenant_cycle(TenantId::try_new(TENANT).unwrap(), NOW)
             .await
             .unwrap();
-        assert_eq!(attempt_count(&admin).await, 0);
-        assert!(
-            store
-                .projection_checkpoint(
-                    &TenantId::try_new(TENANT).unwrap(),
-                    PARTY_DISPLAY_NAME_APPLICATION_PROJECTION_ID,
-                )
-                .await
-                .unwrap()
-                .is_none()
+        let inactive_after = worker_state(&store, &admin, &owner).await;
+        conformance.assert_no_side_effects(
+            "activation-gated suspended cycle",
+            &inactive_before,
+            &inactive_after,
         );
 
         set_status(&admin, "active").await;
@@ -136,20 +138,47 @@ mod process {
             1
         );
 
+        let committed = worker_state(&store, &admin, &owner).await;
         let replay = worker
             .run_cycle(TenantId::try_new(TENANT).unwrap(), NOW)
             .await
             .unwrap();
         assert_eq!(replay.reviewed_events, 0);
-        assert_eq!(attempt_count(&admin).await, 1);
-        assert_eq!(owner.0.lock().unwrap().len(), 1);
+        let replayed = worker_state(&store, &admin, &owner).await;
+        conformance.assert_no_side_effects("completed replay", &committed, &replayed);
 
         set_status(&admin, "uninstalling").await;
+        let uninstalling_before = worker_state(&store, &admin, &owner).await;
         gated
             .run_tenant_cycle(TenantId::try_new(TENANT).unwrap(), NOW)
             .await
             .unwrap();
-        assert_eq!(attempt_count(&admin).await, 1);
+        let uninstalling_after = worker_state(&store, &admin, &owner).await;
+        conformance.assert_no_side_effects(
+            "activation-gated uninstalling cycle",
+            &uninstalling_before,
+            &uninstalling_after,
+        );
+    }
+
+    async fn worker_state(
+        store: &PostgresDataStore,
+        admin: &PgPool,
+        owner: &Arc<ReplayOwner>,
+    ) -> (i64, Option<u64>, usize) {
+        let checkpoint = store
+            .projection_checkpoint(
+                &TenantId::try_new(TENANT).unwrap(),
+                PARTY_DISPLAY_NAME_APPLICATION_PROJECTION_ID,
+            )
+            .await
+            .unwrap()
+            .map(|value| value.applied_event_count);
+        (
+            attempt_count(admin).await,
+            checkpoint,
+            owner.0.lock().unwrap().len(),
+        )
     }
 
     async fn set_status(admin: &PgPool, status: &str) {
