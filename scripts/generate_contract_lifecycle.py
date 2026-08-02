@@ -17,6 +17,7 @@ from contract_lifecycle import (
     registry_counts,
     render_registry,
 )
+from contract_lifecycle_transitions import validate_transition_integrity
 
 
 def write_atomic(path: Path, content: bytes) -> None:
@@ -57,9 +58,14 @@ def git_json(base_ref: str, path: Path, *, optional: bool = False) -> dict | Non
         capture_output=True,
     )
     if completed.returncode != 0:
-        if optional:
-            return None
         details = (completed.stdout + completed.stderr).strip()
+        missing_from_ref = (
+            "exists on disk, but not in" in details
+            or "does not exist in" in details
+            or "Path '" in details and "does not exist" in details
+        )
+        if optional and missing_from_ref:
+            return None
         raise ValueError(f"cannot read {path} from {base_ref}: {details}")
     try:
         value = json.loads(completed.stdout)
@@ -113,6 +119,16 @@ def main(argv: list[str] | None = None) -> int:
             base_bindings=base_bindings,
             base_policy=base_policy,
         )
+        errors.extend(
+            validate_transition_integrity(
+                bindings,
+                policy,
+                base_bindings=base_bindings,
+                base_policy=base_policy,
+                repository_root=Path("."),
+            )
+        )
+        errors = sorted(set(errors))
     except ValueError as error:
         print(f"contract lifecycle generation failed: {error}", file=sys.stderr)
         return 1
