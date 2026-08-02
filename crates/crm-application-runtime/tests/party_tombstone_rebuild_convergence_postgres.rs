@@ -206,13 +206,7 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
         "derived-state rebuilds must not mutate authoritative Party, outbox or audit evidence"
     );
     assert_customer_360_tombstone(&admin, &tenant, &party_id).await;
-    assert_search_tombstone(
-        &admin,
-        &tenant,
-        &party_id,
-        REPEAT_SEARCH_PROJECTION_ID,
-    )
-    .await;
+    assert_search_tombstone(&admin, &tenant, &party_id, REPEAT_SEARCH_PROJECTION_ID).await;
 }
 
 #[derive(Debug)]
