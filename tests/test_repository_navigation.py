@@ -42,9 +42,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
-                "Cargo.lock",
-                "crates/crm-parties-privacy-scope-adapter/Cargo.toml",
-                "crates/crm-parties-privacy-scope-adapter/tests/postgres_projection_replay_convergence.rs",
+                "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
@@ -59,12 +57,13 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "Complexity Baseline CI",
                 "Rust Generated Sync",
                 "Rust CI",
-                "Parties Privacy Scope CI",
+                "Application Runtime CI",
+                "Customer Privacy Owner Execution CI",
             ],
         )
         self.assertIn("complete Repository Step 15", packet["non_goals"][0])
         self.assertIn(
-            "apply a canonical tenant-bound Parties anonymization through PostgresPrivacyOwnerActionExecutor rather than inserting a synthetic privacy event",
+            "invoke build_canonical_internal_owner_execution and execute_next so the real Parties owner endpoint is selected from the production registry",
             packet["deliverables"],
         )
         self.assertIn(
@@ -149,7 +148,8 @@ class RepositoryNavigationTests(unittest.TestCase):
             "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
             "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
             "Rust CI": ".github/workflows/rust.yml",
-            "Parties Privacy Scope CI": ".github/workflows/parties-privacy-scope.yml",
+            "Application Runtime CI": ".github/workflows/application-runtime.yml",
+            "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
         }
         affected = {
             "head_sha": "b" * 40,
@@ -160,7 +160,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Party tombstone rebuild convergence packet"],
+                    "reasons": ["Party tombstone app-runtime rebuild convergence packet"],
                 }
                 for name in packet["required_checks"]
             ],
