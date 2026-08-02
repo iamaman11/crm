@@ -57,7 +57,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             ],
         )
         self.assertIn(
-            "hold both real Party target inserts behind one PostgreSQL advisory-lock barrier and mechanically observe at least two blocked executor sessions before release",
+            "hold the first real Party target insert behind one PostgreSQL advisory-lock barrier and mechanically observe one direct Party waiter plus at least two executor sessions in the same transitive blocking chain",
             packet["deliverables"],
         )
         self.assertIn(
