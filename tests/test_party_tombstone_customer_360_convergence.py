@@ -104,7 +104,11 @@ class PartyTombstoneCustomer360ConvergenceTests(unittest.TestCase):
             self.query_adapter,
         )
         self.assertIn(
-            "document.affects_party(request.root_party_id.as_str())",
+            "document.affects_party(root_party_id)",
+            self.query_adapter,
+        )
+        self.assertIn(
+            'privacy_lifecycle: "active".to_owned()',
             self.query_adapter,
         )
 
@@ -121,12 +125,17 @@ class PartyTombstoneCustomer360ConvergenceTests(unittest.TestCase):
             set(self.packet["allowed_paths"]),
             {
                 "crates/crm-customer-360-composition/src/lib.rs",
+                "crates/crm-customer-360-query-adapter/src/lib.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_party_tombstone_customer_360_convergence.py",
                 "tests/test_repository_navigation.py",
             },
+        )
+        self.assertIn(
+            "keep existing query-adapter test fixtures synchronized with the additive internal Party contribution field",
+            self.packet["deliverables"],
         )
         combined = self.packet["objective"] + "\n" + "\n".join(
             self.packet["non_goals"]
