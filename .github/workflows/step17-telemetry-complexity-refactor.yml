@@ -1,0 +1,68 @@
+name: Step 17 Telemetry Complexity Refactor
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/step17-telemetry-complexity-refactor.yml"
+      - "scripts/apply_step17_telemetry_complexity_refactor.py"
+
+concurrency:
+  group: step17-telemetry-complexity-refactor-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: step17-contract-usage-telemetry
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install validation dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # exact Rust 1.97.1 policy
+        with:
+          toolchain: 1.97.1
+          components: rustfmt
+      - name: Apply bounded adapter refactor
+        run: python scripts/apply_step17_telemetry_complexity_refactor.py
+      - name: Regenerate governed artifacts
+        run: |
+          python scripts/generate_contract_telemetry_catalog.py --write
+          python scripts/generate_repository_navigation.py --write
+      - name: Run packet and generator tests
+        run: |
+          python -m unittest \
+            tests/test_contract_telemetry_catalog.py \
+            tests/test_repository_navigation.py \
+            tests/test_architecture_documentation_consistency.py
+      - name: Format Rust source
+        run: cargo fmt --all
+      - name: Test adapter telemetry and runtime integration
+        run: |
+          cargo test --locked -p crm-capability-adapters contract_usage_telemetry
+          cargo check --locked -p crm-application-runtime --all-targets
+      - name: Commit non-workflow refactor files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout HEAD -- .github/workflows/step17-telemetry-complexity-refactor.yml
+          git rm -f scripts/apply_step17_telemetry_complexity_refactor.py
+          git add -A
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Step 17: keep telemetry outside the process host"
+          git push origin HEAD:step17-contract-usage-telemetry
