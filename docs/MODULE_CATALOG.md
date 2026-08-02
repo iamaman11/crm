@@ -80,7 +80,7 @@ Accepted Customer Privacy architecture/runtime evidence now includes:
 - PR #248 / accepted source `b15482361ab2b322591d488843ab9b46ff676dba` / merge `b4222364c21cb74127834f5ff4f0739343d26379` / 37 of 37 permanent workflows;
 - PR #249 / accepted source `7876945586e5a6cc94f8d3b0f6ba2b57316484d2` / merge `f36592211bed3e0df7cf3771164b4bc24026eff3` / 37 of 37 permanent workflows — complete first-party production contribution aggregation through `crm-first-party-modules` without behavior changes.
 
-Repository Step 13 architecture governance is accepted through PRs #253, #255 and #257. Repository Step 14 and architecture Stage G are accepted through PR #259 / source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / merge `2b0b558077c444d44691371c8a2bcca2c14ae426` / 36 of 36.
+Repository Step 13 architecture governance is accepted through PRs #253, #255 and #257. Repository Step 14 and architecture Stage G are accepted through PR #259 / source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36.
 
 Repository Step 15 is accepted through:
 
