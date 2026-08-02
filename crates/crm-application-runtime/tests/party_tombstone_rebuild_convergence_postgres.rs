@@ -30,6 +30,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const ORIGINAL_NAME: &str = "Ada Historical Projection";
+const LEGACY_CUSTOMER_360_PROJECTION_ID: &str = "customer.customer-360.v1";
 const SEARCH_PROJECTION_ID: &str = "search.global.g3";
 const REPEAT_SEARCH_GENERATION_ID: &str = "g4";
 const REPEAT_SEARCH_PROJECTION_ID: &str = "search.global.g4";
@@ -169,15 +170,29 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
     .expect("production owner action emits immutable convergence event");
 
     seed_stale_customer_360(&admin, &tenant, &party_id, &action_event_id).await;
-    assert_customer_360_stale(&admin, &tenant, &party_id).await;
+    assert_legacy_customer_360_stale(&admin, &tenant, &party_id).await;
+    assert_eq!(CUSTOMER_360_PROJECTION_ID, "customer.customer-360.v2");
+    assert_ne!(
+        CUSTOMER_360_PROJECTION_ID,
+        LEGACY_CUSTOMER_360_PROJECTION_ID
+    );
 
     let tenant_id = TenantId::try_new(tenant.clone()).unwrap();
-    let rebuilt = Customer360ProjectionWorker::new(store.clone())
-        .expect("construct Customer 360 rebuild worker")
-        .rebuild(tenant_id.clone(), 200)
-        .await
-        .expect("rebuild Customer 360 from immutable history");
-    assert!(rebuilt >= 1);
+    let customer_360_worker = Customer360ProjectionWorker::new(store.clone())
+        .expect("construct Customer 360 v2 background worker");
+    let mut automatically_applied = 0_u64;
+    loop {
+        let batch = customer_360_worker
+            .run_batch(tenant_id.clone(), 200)
+            .await
+            .expect("run normal Customer 360 v2 background batch");
+        automatically_applied += u64::from(batch.events_applied);
+        if !batch.has_more {
+            break;
+        }
+    }
+    assert!(automatically_applied >= 1);
+
     GlobalSearchWorker::new(store.clone())
         .expect("construct global search worker")
         .reindex(tenant_id.clone(), 200)
@@ -186,6 +201,7 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
 
     assert_authoritative_party_minimized(&admin, &tenant, &party_id).await;
     assert_customer_360_tombstone(&admin, &tenant, &party_id).await;
+    assert_legacy_customer_360_stale(&admin, &tenant, &party_id).await;
     assert_eq!(INITIAL_GLOBAL_SEARCH_GENERATION_ID, "g3");
     assert_search_tombstone(&admin, &tenant, &party_id, SEARCH_PROJECTION_ID).await;
 
@@ -194,7 +210,7 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
         .expect("construct repeat Customer 360 worker")
         .rebuild(tenant_id.clone(), 200)
         .await
-        .expect("repeat Customer 360 rebuild");
+        .expect("repeat Customer 360 v2 rebuild");
     GlobalSearchWorker::for_generation(store, REPEAT_SEARCH_GENERATION_ID)
         .expect("construct fresh-generation repeat global search worker")
         .reindex(tenant_id, 200)
@@ -206,6 +222,7 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
         "derived-state rebuilds must not mutate authoritative Party, outbox or audit evidence"
     );
     assert_customer_360_tombstone(&admin, &tenant, &party_id).await;
+    assert_legacy_customer_360_stale(&admin, &tenant, &party_id).await;
     assert_search_tombstone(&admin, &tenant, &party_id, REPEAT_SEARCH_PROJECTION_ID).await;
 }
 
@@ -518,7 +535,7 @@ async fn seed_stale_customer_360(
         "#,
     )
     .bind(tenant)
-    .bind(CUSTOMER_360_PROJECTION_ID)
+    .bind(LEGACY_CUSTOMER_360_PROJECTION_ID)
     .bind(source_event_id)
     .execute(admin)
     .await
@@ -555,7 +572,7 @@ async fn seed_stale_customer_360(
         "#,
     )
     .bind(tenant)
-    .bind(CUSTOMER_360_PROJECTION_ID)
+    .bind(LEGACY_CUSTOMER_360_PROJECTION_ID)
     .bind(CUSTOMER_360_CONTRIBUTION_RESOURCE_TYPE)
     .bind(party_id)
     .bind(source_event_id)
@@ -566,7 +583,7 @@ async fn seed_stale_customer_360(
     .unwrap();
 }
 
-async fn assert_customer_360_stale(admin: &PgPool, tenant: &str, party_id: &str) {
+async fn assert_legacy_customer_360_stale(admin: &PgPool, tenant: &str, party_id: &str) {
     let row = sqlx::query(
         r#"
         SELECT source_version,
@@ -578,7 +595,7 @@ async fn assert_customer_360_stale(admin: &PgPool, tenant: &str, party_id: &str)
         "#,
     )
     .bind(tenant)
-    .bind(CUSTOMER_360_PROJECTION_ID)
+    .bind(LEGACY_CUSTOMER_360_PROJECTION_ID)
     .bind(CUSTOMER_360_CONTRIBUTION_RESOURCE_TYPE)
     .bind(party_id)
     .fetch_one(admin)

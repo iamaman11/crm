@@ -1,20 +1,20 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-15-party-tombstone-rebuild-convergence",
-  "title": "Prove Party tombstone rebuild convergence across Customer 360 and search",
+  "packet_id": "repository-step-15-customer360-generation-rollover",
+  "title": "Roll Customer 360 to a fresh privacy-aware generation",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "e9fe1f352386d80a29d122db5d1ed6c47266bfaf"
+    "sha": "2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a"
   },
   "tracking_issues": [
     126,
     194
   ],
-  "objective": "Continue Repository Step 15 with a bounded PostgreSQL production-boundary acceptance slice in the existing application-runtime composition: execute durable Customer Privacy owner execution through the canonical internal registry, intentionally retain stale Customer 360 Party state, rebuild Customer 360 and reindex global search from immutable event history, and prove both derived views converge to non-disclosing Party tombstones without mutating authoritative Party, outbox or audit evidence. Bind this acceptance to the existing Customer Privacy Owner Execution permanent gate on both clean and reapplied schemas. This packet proves deterministic repair and replay safety only; automatic fresh-generation rollout, process-host convergence and final Step 15 closure remain separate work.",
+  "objective": "Continue Repository Step 15 with a bounded Customer 360 generation rollover. Move the shared production projection identity from customer.customer-360.v1 to customer.customer-360.v2 while keeping document schema version 1 unchanged. Prove that a legacy v1 checkpoint and stale personal document do not suppress historical Party privacy events: the normal Customer 360 run_batch path used by the production background worker starts the fresh v2 generation from immutable history, materializes the privacy-minimized tombstone, and leaves legacy v1 evidence untouched but non-authoritative. Query composition must follow the shared v2 constant automatically. This packet does not claim real crm-api process-host no-orphan closure or completion of Repository Step 15.",
   "allowed_paths": [
-    ".github/workflows/customer-privacy-owner-execution.yml",
     "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
+    "crates/crm-customer-360-composition/src/lib.rs",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
     "tests/test_architecture_documentation_consistency.py",
@@ -22,6 +22,7 @@
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
+    ".github/workflows/**",
     "Cargo.lock",
     "Cargo.toml",
     "apps/**",
@@ -29,7 +30,8 @@
     "architecture-policy.json",
     "contracts/**",
     "crates/crm-application-runtime/Cargo.toml",
-    "crates/crm-parties-privacy-scope-adapter/**",
+    "crates/crm-customer-360-composition/Cargo.toml",
+    "crates/crm-customer-360-query-adapter/**",
     "database/migrations/**",
     "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
     "docs/CRM_CAPABILITY_COVERAGE.md",
@@ -50,16 +52,14 @@
     "workspace-dependency-policy.json"
   ],
   "deliverables": [
-    "use the existing crm-application-runtime dependency graph with no manifest or lockfile change",
-    "invoke build_canonical_internal_owner_execution and execute_next so the real Parties owner endpoint is selected from the production registry",
-    "persist canonical Customer Privacy case, action-plan and retention-decision records plus a valid authoritative Party v1 fixture",
-    "observe the immutable parties.privacy.action.apply.completed event emitted by production owner execution rather than inserting a synthetic event",
-    "seed a deliberately stale Customer 360 Party contribution that still contains the original display name and root membership",
-    "rebuild Customer 360 from immutable history and prove the stale document becomes a source-version-2 privacy-minimized tombstone with empty root membership",
-    "reindex global search from immutable history and prove the Party becomes a source-version-2 privacy-minimized suppression document without the original name",
-    "repeat rebuild and reindex and prove authoritative Party, outbox and audit evidence counts remain unchanged",
-    "extend the existing Customer Privacy Owner Execution CI gate to compile, lint and execute this PostgreSQL acceptance on clean and reapplied schemas",
-    "add a permanent repository guard for zero dependency growth, production-boundary execution, stale-state proof, replay convergence, gate execution and explicit non-goals",
+    "change the shared Customer 360 production projection identity from customer.customer-360.v1 to customer.customer-360.v2",
+    "preserve Customer 360 projection document schema version 1 and all accepted contribution and tombstone semantics",
+    "seed a legacy v1 checkpoint and stale Party contribution containing the original display name and root membership",
+    "invoke the normal Customer360ProjectionWorker run_batch path rather than a manual initial rebuild",
+    "prove the fresh v2 generation replays immutable history and materializes the source-version-2 privacy-minimized Party tombstone",
+    "prove the legacy v1 checkpoint and document remain unchanged but are no longer read by the shared production identity",
+    "retain explicit v2 rebuild and fresh global-search generation replay evidence without mutating authoritative records, outbox events or audit records",
+    "mechanically bind the query adapter to the shared v2 constant and the production background worker to Customer360ProjectionWorker run_batch",
     "synchronize repository packet, generated navigation and exact packet fixtures"
   ],
   "required_checks": [
@@ -71,26 +71,27 @@
     "Customer Privacy Owner Execution CI"
   ],
   "acceptance": [
-    "the accepted head is based exactly on main commit e9fe1f352386d80a29d122db5d1ed6c47266bfaf and contains no unrelated change",
-    "workspace package count, internal dependency edges, manifests and Cargo.lock remain unchanged",
-    "the test invokes the canonical internal owner-execution service, which prepares a durable attempt and selects the real Parties owner endpoint",
-    "the immutable parties.privacy.action.apply.completed event is emitted by production execution and is not inserted by the test",
-    "before repair, PostgreSQL contains a stale Customer 360 Party contribution with source version 1, the original display name and root membership",
-    "Customer 360 rebuild replaces that stale state at the same party:<id> projection identity with source version 2, no original name, empty root membership and privacy_minimized lifecycle",
-    "global-search reindex writes the existing g3 suppression document at source version 2 with privacy_minimized lifecycle and no original name",
-    "a repeated rebuild and reindex leave authoritative Party records, outbox events and audit-record counts unchanged",
-    "the existing Customer Privacy Owner Execution CI workflow compiles, lints and executes the new acceptance on both a clean schema and a rollback/reapplied schema",
-    "no production dependency, public contract, migration, runtime worker, route or new permanent workflow is added",
-    "this packet does not claim automatic checkpoint rollover, fresh Customer 360 generation, real crm-api process-host convergence or completion of Repository Step 15",
+    "the accepted head is based exactly on main commit 2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a and contains no unrelated change",
+    "CUSTOMER_360_PROJECTION_ID is exactly customer.customer-360.v2 while CUSTOMER_360_PROJECTION_SCHEMA_VERSION remains exactly 1",
+    "workspace package count, internal dependency edges, manifests, Cargo.lock, migrations, contracts, routes and permanent workflows remain unchanged",
+    "the PostgreSQL acceptance persists a legacy customer.customer-360.v1 checkpoint and stale personal document before starting v2",
+    "the first authoritative v2 materialization uses Customer360ProjectionWorker run_batch and not Customer 360 rebuild",
+    "normal v2 background batches replay immutable history from the missing v2 checkpoint and produce a source-version-2 privacy_minimized tombstone with empty root membership and no original name",
+    "the legacy v1 checkpoint and stale document remain unchanged after v2 run_batch and explicit v2 rebuild",
+    "the Customer 360 query adapter imports and binds the shared CUSTOMER_360_PROJECTION_ID rather than a private literal",
+    "the production Customer360BackgroundWorker delegates each cycle to Customer360ProjectionWorker run_batch",
+    "a subsequent explicit v2 rebuild and fresh global-search generation replay leave authoritative Party, outbox and audit evidence counts unchanged",
+    "the existing Customer Privacy Owner Execution CI executes the updated PostgreSQL acceptance on clean and rollback/reapplied schemas",
+    "this packet does not claim destructive legacy cleanup, document-schema migration, real crm-api process-host no-orphan closure or completion of Repository Step 15",
     "one unchanged exact head passes every applicable permanent workflow and final changed-file/thread review"
   ],
   "non_goals": [
     "complete Repository Step 15 or Phase 8A",
-    "change the production Customer 360 projection identifier or implement automatic fresh-generation rollout",
+    "delete or mutate legacy customer.customer-360.v1 checkpoints or documents",
+    "change Customer 360 projection document schema version 1",
     "change Party, Customer 360 or search public API contracts",
-    "change accepted owner-action persistence, legal-hold, retention or tombstone semantics",
-    "add or change any dependency declaration, Cargo.lock, database migration, runtime worker or route",
-    "create a new permanent CI workflow or broaden unrelated workflow coverage",
+    "change accepted owner-action, retention, tombstone, Customer 360 contribution or search suppression semantics",
+    "add or change any dependency declaration, Cargo.lock, database migration, runtime worker, route or permanent CI workflow",
     "claim real crm-api process-host no-orphan closure",
     "declare architecture 10/10, product 10/10 or any product-complete expert module"
   ]

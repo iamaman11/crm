@@ -28,22 +28,22 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             packet["packet_id"],
-            "repository-step-15-party-tombstone-rebuild-convergence",
+            "repository-step-15-customer360-generation-rollover",
         )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
             {
                 "ref": "main",
-                "sha": "e9fe1f352386d80a29d122db5d1ed6c47266bfaf",
+                "sha": "2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a",
             },
         )
         self.assertEqual(packet["tracking_issues"], [126, 194])
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
-                ".github/workflows/customer-privacy-owner-execution.yml",
                 "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
+                "crates/crm-customer-360-composition/src/lib.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
@@ -64,19 +64,15 @@ class RepositoryNavigationTests(unittest.TestCase):
         )
         self.assertIn("complete Repository Step 15", packet["non_goals"][0])
         self.assertIn(
-            "invoke build_canonical_internal_owner_execution and execute_next so the real Parties owner endpoint is selected from the production registry",
+            "change the shared Customer 360 production projection identity from customer.customer-360.v1 to customer.customer-360.v2",
             packet["deliverables"],
         )
         self.assertIn(
-            "rebuild Customer 360 from immutable history and prove the stale document becomes a source-version-2 privacy-minimized tombstone with empty root membership",
+            "invoke the normal Customer360ProjectionWorker run_batch path rather than a manual initial rebuild",
             packet["deliverables"],
         )
         self.assertIn(
-            "repeat rebuild and reindex and prove authoritative Party, outbox and audit evidence counts remain unchanged",
-            packet["deliverables"],
-        )
-        self.assertIn(
-            "extend the existing Customer Privacy Owner Execution CI gate to compile, lint and execute this PostgreSQL acceptance on clean and reapplied schemas",
+            "prove the legacy v1 checkpoint and document remain unchanged but are no longer read by the shared production identity",
             packet["deliverables"],
         )
 
@@ -92,11 +88,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-15-party-tombstone-rebuild-convergence",
+            "repository-step-15-customer360-generation-rollover",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "e9fe1f352386d80a29d122db5d1ed6c47266bfaf",
+            "2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -165,7 +161,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Party tombstone app-runtime rebuild convergence packet"],
+                    "reasons": ["Customer 360 generation rollover packet"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -173,7 +169,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="e9fe1f352386d80a29d122db5d1ed6c47266bfaf",
+                return_value="2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a",
             ),
             patch(
                 "scripts.repository_navigation.build_report",
