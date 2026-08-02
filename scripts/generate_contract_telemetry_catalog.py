@@ -12,17 +12,26 @@ import sys
 from typing import Any
 
 POLICY_SCHEMA_VERSION = "crm.contract-lifecycle-policy/v1"
+REGISTRY_SCHEMA_VERSION = "crm.contract-lifecycle/v1"
 SAFE_TEXT = re.compile(r"^[A-Za-z0-9_.:+-]+$")
 
 
-def load_policy(path: Path) -> dict[str, Any]:
+def load_json_object(path: Path, label: str) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f"cannot read lifecycle policy {path}: {error}") from error
+        raise ValueError(f"cannot read {label} {path}: {error}") from error
     if not isinstance(value, dict):
-        raise ValueError("lifecycle policy must contain an object")
+        raise ValueError(f"{label} must contain an object")
     return value
+
+
+def load_policy(path: Path) -> dict[str, Any]:
+    return load_json_object(path, "lifecycle policy")
+
+
+def load_registry(path: Path) -> dict[str, Any]:
+    return load_json_object(path, "lifecycle registry")
 
 
 def required_text(value: dict[str, Any], key: str, location: str) -> str:
@@ -32,12 +41,55 @@ def required_text(value: dict[str, Any], key: str, location: str) -> str:
     return candidate
 
 
-def deprecated_capabilities(policy: dict[str, Any]) -> list[dict[str, Any]]:
+def capability_providers(registry: dict[str, Any]) -> dict[tuple[str, str], str]:
+    if registry.get("schema_version") != REGISTRY_SCHEMA_VERSION:
+        raise ValueError(f"lifecycle registry must use {REGISTRY_SCHEMA_VERSION}")
+    if registry.get("policy_schema_version") != POLICY_SCHEMA_VERSION:
+        raise ValueError(
+            f"lifecycle registry policy schema must use {POLICY_SCHEMA_VERSION}"
+        )
+    columns = registry.get("published_columns")
+    required_columns = ("id", "version", "provider_module_id")
+    if not isinstance(columns, list) or any(column not in columns for column in required_columns):
+        raise ValueError(
+            "lifecycle registry published_columns must include id, version and provider_module_id"
+        )
+    published = registry.get("published")
+    if not isinstance(published, dict):
+        raise ValueError("lifecycle registry published must be an object")
+    capabilities = published.get("capabilities")
+    if not isinstance(capabilities, list):
+        raise ValueError("lifecycle registry published.capabilities must be a list")
+    indexes = {column: columns.index(column) for column in required_columns}
+    providers: dict[tuple[str, str], str] = {}
+    for index, row in enumerate(capabilities):
+        location = f"published.capabilities[{index}]"
+        if not isinstance(row, list) or len(row) < len(columns):
+            raise ValueError(f"{location} must match published_columns")
+        values = {
+            column: row[position] for column, position in indexes.items()
+        }
+        capability_id = required_text(values, "id", location)
+        version = required_text(values, "version", location)
+        provider = required_text(values, "provider_module_id", location)
+        coordinate = (capability_id, version)
+        if coordinate in providers:
+            raise ValueError(
+                f"duplicate published capability {capability_id}@{version}"
+            )
+        providers[coordinate] = provider
+    return providers
+
+
+def deprecated_capabilities(
+    policy: dict[str, Any], registry: dict[str, Any]
+) -> list[dict[str, Any]]:
     if policy.get("schema_version") != POLICY_SCHEMA_VERSION:
         raise ValueError(f"lifecycle policy must use {POLICY_SCHEMA_VERSION}")
     contracts = policy.get("contracts")
     if not isinstance(contracts, list):
         raise ValueError("lifecycle policy contracts must be a list")
+    providers = capability_providers(registry)
     entries: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for index, item in enumerate(contracts):
@@ -48,28 +100,44 @@ def deprecated_capabilities(policy: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         capability_id = required_text(item, "id", location)
         version = required_text(item, "version", location)
-        owner = required_text(item, "owner", location)
+        # This is the governance owner of the lifecycle decision, not the runtime module.
+        required_text(item, "owner", location)
         telemetry = item.get("telemetry")
         if not isinstance(telemetry, dict):
             raise ValueError(f"{location}.telemetry must be an object")
         metric = required_text(telemetry, "metric", f"{location}.telemetry")
         lookback_days = telemetry.get("lookback_days")
-        if isinstance(lookback_days, bool) or not isinstance(lookback_days, int) or lookback_days <= 0:
-            raise ValueError(f"{location}.telemetry.lookback_days must be positive")
+        if (
+            isinstance(lookback_days, bool)
+            or not isinstance(lookback_days, int)
+            or lookback_days <= 0
+        ):
+            raise ValueError(
+                f"{location}.telemetry.lookback_days must be positive"
+            )
         coordinate = (capability_id, version)
         if coordinate in seen:
-            raise ValueError(f"duplicate deprecated capability {capability_id}@{version}")
+            raise ValueError(
+                f"duplicate deprecated capability {capability_id}@{version}"
+            )
+        provider = providers.get(coordinate)
+        if provider is None:
+            raise ValueError(
+                f"deprecated capability is not published: {capability_id}@{version}"
+            )
         seen.add(coordinate)
         entries.append(
             {
                 "capability_id": capability_id,
                 "capability_version": version,
-                "owner_module_id": owner,
+                "owner_module_id": provider,
                 "metric": metric,
                 "lookback_days": lookback_days,
             }
         )
-    entries.sort(key=lambda entry: (entry["capability_id"], entry["capability_version"]))
+    entries.sort(
+        key=lambda entry: (entry["capability_id"], entry["capability_version"])
+    )
     return entries
 
 
@@ -134,9 +202,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=Path("contracts/contract-lifecycle-policy.json"),
     )
     parser.add_argument(
+        "--registry",
+        type=Path,
+        default=Path("contracts/contract-lifecycle.json"),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
-        default=Path("crates/crm-application-runtime/src/generated_contract_telemetry.rs"),
+        default=Path(
+            "crates/crm-application-runtime/src/generated_contract_telemetry.rs"
+        ),
     )
     return parser.parse_args(argv)
 
@@ -144,9 +219,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        expected = render(deprecated_capabilities(load_policy(args.policy)))
+        expected = render(
+            deprecated_capabilities(
+                load_policy(args.policy), load_registry(args.registry)
+            )
+        )
     except ValueError as error:
-        print(f"contract telemetry catalog generation failed: {error}", file=sys.stderr)
+        print(
+            f"contract telemetry catalog generation failed: {error}",
+            file=sys.stderr,
+        )
         return 1
     if args.write:
         write_atomic(args.output, expected)
