@@ -1,29 +1,23 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "product-development-10-of-10-plan",
-  "title": "Define universal CRM product development 10/10 plan",
+  "packet_id": "repository-step-15-party-tombstone-search-convergence",
+  "title": "Preserve Party tombstones and remove erased Party data from global search",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "dbba30de911bef10149342ac0490c00ec858d42f"
+    "sha": "5bc885c6a311cbe95eb6e5ba1a85d10aed400650"
   },
   "tracking_issues": [
-    2,
-    11,
-    29,
+    126,
     194
   ],
-  "objective": "Turn the existing CRM capability coverage baseline into one binding, sequenced and automation-first product-development plan for a universal modern CRM, including governed triggers, robots, workflows, approvals, pipelines, funnels, Kanban, cadences, omnichannel, service, marketing, customer success, commercial lifecycle, analytics, low-code, AI, marketplace and enterprise proof, without starting Repository Step 15 or changing current product readiness.",
+  "objective": "Begin Repository Step 15 with the bounded authoritative Party tombstone and global-search convergence slice: retain the soft-deleted minimized Party row as the non-reusable identity tombstone, consume the existing replay-safe Parties owner-action event in a fresh global-search generation, replace stale Party search content with a non-disclosable suppression document, and prove that ordinary search cannot return erased or privacy-minimized Party documents. This packet does not complete Step 15 until Customer 360, remaining projections/cache evidence and exact PostgreSQL process acceptance are accepted.",
   "allowed_paths": [
+    "crates/crm-core-data/src/search_store.rs",
+    "crates/crm-global-search-composition/src/lib.rs",
     "docs/ACTIVE_PACKET.md",
-    "docs/IMPLEMENTATION_ROADMAP.md",
-    "docs/PHASE8_DELIVERY_PLAN.md",
-    "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
-    "docs/README.md",
     "repository-packet.json",
-    "tests/test_architecture_documentation_consistency.py",
-    "tests/test_product_development_plan.py",
-    "tests/test_repository_navigation.py"
+    "tests/test_party_tombstone_search_convergence.py"
   ],
   "forbidden_paths": [
     ".github/**",
@@ -33,10 +27,13 @@
     "architecture-governance.json",
     "architecture-policy.json",
     "contracts/**",
-    "crates/**",
-    "database/**",
+    "database/migrations/**",
+    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
     "docs/CRM_CAPABILITY_COVERAGE.md",
+    "docs/IMPLEMENTATION_ROADMAP.md",
     "docs/MODULE_CATALOG.md",
+    "docs/PHASE8_DELIVERY_PLAN.md",
+    "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
     "docs/PROJECT_STATUS.md",
     "modules/**",
     "packages/**",
@@ -50,36 +47,38 @@
     "workspace-dependency-policy.json"
   ],
   "deliverables": [
-    "add PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md as the normative product-portfolio, automation-semantics and functional-completion plan",
-    "pre-register Repository Step 23 as Catalog plus effective-dated Pricing and Step 24 as Quote/CPQ approval and process-heavy orchestration so architecture proof cannot select easier domains later",
-    "define Phase 8C universal automation with typed triggers, conditions, governed robot actions, durable execution, approvals, visual workflow authoring and sandboxed programmable extensions",
-    "define configurable pipelines, funnels, Kanban, sales cadences and guided execution without creating an alternate mutation, authorization, privacy or audit path",
-    "sequence later Sales, Service, Marketing, Customer Success, PRM, projects, documents, analytics, integrations, Admin Studio, mobile, AI, marketplace and enterprise product trains",
-    "synchronize the implementation roadmap, Phase 8 delivery plan and documentation navigation without changing current readiness or starting Repository Step 15",
-    "add permanent documentation tests that prevent omission or weakening of the product waves, automation safety boundaries and 10/10 completion contract",
+    "subscribe global search generation g3 to parties.privacy.action.apply.completed without adding a dependency or changing the public Party contract",
+    "strictly validate the owner-action event envelope and canonical identity fields before applying a suppression projection",
+    "replace erased and privacy-minimized Party search documents with non-personal markers at the exact next aggregate version",
+    "exclude every non-active lifecycle marker in the PostgreSQL search candidate query before live visibility evaluation",
+    "retain the existing soft-deleted minimized Party row and stable identifier as the no-reuse tombstone rather than physically deleting it",
+    "add permanent tests for generation rollover, exact event validation, stale-name replacement and SQL exclusion",
     "regenerate ACTIVE_PACKET.md from the exact packet declaration"
   ],
   "required_checks": [
     "Affected Scope CI",
     "Governance CI",
-    "Rust Generated Sync"
+    "Rust Generated Sync",
+    "Rust Unit Test Matrix",
+    "PostgreSQL Integration"
   ],
   "acceptance": [
-    "the new product plan is normative, sequenced and explicitly covers the complete universal CRM portfolio rather than only backend domain foundations",
-    "automation explicitly covers typed triggers, conditions, governed robot actions, durable waits/timers, retries, idempotency, crash recovery, human approvals, visual authoring, simulation, diagnostics and safe programmable extensions",
-    "pipelines and Kanban explicitly cover versioned stages, transition rules, required fields/checklists, drag-and-drop validation, saved views, bulk movement, accessibility and performance",
-    "Repository Steps 23 and 24 are pre-registered as Catalog/Pricing and Quote/CPQ orchestration respectively and remain architecture validation waves",
-    "roadmap, Phase 8 plan, documentation navigation and product plan agree on Phases 8A through 8H and Phases 9 through 11",
-    "Repository Step 15 remains the next permitted implementation packet and is not started",
-    "Phase 8A and Customer Privacy remain incomplete, architecture 10/10 remains unclaimed, product-level 10/10 remains a future portfolio result and product-complete expert modules remain zero",
-    "the exact planning pull-request head passes every applicable permanent workflow on one unchanged meaningful user-authored SHA"
+    "the accepted head is based exactly on main commit 5bc885c6a311cbe95eb6e5ba1a85d10aed400650 and contains no unrelated change",
+    "global search uses a fresh immutable generation so historical Party owner-action events are replayed instead of being skipped by an older checkpoint",
+    "only tenant-bound exact Parties owner-action events with canonical owner, capability, resource, resource version and supported delete/anonymize action are accepted",
+    "a delete action replaces the prior searchable Party name with an erased marker and an anonymize action replaces it with a privacy-minimized marker",
+    "PostgreSQL search candidate selection excludes non-active lifecycle documents before any result or match metadata can escape",
+    "no new crate, dependency declaration, public route, Protobuf contract, database migration, worker or permanent workflow is added",
+    "Repository Step 15 remains incomplete after this slice; Customer 360, other derived-state/cache evidence and exact process-level no-orphan acceptance remain next",
+    "one unchanged exact head passes every applicable permanent workflow and final changed-file/thread review"
   ],
   "non_goals": [
-    "start Repository Step 15 or any later product implementation",
-    "implement workflow runtime, robots, pipelines, Kanban, CPQ, communications, AI or marketplace behavior",
-    "change Rust, contracts, schemas, migrations, persistence, routes, workers, manifests, dependencies or product inventory",
-    "change Phase 8A, Customer Privacy or module readiness",
-    "declare architecture 10/10, product-level 10/10 or any product-complete expert module",
-    "add, remove or modify a permanent workflow"
+    "complete Repository Step 15 or Phase 8A",
+    "change Party public create, update, get or list contracts",
+    "change the accepted owner-action persistence, retention, legal-hold or soft-delete semantics",
+    "add Customer 360 or other owner convergence in this first slice",
+    "add a Customer Privacy worker or finalize privacy cases",
+    "change architecture budgets, dependencies, package count or permanent CI workflows",
+    "declare architecture 10/10, product 10/10 or any product-complete expert module"
   ]
 }
