@@ -25,8 +25,8 @@ use crm_customer_privacy_production::{
 use crm_global_search_composition::{GlobalSearchWorker, INITIAL_GLOBAL_SEARCH_GENERATION_ID};
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ModuleId, PayloadEncoding,
-    PortFuture, RecordId, RecordRef, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TenantId,
-    TraceId, TypedPayload,
+    PortFuture, RecordId, RecordRef, RetentionPolicyId, SchemaId, SchemaVersion, SdkError,
+    TenantId, TraceId, TypedPayload,
 };
 use crm_parties_capability_adapter::{RECORD_TYPE as PARTY_RECORD_TYPE, persisted_contract};
 use crm_query_runtime::{QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision};
@@ -109,13 +109,14 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
         .await
         .expect("connect Party rebuild convergence application pool");
     let store = PostgresDataStore::from_pool(application);
-    let service = build_canonical_internal_owner_execution(&CustomerPrivacyProductionDependencies {
-        store: store.clone(),
-        activation: Arc::new(AlwaysActive),
-        cursor_key: [0x71; 32],
-        visibility_authorizer: Arc::new(DenyVisibility),
-    })
-    .expect("build canonical internal owner execution registry");
+    let service =
+        build_canonical_internal_owner_execution(&CustomerPrivacyProductionDependencies {
+            store: store.clone(),
+            activation: Arc::new(AlwaysActive),
+            cursor_key: [0x71; 32],
+            visibility_authorizer: Arc::new(DenyVisibility),
+        })
+        .expect("build canonical internal owner execution registry");
     let execution = service
         .execute_next(OwnerExecutionInvocation {
             tenant_id: TenantId::try_new(tenant.clone()).unwrap(),
