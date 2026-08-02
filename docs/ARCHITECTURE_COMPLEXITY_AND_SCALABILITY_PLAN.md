@@ -68,9 +68,11 @@ The historical Step 13 measurement established 113 workspace packages, 841 inter
 
 Repository Step 14 is accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
 
-Repository Step 15 is accepted through PRs #263–#267. The final process-host closure is PR #267 / accepted source `f1b72dbee09f152005cb3584b9bcc1573bf2c4fe` / squash merge `4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf` / 19 of 19 applicable permanent workflows. The complete exact evidence ledger is recorded in Section 11 and `PROJECT_STATUS.md`.
+Repository Step 15 is accepted through PRs #263–#267. The final process-host closure is PR #267 / accepted source `f1b72dbee09f152005cb3584b9bcc1573bf2c4fe` / squash merge `4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf` / 19 of 19 applicable permanent workflows.
 
-Current blocking baseline after Step 15:
+Repository Step 16 is accepted through PR #269 / source `74b1d7b0f8764fcd90839b7aab25f8f82fe5e552` / merge `6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd` / 20 of 20 and PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17. The complete exact evidence ledger is recorded in Section 11 and `PROJECT_STATUS.md`.
+
+Current blocking baseline after Step 16:
 
 | Metric | Historical Step 13 | Current |
 |---|---:|---:|
@@ -94,7 +96,7 @@ An ordinary capability added to an existing owner creates **zero new crates** by
 | C — golden owner package and persistence model | **In progress** | Customer Privacy golden package, final subject policy, restriction/legal-hold placement, retention precedence, durable owner execution/outcomes, governed access/export, owner actions and accepted Party tombstone/no-orphan convergence through Step 15 | worker lifecycle at Step 19 and Phase 8A closure at Step 21 |
 | D — contribution aggregation | **Complete** | all active first-party owner contributions aggregated through `crm-first-party-modules` by PRs #246, #248 and #249 | preserve bounded owner-owned contribution boundaries |
 | E — affected-scope CI | **Complete** | PR #239: deterministic Rust closure and declarative contract/API/migration/PostgreSQL/process/product/frontend/operations ownership with unknown-path fail closed | preserve policy/workflow compatibility and review gate value/cost at Step 22 |
-| F — generic conformance and contract lifecycle | **In progress** | reusable mutation/query conformance accepted through PR #235 | worker conformance Step 16, contract lifecycle Step 17, real worker adoption Step 19 |
+| F — generic conformance and contract lifecycle | **In progress** | reusable mutation/query conformance through PR #235 and reusable worker conformance with representative real-worker adoption through PRs #269–#270 | contract lifecycle Step 17 and real Customer Privacy worker adoption Step 19 |
 | G — transitional consolidation | **Complete** | PR #259 removes one redundant Customer Accounts package behavior-neutrally and lowers measured budgets | preserve the reduction and prove later changes remain bounded |
 | H — reproducible environment and navigation | **In progress** | `affected`, `check-affected`, `explain`, fail-closed `packet-check`, generated active packet and repository map | deterministic `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke` at Step 18 |
 | I — frontend and operations parity | **Incomplete** | existing product/process checks remain mandatory | frontend/accessibility/browser and restore/SLO/performance/security/supply-chain evidence at Steps 20–21 |
@@ -120,8 +122,8 @@ At most one implementation packet may be active. The next permitted packet is th
 13. complete ADR-031 governance closure: measurement, blocking suppression/direct-lint governance and remaining process-host/change-cost/dependency exit evidence — **complete through PR #257**;
 14. first measured behavior-neutral transitional domain-cluster consolidation — **complete through PR #259**;
 15. Party tombstone, no-orphan proof and projection/search/cache convergence — **complete through PR #267**;
-16. reusable generic worker conformance adopted by representative real workers — **next, not started**;
-17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement;
+16. reusable generic worker conformance adopted by representative real workers — **complete through PR #270**;
+17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement — **next, not started**;
 18. deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke`;
 19. real Customer Privacy worker lifecycle and complete process/end-to-end acceptance;
 20. Phase 8A frontend, accessibility, browser and operations evidence;
@@ -263,9 +265,8 @@ Duplicate or low-value gates must be simplified, merged or removed unless an ind
 
 ## 7. Generic conformance and contract lifecycle
 
-Mutation and query conformance are accepted. Remaining work must prove:
+Mutation, query and worker conformance are accepted. Remaining work must prove:
 
-- reusable worker conformance with activation, authorization, tenant, replay, lease/crash and no-side-effect guarantees;
 - published-version compatibility checks;
 - deprecation telemetry and consumer inventory;
 - governed consumer migration;
@@ -339,19 +340,30 @@ Repository Step 15 is complete through five bounded accepted slices:
 
 The combined evidence proves authoritative stable non-reusable Party identity tombstones, strict event/version lineage, non-disclosure in Search and Customer 360, deterministic replay/rebuild, automatic fresh-generation rollout and real process-host no-orphan convergence. No workspace package, internal dependency edge, public route, public contract or migration was added by Step 15.
 
-This completes Repository Step 15 only. Customer Privacy, Phase 8A, worker conformance, contract lifecycle, frontend/operations evidence and architecture 10/10 remain incomplete.
+At the Step 15 boundary, Customer Privacy, Phase 8A, worker conformance, contract lifecycle, frontend/operations evidence and architecture 10/10 remained incomplete.
 
-### 11.1 Next bounded packet — Repository Step 16
+### 11.1 Accepted Step 16 closure evidence
 
-Repository Step 16 is **next and not started**.
+Repository Step 16 is complete through two bounded accepted slices:
+
+1. PR #269 / source `74b1d7b0f8764fcd90839b7aab25f8f82fe5e552` / merge `6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd` / 20 of 20 — the business-neutral standard-library conformance helper proves denial without side effects, retryable preservation and exact recovery; Customer Enrichment and CRM API import representatives prove activation, live authorization, tenant isolation, completed replay and crash/restart recovery.
+2. PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17 — two live production `crm-api` executors are observed in one PostgreSQL blocking chain while competing for the same durable import work; existing transaction/idempotency ownership serializes the second executor and release converges to exactly one Party record, idempotency record, event, audit record and completed checkpoint.
+
+The combined evidence proves reusable worker conformance and contrasting real-worker adoption without owner-specific generic logic, a generic lease API or production algorithm/contract/schema/migration/package/dependency/workflow changes. Customer Privacy continues to publish zero workers, so its real worker lifecycle remains Step 19.
+
+This completes Repository Step 16 only. Customer Privacy, Phase 8A, contract lifecycle, local lifecycle, frontend/operations evidence and architecture 10/10 remain incomplete.
+
+### 11.2 Next bounded packet — Repository Step 17
+
+Repository Step 17 is **next and not started**.
 
 Required scope:
 
-- reusable generic worker conformance;
-- activation, authorization, tenant, replay, lease/crash and no-side-effect guarantees;
-- adoption by representative contrasting real workers;
-- owner-specific semantics kept outside the generic algorithms;
-- no unrelated contract-lifecycle, local-environment, frontend or operations work.
+- contract compatibility and published-version gates;
+- deprecation telemetry;
+- consumer migration evidence;
+- governed retirement enforcement;
+- no unrelated local-environment, Customer Privacy worker, frontend or operations work.
 
 The packet must start from current `main`, declare exact allowed/forbidden paths and pass every applicable permanent workflow on one unchanged meaningful user-authored head.
 
