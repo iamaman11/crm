@@ -342,7 +342,7 @@ impl ProjectionHandler for Customer360ProjectionHandler {
                     CONTACT_POINT_RECORD_TYPE,
                     CONTACT_POINT_CREATED_SCHEMA,
                 )?;
-                let event = decode::<contact_points::ContactPointCreatedEvent>(delivery)?;
+                let event = decode::<contact_points::PartyCreatedEvent>(delivery)?;
                 contact_point_contribution(
                     delivery,
                     event.contact_point.ok_or_else(|| {
@@ -1141,6 +1141,7 @@ mod tests {
                         ..Default::default()
                     }),
                 }),
+                changed_fields: Vec::new(),
             },
         );
         let write = Customer360ProjectionHandler
