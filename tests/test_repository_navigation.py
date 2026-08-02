@@ -43,6 +43,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             set(packet["allowed_paths"]),
             {
                 "crates/crm-customer-360-composition/src/lib.rs",
+                "crates/crm-customer-360-query-adapter/src/lib.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
@@ -70,6 +71,10 @@ class RepositoryNavigationTests(unittest.TestCase):
         )
         self.assertIn(
             "remove root Party membership from the privacy tombstone so ordinary Customer 360 selection cannot load or disclose it",
+            packet["deliverables"],
+        )
+        self.assertIn(
+            "keep existing query-adapter test fixtures synchronized with the additive internal Party contribution field",
             packet["deliverables"],
         )
         self.assertIn(
