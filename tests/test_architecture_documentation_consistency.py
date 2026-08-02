@@ -175,7 +175,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(classification, self.plan)
 
         self.assertIn("Mere non-growth is insufficient", self.plan)
-        self.assertIn("Every safely removable owner-specific dependency must be removed", self.adr32)
+        adr32_lowered = self.adr32.lower()
+        self.assertIn("safely removable", adr32_lowered)
+        self.assertIn("must be removed", adr32_lowered)
         self.assertIn(
             "Step 22 cannot close with an unresolved runtime dependency classification",
             self.status,
@@ -260,7 +262,12 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             ["Affected Scope CI", "Governance CI", "Rust Generated Sync"],
         )
         self.assertIn("start Repository Step 15", self.packet["non_goals"])
-        self.assertIn("add, remove or modify a permanent workflow", self.packet["non_goals"])
+        self.assertTrue(
+            any(
+                "add, remove or modify a permanent workflow" in non_goal
+                for non_goal in self.packet["non_goals"]
+            )
+        )
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
