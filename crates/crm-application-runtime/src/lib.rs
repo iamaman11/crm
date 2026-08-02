@@ -26,7 +26,6 @@ mod export_execution_source;
 mod export_selection_bootstrap;
 mod export_selection_source;
 mod gateway_grpc;
-mod generated_contract_telemetry;
 mod native_composition;
 mod platform;
 mod process;
@@ -82,8 +81,6 @@ pub use native_composition::{
 pub use platform::*;
 pub use process::*;
 pub use runtime::*;
-
-pub const CRATE_NAME: &str = "crm-application-runtime";
 
 pub fn declared_business_module_ids() -> std::collections::BTreeSet<String> {
     let mut module_ids = native_composition::declared_business_module_ids();

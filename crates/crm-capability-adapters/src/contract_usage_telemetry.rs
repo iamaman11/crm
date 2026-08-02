@@ -264,17 +264,19 @@ impl CapabilityRegistryPort for MeteredCapabilityRegistry {
 
 /// Wrap exact mutation/query registries with PII-free deprecated-contract counters.
 ///
-/// The callback receives a deterministic Prometheus renderer sharing the same
-/// counters. Recording remains synchronous and cannot alter gateway outcomes.
-pub fn meter_contract_registries<F>(
+/// The returned renderer shares the same counters. Recording remains
+/// synchronous and cannot alter gateway outcomes.
+pub fn meter_contract_registries(
     catalog: &'static [(&'static str, &'static str, &'static str, &'static str, u32)],
     registries: [Arc<dyn CapabilityRegistryPort>; 2],
     definitions: [&[CapabilityDefinition]; 2],
-    publish_metrics: F,
-) -> Result<[Arc<dyn CapabilityRegistryPort>; 2], SdkError>
-where
-    F: FnOnce(Arc<dyn Fn() -> String + Send + Sync>),
-{
+) -> Result<
+    (
+        [Arc<dyn CapabilityRegistryPort>; 2],
+        Arc<dyn Fn() -> String + Send + Sync>,
+    ),
+    SdkError,
+> {
     let metrics = Arc::new(ContractUsageMetrics::new(
         catalog,
         definitions[0],
@@ -283,7 +285,6 @@ where
     let renderer_metrics = Arc::clone(&metrics);
     let renderer: Arc<dyn Fn() -> String + Send + Sync> =
         Arc::new(move || renderer_metrics.render_prometheus());
-    publish_metrics(renderer);
 
     let mutation: Arc<dyn CapabilityRegistryPort> = Arc::new(MeteredCapabilityRegistry {
         inner: Arc::clone(&registries[0]),
@@ -295,7 +296,7 @@ where
         metrics,
         surface: ContractUsageSurface::Query,
     });
-    Ok([mutation, query])
+    Ok(([mutation, query], renderer))
 }
 
 #[cfg(test)]
@@ -336,7 +337,6 @@ mod tests {
     #[tokio::test]
     async fn exact_resolution_increments_and_wrong_surface_does_not() {
         let definition = definition("crm.test");
-        let mut render = None;
         let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
             Arc::new(Registry {
                 definition: Some(definition.clone()),
@@ -345,14 +345,12 @@ mod tests {
                 definition: Some(definition.clone()),
             }),
         ];
-        let [mutation, query] = meter_contract_registries(
+        let ([mutation, query], render) = meter_contract_registries(
             CATALOG,
             registries,
             [std::slice::from_ref(&definition), &[]],
-            |renderer| render = Some(renderer),
         )
         .unwrap();
-        let render = render.unwrap();
         assert!(render().ends_with(" 0\n"));
 
         assert!(
@@ -376,18 +374,16 @@ mod tests {
     #[tokio::test]
     async fn unknown_resolution_does_not_increment() {
         let definition = definition("crm.test");
-        let mut render = None;
         let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
             Arc::new(Registry {
                 definition: Some(definition.clone()),
             }),
             Arc::new(Registry { definition: None }),
         ];
-        let [mutation, _] = meter_contract_registries(
+        let ([mutation, _], render) = meter_contract_registries(
             CATALOG,
             registries,
             [std::slice::from_ref(&definition), &[]],
-            |renderer| render = Some(renderer),
         )
         .unwrap();
         let missing = CapabilityId::try_new("test.record.missing").unwrap();
@@ -398,7 +394,7 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
-        assert!(render.unwrap()().ends_with(" 0\n"));
+        assert!(render().ends_with(" 0\n"));
     }
 
     #[test]
@@ -408,7 +404,6 @@ mod tests {
             CATALOG,
             [Arc::clone(&no_registry), Arc::clone(&no_registry)],
             [&[], &[]],
-            |_| {},
         )
         .err()
         .expect("invalid telemetry catalog must fail");
@@ -419,7 +414,6 @@ mod tests {
             CATALOG,
             [Arc::clone(&no_registry), no_registry],
             [&[wrong_owner], &[]],
-            |_| {},
         )
         .err()
         .expect("invalid telemetry catalog must fail");
@@ -430,15 +424,12 @@ mod tests {
     fn prometheus_output_is_deterministic_zero_seeded_and_pii_free() {
         let definition = definition("crm.test");
         let no_registry: Arc<dyn CapabilityRegistryPort> = Arc::new(Registry { definition: None });
-        let mut render = None;
-        meter_contract_registries(
+        let (_, render) = meter_contract_registries(
             CATALOG,
             [Arc::clone(&no_registry), no_registry],
             [&[definition], &[]],
-            |renderer| render = Some(renderer),
         )
         .unwrap();
-        let render = render.unwrap();
         let first = render();
         let second = render();
 

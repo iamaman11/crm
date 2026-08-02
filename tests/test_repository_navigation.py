@@ -42,6 +42,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "affected-scope-policy.json",
                 "crates/crm-application-runtime/src/generated_contract_telemetry.rs",
                 "crates/crm-application-runtime/src/lib.rs",
+                "crates/crm-application-runtime/src/process.rs",
                 "crates/crm-application-runtime/src/runtime.rs",
                 "crates/crm-capability-adapters/src/contract_usage_telemetry.rs",
                 "crates/crm-capability-adapters/src/lib.rs",

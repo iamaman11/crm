@@ -1,5 +1,5 @@
 use crate::export_selection_bootstrap::ExportSelectionWorkerAccess;
-use crate::generated_contract_telemetry::DEPRECATED_CONTRACTS;
+include!("generated_contract_telemetry.rs");
 use crate::{
     ApplicationConfig, ApplicationGatewayService, BootstrapVisibilityResource,
     CustomerEnrichmentApplicationWorkerDependencies,
@@ -110,10 +110,7 @@ impl fmt::Debug for ApplicationComponents {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ApplicationComponents")
-            .field("module_count", &self.module_ids.len())
-            .field("tenant_count", &self.tenant_ids.len())
-            .field("ready", &self.is_ready())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -123,32 +120,19 @@ impl ApplicationComponents {
     }
 
     pub fn last_worker_error(&self) -> Option<String> {
-        self.last_worker_error
-            .lock()
-            .ok()
-            .and_then(|value| value.clone())
+        self.last_worker_error.lock().ok()?.clone()
     }
 }
 
+#[derive(Debug)]
 pub struct ApplicationRuntime {
     config: ApplicationConfig,
     components: Arc<ApplicationComponents>,
 }
 
-impl fmt::Debug for ApplicationRuntime {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("ApplicationRuntime")
-            .field("http_bind", &self.config.http_bind)
-            .field("grpc_bind", &self.config.grpc_bind)
-            .field("components", &self.components)
-            .finish()
-    }
-}
-
 impl ApplicationRuntime {
     pub async fn assemble(config: ApplicationConfig) -> Result<Self, ApplicationRuntimeError> {
-        config.validate()?;
+        config.validate().map_err(ApplicationRuntimeError::Config)?;
         let store = PostgresDataStore::connect(&config.database_url, config.maximum_connections)
             .await
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
@@ -216,18 +200,16 @@ impl ApplicationRuntime {
         }
         let mutation_definitions = composition.mutation_definitions().to_vec();
         let query_definitions = composition.query_definitions().to_vec();
-        let mut contract_usage_metrics_text: Arc<dyn Fn() -> String + Send + Sync> =
-            Arc::new(String::new);
-        let [mutation_registry, query_registry] = meter_contract_registries(
-            DEPRECATED_CONTRACTS,
-            [
-                composition.mutation_registry(),
-                composition.query_registry(),
-            ],
-            [&mutation_definitions, &query_definitions],
-            |renderer| contract_usage_metrics_text = renderer,
-        )
-        .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let ([mutation_registry, query_registry], contract_usage_metrics_text) =
+            meter_contract_registries(
+                DEPRECATED_CONTRACTS,
+                [
+                    composition.mutation_registry(),
+                    composition.query_registry(),
+                ],
+                [&mutation_definitions, &query_definitions],
+            )
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_import_outcome_definitions = internal_capability_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_export_selection_definitions =
@@ -609,12 +591,6 @@ impl fmt::Display for ApplicationRuntimeError {
 
 impl Error for ApplicationRuntimeError {}
 
-impl From<crate::ApplicationConfigError> for ApplicationRuntimeError {
-    fn from(value: crate::ApplicationConfigError) -> Self {
-        Self::Config(value)
-    }
-}
-
 #[derive(Clone)]
 struct HttpState {
     components: Arc<ApplicationComponents>,
@@ -731,11 +707,8 @@ async fn health() -> impl IntoResponse {
     (StatusCode::OK, Json(json!({"status": "ok"})))
 }
 
-async fn metrics(State(state): State<HttpState>) -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        (state.components.contract_usage_metrics_text)(),
-    )
+async fn metrics(State(state): State<HttpState>) -> String {
+    (state.components.contract_usage_metrics_text)()
 }
 
 async fn ready(State(state): State<HttpState>) -> impl IntoResponse {

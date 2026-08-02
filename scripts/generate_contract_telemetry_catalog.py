@@ -146,12 +146,12 @@ def render(entries: list[dict[str, Any]]) -> bytes:
     ]
     if not entries:
         prefix.append(
-            "pub(crate) const DEPRECATED_CONTRACTS: &[(&str, &str, &str, &str, u32)] = &[];\n"
+            "const DEPRECATED_CONTRACTS: &[(&str, &str, &str, &str, u32)] = &[];\n"
         )
         return "".join(prefix).encode("utf-8")
 
     lines = prefix + [
-        "pub(crate) const DEPRECATED_CONTRACTS: &[(&str, &str, &str, &str, u32)] = &[\n"
+        "const DEPRECATED_CONTRACTS: &[(&str, &str, &str, &str, u32)] = &[\n"
     ]
     for entry in entries:
         lines.extend(

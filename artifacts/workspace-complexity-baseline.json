@@ -1,0 +1,1738 @@
+{
+  "ci": {
+    "action_reference_count": 122,
+    "concurrency_workflow_count": 41,
+    "job_count": 43,
+    "main_only_push_workflow_count": 36,
+    "path_filter_entry_count": 1746,
+    "postgres_workflow_count": 31,
+    "pull_request_workflow_count": 41,
+    "run_step_count": 402,
+    "workflow_count": 42,
+    "workflows": [
+      {
+        "action_reference_count": 5,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": false,
+        "job_count": 1,
+        "maximum_timeout_minutes": 45,
+        "name": "Affected Scope CI",
+        "path": ".github/workflows/affected-scope.yml",
+        "path_filter_count": 0,
+        "pushes_main_only": false,
+        "run_step_count": 7
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 70,
+        "name": "Application Runtime CI",
+        "path": ".github/workflows/application-runtime.yml",
+        "path_filter_count": 118,
+        "pushes_main_only": true,
+        "run_step_count": 12
+      },
+      {
+        "action_reference_count": 2,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": false,
+        "job_count": 1,
+        "maximum_timeout_minutes": 12,
+        "name": "CI Telemetry Baseline",
+        "path": ".github/workflows/ci-telemetry-baseline.yml",
+        "path_filter_count": 8,
+        "pushes_main_only": true,
+        "run_step_count": 2
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": false,
+        "job_count": 1,
+        "maximum_timeout_minutes": 10,
+        "name": "Complexity Baseline CI",
+        "path": ".github/workflows/complexity-baseline.yml",
+        "path_filter_count": 52,
+        "pushes_main_only": true,
+        "run_step_count": 8
+      },
+      {
+        "action_reference_count": 1,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 40,
+        "name": "Consents Privacy Scope CI",
+        "path": ".github/workflows/consents-privacy-scope.yml",
+        "path_filter_count": 40,
+        "pushes_main_only": true,
+        "run_step_count": 8
+      },
+      {
+        "action_reference_count": 1,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 50,
+        "name": "Contact Points Privacy Scope CI",
+        "path": ".github/workflows/contact-points-privacy-scope.yml",
+        "path_filter_count": 46,
+        "pushes_main_only": true,
+        "run_step_count": 13
+      },
+      {
+        "action_reference_count": 5,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": false,
+        "job_count": 1,
+        "maximum_timeout_minutes": 15,
+        "name": "Contract CI",
+        "path": ".github/workflows/contracts.yml",
+        "path_filter_count": 46,
+        "pushes_main_only": true,
+        "run_step_count": 2
+      },
+      {
+        "action_reference_count": 1,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 50,
+        "name": "Customer Accounts Privacy Scope CI",
+        "path": ".github/workflows/customer-accounts-privacy-scope.yml",
+        "path_filter_count": 46,
+        "pushes_main_only": true,
+        "run_step_count": 13
+      },
+      {
+        "action_reference_count": 1,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 60,
+        "name": "Customer Data Operations Privacy Scope CI",
+        "path": ".github/workflows/customer-data-operations-privacy-scope.yml",
+        "path_filter_count": 52,
+        "pushes_main_only": true,
+        "run_step_count": 13
+      },
+      {
+        "action_reference_count": 1,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 60,
+        "name": "Customer Enrichment Privacy Scope CI",
+        "path": ".github/workflows/customer-enrichment-privacy-scope.yml",
+        "path_filter_count": 64,
+        "pushes_main_only": true,
+        "run_step_count": 13
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 30,
+        "name": "Customer Enrichment Review Process Runtime CI",
+        "path": ".github/workflows/customer-enrichment-review-process-runtime.yml",
+        "path_filter_count": 48,
+        "pushes_main_only": true,
+        "run_step_count": 5
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 40,
+        "name": "Customer Enrichment Worker Process Runtime CI",
+        "path": ".github/workflows/customer-enrichment-worker-process-runtime.yml",
+        "path_filter_count": 46,
+        "pushes_main_only": true,
+        "run_step_count": 21
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 55,
+        "name": "Customer Privacy Access Export CI",
+        "path": ".github/workflows/customer-privacy-access-export.yml",
+        "path_filter_count": 16,
+        "pushes_main_only": false,
+        "run_step_count": 12
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 50,
+        "name": "Customer Privacy Approval CI",
+        "path": ".github/workflows/customer-privacy-approval.yml",
+        "path_filter_count": 58,
+        "pushes_main_only": true,
+        "run_step_count": 11
+      },
+      {
+        "action_reference_count": 1,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 45,
+        "name": "Customer Privacy Discovery CI",
+        "path": ".github/workflows/customer-privacy-discovery.yml",
+        "path_filter_count": 34,
+        "pushes_main_only": true,
+        "run_step_count": 8
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 50,
+        "name": "Customer Privacy Hold Retention CI",
+        "path": ".github/workflows/customer-privacy-hold-retention.yml",
+        "path_filter_count": 46,
+        "pushes_main_only": true,
+        "run_step_count": 11
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 60,
+        "name": "Customer Privacy Owner Execution CI",
+        "path": ".github/workflows/customer-privacy-owner-execution.yml",
+        "path_filter_count": 26,
+        "pushes_main_only": true,
+        "run_step_count": 14
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 50,
+        "name": "Customer Privacy Persistence CI",
+        "path": ".github/workflows/customer-privacy-persistence.yml",
+        "path_filter_count": 48,
+        "pushes_main_only": true,
+        "run_step_count": 25
+      },
+      {
+        "action_reference_count": 1,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 45,
+        "name": "Customer Privacy Planning CI",
+        "path": ".github/workflows/customer-privacy-planning.yml",
+        "path_filter_count": 42,
+        "pushes_main_only": true,
+        "run_step_count": 8
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 45,
+        "name": "Customer Privacy Restriction Policy CI",
+        "path": ".github/workflows/customer-privacy-restriction-policy.yml",
+        "path_filter_count": 54,
+        "pushes_main_only": true,
+        "run_step_count": 9
+      },
+      {
+        "action_reference_count": 1,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 60,
+        "name": "Data Quality Privacy Scope CI",
+        "path": ".github/workflows/data-quality-privacy-scope.yml",
+        "path_filter_count": 54,
+        "pushes_main_only": true,
+        "run_step_count": 13
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 35,
+        "name": "Data Quality Process Runtime CI",
+        "path": ".github/workflows/data-quality-process-runtime.yml",
+        "path_filter_count": 36,
+        "pushes_main_only": true,
+        "run_step_count": 4
+      },
+      {
+        "action_reference_count": 4,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 2,
+        "maximum_timeout_minutes": 40,
+        "name": "Database CI",
+        "path": ".github/workflows/database.yml",
+        "path_filter_count": 60,
+        "pushes_main_only": true,
+        "run_step_count": 23
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 35,
+        "name": "Event Runtime CI",
+        "path": ".github/workflows/event-runtime.yml",
+        "path_filter_count": 24,
+        "pushes_main_only": true,
+        "run_step_count": 5
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 45,
+        "name": "Export Process Runtime CI",
+        "path": ".github/workflows/export-process-runtime.yml",
+        "path_filter_count": 42,
+        "pushes_main_only": true,
+        "run_step_count": 4
+      },
+      {
+        "action_reference_count": 4,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 50,
+        "name": "Generic Mutation Query Conformance CI",
+        "path": ".github/workflows/generic-conformance.yml",
+        "path_filter_count": 44,
+        "pushes_main_only": true,
+        "run_step_count": 5
+      },
+      {
+        "action_reference_count": 4,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": false,
+        "job_count": 1,
+        "maximum_timeout_minutes": 15,
+        "name": "Governance CI",
+        "path": ".github/workflows/governance.yml",
+        "path_filter_count": 146,
+        "pushes_main_only": true,
+        "run_step_count": 15
+      },
+      {
+        "action_reference_count": 1,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 60,
+        "name": "Identity Resolution Privacy Scope CI",
+        "path": ".github/workflows/identity-resolution-privacy-scope.yml",
+        "path_filter_count": 44,
+        "pushes_main_only": true,
+        "run_step_count": 13
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 35,
+        "name": "Import Process Runtime CI",
+        "path": ".github/workflows/import-process-runtime.yml",
+        "path_filter_count": 42,
+        "pushes_main_only": true,
+        "run_step_count": 4
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 35,
+        "name": "Import Retryable Process Runtime CI",
+        "path": ".github/workflows/import-retryable-process-runtime.yml",
+        "path_filter_count": 42,
+        "pushes_main_only": true,
+        "run_step_count": 4
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 25,
+        "name": "Metadata Runtime CI",
+        "path": ".github/workflows/metadata-runtime.yml",
+        "path_filter_count": 22,
+        "pushes_main_only": true,
+        "run_step_count": 7
+      },
+      {
+        "action_reference_count": 1,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 35,
+        "name": "Parties Privacy Scope CI",
+        "path": ".github/workflows/parties-privacy-scope.yml",
+        "path_filter_count": 34,
+        "pushes_main_only": true,
+        "run_step_count": 8
+      },
+      {
+        "action_reference_count": 1,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 55,
+        "name": "Party Relationships Privacy Scope CI",
+        "path": ".github/workflows/party-relationships-privacy-scope.yml",
+        "path_filter_count": 46,
+        "pushes_main_only": true,
+        "run_step_count": 13
+      },
+      {
+        "action_reference_count": 2,
+        "handles_pull_requests": false,
+        "has_concurrency": false,
+        "has_postgres_service": false,
+        "job_count": 1,
+        "maximum_timeout_minutes": 10,
+        "name": "One-shot PostgreSQL adapter Clippy repair",
+        "path": ".github/workflows/postgres-clippy-repair.yml",
+        "path_filter_count": 1,
+        "pushes_main_only": false,
+        "run_step_count": 2
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 45,
+        "name": "PostgreSQL Process Isolation Pilot",
+        "path": ".github/workflows/postgres-process-isolation.yml",
+        "path_filter_count": 56,
+        "pushes_main_only": true,
+        "run_step_count": 7
+      },
+      {
+        "action_reference_count": 6,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": false,
+        "job_count": 1,
+        "maximum_timeout_minutes": 60,
+        "name": "Product Plane CI",
+        "path": ".github/workflows/product-plane.yml",
+        "path_filter_count": 46,
+        "pushes_main_only": true,
+        "run_step_count": 9
+      },
+      {
+        "action_reference_count": 2,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 35,
+        "name": "Projection Runtime CI",
+        "path": ".github/workflows/projection-runtime.yml",
+        "path_filter_count": 40,
+        "pushes_main_only": true,
+        "run_step_count": 5
+      },
+      {
+        "action_reference_count": 5,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": false,
+        "job_count": 1,
+        "maximum_timeout_minutes": 20,
+        "name": "Rust Generated Sync",
+        "path": ".github/workflows/rust-generated-sync.yml",
+        "path_filter_count": 29,
+        "pushes_main_only": false,
+        "run_step_count": 8
+      },
+      {
+        "action_reference_count": 8,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": false,
+        "job_count": 1,
+        "maximum_timeout_minutes": 15,
+        "name": "Rust CI",
+        "path": ".github/workflows/rust.yml",
+        "path_filter_count": 0,
+        "pushes_main_only": true,
+        "run_step_count": 9
+      },
+      {
+        "action_reference_count": 3,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": true,
+        "job_count": 1,
+        "maximum_timeout_minutes": 35,
+        "name": "Search Runtime CI",
+        "path": ".github/workflows/search-runtime.yml",
+        "path_filter_count": 44,
+        "pushes_main_only": true,
+        "run_step_count": 8
+      },
+      {
+        "action_reference_count": 4,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": false,
+        "job_count": 1,
+        "maximum_timeout_minutes": 30,
+        "name": "Step 17 Budget Package",
+        "path": ".github/workflows/step17-budget-package.yml",
+        "path_filter_count": 2,
+        "pushes_main_only": false,
+        "run_step_count": 8
+      },
+      {
+        "action_reference_count": 6,
+        "handles_pull_requests": true,
+        "has_concurrency": true,
+        "has_postgres_service": false,
+        "job_count": 1,
+        "maximum_timeout_minutes": 30,
+        "name": "Step 17 Telemetry Budget Refactor",
+        "path": ".github/workflows/step17-telemetry-budget-refactor.yml",
+        "path_filter_count": 2,
+        "pushes_main_only": false,
+        "run_step_count": 13
+      }
+    ]
+  },
+  "commit_sha": "6a6e0870fb29e9a25dd9083130808b13e4160672",
+  "composition": {
+    "application_composition": {
+      "files": 1,
+      "non_blank_lines": 1252,
+      "non_comment_lines": 1239,
+      "physical_lines": 1377
+    },
+    "application_runtime": {
+      "files": 28,
+      "non_blank_lines": 7324,
+      "non_comment_lines": 7266,
+      "physical_lines": 7797
+    }
+  },
+  "dependencies": {
+    "duplicate_families": [
+      {
+        "name": "block-buffer",
+        "versions": [
+          "0.10.4",
+          "0.12.1"
+        ]
+      },
+      {
+        "name": "cpufeatures",
+        "versions": [
+          "0.2.17",
+          "0.3.0"
+        ]
+      },
+      {
+        "name": "crypto-common",
+        "versions": [
+          "0.1.7",
+          "0.2.2"
+        ]
+      },
+      {
+        "name": "digest",
+        "versions": [
+          "0.10.7",
+          "0.11.3"
+        ]
+      },
+      {
+        "name": "foldhash",
+        "versions": [
+          "0.1.5",
+          "0.2.0"
+        ]
+      },
+      {
+        "name": "getrandom",
+        "versions": [
+          "0.2.17",
+          "0.4.3"
+        ]
+      },
+      {
+        "name": "hashbrown",
+        "versions": [
+          "0.15.5",
+          "0.16.1",
+          "0.17.1"
+        ]
+      },
+      {
+        "name": "hmac",
+        "versions": [
+          "0.12.1",
+          "0.13.0"
+        ]
+      },
+      {
+        "name": "sha2",
+        "versions": [
+          "0.10.9",
+          "0.11.0"
+        ]
+      },
+      {
+        "name": "syn",
+        "versions": [
+          "2.0.119",
+          "3.0.3"
+        ]
+      },
+      {
+        "name": "windows-sys",
+        "versions": [
+          "0.52.0",
+          "0.61.2"
+        ]
+      }
+    ],
+    "duplicate_family_count": 11
+  },
+  "limitations": [
+    "Build and test durations require repeated runtime telemetry and are not inferred from timeout values.",
+    "Current values are measurement-only and do not establish blocking budgets.",
+    "Reverse impact is computed from declared direct workspace dependencies in cargo metadata."
+  ],
+  "measurement_mode": "non-blocking",
+  "schema_version": "crm.workspace-complexity-baseline/v1",
+  "workspace": {
+    "categories": {
+      "business-module": 13,
+      "other": 1,
+      "technical-crate": 98
+    },
+    "internal_dependency_edges": 835,
+    "maximum_direct_dependents": 104,
+    "maximum_transitive_reverse_impact": 105,
+    "one_consumer_package_count": 26,
+    "package_count": 112,
+    "packages": [
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 2,
+        "manifest_path": "modules/crm-activities/Cargo.toml",
+        "name": "crm-activities",
+        "transitive_reverse_impact": 40
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 7,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-activities-capability-adapter/Cargo.toml",
+        "name": "crm-activities-capability-adapter",
+        "transitive_reverse_impact": 38
+      },
+      {
+        "category": "other",
+        "direct_internal_dependencies": 19,
+        "direct_internal_dependents": 0,
+        "manifest_path": "services/crm-api/Cargo.toml",
+        "name": "crm-api",
+        "transitive_reverse_impact": 0
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 3,
+        "direct_internal_dependents": 18,
+        "manifest_path": "crates/crm-application-composition/Cargo.toml",
+        "name": "crm-application-composition",
+        "transitive_reverse_impact": 40
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 63,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-application-runtime/Cargo.toml",
+        "name": "crm-application-runtime",
+        "transitive_reverse_impact": 1
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 3,
+        "direct_internal_dependents": 8,
+        "manifest_path": "crates/crm-capability-adapters/Cargo.toml",
+        "name": "crm-capability-adapters",
+        "transitive_reverse_impact": 39
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 8,
+        "manifest_path": "crates/crm-capability-ingress/Cargo.toml",
+        "name": "crm-capability-ingress",
+        "transitive_reverse_impact": 36
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 5,
+        "direct_internal_dependents": 58,
+        "manifest_path": "crates/crm-capability-plan-support/Cargo.toml",
+        "name": "crm-capability-plan-support",
+        "transitive_reverse_impact": 71
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 74,
+        "manifest_path": "crates/crm-capability-runtime/Cargo.toml",
+        "name": "crm-capability-runtime",
+        "transitive_reverse_impact": 82
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 5,
+        "manifest_path": "modules/crm-consents/Cargo.toml",
+        "name": "crm-consents",
+        "transitive_reverse_impact": 9
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 6,
+        "direct_internal_dependents": 5,
+        "manifest_path": "crates/crm-consents-capability-adapter/Cargo.toml",
+        "name": "crm-consents-capability-adapter",
+        "transitive_reverse_impact": 8
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 11,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-consents-capability-composition/Cargo.toml",
+        "name": "crm-consents-capability-composition",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 13,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-consents-privacy-scope-adapter/Cargo.toml",
+        "name": "crm-consents-privacy-scope-adapter",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-consents-query-adapter/Cargo.toml",
+        "name": "crm-consents-query-adapter",
+        "transitive_reverse_impact": 5
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 4,
+        "manifest_path": "modules/crm-contact-points/Cargo.toml",
+        "name": "crm-contact-points",
+        "transitive_reverse_impact": 9
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 6,
+        "direct_internal_dependents": 5,
+        "manifest_path": "crates/crm-contact-points-capability-adapter/Cargo.toml",
+        "name": "crm-contact-points-capability-adapter",
+        "transitive_reverse_impact": 8
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 9,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-contact-points-capability-composition/Cargo.toml",
+        "name": "crm-contact-points-capability-composition",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 13,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-contact-points-privacy-scope-adapter/Cargo.toml",
+        "name": "crm-contact-points-privacy-scope-adapter",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-contact-points-query-adapter/Cargo.toml",
+        "name": "crm-contact-points-query-adapter",
+        "transitive_reverse_impact": 4
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 0,
+        "direct_internal_dependents": 15,
+        "manifest_path": "crates/crm-core-contracts/Cargo.toml",
+        "name": "crm-core-contracts",
+        "transitive_reverse_impact": 91
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 11,
+        "direct_internal_dependents": 70,
+        "manifest_path": "crates/crm-core-data/Cargo.toml",
+        "name": "crm-core-data",
+        "transitive_reverse_impact": 75
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 11,
+        "manifest_path": "crates/crm-core-events/Cargo.toml",
+        "name": "crm-core-events",
+        "transitive_reverse_impact": 78
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 4,
+        "manifest_path": "crates/crm-core-files/Cargo.toml",
+        "name": "crm-core-files",
+        "transitive_reverse_impact": 76
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 0,
+        "manifest_path": "crates/crm-core-integrations/Cargo.toml",
+        "name": "crm-core-integrations",
+        "transitive_reverse_impact": 0
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-core-permissions/Cargo.toml",
+        "name": "crm-core-permissions",
+        "transitive_reverse_impact": 2
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 0,
+        "manifest_path": "crates/crm-core-workflow/Cargo.toml",
+        "name": "crm-core-workflow",
+        "transitive_reverse_impact": 0
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 5,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-customer-360-composition/Cargo.toml",
+        "name": "crm-customer-360-composition",
+        "transitive_reverse_impact": 4
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-customer-360-query-adapter/Cargo.toml",
+        "name": "crm-customer-360-query-adapter",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 3,
+        "manifest_path": "modules/crm-customer-accounts/Cargo.toml",
+        "name": "crm-customer-accounts",
+        "transitive_reverse_impact": 7
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 6,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-customer-accounts-capability-adapter/Cargo.toml",
+        "name": "crm-customer-accounts-capability-adapter",
+        "transitive_reverse_impact": 6
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 13,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-customer-accounts-privacy-scope-adapter/Cargo.toml",
+        "name": "crm-customer-accounts-privacy-scope-adapter",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 10,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-customer-accounts-query-adapter/Cargo.toml",
+        "name": "crm-customer-accounts-query-adapter",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 5,
+        "manifest_path": "modules/crm-customer-data-operations/Cargo.toml",
+        "name": "crm-customer-data-operations",
+        "transitive_reverse_impact": 9
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 6,
+        "direct_internal_dependents": 5,
+        "manifest_path": "crates/crm-customer-data-operations-capability-adapter/Cargo.toml",
+        "name": "crm-customer-data-operations-capability-adapter",
+        "transitive_reverse_impact": 8
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 14,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-customer-data-operations-execution-composition/Cargo.toml",
+        "name": "crm-customer-data-operations-execution-composition",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 15,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-customer-data-operations-privacy-scope-adapter/Cargo.toml",
+        "name": "crm-customer-data-operations-privacy-scope-adapter",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-customer-data-operations-query-adapter/Cargo.toml",
+        "name": "crm-customer-data-operations-query-adapter",
+        "transitive_reverse_impact": 4
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-customer-data-operations-source-composition/Cargo.toml",
+        "name": "crm-customer-data-operations-source-composition",
+        "transitive_reverse_impact": 4
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 18,
+        "manifest_path": "modules/crm-customer-enrichment/Cargo.toml",
+        "name": "crm-customer-enrichment",
+        "transitive_reverse_impact": 21
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 4,
+        "manifest_path": "crates/crm-customer-enrichment-application-adapter/Cargo.toml",
+        "name": "crm-customer-enrichment-application-adapter",
+        "transitive_reverse_impact": 6
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 13,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-customer-enrichment-application-composition/Cargo.toml",
+        "name": "crm-customer-enrichment-application-composition",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 6,
+        "direct_internal_dependents": 14,
+        "manifest_path": "crates/crm-customer-enrichment-capability-adapter/Cargo.toml",
+        "name": "crm-customer-enrichment-capability-adapter",
+        "transitive_reverse_impact": 18
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 15,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-customer-enrichment-capability-composition/Cargo.toml",
+        "name": "crm-customer-enrichment-capability-composition",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 7,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-customer-enrichment-materialization-adapter/Cargo.toml",
+        "name": "crm-customer-enrichment-materialization-adapter",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 15,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-customer-enrichment-materialization-composition/Cargo.toml",
+        "name": "crm-customer-enrichment-materialization-composition",
+        "transitive_reverse_impact": 2
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 18,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-customer-enrichment-privacy-scope-adapter/Cargo.toml",
+        "name": "crm-customer-enrichment-privacy-scope-adapter",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 11,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-customer-enrichment-provider-process-composition/Cargo.toml",
+        "name": "crm-customer-enrichment-provider-process-composition",
+        "transitive_reverse_impact": 4
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-customer-enrichment-provider-registry/Cargo.toml",
+        "name": "crm-customer-enrichment-provider-registry",
+        "transitive_reverse_impact": 7
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-customer-enrichment-query-adapter/Cargo.toml",
+        "name": "crm-customer-enrichment-query-adapter",
+        "transitive_reverse_impact": 5
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 3,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-customer-enrichment-registry-http-transport/Cargo.toml",
+        "name": "crm-customer-enrichment-registry-http-transport",
+        "transitive_reverse_impact": 6
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-customer-enrichment-request-list-query-adapter/Cargo.toml",
+        "name": "crm-customer-enrichment-request-list-query-adapter",
+        "transitive_reverse_impact": 5
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 7,
+        "direct_internal_dependents": 7,
+        "manifest_path": "crates/crm-customer-enrichment-review-adapter/Cargo.toml",
+        "name": "crm-customer-enrichment-review-adapter",
+        "transitive_reverse_impact": 12
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 11,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-customer-enrichment-review-composition/Cargo.toml",
+        "name": "crm-customer-enrichment-review-composition",
+        "transitive_reverse_impact": 2
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 9,
+        "direct_internal_dependents": 4,
+        "manifest_path": "crates/crm-customer-enrichment-suggestion-query-adapter/Cargo.toml",
+        "name": "crm-customer-enrichment-suggestion-query-adapter",
+        "transitive_reverse_impact": 6
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 4,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-customer-enrichment-visibility/Cargo.toml",
+        "name": "crm-customer-enrichment-visibility",
+        "transitive_reverse_impact": 2
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 10,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-customer-enrichment-worker-composition/Cargo.toml",
+        "name": "crm-customer-enrichment-worker-composition",
+        "transitive_reverse_impact": 5
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 20,
+        "manifest_path": "modules/crm-customer-privacy/Cargo.toml",
+        "name": "crm-customer-privacy",
+        "transitive_reverse_impact": 22
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 12,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-customer-privacy-application/Cargo.toml",
+        "name": "crm-customer-privacy-application",
+        "transitive_reverse_impact": 4
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 7,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-customer-privacy-cancel-capability-adapter/Cargo.toml",
+        "name": "crm-customer-privacy-cancel-capability-adapter",
+        "transitive_reverse_impact": 6
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 7,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-customer-privacy-capability-adapter/Cargo.toml",
+        "name": "crm-customer-privacy-capability-adapter",
+        "transitive_reverse_impact": 6
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 15,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-customer-privacy-capability-composition/Cargo.toml",
+        "name": "crm-customer-privacy-capability-composition",
+        "transitive_reverse_impact": 4
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 9,
+        "direct_internal_dependents": 9,
+        "manifest_path": "crates/crm-customer-privacy-owner-scope-support/Cargo.toml",
+        "name": "crm-customer-privacy-owner-scope-support",
+        "transitive_reverse_impact": 12
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 3,
+        "direct_internal_dependents": 7,
+        "manifest_path": "crates/crm-customer-privacy-persistence-adapter/Cargo.toml",
+        "name": "crm-customer-privacy-persistence-adapter",
+        "transitive_reverse_impact": 11
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 6,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-customer-privacy-postgres/Cargo.toml",
+        "name": "crm-customer-privacy-postgres",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 18,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-customer-privacy-production/Cargo.toml",
+        "name": "crm-customer-privacy-production",
+        "transitive_reverse_impact": 2
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 4,
+        "manifest_path": "crates/crm-customer-privacy-query-adapter/Cargo.toml",
+        "name": "crm-customer-privacy-query-adapter",
+        "transitive_reverse_impact": 5
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 7,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-customer-privacy-subject-capability-adapter/Cargo.toml",
+        "name": "crm-customer-privacy-subject-capability-adapter",
+        "transitive_reverse_impact": 6
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 7,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-customer-privacy-submit-capability-adapter/Cargo.toml",
+        "name": "crm-customer-privacy-submit-capability-adapter",
+        "transitive_reverse_impact": 6
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 5,
+        "manifest_path": "modules/crm-data-quality/Cargo.toml",
+        "name": "crm-data-quality",
+        "transitive_reverse_impact": 8
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 6,
+        "direct_internal_dependents": 5,
+        "manifest_path": "crates/crm-data-quality-capability-adapter/Cargo.toml",
+        "name": "crm-data-quality-capability-adapter",
+        "transitive_reverse_impact": 7
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 15,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-data-quality-privacy-scope-adapter/Cargo.toml",
+        "name": "crm-data-quality-privacy-scope-adapter",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 9,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-data-quality-query-adapter/Cargo.toml",
+        "name": "crm-data-quality-query-adapter",
+        "transitive_reverse_impact": 4
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 13,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-data-quality-source-composition/Cargo.toml",
+        "name": "crm-data-quality-source-composition",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 16,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-first-party-modules/Cargo.toml",
+        "name": "crm-first-party-modules",
+        "transitive_reverse_impact": 2
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 6,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-global-search-composition/Cargo.toml",
+        "name": "crm-global-search-composition",
+        "transitive_reverse_impact": 38
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 11,
+        "manifest_path": "modules/crm-identity-resolution/Cargo.toml",
+        "name": "crm-identity-resolution",
+        "transitive_reverse_impact": 23
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 6,
+        "direct_internal_dependents": 16,
+        "manifest_path": "crates/crm-identity-resolution-capability-adapter/Cargo.toml",
+        "name": "crm-identity-resolution-capability-adapter",
+        "transitive_reverse_impact": 22
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 13,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-identity-resolution-capability-composition/Cargo.toml",
+        "name": "crm-identity-resolution-capability-composition",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-identity-resolution-merge-composition/Cargo.toml",
+        "name": "crm-identity-resolution-merge-composition",
+        "transitive_reverse_impact": 4
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 9,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-identity-resolution-merge-query-adapter/Cargo.toml",
+        "name": "crm-identity-resolution-merge-query-adapter",
+        "transitive_reverse_impact": 4
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 12,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-identity-resolution-privacy-scope-adapter/Cargo.toml",
+        "name": "crm-identity-resolution-privacy-scope-adapter",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-identity-resolution-query-adapter/Cargo.toml",
+        "name": "crm-identity-resolution-query-adapter",
+        "transitive_reverse_impact": 4
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 5,
+        "direct_internal_dependents": 5,
+        "manifest_path": "crates/crm-identity-resolution-topology-composition/Cargo.toml",
+        "name": "crm-identity-resolution-topology-composition",
+        "transitive_reverse_impact": 10
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 5,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-metadata-api-adapter/Cargo.toml",
+        "name": "crm-metadata-api-adapter",
+        "transitive_reverse_impact": 77
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 6,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-metadata-query-adapter/Cargo.toml",
+        "name": "crm-metadata-query-adapter",
+        "transitive_reverse_impact": 76
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 4,
+        "manifest_path": "crates/crm-metadata-runtime/Cargo.toml",
+        "name": "crm-metadata-runtime",
+        "transitive_reverse_impact": 79
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-metadata-schema/Cargo.toml",
+        "name": "crm-metadata-schema",
+        "transitive_reverse_impact": 78
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 0,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-module-manifest/Cargo.toml",
+        "name": "crm-module-manifest",
+        "transitive_reverse_impact": 1
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 0,
+        "manifest_path": "crates/crm-module-registry/Cargo.toml",
+        "name": "crm-module-registry",
+        "transitive_reverse_impact": 0
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 0,
+        "direct_internal_dependents": 104,
+        "manifest_path": "crates/crm-module-sdk/Cargo.toml",
+        "name": "crm-module-sdk",
+        "transitive_reverse_impact": 105
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 12,
+        "manifest_path": "modules/crm-parties/Cargo.toml",
+        "name": "crm-parties",
+        "transitive_reverse_impact": 33
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 22,
+        "manifest_path": "crates/crm-parties-capability-adapter/Cargo.toml",
+        "name": "crm-parties-capability-adapter",
+        "transitive_reverse_impact": 32
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 11,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-parties-privacy-scope-adapter/Cargo.toml",
+        "name": "crm-parties-privacy-scope-adapter",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 6,
+        "manifest_path": "crates/crm-parties-query-adapter/Cargo.toml",
+        "name": "crm-parties-query-adapter",
+        "transitive_reverse_impact": 17
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 7,
+        "direct_internal_dependents": 7,
+        "manifest_path": "crates/crm-party-reference-composition/Cargo.toml",
+        "name": "crm-party-reference-composition",
+        "transitive_reverse_impact": 13
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 3,
+        "manifest_path": "modules/crm-party-relationships/Cargo.toml",
+        "name": "crm-party-relationships",
+        "transitive_reverse_impact": 8
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 6,
+        "direct_internal_dependents": 4,
+        "manifest_path": "crates/crm-party-relationships-capability-adapter/Cargo.toml",
+        "name": "crm-party-relationships-capability-adapter",
+        "transitive_reverse_impact": 7
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-party-relationships-capability-composition/Cargo.toml",
+        "name": "crm-party-relationships-capability-composition",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 13,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-party-relationships-privacy-scope-adapter/Cargo.toml",
+        "name": "crm-party-relationships-privacy-scope-adapter",
+        "transitive_reverse_impact": 3
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 5,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-party-relationships-projection/Cargo.toml",
+        "name": "crm-party-relationships-projection",
+        "transitive_reverse_impact": 2
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-party-relationships-query-adapter/Cargo.toml",
+        "name": "crm-party-relationships-query-adapter",
+        "transitive_reverse_impact": 4
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 5,
+        "manifest_path": "crates/crm-projection-runtime/Cargo.toml",
+        "name": "crm-projection-runtime",
+        "transitive_reverse_impact": 77
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 0,
+        "direct_internal_dependents": 69,
+        "manifest_path": "crates/crm-proto-contracts/Cargo.toml",
+        "name": "crm-proto-contracts",
+        "transitive_reverse_impact": 79
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 46,
+        "manifest_path": "crates/crm-query-runtime/Cargo.toml",
+        "name": "crm-query-runtime",
+        "transitive_reverse_impact": 80
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 2,
+        "manifest_path": "modules/crm-sales/Cargo.toml",
+        "name": "crm-sales",
+        "transitive_reverse_impact": 40
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 17,
+        "direct_internal_dependents": 4,
+        "manifest_path": "crates/crm-sales-activities-capability-composition/Cargo.toml",
+        "name": "crm-sales-activities-capability-composition",
+        "transitive_reverse_impact": 37
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 3,
+        "manifest_path": "modules/crm-sales-activities-link/Cargo.toml",
+        "name": "crm-sales-activities-link",
+        "transitive_reverse_impact": 39
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 3,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-sales-activities-link-contract-adapter/Cargo.toml",
+        "name": "crm-sales-activities-link-contract-adapter",
+        "transitive_reverse_impact": 38
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 8,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-sales-activities-query-adapter/Cargo.toml",
+        "name": "crm-sales-activities-query-adapter",
+        "transitive_reverse_impact": 38
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 7,
+        "direct_internal_dependents": 1,
+        "manifest_path": "crates/crm-sales-capability-adapter/Cargo.toml",
+        "name": "crm-sales-capability-adapter",
+        "transitive_reverse_impact": 38
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 7,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-search-query-adapter/Cargo.toml",
+        "name": "crm-search-query-adapter",
+        "transitive_reverse_impact": 38
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 4,
+        "direct_internal_dependents": 5,
+        "manifest_path": "crates/crm-search-runtime/Cargo.toml",
+        "name": "crm-search-runtime",
+        "transitive_reverse_impact": 76
+      }
+    ],
+    "top_reverse_impact": [
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 0,
+        "direct_internal_dependents": 104,
+        "manifest_path": "crates/crm-module-sdk/Cargo.toml",
+        "name": "crm-module-sdk",
+        "transitive_reverse_impact": 105
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 0,
+        "direct_internal_dependents": 15,
+        "manifest_path": "crates/crm-core-contracts/Cargo.toml",
+        "name": "crm-core-contracts",
+        "transitive_reverse_impact": 91
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 74,
+        "manifest_path": "crates/crm-capability-runtime/Cargo.toml",
+        "name": "crm-capability-runtime",
+        "transitive_reverse_impact": 82
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 46,
+        "manifest_path": "crates/crm-query-runtime/Cargo.toml",
+        "name": "crm-query-runtime",
+        "transitive_reverse_impact": 80
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 4,
+        "manifest_path": "crates/crm-metadata-runtime/Cargo.toml",
+        "name": "crm-metadata-runtime",
+        "transitive_reverse_impact": 79
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 0,
+        "direct_internal_dependents": 69,
+        "manifest_path": "crates/crm-proto-contracts/Cargo.toml",
+        "name": "crm-proto-contracts",
+        "transitive_reverse_impact": 79
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 11,
+        "manifest_path": "crates/crm-core-events/Cargo.toml",
+        "name": "crm-core-events",
+        "transitive_reverse_impact": 78
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-metadata-schema/Cargo.toml",
+        "name": "crm-metadata-schema",
+        "transitive_reverse_impact": 78
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 5,
+        "direct_internal_dependents": 3,
+        "manifest_path": "crates/crm-metadata-api-adapter/Cargo.toml",
+        "name": "crm-metadata-api-adapter",
+        "transitive_reverse_impact": 77
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 5,
+        "manifest_path": "crates/crm-projection-runtime/Cargo.toml",
+        "name": "crm-projection-runtime",
+        "transitive_reverse_impact": 77
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 4,
+        "manifest_path": "crates/crm-core-files/Cargo.toml",
+        "name": "crm-core-files",
+        "transitive_reverse_impact": 76
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 6,
+        "direct_internal_dependents": 2,
+        "manifest_path": "crates/crm-metadata-query-adapter/Cargo.toml",
+        "name": "crm-metadata-query-adapter",
+        "transitive_reverse_impact": 76
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 4,
+        "direct_internal_dependents": 5,
+        "manifest_path": "crates/crm-search-runtime/Cargo.toml",
+        "name": "crm-search-runtime",
+        "transitive_reverse_impact": 76
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 11,
+        "direct_internal_dependents": 70,
+        "manifest_path": "crates/crm-core-data/Cargo.toml",
+        "name": "crm-core-data",
+        "transitive_reverse_impact": 75
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 5,
+        "direct_internal_dependents": 58,
+        "manifest_path": "crates/crm-capability-plan-support/Cargo.toml",
+        "name": "crm-capability-plan-support",
+        "transitive_reverse_impact": 71
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 2,
+        "manifest_path": "modules/crm-activities/Cargo.toml",
+        "name": "crm-activities",
+        "transitive_reverse_impact": 40
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 3,
+        "direct_internal_dependents": 18,
+        "manifest_path": "crates/crm-application-composition/Cargo.toml",
+        "name": "crm-application-composition",
+        "transitive_reverse_impact": 40
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 2,
+        "direct_internal_dependents": 2,
+        "manifest_path": "modules/crm-sales/Cargo.toml",
+        "name": "crm-sales",
+        "transitive_reverse_impact": 40
+      },
+      {
+        "category": "technical-crate",
+        "direct_internal_dependencies": 3,
+        "direct_internal_dependents": 8,
+        "manifest_path": "crates/crm-capability-adapters/Cargo.toml",
+        "name": "crm-capability-adapters",
+        "transitive_reverse_impact": 39
+      },
+      {
+        "category": "business-module",
+        "direct_internal_dependencies": 1,
+        "direct_internal_dependents": 3,
+        "manifest_path": "modules/crm-sales-activities-link/Cargo.toml",
+        "name": "crm-sales-activities-link",
+        "transitive_reverse_impact": 39
+      }
+    ]
+  }
+}
