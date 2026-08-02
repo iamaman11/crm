@@ -1,5 +1,10 @@
+#[path = "support/generic_worker_conformance.rs"]
+mod worker_conformance;
+
 mod retryable_process {
     include!("import_process_e2e.rs");
+
+    use super::worker_conformance::WorkerConformanceSuite;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn crm_api_process_persists_retryable_target_failure_without_advancing_checkpoint_and_recovers()
@@ -39,6 +44,9 @@ mod retryable_process {
         )
         .into_bytes();
         let baseline = party_target_effects(&admin, TENANT_A).await;
+        let conformance = WorkerConformanceSuite::new(
+            "crm.customer-data-operations/party-import-execution",
+        );
 
         let (mut process, http_addr, grpc_addr) = spawn_api(&database_url).await;
         wait_until_ready(&http, &mut process, &http_addr).await;
@@ -92,8 +100,14 @@ mod retryable_process {
         let failed_attempts = failed_retryable.execution_attempts;
         let failed_job = get_job(&mut grpc, TENANT_A, &job_id).await;
         assert_eq!(failed_job.status, cdo::ImportJobStatus::Executing as i32);
-        assert_eq!(failed_job.checkpoint_row_position, 0);
         assert_eq!(failed_job.succeeded_rows, 0);
+        let failed_effects = party_target_effects(&admin, TENANT_A).await;
+        conformance.assert_retryable_failure_preserves_progress(
+            &0_i64,
+            &failed_job.checkpoint_row_position,
+            &baseline,
+            &failed_effects,
+        );
 
         process
             .kill()
@@ -102,7 +116,11 @@ mod retryable_process {
         let _ = process.wait().await;
         drop_party_retryable_failure_trigger(&admin).await;
         assert_eq!(party_record_count(&admin, &target_party_id).await, 0);
-        assert_eq!(party_target_effects(&admin, TENANT_A).await, baseline);
+        conformance.assert_no_side_effects(
+            "retryable failure before restart",
+            &baseline,
+            &party_target_effects(&admin, TENANT_A).await,
+        );
 
         let (mut recovered, recovered_http_addr, recovered_grpc_addr) =
             spawn_api(&database_url).await;
@@ -123,10 +141,28 @@ mod retryable_process {
         assert_eq!(party_record_count(&admin, &target_party_id).await, 1);
 
         let recovered_effects = party_target_effects(&admin, TENANT_A).await;
-        assert_eq!(recovered_effects.records, baseline.records + 1);
-        assert_eq!(recovered_effects.idempotency, baseline.idempotency + 1);
-        assert_eq!(recovered_effects.events, baseline.events + 1);
-        assert_eq!(recovered_effects.audits, baseline.audits + 1);
+        conformance.assert_exact_recovery(
+            &(
+                baseline.records + 1,
+                baseline.idempotency + 1,
+                baseline.events + 1,
+                baseline.audits + 1,
+            ),
+            &(
+                recovered_effects.records,
+                recovered_effects.idempotency,
+                recovered_effects.events,
+                recovered_effects.audits,
+            ),
+        );
+
+        sleep(Duration::from_millis(250)).await;
+        let post_recovery_replay_effects = party_target_effects(&admin, TENANT_A).await;
+        conformance.assert_no_side_effects(
+            "post-restart completed replay",
+            &recovered_effects,
+            &post_recovery_replay_effects,
+        );
 
         send_sigint(&recovered).await;
         let exit = timeout(Duration::from_secs(15), recovered.wait())
