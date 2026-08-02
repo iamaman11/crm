@@ -10,6 +10,7 @@
 mod background;
 mod bootstrap_visibility;
 mod config;
+mod contract_usage_telemetry;
 mod customer_enrichment_application_worker;
 mod customer_enrichment_materialization_process;
 mod customer_enrichment_provider_process;
@@ -26,6 +27,7 @@ mod export_execution_source;
 mod export_selection_bootstrap;
 mod export_selection_source;
 mod gateway_grpc;
+mod generated_contract_telemetry;
 mod native_composition;
 mod platform;
 mod process;
@@ -38,6 +40,7 @@ pub(crate) use bootstrap_visibility::{
     BootstrapVisibilityResource, build_bootstrap_visibility_registry,
 };
 pub use config::*;
+pub use contract_usage_telemetry::*;
 pub use crm_data_quality_source_composition::{
     DataQualityAggregatePlanner, DataQualityCapabilityExecutor,
 };

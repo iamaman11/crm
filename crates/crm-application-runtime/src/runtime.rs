@@ -1,14 +1,14 @@
 use crate::export_selection_bootstrap::ExportSelectionWorkerAccess;
 use crate::{
     ApplicationConfig, ApplicationGatewayService, BootstrapVisibilityResource,
-    CustomerEnrichmentApplicationWorkerDependencies,
+    ContractUsageMetrics, ContractUsageSurface, CustomerEnrichmentApplicationWorkerDependencies,
     CustomerEnrichmentMaterializationProcessDependencies,
     CustomerEnrichmentProviderProcessDependencies, CustomerEnrichmentProviderWorkerDependencies,
-    GovernedPartyExportSelectionSource, PartyExportArtifactDownloadService,
-    PostgresModuleActivation, ProcessIdentitySource, ProcessProviderSecretValueSource,
-    ProductionBackgroundWorkerDependencies, ProductionCompositionDependencies, SystemClock,
-    bootstrap_export_selection_worker_access, build_bootstrap_visibility_registry,
-    build_customer_enrichment_application_worker,
+    GovernedPartyExportSelectionSource, MeteredCapabilityRegistry,
+    PartyExportArtifactDownloadService, PostgresModuleActivation, ProcessIdentitySource,
+    ProcessProviderSecretValueSource, ProductionBackgroundWorkerDependencies,
+    ProductionCompositionDependencies, SystemClock, bootstrap_export_selection_worker_access,
+    build_bootstrap_visibility_registry, build_customer_enrichment_application_worker,
     build_customer_enrichment_materialization_process, build_customer_enrichment_provider_process,
     build_customer_enrichment_provider_registry, build_customer_enrichment_provider_worker,
     build_process_customer_enrichment_provider_transport_catalog,
@@ -97,6 +97,7 @@ pub struct ApplicationComponents {
     pub query_grpc: Arc<GrpcQueryMiddleware>,
     pub background_workers: BackgroundWorkerRegistry,
     pub export_artifact_download: Arc<PartyExportArtifactDownloadService>,
+    pub contract_usage_metrics: Arc<ContractUsageMetrics>,
     readiness: Arc<AtomicBool>,
     workers_healthy: Arc<AtomicBool>,
     last_worker_error: Arc<Mutex<Option<String>>>,
@@ -214,6 +215,10 @@ impl ApplicationRuntime {
         }
         let mutation_definitions = composition.mutation_definitions().to_vec();
         let query_definitions = composition.query_definitions().to_vec();
+        let contract_usage_metrics = Arc::new(
+            ContractUsageMetrics::production(&mutation_definitions, &query_definitions)
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
+        );
         let internal_import_outcome_definitions = internal_capability_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_export_selection_definitions =
@@ -310,7 +315,11 @@ impl ApplicationRuntime {
         }
 
         let mutation_gateway = Arc::new(CapabilityGateway::new(
-            composition.mutation_registry(),
+            Arc::new(MeteredCapabilityRegistry::new(
+                composition.mutation_registry(),
+                Arc::clone(&contract_usage_metrics),
+                ContractUsageSurface::Mutation,
+            )),
             composition.mutation_validator(),
             Arc::new(FixedWindowRateLimiter::new(
                 RateLimitPolicyStore::default(),
@@ -440,7 +449,11 @@ impl ApplicationRuntime {
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?,
         );
         let query_gateway = Arc::new(QueryGateway::new(
-            composition.query_registry(),
+            Arc::new(MeteredCapabilityRegistry::new(
+                composition.query_registry(),
+                Arc::clone(&contract_usage_metrics),
+                ContractUsageSurface::Query,
+            )),
             composition.query_validator(),
             authorizer.clone(),
             composition.query_executor(),
@@ -519,6 +532,7 @@ impl ApplicationRuntime {
             query_grpc: Arc::new(GrpcQueryMiddleware::new(query_ingress)),
             background_workers,
             export_artifact_download,
+            contract_usage_metrics,
             readiness: Arc::new(AtomicBool::new(false)),
             workers_healthy: Arc::new(AtomicBool::new(true)),
             last_worker_error: Arc::new(Mutex::new(None)),
@@ -668,6 +682,7 @@ async fn run_http_server(
     let router = Router::new()
         .route("/healthz", get(health))
         .route("/readyz", get(ready))
+        .route("/metrics", get(metrics))
         .route(
             "/v1/mutations/{owner_module_id}/{capability_id}/{capability_version}",
             post(mutation),
@@ -713,6 +728,13 @@ async fn run_grpc_server(
 
 async fn health() -> impl IntoResponse {
     (StatusCode::OK, Json(json!({"status": "ok"})))
+}
+
+async fn metrics(State(state): State<HttpState>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        state.components.contract_usage_metrics.render_prometheus(),
+    )
 }
 
 async fn ready(State(state): State<HttpState>) -> impl IntoResponse {

@@ -182,33 +182,31 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_step_17_contract_lifecycle_foundation_packet_is_exact(self) -> None:
+    def test_active_step_17_contract_usage_telemetry_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-17-contract-lifecycle-foundation",
+            "repository-step-17-contract-usage-telemetry",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "5dca69fa7af24bd32d635b80849d47ff54cebd3e"},
+            {"ref": "main", "sha": "a9d6a3c58dc0418343a8919ae731aa5c8b3f92e8"},
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
                 ".github/workflows/contracts.yml",
                 "affected-scope-policy.json",
-                "contracts/contract-lifecycle-policy.json",
-                "contracts/contract-lifecycle.json",
+                "crates/crm-application-runtime/src/contract_usage_telemetry.rs",
+                "crates/crm-application-runtime/src/generated_contract_telemetry.rs",
+                "crates/crm-application-runtime/src/lib.rs",
+                "crates/crm-application-runtime/src/runtime.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
-                "scripts/contract_lifecycle.py",
-                "scripts/contract_lifecycle_transitions.py",
-                "scripts/generate_contract_lifecycle.py",
-                "services/crm-api/tests/support/generic_worker_conformance.rs",
+                "scripts/generate_contract_telemetry_catalog.py",
                 "tests/test_architecture_documentation_consistency.py",
-                "tests/test_contract_lifecycle.py",
-                "tests/test_contract_lifecycle_transitions.py",
+                "tests/test_contract_telemetry_catalog.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -216,6 +214,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.packet["required_checks"],
             [
                 "Affected Scope CI",
+                "Application Runtime CI",
                 "Contract CI",
                 "Complexity Baseline CI",
                 "Governance CI",
@@ -225,18 +224,18 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         )
         for forbidden in (
             "Cargo.lock",
-            "crates/**",
+            "proto/**",
             "database/**",
         ):
             self.assertIn(forbidden, self.packet["forbidden_paths"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "block published-contract removal unless the base policy was deprecated and the current policy retains a permanent retired tombstone",
+            "generate a deterministic typed Rust telemetry catalog from every deprecated capability entry in the lifecycle policy",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "add production request or event deprecation telemetry in this foundation slice",
+            "add event-delivery deprecation telemetry in this capability-usage slice",
             self.packet["non_goals"],
         )
 
