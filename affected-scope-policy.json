@@ -7,7 +7,10 @@
       "path_patterns": [
         "contracts/**",
         "schemas/**",
-        "modules/*/module.yaml"
+        "modules/*/module.yaml",
+        "scripts/contract_lifecycle.py",
+        "scripts/contract_lifecycle_transitions.py",
+        "scripts/generate_contract_lifecycle.py"
       ],
       "required_workflows": [
         "Contract CI",

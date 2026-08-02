@@ -1,0 +1,6 @@
+{
+  "schema_version": "crm.contract-lifecycle-policy/v1",
+  "minimum_deprecation_days": 30,
+  "contracts": [],
+  "external_consumers": []
+}

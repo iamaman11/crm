@@ -14,9 +14,14 @@ on:
       - "packages/client/src/contract_hashes.ts"
       - "schemas/module.schema.json"
       - "scripts/contract_bindings.py"
+      - "scripts/contract_lifecycle.py"
+      - "scripts/contract_lifecycle_transitions.py"
       - "scripts/generate_contract_bindings.py"
+      - "scripts/generate_contract_lifecycle.py"
       - "scripts/validate_module_manifests.py"
       - "tests/test_contract_bindings.py"
+      - "tests/test_contract_lifecycle.py"
+      - "tests/test_contract_lifecycle_transitions.py"
       - "requirements-dev.txt"
       - "modules/*/module.yaml"
       - ".github/workflows/contracts.yml"
@@ -31,9 +36,14 @@ on:
       - "packages/client/src/contract_hashes.ts"
       - "schemas/module.schema.json"
       - "scripts/contract_bindings.py"
+      - "scripts/contract_lifecycle.py"
+      - "scripts/contract_lifecycle_transitions.py"
       - "scripts/generate_contract_bindings.py"
+      - "scripts/generate_contract_lifecycle.py"
       - "scripts/validate_module_manifests.py"
       - "tests/test_contract_bindings.py"
+      - "tests/test_contract_lifecycle.py"
+      - "tests/test_contract_lifecycle_transitions.py"
       - "requirements-dev.txt"
       - "modules/*/module.yaml"
       - ".github/workflows/contracts.yml"
@@ -84,7 +94,7 @@ jobs:
           buf lint proto >contract-diagnostics/lint.txt 2>&1
           lint_status=$?
 
-          python -m unittest tests/test_contract_bindings.py \
+          python -m unittest tests/test_contract_bindings.py tests/test_contract_lifecycle.py tests/test_contract_lifecycle_transitions.py \
             >contract-diagnostics/bindings-unit.txt 2>&1
           bindings_unit_status=$?
 
@@ -99,6 +109,22 @@ jobs:
             echo "Binding generation skipped because descriptor build failed" \
               >contract-diagnostics/bindings.txt
             bindings_status=1
+          fi
+
+          lifecycle_status=0
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            python scripts/generate_contract_lifecycle.py \
+              --check \
+              --base-ref "origin/${BASE_REF}" \
+              --expected-output contract-diagnostics/contract-lifecycle.expected.json \
+              >contract-diagnostics/lifecycle.txt 2>&1
+            lifecycle_status=$?
+          else
+            python scripts/generate_contract_lifecycle.py \
+              --check \
+              --expected-output contract-diagnostics/contract-lifecycle.expected.json \
+              >contract-diagnostics/lifecycle.txt 2>&1
+            lifecycle_status=$?
           fi
 
           breaking_status=0
@@ -118,19 +144,22 @@ jobs:
             contract-diagnostics/lint.txt \
             contract-diagnostics/bindings-unit.txt \
             contract-diagnostics/bindings.txt \
+            contract-diagnostics/lifecycle.txt \
             contract-diagnostics/breaking.txt; do
             echo "::group::${report}"
             cat "${report}"
             echo "::endgroup::"
           done
 
-          printf 'build=%s format=%s lint=%s bindings_unit=%s bindings=%s breaking=%s\n' \
+          printf 'build=%s format=%s lint=%s bindings_unit=%s bindings=%s lifecycle=%s breaking=%s\n' \
             "${build_status}" "${format_status}" "${lint_status}" \
-            "${bindings_unit_status}" "${bindings_status}" "${breaking_status}"
+            "${bindings_unit_status}" "${bindings_status}" "${lifecycle_status}" \
+            "${breaking_status}"
 
           if [ "${build_status}" -ne 0 ] || [ "${format_status}" -ne 0 ] || \
              [ "${lint_status}" -ne 0 ] || [ "${bindings_unit_status}" -ne 0 ] || \
-             [ "${bindings_status}" -ne 0 ] || [ "${breaking_status}" -ne 0 ]; then
+             [ "${bindings_status}" -ne 0 ] || [ "${lifecycle_status}" -ne 0 ] || \
+             [ "${breaking_status}" -ne 0 ]; then
             exit 1
           fi
       - name: Upload contract diagnostics
