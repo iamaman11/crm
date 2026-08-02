@@ -56,12 +56,10 @@ class RepositoryNavigationTests(unittest.TestCase):
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
+                "Customer Privacy Access Export CI",
+                "Customer Privacy Owner Execution CI",
                 "Rust Generated Sync",
                 "Rust CI",
-                "Projection Runtime CI",
-                "Application Runtime CI",
-                "Parties Privacy Scope CI",
-                "Customer Privacy Owner Execution CI",
             ],
         )
         self.assertIn("complete Repository Step 15", packet["non_goals"][0])
@@ -153,12 +151,10 @@ class RepositoryNavigationTests(unittest.TestCase):
         workflow_paths = {
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
             "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
+            "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
+            "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
             "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
             "Rust CI": ".github/workflows/rust.yml",
-            "Projection Runtime CI": ".github/workflows/projection-runtime.yml",
-            "Application Runtime CI": ".github/workflows/application-runtime.yml",
-            "Parties Privacy Scope CI": ".github/workflows/parties-privacy-scope.yml",
-            "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
         }
         affected = {
             "head_sha": "b" * 40,
