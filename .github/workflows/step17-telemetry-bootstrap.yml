@@ -15,7 +15,7 @@ on:
       - "scripts/apply_step17_telemetry_patch.py"
 
 concurrency:
-  group: step17-telemetry-bootstrap
+  group: step17-telemetry-bootstrap-${{ github.event_name }}-${{ github.sha }}
   cancel-in-progress: false
 
 permissions:
@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   patch:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
