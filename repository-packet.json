@@ -19,6 +19,7 @@
     "repository-packet.json",
     "services/crm-api/tests/import_process_retryable_e2e.rs",
     "services/crm-api/tests/support/generic_worker_conformance.rs",
+    "tests/test_architecture_documentation_consistency.py",
     "tests/test_generic_conformance_adoption.py",
     "tests/test_repository_navigation.py"
   ],
