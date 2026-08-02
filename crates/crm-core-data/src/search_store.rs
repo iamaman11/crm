@@ -205,8 +205,7 @@ impl PostgresDataStore {
                 AND document ? 'searchable_fields'
                 AND COALESCE(document -> 'display_fields' ->> 'privacy_lifecycle', 'active') = 'active'
                 AND (cardinality($4::text[]) = 0 OR resource_type = ANY($4::text[]))
-                AND to_tsvector('simple', COALESCE(document ->> 'search_text', ''))
-                    @@ websearch_to_tsquery('simple', $3)
+                AND to_tsvector('simple', COALESCE(document ->> 'search_text', '')) @@ websearch_to_tsquery('simple', $3)
                 AND EXISTS (
                   SELECT 1
                   FROM jsonb_each_text(document -> 'searchable_fields')
