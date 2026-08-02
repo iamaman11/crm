@@ -50,6 +50,8 @@ jobs:
                   'self.assertIn(\'"alpha.create"\', generated)',
               'self.assertIn(\'owner_module_id: "crm.alpha"\', generated)':
                   'self.assertIn(\'"crm.alpha"\', generated)',
+              'self.assertIn("lookback_days: 45", generated)':
+                  'self.assertIn("\\n        45,\\n", generated)',
           }
           for old, new in replacements.items():
               if text.count(old) != 1:
