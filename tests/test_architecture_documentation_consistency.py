@@ -232,25 +232,25 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-15-party-tombstone-customer360-convergence",
+            "repository-step-15-party-tombstone-rebuild-convergence",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
             {
                 "ref": "main",
-                "sha": "bd205e0af77b676654dff8ddf26d3b5b195880b2",
+                "sha": "e9fe1f352386d80a29d122db5d1ed6c47266bfaf",
             },
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                "crates/crm-customer-360-composition/src/lib.rs",
-                "crates/crm-customer-360-query-adapter/src/lib.rs",
+                ".github/workflows/customer-privacy-owner-execution.yml",
+                "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
-                "tests/test_party_tombstone_customer_360_convergence.py",
+                "tests/test_party_tombstone_rebuild_convergence.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -259,35 +259,35 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Owner Execution CI",
                 "Rust Generated Sync",
                 "Rust CI",
+                "Application Runtime CI",
+                "Customer Privacy Owner Execution CI",
             ],
         )
         self.assertIn("complete Repository Step 15", "\n".join(self.packet["non_goals"]))
         self.assertTrue(
             any(
-                "permanent CI workflows" in non_goal
+                "permanent CI workflow" in non_goal
                 for non_goal in self.packet["non_goals"]
             )
         )
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "subscribe the existing Customer 360 projection",
+            "build_canonical_internal_owner_execution",
             "\n".join(self.packet["deliverables"]),
         )
         self.assertIn(
-            "remove root Party membership from the privacy tombstone so ordinary Customer 360 selection cannot load or disclose it",
+            "rebuild Customer 360 from immutable history and prove the stale document becomes a source-version-2 privacy-minimized tombstone with empty root membership",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "keep existing query-adapter test fixtures synchronized with the additive internal Party contribution field",
-            self.packet["deliverables"],
+            "workspace package count, internal dependency edges, manifests and Cargo.lock remain unchanged",
+            self.packet["acceptance"],
         )
         self.assertIn(
-            "does not complete Step 15",
+            "automatic fresh-generation rollout",
             self.packet["objective"],
         )
 
