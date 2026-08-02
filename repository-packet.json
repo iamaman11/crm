@@ -11,8 +11,9 @@
     126,
     194
   ],
-  "objective": "Continue Repository Step 15 with a bounded PostgreSQL production-boundary acceptance slice in the existing application-runtime composition: execute durable Customer Privacy owner execution through the canonical internal registry, intentionally retain stale Customer 360 Party state, rebuild Customer 360 and reindex global search from immutable event history, and prove both derived views converge to non-disclosing Party tombstones without mutating authoritative Party, outbox or audit evidence. This packet proves deterministic repair and replay safety only; automatic fresh-generation rollout, process-host convergence and final Step 15 closure remain separate work.",
+  "objective": "Continue Repository Step 15 with a bounded PostgreSQL production-boundary acceptance slice in the existing application-runtime composition: execute durable Customer Privacy owner execution through the canonical internal registry, intentionally retain stale Customer 360 Party state, rebuild Customer 360 and reindex global search from immutable event history, and prove both derived views converge to non-disclosing Party tombstones without mutating authoritative Party, outbox or audit evidence. Bind this acceptance to the existing Customer Privacy Owner Execution permanent gate on both clean and reapplied schemas. This packet proves deterministic repair and replay safety only; automatic fresh-generation rollout, process-host convergence and final Step 15 closure remain separate work.",
   "allowed_paths": [
+    ".github/workflows/customer-privacy-owner-execution.yml",
     "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
@@ -21,7 +22,6 @@
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
-    ".github/**",
     "Cargo.lock",
     "Cargo.toml",
     "apps/**",
@@ -58,7 +58,8 @@
     "rebuild Customer 360 from immutable history and prove the stale document becomes a source-version-2 privacy-minimized tombstone with empty root membership",
     "reindex global search from immutable history and prove the Party becomes a source-version-2 privacy-minimized suppression document without the original name",
     "repeat rebuild and reindex and prove authoritative Party, outbox and audit evidence counts remain unchanged",
-    "add a permanent repository guard for zero dependency growth, production-boundary execution, stale-state proof, replay convergence and explicit non-goals",
+    "extend the existing Customer Privacy Owner Execution CI gate to compile, lint and execute this PostgreSQL acceptance on clean and reapplied schemas",
+    "add a permanent repository guard for zero dependency growth, production-boundary execution, stale-state proof, replay convergence, gate execution and explicit non-goals",
     "synchronize repository packet, generated navigation and exact packet fixtures"
   ],
   "required_checks": [
@@ -78,7 +79,8 @@
     "Customer 360 rebuild replaces that stale state at the same party:<id> projection identity with source version 2, no original name, empty root membership and privacy_minimized lifecycle",
     "global-search reindex writes the existing g3 suppression document at source version 2 with privacy_minimized lifecycle and no original name",
     "a repeated rebuild and reindex leave authoritative Party records, outbox events and audit-record counts unchanged",
-    "no production dependency, public contract, migration, worker, route or permanent workflow changes",
+    "the existing Customer Privacy Owner Execution CI workflow compiles, lints and executes the new acceptance on both a clean schema and a rollback/reapplied schema",
+    "no production dependency, public contract, migration, runtime worker, route or new permanent workflow is added",
     "this packet does not claim automatic checkpoint rollover, fresh Customer 360 generation, real crm-api process-host convergence or completion of Repository Step 15",
     "one unchanged exact head passes every applicable permanent workflow and final changed-file/thread review"
   ],
@@ -87,7 +89,8 @@
     "change the production Customer 360 projection identifier or implement automatic fresh-generation rollout",
     "change Party, Customer 360 or search public API contracts",
     "change accepted owner-action persistence, legal-hold, retention or tombstone semantics",
-    "add or change any dependency declaration, Cargo.lock, database migration, runtime worker, route or permanent CI workflow",
+    "add or change any dependency declaration, Cargo.lock, database migration, runtime worker or route",
+    "create a new permanent CI workflow or broaden unrelated workflow coverage",
     "claim real crm-api process-host no-orphan closure",
     "declare architecture 10/10, product 10/10 or any product-complete expert module"
   ]
