@@ -102,7 +102,7 @@ mod retryable_process {
         assert_eq!(failed_job.succeeded_rows, 0);
         let failed_effects = party_target_effects(&admin, TENANT_A).await;
         conformance.assert_retryable_failure_preserves_progress(
-            &0_i64,
+            &0_u32,
             &failed_job.checkpoint_row_position,
             &baseline,
             &failed_effects,
