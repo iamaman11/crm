@@ -219,7 +219,7 @@ async fn seed_privacy_orphan(
           $1, $2, $3, 'parties.party', $4, 2, 2,
           'parties.privacy.action.apply.completed',
           'crm.customer-privacy.owner_action.event', '1.0.0', $5,
-          'restricted', 'restricted_json', $2,
+          'restricted', 'json', $2,
           32768, 'crm.customer_privacy.owner_action_command', $6, clock_timestamp()
         )
         "#,
