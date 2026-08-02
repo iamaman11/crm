@@ -36,7 +36,7 @@ jobs:
         with:
           toolchain: 1.97.1
           components: rustfmt
-      - name: Correct duplicate test setup matcher
+      - name: Allow the exact duplicated test fixture
         shell: bash
         run: |
           python - <<'PY'
@@ -44,44 +44,28 @@ jobs:
 
           path = Path("scripts/apply_step17_telemetry_budget_refactor.py")
           text = path.read_text(encoding="utf-8")
-          start_marker = "replace_once(\n    adapter,\n    '''        let mut render = None;\n"
-          end_marker = "''',\n)\n"
-          starts = []
-          cursor = 0
-          while True:
-              start = text.find(start_marker, cursor)
-              if start < 0:
-                  break
-              end = text.find(end_marker, start)
-              if end < 0:
-                  raise SystemExit("duplicate setup block has no exact end marker")
-              starts.append((start, end + len(end_marker)))
-              cursor = end + len(end_marker)
-          if len(starts) != 2:
-              raise SystemExit(f"expected two duplicate setup blocks, found {len(starts)}")
-
-          replacement = '''content = read(adapter)
-          old_render_setup = ''' + "'''" + '''        let mut render = None;
-              let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
-          ''' + "'''" + '''
-          new_render_setup = ''' + "'''" + '''        let registries: [Arc<dyn CapabilityRegistryPort>; 2] = [
-          ''' + "'''" + '''
-          if content.count(old_render_setup) != 2:
-              raise RuntimeError(
-                  f"{adapter}: expected two render setups, found {content.count(old_render_setup)}"
-              )
-          write(adapter, content.replace(old_render_setup, new_render_setup))
+          old = '''def replace_once(path: str, old: str, new: str) -> None:
+              content = read(path)
+              count = content.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{path}: expected one target, found {count}: {old[:100]!r}")
+              write(path, content.replace(old, new, 1))
           '''
-
-          first_start, first_end = starts[0]
-          second_start, second_end = starts[1]
-          updated = (
-              text[:first_start]
-              + replacement
-              + text[first_end:second_start]
-              + text[second_end:]
-          )
-          path.write_text(updated, encoding="utf-8")
+          new = '''def replace_once(path: str, old: str, new: str) -> None:
+              content = read(path)
+              count = content.count(old)
+              duplicated_fixture = (
+                  path == "crates/crm-capability-adapters/src/contract_usage_telemetry.rs"
+                  and "let mut render = None;" in old
+                  and count == 2
+              )
+              if count != 1 and not duplicated_fixture:
+                  raise RuntimeError(f"{path}: expected one target, found {count}: {old[:100]!r}")
+              write(path, content.replace(old, new, 1))
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one replace_once helper, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
           PY
       - name: Apply budget-neutral refactor
         run: python scripts/apply_step17_telemetry_budget_refactor.py
