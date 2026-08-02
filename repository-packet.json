@@ -63,12 +63,10 @@
   "required_checks": [
     "Affected Scope CI",
     "Complexity Baseline CI",
+    "Customer Privacy Access Export CI",
+    "Customer Privacy Owner Execution CI",
     "Rust Generated Sync",
-    "Rust CI",
-    "Projection Runtime CI",
-    "Application Runtime CI",
-    "Parties Privacy Scope CI",
-    "Customer Privacy Owner Execution CI"
+    "Rust CI"
   ],
   "acceptance": [
     "the accepted head is based exactly on main commit bd205e0af77b676654dff8ddf26d3b5b195880b2 and contains no unrelated change",
