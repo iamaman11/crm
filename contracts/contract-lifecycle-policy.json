@@ -1,6 +1,31 @@
 {
   "schema_version": "crm.contract-lifecycle-policy/v1",
   "minimum_deprecation_days": 30,
-  "contracts": [],
+  "contracts": [
+    {
+      "kind": "capability",
+      "id": "activities.task.create",
+      "version": "1.0.0",
+      "state": "deprecated",
+      "owner": "crm.activities",
+      "deprecated_on": "2026-08-03",
+      "removal_not_before": "2026-09-02",
+      "replacement": {
+        "kind": "capability",
+        "id": "activities.task.create",
+        "version": "1.1.0"
+      },
+      "migration": {
+        "issue": 275,
+        "guide": "docs/contract-migrations/activities-task-create-1.0.0-to-1.1.0.md",
+        "completed_on": "2026-08-03"
+      },
+      "telemetry": {
+        "metric": "crm_deprecated_capability_usage_total",
+        "lookback_days": 30,
+        "zero_since": null
+      }
+    }
+  ],
   "external_consumers": []
 }

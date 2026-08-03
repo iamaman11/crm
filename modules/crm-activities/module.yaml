@@ -1,6 +1,6 @@
 schema_version: crm.module/v1
 module_id: crm.activities
-version: 0.1.0
+version: 0.1.1
 display_name: CRM Activities
 description: Independent activities domain module owning tasks and reminder state.
 owner:
@@ -21,6 +21,13 @@ provides:
   capabilities:
     - id: activities.task.create
       version: 1.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v1.TaskService.CreateTask
+        request: crm.activities.v1.CreateTaskRequest
+        response: crm.activities.v1.CreateTaskResponse
+    - id: activities.task.create
+      version: 1.1.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.CreateTask

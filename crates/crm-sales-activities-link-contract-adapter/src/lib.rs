@@ -11,13 +11,14 @@ use crm_proto_contracts::{
 };
 use crm_sales_activities_link::{
     ActivitiesTaskCommandEncoder, CreateTaskIntent, DealLifecycleStatus, SOURCE_EVENT_TYPE,
-    SOURCE_EVENT_VERSION, SOURCE_MODULE_ID, SalesDealStageChanged, TARGET_CAPABILITY_VERSION,
-    TARGET_MODULE_ID, TARGET_REQUEST_SCHEMA_ID,
+    SOURCE_EVENT_VERSION, SOURCE_MODULE_ID, SalesDealStageChanged, TARGET_MODULE_ID,
+    TARGET_REQUEST_SCHEMA_ID,
 };
 use prost::Message;
 
 pub const SOURCE_EVENT_SCHEMA_ID: &str = "crm.sales.v1.DealStageChangedEvent";
 pub const DEFAULT_RETENTION_POLICY_ID: &str = "standard";
+const TARGET_REQUEST_SCHEMA_VERSION: &str = "1.0.0";
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ProtobufSalesActivitiesLinkContractAdapter;
@@ -71,7 +72,7 @@ impl ActivitiesTaskCommandEncoder for ProtobufSalesActivitiesLinkContractAdapter
         protobuf_payload(
             TARGET_MODULE_ID,
             TARGET_REQUEST_SCHEMA_ID,
-            TARGET_CAPABILITY_VERSION,
+            TARGET_REQUEST_SCHEMA_VERSION,
             &message,
         )
     }
@@ -198,6 +199,8 @@ mod tests {
         RecordType, ResourceRef, TenantId, TraceId,
     };
 
+    use crm_sales_activities_link::TARGET_CAPABILITY_VERSION;
+
     fn delivery(message: sales::DealStageChangedEvent) -> EventDelivery {
         let bytes = message.encode_to_vec();
         EventDelivery {
@@ -303,6 +306,11 @@ mod tests {
 
         assert_eq!(payload.owner.as_str(), TARGET_MODULE_ID);
         assert_eq!(payload.schema_id.as_str(), TARGET_REQUEST_SCHEMA_ID);
+        assert_eq!(
+            payload.schema_version.as_str(),
+            TARGET_REQUEST_SCHEMA_VERSION
+        );
+        assert_ne!(payload.schema_version.as_str(), TARGET_CAPABILITY_VERSION);
         assert_eq!(
             payload.descriptor_hash,
             message_descriptor_hash(TARGET_REQUEST_SCHEMA_ID)

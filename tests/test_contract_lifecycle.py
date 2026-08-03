@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 import unittest
 
 from scripts.contract_lifecycle import build_registry, render_registry
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def capability(contract_id: str, version: str = "1.0.0") -> dict:
@@ -104,6 +109,41 @@ def lifecycle_entry(state: str) -> dict:
 
 
 class ContractLifecycleTests(unittest.TestCase):
+    def test_committed_representative_deprecation_and_migration_are_exact(self) -> None:
+        policy = json.loads((ROOT / "contracts/contract-lifecycle-policy.json").read_text())
+        registry = json.loads((ROOT / "contracts/contract-lifecycle.json").read_text())
+
+        self.assertEqual(len(policy["contracts"]), 1)
+        deprecated = policy["contracts"][0]
+        self.assertEqual(
+            (deprecated["kind"], deprecated["id"], deprecated["version"]),
+            ("capability", "activities.task.create", "1.0.0"),
+        )
+        self.assertEqual(deprecated["state"], "deprecated")
+        self.assertEqual(deprecated["deprecated_on"], "2026-08-03")
+        self.assertEqual(deprecated["removal_not_before"], "2026-09-02")
+        self.assertEqual(deprecated["migration"]["completed_on"], "2026-08-03")
+        self.assertIsNone(deprecated["telemetry"]["zero_since"])
+
+        coordinates = [
+            item
+            for item in registry["published"]["capabilities"]
+            if item[0] == "activities.task.create"
+        ]
+        self.assertEqual(
+            coordinates,
+            [
+                ["activities.task.create", "1.0.0", "crm.activities", []],
+                [
+                    "activities.task.create",
+                    "1.1.0",
+                    "crm.activities",
+                    ["crm.sales-activities-link"],
+                ],
+            ],
+        )
+        self.assertEqual(registry["lifecycle"], [deprecated])
+
     def test_registry_is_complete_sorted_and_inventories_internal_consumers(self) -> None:
         manifests = [
             manifest("crm.zeta", events=[("example.created", "1.0.0")]),

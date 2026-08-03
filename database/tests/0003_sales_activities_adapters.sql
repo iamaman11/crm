@@ -20,6 +20,15 @@ VALUES
   'platform'
 ),
 (
+  'crm.activities',
+  '0.1.1',
+  'crm.cjson/v1',
+  decode(repeat('ae', 32), 'hex'),
+  '{}'::jsonb,
+  clock_timestamp(),
+  'platform'
+),
+(
   'crm.sales',
   '0.1.0',
   'crm.cjson/v1',
@@ -50,6 +59,12 @@ INSERT INTO crm.capability_registry (
 VALUES
   (
     'activities.task.create', '1.0.0', 'crm.activities', '0.1.0',
+    'crm.activities.v1.TaskService', 'CreateTask',
+    decode(repeat('31', 32), 'hex'), decode(repeat('32', 32), 'hex'),
+    'low', true, true, false, false, false, false, false
+  ),
+  (
+    'activities.task.create', '1.1.0', 'crm.activities', '0.1.1',
     'crm.activities.v1.TaskService', 'CreateTask',
     decode(repeat('31', 32), 'hex'), decode(repeat('32', 32), 'hex'),
     'low', true, true, false, false, false, false, false

@@ -16,7 +16,8 @@ pub const SOURCE_EVENT_VERSION: &str = "1.0.0";
 pub const SOURCE_RECORD_TYPE: &str = "sales.deal";
 pub const TARGET_MODULE_ID: &str = "crm.activities";
 pub const TARGET_CAPABILITY_ID: &str = "activities.task.create";
-pub const TARGET_CAPABILITY_VERSION: &str = "1.0.0";
+pub const TARGET_CAPABILITY_VERSION: &str = "1.1.0";
+const TARGET_REQUEST_SCHEMA_VERSION: &str = "1.0.0";
 pub const TARGET_REQUEST_SCHEMA_ID: &str = "crm.activities.v1.CreateTaskRequest";
 
 const DELIVERY_STATE_SCHEMA_ID: &str = "crm.sales-activities-link.delivery-state";
@@ -386,7 +387,7 @@ fn validate_target_payload(payload: &TypedPayload) -> Result<(), SdkError> {
     payload.validate()?;
     if payload.owner.as_str() != TARGET_MODULE_ID
         || payload.schema_id.as_str() != TARGET_REQUEST_SCHEMA_ID
-        || payload.schema_version.as_str() != TARGET_CAPABILITY_VERSION
+        || payload.schema_version.as_str() != TARGET_REQUEST_SCHEMA_VERSION
         || payload.encoding != PayloadEncoding::Protobuf
     {
         return Err(SdkError::new(
@@ -474,7 +475,7 @@ mod tests {
             Ok(TypedPayload {
                 owner: ModuleId::try_new(TARGET_MODULE_ID).unwrap(),
                 schema_id: SchemaId::try_new(TARGET_REQUEST_SCHEMA_ID).unwrap(),
-                schema_version: SchemaVersion::try_new(TARGET_CAPABILITY_VERSION).unwrap(),
+                schema_version: SchemaVersion::try_new(TARGET_REQUEST_SCHEMA_VERSION).unwrap(),
                 descriptor_hash: [2; 32],
                 data_class: DataClass::Confidential,
                 encoding: PayloadEncoding::Protobuf,
@@ -582,6 +583,18 @@ mod tests {
         assert_eq!(
             capabilities.calls()[0].request.capability_id.as_str(),
             TARGET_CAPABILITY_ID
+        );
+        assert_eq!(
+            capabilities.calls()[0].request.capability_version.as_str(),
+            TARGET_CAPABILITY_VERSION
+        );
+        assert_eq!(
+            capabilities.calls()[0]
+                .request
+                .input
+                .schema_version
+                .as_str(),
+            TARGET_REQUEST_SCHEMA_VERSION
         );
     }
 
