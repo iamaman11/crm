@@ -222,6 +222,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
+                "Customer Privacy Access Export CI",
+                "Customer Privacy Owner Execution CI",
                 "Governance CI",
                 "Rust Generated Sync",
                 "Rust CI",

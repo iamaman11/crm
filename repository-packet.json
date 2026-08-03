@@ -56,6 +56,8 @@
   "required_checks": [
     "Affected Scope CI",
     "Complexity Baseline CI",
+    "Customer Privacy Access Export CI",
+    "Customer Privacy Owner Execution CI",
     "Governance CI",
     "Rust Generated Sync",
     "Rust CI"
@@ -67,7 +69,8 @@
     "dev-up/dev-reset are the only next permitted implementation packet and Step 19 remains blocked",
     "the final diff contains only declared documentation, packet, generated navigation and permanent guard files",
     "Complexity Baseline CI is applicable and succeeds on the same final exact head through the declared complexity-baseline evidence path",
-    "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments or review threads"
+    "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments or review threads",
+    "the exact final head passes both Customer Privacy process gates selected by the permanent historical-evidence preflight"
   ],
   "non_goals": [
     "implement dev-up, dev-reset, seed-demo or smoke",
