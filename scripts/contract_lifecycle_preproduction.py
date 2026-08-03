@@ -13,7 +13,10 @@ from pathlib import Path
 import re
 from typing import Any, Callable
 
-import contract_lifecycle as core
+if __package__:
+    from . import contract_lifecycle as core
+else:
+    import contract_lifecycle as core
 
 NEVER_RELEASED_MODE = "never_externally_released"
 EVIDENCE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,199}$")
