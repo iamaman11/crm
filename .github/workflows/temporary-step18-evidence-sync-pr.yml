@@ -62,6 +62,15 @@ jobs:
               '    def test_active_packet_declaration_is_exact',
               '    def test_generated_navigation_is_deterministic_and_current',
           )
+
+          navigation = Path('tests/test_repository_navigation.py')
+          navigation.write_text(
+              navigation.read_text(encoding='utf-8').replace(
+                  'repository-step-18-doctor-bootstrap-evidence-sync-evidence-sync',
+                  'repository-step-18-doctor-bootstrap-evidence-sync',
+              ),
+              encoding='utf-8',
+          )
           PY
           python scripts/generate_repository_navigation.py --write
           python -m unittest \
