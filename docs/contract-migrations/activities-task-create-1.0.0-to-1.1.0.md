@@ -23,6 +23,11 @@ The repository-owned consumer `crm.sales-activities-link` now declares and invok
 `activities.task.create@1.1.0`. Its idempotency key, actor, tenant, authorization,
 business transaction, payload encoding and delivery-state behavior are unchanged.
 
+The PostgreSQL acceptance registry publishes `crm.activities@0.1.1` and the exact
+`activities.task.create@1.1.0` coordinate alongside their historical predecessors.
+This is fixture parity for runtime acceptance only; no authoritative schema or
+migration changes are required.
+
 The deprecated `1.0.0` coordinate remains published and executable during the
 observation window. Any exact `1.0.0` resolution is exposed through the existing
 zero-seeded `crm_deprecated_capability_usage_total` telemetry series.
