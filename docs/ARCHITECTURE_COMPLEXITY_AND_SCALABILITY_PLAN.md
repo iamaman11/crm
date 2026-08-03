@@ -358,19 +358,15 @@ The combined evidence proves reusable worker conformance and contrasting real-wo
 
 This completes Repository Step 16 only. Customer Privacy, Phase 8A, contract lifecycle, local lifecycle, frontend/operations evidence and architecture 10/10 remain incomplete.
 
-### 11.2 Next bounded packet — Repository Step 17
+### 11.2 Accepted Step 17 closure evidence
 
-Repository Step 17 is **next and not started**.
+Repository Step 17 is complete through three bounded accepted slices:
 
-Required scope:
+1. PR #275 / source `1c6366b557e255a14a677758fd87f7fe63184a89` / merge `60d5974349a04c462475aadd4af0a37bada9713b` / 23 of 23 — published wire-compatible `activities.task.create@1.1.0`, migrated the sole repository-owned consumer and made live authorization overlap exact-version safe.
+2. PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8 — made production zero-usage retirement evidence SHA-256-bound, complete, append-only and fail closed.
+3. PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 — proved the coordinate was never externally released through live empty GitHub Releases, tags and deployments, non-publishable packages and no external consumer record, then retired `activities.task.create@1.0.0` while preserving its historical tombstone and keeping `telemetry.zero_since` null.
 
-- contract compatibility and published-version gates;
-- deprecation telemetry;
-- consumer migration evidence;
-- governed retirement enforcement;
-- no unrelated local-environment, Customer Privacy worker, frontend or operations work.
-
-The packet must start from current `main`, declare exact allowed/forbidden paths and pass every applicable permanent workflow on one unchanged meaningful user-authored head.
+The combined evidence keeps `activities.task.create@1.1.0` as the sole live create coordinate, preserves the ordinary production zero-usage path for released contracts and fabricates no production history. Repository Step 18 is the next permitted implementation packet and is not started.
 
 ## 12. Repository Step 22 mandatory decision and review
 
