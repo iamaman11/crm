@@ -43,13 +43,13 @@
     "services/**"
   ],
   "deliverables": [
-    "add `repo.py doctor` with deterministic human and JSON output, bootstrap/full profiles and actionable fail-closed remediation",
-    "derive Rust, Node and pnpm expectations from `rust-toolchain.toml` and `package.json` rather than duplicating version constants",
-    "add `repo.py bootstrap` with `.venv`, committed Python constraints, `cargo --locked`, frozen pnpm installation and generated-navigation verification",
-    "provide a side-effect-free `bootstrap --dry-run` plan built from argument arrays rather than shell command strings",
+    "add repo.py doctor with deterministic human and JSON output, bootstrap/full profiles and actionable fail-closed remediation",
+    "derive Rust, Node and pnpm expectations from rust-toolchain.toml and package.json rather than duplicating version constants",
+    "add repo.py bootstrap with .venv, committed Python constraints, locked Cargo dependencies, frozen pnpm installation and generated-navigation verification",
+    "provide a side-effect-free bootstrap --dry-run plan built from argument arrays rather than shell command strings",
     "classify local lifecycle tooling as operations-owned affected scope requiring Governance CI",
     "run focused lifecycle tests through permanent native conformance and Governance CI",
-    "document only `doctor` and `bootstrap` as implemented while keeping the remaining Step 18 commands explicitly open"
+    "document only doctor and bootstrap as implemented while keeping the remaining Step 18 commands explicitly open"
   ],
   "required_checks": [
     "Affected Scope CI",
