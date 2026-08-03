@@ -49,8 +49,8 @@ jobs:
           from pathlib import Path
           import re
 
-          path = Path("crates/crm-capability-adapters/src/contract_usage_telemetry.rs")
-          text = path.read_text(encoding="utf-8")
+          telemetry = Path("crates/crm-capability-adapters/src/contract_usage_telemetry.rs")
+          text = telemetry.read_text(encoding="utf-8")
           capability_pattern = re.compile(
               r"&'static\s*\[\s*\(&'static str,\s*&'static str,\s*&'static str,\s*&'static str,\s*u32\),\s*\]"
           )
@@ -71,7 +71,61 @@ jobs:
               raise SystemExit(f"expected two capability tuple slice signatures, replaced {capability_count}")
           if event_count != 2:
               raise SystemExit(f"expected two event tuple slice signatures, replaced {event_count}")
-          path.write_text(text, encoding="utf-8")
+
+          capability_value_old = '''    static CAPABILITY_CATALOG: &[(&str, &str, &str, &str, u32)] = &[((
+                  "test.record.create",
+                  "1.0.0",
+                  "crm.test",
+                  "crm_contract_usage_total",
+                  30,
+              ))];'''
+          capability_value_new = '''    static CAPABILITY_CATALOG: &[(&str, &str, &str, &str, u32)] = &[(
+                  "test.record.create",
+                  "1.0.0",
+                  "crm.test",
+                  "crm_contract_usage_total",
+                  30,
+              )];'''
+          event_value_old = '''    static EVENT_CATALOG: &[(&str, &str, &str, &str, &str, u32)] = &[((
+                  "test.record.created",
+                  "1.0.0",
+                  "crm.test",
+                  "crm.consumer",
+                  "crm_contract_usage_total",
+                  45,
+              ))];'''
+          event_value_new = '''    static EVENT_CATALOG: &[(&str, &str, &str, &str, &str, u32)] = &[(
+                  "test.record.created",
+                  "1.0.0",
+                  "crm.test",
+                  "crm.consumer",
+                  "crm_contract_usage_total",
+                  45,
+              )];'''
+          if text.count(capability_value_old) != 1:
+              raise SystemExit("expected one double-parenthesized capability test catalog")
+          if text.count(event_value_old) != 1:
+              raise SystemExit("expected one double-parenthesized event test catalog")
+          text = text.replace(capability_value_old, capability_value_new, 1)
+          text = text.replace(event_value_old, event_value_new, 1)
+          telemetry.write_text(text, encoding="utf-8")
+
+          postgres = Path("crates/crm-core-data/src/postgres.rs")
+          postgres_text = postgres.read_text(encoding="utf-8")
+          struct_marker = "#[derive(Clone)]\npub struct PostgresDataStore {"
+          alias_and_struct = (
+              "type EventDeliveryObserver = Arc<dyn Fn(&EventDelivery) + Send + Sync>;\n\n"
+              "#[derive(Clone)]\npub struct PostgresDataStore {"
+          )
+          field_old = "    event_delivery_observer: Option<Arc<dyn Fn(&EventDelivery) + Send + Sync>>,"
+          field_new = "    event_delivery_observer: Option<EventDeliveryObserver>,"
+          if postgres_text.count(struct_marker) != 1:
+              raise SystemExit("expected one PostgresDataStore declaration")
+          if postgres_text.count(field_old) != 1:
+              raise SystemExit("expected one complex event delivery observer field")
+          postgres_text = postgres_text.replace(struct_marker, alias_and_struct, 1)
+          postgres_text = postgres_text.replace(field_old, field_new, 1)
+          postgres.write_text(postgres_text, encoding="utf-8")
           PY
           rm -f .github/step17-event-patch-{01,02,03,04,05}.txt
           rm -f .github/workflows/step17-event-delivery-analysis.yml
