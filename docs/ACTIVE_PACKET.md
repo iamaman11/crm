@@ -88,12 +88,12 @@ Continue Repository Step 17 by replacing trust in a manually entered telemetry.z
 
 ## Explicit non-goals
 
-- `set telemetry.zero_since for activities.task.create@1.0.0`
-- `add a production observation artifact or claim a zero-usage window that has not occurred`
-- `retire or remove activities.task.create@1.0.0`
-- `change the accepted 1.0.0 to 1.1.0 migration, authorization overlap or runtime telemetry behavior`
-- `add a new permanent workflow or duplicate existing Contract CI responsibilities`
-- `implement Step 18 local lifecycle commands, Step 19 Customer Privacy workers, frontend, operations closure or product completion`
-- `synchronize final Step 17 closure evidence or declare architecture 10/10`
+- set telemetry.zero_since for activities.task.create@1.0.0
+- add a production observation artifact or claim a zero-usage window that has not occurred
+- retire or remove activities.task.create@1.0.0
+- change the accepted 1.0.0 to 1.1.0 migration, authorization overlap or runtime telemetry behavior
+- add a new permanent workflow or duplicate existing Contract CI responsibilities
+- implement Step 18 local lifecycle commands, Step 19 Customer Privacy workers, frontend, operations closure or product completion
+- synchronize final Step 17 closure evidence or declare architecture 10/10
 
 This generated file is orientation only. `repository-packet.json` and the normative architecture plan remain authoritative.
