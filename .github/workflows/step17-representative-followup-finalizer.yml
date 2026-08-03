@@ -1,0 +1,136 @@
+name: Step 17 Representative Follow-up Finalizer
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/step17-followup.patch.gz.b64"
+      - ".github/workflows/step17-representative-followup-finalizer.yml"
+
+concurrency:
+  group: step17-representative-followup-finalizer-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-publish:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: step17-representative-followup-finalizer
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # exact Rust 1.97.1 policy
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Install Buf
+        uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1.4.0
+        with:
+          version: 1.50.1
+          setup_only: true
+      - name: Install validation dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+      - name: Reproduce exact follow-up candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_main=861b1d5907c43f5e89dc10d5a7c81c1c98aa771b
+          expected_head=81b67fd3b879739806de2dcc6804541b10837bd3
+          git fetch origin main step17-representative-lifecycle
+          test "$(git rev-parse origin/main)" = "${expected_main}"
+          test "$(git rev-parse origin/step17-representative-lifecycle)" = "${expected_head}"
+          cp .github/step17-followup.patch.gz.b64 /tmp/step17-followup.patch.gz.b64
+          test "$(git hash-object /tmp/step17-followup.patch.gz.b64)" = "affd4295d58ce67593c1c39a54b3e77a66eadfd8"
+          base64 --decode /tmp/step17-followup.patch.gz.b64 | gzip --decompress > /tmp/step17-followup.patch
+          echo "c947d102664da72ff500256cc5630f8e8ec9982711d5b2a58d7e2da890e369cd  /tmp/step17-followup.patch" | sha256sum --check
+          git reset --hard "${expected_head}"
+          git clean -fdx
+          git apply --index /tmp/step17-followup.patch
+          test -z "$(git diff --check)"
+          cargo fmt --all -- --check
+          buf build proto --output /tmp/crm-schema.binpb
+          python scripts/generate_contract_bindings.py --check --descriptor-set /tmp/crm-schema.binpb
+          python scripts/generate_contract_lifecycle.py --check --base-ref origin/main --expected-output /tmp/contract-lifecycle.expected.json
+          cmp contracts/contract-lifecycle.json /tmp/contract-lifecycle.expected.json
+          python scripts/generate_contract_telemetry_catalog.py --check
+          python scripts/generate_repository_navigation.py --check
+          python scripts/validate_module_manifests.py
+          python scripts/check_module_compatibility.py --base-ref origin/main
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          packet = json.loads(Path("repository-packet.json").read_text(encoding="utf-8"))
+          changed = subprocess.check_output(
+              ["git", "diff", "--name-only", "origin/main"], text=True
+          ).splitlines()
+          expected = sorted(packet["allowed_paths"])
+          if changed != expected:
+              raise SystemExit(
+                  f"exact packet tree mismatch\nexpected={expected}\nactual={changed}"
+              )
+          if len(changed) != 20:
+              raise SystemExit(f"expected 20 packet files, found {len(changed)}")
+          PY
+      - name: Validate focused lifecycle and navigation closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest \
+            tests/test_contract_bindings.py \
+            tests/test_contract_lifecycle.py \
+            tests/test_contract_lifecycle_transitions.py \
+            tests/test_contract_telemetry_catalog.py \
+            tests/test_repository_navigation.py \
+            tests/test_architecture_documentation_consistency.py
+      - name: Validate full Rust and architecture closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check --workspace --all-targets --all-features --locked
+          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+          cargo test --workspace --all-features --locked
+          python scripts/check_architecture.py
+          python scripts/check_step13_suppression_baseline.py --check --json-output /tmp/suppressions.json --markdown-output /tmp/suppressions.md
+          python scripts/analyze_workspace_governance.py --base-ref origin/main --check --json-output /tmp/governance.json --markdown-output /tmp/governance.md
+          python scripts/check_workspace_dependency_policy.py --check --json-output /tmp/dependencies.json --markdown-output /tmp/dependencies.md
+          python scripts/analyze_step13_complexity.py --json-output /tmp/complexity.json --markdown-output /tmp/complexity.md
+          python - <<'PY'
+          import json
+          report = json.load(open("/tmp/complexity.json", encoding="utf-8"))
+          actual = report["workspace_baseline"]["composition"]["application_runtime"]["non_comment_lines"]
+          if actual != 7269:
+              raise SystemExit(f"application-runtime LOC must equal accepted ceiling 7269, found {actual}")
+          PY
+      - name: Publish clean candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -m "Harden representative lifecycle publication evidence"
+          mkdir -p /tmp/step17-followup-proof
+          git rev-parse HEAD > /tmp/step17-followup-proof/clean-sha.txt
+          git diff --name-only origin/main HEAD > /tmp/step17-followup-proof/changed-files.txt
+          git diff --binary origin/main HEAD > /tmp/step17-followup-proof/clean.diff
+          sha256sum /tmp/step17-followup-proof/clean.diff > /tmp/step17-followup-proof/clean.diff.sha256
+          cp /tmp/suppressions.json /tmp/governance.json /tmp/dependencies.json /tmp/complexity.json /tmp/step17-followup-proof/
+          git push --force origin HEAD:step17-representative-clean-staging-v2
+      - name: Upload proof
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: step17-representative-followup-proof
+          path: /tmp/step17-followup-proof
+          if-no-files-found: error
+          retention-days: 14
