@@ -210,7 +210,14 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         )
         self.assertEqual(
             self.packet["required_checks"],
-            ["Affected Scope CI", "Contract CI", "Governance CI"],
+            [
+                "Affected Scope CI",
+                "Contract CI",
+                "Governance CI",
+                "Operations CI",
+                "Phase8A Workflow Guard",
+                "Rust Generated Sync",
+            ],
         )
         for forbidden in (
             "Cargo.lock",
