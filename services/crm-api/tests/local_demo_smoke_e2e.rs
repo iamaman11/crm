@@ -34,13 +34,16 @@ async fn deterministic_local_demo_seed_or_smoke() {
         std::env::var("CRM_LOCAL_DEMO_IDEMPOTENCY_KEY").expect("local demo idempotency key");
 
     ensure_party_adapter(&admin_database_url).await;
+    if mode == "smoke" {
+        assert_query_requires_grant(&database_url, &party_id).await;
+    }
 
     let http_port = free_port();
     let grpc_port = free_port();
     let http_addr = format!("127.0.0.1:{http_port}");
     let grpc_addr = format!("127.0.0.1:{grpc_port}");
     let http = HttpClient::new();
-    let mut process = spawn_crm_api(&database_url, &http_addr, &grpc_addr, mode == "seed", None);
+    let mut process = spawn_crm_api(&database_url, &http_addr, &grpc_addr, true, None);
     wait_until_ready(&http, &mut process, &http_addr, true).await;
     let mut gateway = connect_grpc(&grpc_addr).await;
 
@@ -50,7 +53,7 @@ async fn deterministic_local_demo_seed_or_smoke() {
 
     let party = get_demo_party(&mut gateway, &party_id, TENANT_A, true)
         .await
-        .expect("authenticated local demo Party query");
+        .expect("authenticated and granted local demo Party query");
     assert_eq!(
         party
             .party_ref
@@ -77,6 +80,22 @@ async fn deterministic_local_demo_seed_or_smoke() {
         assert_eq!(cross_tenant.code(), Code::NotFound);
     }
 
+    stop_process(&mut process).await;
+}
+
+async fn assert_query_requires_grant(database_url: &str, party_id: &str) {
+    let http_port = free_port();
+    let grpc_port = free_port();
+    let http_addr = format!("127.0.0.1:{http_port}");
+    let grpc_addr = format!("127.0.0.1:{grpc_port}");
+    let http = HttpClient::new();
+    let mut process = spawn_crm_api(database_url, &http_addr, &grpc_addr, false, None);
+    wait_until_ready(&http, &mut process, &http_addr, true).await;
+    let mut gateway = connect_grpc(&grpc_addr).await;
+    let denied = get_demo_party(&mut gateway, party_id, TENANT_A, true)
+        .await
+        .expect_err("authenticated query without a live grant must fail");
+    assert_eq!(denied.code(), Code::PermissionDenied);
     stop_process(&mut process).await;
 }
 
