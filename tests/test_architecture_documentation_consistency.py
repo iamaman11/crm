@@ -204,6 +204,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "crates/crm-sales-activities-capability-composition/src/lib.rs",
                 "crates/crm-sales-activities-capability-composition/tests/catalog_contract.rs",
                 "crates/crm-sales-activities-link-contract-adapter/src/lib.rs",
+                "database/tests/0003_sales_activities_adapters.sql",
                 "docs/ACTIVE_PACKET.md",
                 "docs/contract-migrations/activities-task-create-1.0.0-to-1.1.0.md",
                 "docs/generated/REPOSITORY_MAP.md",
@@ -226,7 +227,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "Contract CI",
                 "Complexity Baseline CI",
                 "Database CI",
+                "Event Runtime CI",
                 "Governance CI",
+                "Projection Runtime CI",
                 "Rust Generated Sync",
                 "Rust CI",
             ],
@@ -234,7 +237,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         for forbidden in (
             "Cargo.lock",
             "proto/**",
-            "database/**",
+            "database/migrations/**",
         ):
             self.assertIn(forbidden, self.packet["forbidden_paths"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
