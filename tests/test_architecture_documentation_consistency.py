@@ -182,35 +182,40 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_step_17_event_delivery_telemetry_packet_is_exact(self) -> None:
+    def test_active_step_17_representative_capability_deprecation_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-17-event-delivery-telemetry",
+            "repository-step-17-representative-capability-deprecation",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "0c6a1f3505ee416a6962ca2eac4c29fdf96700b9"},
+            {"ref": "main", "sha": "861b1d5907c43f5e89dc10d5a7c81c1c98aa771b"},
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
-            {
+{
+                "contracts/contract-lifecycle-policy.json",
+                "contracts/contract-lifecycle.json",
+                "contracts/module-contract-bindings.json",
+                "crates/crm-activities-capability-adapter/src/planner.rs",
                 "crates/crm-application-runtime/src/generated_contract_telemetry.rs",
-                "crates/crm-application-runtime/src/runtime.rs",
-                "crates/crm-capability-adapters/src/contract_usage_telemetry.rs",
-                "crates/crm-core-data/src/lib.rs",
-                "crates/crm-core-data/src/postgres.rs",
-                "crates/crm-core-data/src/postgres_event_delivery_ledger.rs",
-                "crates/crm-core-data/src/postgres_projection.rs",
-                "crates/crm-core-data/tests/postgres_event_delivery.rs",
+                "crates/crm-sales-activities-capability-composition/src/lib.rs",
+                "crates/crm-sales-activities-capability-composition/tests/catalog_contract.rs",
+                "crates/crm-sales-activities-link-contract-adapter/src/lib.rs",
                 "docs/ACTIVE_PACKET.md",
+                "docs/contract-migrations/activities-task-create-1.0.0-to-1.1.0.md",
+                "docs/generated/REPOSITORY_MAP.md",
+                "modules/crm-activities/module.yaml",
+                "modules/crm-sales-activities-link/module.yaml",
+                "modules/crm-sales-activities-link/src/lib.rs",
                 "repository-packet.json",
-                "scripts/generate_contract_telemetry_catalog.py",
                 "tests/test_architecture_documentation_consistency.py",
+                "tests/test_contract_lifecycle.py",
                 "tests/test_contract_telemetry_catalog.py",
                 "tests/test_repository_navigation.py",
-            },
+            }
         )
         self.assertEqual(
             self.packet["required_checks"],
@@ -234,11 +239,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "generate deterministic capability and consumer-expanded event telemetry catalogs from every deprecated lifecycle entry",
+            "publish activities.task.create at exact versions 1.0.0 and 1.1.0 through the same governed protobuf binding",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "deprecate, migrate or retire any currently published capability or event",
+            "remove or retire activities.task.create@1.0.0",
             self.packet["non_goals"],
         )
 

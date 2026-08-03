@@ -29,7 +29,7 @@ provides:
 consumes:
   capabilities:
     - id: activities.task.create
-      version: 1.0.0
+      version: 1.1.0
   events:
     - id: sales.deal.stage_changed
       version: 1.0.0

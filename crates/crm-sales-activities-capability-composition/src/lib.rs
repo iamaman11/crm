@@ -34,7 +34,7 @@ use crm_activities_capability_adapter::{
 use crm_capability_adapters::CapabilityCatalog;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
 use crm_core_data::{AggregateTarget, CapabilityBatchExecutionPlan, TransactionalAggregatePlanner};
-use crm_module_sdk::{ErrorCategory, RecordSnapshot, SdkError};
+use crm_module_sdk::{CapabilityVersion, ErrorCategory, RecordSnapshot, SdkError};
 use crm_sales_capability_adapter::{
     ADVANCE_CAPABILITY as SALES_ADVANCE_CAPABILITY, CREATE_CAPABILITY as SALES_CREATE_CAPABILITY,
     MODULE_ID as SALES_MODULE_ID, SalesDealCapabilityPlanner,
@@ -42,20 +42,23 @@ use crm_sales_capability_adapter::{
     capability_definition as sales_capability_definition,
 };
 
-pub const PRODUCTION_MUTATION_CAPABILITY_IDS: [&str; 7] = [
-    SALES_CREATE_CAPABILITY,
-    SALES_UPDATE_CAPABILITY,
-    SALES_ADVANCE_CAPABILITY,
-    ACTIVITIES_CREATE_CAPABILITY,
-    ACTIVITIES_UPDATE_CAPABILITY,
-    ACTIVITIES_COMPLETE_CAPABILITY,
-    ACTIVITIES_REMINDER_CAPABILITY,
+pub const PRODUCTION_MUTATION_CAPABILITY_COORDINATES: [(&str, &str); 8] = [
+    (SALES_CREATE_CAPABILITY, "1.0.0"),
+    (SALES_UPDATE_CAPABILITY, "1.0.0"),
+    (SALES_ADVANCE_CAPABILITY, "1.0.0"),
+    (ACTIVITIES_CREATE_CAPABILITY, "1.0.0"),
+    (ACTIVITIES_CREATE_CAPABILITY, "1.1.0"),
+    (ACTIVITIES_UPDATE_CAPABILITY, "1.0.0"),
+    (ACTIVITIES_COMPLETE_CAPABILITY, "1.0.0"),
+    (ACTIVITIES_REMINDER_CAPABILITY, "1.0.0"),
 ];
 
 pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
-    PRODUCTION_MUTATION_CAPABILITY_IDS
+    PRODUCTION_MUTATION_CAPABILITY_COORDINATES
         .iter()
-        .map(|capability_id| expected_definition(capability_id))
+        .map(|(capability_id, capability_version)| {
+            expected_definition(capability_id, capability_version)
+        })
         .collect()
 }
 
@@ -111,7 +114,10 @@ fn validated_route(
     definition: &CapabilityDefinition,
     request: &CapabilityRequest,
 ) -> Result<PlannerRoute, SdkError> {
-    let expected = expected_definition(definition.capability_id.as_str())?;
+    let expected = expected_definition(
+        definition.capability_id.as_str(),
+        definition.capability_version.as_str(),
+    )?;
 
     if definition.capability_version != expected.capability_version {
         return Err(configuration_error(
@@ -145,8 +151,11 @@ fn validated_route(
     }
 }
 
-fn expected_definition(capability_id: &str) -> Result<CapabilityDefinition, SdkError> {
-    match capability_id {
+fn expected_definition(
+    capability_id: &str,
+    capability_version: &str,
+) -> Result<CapabilityDefinition, SdkError> {
+    let mut definition = match capability_id {
         SALES_CREATE_CAPABILITY | SALES_UPDATE_CAPABILITY | SALES_ADVANCE_CAPABILITY => {
             sales_capability_definition(capability_id)
         }
@@ -158,7 +167,23 @@ fn expected_definition(capability_id: &str) -> Result<CapabilityDefinition, SdkE
             "CAPABILITY_PLANNER_ROUTE_UNSUPPORTED",
             "The capability planner route is unsupported.",
         )),
+    }?;
+    let supported = capability_version == "1.0.0"
+        || (capability_id == ACTIVITIES_CREATE_CAPABILITY && capability_version == "1.1.0");
+    if !supported {
+        return Err(configuration_error(
+            "CAPABILITY_PLANNER_VERSION_MISMATCH",
+            "The capability planner version binding is invalid.",
+        ));
     }
+    definition.capability_version =
+        CapabilityVersion::try_new(capability_version).map_err(|_| {
+            configuration_error(
+                "CAPABILITY_PLANNER_VERSION_MISMATCH",
+                "The capability planner version binding is invalid.",
+            )
+        })?;
+    Ok(definition)
 }
 
 fn configuration_error(code: &'static str, safe_message: &'static str) -> SdkError {
@@ -176,17 +201,23 @@ mod tests {
     };
 
     #[test]
-    fn catalog_contains_exactly_the_seven_phase6_mutations_in_stable_order() {
+    fn catalog_contains_exactly_the_eight_phase6_coordinates_in_stable_order() {
         let definitions = capability_definitions().unwrap();
-        assert_eq!(definitions.len(), PRODUCTION_MUTATION_CAPABILITY_IDS.len());
+        assert_eq!(
+            definitions.len(),
+            PRODUCTION_MUTATION_CAPABILITY_COORDINATES.len()
+        );
         assert_eq!(
             definitions
                 .iter()
-                .map(|definition| definition.capability_id.as_str())
+                .map(|definition| (
+                    definition.capability_id.as_str(),
+                    definition.capability_version.as_str(),
+                ))
                 .collect::<Vec<_>>(),
-            PRODUCTION_MUTATION_CAPABILITY_IDS
+            PRODUCTION_MUTATION_CAPABILITY_COORDINATES
         );
-        assert_eq!(capability_catalog().unwrap().len(), 7);
+        assert_eq!(capability_catalog().unwrap().len(), 8);
     }
 
     #[test]

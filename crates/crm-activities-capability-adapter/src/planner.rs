@@ -27,6 +27,7 @@ pub const UPDATE_CAPABILITY: &str = "activities.task.update";
 pub const COMPLETE_CAPABILITY: &str = "activities.task.complete";
 pub const REMINDER_CAPABILITY: &str = "activities.task.schedule_reminder";
 
+const CREATE_REPLACEMENT_VERSION: &str = "1.1.0";
 const CREATE_REQUEST_SCHEMA: &str = "crm.activities.v1.CreateTaskRequest";
 const CREATE_RESPONSE_SCHEMA: &str = "crm.activities.v1.CreateTaskResponse";
 const UPDATE_REQUEST_SCHEMA: &str = "crm.activities.v1.UpdateTaskRequest";
@@ -671,9 +672,13 @@ fn ensure_definition(
     definition: &CapabilityDefinition,
     request: &CapabilityRequest,
 ) -> Result<(), SdkError> {
+    let version = definition.capability_version.as_str();
+    let supported_version = version == support::CONTRACT_VERSION
+        || (definition.capability_id.as_str() == CREATE_CAPABILITY
+            && version == CREATE_REPLACEMENT_VERSION);
     if definition.owner_module_id.as_str() != MODULE_ID
         || request.context.module_id.as_str() != MODULE_ID
-        || definition.capability_version.as_str() != support::CONTRACT_VERSION
+        || !supported_version
         || request.context.execution.capability_id != definition.capability_id
         || request.context.execution.capability_version != definition.capability_version
     {
@@ -704,9 +709,9 @@ fn invalid_plan() -> SdkError {
 mod tests {
     use super::*;
     use crm_module_sdk::{
-        BusinessTransactionId, CausationId, CorrelationId, ExecutionContext, IdempotencyKey,
-        ModuleExecutionContext, PayloadEncoding, RequestId, RetentionPolicyId, SchemaId,
-        SchemaVersion, TraceId,
+        BusinessTransactionId, CapabilityVersion, CausationId, CorrelationId, ExecutionContext,
+        IdempotencyKey, ModuleExecutionContext, PayloadEncoding, RequestId, RetentionPolicyId,
+        SchemaId, SchemaVersion, TraceId,
     };
     use prost::Message;
 
@@ -726,6 +731,63 @@ mod tests {
         assert_eq!(decode_task_state(&payload.bytes).unwrap().version(), 1);
         assert_eq!(first.batch.events.len(), 1);
         assert_eq!(first.batch.audits.len(), 1);
+    }
+
+    #[test]
+    fn create_replacement_coordinate_reuses_the_v1_wire_contract() {
+        let mut definition = capability_definition(CREATE_CAPABILITY).unwrap();
+        definition.capability_version =
+            CapabilityVersion::try_new(CREATE_REPLACEMENT_VERSION).unwrap();
+        let mut request = create_request("tenant-a");
+        request.context.execution.capability_version = definition.capability_version.clone();
+
+        let plan = ActivitiesTaskCapabilityPlanner
+            .plan(&definition, &request, None)
+            .expect("replacement coordinate must use the existing planner");
+
+        assert_eq!(
+            definition.input_contract.schema_version.as_str(),
+            support::CONTRACT_VERSION
+        );
+        assert_eq!(
+            definition
+                .output_contract
+                .as_ref()
+                .expect("create definition must publish an output contract")
+                .schema_version
+                .as_str(),
+            support::CONTRACT_VERSION,
+        );
+        assert_eq!(plan.batch.records.len(), 1);
+    }
+
+    #[test]
+    fn non_create_replacement_version_is_rejected() {
+        let mut definition = capability_definition(UPDATE_CAPABILITY).unwrap();
+        definition.capability_version =
+            CapabilityVersion::try_new(CREATE_REPLACEMENT_VERSION).unwrap();
+        let mut request = request(
+            UPDATE_CAPABILITY,
+            UPDATE_REQUEST_SCHEMA,
+            wire::UpdateTaskRequest {
+                task_id: "task-1".to_owned(),
+                expected_version: 1,
+                subject: None,
+                description: None,
+                owner: None,
+                priority: None,
+                due_at: None,
+            }
+            .encode_to_vec(),
+            200,
+        );
+        request.context.execution.capability_version = definition.capability_version.clone();
+
+        let error = ActivitiesTaskCapabilityPlanner
+            .target(&definition, &request)
+            .expect_err("only create may publish the replacement coordinate");
+
+        assert_eq!(error.code, "ACTIVITIES_MUTATION_PLAN_INVALID");
     }
 
     #[test]

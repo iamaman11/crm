@@ -71,6 +71,25 @@ class ContractTelemetryCatalogTests(unittest.TestCase):
         ).read_bytes()
         self.assertEqual(actual, expected)
 
+    def test_committed_representative_deprecation_has_one_zero_seeded_series(self) -> None:
+        policy = load_policy(ROOT / "contracts/contract-lifecycle-policy.json")
+        lifecycle = load_registry(ROOT / "contracts/contract-lifecycle.json")
+        entries = deprecated_capabilities(policy, lifecycle)
+
+        self.assertEqual(
+            entries,
+            [
+                {
+                    "capability_id": "activities.task.create",
+                    "capability_version": "1.0.0",
+                    "owner_module_id": "crm.activities",
+                    "metric": "crm_deprecated_capability_usage_total",
+                    "lookback_days": 30,
+                }
+            ],
+        )
+        self.assertEqual(deprecated_event_deliveries(policy, lifecycle), [])
+
     def test_deprecated_capabilities_are_sorted_and_use_provider_module(self) -> None:
         policy = {
             "schema_version": "crm.contract-lifecycle-policy/v1",
