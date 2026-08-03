@@ -287,7 +287,13 @@ async fn projections_rebuild_from_immutable_events_without_authoritative_side_ef
 fn production_gateway(store: PostgresDataStore) -> Arc<CapabilityGateway> {
     let clock = Arc::new(FixedClock::new(NOW));
     let authorization_store = LiveAuthorizationStore::default();
-    for definition in capability_definitions().expect("valid production capability definitions") {
+    for capability_id in [
+        "sales.deal.create",
+        "sales.deal.advance_stage",
+        "activities.task.create",
+        "activities.task.complete",
+    ] {
+        let definition = latest_definition(capability_id);
         authorization_store
             .upsert(AuthorizationGrant {
                 tenant_id: TenantId::try_new(TENANT).unwrap(),
@@ -339,11 +345,7 @@ async fn invoke<M: Message>(
     identity: &str,
     message: M,
 ) {
-    let definition = capability_definitions()
-        .expect("valid production definitions")
-        .into_iter()
-        .find(|definition| definition.capability_id.as_str() == capability_id)
-        .unwrap_or_else(|| panic!("missing capability definition: {capability_id}"));
+    let definition = latest_definition(capability_id);
     client
         .invoke(
             &caller_context(identity),
@@ -355,6 +357,21 @@ async fn invoke<M: Message>(
         )
         .await
         .unwrap_or_else(|error| panic!("production capability failed: {error}"));
+}
+
+fn latest_definition(
+    capability_id: &str,
+) -> crm_capability_runtime::CapabilityDefinition {
+    capability_definitions()
+        .expect("valid production definitions")
+        .into_iter()
+        .filter(|definition| definition.capability_id.as_str() == capability_id)
+        .max_by(|left, right| {
+            left.capability_version
+                .as_str()
+                .cmp(right.capability_version.as_str())
+        })
+        .unwrap_or_else(|| panic!("missing capability definition: {capability_id}"))
 }
 
 fn caller_context(identity: &str) -> ModuleExecutionContext {
