@@ -21,6 +21,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.roadmap = read("docs/IMPLEMENTATION_ROADMAP.md")
         cls.phase8 = read("docs/PHASE8_DELIVERY_PLAN.md")
         cls.plan = read("docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md")
+        cls.complexity = read("docs/WORKSPACE_COMPLEXITY_BASELINE.md")
         cls.catalog = read("docs/MODULE_CATALOG.md")
         cls.delivery = read("docs/DELIVERY_GOVERNANCE.md")
         cls.adr32 = read("docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md")
@@ -210,6 +211,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "docs/MODULE_CATALOG.md",
                 "docs/PHASE8_DELIVERY_PLAN.md",
                 "docs/PROJECT_STATUS.md",
+                "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
@@ -233,6 +235,14 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "7 of 7",
             ):
                 self.assertIn(marker, document)
+        for marker in (
+            "PR #281",
+            "76a0d93d594b6ffbb890f90d3cb9037febf4c3f8",
+            "87bc0d33befc4525b62aa7e0e1884abc07e12abf",
+            "7 of 7",
+            "changed no workspace package",
+        ):
+            self.assertIn(marker, self.complexity)
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(

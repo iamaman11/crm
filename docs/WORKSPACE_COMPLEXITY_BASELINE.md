@@ -7,6 +7,10 @@ Product boundary preserved: #126
 
 > Stage B measurement baseline. Dependency/version/feature/fan-out/public-surface observations are reports and warnings, not calibrated blocking budgets. Invalid or expired architecture exceptions, missing exception ownership/documentation, broken core workspace invariants, unjustified newly added workspace members and violations of explicit calibrated workspace dependency policies are blocking.
 
+## Accepted Repository Step 18 doctor/bootstrap complexity non-effect
+
+PR #281 / accepted source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7 applicable permanent workflows added deterministic repository-pinned `doctor` and locked isolated `bootstrap`. The accepted slice changed no workspace package, dependency declaration, feature set, internal edge, public Rust surface, Cargo manifest or `Cargo.lock`; this file remains a historical Stage B measurement baseline rather than a replacement for current generated complexity artifacts.
+
 The snapshot is reproducible through:
 
 ```bash

@@ -18,6 +18,7 @@
     "docs/MODULE_CATALOG.md",
     "docs/PHASE8_DELIVERY_PLAN.md",
     "docs/PROJECT_STATUS.md",
+    "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
     "repository-packet.json",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
@@ -49,7 +50,8 @@
     "record exact PR #281 source, squash merge and 7-of-7 workflow evidence in all five normative documents",
     "mark Repository Step 18 in progress with doctor/bootstrap accepted and dev-up/dev-reset next",
     "preserve seed-demo and smoke as later bounded Step 18 slices",
-    "update active-packet and documentation-consistency guards to the accepted evidence-sync packet"
+    "update active-packet and documentation-consistency guards to the accepted evidence-sync packet",
+    "record the accepted doctor/bootstrap zero-impact result in the historical workspace complexity baseline"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -64,6 +66,7 @@
     "Step 18 is described as in progress rather than complete",
     "dev-up/dev-reset are the only next permitted implementation packet and Step 19 remains blocked",
     "the final diff contains only declared documentation, packet, generated navigation and permanent guard files",
+    "Complexity Baseline CI is applicable and succeeds on the same final exact head through the declared complexity-baseline evidence path",
     "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments or review threads"
   ],
   "non_goals": [
