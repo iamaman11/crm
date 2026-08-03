@@ -18,6 +18,7 @@ from contract_lifecycle import (
     render_registry,
 )
 from contract_lifecycle_transitions import validate_transition_integrity
+from contract_retirement_evidence import validate_retirement_evidence
 
 
 def write_atomic(path: Path, content: bytes) -> None:
@@ -91,6 +92,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--policy", type=Path, default=Path("contracts/contract-lifecycle-policy.json")
     )
     parser.add_argument(
+        "--retirement-evidence",
+        type=Path,
+        default=Path("contracts/contract-retirement-evidence.json"),
+    )
+    parser.add_argument(
         "--output", type=Path, default=Path("contracts/contract-lifecycle.json")
     )
     parser.add_argument(
@@ -107,11 +113,18 @@ def main(argv: list[str] | None = None) -> int:
         manifests = load_authoring_manifests(args.modules_root, args.schema)
         bindings = load_json_object(args.bindings, "contract bindings")
         policy = load_json_object(args.policy, "contract lifecycle policy")
+        retirement_evidence = load_json_object(
+            args.retirement_evidence, "contract retirement evidence"
+        )
         base_bindings = None
         base_policy = None
+        base_retirement_evidence = None
         if args.base_ref:
             base_bindings = git_json(args.base_ref, args.bindings)
             base_policy = git_json(args.base_ref, args.policy, optional=True)
+            base_retirement_evidence = git_json(
+                args.base_ref, args.retirement_evidence, optional=True
+            )
         registry, errors = build_registry(
             bindings,
             manifests,
@@ -124,6 +137,15 @@ def main(argv: list[str] | None = None) -> int:
                 bindings,
                 policy,
                 base_bindings=base_bindings,
+                base_policy=base_policy,
+                repository_root=Path("."),
+            )
+        )
+        errors.extend(
+            validate_retirement_evidence(
+                retirement_evidence,
+                policy,
+                base_evidence=base_retirement_evidence,
                 base_policy=base_policy,
                 repository_root=Path("."),
             )

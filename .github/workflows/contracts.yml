@@ -17,6 +17,7 @@ on:
       - "scripts/contract_bindings.py"
       - "scripts/contract_lifecycle.py"
       - "scripts/contract_lifecycle_transitions.py"
+      - "scripts/contract_retirement_evidence.py"
       - "scripts/generate_contract_bindings.py"
       - "scripts/generate_contract_lifecycle.py"
       - "scripts/generate_contract_telemetry_catalog.py"
@@ -24,6 +25,7 @@ on:
       - "tests/test_contract_bindings.py"
       - "tests/test_contract_lifecycle.py"
       - "tests/test_contract_lifecycle_transitions.py"
+      - "tests/test_contract_retirement_evidence.py"
       - "tests/test_contract_telemetry_catalog.py"
       - "requirements-dev.txt"
       - "modules/*/module.yaml"
@@ -42,6 +44,7 @@ on:
       - "scripts/contract_bindings.py"
       - "scripts/contract_lifecycle.py"
       - "scripts/contract_lifecycle_transitions.py"
+      - "scripts/contract_retirement_evidence.py"
       - "scripts/generate_contract_bindings.py"
       - "scripts/generate_contract_lifecycle.py"
       - "scripts/generate_contract_telemetry_catalog.py"
@@ -49,6 +52,7 @@ on:
       - "tests/test_contract_bindings.py"
       - "tests/test_contract_lifecycle.py"
       - "tests/test_contract_lifecycle_transitions.py"
+      - "tests/test_contract_retirement_evidence.py"
       - "tests/test_contract_telemetry_catalog.py"
       - "requirements-dev.txt"
       - "modules/*/module.yaml"
@@ -100,7 +104,7 @@ jobs:
           buf lint proto >contract-diagnostics/lint.txt 2>&1
           lint_status=$?
 
-          python -m unittest tests/test_contract_bindings.py tests/test_contract_lifecycle.py tests/test_contract_lifecycle_transitions.py tests/test_contract_telemetry_catalog.py \
+          python -m unittest tests/test_contract_bindings.py tests/test_contract_lifecycle.py tests/test_contract_lifecycle_transitions.py tests/test_contract_retirement_evidence.py tests/test_contract_telemetry_catalog.py \
             >contract-diagnostics/bindings-unit.txt 2>&1
           bindings_unit_status=$?
 
