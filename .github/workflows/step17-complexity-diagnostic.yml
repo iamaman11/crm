@@ -65,6 +65,17 @@ jobs:
           echo "7aafca243a85741f6e3e85434f8b5bb62f4d54e1d3433676b8e8105caad779cd  /tmp/step17-reduction.patch" | sha256sum --check
           git apply --check /tmp/step17-reduction.patch
           git apply /tmp/step17-reduction.patch
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/crm-core-data/tests/postgres_event_delivery.rs")
+          text = path.read_text(encoding="utf-8")
+          old = 'Arc::new(|_: &EventDelivery| panic!("observer failure"))'
+          new = 'Arc::new(|_: &EventDelivery| -> () { panic!("observer failure") })'
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one panic observer target, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
           rm -f .github/step17-event-reduction.txt
           rm -f .github/workflows/step17-complexity-diagnostic.yml
           cargo fmt --all
