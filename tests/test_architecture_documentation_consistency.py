@@ -182,28 +182,28 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_step_17_contract_usage_telemetry_packet_is_exact(self) -> None:
+    def test_active_step_17_event_delivery_telemetry_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-17-contract-usage-telemetry",
+            "repository-step-17-event-delivery-telemetry",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "a9d6a3c58dc0418343a8919ae731aa5c8b3f92e8"},
+            {"ref": "main", "sha": "0c6a1f3505ee416a6962ca2eac4c29fdf96700b9"},
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                ".github/workflows/contracts.yml",
-                "affected-scope-policy.json",
                 "crates/crm-application-runtime/src/generated_contract_telemetry.rs",
-                "crates/crm-application-runtime/src/lib.rs",
-                "crates/crm-application-runtime/src/process.rs",
                 "crates/crm-application-runtime/src/runtime.rs",
                 "crates/crm-capability-adapters/src/contract_usage_telemetry.rs",
-                "crates/crm-capability-adapters/src/lib.rs",
+                "crates/crm-core-data/src/lib.rs",
+                "crates/crm-core-data/src/postgres.rs",
+                "crates/crm-core-data/src/postgres_event_delivery_ledger.rs",
+                "crates/crm-core-data/src/postgres_projection.rs",
+                "crates/crm-core-data/tests/postgres_event_delivery.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "scripts/generate_contract_telemetry_catalog.py",
@@ -219,6 +219,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "Application Runtime CI",
                 "Contract CI",
                 "Complexity Baseline CI",
+                "Database CI",
                 "Governance CI",
                 "Rust Generated Sync",
                 "Rust CI",
@@ -233,11 +234,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "generate a deterministic typed Rust telemetry catalog from every deprecated capability entry in the lifecycle policy",
+            "generate deterministic capability and consumer-expanded event telemetry catalogs from every deprecated lifecycle entry",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "add event-delivery deprecation telemetry in this capability-usage slice",
+            "deprecate, migrate or retire any currently published capability or event",
             self.packet["non_goals"],
         )
 

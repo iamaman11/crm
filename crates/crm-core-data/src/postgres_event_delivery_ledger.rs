@@ -137,6 +137,7 @@ impl PostgresDataStore {
             .map_err(|error| stored_value_invalid(error.to_string()))?;
         let attempt_count = u32::try_from(attempt_count)
             .map_err(|_| stored_value_invalid("negative delivery attempt count"))?;
+        self.observe_event_delivery(&delivery);
         Ok(EventDeliveryClaim::Claimed(ClaimedEventDelivery {
             delivery: Box::new(delivery),
             attempt_count,

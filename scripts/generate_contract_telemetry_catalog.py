@@ -41,7 +41,9 @@ def required_text(value: dict[str, Any], key: str, location: str) -> str:
     return candidate
 
 
-def capability_providers(registry: dict[str, Any]) -> dict[tuple[str, str], str]:
+def published_rows(
+    registry: dict[str, Any], plural: str
+) -> tuple[list[str], list[list[Any]]]:
     if registry.get("schema_version") != REGISTRY_SCHEMA_VERSION:
         raise ValueError(f"lifecycle registry must use {REGISTRY_SCHEMA_VERSION}")
     if registry.get("policy_schema_version") != POLICY_SCHEMA_VERSION:
@@ -49,20 +51,26 @@ def capability_providers(registry: dict[str, Any]) -> dict[tuple[str, str], str]
             f"lifecycle registry policy schema must use {POLICY_SCHEMA_VERSION}"
         )
     columns = registry.get("published_columns")
-    required_columns = ("id", "version", "provider_module_id")
+    required_columns = ("id", "version", "provider_module_id", "internal_consumers")
     if not isinstance(columns, list) or any(
         column not in columns for column in required_columns
     ):
         raise ValueError(
-            "lifecycle registry published_columns must include id, version and provider_module_id"
+            "lifecycle registry published_columns must include id, version, "
+            "provider_module_id and internal_consumers"
         )
     published = registry.get("published")
     if not isinstance(published, dict):
         raise ValueError("lifecycle registry published must be an object")
-    capabilities = published.get("capabilities")
-    if not isinstance(capabilities, list):
-        raise ValueError("lifecycle registry published.capabilities must be a list")
-    indexes = {column: columns.index(column) for column in required_columns}
+    rows = published.get(plural)
+    if not isinstance(rows, list):
+        raise ValueError(f"lifecycle registry published.{plural} must be a list")
+    return columns, rows
+
+
+def capability_providers(registry: dict[str, Any]) -> dict[tuple[str, str], str]:
+    columns, capabilities = published_rows(registry, "capabilities")
+    indexes = {column: columns.index(column) for column in columns}
     providers: dict[tuple[str, str], str] = {}
     for index, row in enumerate(capabilities):
         location = f"published.capabilities[{index}]"
@@ -72,13 +80,69 @@ def capability_providers(registry: dict[str, Any]) -> dict[tuple[str, str], str]
         capability_id = required_text(values, "id", location)
         version = required_text(values, "version", location)
         provider = required_text(values, "provider_module_id", location)
+        consumers = values["internal_consumers"]
+        if not isinstance(consumers, list):
+            raise ValueError(f"{location}.internal_consumers must be a list")
         coordinate = (capability_id, version)
         if coordinate in providers:
-            raise ValueError(
-                f"duplicate published capability {capability_id}@{version}"
-            )
+            raise ValueError(f"duplicate published capability {capability_id}@{version}")
         providers[coordinate] = provider
     return providers
+
+
+def event_delivery_bindings(
+    registry: dict[str, Any],
+) -> dict[tuple[str, str], tuple[str, tuple[str, ...]]]:
+    columns, events = published_rows(registry, "events")
+    indexes = {column: columns.index(column) for column in columns}
+    bindings: dict[tuple[str, str], tuple[str, tuple[str, ...]]] = {}
+    for index, row in enumerate(events):
+        location = f"published.events[{index}]"
+        if not isinstance(row, list) or len(row) < len(columns):
+            raise ValueError(f"{location} must match published_columns")
+        values = {column: row[position] for column, position in indexes.items()}
+        event_type = required_text(values, "id", location)
+        version = required_text(values, "version", location)
+        provider = required_text(values, "provider_module_id", location)
+        raw_consumers = values["internal_consumers"]
+        if not isinstance(raw_consumers, list):
+            raise ValueError(f"{location}.internal_consumers must be a list")
+        consumers: list[str] = []
+        seen_consumers: set[str] = set()
+        for consumer_index, raw_consumer in enumerate(raw_consumers):
+            consumer = required_text(
+                {"consumer": raw_consumer},
+                "consumer",
+                f"{location}.internal_consumers[{consumer_index}]",
+            )
+            if consumer in seen_consumers:
+                raise ValueError(
+                    f"duplicate internal event consumer {consumer} for "
+                    f"{event_type}@{version}"
+                )
+            seen_consumers.add(consumer)
+            consumers.append(consumer)
+        coordinate = (event_type, version)
+        if coordinate in bindings:
+            raise ValueError(f"duplicate published event {event_type}@{version}")
+        bindings[coordinate] = (provider, tuple(sorted(consumers)))
+    return bindings
+
+
+def telemetry(item: dict[str, Any], location: str) -> tuple[str, int]:
+    required_text(item, "owner", location)
+    value = item.get("telemetry")
+    if not isinstance(value, dict):
+        raise ValueError(f"{location}.telemetry must be an object")
+    metric = required_text(value, "metric", f"{location}.telemetry")
+    lookback_days = value.get("lookback_days")
+    if (
+        isinstance(lookback_days, bool)
+        or not isinstance(lookback_days, int)
+        or lookback_days <= 0
+    ):
+        raise ValueError(f"{location}.telemetry.lookback_days must be positive")
+    return metric, lookback_days
 
 
 def deprecated_capabilities(
@@ -100,25 +164,10 @@ def deprecated_capabilities(
             continue
         capability_id = required_text(item, "id", location)
         version = required_text(item, "version", location)
-        required_text(item, "owner", location)
-        telemetry = item.get("telemetry")
-        if not isinstance(telemetry, dict):
-            raise ValueError(f"{location}.telemetry must be an object")
-        metric = required_text(telemetry, "metric", f"{location}.telemetry")
-        lookback_days = telemetry.get("lookback_days")
-        if (
-            isinstance(lookback_days, bool)
-            or not isinstance(lookback_days, int)
-            or lookback_days <= 0
-        ):
-            raise ValueError(
-                f"{location}.telemetry.lookback_days must be positive"
-            )
+        metric, lookback_days = telemetry(item, location)
         coordinate = (capability_id, version)
         if coordinate in seen:
-            raise ValueError(
-                f"duplicate deprecated capability {capability_id}@{version}"
-            )
+            raise ValueError(f"duplicate deprecated capability {capability_id}@{version}")
         provider = providers.get(coordinate)
         if provider is None:
             raise ValueError(
@@ -134,38 +183,110 @@ def deprecated_capabilities(
                 "lookback_days": lookback_days,
             }
         )
+    entries.sort(key=lambda entry: (entry["capability_id"], entry["capability_version"]))
+    return entries
+
+
+def deprecated_event_deliveries(
+    policy: dict[str, Any], registry: dict[str, Any]
+) -> list[dict[str, Any]]:
+    if policy.get("schema_version") != POLICY_SCHEMA_VERSION:
+        raise ValueError(f"lifecycle policy must use {POLICY_SCHEMA_VERSION}")
+    contracts = policy.get("contracts")
+    if not isinstance(contracts, list):
+        raise ValueError("lifecycle policy contracts must be a list")
+    bindings = event_delivery_bindings(registry)
+    entries: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for index, item in enumerate(contracts):
+        location = f"contracts[{index}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{location} must be an object")
+        if item.get("kind") != "event" or item.get("state") != "deprecated":
+            continue
+        event_type = required_text(item, "id", location)
+        version = required_text(item, "version", location)
+        metric, lookback_days = telemetry(item, location)
+        coordinate = (event_type, version)
+        if coordinate in seen:
+            raise ValueError(f"duplicate deprecated event {event_type}@{version}")
+        binding = bindings.get(coordinate)
+        if binding is None:
+            raise ValueError(f"deprecated event is not published: {event_type}@{version}")
+        seen.add(coordinate)
+        provider, consumers = binding
+        for consumer in consumers:
+            entries.append(
+                {
+                    "event_type": event_type,
+                    "event_version": version,
+                    "provider_module_id": provider,
+                    "consumer_module_id": consumer,
+                    "metric": metric,
+                    "lookback_days": lookback_days,
+                }
+            )
     entries.sort(
-        key=lambda entry: (entry["capability_id"], entry["capability_version"])
+        key=lambda entry: (
+            entry["event_type"],
+            entry["event_version"],
+            entry["consumer_module_id"],
+        )
     )
     return entries
 
 
-def render(entries: list[dict[str, Any]]) -> bytes:
-    prefix = [
+def render(
+    capabilities: list[dict[str, Any]], events: list[dict[str, Any]]
+) -> bytes:
+    lines = [
         "// @generated by scripts/generate_contract_telemetry_catalog.py; do not edit.\n"
     ]
-    if not entries:
-        prefix.append(
+    if capabilities:
+        lines.append(
+            "const DEPRECATED_CONTRACTS: &[(&str, &str, &str, &str, u32)] = &[\n"
+        )
+        for entry in capabilities:
+            lines.extend(
+                [
+                    "    (\n",
+                    f'        "{entry["capability_id"]}",\n',
+                    f'        "{entry["capability_version"]}",\n',
+                    f'        "{entry["owner_module_id"]}",\n',
+                    f'        "{entry["metric"]}",\n',
+                    f'        {entry["lookback_days"]},\n',
+                    "    ),\n",
+                ]
+            )
+        lines.append("];\n")
+    else:
+        lines.append(
             "const DEPRECATED_CONTRACTS: &[(&str, &str, &str, &str, u32)] = &[];\n"
         )
-        return "".join(prefix).encode("utf-8")
-
-    lines = prefix + [
-        "const DEPRECATED_CONTRACTS: &[(&str, &str, &str, &str, u32)] = &[\n"
-    ]
-    for entry in entries:
-        lines.extend(
-            [
-                "    (\n",
-                f'        "{entry["capability_id"]}",\n',
-                f'        "{entry["capability_version"]}",\n',
-                f'        "{entry["owner_module_id"]}",\n',
-                f'        "{entry["metric"]}",\n',
-                f'        {entry["lookback_days"]},\n',
-                "    ),\n",
-            ]
+    if events:
+        lines.append(
+            "const DEPRECATED_EVENT_DELIVERIES: "
+            "&[(&str, &str, &str, &str, &str, u32)] = &[\n"
         )
-    lines.append("];\n")
+        for entry in events:
+            lines.extend(
+                [
+                    "    (\n",
+                    f'        "{entry["event_type"]}",\n',
+                    f'        "{entry["event_version"]}",\n',
+                    f'        "{entry["provider_module_id"]}",\n',
+                    f'        "{entry["consumer_module_id"]}",\n',
+                    f'        "{entry["metric"]}",\n',
+                    f'        {entry["lookback_days"]},\n',
+                    "    ),\n",
+                ]
+            )
+        lines.append("];\n")
+    else:
+        lines.append(
+            "const DEPRECATED_EVENT_DELIVERIES: "
+            "&[(&str, &str, &str, &str, &str, u32)] = &[];\n"
+        )
     return "".join(lines).encode("utf-8")
 
 
@@ -225,10 +346,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
+        policy = load_policy(args.policy)
+        registry = load_registry(args.registry)
         expected = render(
-            deprecated_capabilities(
-                load_policy(args.policy), load_registry(args.registry)
-            )
+            deprecated_capabilities(policy, registry),
+            deprecated_event_deliveries(policy, registry),
         )
     except ValueError as error:
         print(
