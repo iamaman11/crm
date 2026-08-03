@@ -46,20 +46,22 @@ Which = Callable[[str], str | None]
 Run = Callable[[Sequence[str]], None]
 
 
-def _capture(command: Sequence[str]) -> subprocess.CompletedProcess[str]:
+def _capture(
+    command: Sequence[str], root: Path = ROOT
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         list(command),
-        cwd=ROOT,
+        cwd=root,
         check=False,
         capture_output=True,
         text=True,
     )
 
 
-def _run(command: Sequence[str]) -> None:
+def _run(command: Sequence[str], root: Path = ROOT) -> None:
     rendered = " ".join(command)
     print(f"+ {rendered}", flush=True)
-    completed = subprocess.run(list(command), cwd=ROOT, check=False)
+    completed = subprocess.run(list(command), cwd=root, check=False)
     if completed.returncode != 0:
         raise LifecycleError(
             f"command failed with exit code {completed.returncode}: {rendered}"
@@ -154,7 +156,7 @@ def doctor(
         raise LifecycleError(f"unsupported doctor profile: {profile}")
     root = root.resolve()
     which = which or shutil.which
-    capture = capture or _capture
+    capture = capture or (lambda command: _capture(command, root))
     python_version = python_version or sys.version_info[:3]
 
     missing = [
@@ -186,6 +188,14 @@ def doctor(
                 if python_version >= MINIMUM_PYTHON
                 else "install Python 3.11 or newer"
             ),
+        ),
+        _command_check(
+            check_id="python-venv",
+            executable=sys.executable,
+            command=(sys.executable, "-m", "venv", "--help"),
+            which=which,
+            capture=capture,
+            remediation="install Python venv/ensurepip support for this interpreter",
         ),
     ]
 
@@ -355,7 +365,11 @@ def bootstrap(
 ) -> dict[str, object]:
     """Create local dependency state from committed constraints and lockfiles."""
     root = root.resolve()
-    report = doctor_report or doctor(root, profile="bootstrap")
+    report = (
+        doctor_report
+        if doctor_report is not None
+        else doctor(root, profile="bootstrap")
+    )
     if not bool(report["ok"]):
         raise LifecycleError(
             "bootstrap prerequisites failed; run repo.py doctor --profile bootstrap"
@@ -363,7 +377,7 @@ def bootstrap(
 
     commands = bootstrap_plan(root)
     if not dry_run:
-        runner = run or _run
+        runner = run or (lambda command: _run(command, root))
         for command in commands:
             runner(command)
 
