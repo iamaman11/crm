@@ -7,6 +7,7 @@ on:
     paths:
       - "proto/**"
       - "contracts/**"
+      - "evidence/contract-lifecycle/**"
       - "buf.yaml"
       - "buf.lock"
       - "buf.gen*.yaml"
@@ -16,7 +17,9 @@ on:
       - "schemas/module.schema.json"
       - "scripts/contract_bindings.py"
       - "scripts/contract_lifecycle.py"
+      - "scripts/contract_lifecycle_preproduction.py"
       - "scripts/contract_lifecycle_transitions.py"
+      - "scripts/contract_release_evidence.py"
       - "scripts/contract_retirement_evidence.py"
       - "scripts/generate_contract_bindings.py"
       - "scripts/generate_contract_lifecycle.py"
@@ -24,7 +27,9 @@ on:
       - "scripts/validate_module_manifests.py"
       - "tests/test_contract_bindings.py"
       - "tests/test_contract_lifecycle.py"
+      - "tests/test_contract_lifecycle_preproduction.py"
       - "tests/test_contract_lifecycle_transitions.py"
+      - "tests/test_contract_release_evidence.py"
       - "tests/test_contract_retirement_evidence.py"
       - "tests/test_contract_telemetry_catalog.py"
       - "requirements-dev.txt"
@@ -34,6 +39,7 @@ on:
     paths:
       - "proto/**"
       - "contracts/**"
+      - "evidence/contract-lifecycle/**"
       - "buf.yaml"
       - "buf.lock"
       - "buf.gen*.yaml"
@@ -43,7 +49,9 @@ on:
       - "schemas/module.schema.json"
       - "scripts/contract_bindings.py"
       - "scripts/contract_lifecycle.py"
+      - "scripts/contract_lifecycle_preproduction.py"
       - "scripts/contract_lifecycle_transitions.py"
+      - "scripts/contract_release_evidence.py"
       - "scripts/contract_retirement_evidence.py"
       - "scripts/generate_contract_bindings.py"
       - "scripts/generate_contract_lifecycle.py"
@@ -51,7 +59,9 @@ on:
       - "scripts/validate_module_manifests.py"
       - "tests/test_contract_bindings.py"
       - "tests/test_contract_lifecycle.py"
+      - "tests/test_contract_lifecycle_preproduction.py"
       - "tests/test_contract_lifecycle_transitions.py"
+      - "tests/test_contract_release_evidence.py"
       - "tests/test_contract_retirement_evidence.py"
       - "tests/test_contract_telemetry_catalog.py"
       - "requirements-dev.txt"
@@ -64,6 +74,7 @@ concurrency:
 
 permissions:
   contents: read
+  deployments: read
 
 jobs:
   contracts:
@@ -88,6 +99,7 @@ jobs:
       - name: Build, format, lint, generate and breaking checks
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           mkdir -p contract-diagnostics
@@ -104,7 +116,14 @@ jobs:
           buf lint proto >contract-diagnostics/lint.txt 2>&1
           lint_status=$?
 
-          python -m unittest tests/test_contract_bindings.py tests/test_contract_lifecycle.py tests/test_contract_lifecycle_transitions.py tests/test_contract_retirement_evidence.py tests/test_contract_telemetry_catalog.py \
+          python -m unittest \
+            tests/test_contract_bindings.py \
+            tests/test_contract_lifecycle.py \
+            tests/test_contract_lifecycle_preproduction.py \
+            tests/test_contract_lifecycle_transitions.py \
+            tests/test_contract_release_evidence.py \
+            tests/test_contract_retirement_evidence.py \
+            tests/test_contract_telemetry_catalog.py \
             >contract-diagnostics/bindings-unit.txt 2>&1
           bindings_unit_status=$?
 
@@ -119,6 +138,52 @@ jobs:
             echo "Binding generation skipped because descriptor build failed" \
               >contract-diagnostics/bindings.txt
             bindings_status=1
+          fi
+
+          release_evidence_status=0
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+            curl --fail --silent --show-error --location \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api}/releases?per_page=100" \
+              >contract-diagnostics/github-releases.json
+            releases_status=$?
+            curl --fail --silent --show-error --location \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api}/tags?per_page=100" \
+              >contract-diagnostics/github-tags.json
+            tags_status=$?
+            curl --fail --silent --show-error --location \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api}/deployments?per_page=100" \
+              >contract-diagnostics/github-deployments.json
+            deployments_status=$?
+            if [ "${releases_status}" -ne 0 ] || [ "${tags_status}" -ne 0 ] || \
+               [ "${deployments_status}" -ne 0 ]; then
+              echo "GitHub release-channel snapshot failed" \
+                >contract-diagnostics/release-evidence.txt
+              release_evidence_status=1
+            else
+              python scripts/contract_release_evidence.py \
+                --check-live \
+                --base-ref "origin/${BASE_REF}" \
+                --releases contract-diagnostics/github-releases.json \
+                --tags contract-diagnostics/github-tags.json \
+                --deployments contract-diagnostics/github-deployments.json \
+                --repository "${GITHUB_REPOSITORY}" \
+                --source-commit "$(git rev-parse "origin/${BASE_REF}")" \
+                >contract-diagnostics/release-evidence.txt 2>&1
+              release_evidence_status=$?
+            fi
+          else
+            echo "Live never-released evidence check skipped outside pull requests" \
+              >contract-diagnostics/release-evidence.txt
           fi
 
           lifecycle_status=0
@@ -154,6 +219,7 @@ jobs:
             contract-diagnostics/lint.txt \
             contract-diagnostics/bindings-unit.txt \
             contract-diagnostics/bindings.txt \
+            contract-diagnostics/release-evidence.txt \
             contract-diagnostics/lifecycle.txt \
             contract-diagnostics/breaking.txt; do
             echo "::group::${report}"
@@ -161,15 +227,17 @@ jobs:
             echo "::endgroup::"
           done
 
-          printf 'build=%s format=%s lint=%s bindings_unit=%s bindings=%s lifecycle=%s breaking=%s\n' \
+          printf 'build=%s format=%s lint=%s bindings_unit=%s bindings=%s release_evidence=%s lifecycle=%s breaking=%s\n' \
             "${build_status}" "${format_status}" "${lint_status}" \
-            "${bindings_unit_status}" "${bindings_status}" "${lifecycle_status}" \
+            "${bindings_unit_status}" "${bindings_status}" \
+            "${release_evidence_status}" "${lifecycle_status}" \
             "${breaking_status}"
 
           if [ "${build_status}" -ne 0 ] || [ "${format_status}" -ne 0 ] || \
              [ "${lint_status}" -ne 0 ] || [ "${bindings_unit_status}" -ne 0 ] || \
-             [ "${bindings_status}" -ne 0 ] || [ "${lifecycle_status}" -ne 0 ] || \
-             [ "${breaking_status}" -ne 0 ]; then
+             [ "${bindings_status}" -ne 0 ] || \
+             [ "${release_evidence_status}" -ne 0 ] || \
+             [ "${lifecycle_status}" -ne 0 ] || [ "${breaking_status}" -ne 0 ]; then
             exit 1
           fi
       - name: Upload contract diagnostics
