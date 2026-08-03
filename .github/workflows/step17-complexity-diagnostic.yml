@@ -60,9 +60,9 @@ jobs:
         run: |
           set -euo pipefail
           tr -d '\r\n' < .github/step17-event-reduction.txt > /tmp/step17-reduction.patch.gz.b64
-          echo "21d67ad03a2a2da7d41fb4a1258edb0bc46331d61447f44f026e3e2f6340d29f  /tmp/step17-reduction.patch.gz.b64" | sha256sum --check
+          echo "dbf826d407ab9762b3df21aee10def64a3c62e15e08e8055ecd40d3676902cdf  /tmp/step17-reduction.patch.gz.b64" | sha256sum --check
           base64 --decode /tmp/step17-reduction.patch.gz.b64 | gzip --decompress > /tmp/step17-reduction.patch
-          echo "37b88828a8be6b1e802e5267b94ee66522f4914c828144ea1f95ad7a86f7b5d1  /tmp/step17-reduction.patch" | sha256sum --check
+          echo "f8ef7cbccfe4d3af075b36f66fd59ff55920be447c39ad0410ebfa176b67a4f9  /tmp/step17-reduction.patch" | sha256sum --check
           git apply --check /tmp/step17-reduction.patch
           git apply /tmp/step17-reduction.patch
           rm -f .github/step17-event-reduction.txt
