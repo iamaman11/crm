@@ -130,6 +130,7 @@
         "scripts/check_native_module_composition.py",
         "scripts/check_step13_exit_evidence.py",
         "scripts/check_step13_suppression_baseline.py",
+        "scripts/local_demo.py",
         "scripts/local_dev.py",
         "scripts/local_lifecycle.py",
         "scripts/prepare_isolated_process_database.sh",

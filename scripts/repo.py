@@ -89,6 +89,7 @@ def command_conformance(_: argparse.Namespace) -> None:
             "tests/test_customer_privacy_architecture_freeze.py",
             "tests/test_customer_privacy_contract_inventory.py",
             "tests/test_customer_privacy_owner_scope_contracts.py",
+            "tests/test_local_demo.py",
             "tests/test_local_dev.py",
             "tests/test_local_lifecycle.py",
             "tests/test_module_compatibility.py",
@@ -253,6 +254,31 @@ def command_dev_reset(args: argparse.Namespace) -> None:
     else:
         print(render_dev(report), end="")
 
+
+
+def _command_demo(mode: str, args: argparse.Namespace) -> None:
+    try:
+        from local_demo import LifecycleError, render_demo, seed_demo, smoke
+    except ModuleNotFoundError:
+        from scripts.local_demo import LifecycleError, render_demo, seed_demo, smoke
+
+    operation = seed_demo if mode == "seed" else smoke
+    try:
+        report = operation(ROOT, dry_run=args.dry_run)
+    except LifecycleError as error:
+        raise CommandError(str(error)) from error
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(render_demo(report), end="")
+
+
+def command_seed_demo(args: argparse.Namespace) -> None:
+    _command_demo("seed", args)
+
+
+def command_smoke(args: argparse.Namespace) -> None:
+    _command_demo("smoke", args)
 
 def affected_clippy_command(report: dict) -> list[str] | None:
     packages = report["affected_packages"]
@@ -467,6 +493,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     dev_reset_parser.add_argument("--json", action="store_true")
     dev_reset_parser.set_defaults(handler=command_dev_reset)
+
+
+    seed_demo_parser = subparsers.add_parser(
+        "seed-demo",
+        help="create or idempotently replay the governed deterministic local demo dataset",
+    )
+    seed_demo_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show the owned database and exact locked process-test command without executing it",
+    )
+    seed_demo_parser.add_argument("--json", action="store_true")
+    seed_demo_parser.set_defaults(handler=command_seed_demo)
+
+    smoke_parser = subparsers.add_parser(
+        "smoke",
+        help="verify the deterministic local demo through the real crm-api process",
+    )
+    smoke_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show the exact locked smoke command without starting crm-api",
+    )
+    smoke_parser.add_argument("--json", action="store_true")
+    smoke_parser.set_defaults(handler=command_smoke)
 
     check_affected = subparsers.add_parser(
         "check-affected",

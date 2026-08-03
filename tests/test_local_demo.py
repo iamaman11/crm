@@ -16,6 +16,7 @@ from scripts.local_demo import (
     seed_demo,
     smoke,
 )
+from scripts.repo import build_parser
 
 
 def prepare_root(root: Path) -> None:
@@ -173,6 +174,17 @@ class LocalDemoTests(unittest.TestCase):
                     execute=execute,
                     environ={"CRM_LOCAL_NAMESPACE": "unit-failure"},
                 )
+
+    def test_repository_parser_exposes_demo_commands(self) -> None:
+        parser = build_parser()
+        seed = parser.parse_args(["seed-demo", "--dry-run", "--json"])
+        self.assertEqual(seed.command, "seed-demo")
+        self.assertTrue(seed.dry_run)
+        self.assertTrue(seed.json)
+        verify = parser.parse_args(["smoke", "--dry-run", "--json"])
+        self.assertEqual(verify.command, "smoke")
+        self.assertTrue(verify.dry_run)
+        self.assertTrue(verify.json)
 
     def test_invalid_mode_is_rejected_before_preparation(self) -> None:
         prepared = False
