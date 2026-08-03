@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from scripts.affected_scope import build_report
 from scripts.local_lifecycle import (
@@ -51,6 +53,7 @@ def successful_capture(
     command: tuple[str, ...] | list[str],
 ) -> subprocess.CompletedProcess[str]:
     outputs = {
+        (sys.executable, "-m", "venv", "--help"): "usage: venv",
         ("git", "--version"): "git version 2.51.0",
         ("rustc", "--version"): "rustc 1.97.1 (example 2026-07-01)",
         ("cargo", "--version"): "cargo 1.97.1 (example 2026-07-01)",
@@ -84,6 +87,7 @@ class LocalLifecycleTests(unittest.TestCase):
             [
                 "repository",
                 "python",
+                "python-venv",
                 "git",
                 "rustc",
                 "cargo",
@@ -110,6 +114,7 @@ class LocalLifecycleTests(unittest.TestCase):
             )
         self.assertTrue(report["ok"])
         ids = [check["id"] for check in report["checks"]]
+        self.assertIn("python-venv", ids)
         self.assertNotIn("docker", ids)
         self.assertNotIn("docker-daemon", ids)
 
@@ -188,6 +193,49 @@ class LocalLifecycleTests(unittest.TestCase):
                     doctor_report={"ok": False},
                 )
 
+    def test_default_subprocesses_use_requested_checkout_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            prepare_root(root)
+            with patch(
+                "scripts.local_lifecycle.subprocess.run",
+                return_value=subprocess.CompletedProcess([], 0, "", ""),
+            ) as run:
+                bootstrap(root, doctor_report={"ok": True})
+        self.assertGreater(len(run.call_args_list), 0)
+        self.assertTrue(all(call.kwargs["cwd"] == root for call in run.call_args_list))
+
+    def test_default_doctor_capture_uses_requested_checkout_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            prepare_root(root)
+            seen_roots: list[Path] = []
+
+            def run(
+                command: list[str],
+                *,
+                cwd: Path,
+                check: bool,
+                capture_output: bool,
+                text: bool,
+            ) -> subprocess.CompletedProcess[str]:
+                self.assertFalse(check)
+                self.assertTrue(capture_output)
+                self.assertTrue(text)
+                seen_roots.append(cwd)
+                return successful_capture(command)
+
+            with patch("scripts.local_lifecycle.subprocess.run", side_effect=run):
+                report = doctor(
+                    root,
+                    profile="bootstrap",
+                    which=lambda executable: executable,
+                    python_version=(3, 13, 0),
+                )
+        self.assertTrue(report["ok"])
+        self.assertGreater(len(seen_roots), 0)
+        self.assertTrue(all(cwd == root for cwd in seen_roots))
+
     def test_repository_parser_exposes_local_lifecycle(self) -> None:
         parser = build_parser()
         doctor_args = parser.parse_args(["doctor", "--profile", "bootstrap", "--json"])
@@ -199,22 +247,24 @@ class LocalLifecycleTests(unittest.TestCase):
         self.assertTrue(bootstrap_args.dry_run)
         self.assertTrue(bootstrap_args.json)
 
-    def test_local_lifecycle_has_permanent_governance_coverage(self) -> None:
-        report = build_report(
-            ROOT,
-            "origin/main",
-            paths=["scripts/local_lifecycle.py"],
-            metadata={"packages": [], "workspace_members": []},
-            head_sha="local-lifecycle",
-        )
-        self.assertEqual(
-            [scope["id"] for scope in report["selected_scopes"]],
-            ["operations"],
-        )
-        self.assertIn(
-            "Governance CI",
-            [workflow["name"] for workflow in report["selected_workflows"]],
-        )
+    def test_local_lifecycle_and_agent_guide_have_governance_coverage(self) -> None:
+        for path in ("scripts/local_lifecycle.py", "AGENTS.md"):
+            with self.subTest(path=path):
+                report = build_report(
+                    ROOT,
+                    "origin/main",
+                    paths=[path],
+                    metadata={"packages": [], "workspace_members": []},
+                    head_sha="local-lifecycle",
+                )
+                self.assertEqual(
+                    [scope["id"] for scope in report["selected_scopes"]],
+                    ["operations"],
+                )
+                self.assertIn(
+                    "Governance CI",
+                    [workflow["name"] for workflow in report["selected_workflows"]],
+                )
         governance = (ROOT / ".github/workflows/governance.yml").read_text(
             encoding="utf-8"
         )
