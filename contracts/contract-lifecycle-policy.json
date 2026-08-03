@@ -6,7 +6,7 @@
       "kind": "capability",
       "id": "activities.task.create",
       "version": "1.0.0",
-      "state": "deprecated",
+      "state": "retired",
       "owner": "crm.activities",
       "deprecated_on": "2026-08-03",
       "removal_not_before": "2026-09-02",
@@ -24,7 +24,12 @@
         "metric": "crm_deprecated_capability_usage_total",
         "lookback_days": 30,
         "zero_since": null
-      }
+      },
+      "retirement": {
+        "mode": "never_externally_released",
+        "evidence_id": "activities-task-create-1.0.0-never-released-2026-08-03"
+      },
+      "retired_on": "2026-08-03"
     }
   ],
   "external_consumers": []
