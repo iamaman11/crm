@@ -211,6 +211,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "modules/crm-sales-activities-link/module.yaml",
                 "modules/crm-sales-activities-link/src/lib.rs",
                 "repository-packet.json",
+                "scripts/generate_contract_telemetry_catalog.py",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_contract_lifecycle.py",
                 "tests/test_contract_telemetry_catalog.py",

@@ -111,7 +111,12 @@ class ContractTelemetryCatalogTests(unittest.TestCase):
         generated = render(entries, []).decode("utf-8")
         self.assertIn('"alpha.create"', generated)
         self.assertIn('"crm.alpha"', generated)
-        self.assertIn("\n        45,\n", generated)
+        self.assertIn(
+            '("alpha.create", "1.0.0", "crm.alpha", '
+            '"crm_contract_usage_total", 45)',
+            generated,
+        )
+        self.assertIn("#[rustfmt::skip]\nconst DEPRECATED_CONTRACTS", generated)
         self.assertNotIn("contract-platform", generated)
         self.assertNotIn("zeta.create", generated)
 
@@ -146,7 +151,14 @@ class ContractTelemetryCatalogTests(unittest.TestCase):
         self.assertIn('"test.record.created"', generated)
         self.assertIn('"crm.consumer-a"', generated)
         self.assertIn('"crm.consumer-z"', generated)
-        self.assertIn("\n        60,\n", generated)
+        self.assertIn(
+            '("test.record.created", "1.0.0", "crm.test", '
+            '"crm.consumer-a", "crm_contract_usage_total", 60)',
+            generated,
+        )
+        self.assertIn(
+            "#[rustfmt::skip]\nconst DEPRECATED_EVENT_DELIVERIES", generated
+        )
         self.assertNotIn("contract-platform", generated)
         self.assertNotIn("test.record.updated", generated)
 
@@ -249,6 +261,29 @@ class ContractTelemetryCatalogTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "duplicate internal event consumer"):
             event_delivery_bindings(duplicate_consumer)
+
+    def test_non_empty_catalog_keeps_generated_runtime_data_compact(self) -> None:
+        generated = render(
+            [
+                {
+                    "capability_id": "test.create",
+                    "capability_version": "1.0.0",
+                    "owner_module_id": "crm.test",
+                    "metric": "crm_contract_usage_total",
+                    "lookback_days": 30,
+                }
+            ],
+            [],
+        ).decode("utf-8")
+        code_lines = [
+            line
+            for line in generated.splitlines()
+            if line and not line.startswith("//")
+        ]
+        self.assertEqual(len(code_lines), 3)
+        self.assertEqual(code_lines[0], "#[rustfmt::skip]")
+        self.assertIn('= &[("test.create", "1.0.0", "crm.test",', code_lines[1])
+        self.assertIn("DEPRECATED_EVENT_DELIVERIES", code_lines[2])
 
     def test_empty_policy_renders_both_deterministic_empty_catalogs(self) -> None:
         generated = render([], []).decode("utf-8")
