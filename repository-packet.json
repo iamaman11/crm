@@ -21,6 +21,7 @@
     "repository-packet.json",
     "scripts/local_lifecycle.py",
     "scripts/repo.py",
+    "tests/test_architecture_documentation_consistency.py",
     "tests/test_local_lifecycle.py",
     "tests/test_repository_navigation.py"
   ],
