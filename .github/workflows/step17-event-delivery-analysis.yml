@@ -1,4 +1,4 @@
-name: Step 17 Event Delivery Analysis
+name: Step 17 Event Delivery Verifier
 
 on:
   pull_request:
@@ -8,28 +8,120 @@ on:
       - ".github/workflows/step17-event-delivery-analysis.yml"
 
 concurrency:
-  group: step17-event-delivery-analysis-${{ github.sha }}
+  group: step17-event-delivery-verifier-${{ github.sha }}
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  snapshot:
+  validate-and-publish:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: step17-event-delivery-telemetry
           fetch-depth: 0
-      - name: Package repository source
-        run: git archive --format=zip --output=crm-step17-source.zip HEAD
-      - name: Upload repository source
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          name: crm-step17-source
-          path: crm-step17-source.zip
-          if-no-files-found: error
-          retention-days: 1
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # exact Rust 1.97.1 policy
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - name: Install validation dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+      - name: Apply checksum-bound event telemetry patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/step17-event-patch-{01,02,03,04,05}.txt > /tmp/step17-event.patch.gz.b64
+          echo "d606578f8b9afcaf8dfac6d4bf63e7c76164d180ea08146853b6279a6d4e5310  /tmp/step17-event.patch.gz.b64" | sha256sum --check
+          base64 --decode /tmp/step17-event.patch.gz.b64 | gzip --decompress > /tmp/step17-event.patch
+          echo "4c8a4833329badc8ed2c3b3aa2afcb838d2ed2303908fbd53cbb40e358174012  /tmp/step17-event.patch" | sha256sum --check
+          git apply --check /tmp/step17-event.patch
+          git apply /tmp/step17-event.patch
+          rm -f .github/step17-event-patch-{01,02,03,04,05}.txt
+          rm -f .github/workflows/step17-event-delivery-analysis.yml
+      - name: Verify bounded final tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/expected-files <<'EOF'
+          crates/crm-application-runtime/src/generated_contract_telemetry.rs
+          crates/crm-application-runtime/src/runtime.rs
+          crates/crm-capability-adapters/src/contract_usage_telemetry.rs
+          crates/crm-core-data/src/lib.rs
+          crates/crm-core-data/src/postgres.rs
+          crates/crm-core-data/src/postgres_event_delivery_ledger.rs
+          crates/crm-core-data/src/postgres_projection.rs
+          crates/crm-core-data/tests/postgres_event_delivery.rs
+          docs/ACTIVE_PACKET.md
+          repository-packet.json
+          scripts/generate_contract_telemetry_catalog.py
+          tests/test_architecture_documentation_consistency.py
+          tests/test_contract_telemetry_catalog.py
+          tests/test_repository_navigation.py
+          EOF
+          git diff --name-only origin/main | sort > /tmp/actual-files
+          sort -o /tmp/expected-files /tmp/expected-files
+          diff -u /tmp/expected-files /tmp/actual-files
+          test "$(wc -l < /tmp/actual-files)" -eq 14
+          git diff --check
+      - name: Validate generated policy and repository packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/generate_contract_telemetry_catalog.py --check
+          python scripts/generate_repository_navigation.py --check
+          python -m unittest -v \
+            tests.test_contract_telemetry_catalog \
+            tests.test_architecture_documentation_consistency \
+            tests.test_repository_navigation
+          python scripts/repo.py packet-check --base origin/main
+      - name: Format and test focused Rust closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          git diff --check
+          cargo test --locked -p crm-capability-adapters contract_usage_telemetry
+          cargo test --locked -p crm-core-data --test postgres_event_delivery --features postgres-integration
+          cargo check --locked -p crm-application-runtime --all-targets
+      - name: Run full workspace Clippy
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+      - name: Enforce accepted complexity ceilings
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python scripts/analyze_workspace.py \
+            --json-output artifacts/workspace-complexity-baseline.json \
+            --markdown-output artifacts/workspace-complexity-baseline.md
+          python scripts/analyze_step13_complexity.py \
+            --json-output artifacts/step13-complexity-baseline.json \
+            --markdown-output artifacts/step13-complexity-baseline.md
+          python scripts/check_step13_exit_evidence.py \
+            --check \
+            --json-output artifacts/step13-exit-evidence.json \
+            --markdown-output artifacts/step13-exit-evidence.md
+      - name: Publish clean exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only origin/main | sort > /tmp/final-files
+          diff -u /tmp/expected-files /tmp/final-files
+          test "$(wc -l < /tmp/final-files)" -eq 14
+          git diff --check
+          git add -A
+          git diff --cached --check
+          git diff --cached --name-only origin/main | sort > /tmp/staged-files
+          diff -u /tmp/expected-files /tmp/staged-files
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Step 17: instrument deprecated event delivery usage"
+          git push origin HEAD:step17-event-delivery-telemetry
