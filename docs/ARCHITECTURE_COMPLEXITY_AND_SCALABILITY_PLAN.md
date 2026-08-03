@@ -3,7 +3,7 @@
 Status: **Normative cross-cutting execution plan**  
 Tracking issue: #194  
 Original audit baseline: **2026-07-27**  
-Current execution checkpoint: **2026-08-02**
+Current execution checkpoint: **2026-08-03**
 
 This plan governs repository structure, Rust workspace packaging, module composition, dependency and exception governance, contracts, persistence ownership, CI/test selection, developer tooling, documentation navigation, local development, frontend architecture and production operations.
 
@@ -72,7 +72,12 @@ Repository Step 15 is accepted through PRs #263–#267. The final process-host c
 
 Repository Step 16 is accepted through PR #269 / source `74b1d7b0f8764fcd90839b7aab25f8f82fe5e552` / merge `6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd` / 20 of 20 and PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17. The complete exact evidence ledger is recorded in Section 11 and `PROJECT_STATUS.md`.
 
-Current blocking baseline after Step 16:
+Repository Step 17 is accepted through PR #275 / source `1c6366b557e255a14a677758fd87f7fe63184a89` / merge `60d5974349a04c462475aadd4af0a37bada9713b` / 23 of 23, PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8 and PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22.
+
+The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is the next permitted implementation step and is not started.
+
+
+Current blocking baseline after Step 17:
 
 | Metric | Historical Step 13 | Current |
 |---|---:|---:|
@@ -96,7 +101,7 @@ An ordinary capability added to an existing owner creates **zero new crates** by
 | C — golden owner package and persistence model | **In progress** | Customer Privacy golden package, final subject policy, restriction/legal-hold placement, retention precedence, durable owner execution/outcomes, governed access/export, owner actions and accepted Party tombstone/no-orphan convergence through Step 15 | worker lifecycle at Step 19 and Phase 8A closure at Step 21 |
 | D — contribution aggregation | **Complete** | all active first-party owner contributions aggregated through `crm-first-party-modules` by PRs #246, #248 and #249 | preserve bounded owner-owned contribution boundaries |
 | E — affected-scope CI | **Complete** | PR #239: deterministic Rust closure and declarative contract/API/migration/PostgreSQL/process/product/frontend/operations ownership with unknown-path fail closed | preserve policy/workflow compatibility and review gate value/cost at Step 22 |
-| F — generic conformance and contract lifecycle | **In progress** | reusable mutation/query conformance through PR #235 and reusable worker conformance with representative real-worker adoption through PRs #269–#270 | contract lifecycle Step 17 and real Customer Privacy worker adoption Step 19 |
+| F — generic conformance and contract lifecycle | **In progress** | reusable mutation/query conformance through PR #235, reusable worker conformance through PRs #269–#270 and complete contract lifecycle enforcement through PRs #275, #278 and #279 | real Customer Privacy worker adoption Step 19 |
 | G — transitional consolidation | **Complete** | PR #259 removes one redundant Customer Accounts package behavior-neutrally and lowers measured budgets | preserve the reduction and prove later changes remain bounded |
 | H — reproducible environment and navigation | **In progress** | `affected`, `check-affected`, `explain`, fail-closed `packet-check`, generated active packet and repository map | deterministic `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo`, `smoke` at Step 18 |
 | I — frontend and operations parity | **Incomplete** | existing product/process checks remain mandatory | frontend/accessibility/browser and restore/SLO/performance/security/supply-chain evidence at Steps 20–21 |
@@ -123,8 +128,8 @@ At most one implementation packet may be active. The next permitted packet is th
 14. first measured behavior-neutral transitional domain-cluster consolidation — **complete through PR #259**;
 15. Party tombstone, no-orphan proof and projection/search/cache convergence — **complete through PR #267**;
 16. reusable generic worker conformance adopted by representative real workers — **complete through PR #270**;
-17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement — **next, not started**;
-18. deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke`;
+17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement — **complete through PR #279**;
+18. deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` — **next, not started**;
 19. real Customer Privacy worker lifecycle and complete process/end-to-end acceptance;
 20. Phase 8A frontend, accessibility, browser and operations evidence;
 21. Phase 8A closure;
@@ -353,19 +358,15 @@ The combined evidence proves reusable worker conformance and contrasting real-wo
 
 This completes Repository Step 16 only. Customer Privacy, Phase 8A, contract lifecycle, local lifecycle, frontend/operations evidence and architecture 10/10 remain incomplete.
 
-### 11.2 Next bounded packet — Repository Step 17
+### 11.2 Accepted Step 17 closure evidence
 
-Repository Step 17 is **next and not started**.
+Repository Step 17 is complete through three bounded accepted slices:
 
-Required scope:
+1. PR #275 / source `1c6366b557e255a14a677758fd87f7fe63184a89` / merge `60d5974349a04c462475aadd4af0a37bada9713b` / 23 of 23 — published wire-compatible `activities.task.create@1.1.0`, migrated the sole repository-owned consumer and made live authorization overlap exact-version safe.
+2. PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8 — made production zero-usage retirement evidence SHA-256-bound, complete, append-only and fail closed.
+3. PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 — proved the coordinate was never externally released through live empty GitHub Releases, tags and deployments, non-publishable packages and no external consumer record, then retired `activities.task.create@1.0.0` while preserving its historical tombstone and keeping `telemetry.zero_since` null.
 
-- contract compatibility and published-version gates;
-- deprecation telemetry;
-- consumer migration evidence;
-- governed retirement enforcement;
-- no unrelated local-environment, Customer Privacy worker, frontend or operations work.
-
-The packet must start from current `main`, declare exact allowed/forbidden paths and pass every applicable permanent workflow on one unchanged meaningful user-authored head.
+The combined evidence keeps `activities.task.create@1.1.0` as the sole live create coordinate, preserves the ordinary production zero-usage path for released contracts and fabricates no production history. Repository Step 18 is the next permitted implementation packet and is not started.
 
 ## 12. Repository Step 22 mandatory decision and review
 

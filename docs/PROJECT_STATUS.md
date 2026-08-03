@@ -1,6 +1,6 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-08-02
+Status date: 2026-08-03
 
 This document is the concise authoritative current-state snapshot. Product dependencies remain normative in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`; the single repository execution order remains normative in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4; module readiness remains normative in `MODULE_CATALOG.md`.
 
@@ -20,7 +20,7 @@ This document is the concise authoritative current-state snapshot. Product depen
 
 Phase 8A.11 / issue #126 is in progress.
 
-Repository Steps 1–16 are complete. Architecture Stages A, B, D, E and G are complete. Stages C, F, H and I remain incomplete or in progress according to the architecture plan.
+Repository Steps 1–17 are complete. Architecture Stages A, B, D, E and G are complete. Stages C, F, H and I remain incomplete or in progress according to the architecture plan.
 
 Repository Step 14 and Stage G are accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
 
@@ -49,6 +49,17 @@ Repository Step 16 is accepted through two bounded implementation slices:
 - PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17: two simultaneously live production `crm-api` import executors contend for the same durable Party-import work, PostgreSQL blocking evidence proves serialization before a second target effect, and release converges to one completed checkpoint and exactly one Party record, idempotency record, event and audit record with no duplicate replay.
 
 Step 16 proves reusable worker conformance across contrasting real workers without adding a generic lease API or changing production algorithms, contracts, schemas, migrations, crates, dependencies or permanent workflows. Customer Privacy still publishes zero workers; its real worker lifecycle remains reserved for Step 19.
+
+## Repository Step 17 accepted closure
+
+Repository Step 17 is complete through three bounded accepted slices:
+
+- PR #275 / source `1c6366b557e255a14a677758fd87f7fe63184a89` / merge `60d5974349a04c462475aadd4af0a37bada9713b` / 23 of 23 — published wire-compatible `activities.task.create@1.1.0`, migrated the sole repository-owned consumer and made live authorization overlap exact-version safe;
+- PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8 — made production zero-usage retirement evidence SHA-256-bound, complete, append-only and fail closed;
+- PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 — proved the coordinate was never externally released through live empty GitHub Releases, tags and deployments, non-publishable packages and no external consumer record, then retired `activities.task.create@1.0.0` while preserving its historical tombstone and keeping `telemetry.zero_since` null.
+
+The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is the next permitted implementation step and is not started.
+
 
 ## Current measured repository baseline
 
@@ -85,6 +96,7 @@ The earlier 113-package and 841-edge measurements remain immutable historical St
 | 14 | PR #259 / source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 | First measured behavior-neutral transitional consolidation; Stage G complete |
 | 15 | PRs #263–#267 / exact sources and merges listed above / final closure 19 of 19 | Party tombstone, Search/Customer 360 convergence, immutable-history rebuild, automatic v2 rollover and real `crm-api` no-orphan proof |
 | 16 | PR #269 / source `74b1d7b0f8764fcd90839b7aab25f8f82fe5e552` / merge `6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd` / 20 of 20; PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17 | Reusable worker conformance, representative real-worker adoption, retry/restart recovery and exactly-once contention convergence |
+| 17 | PR #275 / source `1c6366b557e255a14a677758fd87f7fe63184a89` / merge `60d5974349a04c462475aadd4af0a37bada9713b` / 23 of 23; PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8; PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 | Wire-compatible migration, exact-version authorization overlap, immutable retirement evidence and proven never-externally-released retirement |
 
 ## Customer Privacy product boundary
 
@@ -144,9 +156,9 @@ Step 22 cannot close with an unresolved runtime dependency classification or unr
 
 ## Next permitted repository packet
 
-Repository Step 17 is the next permitted implementation packet and is **not started**. Its bounded scope is contract compatibility, published-version gates, deprecation telemetry, consumer migration evidence and governed retirement enforcement.
+Repository Step 18 is the next permitted implementation packet and is **not started**. Its bounded scope is deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` on a clean environment.
 
-No Step 18 or later implementation may start while Step 17 remains unfinished.
+No Step 19 or later implementation may start while Step 18 remains unfinished.
 
 ## Repository continuation order
 

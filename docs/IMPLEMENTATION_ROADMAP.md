@@ -70,7 +70,7 @@ Issue #194 remains open. The architecture stage ledger is:
 - Stage H reproducible environment and navigation — **In progress**;
 - Stage I frontend and operations parity — **Incomplete**.
 
-Repository Steps 1–16 are complete. Repository Step 17 is the next permitted implementation step and is **not started**.
+Repository Steps 1–17 are complete. Repository Step 18 is the next permitted implementation step and is **not started**.
 
 ### 3.1 Accepted Repository Step 14 closure
 
@@ -120,13 +120,24 @@ Step 16 is accepted through two bounded slices:
 
 The accepted worker suite keeps owner-specific semantics outside the generic algorithms, adds no generic lease API, and changes no production algorithm, public contract, route, schema, migration, package, dependency or permanent workflow. Customer Privacy remains at zero workers until Step 19.
 
-### 3.4 Binding next repository sequence
+### 3.4 Accepted Repository Step 17 closure
+
+Step 17 is accepted through three bounded slices:
+
+- PR #275 / source `1c6366b557e255a14a677758fd87f7fe63184a89` / merge `60d5974349a04c462475aadd4af0a37bada9713b` / 23 of 23 — published wire-compatible `activities.task.create@1.1.0`, migrated the sole repository-owned consumer and made live authorization overlap exact-version safe;
+- PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8 — made production zero-usage retirement evidence SHA-256-bound, complete, append-only and fail closed;
+- PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 — proved the coordinate was never externally released through live empty GitHub Releases, tags and deployments, non-publishable packages and no external consumer record, then retired `activities.task.create@1.0.0` while preserving its historical tombstone and keeping `telemetry.zero_since` null.
+
+The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is the next permitted implementation step and is not started.
+
+
+### 3.5 Binding next repository sequence
 
 The complete order is normative in the architecture plan. The remaining sequence begins:
 
 16. reusable generic worker conformance — **complete through PR #270**;
-17. contract compatibility, deprecation, consumer-migration and retirement enforcement — **next, not started**;
-18. deterministic local lifecycle commands;
+17. contract compatibility, deprecation, consumer-migration and retirement enforcement — **complete through PR #279**;
+18. deterministic local lifecycle commands — **next, not started**;
 19. Customer Privacy worker and full process/end-to-end acceptance;
 20. Phase 8A frontend, accessibility, browser and operations evidence;
 21. Phase 8A closure;
@@ -191,7 +202,7 @@ Trusted-internal planning, retention evaluation, replay-safe owner execution, ac
 
 ### 5.1 Remaining Phase 8A.11 product work
 
-The remaining product work after Step 16 is:
+The remaining product work after Step 17 is:
 
 - restriction and legal-hold release/read lifecycle where required;
 - a real Customer Privacy worker lifecycle using the accepted reusable conformance;
@@ -199,7 +210,7 @@ The remaining product work after Step 16 is:
 - frontend, accessibility and browser acceptance;
 - production restore, SLO, observability, performance, security and supply-chain evidence.
 
-Repository Step 17 owns only contract lifecycle enforcement. It must not absorb Steps 18–21 or claim a Customer Privacy worker before Step 19.
+Repository Step 17 contract lifecycle enforcement is complete. Repository Step 18 now owns only deterministic local lifecycle commands and must not absorb Steps 19–21 or claim a Customer Privacy worker before Step 19.
 
 ## 6. Module-readiness accounting
 

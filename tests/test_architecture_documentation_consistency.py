@@ -96,23 +96,33 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                     f"unqualified current 113-package claim: {context}",
                 )
 
-    def test_step_16_is_complete_and_step_17_is_next(self) -> None:
+    def test_step_17_is_complete_and_step_18_is_next(self) -> None:
+        exact = (
+            "PR #275",
+            "1c6366b557e255a14a677758fd87f7fe63184a89",
+            "60d5974349a04c462475aadd4af0a37bada9713b",
+            "PR #278",
+            "228f459963e571a830aee6c43cddd15e3c9b0d5f",
+            "996d634a33945e618be5ff81c297f0f617ce19d5",
+            "PR #279",
+            "0dce0895edec56508df1b4fc880d09ab27fc00df",
+            "ea3d3894d05e3a8d814aff69824b593843763d03",
+        )
         for document in self.normative_documents:
             lowered = document.lower()
-            self.assertIn("step 16", lowered)
+            for marker in exact:
+                self.assertIn(marker, document)
             self.assertIn("step 17", lowered)
-            self.assertNotRegex(lowered, r"step 16 (?:is )?(?:the )?next")
-            self.assertNotRegex(lowered, r"step 16[^\n.;]{0,80}not started")
+            self.assertIn("step 18", lowered)
+            self.assertNotRegex(lowered, r"step 17[^\n.;]{0,80}not started")
+        self.assertIn("Repository Steps 1–17 are complete", self.status)
+        self.assertIn("Repository Step 18 is the next permitted implementation packet", self.status)
         self.assertIn(
-            "16. reusable generic worker conformance adopted by representative real workers — **complete through PR #270**",
+            "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement — **complete through PR #279**",
             self.plan,
         )
-        self.assertIn(
-            "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement — **next, not started**",
-            self.plan,
-        )
-        self.assertIn("Repository Step 17 is the next permitted implementation packet", self.status)
-        self.assertIn("Repository Steps 1–16 are complete", self.status)
+        self.assertIn("18. deterministic local lifecycle commands", self.plan)
+        self.assertIn("**next, not started**", self.plan)
 
     def test_product_readiness_is_not_overstated(self) -> None:
         for document in self.normative_documents:
@@ -182,45 +192,28 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_step_17_preproduction_retirement_packet_is_exact(self) -> None:
+    def test_active_step_17_evidence_sync_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-17-preproduction-retirement",
+            "repository-step-17-accepted-evidence-sync",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "996d634a33945e618be5ff81c297f0f617ce19d5"},
+            {"ref": "main", "sha": "ea3d3894d05e3a8d814aff69824b593843763d03"},
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                ".github/workflows/contracts.yml",
-                "affected-scope-policy.json",
-                "contracts/contract-lifecycle-policy.json",
-                "contracts/contract-lifecycle.json",
-                "contracts/contract-release-evidence.json",
-                "contracts/module-contract-bindings.json",
-                "crates/crm-application-runtime/src/generated_contract_telemetry.rs",
-                "crates/crm-sales-activities-capability-composition/src/lib.rs",
-                "crates/crm-sales-activities-capability-composition/tests/catalog_contract.rs",
-                "database/tests/0003_sales_activities_adapters.sql",
                 "docs/ACTIVE_PACKET.md",
-                "docs/contract-migrations/activities-task-create-1.0.0-to-1.1.0.md",
-                "docs/generated/REPOSITORY_MAP.md",
-                "evidence/contract-lifecycle/activities-task-create-1.0.0-never-released.json",
-                "modules/crm-activities/module.yaml",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/MODULE_CATALOG.md",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/PROJECT_STATUS.md",
                 "repository-packet.json",
-                "scripts/contract_lifecycle_preproduction.py",
-                "scripts/contract_release_evidence.py",
-                "scripts/generate_contract_lifecycle.py",
                 "tests/test_architecture_documentation_consistency.py",
-                "tests/test_contract_lifecycle.py",
-                "tests/test_contract_lifecycle_preproduction.py",
-                "tests/test_contract_release_evidence.py",
-                "tests/test_contract_retirement_evidence.py",
-                "tests/test_contract_telemetry_catalog.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -228,17 +221,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.packet["required_checks"],
             [
                 "Affected Scope CI",
-                "Application Runtime CI",
-                "Contract CI",
                 "Complexity Baseline CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Owner Execution CI",
-                "Database CI",
-                "Event Runtime CI",
                 "Governance CI",
-                "PostgreSQL Process Isolation Pilot",
-                "Product Plane CI",
-                "Projection Runtime CI",
                 "Rust Generated Sync",
                 "Rust CI",
             ],
@@ -246,18 +230,18 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         for forbidden in (
             "Cargo.lock",
             "proto/**",
-            "database/migrations/**",
-            "docs/PROJECT_STATUS.md",
+            "database/**",
+            ".github/workflows/**",
         ):
             self.assertIn(forbidden, self.packet["forbidden_paths"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "verify the new evidence against live GitHub Releases, tags and deployments before merge",
+            "record exact PR #275, #278 and #279 source, merge and workflow evidence in all five normative documents",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "backdate telemetry.zero_since or fabricate production usage history",
+            "start deterministic local lifecycle Step 18 implementation",
             self.packet["non_goals"],
         )
 
