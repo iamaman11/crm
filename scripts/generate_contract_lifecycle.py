@@ -10,6 +10,10 @@ from pathlib import Path
 import subprocess
 import sys
 
+from contract_lifecycle_preproduction import install
+
+install()
+
 from contract_bindings import load_authoring_manifests
 from contract_lifecycle import (
     build_registry,
@@ -18,6 +22,7 @@ from contract_lifecycle import (
     render_registry,
 )
 from contract_lifecycle_transitions import validate_transition_integrity
+from contract_release_evidence import validate_release_evidence
 from contract_retirement_evidence import validate_retirement_evidence
 
 
@@ -97,6 +102,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=Path("contracts/contract-retirement-evidence.json"),
     )
     parser.add_argument(
+        "--release-evidence",
+        type=Path,
+        default=Path("contracts/contract-release-evidence.json"),
+    )
+    parser.add_argument(
         "--output", type=Path, default=Path("contracts/contract-lifecycle.json")
     )
     parser.add_argument(
@@ -116,14 +126,21 @@ def main(argv: list[str] | None = None) -> int:
         retirement_evidence = load_json_object(
             args.retirement_evidence, "contract retirement evidence"
         )
+        release_evidence = load_json_object(
+            args.release_evidence, "contract release evidence"
+        )
         base_bindings = None
         base_policy = None
         base_retirement_evidence = None
+        base_release_evidence = None
         if args.base_ref:
             base_bindings = git_json(args.base_ref, args.bindings)
             base_policy = git_json(args.base_ref, args.policy, optional=True)
             base_retirement_evidence = git_json(
                 args.base_ref, args.retirement_evidence, optional=True
+            )
+            base_release_evidence = git_json(
+                args.base_ref, args.release_evidence, optional=True
             )
         registry, errors = build_registry(
             bindings,
@@ -146,6 +163,15 @@ def main(argv: list[str] | None = None) -> int:
                 retirement_evidence,
                 policy,
                 base_evidence=base_retirement_evidence,
+                base_policy=base_policy,
+                repository_root=Path("."),
+            )
+        )
+        errors.extend(
+            validate_release_evidence(
+                release_evidence,
+                policy,
+                base_evidence=base_release_evidence,
                 base_policy=base_policy,
                 repository_root=Path("."),
             )
