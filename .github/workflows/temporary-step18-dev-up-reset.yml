@@ -1,0 +1,417 @@
+name: Temporary Step 18 Dev Up Reset Integration
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.head_ref == 'repository-step-18-dev-up-reset' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - name: Install navigation dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+      - name: Integrate lifecycle commands and permanent guards
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          from pathlib import Path
+          import re
+          import textwrap
+
+          def read(path: str) -> str:
+              return Path(path).read_text(encoding="utf-8")
+
+          def write(path: str, content: str) -> None:
+              Path(path).write_text(content, encoding="utf-8")
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              content = read(path)
+              count = content.count(old)
+              if count != 1:
+                  raise SystemExit(
+                      f"{path}: expected exactly one occurrence of {old!r}, found {count}"
+                  )
+              write(path, content.replace(old, new))
+
+          def replace_all(path: str, old: str, new: str, expected: int) -> None:
+              content = read(path)
+              count = content.count(old)
+              if count != expected:
+                  raise SystemExit(
+                      f"{path}: expected {expected} occurrence(s) of {old!r}, found {count}"
+                  )
+              write(path, content.replace(old, new))
+
+          packet_path = Path("repository-packet.json")
+          packet = json.loads(packet_path.read_text(encoding="utf-8"))
+          packet["allowed_paths"] = [
+              ".github/workflows/governance.yml",
+              "AGENTS.md",
+              "README.md",
+              "affected-scope-policy.json",
+              "docs/ACTIVE_PACKET.md",
+              "docs/DEVELOPMENT_WORKFLOW.md",
+              "repository-packet.json",
+              "scripts/local_dev.py",
+              "scripts/repo.py",
+              "tests/test_architecture_documentation_consistency.py",
+              "tests/test_local_dev.py",
+              "tests/test_local_lifecycle_docker.py",
+              "tests/test_repository_navigation.py",
+          ]
+          packet_path.write_text(json.dumps(packet, indent=2) + "\n", encoding="utf-8")
+
+          policy_path = Path("affected-scope-policy.json")
+          policy = json.loads(policy_path.read_text(encoding="utf-8"))
+          operations = next(scope for scope in policy["scopes"] if scope["id"] == "operations")
+          for path in ("scripts/local_dev.py", "scripts/repo.py"):
+              if path not in operations["path_patterns"]:
+                  operations["path_patterns"].append(path)
+          operations["path_patterns"] = sorted(operations["path_patterns"])
+          policy_path.write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8")
+
+          repo = "scripts/repo.py"
+          replace_once(
+              repo,
+              '            "tests/test_local_lifecycle.py",\n',
+              '            "tests/test_local_dev.py",\n'
+              '            "tests/test_local_lifecycle.py",\n',
+          )
+          handlers = textwrap.dedent('''
+
+          def command_dev_up(args: argparse.Namespace) -> None:
+              try:
+                  from local_dev import LifecycleError, dev_up, render_dev
+              except ModuleNotFoundError:
+                  from scripts.local_dev import LifecycleError, dev_up, render_dev
+
+              try:
+                  report = dev_up(ROOT, dry_run=args.dry_run)
+              except LifecycleError as error:
+                  raise CommandError(str(error)) from error
+              if args.json:
+                  print(json.dumps(report, indent=2, sort_keys=True))
+              else:
+                  print(render_dev(report), end="")
+
+
+          def command_dev_reset(args: argparse.Namespace) -> None:
+              try:
+                  from local_dev import LifecycleError, dev_reset, render_dev
+              except ModuleNotFoundError:
+                  from scripts.local_dev import LifecycleError, dev_reset, render_dev
+
+              try:
+                  report = dev_reset(ROOT, dry_run=args.dry_run)
+              except LifecycleError as error:
+                  raise CommandError(str(error)) from error
+              if args.json:
+                  print(json.dumps(report, indent=2, sort_keys=True))
+              else:
+                  print(render_dev(report), end="")
+          ''')
+          replace_once(
+              repo,
+              "\n\ndef affected_clippy_command(report: dict) -> list[str] | None:\n",
+              handlers + "\n\ndef affected_clippy_command(report: dict) -> list[str] | None:\n",
+          )
+          parsers = textwrap.dedent('''
+
+              dev_up_parser = subparsers.add_parser(
+                  "dev-up",
+                  help="create or reuse the exact owned local PostgreSQL dependency plane",
+              )
+              dev_up_parser.add_argument(
+                  "--dry-run",
+                  action="store_true",
+                  help="inspect current state and print the mutation plan without changing Docker",
+              )
+              dev_up_parser.add_argument("--json", action="store_true")
+              dev_up_parser.set_defaults(handler=command_dev_up)
+
+              dev_reset_parser = subparsers.add_parser(
+                  "dev-reset",
+                  help="remove only owned local PostgreSQL state and recreate it cleanly",
+              )
+              dev_reset_parser.add_argument(
+                  "--dry-run",
+                  action="store_true",
+                  help="verify ownership and print the reset plan without changing Docker",
+              )
+              dev_reset_parser.add_argument("--json", action="store_true")
+              dev_reset_parser.set_defaults(handler=command_dev_reset)
+          ''')
+          parsers = textwrap.indent(parsers.strip("\n") + "\n", "    ")
+          replace_once(
+              repo,
+              "\n    check_affected = subparsers.add_parser(\n",
+              "\n" + parsers + "\n    check_affected = subparsers.add_parser(\n",
+          )
+
+          governance = ".github/workflows/governance.yml"
+          replace_all(
+              governance,
+              '      - "scripts/local_lifecycle.py"\n',
+              '      - "scripts/local_dev.py"\n'
+              '      - "scripts/local_lifecycle.py"\n',
+              2,
+          )
+          replace_all(
+              governance,
+              '      - "tests/test_local_lifecycle.py"\n',
+              '      - "tests/test_local_dev.py"\n'
+              '      - "tests/test_local_lifecycle.py"\n'
+              '      - "tests/test_local_lifecycle_docker.py"\n',
+              2,
+          )
+          replace_once(
+              governance,
+              "    timeout-minutes: 15\n",
+              "    timeout-minutes: 25\n",
+          )
+          replace_once(
+              governance,
+              "      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25\n",
+              "      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25\n"
+              "      - name: Setup Node.js\n"
+              "        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\n"
+              "        with:\n"
+              "          node-version: \"24.18.0\"\n"
+              "      - name: Setup pnpm\n"
+              "        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4\n"
+              "        with:\n"
+              "          version: \"11.12.0\"\n",
+          )
+          replace_once(
+              governance,
+              "      - name: Run permanent native architecture conformance preflight\n"
+              "        run: python scripts/repo.py conformance\n",
+              "      - name: Run permanent native architecture conformance preflight\n"
+              "        run: python scripts/repo.py conformance\n"
+              "      - name: Run deterministic local PostgreSQL Docker acceptance\n"
+              "        env:\n"
+              "          CRM_RUN_LOCAL_DOCKER_ACCEPTANCE: \"1\"\n"
+              "          CRM_LOCAL_NAMESPACE: governance-${{ github.run_id }}\n"
+              "          CRM_LOCAL_POSTGRES_PORT: \"55432\"\n"
+              "        run: python -m unittest tests.test_local_lifecycle_docker\n",
+          )
+
+          readme = "README.md"
+          replace_once(
+              readme,
+              "python scripts/repo.py bootstrap\npython scripts/repo.py architecture\n",
+              "python scripts/repo.py bootstrap\n"
+              "python scripts/repo.py dev-up --dry-run\n"
+              "python scripts/repo.py dev-up\n"
+              "python scripts/repo.py dev-reset --dry-run\n"
+              "python scripts/repo.py dev-reset\n"
+              "python scripts/repo.py architecture\n",
+          )
+          replace_once(
+              readme,
+              "`doctor` inspects the repository-pinned Python, Rust, Node and pnpm prerequisites; its full profile also checks Docker CLI, Compose v2 and daemon availability. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, fetches Cargo dependencies with `--locked`, installs pnpm dependencies with `--frozen-lockfile`, and verifies locked metadata and generated navigation. It does not silently install or globally switch system toolchains.\n\nSpecialized contract, database, process, migration and product-plane gates remain mandatory when their scopes are affected. Repository Step 18 remains in progress: `dev-up`, `dev-reset`, `seed-demo` and `smoke` are not yet implemented or accepted.",
+              "`doctor` inspects the repository-pinned Python, Rust, Node and pnpm prerequisites; its full profile also checks Docker CLI, Compose v2 and daemon availability. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, fetches Cargo dependencies with `--locked`, installs pnpm dependencies with `--frozen-lockfile`, and verifies locked metadata and generated navigation. It does not silently install or globally switch system toolchains.\n\n`dev-up` creates or reuses one checkout-scoped PostgreSQL dependency plane from an immutable PostgreSQL 17 image digest, binds it only to `127.0.0.1`, applies every committed up migration and the accepted platform fixtures through Docker-native `psql`, and refuses partial, foreign or drifted resources. `dev-reset` verifies ownership before deleting only that checkout's container and volume and then recreates a clean ready database; use `--dry-run` before destructive reset.\n\nSpecialized contract, database, process, migration and product-plane gates remain mandatory when their scopes are affected. Repository Step 18 remains in progress: `seed-demo` and `smoke` are not yet implemented or accepted, and `dev-up`/`dev-reset` do not start backend or frontend processes.",
+          )
+
+          agents = "AGENTS.md"
+          replace_once(
+              agents,
+              "python scripts/repo.py bootstrap\npython scripts/repo.py conformance\n",
+              "python scripts/repo.py bootstrap\n"
+              "python scripts/repo.py dev-up --dry-run\n"
+              "python scripts/repo.py dev-up\n"
+              "python scripts/repo.py dev-reset --dry-run\n"
+              "python scripts/repo.py dev-reset\n"
+              "python scripts/repo.py conformance\n",
+          )
+          replace_once(
+              agents,
+              "`doctor` reads repository-pinned tool requirements and never changes the machine. The bootstrap profile excludes Docker so dependency preparation can be diagnosed independently; the full profile checks Docker CLI, Compose v2 and daemon availability. `bootstrap` uses an isolated `.venv`, committed constraints and lockfiles, and does not silently install or globally switch system toolchains.\n\nRepository Step 18 remains in progress. `dev-up`, `dev-reset`, `seed-demo` and `smoke` are not yet implemented or accepted.",
+              "`doctor` reads repository-pinned tool requirements and never changes the machine. The bootstrap profile excludes Docker so dependency preparation can be diagnosed independently; the full profile checks Docker CLI, Compose v2 and daemon availability. `bootstrap` uses an isolated `.venv`, committed constraints and lockfiles, and does not silently install or globally switch system toolchains.\n\n`dev-up` and `dev-reset` manage only the checkout-scoped PostgreSQL dependency plane. They use immutable image and schema-input digests, loopback-only publishing and ownership labels. Never manually relabel a lifecycle resource; when exact configuration or schema inputs change, inspect `dev-reset --dry-run` and reset the owned state.\n\nRepository Step 18 remains in progress. `seed-demo` and `smoke` are not yet implemented or accepted; backend/frontend process startup remains outside this packet.",
+          )
+
+          workflow = "docs/DEVELOPMENT_WORKFLOW.md"
+          replace_once(
+              workflow,
+              "python scripts/repo.py bootstrap\n```\n\n`doctor` reads tool requirements from committed repository configuration and changes nothing. The bootstrap profile validates dependency-preparation prerequisites without requiring Docker; the full profile additionally checks Docker CLI, Compose v2 and daemon availability. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, uses locked Cargo and frozen pnpm dependency resolution, and verifies generated navigation. It does not silently install or globally switch system toolchains.\n\nRepository Step 18 remains in progress. `dev-up`, `dev-reset`, `seed-demo` and `smoke` remain later bounded Step 18 work and must not be represented as implemented before permanent acceptance.",
+              "python scripts/repo.py bootstrap\n"
+              "python scripts/repo.py dev-up --dry-run\n"
+              "python scripts/repo.py dev-up\n"
+              "python scripts/repo.py dev-reset --dry-run\n"
+              "python scripts/repo.py dev-reset\n"
+              "```\n\n`doctor` reads tool requirements from committed repository configuration and changes nothing. The bootstrap profile validates dependency-preparation prerequisites without requiring Docker; the full profile additionally checks Docker CLI, Compose v2 and daemon availability. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, uses locked Cargo and frozen pnpm dependency resolution, and verifies generated navigation. It does not silently install or globally switch system toolchains.\n\n`dev-up` creates or reuses the exact checkout-owned PostgreSQL dependency plane from pinned repository migrations and fixtures. It validates ownership, image, port, volume and schema digest before reuse. `dev-reset` first validates immutable ownership labels, removes the container before the volume, and recreates the current clean database; dry-run performs inspection only. Neither command starts product processes or seeds a demo scenario.\n\nRepository Step 18 remains in progress. `seed-demo` and `smoke` remain later bounded Step 18 work and must not be represented as implemented before permanent acceptance.",
+          )
+
+          architecture = "tests/test_architecture_documentation_consistency.py"
+          architecture_method = '''    def test_active_step_18_dev_up_reset_packet_is_exact(self) -> None:
+              self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
+              self.assertEqual(self.packet["packet_id"], "repository-step-18-dev-up-reset")
+              self.assertEqual(self.packet["status"], "active")
+              self.assertEqual(
+                  self.packet["baseline"],
+                  {"ref": "main", "sha": "dbb3e08097ff9439161ce94ff91b8912c8a0b249"},
+              )
+              self.assertEqual(self.packet["tracking_issues"], [194])
+              self.assertEqual(
+                  set(self.packet["allowed_paths"]),
+                  {
+                      ".github/workflows/governance.yml",
+                      "AGENTS.md",
+                      "README.md",
+                      "affected-scope-policy.json",
+                      "docs/ACTIVE_PACKET.md",
+                      "docs/DEVELOPMENT_WORKFLOW.md",
+                      "repository-packet.json",
+                      "scripts/local_dev.py",
+                      "scripts/repo.py",
+                      "tests/test_architecture_documentation_consistency.py",
+                      "tests/test_local_dev.py",
+                      "tests/test_local_lifecycle_docker.py",
+                      "tests/test_repository_navigation.py",
+                  },
+              )
+              self.assertEqual(
+                  self.packet["required_checks"],
+                  [
+                      "Affected Scope CI",
+                      "Complexity Baseline CI",
+                      "Customer Privacy Access Export CI",
+                      "Customer Privacy Owner Execution CI",
+                      "Governance CI",
+                      "Rust Generated Sync",
+                      "Rust CI",
+                  ],
+              )
+              self.assertIn(self.packet["packet_id"], self.active_packet)
+              self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
+              self.assertIn(
+                  "add repo.py dev-reset that refuses foreign resources, removes only exactly owned container and volume state, and recreates a clean ready dependency plane",
+                  self.packet["deliverables"],
+              )
+              self.assertIn("implement seed-demo or smoke", self.packet["non_goals"])
+
+          '''
+          content = read(architecture)
+          content, count = re.subn(
+              r"    def test_active_step_18_doctor_bootstrap_evidence_sync_packet_is_exact\(self\) -> None:\n.*?(?=    def test_repository_map_and_product_inventory_remain_exact)",
+              architecture_method,
+              content,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit("failed to replace architecture packet guard")
+          write(architecture, content)
+
+          navigation = "tests/test_repository_navigation.py"
+          navigation_method = '''    def test_active_packet_declaration_is_exact(self) -> None:
+              packet = load_packet(ROOT)
+              self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
+              self.assertEqual(packet["packet_id"], "repository-step-18-dev-up-reset")
+              self.assertEqual(packet["status"], "active")
+              self.assertEqual(
+                  packet["baseline"],
+                  {"ref": "main", "sha": "dbb3e08097ff9439161ce94ff91b8912c8a0b249"},
+              )
+              self.assertEqual(packet["tracking_issues"], [194])
+              self.assertEqual(
+                  set(packet["allowed_paths"]),
+                  {
+                      ".github/workflows/governance.yml",
+                      "AGENTS.md",
+                      "README.md",
+                      "affected-scope-policy.json",
+                      "docs/ACTIVE_PACKET.md",
+                      "docs/DEVELOPMENT_WORKFLOW.md",
+                      "repository-packet.json",
+                      "scripts/local_dev.py",
+                      "scripts/repo.py",
+                      "tests/test_architecture_documentation_consistency.py",
+                      "tests/test_local_dev.py",
+                      "tests/test_local_lifecycle_docker.py",
+                      "tests/test_repository_navigation.py",
+                  },
+              )
+              self.assertEqual(
+                  packet["required_checks"],
+                  [
+                      "Affected Scope CI",
+                      "Complexity Baseline CI",
+                      "Customer Privacy Access Export CI",
+                      "Customer Privacy Owner Execution CI",
+                      "Governance CI",
+                      "Rust Generated Sync",
+                      "Rust CI",
+                  ],
+              )
+              self.assertIn(
+                  "add repo.py dev-up with deterministic human and JSON reports plus a side-effect-free dry-run",
+                  packet["deliverables"],
+              )
+              self.assertIn("implement seed-demo or smoke", packet["non_goals"])
+
+          '''
+          content = read(navigation)
+          content, count = re.subn(
+              r"    def test_active_packet_declaration_is_exact\(self\) -> None:\n.*?(?=    def test_generated_navigation_is_deterministic_and_current)",
+              navigation_method,
+              content,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit("failed to replace navigation packet guard")
+          content = content.replace(
+              "repository-step-18-doctor-bootstrap-evidence-sync",
+              "repository-step-18-dev-up-reset",
+          )
+          content = content.replace(
+              "87bc0d33befc4525b62aa7e0e1884abc07e12abf",
+              "dbb3e08097ff9439161ce94ff91b8912c8a0b249",
+          )
+          write(navigation, content)
+          PY
+          python scripts/generate_repository_navigation.py --write
+          python -m unittest \
+            tests.test_local_dev \
+            tests.test_local_lifecycle \
+            tests.test_architecture_documentation_consistency \
+            tests.test_repository_navigation
+      - name: Commit integrated lifecycle surface
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            .github/workflows/governance.yml \
+            AGENTS.md \
+            README.md \
+            affected-scope-policy.json \
+            docs/ACTIVE_PACKET.md \
+            docs/DEVELOPMENT_WORKFLOW.md \
+            repository-packet.json \
+            scripts/repo.py \
+            tests/test_architecture_documentation_consistency.py \
+            tests/test_repository_navigation.py
+          if git diff --cached --quiet; then
+            echo "No integration changes produced"
+            exit 1
+          fi
+          git commit -m "Integrate deterministic dev-up and dev-reset"
+          git push origin "HEAD:${HEAD_BRANCH}"
