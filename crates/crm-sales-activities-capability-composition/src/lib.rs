@@ -42,11 +42,10 @@ use crm_sales_capability_adapter::{
     capability_definition as sales_capability_definition,
 };
 
-pub const PRODUCTION_MUTATION_CAPABILITY_COORDINATES: [(&str, &str); 8] = [
+pub const PRODUCTION_MUTATION_CAPABILITY_COORDINATES: [(&str, &str); 7] = [
     (SALES_CREATE_CAPABILITY, "1.0.0"),
     (SALES_UPDATE_CAPABILITY, "1.0.0"),
     (SALES_ADVANCE_CAPABILITY, "1.0.0"),
-    (ACTIVITIES_CREATE_CAPABILITY, "1.0.0"),
     (ACTIVITIES_CREATE_CAPABILITY, "1.1.0"),
     (ACTIVITIES_UPDATE_CAPABILITY, "1.0.0"),
     (ACTIVITIES_COMPLETE_CAPABILITY, "1.0.0"),
@@ -168,8 +167,11 @@ fn expected_definition(
             "The capability planner route is unsupported.",
         )),
     }?;
-    let supported = capability_version == "1.0.0"
-        || (capability_id == ACTIVITIES_CREATE_CAPABILITY && capability_version == "1.1.0");
+    let supported = if capability_id == ACTIVITIES_CREATE_CAPABILITY {
+        capability_version == "1.1.0"
+    } else {
+        capability_version == "1.0.0"
+    };
     if !supported {
         return Err(configuration_error(
             "CAPABILITY_PLANNER_VERSION_MISMATCH",
@@ -201,7 +203,7 @@ mod tests {
     };
 
     #[test]
-    fn catalog_contains_exactly_the_eight_phase6_coordinates_in_stable_order() {
+    fn catalog_contains_exactly_the_seven_phase6_coordinates_in_stable_order() {
         let definitions = capability_definitions().unwrap();
         assert_eq!(
             definitions.len(),
@@ -217,7 +219,19 @@ mod tests {
                 .collect::<Vec<_>>(),
             PRODUCTION_MUTATION_CAPABILITY_COORDINATES
         );
-        assert_eq!(capability_catalog().unwrap().len(), 8);
+        assert_eq!(capability_catalog().unwrap().len(), 7);
+    }
+
+    #[test]
+    fn retired_create_v1_coordinate_is_rejected_before_payload_decoding() {
+        let mut definition =
+            activities_capability_definition(ACTIVITIES_CREATE_CAPABILITY).unwrap();
+        definition.capability_version = CapabilityVersion::try_new("1.0.0").unwrap();
+        let request = request_for(&definition);
+        let error = SalesActivitiesCapabilityPlannerRouter
+            .target(&definition, &request)
+            .unwrap_err();
+        assert_eq!(error.code, "CAPABILITY_PLANNER_VERSION_MISMATCH");
     }
 
     #[test]

@@ -8,6 +8,10 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from scripts.contract_lifecycle_preproduction import install
+
+install()
+
 from scripts.contract_retirement_evidence import validate_retirement_evidence
 
 

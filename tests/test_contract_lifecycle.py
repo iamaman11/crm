@@ -109,21 +109,29 @@ def lifecycle_entry(state: str) -> dict:
 
 
 class ContractLifecycleTests(unittest.TestCase):
-    def test_committed_representative_deprecation_and_migration_are_exact(self) -> None:
+    def test_committed_representative_retirement_is_exact(self) -> None:
         policy = json.loads((ROOT / "contracts/contract-lifecycle-policy.json").read_text())
         registry = json.loads((ROOT / "contracts/contract-lifecycle.json").read_text())
 
         self.assertEqual(len(policy["contracts"]), 1)
-        deprecated = policy["contracts"][0]
+        retired = policy["contracts"][0]
         self.assertEqual(
-            (deprecated["kind"], deprecated["id"], deprecated["version"]),
+            (retired["kind"], retired["id"], retired["version"]),
             ("capability", "activities.task.create", "1.0.0"),
         )
-        self.assertEqual(deprecated["state"], "deprecated")
-        self.assertEqual(deprecated["deprecated_on"], "2026-08-03")
-        self.assertEqual(deprecated["removal_not_before"], "2026-09-02")
-        self.assertEqual(deprecated["migration"]["completed_on"], "2026-08-03")
-        self.assertIsNone(deprecated["telemetry"]["zero_since"])
+        self.assertEqual(retired["state"], "retired")
+        self.assertEqual(retired["deprecated_on"], "2026-08-03")
+        self.assertEqual(retired["removal_not_before"], "2026-09-02")
+        self.assertEqual(retired["migration"]["completed_on"], "2026-08-03")
+        self.assertIsNone(retired["telemetry"]["zero_since"])
+        self.assertEqual(retired["retired_on"], "2026-08-03")
+        self.assertEqual(
+            retired["retirement"],
+            {
+                "mode": "never_externally_released",
+                "evidence_id": "activities-task-create-1.0.0-never-released-2026-08-03",
+            },
+        )
 
         coordinates = [
             item
@@ -133,16 +141,15 @@ class ContractLifecycleTests(unittest.TestCase):
         self.assertEqual(
             coordinates,
             [
-                ["activities.task.create", "1.0.0", "crm.activities", []],
                 [
                     "activities.task.create",
                     "1.1.0",
                     "crm.activities",
                     ["crm.sales-activities-link"],
-                ],
+                ]
             ],
         )
-        self.assertEqual(registry["lifecycle"], [deprecated])
+        self.assertEqual(registry["lifecycle"], [retired])
 
     def test_registry_is_complete_sorted_and_inventories_internal_consumers(self) -> None:
         manifests = [

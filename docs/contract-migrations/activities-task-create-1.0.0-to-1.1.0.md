@@ -2,11 +2,10 @@
 
 ## Scope
 
-`activities.task.create@1.0.0` is deprecated on **2026-08-03**. Its replacement is
-`activities.task.create@1.1.0`. The earliest permitted removal date is **2026-09-02**,
-but reaching that date does not authorize removal by itself.
+`activities.task.create@1.0.0` was deprecated and retired on **2026-08-03**. Its
+replacement is `activities.task.create@1.1.0`.
 
-The replacement is wire-compatible with the deprecated coordinate:
+The replacement is wire-compatible with the retired coordinate:
 
 - provider remains `crm.activities`;
 - RPC remains `crm.activities.v1.TaskService.CreateTask`;
@@ -19,27 +18,40 @@ Callers must not rewrite the protobuf payload schema version to `1.1.0`.
 
 ## Governed internal migration
 
-The repository-owned consumer `crm.sales-activities-link` now declares and invokes
+The repository-owned consumer `crm.sales-activities-link` declares and invokes
 `activities.task.create@1.1.0`. Its idempotency key, actor, tenant, authorization,
 business transaction, payload encoding and delivery-state behavior are unchanged.
 
-The PostgreSQL acceptance registry publishes `crm.activities@0.1.1` and the exact
-`activities.task.create@1.1.0` coordinate alongside their historical predecessors.
-This is fixture parity for runtime acceptance only; no authoritative schema or
-migration changes are required.
+`crm.activities@0.1.2` removes the retired `1.0.0` coordinate from the current module
+manifest. The PostgreSQL acceptance registry keeps the historical `0.1.0`, `0.1.1`
+and `activities.task.create@1.0.0` publication rows while registering the successor
+module version. Historical registry evidence is not a live provider declaration.
 
-The deprecated `1.0.0` coordinate remains published and executable during the
-observation window. Any exact `1.0.0` resolution is exposed through the existing
-zero-seeded `crm_deprecated_capability_usage_total` telemetry series.
+## Never-externally-released retirement
 
-## Retirement conditions
+The normal lifecycle boundary remains **2026-09-02** and the normal telemetry
+lookback remains 30 days. It was not shortened or backdated. Instead, the narrower
+`never_externally_released` path was used because the coordinate had no external
+consumer record and the project had no GitHub release, Git tag or deployment at the
+retirement checkpoint.
 
-This migration does **not** retire `1.0.0` and does not establish a zero-usage start
-date. A later retirement packet must independently prove all of the following:
+The immutable evidence record is
+`activities-task-create-1.0.0-never-released-2026-08-03`. It is bound by SHA-256 to
+a repository artifact that records:
 
-1. no live internal or declared external consumers remain;
-2. the removal date is on or after `2026-09-02`;
-3. production telemetry establishes at least 30 consecutive days of zero exact
-   `activities.task.create@1.0.0` usage;
-4. the lifecycle registry records immutable migration and zero-usage evidence before
-   the old coordinate is removed.
+- empty GitHub Releases, tags and deployments snapshots;
+- exact source commit `996d634a33945e618be5ff81c297f0f617ce19d5`;
+- `publish = false` for the Activities owner and capability-adapter packages;
+- the repository owner attestation and tracking issue;
+- the exact retired capability coordinate.
+
+Contract CI verifies newly introduced never-released evidence against the live GitHub
+API before merge. The lifecycle tombstone and evidence then become append-only and
+immutable. `telemetry.zero_since` remains `null`; no production zero-usage history was
+fabricated.
+
+## Result
+
+`activities.task.create@1.0.0` is no longer published by the current module manifest,
+is absent from the production capability catalog and is rejected before payload
+decoding. `activities.task.create@1.1.0` remains the sole live create coordinate.
