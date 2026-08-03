@@ -1,0 +1,29 @@
+{
+  "schema_version": "crm.contract-never-released-observation/v1",
+  "repository": "iamaman11/crm",
+  "observed_on": "2026-08-03",
+  "source_commit": "996d634a33945e618be5ff81c297f0f617ce19d5",
+  "kind": "capability",
+  "id": "activities.task.create",
+  "version": "1.0.0",
+  "github": {
+    "releases": [],
+    "tags": [],
+    "deployments": []
+  },
+  "package_publication": [
+    {
+      "path": "modules/crm-activities/Cargo.toml",
+      "publish": false
+    },
+    {
+      "path": "crates/crm-activities-capability-adapter/Cargo.toml",
+      "publish": false
+    }
+  ],
+  "owner_attestation": {
+    "account": "iamaman11",
+    "issue": 194,
+    "statement": "The coordinate was never deployed to production, packaged in a GitHub release or tag, published as a package, or provided to an external consumer."
+  }
+}
