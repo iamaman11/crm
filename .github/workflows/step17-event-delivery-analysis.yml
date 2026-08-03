@@ -1,9 +1,9 @@
 name: Step 17 Event Delivery Analysis
 
 on:
-  push:
+  pull_request:
     branches:
-      - step17-event-delivery-telemetry
+      - main
     paths:
       - ".github/workflows/step17-event-delivery-analysis.yml"
 
@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   snapshot:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,8 +25,7 @@ jobs:
           ref: step17-event-delivery-telemetry
           fetch-depth: 0
       - name: Package repository source
-        run: |
-          git archive --format=zip --output=crm-step17-source.zip HEAD
+        run: git archive --format=zip --output=crm-step17-source.zip HEAD
       - name: Upload repository source
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
