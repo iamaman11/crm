@@ -129,6 +129,7 @@
         "scripts/check_native_module_composition.py",
         "scripts/check_step13_exit_evidence.py",
         "scripts/check_step13_suppression_baseline.py",
+        "scripts/local_lifecycle.py",
         "scripts/prepare_isolated_process_database.sh",
         "step13-complexity-policy.json",
         "step13-suppression-baseline.json"
