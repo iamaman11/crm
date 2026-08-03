@@ -96,11 +96,25 @@ jobs:
           tests/test_contract_telemetry_catalog.py
           tests/test_repository_navigation.py
           EOF
-          git diff --name-only origin/main | sort > /tmp/actual-files
           sort -o /tmp/expected-files /tmp/expected-files
+          git diff --name-only origin/main | sort > /tmp/actual-files
           diff -u /tmp/expected-files /tmp/actual-files
           test "$(wc -l < /tmp/actual-files)" -eq 14
           git diff --check
+      - name: Commit clean candidate locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --check
+          git diff --cached --name-only origin/main | sort > /tmp/staged-files
+          diff -u /tmp/expected-files /tmp/staged-files
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Step 17: instrument deprecated event delivery usage"
+          git diff --name-only origin/main HEAD | sort > /tmp/candidate-files
+          diff -u /tmp/expected-files /tmp/candidate-files
+          test -z "$(git status --porcelain)"
       - name: Validate generated policy and repository packet
         shell: bash
         run: |
@@ -140,15 +154,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff --name-only origin/main | sort > /tmp/final-files
+          git diff --name-only origin/main HEAD | sort > /tmp/final-files
           diff -u /tmp/expected-files /tmp/final-files
           test "$(wc -l < /tmp/final-files)" -eq 14
-          git diff --check
-          git add -A
-          git diff --cached --check
-          git diff --cached --name-only origin/main | sort > /tmp/staged-files
-          diff -u /tmp/expected-files /tmp/staged-files
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Step 17: instrument deprecated event delivery usage"
+          test -z "$(git status --porcelain)"
           git push origin HEAD:step17-event-delivery-telemetry
