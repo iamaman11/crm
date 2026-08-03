@@ -415,7 +415,7 @@ def _marker(config: DevConfig) -> str:
 def _read_marker(runtime: DockerRuntime, config: DevConfig) -> str:
     output = runtime.execute_sql(
         config,
-        "SELECT COALESCE(obj_description(oid, 'pg_database'), '') "
+        "SELECT COALESCE(shobj_description(oid, 'pg_database'), '') "
         "FROM pg_database WHERE datname = current_database();\n",
     )
     lines = [line.strip() for line in output.splitlines() if line.strip()]
