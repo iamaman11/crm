@@ -1,35 +1,34 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-18-doctor-bootstrap-evidence-sync",
-  "title": "Synchronize accepted Step 18 doctor and bootstrap evidence",
+  "packet_id": "repository-step-18-dev-up-reset",
+  "title": "Add deterministic local PostgreSQL dev-up and dev-reset",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "87bc0d33befc4525b62aa7e0e1884abc07e12abf"
+    "sha": "dbb3e08097ff9439161ce94ff91b8912c8a0b249"
   },
   "tracking_issues": [
     194
   ],
-  "objective": "Record the exact accepted PR #281 source, squash merge and 7-of-7 workflow evidence across every live normative source; mark Repository Step 18 in progress rather than complete; and make deterministic dev-up/dev-reset the only next permitted implementation packet without changing runtime or product behavior.",
+  "objective": "Continue Repository Step 18 with deterministic, cross-platform `dev-up` and `dev-reset` commands for the local PostgreSQL dependency plane. Use an immutable production-aligned PostgreSQL 17 image, checkout-scoped owned Docker resources, loopback-only publishing, repository migrations and accepted fixtures, schema-drift detection, idempotent reuse and fail-closed reset semantics while leaving demo seeding, backend/frontend orchestration and smoke acceptance for later bounded Step 18 packets.",
   "allowed_paths": [
+    ".github/workflows/governance.yml",
+    "AGENTS.md",
+    "README.md",
+    "affected-scope-policy.json",
     "docs/ACTIVE_PACKET.md",
-    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-    "docs/IMPLEMENTATION_ROADMAP.md",
-    "docs/MODULE_CATALOG.md",
-    "docs/PHASE8_DELIVERY_PLAN.md",
-    "docs/PROJECT_STATUS.md",
-    "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
+    "docs/DEVELOPMENT_WORKFLOW.md",
     "repository-packet.json",
+    "scripts/local_lifecycle.py",
+    "scripts/repo.py",
     "tests/test_architecture_documentation_consistency.py",
+    "tests/test_local_lifecycle.py",
+    "tests/test_local_lifecycle_docker.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
-    ".github/workflows/**",
-    "AGENTS.md",
     "Cargo.lock",
     "Cargo.toml",
-    "README.md",
-    "affected-scope-policy.json",
     "apps/**",
     "contracts/**",
     "crates/**",
@@ -43,15 +42,18 @@
     "requirements-dev.txt",
     "rust-toolchain.toml",
     "schemas/**",
-    "scripts/**",
     "services/**"
   ],
   "deliverables": [
-    "record exact PR #281 source, squash merge and 7-of-7 workflow evidence in all five normative documents",
-    "mark Repository Step 18 in progress with doctor/bootstrap accepted and dev-up/dev-reset next",
-    "preserve seed-demo and smoke as later bounded Step 18 slices",
-    "update active-packet and documentation-consistency guards to the accepted evidence-sync packet",
-    "record the accepted doctor/bootstrap zero-impact result in the historical workspace complexity baseline"
+    "add repo.py dev-up with deterministic human and JSON reports plus a side-effect-free dry-run",
+    "pin the local PostgreSQL dependency to an immutable official PostgreSQL 17 Alpine multi-platform image digest",
+    "derive checkout-scoped container and volume names from a validated namespace and attach immutable ownership labels",
+    "publish PostgreSQL only on 127.0.0.1 with a validated configurable local port",
+    "initialize the database through Docker-native psql using every ordered committed migration and the accepted platform fixtures",
+    "record and verify a deterministic schema-input digest before reusing local state",
+    "add repo.py dev-reset that refuses foreign resources, removes only exactly owned container and volume state, and recreates a clean ready dependency plane",
+    "prove create, idempotent reuse, drift refusal, foreign-resource refusal, reset and clean-environment behavior through permanent unit and Docker acceptance",
+    "document only dev-up/dev-reset as implemented while keeping seed-demo, smoke and Step 19 explicitly open"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -63,19 +65,24 @@
     "Rust CI"
   ],
   "acceptance": [
-    "the branch is based exactly on merge commit 87bc0d33befc4525b62aa7e0e1884abc07e12abf",
-    "all five normative documents contain PR #281, source 76a0d93d594b6ffbb890f90d3cb9037febf4c3f8, merge 87bc0d33befc4525b62aa7e0e1884abc07e12abf and 7 of 7",
-    "Step 18 is described as in progress rather than complete",
-    "dev-up/dev-reset are the only next permitted implementation packet and Step 19 remains blocked",
-    "the final diff contains only declared documentation, packet, generated navigation and permanent guard files",
-    "Complexity Baseline CI is applicable and succeeds on the same final exact head through the declared complexity-baseline evidence path",
-    "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments or review threads",
-    "the exact final head passes both Customer Privacy process gates selected by the permanent historical-evidence preflight"
+    "the branch is based exactly on main commit dbb3e08097ff9439161ce94ff91b8912c8a0b249 and contains only the declared dev-up/dev-reset packet files",
+    "dev-up uses the full doctor prerequisite profile and never silently installs, upgrades or globally switches Docker or toolchains",
+    "the PostgreSQL image reference contains both a production-aligned PostgreSQL 17 Alpine tag and an immutable sha256 digest",
+    "resource names and labels are deterministic for one checkout or an explicit validated namespace",
+    "dev-up binds only 127.0.0.1, rejects invalid ports, and refuses incomplete, foreign, image-drifted, configuration-drifted or schema-drifted resources",
+    "fresh initialization applies all sorted up migrations and the accepted platform, sales-activities and search-role fixtures through Docker-native psql with ON_ERROR_STOP",
+    "a second unchanged dev-up reuses the exact owned ready database without reapplying migrations",
+    "dev-reset dry-run mutates nothing; real reset verifies ownership before removing the container and volume and recreates a clean ready database",
+    "a permanent clean-environment Docker acceptance proves first up, idempotent second up, destructive reset and absence of a pre-reset probe after recreation",
+    "future changes to repository lifecycle entry points select Governance CI and run both focused unit and Docker acceptance",
+    "documentation does not claim seed-demo, smoke, Repository Step 18, Phase 8A or architecture 10/10 complete",
+    "one unchanged meaningful final head passes every applicable permanent workflow with zero unresolved comments or review threads"
   ],
   "non_goals": [
-    "implement dev-up, dev-reset, seed-demo or smoke",
+    "implement seed-demo or smoke",
+    "start crm-api, frontend or any long-running product process",
     "start Repository Step 19 or change Customer Privacy worker behavior",
-    "change runtime, routes, contracts, schemas, migrations, dependencies, lockfiles or product behavior",
+    "change runtime, owner, route, contract, schema, migration, dependency, lockfile or product behavior",
     "complete Repository Step 18, Phase 8A, an expert module or architecture 10/10"
   ]
 }
