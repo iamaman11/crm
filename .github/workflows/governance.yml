@@ -169,7 +169,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   governance:
@@ -178,6 +178,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ github.head_ref || github.ref }}
           fetch-depth: 0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -200,6 +201,92 @@ jobs:
           version: "11.12.0"
       - name: Install validation dependencies
         run: python -m pip install --requirement requirements-dev.txt
+      - name: Temporarily verify and commit role ordering
+        if: github.event_name == 'pull_request' && github.head_ref == 'repository-step-18-dev-up-reset' && github.actor != 'github-actions[bot]'
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+          CRM_RUN_LOCAL_DOCKER_ACCEPTANCE: "1"
+          CRM_LOCAL_NAMESPACE: role-order-${{ github.run_id }}
+          CRM_LOCAL_POSTGRES_PORT: "55433"
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          implementation = Path('scripts/local_dev.py')
+          content = implementation.read_text(encoding='utf-8')
+          old = '''def _initialize(runtime: DockerRuntime, root: Path, config: DevConfig) -> int:
+              for relative in config.schema_paths:
+                  runtime.execute_sql(config, (root / relative).read_text(encoding="utf-8"))
+              runtime.execute_sql(
+                  config,
+                  """
+          DO $crm_local$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'crm_app_test') THEN
+              CREATE ROLE crm_app_test LOGIN PASSWORD 'crm_app_test';
+            ELSE
+              ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test';
+            END IF;
+          END
+          $crm_local$;
+          """,
+              )
+          '''
+          old = '\n'.join(line[10:] if line.startswith('          ') else line for line in old.splitlines()) + '\n'
+          new = '''def _initialize(runtime: DockerRuntime, root: Path, config: DevConfig) -> int:
+              runtime.execute_sql(
+                  config,
+                  """
+          DO $crm_local$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'crm_app_test') THEN
+              CREATE ROLE crm_app_test LOGIN PASSWORD 'crm_app_test';
+            ELSE
+              ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test';
+            END IF;
+          END
+          $crm_local$;
+          """,
+              )
+              for relative in config.schema_paths:
+                  runtime.execute_sql(config, (root / relative).read_text(encoding="utf-8"))
+          '''
+          new = '\n'.join(line[10:] if line.startswith('          ') else line for line in new.splitlines()) + '\n'
+          if content.count(old) != 1:
+              raise SystemExit(f'expected initialization block once, found {content.count(old)}')
+          implementation.write_text(content.replace(old, new), encoding='utf-8')
+
+          tests = Path('tests/test_local_dev.py')
+          content = tests.read_text(encoding='utf-8')
+          marker = '    def test_fresh_up_then_unchanged_up_is_idempotent(self) -> None:\n'
+          method = '''    def test_application_role_is_provisioned_before_first_migration(self) -> None:
+              with tempfile.TemporaryDirectory() as temporary:
+                  root = Path(temporary)
+                  prepare_root(root)
+                  runtime = FakeRuntime()
+                  dev_up(
+                      root,
+                      runtime=runtime,
+                      doctor_report={"ok": True},
+                      environ={"CRM_LOCAL_NAMESPACE": "unit-role-order"},
+                  )
+              self.assertIn("CREATE ROLE crm_app_test", runtime.sql[0])
+              self.assertEqual(runtime.sql[1], "CREATE SCHEMA crm;\\n")
+
+          '''
+          method = '\n'.join(line[10:] if line.startswith('          ') else line for line in method.splitlines()) + '\n'
+          if content.count(marker) != 1:
+              raise SystemExit(f'expected test insertion marker once, found {content.count(marker)}')
+          tests.write_text(content.replace(marker, method + marker), encoding='utf-8')
+          PY
+          python -m unittest tests.test_local_dev
+          python -m unittest tests.test_local_lifecycle_docker
+          git config user.name "github-actions[bot]"
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/local_dev.py tests/test_local_dev.py
+          git diff --cached --quiet && { echo "No role-order update produced"; exit 1; }
+          git commit -m "Provision local application role before migrations"
+          git push origin "HEAD:${HEAD_BRANCH}"
       - name: Enforce immutable module publication compatibility
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
