@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   package:
@@ -111,3 +111,27 @@ jobs:
           path: /tmp/step17-event-artifacts
           if-no-files-found: error
           retention-days: 14
+      - name: Publish staging commit with bootstrap files retained
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/bootstrap-files <<'EOF'
+          .github/step17-event-patch-01.txt
+          .github/step17-event-patch-02.txt
+          .github/step17-event-patch-03.txt
+          .github/step17-event-patch-04.txt
+          .github/step17-event-patch-05.txt
+          .github/step17-event-reduction.txt
+          .github/workflows/step17-event-delivery-analysis.yml
+          .github/workflows/step17-complexity-diagnostic.yml
+          .github/workflows/step17-event-finalizer-v5.yml
+          EOF
+          sed -i 's/^          //' /tmp/bootstrap-files
+          git checkout origin/step17-event-delivery-telemetry -- $(cat /tmp/bootstrap-files)
+          git add -A
+          git commit --amend --no-edit
+          git diff --name-only origin/step17-event-delivery-telemetry HEAD | sort > /tmp/staging-files
+          diff -u /tmp/expected-files /tmp/staging-files
+          test "$(wc -l < /tmp/staging-files)" -eq 14
+          test -z "$(git status --porcelain)"
+          git push --force origin HEAD:step17-event-clean-staging-v7
