@@ -98,17 +98,18 @@ jobs:
                       raise SystemExit(
                           f"fixture-test generation block not found: start={start}, end={end}"
                       )
-                  replacement = '''fixture_test = chr(10).join([
-              "    def test_representative_postgres_fixture_preserves_both_exact_publications(self) -> None:",
-              "        fixture = read(\"database/tests/0003_sales_activities_adapters.sql\")",
-              "        self.assertIn(\"'activities.task.create', '1.0.0', 'crm.activities', '0.1.0'\", fixture)",
-              "        self.assertIn(\"'activities.task.create', '1.1.0', 'crm.activities', '0.1.1'\", fixture)",
-              "        self.assertEqual(fixture.count(\"decode(repeat('31', 32), 'hex')\"), 2)",
-              "        self.assertEqual(fixture.count(\"decode(repeat('32', 32), 'hex')\"), 2)",
-              "        self.assertIn(\"expected immutable activities.task.create publications\", fixture)",
-              "",
-              "",
-          ])'''
+                  fixture_lines = [
+                      "    def test_representative_postgres_fixture_preserves_both_exact_publications(self) -> None:",
+                      '        fixture = read("database/tests/0003_sales_activities_adapters.sql")',
+                      '        self.assertIn("\'activities.task.create\', \'1.0.0\', \'crm.activities\', \'0.1.0\'", fixture)',
+                      '        self.assertIn("\'activities.task.create\', \'1.1.0\', \'crm.activities\', \'0.1.1\'", fixture)',
+                      '        self.assertEqual(fixture.count("decode(repeat(\'31\', 32), \'hex\')"), 2)',
+                      '        self.assertEqual(fixture.count("decode(repeat(\'32\', 32), \'hex\')"), 2)',
+                      '        self.assertIn("expected immutable activities.task.create publications", fixture)',
+                      "",
+                      "",
+                  ]
+                  replacement = "fixture_test = chr(10).join(" + repr(fixture_lines) + ")"
                   script = script[:start] + replacement + script[end:]
               output = Path(f"/tmp/step17-db-{wanted[name]}.sh")
               output.write_text(script, encoding="utf-8")
