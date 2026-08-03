@@ -41,9 +41,7 @@ FIXTURE_PATHS = (
 )
 LABEL_PREFIX = "com.ultimate-crm.local"
 NAMESPACE_PATTERN = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?")
-Execute = Callable[
-    [Sequence[str], str | None], subprocess.CompletedProcess[str]
-]
+Execute = Callable[[Sequence[str], str | None], subprocess.CompletedProcess[str]]
 Sleep = Callable[[float], None]
 
 
@@ -169,13 +167,7 @@ class DockerRuntime:
         self.require(command)
 
     def create_container(self, config: DevConfig) -> None:
-        command = [
-            "docker",
-            "run",
-            "--detach",
-            "--name",
-            config.container_name,
-        ]
+        command = ["docker", "run", "--detach", "--name", config.container_name]
         for key, value in sorted(config.labels("postgres-container").items()):
             command.extend(("--label", f"{key}={value}"))
         command.extend(
@@ -227,8 +219,12 @@ class DockerRuntime:
         return completed.stdout.strip()
 
     def wait_ready(self, config: DevConfig, attempts: int = 60) -> None:
+        database_query = (
+            "SELECT 1 FROM pg_database "
+            f"WHERE datname = '{config.database}';"
+        )
         for attempt in range(attempts):
-            completed = self.execute(
+            ready = self.execute(
                 (
                     "docker",
                     "exec",
@@ -237,11 +233,34 @@ class DockerRuntime:
                     "--username",
                     config.admin_user,
                     "--dbname",
-                    config.database,
+                    "postgres",
                 ),
                 None,
             )
-            if completed.returncode == 0:
+            database_ready = False
+            if ready.returncode == 0:
+                database = self.execute(
+                    (
+                        "docker",
+                        "exec",
+                        config.container_name,
+                        "psql",
+                        "--username",
+                        config.admin_user,
+                        "--dbname",
+                        "postgres",
+                        "--no-psqlrc",
+                        "--tuples-only",
+                        "--no-align",
+                        "--command",
+                        database_query,
+                    ),
+                    None,
+                )
+                database_ready = (
+                    database.returncode == 0 and database.stdout.strip() == "1"
+                )
+            if database_ready:
                 return
             container = self.inspect_container(config.container_name)
             state = container.get("State") if container else None
@@ -252,7 +271,9 @@ class DockerRuntime:
                 )
             if attempt + 1 < attempts:
                 self.sleep(1.0)
-        raise LifecycleError("local PostgreSQL did not become ready within 60 seconds")
+        raise LifecycleError(
+            "local PostgreSQL target database did not become ready within 60 seconds"
+        )
 
 
 def _schema_inputs(root: Path) -> tuple[tuple[str, ...], str]:
@@ -402,8 +423,6 @@ def _read_marker(runtime: DockerRuntime, config: DevConfig) -> str:
 
 
 def _initialize(runtime: DockerRuntime, root: Path, config: DevConfig) -> int:
-    for relative in config.schema_paths:
-        runtime.execute_sql(config, (root / relative).read_text(encoding="utf-8"))
     runtime.execute_sql(
         config,
         """
@@ -418,6 +437,11 @@ END
 $crm_local$;
 """,
     )
+    for relative in config.schema_paths:
+        runtime.execute_sql(
+            config,
+            (root / relative).read_text(encoding="utf-8"),
+        )
     runtime.execute_sql(
         config,
         f"COMMENT ON DATABASE {config.database} IS '{_marker(config)}';\n",
@@ -541,9 +565,7 @@ def dev_up(
     volume = docker.inspect_volume(config.volume_name)
 
     if (container is None) != (volume is None):
-        raise LifecycleError(
-            "incomplete local Docker state detected; run repo.py dev-reset"
-        )
+        raise LifecycleError("incomplete local Docker state detected; run repo.py dev-reset")
     if container is None and volume is None:
         if dry_run:
             return _report(
