@@ -126,7 +126,16 @@ jobs:
         run: bash /tmp/step17-db-focused.sh
       - name: Full Rust and architecture closure
         shell: bash
-        run: bash /tmp/step17-db-closure.sh
+        run: |
+          env \
+            -u DATABASE_URL \
+            -u ADMIN_DATABASE_URL \
+            -u PGHOST \
+            -u PGPORT \
+            -u PGDATABASE \
+            -u PGUSER \
+            -u PGPASSWORD \
+            bash /tmp/step17-db-closure.sh
       - name: Apply Event Runtime database
         shell: bash
         run: bash /tmp/step17-db-database.sh
