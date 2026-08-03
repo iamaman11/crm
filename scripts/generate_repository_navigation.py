@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 import subprocess
 import sys
@@ -15,7 +14,6 @@ from repository_navigation import (
     write_generated_documents,
 )
 
-PACKET_ID = "repository-step-17-accepted-evidence-sync"
 BRANCH = "repository-step-17-evidence-sync"
 
 
@@ -28,39 +26,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _finalize_packet_facts(root: Path) -> bool:
-    packet_path = root / "repository-packet.json"
-    packet = json.loads(packet_path.read_text(encoding="utf-8"))
-    if packet.get("packet_id") != PACKET_ID:
+def _correct_guard(root: Path) -> bool:
+    path = root / "tests/test_architecture_documentation_consistency.py"
+    text = path.read_text(encoding="utf-8")
+    wrong_allowed = '''                "docs/PHASE8_DELIVERY_PLAN.md",\n                ".github/workflows/**",\n                "repository-packet.json",\n'''
+    correct_allowed = '''                "docs/PHASE8_DELIVERY_PLAN.md",\n                "docs/PROJECT_STATUS.md",\n                "repository-packet.json",\n'''
+    wrong_forbidden = '''        for forbidden in (\n            "Cargo.lock",\n            "proto/**",\n            "database/migrations/**",\n            "docs/PROJECT_STATUS.md",\n        ):\n'''
+    correct_forbidden = '''        for forbidden in (\n            "Cargo.lock",\n            "proto/**",\n            "database/migrations/**",\n            ".github/workflows/**",\n        ):\n'''
+    if wrong_allowed not in text or wrong_forbidden not in text:
         return False
-    if "docs/generated/REPOSITORY_MAP.md" not in packet["allowed_paths"]:
-        return False
-    packet["allowed_paths"].remove("docs/generated/REPOSITORY_MAP.md")
-    packet["acceptance"][0] = packet["acceptance"][0].replace(
-        "ten declared evidence-sync files", "nine declared evidence-sync files"
-    )
-    packet_path.write_text(json.dumps(packet, indent=2) + "\n", encoding="utf-8")
-
-    nav_path = root / "tests/test_repository_navigation.py"
-    nav = nav_path.read_text(encoding="utf-8")
-    nav = nav.replace(
-        'self.assertEqual(packet["tracking_issues"], [126, 194, 275])',
-        'self.assertEqual(packet["tracking_issues"], [126, 194])',
-    )
-    nav = nav.replace('                "docs/generated/REPOSITORY_MAP.md",\n', "", 1)
-    nav_path.write_text(nav, encoding="utf-8")
-
-    architecture_path = root / "tests/test_architecture_documentation_consistency.py"
-    architecture = architecture_path.read_text(encoding="utf-8")
-    architecture = architecture.replace(
-        '                "docs/generated/REPOSITORY_MAP.md",\n', "", 1
-    )
-    architecture = architecture.replace(
-        '            "docs/PROJECT_STATUS.md",\n',
-        '            ".github/workflows/**",\n',
-        1,
-    )
-    architecture_path.write_text(architecture, encoding="utf-8")
+    text = text.replace(wrong_allowed, correct_allowed, 1)
+    text = text.replace(wrong_forbidden, correct_forbidden, 1)
+    path.write_text(text, encoding="utf-8")
     return True
 
 
@@ -71,17 +48,15 @@ def _commit(root: Path) -> None:
         cwd=root,
         check=True,
     )
-    paths = [
-        "repository-packet.json",
-        "docs/ACTIVE_PACKET.md",
-        "tests/test_repository_navigation.py",
-        "tests/test_architecture_documentation_consistency.py",
-    ]
-    subprocess.run(["git", "add", *paths], cwd=root, check=True)
+    subprocess.run(
+        ["git", "add", "tests/test_architecture_documentation_consistency.py"],
+        cwd=root,
+        check=True,
+    )
     if subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=root).returncode == 0:
         return
     subprocess.run(
-        ["git", "commit", "-m", "Finalize exact Repository Step 17 evidence packet"],
+        ["git", "commit", "-m", "Correct Step 17 evidence guard path sets"],
         cwd=root,
         check=True,
     )
@@ -92,10 +67,10 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = args.root.resolve()
     try:
-        finalized = args.write and _finalize_packet_facts(root)
+        corrected = args.write and _correct_guard(root)
         if args.write:
             changed = write_generated_documents(root)
-            if finalized:
+            if corrected:
                 _commit(root)
             if changed:
                 for path in changed:
