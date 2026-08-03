@@ -96,7 +96,7 @@ class FakeRuntime:
         if "COMMENT ON DATABASE" in sql:
             self.marker = f"ultimate-crm-local-schema:{config.schema_digest}"
             return ""
-        if "obj_description" in sql:
+        if "shobj_description" in sql:
             return self.marker
         if "information_schema.tables" in sql:
             return "42"
