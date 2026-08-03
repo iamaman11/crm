@@ -1,0 +1,63 @@
+name: Temporary Step 18 Dev Up Reset Evidence Sync
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-step18-dev-up-reset-evidence-sync-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  synchronize:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact pull-request branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.11'
+
+      - name: Synchronize accepted evidence fail closed
+        run: python scripts/temporary_step18_dev_up_reset_evidence_sync.py
+
+      - name: Verify focused permanent guards
+        run: |
+          python -m unittest \
+            tests.test_architecture_documentation_consistency \
+            tests.test_repository_navigation
+          python scripts/generate_repository_navigation.py --check
+          git diff --check
+
+      - name: Commit only declared evidence files
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          git add \
+            docs/ACTIVE_PACKET.md \
+            docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md \
+            docs/IMPLEMENTATION_ROADMAP.md \
+            docs/MODULE_CATALOG.md \
+            docs/PHASE8_DELIVERY_PLAN.md \
+            docs/PROJECT_STATUS.md \
+            docs/WORKSPACE_COMPLEXITY_BASELINE.md \
+            repository-packet.json \
+            tests/test_architecture_documentation_consistency.py \
+            tests/test_repository_navigation.py
+          if git diff --cached --quiet; then
+            echo 'Evidence is already synchronized.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Synchronize accepted Step 18 dev-up reset evidence'
+          git push origin "HEAD:${HEAD_REF}"
