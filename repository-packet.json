@@ -62,7 +62,10 @@
   "required_checks": [
     "Affected Scope CI",
     "Contract CI",
-    "Governance CI"
+    "Governance CI",
+    "Operations CI",
+    "Phase8A Workflow Guard",
+    "Rust Generated Sync"
   ],
   "acceptance": [
     "the branch is based exactly on main commit 60d5974349a04c462475aadd4af0a37bada9713b and contains only the ten declared retirement-evidence packet files",
