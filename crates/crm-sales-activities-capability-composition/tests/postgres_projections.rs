@@ -359,9 +359,7 @@ async fn invoke<M: Message>(
         .unwrap_or_else(|error| panic!("production capability failed: {error}"));
 }
 
-fn latest_definition(
-    capability_id: &str,
-) -> crm_capability_runtime::CapabilityDefinition {
+fn latest_definition(capability_id: &str) -> crm_capability_runtime::CapabilityDefinition {
     capability_definitions()
         .expect("valid production definitions")
         .into_iter()
