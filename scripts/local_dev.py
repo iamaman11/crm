@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEV_SCHEMA = "crm.local-lifecycle-dev/v1"
 POSTGRES_IMAGE = (
     "postgres:17-alpine@"
-    "sha256:dc17045ccfd343b49600570ea734b9c4991cf1c3f3302e67df51e3b402dd55c4"
+    "sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193"
 )
 POSTGRES_CONTAINER_PORT = 5432
 DEFAULT_POSTGRES_PORT = 5433
