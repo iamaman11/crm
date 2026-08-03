@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   verify-core:
+    # Diagnostic only; this workflow is removed before exact-head acceptance.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 35
