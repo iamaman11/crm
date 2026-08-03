@@ -45,7 +45,7 @@ fn production_catalog_coordinates_are_unique_and_partitioned_by_owner() {
             .iter()
             .filter(|definition| definition.owner_module_id.as_str() == ACTIVITIES_MODULE_ID)
             .count(),
-        5
+        4
     );
     assert_eq!(
         definitions
@@ -53,7 +53,7 @@ fn production_catalog_coordinates_are_unique_and_partitioned_by_owner() {
             .filter(|definition| definition.capability_id.as_str() == ACTIVITIES_CREATE_CAPABILITY)
             .map(|definition| definition.capability_version.as_str())
             .collect::<Vec<_>>(),
-        ["1.0.0", "1.1.0"]
+        ["1.1.0"]
     );
     assert!(definitions.iter().all(|definition| definition.mutation));
     assert!(
