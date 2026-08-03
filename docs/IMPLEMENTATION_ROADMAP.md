@@ -70,7 +70,7 @@ Issue #194 remains open. The architecture stage ledger is:
 - Stage H reproducible environment and navigation — **In progress**;
 - Stage I frontend and operations parity — **Incomplete**.
 
-Repository Steps 1–17 are complete. Repository Step 18 is **in progress through accepted PR #281**; doctor/bootstrap are accepted and dev-up/dev-reset are the next permitted bounded implementation packet.
+Repository Steps 1–17 are complete. Repository Step 18 is **in progress through accepted PRs #281 and #283**; doctor/bootstrap/dev-up/dev-reset are accepted and seed-demo/smoke are the next permitted bounded implementation packet.
 
 ### 3.1 Accepted Repository Step 14 closure
 
@@ -128,14 +128,14 @@ Step 17 is accepted through three bounded slices:
 - PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8 — made production zero-usage retirement evidence SHA-256-bound, complete, append-only and fail closed;
 - PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 — proved the coordinate was never externally released through live empty GitHub Releases, tags and deployments, non-publishable packages and no external consumer record, then retired `activities.task.create@1.0.0` while preserving its historical tombstone and keeping `telemetry.zero_since` null.
 
-The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is in progress through accepted PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7 applicable permanent workflows on one unchanged exact head. The accepted first slice delivers deterministic repository-pinned `doctor` and locked isolated `bootstrap`; the next permitted bounded implementation packet is `dev-up` and `dev-reset`, while `seed-demo` and `smoke` remain later Step 18 slices.
+The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is in progress through accepted PRs #281 and #283: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7 applicable permanent workflows, each on one unchanged exact head. The accepted slices deliver deterministic repository-pinned `doctor`, locked isolated `bootstrap`, and checkout-owned PostgreSQL `dev-up` / `dev-reset` with immutable image pinning, schema-digest reuse, fail-closed ownership checks and permanent real-Docker create/reuse/reset acceptance. The next permitted bounded implementation packet is `seed-demo` and `smoke`; Repository Step 19 remains blocked.
 
 
-### 3.5 Accepted Repository Step 18 doctor/bootstrap slice
+### 3.5 Accepted Repository Step 18 lifecycle slices
 
-Repository Step 18 is in progress through accepted PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7 applicable permanent workflows on one unchanged exact head. The accepted first slice delivers deterministic repository-pinned `doctor` and locked isolated `bootstrap`; the next permitted bounded implementation packet is `dev-up` and `dev-reset`, while `seed-demo` and `smoke` remain later Step 18 slices.
+Repository Step 18 is in progress through accepted PRs #281 and #283: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7 applicable permanent workflows, each on one unchanged exact head. The accepted slices deliver deterministic repository-pinned `doctor`, locked isolated `bootstrap`, and checkout-owned PostgreSQL `dev-up` / `dev-reset` with immutable image pinning, schema-digest reuse, fail-closed ownership checks and permanent real-Docker create/reuse/reset acceptance. The next permitted bounded implementation packet is `seed-demo` and `smoke`; Repository Step 19 remains blocked.
 
-The slice changes no product behavior or runtime ownership. Step 18 remains open until dev-up, dev-reset, seed-demo and smoke are separately accepted.
+The accepted slices change no product behavior or runtime ownership. Step 18 remains open until seed-demo and smoke are accepted on a clean environment.
 
 ### 3.6 Binding next repository sequence
 
@@ -143,7 +143,7 @@ The complete order is normative in the architecture plan. The remaining sequence
 
 16. reusable generic worker conformance — **complete through PR #270**;
 17. contract compatibility, deprecation, consumer-migration and retirement enforcement — **complete through PR #279**;
-18. deterministic local lifecycle commands — **in progress through PR #281; doctor/bootstrap accepted, dev-up/dev-reset next**;
+18. deterministic local lifecycle commands — **in progress through PRs #281 and #283; doctor/bootstrap/dev-up/dev-reset accepted, seed-demo/smoke next**;
 19. Customer Privacy worker and full process/end-to-end acceptance;
 20. Phase 8A frontend, accessibility, browser and operations evidence;
 21. Phase 8A closure;
