@@ -178,6 +178,69 @@ class LocalDevTests(unittest.TestCase):
             after = build_dev_config(root, environ={}).schema_digest
         self.assertNotEqual(before, after)
 
+    def test_wait_ready_requires_the_target_database(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_root(root)
+            config = build_dev_config(
+                root,
+                environ={"CRM_LOCAL_NAMESPACE": "unit-ready"},
+            )
+            probes = 0
+            sleeps: list[float] = []
+            calls: list[list[str]] = []
+
+            def execute(command, input_text):
+                nonlocal probes
+                command = list(command)
+                calls.append(command)
+                if command[:3] == ["docker", "container", "inspect"]:
+                    payload = [{"State": {"Running": True, "Status": "running"}}]
+                    return subprocess.CompletedProcess(
+                        command,
+                        0,
+                        json.dumps(payload),
+                        "",
+                    )
+                if "pg_isready" in command:
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                if "psql" in command and "--command" in command:
+                    probes += 1
+                    return subprocess.CompletedProcess(
+                        command,
+                        0,
+                        "1" if probes == 2 else "",
+                        "",
+                    )
+                raise AssertionError(command)
+
+            runtime = DockerRuntime(
+                root,
+                execute=execute,
+                sleep=sleeps.append,
+            )
+            runtime.wait_ready(config, attempts=2)
+        self.assertEqual(probes, 2)
+        self.assertEqual(sleeps, [1.0])
+        psql_calls = [command for command in calls if "psql" in command]
+        self.assertEqual(len(psql_calls), 2)
+        for command in psql_calls:
+            self.assertEqual(command[command.index("--dbname") + 1], "postgres")
+
+    def test_application_role_is_provisioned_before_first_migration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_root(root)
+            runtime = FakeRuntime()
+            dev_up(
+                root,
+                runtime=runtime,
+                doctor_report={"ok": True},
+                environ={"CRM_LOCAL_NAMESPACE": "unit-role-order"},
+            )
+        self.assertIn("CREATE ROLE crm_app_test", runtime.sql[0])
+        self.assertEqual(runtime.sql[1], "CREATE SCHEMA crm;\n")
+
     def test_fresh_up_then_unchanged_up_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -345,7 +408,9 @@ class LocalDevTests(unittest.TestCase):
             runtime.create_container(config)
             runtime.execute_sql(config, "SELECT 1;\n")
         self.assertTrue(all(isinstance(command, list) for command, _ in calls))
-        self.assertTrue(all(all(isinstance(part, str) for part in command) for command, _ in calls))
+        self.assertTrue(
+            all(all(isinstance(part, str) for part in command) for command, _ in calls)
+        )
         self.assertFalse(any(command[:2] == ["sh", "-c"] for command, _ in calls))
         self.assertEqual(calls[-1][1], "SELECT 1;\n")
         publish = calls[1][0][calls[1][0].index("--publish") + 1]
