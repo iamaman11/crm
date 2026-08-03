@@ -47,37 +47,30 @@ jobs:
           git apply /tmp/step17-event.patch
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path("crates/crm-capability-adapters/src/contract_usage_telemetry.rs")
           text = path.read_text(encoding="utf-8")
-          capability_old = """&'static [
-                  (&'static str, &'static str, &'static str, &'static str, u32),
-              ]"""
-          capability_new = """&'static [(&'static str, &'static str, &'static str, &'static str, u32)]"""
-          event_old = """&'static [
-                  (
-                      &'static str,
-                      &'static str,
-                      &'static str,
-                      &'static str,
-                      &'static str,
-                      u32,
-                  ),
-              ]"""
-          event_new = """&'static [(
-                  &'static str,
-                  &'static str,
-                  &'static str,
-                  &'static str,
-                  &'static str,
-                  u32,
-              )]"""
-          if text.count(capability_old) != 2:
-              raise SystemExit(f"expected two capability tuple slice signatures, found {text.count(capability_old)}")
-          if text.count(event_old) != 2:
-              raise SystemExit(f"expected two event tuple slice signatures, found {text.count(event_old)}")
-          text = text.replace(capability_old, capability_new)
-          text = text.replace(event_old, event_new)
+          capability_pattern = re.compile(
+              r"&'static\s*\[\s*\(&'static str,\s*&'static str,\s*&'static str,\s*&'static str,\s*u32\),\s*\]"
+          )
+          event_pattern = re.compile(
+              r"&'static\s*\[\s*\(\s*"
+              r"&'static str,\s*&'static str,\s*&'static str,\s*"
+              r"&'static str,\s*&'static str,\s*u32,\s*\),\s*\]"
+          )
+          text, capability_count = capability_pattern.subn(
+              "&'static [(&'static str, &'static str, &'static str, &'static str, u32)]",
+              text,
+          )
+          text, event_count = event_pattern.subn(
+              "&'static [(&'static str, &'static str, &'static str, &'static str, &'static str, u32)]",
+              text,
+          )
+          if capability_count != 2:
+              raise SystemExit(f"expected two capability tuple slice signatures, replaced {capability_count}")
+          if event_count != 2:
+              raise SystemExit(f"expected two event tuple slice signatures, replaced {event_count}")
           path.write_text(text, encoding="utf-8")
           PY
           rm -f .github/step17-event-patch-{01,02,03,04,05}.txt
