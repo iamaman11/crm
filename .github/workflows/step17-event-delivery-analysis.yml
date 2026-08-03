@@ -39,7 +39,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .github/step17-event-patch-{01,02,03,04,05}.txt > /tmp/step17-event.patch.gz.b64
+          cat .github/step17-event-patch-{01,02,03,04,05}.txt | tr -d '\r\n' > /tmp/step17-event.patch.gz.b64
           echo "d606578f8b9afcaf8dfac6d4bf63e7c76164d180ea08146853b6279a6d4e5310  /tmp/step17-event.patch.gz.b64" | sha256sum --check
           base64 --decode /tmp/step17-event.patch.gz.b64 | gzip --decompress > /tmp/step17-event.patch
           echo "4c8a4833329badc8ed2c3b3aa2afcb838d2ed2303908fbd53cbb40e358174012  /tmp/step17-event.patch" | sha256sum --check
