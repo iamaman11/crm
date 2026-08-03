@@ -96,17 +96,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p artifacts
-          cp /tmp/expected-files artifacts/final-files.txt
-          tar -czf artifacts/step17-event-clean-tree.tar.gz -T artifacts/final-files.txt
-          sha256sum artifacts/step17-event-clean-tree.tar.gz > artifacts/step17-event-clean-tree.sha256
-          git diff --binary origin/main HEAD > artifacts/step17-event-clean-tree.diff
-          test "$(wc -l < artifacts/final-files.txt)" -eq 14
           test -z "$(git status --porcelain)"
+          rm -rf /tmp/step17-event-artifacts
+          mkdir -p /tmp/step17-event-artifacts
+          cp /tmp/expected-files /tmp/step17-event-artifacts/final-files.txt
+          tar -czf /tmp/step17-event-artifacts/step17-event-clean-tree.tar.gz -T /tmp/step17-event-artifacts/final-files.txt
+          sha256sum /tmp/step17-event-artifacts/step17-event-clean-tree.tar.gz > /tmp/step17-event-artifacts/step17-event-clean-tree.sha256
+          git diff --binary origin/main HEAD > /tmp/step17-event-artifacts/step17-event-clean-tree.diff
+          test "$(wc -l < /tmp/step17-event-artifacts/final-files.txt)" -eq 14
       - name: Upload proven clean tree
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: step17-event-proven-clean-tree
-          path: artifacts
+          path: /tmp/step17-event-artifacts
           if-no-files-found: error
           retention-days: 14
