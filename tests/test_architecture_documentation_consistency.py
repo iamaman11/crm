@@ -96,7 +96,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                     f"unqualified current 113-package claim: {context}",
                 )
 
-    def test_step_17_is_complete_and_step_18_is_next(self) -> None:
+    def test_step_17_is_complete_and_step_18_is_in_progress(self) -> None:
         exact = (
             "PR #275",
             "1c6366b557e255a14a677758fd87f7fe63184a89",
@@ -116,13 +116,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn("step 18", lowered)
             self.assertNotRegex(lowered, r"step 17[^\n.;]{0,80}not started")
         self.assertIn("Repository Steps 1–17 are complete", self.status)
-        self.assertIn("Repository Step 18 is the next permitted implementation packet", self.status)
+        self.assertIn("Repository Step 18 is in progress through accepted PR #281", self.status)
         self.assertIn(
             "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement — **complete through PR #279**",
             self.plan,
         )
         self.assertIn("18. deterministic local lifecycle commands", self.plan)
-        self.assertIn("**next, not started**", self.plan)
+        self.assertIn("**in progress through PR #281; doctor/bootstrap accepted, dev-up/dev-reset next**", self.plan)
 
     def test_product_readiness_is_not_overstated(self) -> None:
         for document in self.normative_documents:
@@ -192,32 +192,26 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_step_18_doctor_bootstrap_packet_is_exact(self) -> None:
+    def test_active_step_18_doctor_bootstrap_evidence_sync_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(
-            self.packet["packet_id"],
-            "repository-step-18-doctor-bootstrap",
-        )
+        self.assertEqual(self.packet["packet_id"], "repository-step-18-doctor-bootstrap-evidence-sync")
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "2659aed59a9fb9ac5a21d957f3eda85b54599d84"},
+            {"ref": "main", "sha": "87bc0d33befc4525b62aa7e0e1884abc07e12abf"},
         )
         self.assertEqual(self.packet["tracking_issues"], [194])
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                ".github/workflows/governance.yml",
-                "AGENTS.md",
-                "README.md",
-                "affected-scope-policy.json",
                 "docs/ACTIVE_PACKET.md",
-                "docs/DEVELOPMENT_WORKFLOW.md",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/MODULE_CATALOG.md",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/PROJECT_STATUS.md",
                 "repository-packet.json",
-                "scripts/local_lifecycle.py",
-                "scripts/repo.py",
                 "tests/test_architecture_documentation_consistency.py",
-                "tests/test_local_lifecycle.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -226,28 +220,27 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Owner Execution CI",
                 "Governance CI",
                 "Rust Generated Sync",
                 "Rust CI",
             ],
         )
-        for forbidden in (
-            "Cargo.lock",
-            "contracts/**",
-            "database/**",
-            "proto/**",
-        ):
-            self.assertIn(forbidden, self.packet["forbidden_paths"])
+        for document in self.normative_documents:
+            for marker in (
+                "PR #281",
+                "76a0d93d594b6ffbb890f90d3cb9037febf4c3f8",
+                "87bc0d33befc4525b62aa7e0e1884abc07e12abf",
+                "7 of 7",
+            ):
+                self.assertIn(marker, document)
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "add repo.py doctor with deterministic human and JSON output, bootstrap/full profiles and actionable fail-closed remediation",
+            "record exact PR #281 source, squash merge and 7-of-7 workflow evidence in all five normative documents",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "implement `dev-up`, `dev-reset`, `seed-demo` or `smoke` in this first Step 18 slice",
+            "implement dev-up, dev-reset, seed-demo or smoke",
             self.packet["non_goals"],
         )
 

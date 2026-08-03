@@ -70,7 +70,7 @@ Issue #194 remains open. The architecture stage ledger is:
 - Stage H reproducible environment and navigation — **In progress**;
 - Stage I frontend and operations parity — **Incomplete**.
 
-Repository Steps 1–17 are complete. Repository Step 18 is the next permitted implementation step and is **not started**.
+Repository Steps 1–17 are complete. Repository Step 18 is **in progress through accepted PR #281**; doctor/bootstrap are accepted and dev-up/dev-reset are the next permitted bounded implementation packet.
 
 ### 3.1 Accepted Repository Step 14 closure
 
@@ -128,16 +128,22 @@ Step 17 is accepted through three bounded slices:
 - PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8 — made production zero-usage retirement evidence SHA-256-bound, complete, append-only and fail closed;
 - PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 — proved the coordinate was never externally released through live empty GitHub Releases, tags and deployments, non-publishable packages and no external consumer record, then retired `activities.task.create@1.0.0` while preserving its historical tombstone and keeping `telemetry.zero_since` null.
 
-The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is the next permitted implementation step and is not started.
+The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is in progress through accepted PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7 applicable permanent workflows on one unchanged exact head. The accepted first slice delivers deterministic repository-pinned `doctor` and locked isolated `bootstrap`; the next permitted bounded implementation packet is `dev-up` and `dev-reset`, while `seed-demo` and `smoke` remain later Step 18 slices.
 
 
-### 3.5 Binding next repository sequence
+### 3.5 Accepted Repository Step 18 doctor/bootstrap slice
+
+Repository Step 18 is in progress through accepted PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7 applicable permanent workflows on one unchanged exact head. The accepted first slice delivers deterministic repository-pinned `doctor` and locked isolated `bootstrap`; the next permitted bounded implementation packet is `dev-up` and `dev-reset`, while `seed-demo` and `smoke` remain later Step 18 slices.
+
+The slice changes no product behavior or runtime ownership. Step 18 remains open until dev-up, dev-reset, seed-demo and smoke are separately accepted.
+
+### 3.6 Binding next repository sequence
 
 The complete order is normative in the architecture plan. The remaining sequence begins:
 
 16. reusable generic worker conformance — **complete through PR #270**;
 17. contract compatibility, deprecation, consumer-migration and retirement enforcement — **complete through PR #279**;
-18. deterministic local lifecycle commands — **next, not started**;
+18. deterministic local lifecycle commands — **in progress through PR #281; doctor/bootstrap accepted, dev-up/dev-reset next**;
 19. Customer Privacy worker and full process/end-to-end acceptance;
 20. Phase 8A frontend, accessibility, browser and operations evidence;
 21. Phase 8A closure;
