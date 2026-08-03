@@ -106,6 +106,7 @@ impl PostgresDataStore {
                 occurred_at_unix_nanos,
                 event_id,
             });
+            self.observe_event_delivery(&delivery);
             deliveries.push(delivery);
         }
 

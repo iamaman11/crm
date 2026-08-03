@@ -58,8 +58,8 @@ use crm_customer_enrichment_materialization_composition::MATERIALIZATION_PROCESS
 use crm_customer_enrichment_provider_process_composition::PROVIDER_PROCESS_WORKER_ACTOR_ID;
 use crm_global_search_composition::GlobalSearchWorker;
 use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, Clock, ModuleId, RandomSource, RecordType,
-    SchemaVersion, TenantId, TypedPayload,
+    ActorId, CapabilityId, CapabilityVersion, Clock, EventDelivery, ModuleId, RandomSource,
+    RecordType, SchemaVersion, TenantId, TypedPayload,
 };
 use crm_parties_capability_adapter::{
     CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, MODULE_ID as PARTIES_MODULE_ID,
@@ -117,10 +117,6 @@ impl fmt::Debug for ApplicationComponents {
 impl ApplicationComponents {
     pub fn is_ready(&self) -> bool {
         self.readiness.load(Ordering::Acquire) && self.workers_healthy.load(Ordering::Acquire)
-    }
-
-    pub fn last_worker_error(&self) -> Option<String> {
-        self.last_worker_error.lock().ok()?.clone()
     }
 }
 
@@ -200,18 +196,23 @@ impl ApplicationRuntime {
         }
         let mutation_definitions = composition.mutation_definitions().to_vec();
         let query_definitions = composition.query_definitions().to_vec();
+        let mut event_delivery_observer: Arc<dyn Fn(&EventDelivery) + Send + Sync> =
+            Arc::new(|_| {});
         let mut contract_usage_metrics_text: Arc<dyn Fn() -> String + Send + Sync> =
             Arc::new(String::new);
         let [mutation_registry, query_registry] = meter_contract_registries(
             DEPRECATED_CONTRACTS,
+            DEPRECATED_EVENT_DELIVERIES,
             [
                 composition.mutation_registry(),
                 composition.query_registry(),
             ],
             [&mutation_definitions, &query_definitions],
+            |observer| event_delivery_observer = observer,
             |renderer| contract_usage_metrics_text = renderer,
         )
         .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+        let store: PostgresDataStore = (store, event_delivery_observer).into();
         let internal_import_outcome_definitions = internal_capability_definitions()
             .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
         let internal_export_selection_definitions =
@@ -528,10 +529,6 @@ impl ApplicationRuntime {
         Ok(Self { config, components })
     }
 
-    pub fn components(&self) -> Arc<ApplicationComponents> {
-        Arc::clone(&self.components)
-    }
-
     pub async fn run_until_signal(self) -> Result<(), ApplicationRuntimeError> {
         let http_listener = TcpListener::bind(self.config.http_bind)
             .await
@@ -721,7 +718,7 @@ async fn ready(State(state): State<HttpState>) -> impl IntoResponse {
             StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({
                 "status": "not_ready",
-                "worker_error": state.components.last_worker_error(),
+                "worker_error": state.components.last_worker_error.lock().ok().and_then(|value| value.clone()),
             })),
         )
     }

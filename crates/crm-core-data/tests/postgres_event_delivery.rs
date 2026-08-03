@@ -4,13 +4,16 @@ use crm_core_data::{
     AuditIntent, BatchMutationPlan, EventDeliveryClaim, EventDeliveryCompletion,
     EventDeliveryQuery, EventEvidence, IdempotencyEvidence, PostgresDataStore, RecordMutation,
 };
+use crm_core_events::{EventHistoryRequest, ProjectionStore};
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
-    DataClass, DomainEvent, EventId, EventType, ExecutionContext, IdempotencyKey,
+    DataClass, DomainEvent, EventDelivery, EventId, EventType, ExecutionContext, IdempotencyKey,
     ModuleExecutionContext, ModuleId, PayloadEncoding, RecordId, RecordRef, RecordType, RequestId,
     RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId, TypedPayload,
 };
 use sqlx::{PgPool, Row};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const TENANT: &str = "tenant-a";
 const OTHER_TENANT: &str = "tenant-b";
@@ -29,9 +32,17 @@ async fn reconstructs_restart_safe_delivery_and_enforces_active_installation() {
     };
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
         .expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
-    let store = PostgresDataStore::connect(&database_url, 4)
-        .await
-        .expect("connect event delivery store");
+    let observed_deliveries = Arc::new(AtomicU64::new(0));
+    let observed = Arc::clone(&observed_deliveries);
+    let store: PostgresDataStore = (
+        PostgresDataStore::connect(&database_url, 4)
+            .await
+            .expect("connect event delivery store"),
+        Arc::new(move |_: &EventDelivery| {
+            observed.fetch_add(1, Ordering::Relaxed);
+        }) as Arc<dyn Fn(&EventDelivery) + Send + Sync>,
+    )
+        .into();
     let admin = PgPool::connect(&admin_database_url)
         .await
         .expect("connect event delivery admin");
@@ -76,6 +87,44 @@ async fn reconstructs_restart_safe_delivery_and_enforces_active_installation() {
     assert_eq!(first.aggregate_version, 1);
     assert_eq!(first.payload.owner.as_str(), MODULE);
     assert_eq!(first.payload.bytes, b"event-delivery-payload");
+    assert_eq!(observed_deliveries.load(Ordering::Relaxed), 0);
+
+    let history = ProjectionStore::list_event_history(
+        &store,
+        EventHistoryRequest {
+            tenant_id: tenant(TENANT),
+            consumer_module_id: module(MODULE),
+            event_types: vec![EventType::try_new("test.event_delivery.created").unwrap()],
+            after: None,
+            page_size: 10,
+        },
+    )
+    .await
+    .expect("list consumer event history");
+    assert_eq!(history.deliveries.len(), 1);
+    assert_eq!(history.deliveries[0].event_id.as_str(), EVENT_ID);
+    assert_eq!(observed_deliveries.load(Ordering::Relaxed), 1);
+
+    let panic_store: PostgresDataStore = (
+        store.clone(),
+        Arc::new(|_: &EventDelivery| -> () { panic!("observer failure") })
+            as Arc<dyn Fn(&EventDelivery) + Send + Sync>,
+    )
+        .into();
+    let panic_history = ProjectionStore::list_event_history(
+        &panic_store,
+        EventHistoryRequest {
+            tenant_id: tenant(TENANT),
+            consumer_module_id: module(MODULE),
+            event_types: vec![EventType::try_new("test.event_delivery.created").unwrap()],
+            after: None,
+            page_size: 10,
+        },
+    )
+    .await
+    .expect("observer panic must not alter event history");
+    assert_eq!(panic_history.deliveries.len(), 1);
+    assert_eq!(observed_deliveries.load(Ordering::Relaxed), 1);
 
     let foreign = store
         .get_event_delivery(&EventDeliveryQuery {
@@ -107,6 +156,7 @@ async fn reconstructs_restart_safe_delivery_and_enforces_active_installation() {
         }
         other => panic!("expected first delivery claim, got {other:?}"),
     };
+    assert_eq!(observed_deliveries.load(Ordering::Relaxed), 2);
 
     assert_eq!(
         store
@@ -155,6 +205,7 @@ async fn reconstructs_restart_safe_delivery_and_enforces_active_installation() {
         }
         other => panic!("expected retry delivery claim, got {other:?}"),
     }
+    assert_eq!(observed_deliveries.load(Ordering::Relaxed), 3);
     store
         .complete_event_delivery(
             &tenant(TENANT),
@@ -192,6 +243,7 @@ async fn reconstructs_restart_safe_delivery_and_enforces_active_installation() {
             .await
             .expect("foreign tenant installation remains non-disclosing")
     );
+    assert_eq!(observed_deliveries.load(Ordering::Relaxed), 3);
 
     let persisted = sqlx::query(
         r#"

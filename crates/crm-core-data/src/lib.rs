@@ -65,6 +65,3 @@ pub use subject_policy::{CustomerSubjectOperationClass, TransactionalCustomerSub
 /// Governed implementation dependency for owner PostgreSQL packages. This keeps the
 /// workspace on the already resolved SQLx family without adding direct version debt.
 pub use sqlx as postgres_sqlx;
-
-/// Architecture marker for `crm-core-data`.
-pub const CRATE_NAME: &str = "crm-core-data";

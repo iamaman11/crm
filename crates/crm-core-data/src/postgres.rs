@@ -2,13 +2,15 @@ use crate::audit::{
     AuditIntent, AuditMaterializationError, MaterializedAuditRecord, materialize_audit_chain,
 };
 use crm_module_sdk::{
-    DataClass, DomainEvent, ErrorCategory, ModuleExecutionContext, ModuleId, PayloadEncoding,
-    RecordRef, RecordSnapshot, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
+    DomainEvent, ErrorCategory, EventDelivery, ModuleExecutionContext, ModuleId, RecordRef,
+    RecordSnapshot, RetentionPolicyId, SchemaId, SchemaVersion, SdkError, TypedPayload,
 };
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use std::error::Error;
 use std::fmt;
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdempotencyEvidence {
@@ -34,33 +36,32 @@ impl RecordCreatePlan {
         self.context.validate().map_err(DataError::Sdk)?;
         self.record_payload.validate().map_err(DataError::Sdk)?;
         self.event.payload.validate().map_err(DataError::Sdk)?;
-
-        if self.event.aggregate != self.record {
-            return Err(DataError::InvalidPlan(
-                "event aggregate must match the created record".to_owned(),
-            ));
-        }
-        if self.event_id.is_empty()
-            || self.idempotency.scope.is_empty()
-            || self.idempotency.key.is_empty()
-        {
-            return Err(DataError::InvalidPlan(
-                "event and idempotency identifiers must not be empty".to_owned(),
-            ));
-        }
+        require_plan(
+            self.event.aggregate == self.record,
+            "event aggregate must match the created record",
+        )?;
+        require_plan(
+            !self.event_id.is_empty()
+                && !self.idempotency.scope.is_empty()
+                && !self.idempotency.key.is_empty(),
+            "event and idempotency identifiers must not be empty",
+        )?;
         self.audit.validate().map_err(DataError::InvalidPlan)?;
-        if self.idempotency.request_hash.iter().all(|byte| *byte == 0) {
-            return Err(DataError::InvalidPlan(
-                "request hash must not be all zeroes".to_owned(),
-            ));
-        }
-        if self.context.module_id != self.record_payload.owner {
-            return Err(DataError::InvalidPlan(
-                "record payload owner must match the executing module".to_owned(),
-            ));
-        }
-        Ok(())
+        require_plan(
+            self.idempotency.request_hash.iter().any(|byte| *byte != 0),
+            "request hash must not be all zeroes",
+        )?;
+        require_plan(
+            self.context.module_id == self.record_payload.owner,
+            "record payload owner must match the executing module",
+        )
     }
+}
+
+fn require_plan(condition: bool, message: &'static str) -> Result<(), DataError> {
+    condition
+        .then_some(())
+        .ok_or_else(|| DataError::InvalidPlan(message.to_owned()))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,7 +99,7 @@ impl Error for DataError {
         match self {
             Self::Database(error) => Some(error),
             Self::Sdk(error) => Some(error),
-            Self::InvalidPlan(_) | Self::InvalidStoredValue(_) => None,
+            _ => None,
         }
     }
 }
@@ -109,22 +110,50 @@ impl From<sqlx::Error> for DataError {
     }
 }
 
-#[derive(Debug, Clone)]
+type EventDeliveryObserver = Arc<dyn Fn(&EventDelivery) + Send + Sync>;
+
+#[derive(Clone)]
 pub struct PostgresDataStore {
     pool: PgPool,
+    event_delivery_observer: Option<EventDeliveryObserver>,
+}
+
+impl fmt::Debug for PostgresDataStore {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PostgresDataStore")
+            .finish_non_exhaustive()
+    }
+}
+
+impl From<(PostgresDataStore, EventDeliveryObserver)> for PostgresDataStore {
+    fn from((mut store, observer): (PostgresDataStore, EventDeliveryObserver)) -> Self {
+        store.event_delivery_observer = Some(observer);
+        store
+    }
 }
 
 impl PostgresDataStore {
     pub async fn connect(database_url: &str, maximum_connections: u32) -> Result<Self, DataError> {
-        let pool = PgPoolOptions::new()
-            .max_connections(maximum_connections)
-            .connect(database_url)
-            .await?;
-        Ok(Self { pool })
+        Ok(Self::from_pool(
+            PgPoolOptions::new()
+                .max_connections(maximum_connections)
+                .connect(database_url)
+                .await?,
+        ))
     }
 
     pub const fn from_pool(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            event_delivery_observer: None,
+        }
+    }
+
+    pub(crate) fn observe_event_delivery(&self, delivery: &EventDelivery) {
+        if let Some(observer) = &self.event_delivery_observer {
+            let _ = catch_unwind(AssertUnwindSafe(|| observer(delivery)));
+        }
     }
 
     pub fn pool(&self) -> &PgPool {
@@ -275,8 +304,8 @@ async fn insert_record(
     .bind(plan.record_payload.schema_id.as_str())
     .bind(plan.record_payload.schema_version.as_str())
     .bind(plan.record_payload.descriptor_hash.as_slice())
-    .bind(data_class_name(plan.record_payload.data_class))
-    .bind(payload_encoding_name(plan.record_payload.encoding))
+    .bind(enum_name(plan.record_payload.data_class))
+    .bind(enum_name(plan.record_payload.encoding))
     .bind(maximum_size)
     .bind(plan.record_payload.retention_policy_id.as_str())
     .bind(plan.record_payload.bytes.as_slice())
@@ -367,8 +396,8 @@ async fn insert_outbox_event(
     .bind(plan.event.payload.schema_id.as_str())
     .bind(plan.event.payload.schema_version.as_str())
     .bind(plan.event.payload.descriptor_hash.as_slice())
-    .bind(data_class_name(plan.event.payload.data_class))
-    .bind(payload_encoding_name(plan.event.payload.encoding))
+    .bind(enum_name(plan.event.payload.data_class))
+    .bind(enum_name(plan.event.payload.encoding))
     .bind(maximum_size)
     .bind(plan.event.payload.retention_policy_id.as_str())
     .bind(plan.event.payload.bytes.as_slice())
@@ -492,8 +521,8 @@ fn decode_record(
             schema_id,
             schema_version,
             descriptor_hash,
-            data_class: parse_data_class(row.try_get("data_class")?)?,
-            encoding: parse_payload_encoding(row.try_get("payload_encoding")?)?,
+            data_class: parse_enum(row.try_get("data_class")?, "data class")?,
+            encoding: parse_enum(row.try_get("payload_encoding")?, "payload encoding")?,
             maximum_size_bytes: maximum_payload_size,
             retention_policy_id,
             bytes: row.try_get("payload_bytes")?,
@@ -501,56 +530,17 @@ fn decode_record(
     })
 }
 
-const fn data_class_name(value: DataClass) -> &'static str {
-    match value {
-        DataClass::Public => "public",
-        DataClass::Internal => "internal",
-        DataClass::Confidential => "confidential",
-        DataClass::Restricted => "restricted",
-        DataClass::Personal => "personal",
-        DataClass::SensitivePersonal => "sensitive_personal",
-        DataClass::Biometric => "biometric",
-        DataClass::Financial => "financial",
-        DataClass::Credential => "credential",
-    }
+fn enum_name<T: serde::Serialize>(value: T) -> String {
+    serde_json::to_value(value)
+        .expect("SDK enum serialization must succeed")
+        .as_str()
+        .expect("SDK enum serialization must produce a string")
+        .to_owned()
 }
 
-fn parse_data_class(value: String) -> Result<DataClass, DataError> {
-    match value.as_str() {
-        "public" => Ok(DataClass::Public),
-        "internal" => Ok(DataClass::Internal),
-        "confidential" => Ok(DataClass::Confidential),
-        "restricted" => Ok(DataClass::Restricted),
-        "personal" => Ok(DataClass::Personal),
-        "sensitive_personal" => Ok(DataClass::SensitivePersonal),
-        "biometric" => Ok(DataClass::Biometric),
-        "financial" => Ok(DataClass::Financial),
-        "credential" => Ok(DataClass::Credential),
-        _ => Err(DataError::InvalidStoredValue(format!(
-            "unknown data class {value}"
-        ))),
-    }
-}
-
-const fn payload_encoding_name(value: PayloadEncoding) -> &'static str {
-    match value {
-        PayloadEncoding::Protobuf => "protobuf",
-        PayloadEncoding::Json => "json",
-        PayloadEncoding::Utf8Text => "utf8_text",
-        PayloadEncoding::Binary => "binary",
-    }
-}
-
-fn parse_payload_encoding(value: String) -> Result<PayloadEncoding, DataError> {
-    match value.as_str() {
-        "protobuf" => Ok(PayloadEncoding::Protobuf),
-        "json" => Ok(PayloadEncoding::Json),
-        "utf8_text" => Ok(PayloadEncoding::Utf8Text),
-        "binary" => Ok(PayloadEncoding::Binary),
-        _ => Err(DataError::InvalidStoredValue(format!(
-            "unknown payload encoding {value}"
-        ))),
-    }
+fn parse_enum<T: serde::de::DeserializeOwned>(value: String, kind: &str) -> Result<T, DataError> {
+    serde_json::from_value(serde_json::Value::String(value.clone()))
+        .map_err(|_| DataError::InvalidStoredValue(format!("unknown {kind} {value}")))
 }
 
 pub fn database_error_to_sdk(error: DataError) -> SdkError {
