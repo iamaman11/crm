@@ -11,8 +11,7 @@ use tonic::Code;
 const DATASET_VERSION: &str = "crm.local-demo.dataset/v1";
 const PARTY_CREATE: &str = "parties.party.create";
 const PARTY_GET: &str = "parties.party.get";
-const PARTY_ADAPTER_FIXTURE: &str =
-    include_str!("../../../database/tests/0005_party_adapter.sql");
+const PARTY_ADAPTER_FIXTURE: &str = include_str!("../../../database/tests/0005_party_adapter.sql");
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn deterministic_local_demo_seed_or_smoke() {
