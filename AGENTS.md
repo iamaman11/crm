@@ -186,9 +186,13 @@ python scripts/generate_repository_navigation.py --check
 
 Use `docs/generated/REPOSITORY_MAP.md` for deterministic workspace/module/route inventory. Unknown or ambiguous explain targets must fail closed.
 
-Implemented validation entry points include:
+Implemented validation and local lifecycle entry points include:
 
 ```bash
+python scripts/repo.py doctor
+python scripts/repo.py doctor --profile bootstrap
+python scripts/repo.py bootstrap --dry-run
+python scripts/repo.py bootstrap
 python scripts/repo.py conformance
 python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
@@ -196,7 +200,9 @@ python scripts/repo.py packet-check --base origin/main
 python scripts/repo.py quality
 ```
 
-Local lifecycle commands `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` remain **future repository step 15** work. Do not claim they exist before implementation and permanent acceptance.
+`doctor` reads repository-pinned tool requirements and never changes the machine. The bootstrap profile excludes Docker so dependency preparation can be diagnosed independently; the full profile checks Docker CLI, Compose v2 and daemon availability. `bootstrap` uses an isolated `.venv`, committed constraints and lockfiles, and does not silently install or globally switch system toolchains.
+
+Repository Step 18 remains in progress. `dev-up`, `dev-reset`, `seed-demo` and `smoke` are not yet implemented or accepted.
 
 ## 10. Required checks before completion
 

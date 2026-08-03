@@ -83,6 +83,10 @@ python scripts/generate_repository_navigation.py --check
 Use the stable repository command surface:
 
 ```bash
+python scripts/repo.py doctor
+python scripts/repo.py doctor --profile bootstrap
+python scripts/repo.py bootstrap --dry-run
+python scripts/repo.py bootstrap
 python scripts/repo.py architecture
 python scripts/repo.py manifests
 python scripts/repo.py contracts
@@ -99,7 +103,9 @@ python scripts/repo.py test-all
 python scripts/repo.py quality
 ```
 
-Specialized contract, database, process, migration and product-plane gates remain mandatory when their scopes are affected. Local lifecycle commands such as `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` remain future repository step 15 work and must not be represented as implemented.
+`doctor` inspects the repository-pinned Python, Rust, Node and pnpm prerequisites; its full profile also checks Docker CLI, Compose v2 and daemon availability. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, fetches Cargo dependencies with `--locked`, installs pnpm dependencies with `--frozen-lockfile`, and verifies locked metadata and generated navigation. It does not silently install or globally switch system toolchains.
+
+Specialized contract, database, process, migration and product-plane gates remain mandatory when their scopes are affected. Repository Step 18 remains in progress: `dev-up`, `dev-reset`, `seed-demo` and `smoke` are not yet implemented or accepted.
 
 ## Status synchronization rule
 

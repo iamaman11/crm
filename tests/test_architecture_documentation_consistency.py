@@ -192,28 +192,32 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_step_17_evidence_sync_packet_is_exact(self) -> None:
+    def test_active_step_18_doctor_bootstrap_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-17-accepted-evidence-sync",
+            "repository-step-18-doctor-bootstrap",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "ea3d3894d05e3a8d814aff69824b593843763d03"},
+            {"ref": "main", "sha": "2659aed59a9fb9ac5a21d957f3eda85b54599d84"},
         )
+        self.assertEqual(self.packet["tracking_issues"], [194])
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
+                ".github/workflows/governance.yml",
+                "AGENTS.md",
+                "README.md",
+                "affected-scope-policy.json",
                 "docs/ACTIVE_PACKET.md",
-                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-                "docs/IMPLEMENTATION_ROADMAP.md",
-                "docs/MODULE_CATALOG.md",
-                "docs/PHASE8_DELIVERY_PLAN.md",
-                "docs/PROJECT_STATUS.md",
+                "docs/DEVELOPMENT_WORKFLOW.md",
                 "repository-packet.json",
+                "scripts/local_lifecycle.py",
+                "scripts/repo.py",
                 "tests/test_architecture_documentation_consistency.py",
+                "tests/test_local_lifecycle.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -222,6 +226,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
+                "Customer Privacy Access Export CI",
+                "Customer Privacy Owner Execution CI",
                 "Governance CI",
                 "Rust Generated Sync",
                 "Rust CI",
@@ -229,19 +235,19 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         )
         for forbidden in (
             "Cargo.lock",
-            "proto/**",
+            "contracts/**",
             "database/**",
-            ".github/workflows/**",
+            "proto/**",
         ):
             self.assertIn(forbidden, self.packet["forbidden_paths"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "record exact PR #275, #278 and #279 source, merge and workflow evidence in all five normative documents",
+            "add repo.py doctor with deterministic human and JSON output, bootstrap/full profiles and actionable fail-closed remediation",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "start deterministic local lifecycle Step 18 implementation",
+            "implement `dev-up`, `dev-reset`, `seed-demo` or `smoke` in this first Step 18 slice",
             self.packet["non_goals"],
         )
 

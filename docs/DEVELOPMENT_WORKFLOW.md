@@ -204,7 +204,7 @@ python scripts/generate_repository_navigation.py --check
 
 Generated active-packet and repository-map documents are reproducible navigation outputs, not sources of truth.
 
-The target local lifecycle remains:
+The deterministic local lifecycle starts with the implemented Step 18 commands:
 
 ```text
 doctor
@@ -217,7 +217,18 @@ doctor
 → exact-head gates
 ```
 
-`doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` remain future repository step 15 work. They must not be claimed as available until implementation and permanent acceptance exist.
+Use:
+
+```bash
+python scripts/repo.py doctor
+python scripts/repo.py doctor --profile bootstrap
+python scripts/repo.py bootstrap --dry-run
+python scripts/repo.py bootstrap
+```
+
+`doctor` reads tool requirements from committed repository configuration and changes nothing. The bootstrap profile validates dependency-preparation prerequisites without requiring Docker; the full profile additionally checks Docker CLI, Compose v2 and daemon availability. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, uses locked Cargo and frozen pnpm dependency resolution, and verifies generated navigation. It does not silently install or globally switch system toolchains.
+
+Repository Step 18 remains in progress. `dev-up`, `dev-reset`, `seed-demo` and `smoke` remain later bounded Step 18 work and must not be represented as implemented before permanent acceptance.
 
 ## 15. Multi-agent exact-SHA workflow
 
