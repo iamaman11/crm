@@ -224,7 +224,8 @@ mod tests {
 
     #[test]
     fn retired_create_v1_coordinate_is_rejected_before_payload_decoding() {
-        let mut definition = activities_capability_definition(ACTIVITIES_CREATE_CAPABILITY).unwrap();
+        let mut definition =
+            activities_capability_definition(ACTIVITIES_CREATE_CAPABILITY).unwrap();
         definition.capability_version = CapabilityVersion::try_new("1.0.0").unwrap();
         let request = request_for(&definition);
         let error = SalesActivitiesCapabilityPlannerRouter
