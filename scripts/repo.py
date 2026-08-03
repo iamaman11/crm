@@ -89,6 +89,7 @@ def command_conformance(_: argparse.Namespace) -> None:
             "tests/test_customer_privacy_architecture_freeze.py",
             "tests/test_customer_privacy_contract_inventory.py",
             "tests/test_customer_privacy_owner_scope_contracts.py",
+            "tests/test_local_lifecycle.py",
             "tests/test_module_compatibility.py",
             "tests/test_module_manifest_validation.py",
             "tests/test_module_scaffolding.py",
@@ -184,6 +185,40 @@ def command_packet_check(args: argparse.Namespace) -> None:
         print(render_packet_check(report), end="")
     if not report["ok"]:
         raise CommandError("active repository packet check failed")
+
+
+def command_doctor(args: argparse.Namespace) -> None:
+    try:
+        from local_lifecycle import LifecycleError, doctor, render_doctor
+    except ModuleNotFoundError:
+        from scripts.local_lifecycle import LifecycleError, doctor, render_doctor
+
+    try:
+        report = doctor(ROOT, profile=args.profile)
+    except LifecycleError as error:
+        raise CommandError(str(error)) from error
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(render_doctor(report), end="")
+    if not report["ok"]:
+        raise CommandError("local doctor found blocking prerequisites")
+
+
+def command_bootstrap(args: argparse.Namespace) -> None:
+    try:
+        from local_lifecycle import LifecycleError, bootstrap, render_bootstrap
+    except ModuleNotFoundError:
+        from scripts.local_lifecycle import LifecycleError, bootstrap, render_bootstrap
+
+    try:
+        report = bootstrap(ROOT, dry_run=args.dry_run)
+    except LifecycleError as error:
+        raise CommandError(str(error)) from error
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(render_bootstrap(report), end="")
 
 
 def affected_clippy_command(report: dict) -> list[str] | None:
@@ -350,6 +385,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="write generated navigation before checking the packet",
     )
     packet_check_parser.set_defaults(handler=command_packet_check)
+
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="inspect repository, toolchain and optional container prerequisites",
+    )
+    doctor_parser.add_argument(
+        "--profile",
+        choices=("bootstrap", "full"),
+        default="full",
+        help="check dependency-bootstrap prerequisites or the complete local runtime",
+    )
+    doctor_parser.add_argument("--json", action="store_true")
+    doctor_parser.set_defaults(handler=command_doctor)
+
+    bootstrap_parser = subparsers.add_parser(
+        "bootstrap",
+        help="create locked local Python, Rust and product dependency state",
+    )
+    bootstrap_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the exact bootstrap plan without changing local state",
+    )
+    bootstrap_parser.add_argument("--json", action="store_true")
+    bootstrap_parser.set_defaults(handler=command_bootstrap)
 
     check_affected = subparsers.add_parser(
         "check-affected",
