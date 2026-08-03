@@ -29,6 +29,15 @@ VALUES
   'platform'
 ),
 (
+  'crm.activities',
+  '0.1.2',
+  'crm.cjson/v1',
+  decode(repeat('af', 32), 'hex'),
+  '{}'::jsonb,
+  clock_timestamp(),
+  'platform'
+),
+(
   'crm.sales',
   '0.1.0',
   'crm.cjson/v1',
