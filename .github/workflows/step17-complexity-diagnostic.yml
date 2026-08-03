@@ -84,7 +84,7 @@ jobs:
           echo $? > artifacts/exit-evidence.exit
           cat artifacts/*.log
           exit 0
-      - name: Package exact candidate source
+      - name: Package exact candidate source and diff
         shell: bash
         run: |
           cat > artifacts/final-files.txt <<'EOF'
@@ -107,6 +107,8 @@ jobs:
           while IFS= read -r path; do test -f "$path"; done < artifacts/final-files.txt
           tar -czf artifacts/step17-event-candidate.tar.gz -T artifacts/final-files.txt
           sha256sum artifacts/step17-event-candidate.tar.gz > artifacts/step17-event-candidate.sha256
+          git diff --binary origin/main HEAD > artifacts/step17-event-candidate.diff
+          cp /tmp/step17-event.patch artifacts/step17-event-original.patch
       - name: Upload complexity evidence and candidate source
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
