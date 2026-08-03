@@ -36,24 +36,12 @@ async fn deterministic_local_demo_seed_or_smoke() {
     let http_addr = format!("127.0.0.1:{http_port}");
     let grpc_addr = format!("127.0.0.1:{grpc_port}");
     let http = HttpClient::new();
-    let mut process = spawn_crm_api(
-        &database_url,
-        &http_addr,
-        &grpc_addr,
-        mode == "seed",
-        None,
-    );
+    let mut process = spawn_crm_api(&database_url, &http_addr, &grpc_addr, mode == "seed", None);
     wait_until_ready(&http, &mut process, &http_addr, true).await;
     let mut gateway = connect_grpc(&grpc_addr).await;
 
     if mode == "seed" {
-        create_demo_party(
-            &mut gateway,
-            &party_id,
-            &display_name,
-            &idempotency_key,
-        )
-        .await;
+        create_demo_party(&mut gateway, &party_id, &display_name, &idempotency_key).await;
     }
 
     let party = get_demo_party(&mut gateway, &party_id, TENANT_A, true)
@@ -105,16 +93,9 @@ async fn create_demo_party(
             display_name: display_name.to_owned(),
         },
     );
-    mutate(
-        gateway,
-        &definition,
-        input,
-        TENANT_A,
-        idempotency_key,
-        true,
-    )
-    .await
-    .expect("create or idempotently replay local demo Party");
+    mutate(gateway, &definition, input, TENANT_A, idempotency_key, true)
+        .await
+        .expect("create or idempotently replay local demo Party");
 }
 
 async fn get_demo_party(
