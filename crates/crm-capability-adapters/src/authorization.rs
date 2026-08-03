@@ -120,9 +120,7 @@ impl LiveAuthorizationStore {
             .map_err(|_| AuthorizationStoreError::Poisoned)?;
         let grant_count = state.grants.len();
         state.grants.retain(|key, _| {
-            key.tenant_id != *tenant_id
-                || key.actor_id != *actor_id
-                || key.policy_id != policy_id
+            key.tenant_id != *tenant_id || key.actor_id != *actor_id || key.policy_id != policy_id
         });
         let removed = state.grants.len() != grant_count;
         if removed {
@@ -402,10 +400,7 @@ mod tests {
         grant_v2.policy_version = "policy-8".to_owned();
         store.upsert(grant_v1).unwrap();
         store.upsert(grant_v2).unwrap();
-        let authorizer = LiveCapabilityAuthorizer::new(
-            store,
-            Arc::new(FixedClock::new(100)),
-        );
+        let authorizer = LiveCapabilityAuthorizer::new(store, Arc::new(FixedClock::new(100)));
         let definition_v1 = definition();
         let mut definition_v2 = definition_v1.clone();
         definition_v2.capability_version = CapabilityVersion::try_new("2.0.0").unwrap();
