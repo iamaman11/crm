@@ -211,7 +211,9 @@ class ContractReleaseEvidenceTests(unittest.TestCase):
             root = Path(directory)
             evidence = write_evidence(root)
             rewritten = deepcopy(evidence)
-            rewritten["observations"][0]["recorded_on"] = "2026-08-02"
+            rewritten["observations"][0]["evidence_id"] = (
+                "example-create-1.0.0-never-released-rewritten"
+            )
             errors = validate_release_evidence(
                 rewritten,
                 policy(),
