@@ -293,11 +293,11 @@ No later product train may be represented as complete from backend/platform work
 
 ## 12. Binding repository continuation
 
-Repository Steps 1–16 are complete.
+Repository Steps 1–17 are complete.
 
 16. Repository Step 16 — reusable worker conformance — **complete through PR #270**;
-17. Repository Step 17 — contract lifecycle enforcement — **next, not started**;
-18. Repository Step 18 — deterministic local lifecycle;
+17. Repository Step 17 — contract lifecycle enforcement — **complete through PR #279**;
+18. Repository Step 18 — deterministic local lifecycle — **next, not started**;
 19. Repository Step 19 — Customer Privacy worker and full E2E;
 20. Repository Step 20 — frontend and operations evidence;
 21. Repository Step 21 — Phase 8A closure;

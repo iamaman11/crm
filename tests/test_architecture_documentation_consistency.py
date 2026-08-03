@@ -230,7 +230,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         for forbidden in (
             "Cargo.lock",
             "proto/**",
-            "database/migrations/**",
+            "database/**",
             ".github/workflows/**",
         ):
             self.assertIn(forbidden, self.packet["forbidden_paths"])
