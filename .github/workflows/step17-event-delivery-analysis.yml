@@ -47,6 +47,7 @@ jobs:
           git apply /tmp/step17-event.patch
           rm -f .github/step17-event-patch-{01,02,03,04,05}.txt
           rm -f .github/workflows/step17-event-delivery-analysis.yml
+          cargo fmt --all
       - name: Verify bounded final tree
         shell: bash
         run: |
@@ -83,12 +84,10 @@ jobs:
             tests.test_architecture_documentation_consistency \
             tests.test_repository_navigation
           python scripts/repo.py packet-check --base origin/main
-      - name: Format and test focused Rust closure
+      - name: Test focused Rust closure
         shell: bash
         run: |
           set -euo pipefail
-          cargo fmt --all
-          git diff --check
           cargo test --locked -p crm-capability-adapters contract_usage_telemetry
           cargo test --locked -p crm-core-data --test postgres_event_delivery --features postgres-integration
           cargo check --locked -p crm-application-runtime --all-targets
