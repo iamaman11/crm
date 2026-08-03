@@ -52,7 +52,14 @@ class RepositoryNavigationTests(unittest.TestCase):
         )
         self.assertEqual(
             packet["required_checks"],
-            ["Affected Scope CI", "Contract CI", "Governance CI"],
+            [
+                "Affected Scope CI",
+                "Contract CI",
+                "Governance CI",
+                "Operations CI",
+                "Phase8A Workflow Guard",
+                "Rust Generated Sync",
+            ],
         )
         self.assertIn(
             "bind every observation to a safe evidence/contract-lifecycle JSON artifact and its exact SHA-256 digest",
@@ -112,6 +119,9 @@ class RepositoryNavigationTests(unittest.TestCase):
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
             "Contract CI": ".github/workflows/contracts.yml",
             "Governance CI": ".github/workflows/governance.yml",
+            "Operations CI": ".github/workflows/operations.yml",
+            "Phase8A Workflow Guard": ".github/workflows/phase8a-workflow-guard.yml",
+            "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
         }
         affected = {
             "head_sha": "b" * 40,
