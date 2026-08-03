@@ -1,0 +1,35 @@
+name: Step 17 Event Delivery Analysis
+
+on:
+  push:
+    branches:
+      - step17-event-delivery-telemetry
+    paths:
+      - ".github/workflows/step17-event-delivery-analysis.yml"
+
+concurrency:
+  group: step17-event-delivery-analysis-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: step17-event-delivery-telemetry
+          fetch-depth: 0
+      - name: Package repository source
+        run: |
+          git archive --format=zip --output=crm-step17-source.zip HEAD
+      - name: Upload repository source
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: crm-step17-source
+          path: crm-step17-source.zip
+          if-no-files-found: error
+          retention-days: 1
