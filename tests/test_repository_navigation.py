@@ -34,7 +34,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             packet["baseline"],
             {"ref": "main", "sha": "ea3d3894d05e3a8d814aff69824b593843763d03"},
         )
-        self.assertEqual(packet["tracking_issues"], [126, 194, 275])
+        self.assertEqual(packet["tracking_issues"], [126, 194])
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
@@ -44,7 +44,6 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "docs/MODULE_CATALOG.md",
                 "docs/PHASE8_DELIVERY_PLAN.md",
                 "docs/PROJECT_STATUS.md",
-                "docs/generated/REPOSITORY_MAP.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",

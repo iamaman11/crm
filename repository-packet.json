@@ -19,7 +19,6 @@
     "docs/MODULE_CATALOG.md",
     "docs/PHASE8_DELIVERY_PLAN.md",
     "docs/PROJECT_STATUS.md",
-    "docs/generated/REPOSITORY_MAP.md",
     "repository-packet.json",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
@@ -57,7 +56,7 @@
     "Rust CI"
   ],
   "acceptance": [
-    "the branch is based exactly on main commit ea3d3894d05e3a8d814aff69824b593843763d03 and contains only the ten declared evidence-sync files",
+    "the branch is based exactly on main commit ea3d3894d05e3a8d814aff69824b593843763d03 and contains only the nine declared evidence-sync files",
     "all five normative documents state Repository Steps 1-17 are complete and Step 18 is the sole next implementation step",
     "all five normative documents contain exact PR #275, #278 and #279 source and merge evidence",
     "no document calls Step 17 next or not started",
