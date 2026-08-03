@@ -224,11 +224,17 @@ python scripts/repo.py doctor
 python scripts/repo.py doctor --profile bootstrap
 python scripts/repo.py bootstrap --dry-run
 python scripts/repo.py bootstrap
+python scripts/repo.py dev-up --dry-run
+python scripts/repo.py dev-up
+python scripts/repo.py dev-reset --dry-run
+python scripts/repo.py dev-reset
 ```
 
 `doctor` reads tool requirements from committed repository configuration and changes nothing. The bootstrap profile validates dependency-preparation prerequisites without requiring Docker; the full profile additionally checks Docker CLI, Compose v2 and daemon availability. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, uses locked Cargo and frozen pnpm dependency resolution, and verifies generated navigation. It does not silently install or globally switch system toolchains.
 
-Repository Step 18 remains in progress. `dev-up`, `dev-reset`, `seed-demo` and `smoke` remain later bounded Step 18 work and must not be represented as implemented before permanent acceptance.
+`dev-up` creates or reuses the exact checkout-owned PostgreSQL dependency plane from pinned repository migrations and fixtures. It validates ownership, image, port, volume and schema digest before reuse. `dev-reset` first validates immutable ownership labels, removes the container before the volume, and recreates the current clean database; dry-run performs inspection only. Neither command starts product processes or seeds a demo scenario.
+
+Repository Step 18 remains in progress. `seed-demo` and `smoke` remain later bounded Step 18 work and must not be represented as implemented before permanent acceptance.
 
 ## 15. Multi-agent exact-SHA workflow
 
