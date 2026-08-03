@@ -211,7 +211,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "docs/IMPLEMENTATION_ROADMAP.md",
                 "docs/MODULE_CATALOG.md",
                 "docs/PHASE8_DELIVERY_PLAN.md",
-                ".github/workflows/**",
+                "docs/PROJECT_STATUS.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
@@ -231,7 +231,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Cargo.lock",
             "proto/**",
             "database/migrations/**",
-            "docs/PROJECT_STATUS.md",
+            ".github/workflows/**",
         ):
             self.assertIn(forbidden, self.packet["forbidden_paths"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
