@@ -1,0 +1,15 @@
+{
+  "schema_version": "crm.contract-release-evidence/v1",
+  "observations": [
+    {
+      "evidence_id": "activities-task-create-1.0.0-never-released-2026-08-03",
+      "kind": "capability",
+      "id": "activities.task.create",
+      "version": "1.0.0",
+      "classification": "never_externally_released",
+      "recorded_on": "2026-08-03",
+      "artifact": "evidence/contract-lifecycle/activities-task-create-1.0.0-never-released.json",
+      "artifact_sha256": "sha256:ff853922b080d1d2dd303d711d169acbc26d86a76eff4cb28e39c0b84b4c56f1"
+    }
+  ]
+}
