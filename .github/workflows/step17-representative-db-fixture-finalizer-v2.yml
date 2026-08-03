@@ -1,0 +1,144 @@
+name: Step 17 Representative DB Fixture Finalizer V2
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/step17-representative-db-fixture-finalizer-v2.yml"
+
+concurrency:
+  group: step17-representative-db-fixture-finalizer-v2-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-publish:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_event_runtime_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_event_runtime_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5434
+      PGDATABASE: crm_event_runtime_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5434/crm_event_runtime_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5434/crm_event_runtime_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: step17-representative-db-fixture-finalizer
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # exact Rust 1.97.1 policy
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+      - name: Install Buf
+        uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1.4.0
+        with:
+          version: 1.50.1
+          setup_only: true
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --requirement requirements-dev.txt
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Extract verified finalizer scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from ruamel.yaml import YAML
+
+          workflow_path = Path(".github/workflows/step17-representative-db-fixture-finalizer.yml")
+          workflow = YAML(typ="safe").load(workflow_path.read_text(encoding="utf-8"))
+          wanted = {
+              "Reproduce exact 21-file candidate": "reproduce",
+              "Validate focused lifecycle and navigation closure": "focused",
+              "Validate full Rust and architecture closure": "closure",
+              "Apply Event Runtime database": "database",
+              "Validate production event delivery and projections": "event",
+              "Publish clean candidate": "publish",
+          }
+          found = {}
+          for step in workflow["jobs"]["validate-and-publish"]["steps"]:
+              name = step.get("name")
+              if name not in wanted:
+                  continue
+              script = step["run"]
+              if name == "Reproduce exact 21-file candidate":
+                  start_marker = "fixture_test = '''"
+                  end_marker = "\nif architecture.count(marker) != 1:"
+                  start = script.find(start_marker)
+                  end = script.find(end_marker, start)
+                  if start < 0 or end < 0:
+                      raise SystemExit(
+                          f"fixture-test generation block not found: start={start}, end={end}"
+                      )
+                  replacement = '''fixture_test = chr(10).join([
+              "    def test_representative_postgres_fixture_preserves_both_exact_publications(self) -> None:",
+              "        fixture = read(\"database/tests/0003_sales_activities_adapters.sql\")",
+              "        self.assertIn(\"'activities.task.create', '1.0.0', 'crm.activities', '0.1.0'\", fixture)",
+              "        self.assertIn(\"'activities.task.create', '1.1.0', 'crm.activities', '0.1.1'\", fixture)",
+              "        self.assertEqual(fixture.count(\"decode(repeat('31', 32), 'hex')\"), 2)",
+              "        self.assertEqual(fixture.count(\"decode(repeat('32', 32), 'hex')\"), 2)",
+              "        self.assertIn(\"expected immutable activities.task.create publications\", fixture)",
+              "",
+              "",
+          ])'''
+                  script = script[:start] + replacement + script[end:]
+              output = Path(f"/tmp/step17-db-{wanted[name]}.sh")
+              output.write_text(script, encoding="utf-8")
+              found[name] = True
+          missing = sorted(set(wanted) - set(found))
+          if missing:
+              raise SystemExit(f"missing finalizer scripts: {missing}")
+          PY
+      - name: Reproduce exact candidate
+        shell: bash
+        run: bash /tmp/step17-db-reproduce.sh
+      - name: Focused lifecycle closure
+        shell: bash
+        run: bash /tmp/step17-db-focused.sh
+      - name: Full Rust and architecture closure
+        shell: bash
+        run: bash /tmp/step17-db-closure.sh
+      - name: Apply Event Runtime database
+        shell: bash
+        run: bash /tmp/step17-db-database.sh
+      - name: Validate Event Runtime PostgreSQL paths
+        shell: bash
+        run: bash /tmp/step17-db-event.sh
+      - name: Publish clean candidate
+        shell: bash
+        run: bash /tmp/step17-db-publish.sh
+      - name: Upload proof
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: step17-representative-db-fixture-proof-v2
+          path: /tmp/step17-db-fixture-proof
+          if-no-files-found: error
+          retention-days: 14
