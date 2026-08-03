@@ -19,6 +19,9 @@ struct AuthorizationKey {
     tenant_id: TenantId,
     actor_id: ActorId,
     policy_id: String,
+    capability_id: CapabilityId,
+    capability_version: CapabilityVersion,
+    owner_module_id: ModuleId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +42,9 @@ impl AuthorizationGrant {
             tenant_id: self.tenant_id.clone(),
             actor_id: self.actor_id.clone(),
             policy_id: self.policy_id.clone(),
+            capability_id: self.capability_id.clone(),
+            capability_version: self.capability_version.clone(),
+            owner_module_id: self.owner_module_id.clone(),
         }
     }
 
@@ -112,14 +118,13 @@ impl LiveAuthorizationStore {
             .state
             .write()
             .map_err(|_| AuthorizationStoreError::Poisoned)?;
-        let removed = state
-            .grants
-            .remove(&AuthorizationKey {
-                tenant_id: tenant_id.clone(),
-                actor_id: actor_id.clone(),
-                policy_id: policy_id.to_owned(),
-            })
-            .is_some();
+        let grant_count = state.grants.len();
+        state.grants.retain(|key, _| {
+            key.tenant_id != *tenant_id
+                || key.actor_id != *actor_id
+                || key.policy_id != policy_id
+        });
+        let removed = state.grants.len() != grant_count;
         if removed {
             state.revision = state.revision.saturating_add(1);
         }
@@ -209,30 +214,35 @@ impl LiveCapabilityAuthorizer {
             tenant_id: tenant_id.clone(),
             actor_id: actor_id.clone(),
             policy_id: definition.authorization_policy_id.clone(),
+            capability_id: definition.capability_id.clone(),
+            capability_version: definition.capability_version.clone(),
+            owner_module_id: definition.owner_module_id.clone(),
         };
         let decision_id = format!(
             "authorization:{}:{}:{}:{}",
             state.revision, key.tenant_id, key.actor_id, key.policy_id
         );
         let Some(grant) = state.grants.get(&key) else {
+            let policy_grant = state.grants.iter().find_map(|(candidate, grant)| {
+                (candidate.tenant_id == key.tenant_id
+                    && candidate.actor_id == key.actor_id
+                    && candidate.policy_id == key.policy_id)
+                    .then_some(grant)
+            });
             return Ok(AuthorizationDecision {
                 allowed: false,
                 decision_id,
-                reason_code: "grant_missing".to_owned(),
-                policy_version: "none".to_owned(),
+                reason_code: if policy_grant.is_some() {
+                    "grant_binding_mismatch"
+                } else {
+                    "grant_missing"
+                }
+                .to_owned(),
+                policy_version: policy_grant
+                    .map(|grant| grant.policy_version.clone())
+                    .unwrap_or_else(|| "none".to_owned()),
             });
         };
-        if grant.capability_id != definition.capability_id
-            || grant.capability_version != definition.capability_version
-            || grant.owner_module_id != definition.owner_module_id
-        {
-            return Ok(AuthorizationDecision {
-                allowed: false,
-                decision_id,
-                reason_code: "grant_binding_mismatch".to_owned(),
-                policy_version: grant.policy_version.clone(),
-            });
-        }
         if grant
             .expires_at_unix_nanos
             .is_some_and(|expires_at| expires_at <= self.clock.now_unix_nanos())
@@ -381,6 +391,38 @@ mod tests {
             .unwrap();
         assert!(!denied.allowed);
         assert_eq!(denied.reason_code, "grant_missing");
+    }
+
+    #[tokio::test]
+    async fn exact_version_grants_coexist_for_the_same_policy() {
+        let store = LiveAuthorizationStore::default();
+        let grant_v1 = grant();
+        let mut grant_v2 = grant_v1.clone();
+        grant_v2.capability_version = CapabilityVersion::try_new("2.0.0").unwrap();
+        grant_v2.policy_version = "policy-8".to_owned();
+        store.upsert(grant_v1).unwrap();
+        store.upsert(grant_v2).unwrap();
+        let authorizer = LiveCapabilityAuthorizer::new(
+            store,
+            Arc::new(FixedClock::new(100)),
+        );
+        let definition_v1 = definition();
+        let mut definition_v2 = definition_v1.clone();
+        definition_v2.capability_version = CapabilityVersion::try_new("2.0.0").unwrap();
+        let request = request();
+
+        assert!(
+            CapabilityAuthorizer::authorize(&authorizer, &definition_v1, &request)
+                .await
+                .unwrap()
+                .allowed
+        );
+        assert!(
+            CapabilityAuthorizer::authorize(&authorizer, &definition_v2, &request)
+                .await
+                .unwrap()
+                .allowed
+        );
     }
 
     #[tokio::test]
