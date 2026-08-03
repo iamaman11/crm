@@ -182,74 +182,51 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_step_17_representative_capability_deprecation_packet_is_exact(self) -> None:
+    def test_active_step_17_retirement_observation_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-17-representative-capability-deprecation",
+            "repository-step-17-retirement-observation-evidence",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "861b1d5907c43f5e89dc10d5a7c81c1c98aa771b"},
+            {"ref": "main", "sha": "60d5974349a04c462475aadd4af0a37bada9713b"},
         )
         self.assertEqual(
             set(self.packet["allowed_paths"]),
-{
-                "contracts/contract-lifecycle-policy.json",
-                "contracts/contract-lifecycle.json",
-                "contracts/module-contract-bindings.json",
-                "crates/crm-activities-capability-adapter/src/planner.rs",
-                "crates/crm-application-runtime/src/generated_contract_telemetry.rs",
-                "crates/crm-capability-adapters/src/authorization.rs",
-                "crates/crm-sales-activities-capability-composition/src/lib.rs",
-                "crates/crm-sales-activities-capability-composition/tests/catalog_contract.rs",
-                "crates/crm-sales-activities-capability-composition/tests/postgres_projections.rs",
-                "crates/crm-sales-activities-link-contract-adapter/src/lib.rs",
-                "database/tests/0003_sales_activities_adapters.sql",
+            {
+                ".github/workflows/contracts.yml",
+                "affected-scope-policy.json",
+                "contracts/contract-retirement-evidence.json",
                 "docs/ACTIVE_PACKET.md",
-                "docs/contract-migrations/activities-task-create-1.0.0-to-1.1.0.md",
-                "docs/generated/REPOSITORY_MAP.md",
-                "modules/crm-activities/module.yaml",
-                "modules/crm-sales-activities-link/module.yaml",
-                "modules/crm-sales-activities-link/src/lib.rs",
                 "repository-packet.json",
-                "scripts/generate_contract_telemetry_catalog.py",
+                "scripts/contract_retirement_evidence.py",
+                "scripts/generate_contract_lifecycle.py",
                 "tests/test_architecture_documentation_consistency.py",
-                "tests/test_contract_lifecycle.py",
-                "tests/test_contract_telemetry_catalog.py",
+                "tests/test_contract_retirement_evidence.py",
                 "tests/test_repository_navigation.py",
-            }
+            },
         )
         self.assertEqual(
             self.packet["required_checks"],
-            [
-                "Affected Scope CI",
-                "Application Runtime CI",
-                "Contract CI",
-                "Complexity Baseline CI",
-                "Database CI",
-                "Event Runtime CI",
-                "Governance CI",
-                "Projection Runtime CI",
-                "Rust Generated Sync",
-                "Rust CI",
-            ],
+            ["Affected Scope CI", "Contract CI", "Governance CI"],
         )
         for forbidden in (
             "Cargo.lock",
             "proto/**",
-            "database/migrations/**",
+            "evidence/**",
+            "contracts/contract-lifecycle-policy.json",
         ):
             self.assertIn(forbidden, self.packet["forbidden_paths"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "publish activities.task.create at exact versions 1.0.0 and 1.1.0 through the same governed protobuf binding",
+            "bind every observation to a safe evidence/contract-lifecycle JSON artifact and its exact SHA-256 digest",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "remove or retire activities.task.create@1.0.0",
+            "set telemetry.zero_since for activities.task.create@1.0.0",
             self.packet["non_goals"],
         )
 
