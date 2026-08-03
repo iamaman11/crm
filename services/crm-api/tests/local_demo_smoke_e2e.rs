@@ -4,12 +4,15 @@ use crm_application_runtime::gateway_v1::application_gateway_service_client::App
 use crm_proto_contracts::crm::{customer::v1 as customer, parties::v1 as parties};
 use prost::Message;
 use reqwest::Client as HttpClient;
+use sqlx::{Executor, PgPool};
 use support::customer_enrichment_process::*;
 use tonic::Code;
 
 const DATASET_VERSION: &str = "crm.local-demo.dataset/v1";
 const PARTY_CREATE: &str = "parties.party.create";
 const PARTY_GET: &str = "parties.party.get";
+const PARTY_ADAPTER_FIXTURE: &str =
+    include_str!("../../../database/tests/0005_party_adapter.sql");
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn deterministic_local_demo_seed_or_smoke() {
@@ -23,13 +26,15 @@ async fn deterministic_local_demo_seed_or_smoke() {
         DATASET_VERSION
     );
     let database_url = std::env::var("DATABASE_URL").expect("local demo DATABASE_URL");
-    let _admin_database_url =
+    let admin_database_url =
         std::env::var("ADMIN_DATABASE_URL").expect("local demo ADMIN_DATABASE_URL");
     let party_id = std::env::var("CRM_LOCAL_DEMO_PARTY_ID").expect("local demo Party ID");
     let display_name =
         std::env::var("CRM_LOCAL_DEMO_PARTY_DISPLAY_NAME").expect("local demo Party name");
     let idempotency_key =
         std::env::var("CRM_LOCAL_DEMO_IDEMPOTENCY_KEY").expect("local demo idempotency key");
+
+    ensure_party_adapter(&admin_database_url).await;
 
     let http_port = free_port();
     let grpc_port = free_port();
@@ -74,6 +79,17 @@ async fn deterministic_local_demo_seed_or_smoke() {
     }
 
     stop_process(&mut process).await;
+}
+
+async fn ensure_party_adapter(admin_database_url: &str) {
+    let admin = PgPool::connect(admin_database_url)
+        .await
+        .expect("connect local demo admin pool");
+    admin
+        .execute(PARTY_ADAPTER_FIXTURE)
+        .await
+        .expect("apply accepted Party production-adapter fixture");
+    admin.close().await;
 }
 
 async fn create_demo_party(
