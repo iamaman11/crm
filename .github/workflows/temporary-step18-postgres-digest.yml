@@ -1,0 +1,47 @@
+name: Temporary Step 18 PostgreSQL Digest Verification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-update:
+    if: github.head_ref == 'repository-step-18-dev-up-reset' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - name: Replace and verify official immutable image digest
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/local_dev.py')
+          content = path.read_text(encoding='utf-8')
+          old = 'sha256:dc17045ccfd343b49600570ea734b9c4991cf1c3f3302e67df51e3b402dd55c4'
+          new = 'sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193'
+          if content.count(old) != 1:
+              raise SystemExit(f'expected old digest exactly once, found {content.count(old)}')
+          path.write_text(content.replace(old, new), encoding='utf-8')
+          PY
+          docker pull postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+          python -m unittest tests.test_local_dev
+      - name: Commit verified digest
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/local_dev.py
+          git diff --cached --quiet && { echo "No digest update produced"; exit 1; }
+          git commit -m "Refresh pinned PostgreSQL 17 Alpine digest"
+          git push origin "HEAD:${HEAD_BRANCH}"
