@@ -35,6 +35,33 @@ jobs:
           end = workflow.index("\n          PY\n", start)
           script = textwrap.dedent(workflow[start:end])
           exec(compile(script, 'temporary-step18-evidence-sync', 'exec'))
+
+          def normalize_method(path: str, start_marker: str, end_marker: str) -> None:
+              file_path = Path(path)
+              content = file_path.read_text(encoding='utf-8')
+              method_start = content.index(start_marker)
+              method_end = content.index(end_marker, method_start)
+              block = content[method_start:method_end]
+              lines = block.splitlines(keepends=True)
+              fixed = lines[0] + ''.join(
+                  line[6:] if line.startswith('      ') else line
+                  for line in lines[1:]
+              )
+              file_path.write_text(
+                  content[:method_start] + fixed + content[method_end:],
+                  encoding='utf-8',
+              )
+
+          normalize_method(
+              'tests/test_architecture_documentation_consistency.py',
+              '    def test_active_step_18_doctor_bootstrap_evidence_sync_packet_is_exact',
+              '    def test_repository_map_and_product_inventory_remain_exact',
+          )
+          normalize_method(
+              'tests/test_repository_navigation.py',
+              '    def test_active_packet_declaration_is_exact',
+              '    def test_generated_navigation_is_deterministic_and_current',
+          )
           PY
           python scripts/generate_repository_navigation.py --write
           python -m unittest \
