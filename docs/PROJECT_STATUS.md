@@ -1,6 +1,6 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-08-03
+Status date: 2026-08-04
 
 This document is the concise authoritative current-state snapshot. Product dependencies remain normative in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`; the single repository execution order remains normative in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4; module readiness remains normative in `MODULE_CATALOG.md`.
 
@@ -20,7 +20,7 @@ This document is the concise authoritative current-state snapshot. Product depen
 
 Phase 8A.11 / issue #126 is in progress.
 
-Repository Steps 1–17 are complete. Repository Step 18 is in progress through the accepted doctor/bootstrap slice in PR #281. Architecture Stages A, B, D, E and G are complete. Stages C, F, H and I remain incomplete or in progress according to the architecture plan.
+Repository Steps 1–17 are complete. Repository Step 18 is in progress through accepted PRs #281 and #283; doctor/bootstrap/dev-up/dev-reset are accepted and seed-demo/smoke are next. Architecture Stages A, B, D, E and G are complete. Stages C, F, H and I remain incomplete or in progress according to the architecture plan.
 
 Repository Step 14 and Stage G are accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
 
@@ -58,18 +58,21 @@ Repository Step 17 is complete through three bounded accepted slices:
 - PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8 — made production zero-usage retirement evidence SHA-256-bound, complete, append-only and fail closed;
 - PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 — proved the coordinate was never externally released through live empty GitHub Releases, tags and deployments, non-publishable packages and no external consumer record, then retired `activities.task.create@1.0.0` while preserving its historical tombstone and keeping `telemetry.zero_since` null.
 
-The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is in progress through accepted PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7 applicable permanent workflows on one unchanged exact head. The accepted first slice delivers deterministic repository-pinned `doctor` and locked isolated `bootstrap`; the next permitted bounded implementation packet is `dev-up` and `dev-reset`, while `seed-demo` and `smoke` remain later Step 18 slices.
+The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is in progress through accepted PRs #281 and #283: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7 applicable permanent workflows, each on one unchanged exact head. The accepted slices deliver deterministic repository-pinned `doctor`, locked isolated `bootstrap`, and checkout-owned PostgreSQL `dev-up` / `dev-reset` with immutable image pinning, schema-digest reuse, fail-closed ownership checks and permanent real-Docker create/reuse/reset acceptance. The next permitted bounded implementation packet is `seed-demo` and `smoke`; Repository Step 19 remains blocked.
 
 
-## Repository Step 18 accepted doctor/bootstrap slice
+## Repository Step 18 accepted lifecycle slices
 
-Repository Step 18 is in progress through accepted PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7 applicable permanent workflows on one unchanged exact head. The accepted first slice delivers deterministic repository-pinned `doctor` and locked isolated `bootstrap`; the next permitted bounded implementation packet is `dev-up` and `dev-reset`, while `seed-demo` and `smoke` remain later Step 18 slices.
+Repository Step 18 is in progress through accepted PRs #281 and #283: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7 applicable permanent workflows, each on one unchanged exact head. The accepted slices deliver deterministic repository-pinned `doctor`, locked isolated `bootstrap`, and checkout-owned PostgreSQL `dev-up` / `dev-reset` with immutable image pinning, schema-digest reuse, fail-closed ownership checks and permanent real-Docker create/reuse/reset acceptance. The next permitted bounded implementation packet is `seed-demo` and `smoke`; Repository Step 19 remains blocked.
 
 Accepted behavior:
 
 - `repo.py doctor` provides deterministic human and JSON output, repository-pinned Rust/Node/pnpm validation, Python venv validation and actionable fail-closed remediation;
 - the bootstrap profile excludes Docker, while the full profile additionally validates Docker CLI, Compose v2 and daemon reachability;
 - `repo.py bootstrap` creates an isolated `.venv`, installs committed Python constraints, uses Cargo `--locked` and pnpm `--frozen-lockfile`, and verifies locked metadata plus generated navigation;
+- `repo.py dev-up` creates or reuses an immutable PostgreSQL 17 dependency plane with checkout-scoped ownership labels, loopback-only publishing, ordered migrations/fixtures and a deterministic schema digest;
+- `repo.py dev-reset` verifies ownership before removing only the owned container and volume, then recreates clean state;
+- permanent real-Docker acceptance proves create, marker persistence, unchanged reuse, destructive reset, pre-reset probe removal and CRM schema restoration;
 - dry-run executes no command and reports the exact ordered argument-array plan;
 - no runtime, owner, route, worker, contract, schema, migration, dependency, lockfile or product behavior changed.
 
@@ -109,7 +112,7 @@ The earlier 113-package and 841-edge measurements remain immutable historical St
 | 15 | PRs #263–#267 / exact sources and merges listed above / final closure 19 of 19 | Party tombstone, Search/Customer 360 convergence, immutable-history rebuild, automatic v2 rollover and real `crm-api` no-orphan proof |
 | 16 | PR #269 / source `74b1d7b0f8764fcd90839b7aab25f8f82fe5e552` / merge `6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd` / 20 of 20; PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17 | Reusable worker conformance, representative real-worker adoption, retry/restart recovery and exactly-once contention convergence |
 | 17 | PR #275 / source `1c6366b557e255a14a677758fd87f7fe63184a89` / merge `60d5974349a04c462475aadd4af0a37bada9713b` / 23 of 23; PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8; PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 | Wire-compatible migration, exact-version authorization overlap, immutable retirement evidence and proven never-externally-released retirement |
-| 18 (doctor/bootstrap slice) | PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7 | Deterministic repository-pinned doctor and locked isolated bootstrap; Step 18 remains in progress with dev-up/dev-reset next |
+| 18 (lifecycle slices) | PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7 | Deterministic doctor/bootstrap and checkout-owned PostgreSQL dev-up/dev-reset; Step 18 remains in progress with seed-demo/smoke next |
 
 ## Customer Privacy product boundary
 
@@ -152,7 +155,7 @@ Customer Privacy and Phase 8A remain incomplete. Current product-complete expert
 - **Stage E — complete:** affected-scope selection covers Rust, contracts, Protobuf/API, migrations, PostgreSQL, process, product, frontend and operations planes; Step 22 must review value, duplication and cost of every permanent gate.
 - **Stage F — in progress:** mutation/query and worker conformance are accepted; contract lifecycle remains.
 - **Stage G — complete:** PR #259 proves the first measured behavior-neutral transitional consolidation.
-- **Stage H — in progress:** explanation, packet checking and generated navigation exist; deterministic local lifecycle commands remain.
+- **Stage H — in progress:** explanation, packet checking, generated navigation, doctor, bootstrap, dev-up and dev-reset are accepted; deterministic seed-demo and smoke remain.
 - **Stage I — incomplete:** frontend and operations parity remain future work.
 
 Architecture 10/10 is **not declared**. Repository Step 22 is a measurement and decision checkpoint, and final closure remains reserved for Step 25 after every criterion and two contrasting expert-domain waves are mechanically proven.
@@ -169,16 +172,15 @@ Step 22 cannot close with an unresolved runtime dependency classification or unr
 
 ## Next permitted repository packet
 
-Repository Step 18 is the next permitted implementation packet and is **not started**. Its bounded scope is deterministic local lifecycle commands: `doctor`, `bootstrap`, `dev-up`, `dev-reset`, `seed-demo` and `smoke` on a clean environment.
+The next permitted implementation packet is the remaining bounded Repository Step 18 slice: deterministic `seed-demo` and end-to-end `smoke` on a clean environment. Doctor, bootstrap, dev-up and dev-reset are already accepted through PRs #281 and #283.
 
 No Step 19 or later implementation may start while Step 18 remains unfinished.
 
 ## Repository continuation order
 
 ```text
-1–16. accepted and complete
--> 17. contract compatibility, deprecation, consumer migration and retirement enforcement — next, not started
--> 18. deterministic local lifecycle commands
+1–17. accepted and complete
+-> 18. deterministic local lifecycle commands — in progress; doctor/bootstrap/dev-up/dev-reset accepted, seed-demo/smoke next
 -> 19. Customer Privacy worker and complete process/end-to-end acceptance
 -> 20. Phase 8A frontend and operations evidence
 -> 21. Phase 8A closure

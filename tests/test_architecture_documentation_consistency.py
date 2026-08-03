@@ -108,6 +108,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "PR #279",
             "0dce0895edec56508df1b4fc880d09ab27fc00df",
             "ea3d3894d05e3a8d814aff69824b593843763d03",
+            "PR #283",
+            "5f4480fafd37cc8c89df60f3688e756d7f881af8",
+            "21e2f73b57d2c35c16eccc15ee3e075e818f488a",
+            "7 of 7",
         )
         for document in self.normative_documents:
             lowered = document.lower()
@@ -117,13 +121,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn("step 18", lowered)
             self.assertNotRegex(lowered, r"step 17[^\n.;]{0,80}not started")
         self.assertIn("Repository Steps 1–17 are complete", self.status)
-        self.assertIn("Repository Step 18 is in progress through accepted PR #281", self.status)
+        self.assertIn("Repository Step 18 is in progress through accepted PRs #281 and #283", self.status)
         self.assertIn(
             "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement — **complete through PR #279**",
             self.plan,
         )
         self.assertIn("18. deterministic local lifecycle commands", self.plan)
-        self.assertIn("**in progress through PR #281; doctor/bootstrap accepted, dev-up/dev-reset next**", self.plan)
+        self.assertIn("**in progress through PRs #281 and #283; doctor/bootstrap/dev-up/dev-reset accepted, seed-demo/smoke next**", self.plan)
 
     def test_product_readiness_is_not_overstated(self) -> None:
         for document in self.normative_documents:
@@ -193,30 +197,27 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_step_18_dev_up_reset_packet_is_exact(self) -> None:
+    def test_active_step_18_dev_up_reset_evidence_sync_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-18-dev-up-reset")
+        self.assertEqual(self.packet["packet_id"], "repository-step-18-dev-up-reset-evidence-sync")
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "dbb3e08097ff9439161ce94ff91b8912c8a0b249"},
+            {"ref": "main", "sha": "21e2f73b57d2c35c16eccc15ee3e075e818f488a"},
         )
         self.assertEqual(self.packet["tracking_issues"], [194])
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                ".github/workflows/governance.yml",
-                "AGENTS.md",
-                "README.md",
-                "affected-scope-policy.json",
                 "docs/ACTIVE_PACKET.md",
-                "docs/DEVELOPMENT_WORKFLOW.md",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/MODULE_CATALOG.md",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/PROJECT_STATUS.md",
+                "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
                 "repository-packet.json",
-                "scripts/local_dev.py",
-                "scripts/repo.py",
                 "tests/test_architecture_documentation_consistency.py",
-                "tests/test_local_dev.py",
-                "tests/test_local_lifecycle_docker.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -235,7 +236,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "add repo.py dev-reset that refuses foreign resources, removes only exactly owned container and volume state, and recreates a clean ready dependency plane",
+            "record exact PR #283 source, squash merge and 7-of-7 workflow evidence in all five normative documents",
             self.packet["deliverables"],
         )
         self.assertIn("implement seed-demo or smoke", self.packet["non_goals"])
