@@ -1,4 +1,4 @@
-name: Step 17 Event Telemetry Finalizer V6
+name: Step 17 Event Telemetry Finalizer V7
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
       - ".github/workflows/step17-event-finalizer-v5.yml"
 
 concurrency:
-  group: step17-event-telemetry-finalizer-v6-${{ github.sha }}
+  group: step17-event-telemetry-finalizer-v7-${{ github.sha }}
   cancel-in-progress: false
 
 permissions:
@@ -80,6 +80,8 @@ jobs:
           replacements = {
               "let store = (store, event_delivery_observer).into();":
                   "let store: PostgresDataStore = (store, event_delivery_observer).into();",
+              '"worker_error": state.components.last_worker_error(),':
+                  '"worker_error": state.components.last_worker_error.lock().ok().and_then(|value| value.clone()),',
               '''    pub fn last_worker_error(&self) -> Option<String> {
                   self.last_worker_error.lock().ok()?.clone()
               }
