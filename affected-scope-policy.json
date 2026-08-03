@@ -117,8 +117,8 @@
       "id": "operations",
       "owner": "platform-operations",
       "path_patterns": [
-        ".github/workflows/**",
         ".github/pull_request_template.md",
+        ".github/workflows/**",
         "AGENTS.md",
         "docs/ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md",
         "docs/CI_TELEMETRY_BASELINE.md",
@@ -130,8 +130,10 @@
         "scripts/check_native_module_composition.py",
         "scripts/check_step13_exit_evidence.py",
         "scripts/check_step13_suppression_baseline.py",
+        "scripts/local_dev.py",
         "scripts/local_lifecycle.py",
         "scripts/prepare_isolated_process_database.sh",
+        "scripts/repo.py",
         "step13-complexity-policy.json",
         "step13-suppression-baseline.json"
       ],

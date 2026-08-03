@@ -193,6 +193,10 @@ python scripts/repo.py doctor
 python scripts/repo.py doctor --profile bootstrap
 python scripts/repo.py bootstrap --dry-run
 python scripts/repo.py bootstrap
+python scripts/repo.py dev-up --dry-run
+python scripts/repo.py dev-up
+python scripts/repo.py dev-reset --dry-run
+python scripts/repo.py dev-reset
 python scripts/repo.py conformance
 python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
@@ -202,7 +206,9 @@ python scripts/repo.py quality
 
 `doctor` reads repository-pinned tool requirements and never changes the machine. The bootstrap profile excludes Docker so dependency preparation can be diagnosed independently; the full profile checks Docker CLI, Compose v2 and daemon availability. `bootstrap` uses an isolated `.venv`, committed constraints and lockfiles, and does not silently install or globally switch system toolchains.
 
-Repository Step 18 remains in progress. `dev-up`, `dev-reset`, `seed-demo` and `smoke` are not yet implemented or accepted.
+`dev-up` and `dev-reset` manage only the checkout-scoped PostgreSQL dependency plane. They use immutable image and schema-input digests, loopback-only publishing and ownership labels. Never manually relabel a lifecycle resource; when exact configuration or schema inputs change, inspect `dev-reset --dry-run` and reset the owned state.
+
+Repository Step 18 remains in progress. `seed-demo` and `smoke` are not yet implemented or accepted; backend/frontend process startup remains outside this packet.
 
 ## 10. Required checks before completion
 

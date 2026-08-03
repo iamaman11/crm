@@ -87,6 +87,10 @@ python scripts/repo.py doctor
 python scripts/repo.py doctor --profile bootstrap
 python scripts/repo.py bootstrap --dry-run
 python scripts/repo.py bootstrap
+python scripts/repo.py dev-up --dry-run
+python scripts/repo.py dev-up
+python scripts/repo.py dev-reset --dry-run
+python scripts/repo.py dev-reset
 python scripts/repo.py architecture
 python scripts/repo.py manifests
 python scripts/repo.py contracts
@@ -105,7 +109,9 @@ python scripts/repo.py quality
 
 `doctor` inspects the repository-pinned Python, Rust, Node and pnpm prerequisites; its full profile also checks Docker CLI, Compose v2 and daemon availability. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, fetches Cargo dependencies with `--locked`, installs pnpm dependencies with `--frozen-lockfile`, and verifies locked metadata and generated navigation. It does not silently install or globally switch system toolchains.
 
-Specialized contract, database, process, migration and product-plane gates remain mandatory when their scopes are affected. Repository Step 18 remains in progress: `dev-up`, `dev-reset`, `seed-demo` and `smoke` are not yet implemented or accepted.
+`dev-up` creates or reuses one checkout-scoped PostgreSQL dependency plane from an immutable PostgreSQL 17 image digest, binds it only to `127.0.0.1`, applies every committed up migration and the accepted platform fixtures through Docker-native `psql`, and refuses partial, foreign or drifted resources. `dev-reset` verifies ownership before deleting only that checkout's container and volume and then recreates a clean ready database; use `--dry-run` before destructive reset.
+
+Specialized contract, database, process, migration and product-plane gates remain mandatory when their scopes are affected. Repository Step 18 remains in progress: `seed-demo` and `smoke` are not yet implemented or accepted, and `dev-up`/`dev-reset` do not start backend or frontend processes.
 
 ## Status synchronization rule
 
