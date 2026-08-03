@@ -197,6 +197,10 @@ python scripts/repo.py dev-up --dry-run
 python scripts/repo.py dev-up
 python scripts/repo.py dev-reset --dry-run
 python scripts/repo.py dev-reset
+python scripts/repo.py seed-demo --dry-run
+python scripts/repo.py seed-demo
+python scripts/repo.py smoke --dry-run
+python scripts/repo.py smoke
 python scripts/repo.py conformance
 python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
@@ -208,7 +212,9 @@ python scripts/repo.py quality
 
 `dev-up` and `dev-reset` manage only the checkout-scoped PostgreSQL dependency plane. They use immutable image and schema-input digests, loopback-only publishing and ownership labels. Never manually relabel a lifecycle resource; when exact configuration or schema inputs change, inspect `dev-reset --dry-run` and reset the owned state.
 
-Repository Step 18 remains in progress. `seed-demo` and `smoke` are not yet implemented or accepted; backend/frontend process startup remains outside this packet.
+`seed-demo` and `smoke` reuse that exact dependency plane and one locked real-process acceptance target. The versioned `local-demo-acme` demo state is created only through the governed Party mutation gateway with a stable versioned identity and idempotency key. Smoke must prove readiness, denial without a live query grant, success with the explicit bootstrap grant, authentication denial and cross-tenant non-disclosure; direct business-table writes or alternate transport paths are forbidden.
+
+This implementation packet completes the Repository Step 18 command surface, but Step 18 is not complete until merged exact-head evidence is synchronized. Frontend/browser acceptance and Repository Step 19 remain outside this packet.
 
 ## 10. Required checks before completion
 

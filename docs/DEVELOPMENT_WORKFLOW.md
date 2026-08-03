@@ -228,13 +228,19 @@ python scripts/repo.py dev-up --dry-run
 python scripts/repo.py dev-up
 python scripts/repo.py dev-reset --dry-run
 python scripts/repo.py dev-reset
+python scripts/repo.py seed-demo --dry-run
+python scripts/repo.py seed-demo
+python scripts/repo.py smoke --dry-run
+python scripts/repo.py smoke
 ```
 
 `doctor` reads tool requirements from committed repository configuration and changes nothing. The bootstrap profile validates dependency-preparation prerequisites without requiring Docker; the full profile additionally checks Docker CLI, Compose v2 and daemon availability. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, uses locked Cargo and frozen pnpm dependency resolution, and verifies generated navigation. It does not silently install or globally switch system toolchains.
 
 `dev-up` creates or reuses the exact checkout-owned PostgreSQL dependency plane from pinned repository migrations and fixtures. It validates ownership, image, port, volume and schema digest before reuse. `dev-reset` first validates immutable ownership labels, removes the container before the volume, and recreates the current clean database; dry-run performs inspection only. Neither command starts product processes or seeds a demo scenario.
 
-Repository Step 18 remains in progress. `seed-demo` and `smoke` remain later bounded Step 18 work and must not be represented as implemented before permanent acceptance.
+`seed-demo` starts the real production composition through one locked Rust process target, applies the accepted Party production-adapter fixture, and creates or idempotently replays the versioned `local-demo-acme` organization only through `parties.party.create`. `smoke` starts a fresh real `crm-api` process, proves the authenticated Party query is denied without a live grant, then verifies the explicit bootstrap-granted read, missing-authentication denial and tenant-B non-disclosure. `kill_on_drop` plus graceful SIGINT cleanup prevents orphan local API processes.
+
+This bounded packet completes the Repository Step 18 command surface. Step 18 remains in progress until merge and a separate exact evidence synchronization; frontend/browser acceptance and Repository Step 19 remain blocked.
 
 ## 15. Multi-agent exact-SHA workflow
 

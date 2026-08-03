@@ -13,6 +13,7 @@ on:
       - "crates/**/Cargo.toml"
       - "modules/**/Cargo.toml"
       - "services/**/Cargo.toml"
+      - "services/crm-api/tests/local_demo_smoke_e2e.rs"
       - "crates/crm-application-composition/**"
       - "crates/crm-first-party-modules/**"
       - "crates/crm-application-runtime/**"
@@ -51,6 +52,7 @@ on:
       - "scripts/analyze_workspace_governance.py"
       - "scripts/analyze_ci_telemetry.py"
       - "scripts/compile_module_manifest_ir.py"
+      - "scripts/local_demo.py"
       - "scripts/local_dev.py"
       - "scripts/local_lifecycle.py"
       - "scripts/module_manifest_projection.py"
@@ -66,6 +68,7 @@ on:
       - "tests/test_ci_event_policy.py"
       - "tests/test_action_pinning.py"
       - "tests/test_affected_scope.py"
+      - "tests/test_local_demo.py"
       - "tests/test_local_dev.py"
       - "tests/test_local_lifecycle.py"
       - "tests/test_local_lifecycle_docker.py"
@@ -93,6 +96,7 @@ on:
       - "crates/**/Cargo.toml"
       - "modules/**/Cargo.toml"
       - "services/**/Cargo.toml"
+      - "services/crm-api/tests/local_demo_smoke_e2e.rs"
       - "crates/crm-application-composition/**"
       - "crates/crm-first-party-modules/**"
       - "crates/crm-application-runtime/**"
@@ -131,6 +135,7 @@ on:
       - "scripts/analyze_workspace_governance.py"
       - "scripts/analyze_ci_telemetry.py"
       - "scripts/compile_module_manifest_ir.py"
+      - "scripts/local_demo.py"
       - "scripts/local_dev.py"
       - "scripts/local_lifecycle.py"
       - "scripts/module_manifest_projection.py"
@@ -146,6 +151,7 @@ on:
       - "tests/test_ci_event_policy.py"
       - "tests/test_action_pinning.py"
       - "tests/test_affected_scope.py"
+      - "tests/test_local_demo.py"
       - "tests/test_local_dev.py"
       - "tests/test_local_lifecycle.py"
       - "tests/test_local_lifecycle_docker.py"
@@ -174,7 +180,7 @@ permissions:
 jobs:
   governance:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -238,3 +244,12 @@ jobs:
           CRM_LOCAL_NAMESPACE: governance-${{ github.run_id }}
           CRM_LOCAL_POSTGRES_PORT: "55432"
         run: python -m unittest tests.test_local_lifecycle_docker
+      - name: Run deterministic local demo seed replay and smoke acceptance
+        env:
+          CRM_LOCAL_NAMESPACE: governance-demo-${{ github.run_id }}
+          CRM_LOCAL_POSTGRES_PORT: "55433"
+        run: |
+          python scripts/repo.py dev-reset
+          python scripts/repo.py seed-demo
+          python scripts/repo.py seed-demo
+          python scripts/repo.py smoke
