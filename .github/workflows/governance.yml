@@ -275,6 +275,11 @@ jobs:
 
           '''
           method = '\n'.join(line[10:] if line.startswith('          ') else line for line in method.splitlines()) + '\n'
+          method_lines = method.splitlines()
+          method = method_lines[0] + '\n' + '\n'.join(
+              ('    ' + line) if line.strip() else line
+              for line in method_lines[1:]
+          ) + '\n'
           if content.count(marker) != 1:
               raise SystemExit(f'expected test insertion marker once, found {content.count(marker)}')
           tests.write_text(content.replace(marker, method + marker), encoding='utf-8')
