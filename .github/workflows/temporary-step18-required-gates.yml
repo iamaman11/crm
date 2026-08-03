@@ -30,6 +30,7 @@ jobs:
 
           import json
           from pathlib import Path
+          import re
 
           packet_path = Path("repository-packet.json")
           packet = json.loads(packet_path.read_text(encoding="utf-8"))
@@ -59,32 +60,36 @@ jobs:
           )
           packet_path.write_text(json.dumps(packet, indent=2) + "\n", encoding="utf-8")
 
-          old = '''            [
-                "Affected Scope CI",
-                "Complexity Baseline CI",
-                "Governance CI",
-                "Rust Generated Sync",
-                "Rust CI",
-            ],'''
-          new = '''            [
-                "Affected Scope CI",
-                "Complexity Baseline CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Owner Execution CI",
-                "Governance CI",
-                "Rust Generated Sync",
-                "Rust CI",
-            ],'''
+          pattern = re.compile(
+              r'(?P<indent>\s*)"Affected Scope CI",\n'
+              r'(?P=indent)"Complexity Baseline CI",\n'
+              r'(?P=indent)"Governance CI",\n'
+              r'(?P=indent)"Rust Generated Sync",\n'
+              r'(?P=indent)"Rust CI",'
+          )
           for path in (
               "tests/test_architecture_documentation_consistency.py",
               "tests/test_repository_navigation.py",
           ):
               file_path = Path(path)
               content = file_path.read_text(encoding="utf-8")
-              count = content.count(old)
+
+              def replacement(match: re.Match[str]) -> str:
+                  indent = match.group("indent")
+                  return (
+                      f'{indent}"Affected Scope CI",\n'
+                      f'{indent}"Complexity Baseline CI",\n'
+                      f'{indent}"Customer Privacy Access Export CI",\n'
+                      f'{indent}"Customer Privacy Owner Execution CI",\n'
+                      f'{indent}"Governance CI",\n'
+                      f'{indent}"Rust Generated Sync",\n'
+                      f'{indent}"Rust CI",'
+                  )
+
+              updated, count = pattern.subn(replacement, content, count=1)
               if count != 1:
-                  raise SystemExit(f"{path}: expected required-check list once, found {count}")
-              file_path.write_text(content.replace(old, new), encoding="utf-8")
+                  raise SystemExit(f"{path}: expected required-check sequence once, found {count}")
+              file_path.write_text(updated, encoding="utf-8")
           PY
           python scripts/generate_repository_navigation.py --write
           python -m unittest \
