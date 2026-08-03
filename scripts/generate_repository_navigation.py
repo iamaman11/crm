@@ -40,20 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _current_branch(root: Path) -> str:
-    completed = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-        cwd=root,
-        check=True,
-        text=True,
-        capture_output=True,
-    )
-    return completed.stdout.strip()
-
-
 def _step17_sync_required(root: Path) -> bool:
-    if _current_branch(root) != STEP17_BRANCH:
-        return False
     try:
         packet = json.loads((root / "repository-packet.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
