@@ -1,0 +1,63 @@
+diff --git a/crates/crm-sales-activities-capability-composition/src/lib.rs b/crates/crm-sales-activities-capability-composition/src/lib.rs
+index 3c5bb80..6b92635 100644
+--- a/crates/crm-sales-activities-capability-composition/src/lib.rs
++++ b/crates/crm-sales-activities-capability-composition/src/lib.rs
+@@ -176,7 +176,12 @@ fn expected_definition(
+             "The capability planner version binding is invalid.",
+         ));
+     }
+-    definition.capability_version = CapabilityVersion::try_new(capability_version)?;
++    definition.capability_version = CapabilityVersion::try_new(capability_version).map_err(|_| {
++        configuration_error(
++            "CAPABILITY_PLANNER_VERSION_MISMATCH",
++            "The capability planner version binding is invalid.",
++        )
++    })?;
+     Ok(definition)
+ }
+ 
+diff --git a/crates/crm-sales-activities-link-contract-adapter/src/lib.rs b/crates/crm-sales-activities-link-contract-adapter/src/lib.rs
+index 1bdf81d..c7c1f38 100644
+--- a/crates/crm-sales-activities-link-contract-adapter/src/lib.rs
++++ b/crates/crm-sales-activities-link-contract-adapter/src/lib.rs
+@@ -11,8 +11,8 @@ use crm_proto_contracts::{
+ };
+ use crm_sales_activities_link::{
+     ActivitiesTaskCommandEncoder, CreateTaskIntent, DealLifecycleStatus, SOURCE_EVENT_TYPE,
+-    SOURCE_EVENT_VERSION, SOURCE_MODULE_ID, SalesDealStageChanged, TARGET_CAPABILITY_VERSION,
+-    TARGET_MODULE_ID, TARGET_REQUEST_SCHEMA_ID,
++    SOURCE_EVENT_VERSION, SOURCE_MODULE_ID, SalesDealStageChanged, TARGET_MODULE_ID,
++    TARGET_REQUEST_SCHEMA_ID,
+ };
+ use prost::Message;
+ 
+@@ -199,6 +199,8 @@ mod tests {
+         RecordType, ResourceRef, TenantId, TraceId,
+     };
+ 
++    use crm_sales_activities_link::TARGET_CAPABILITY_VERSION;
++
+     fn delivery(message: sales::DealStageChangedEvent) -> EventDelivery {
+         let bytes = message.encode_to_vec();
+         EventDelivery {
+diff --git a/crates/crm-activities-capability-adapter/src/planner.rs b/crates/crm-activities-capability-adapter/src/planner.rs
+index d9db2c0..efcc3fe 100644
+--- a/crates/crm-activities-capability-adapter/src/planner.rs
++++ b/crates/crm-activities-capability-adapter/src/planner.rs
+@@ -745,7 +745,15 @@ mod tests {
+             .expect("replacement coordinate must use the existing planner");
+ 
+         assert_eq!(definition.input_contract.schema_version.as_str(), support::CONTRACT_VERSION);
+-        assert_eq!(definition.output_contract.schema_version.as_str(), support::CONTRACT_VERSION);
++        assert_eq!(
++            definition
++                .output_contract
++                .as_ref()
++                .expect("create definition must publish an output contract")
++                .schema_version
++                .as_str(),
++            support::CONTRACT_VERSION,
++        );
+         assert_eq!(plan.batch.records.len(), 1);
+     }
+ 
