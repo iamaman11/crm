@@ -92,7 +92,16 @@ Repository Step 15 is accepted through:
 - PR #266 / source `ded5d80ae11bbf044b5bfe5b572e8dab521f884a` / merge `1f889a810c82da3d0fee12427eacccbe43613bac` / 19 of 19 — automatic Customer 360 v2 generation rollover;
 - PR #267 / source `f1b72dbee09f152005cb3584b9bcc1573bf2c4fe` / merge `4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf` / 19 of 19 — real `crm-api` process-host no-orphan repair on clean and rollback/reapplied schemas.
 
-The accepted Step 15 result preserves the current measured repository at **112 workspace packages**, **835 internal dependency edges**, maximum dependency depth **18**, **5,377** conservative public Rust items, **270** dependency declarations and **91** suppression occurrences. Repository Step 16 is complete through PRs #269 and #270; reusable worker conformance, retry/restart recovery, tenant isolation and exactly-once contention convergence are accepted. Repository Step 17 is next and not started. This architecture/runtime evidence does not add a Customer Privacy worker or advance Customer Privacy to Product complete.
+Repository Step 17 is accepted through:
+
+- PR #275 / source `1c6366b557e255a14a677758fd87f7fe63184a89` / merge `60d5974349a04c462475aadd4af0a37bada9713b` / 23 of 23 — published wire-compatible `activities.task.create@1.1.0`, migrated the sole repository-owned consumer and made live authorization overlap exact-version safe;
+- PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8 — made production zero-usage retirement evidence SHA-256-bound, complete, append-only and fail closed;
+- PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 — proved the coordinate was never externally released through live empty GitHub Releases, tags and deployments, non-publishable packages and no external consumer record, then retired `activities.task.create@1.0.0` while preserving its historical tombstone and keeping `telemetry.zero_since` null.
+
+The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is the next permitted implementation step and is not started.
+
+
+The accepted Step 15 result preserves the current measured repository at **112 workspace packages**, **835 internal dependency edges**, maximum dependency depth **18**, **5,377** conservative public Rust items, **270** dependency declarations and **91** suppression occurrences. Repository Step 16 is complete through PRs #269 and #270; reusable worker conformance, retry/restart recovery, tenant isolation and exactly-once contention convergence are accepted. Repository Step 17 is complete through PR #279; Repository Step 18 is next and not started. This architecture/runtime evidence does not add a Customer Privacy worker or advance Customer Privacy to Product complete.
 
 ## 5. Phase 8A packet accounting
 
