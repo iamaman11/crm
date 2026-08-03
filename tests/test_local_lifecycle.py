@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 
+from scripts.affected_scope import build_report
 from scripts.local_lifecycle import (
     BOOTSTRAP_SCHEMA,
     DOCTOR_SCHEMA,
@@ -15,6 +16,9 @@ from scripts.local_lifecycle import (
     doctor,
 )
 from scripts.repo import build_parser
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def prepare_root(root: Path) -> None:
@@ -194,6 +198,28 @@ class LocalLifecycleTests(unittest.TestCase):
         self.assertEqual(bootstrap_args.command, "bootstrap")
         self.assertTrue(bootstrap_args.dry_run)
         self.assertTrue(bootstrap_args.json)
+
+    def test_local_lifecycle_has_permanent_governance_coverage(self) -> None:
+        report = build_report(
+            ROOT,
+            "origin/main",
+            paths=["scripts/local_lifecycle.py"],
+            metadata={"packages": [], "workspace_members": []},
+            head_sha="local-lifecycle",
+        )
+        self.assertEqual(
+            [scope["id"] for scope in report["selected_scopes"]],
+            ["operations"],
+        )
+        self.assertIn(
+            "Governance CI",
+            [workflow["name"] for workflow in report["selected_workflows"]],
+        )
+        governance = (ROOT / ".github/workflows/governance.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertGreaterEqual(governance.count('"scripts/local_lifecycle.py"'), 2)
+        self.assertGreaterEqual(governance.count('"tests/test_local_lifecycle.py"'), 2)
 
 
 if __name__ == "__main__":
