@@ -119,6 +119,7 @@
       "path_patterns": [
         ".github/workflows/**",
         ".github/pull_request_template.md",
+        "AGENTS.md",
         "docs/ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md",
         "docs/CI_TELEMETRY_BASELINE.md",
         "docs/DELIVERY_GOVERNANCE.md",
