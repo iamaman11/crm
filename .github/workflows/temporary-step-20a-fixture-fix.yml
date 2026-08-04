@@ -49,8 +49,8 @@ jobs:
           replacement = (
               r"\g<indent>page_size: 25,\n"
               r"\g<indent>cursor: String::new(),\n"
-              r"\g<indent>kind: 0,\n"
-              r"\g<indent>status: 0,\n"
+              r"\g<indent>kind: None,\n"
+              r"\g<indent>status: None,\n"
               r"\g<close>},"
           )
           payload, count = pattern.subn(replacement, payload, count=1)
