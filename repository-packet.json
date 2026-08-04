@@ -51,6 +51,7 @@
   "required_checks": [
     "Affected Scope CI",
     "Application Runtime CI",
+    "Database CI",
     "Complexity Baseline CI",
     "Customer Privacy Owner Execution CI",
     "Governance CI",
