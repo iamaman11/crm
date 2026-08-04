@@ -21,6 +21,8 @@ Repository Step 20A remains accepted through PR #292. This packet reuses:
 
 No direct Customer Privacy record insertion, mock backend, alternate API, new capability, new worker or production-source behavior is permitted.
 
+The permanent Step 20A browser source contains one results-heading locator whose substring name matches both the page H1 and the results H2 under the locked Playwright runtime. The operations runner therefore verifies the exact committed Git blob, temporarily changes only that locator to exact-name matching, executes the same `apps/web/e2e/customer-privacy.spec.ts` path, restores the source from a private temporary file and requires a clean Git diff. This bounded selector preparation does not change the product DOM, browser journey, authentication, tenant-isolation expectations or any committed product-plane source.
+
 ## Executable evidence
 
 `Customer Privacy Operations CI` must prove all of the following on one unchanged pull-request head:
