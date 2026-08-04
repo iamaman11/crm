@@ -1,4 +1,9 @@
-import { useRef, useState, type FormEvent } from "react";
+import {
+  useRef,
+  useState,
+  type FormEvent,
+  type RefObject,
+} from "react";
 import {
   ProductClientError,
   type GovernedCustomerPrivacyClient,
@@ -100,7 +105,8 @@ export function CustomerPrivacyPage({
         <h2 id="privacy-case-search-heading">Find cases by canonical Party</h2>
         <label htmlFor="canonical-party-id">Canonical Party reference</label>
         <p id="canonical-party-help">
-          Enter the opaque Party identifier. Do not enter a name, email address, passport number, or other personal data.
+          Enter the opaque Party identifier. Do not enter a name, email address,
+          passport number, or other personal data.
         </p>
         <input
           id="canonical-party-id"
@@ -112,7 +118,10 @@ export function CustomerPrivacyPage({
           maxLength={128}
           disabled={loading}
         />
-        <button type="submit" disabled={loading || canonicalPartyId.trim().length === 0}>
+        <button
+          type="submit"
+          disabled={loading || canonicalPartyId.trim().length === 0}
+        >
           {loading ? "Loading cases…" : "Load cases"}
         </button>
       </form>
@@ -129,7 +138,10 @@ export function CustomerPrivacyPage({
           <FeedbackPanel tone="danger" title="Customer Privacy request failed">
             <p>{error}</p>
             {lastSubmittedPartyId ? (
-              <button type="button" onClick={() => void loadCases(lastSubmittedPartyId)}>
+              <button
+                type="button"
+                onClick={() => void loadCases(lastSubmittedPartyId)}
+              >
                 Retry case list
               </button>
             ) : null}
@@ -155,7 +167,9 @@ export function CustomerPrivacyPage({
                   <button
                     type="button"
                     onClick={() => void handleSelect(view.id)}
-                    aria-pressed={selectedCase?.privacyCaseRef?.privacyCaseId === view.id}
+                    aria-pressed={
+                      selectedCase?.privacyCaseRef?.privacyCaseId === view.id
+                    }
                     disabled={loadingDetail}
                   >
                     <span>{view.kind}</span>
@@ -170,7 +184,10 @@ export function CustomerPrivacyPage({
       </section>
 
       {selectedCase ? (
-        <PrivacyCaseDetail privacyCase={selectedCase} headingRef={detailHeadingRef} />
+        <PrivacyCaseDetail
+          privacyCase={selectedCase}
+          headingRef={detailHeadingRef}
+        />
       ) : null}
     </div>
   );
@@ -181,7 +198,7 @@ function PrivacyCaseDetail({
   headingRef,
 }: {
   privacyCase: PrivacyCase;
-  headingRef: React.RefObject<HTMLHeadingElement | null>;
+  headingRef: RefObject<HTMLHeadingElement | null>;
 }) {
   const view = customerPrivacyCaseViewModel(privacyCase);
   return (

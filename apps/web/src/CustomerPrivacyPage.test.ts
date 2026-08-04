@@ -1,25 +1,23 @@
-import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
-import { PrivacyCaseSchema } from "@ultimate-crm/client/gen/crm/customer_privacy/v1/types_pb";
-import { PrivacyCaseRefSchema } from "@ultimate-crm/client/gen/crm/customer_privacy/v1/reference_pb";
-import { ProductClientError } from "@ultimate-crm/client";
+import { ProductClientError, type PrivacyCase } from "@ultimate-crm/client";
 import { customerPrivacyMessageForError } from "./CustomerPrivacyPage";
 import { customerPrivacyCaseViewModel } from "./customerPrivacyViewModel";
 
 describe("Customer Privacy presentation", () => {
   it("maps bounded case metadata without exposing internal evidence", () => {
-    const view = customerPrivacyCaseViewModel(
-      create(PrivacyCaseSchema, {
-        privacyCaseRef: create(PrivacyCaseRefSchema, { privacyCaseId: "case-a" }),
-        kind: 1,
-        status: 12,
-        version: 3n,
-        policyVersion: "policy-v1",
-        createdAtUnixMs: 1710000000000n,
-        updatedAtUnixMs: 1710001000000n,
-      }),
-    );
+    const privacyCase = {
+      privacyCaseRef: { privacyCaseId: "case-a" },
+      kind: 1,
+      status: 12,
+      version: 3n,
+      policyVersion: "policy-v1",
+      createdAtUnixMs: 1710000000000n,
+      updatedAtUnixMs: 1710001000000n,
+      subjectBinding: { verifiedByActorId: "must-not-render" },
+      approval: { approvedByActorId: "must-not-render" },
+    } as unknown as PrivacyCase;
 
+    const view = customerPrivacyCaseViewModel(privacyCase);
     expect(view).toMatchObject({
       id: "case-a",
       kind: "Access",
