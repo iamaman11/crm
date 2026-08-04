@@ -1,25 +1,20 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-18-seed-demo-smoke-evidence-sync",
-  "title": "Synchronize accepted Repository Step 18 closure evidence",
+  "packet_id": "repository-step-19-owner-execution-worker-boundary",
+  "title": "Add bounded Customer Privacy owner-execution worker boundary",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "a906f2c514285974113749b8b8ad9446202a5fa1"
+    "sha": "a8fa7c1586f9d9a3771f4f23277784b7c3ef7a9e"
   },
   "tracking_issues": [
-    194
+    194,
+    126
   ],
-  "objective": "Record exact PR #285 source, squash merge and 19-of-19 acceptance evidence across every normative source, close Repository Step 18 and make Repository Step 19 the only next permitted implementation packet without changing runtime or product behavior.",
+  "objective": "Begin Repository Step 19 by making the accepted Customer Privacy owner-execution service a bounded, activation-gated generic tenant worker without growing the public Rust surface, registering a process worker or changing contracts, routes, schemas, migrations or product-readiness claims.",
   "allowed_paths": [
+    "crates/crm-customer-privacy-application/src/execution.rs",
     "docs/ACTIVE_PACKET.md",
-    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-    "docs/IMPLEMENTATION_ROADMAP.md",
-    "docs/MODULE_CATALOG.md",
-    "docs/PHASE8_DELIVERY_PLAN.md",
-    "docs/PROJECT_STATUS.md",
-    "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
-    "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
     "repository-packet.json",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
@@ -29,13 +24,10 @@
     "AGENTS.md",
     "Cargo.lock",
     "Cargo.toml",
-    "README.md",
     "affected-scope-policy.json",
     "apps/**",
     "contracts/**",
-    "crates/**",
     "database/**",
-    "evidence/**",
     "modules/**",
     "package.json",
     "packages/**",
@@ -48,33 +40,36 @@
     "services/**"
   ],
   "deliverables": [
-    "record exact PR #285 source, squash merge and 19-of-19 workflow evidence in all six normative documents",
-    "mark Repository Step 18 and architecture Stage H complete while keeping Phase 8A, Customer Privacy and architecture 10/10 incomplete",
-    "make Repository Step 19 the only next permitted implementation packet",
-    "update active-packet and documentation-consistency guards to the accepted closure evidence-sync packet",
-    "record the accepted seed-demo/smoke zero-impact result in the historical workspace complexity baseline"
+    "implement the existing generic TenantBackgroundWorker contract directly on PrivacyOwnerExecutionService",
+    "extend the existing owner-execution persistence port with a backward-compatible ready-work hook whose safe default is no work",
+    "deny ready-work discovery and owner effects when durable tenant activation is absent",
+    "validate the complete bounded batch for exact tenant, trusted provenance, monotonic non-future time and unique execution identity before the first execution",
+    "delegate every accepted item to the existing replay-safe exact-nine owner execution service",
+    "prove inactive no-side-effect behavior, active delegation and fail-closed duplicate rejection with unit tests while keeping the conservative public Rust surface at 5377"
   ],
   "required_checks": [
     "Affected Scope CI",
     "Complexity Baseline CI",
-    "Customer Privacy Access Export CI",
     "Customer Privacy Owner Execution CI",
     "Governance CI",
     "Rust Generated Sync",
     "Rust CI"
   ],
   "acceptance": [
-    "the branch is based exactly on merge commit a906f2c514285974113749b8b8ad9446202a5fa1",
-    "all six normative documents contain PR #285, source a522b8b11a0c6f143694f516e7a7f9d522c18ce3, merge a906f2c514285974113749b8b8ad9446202a5fa1 and 19 of 19",
-    "Repository Step 18 and Stage H are complete while Step 19 is the next permitted packet",
-    "Customer Privacy, Phase 8A and architecture 10/10 remain explicitly incomplete",
-    "the final diff contains only declared documentation, packet, generated navigation and permanent guard files",
-    "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments, reviews or review threads"
+    "the branch is based exactly on main commit a8fa7c1586f9d9a3771f4f23277784b7c3ef7a9e",
+    "the packet adds zero crates, dependencies, contracts, routes, schemas, migrations, public ingress or conservative public Rust items",
+    "a disabled or uninstalled Customer Privacy module performs no ready-work read and no owner execution",
+    "every active cycle is bounded and rejects an oversized, cross-tenant, untrusted, duplicate, non-monotonic or future-dated source batch before any owner execution",
+    "accepted work is executed only through PrivacyOwnerExecutionService::execute_next and therefore preserves the accepted exact-nine replay-safe coordinator boundary",
+    "Repository Step 19 remains in progress; PostgreSQL ready-work discovery, process registration and complete process/end-to-end acceptance remain absent",
+    "Customer Privacy, Phase 8A, product-complete expert modules and architecture 10/10 remain incomplete",
+    "one unchanged exact review head passes every applicable permanent workflow with zero unresolved comments, reviews or review threads"
   ],
   "non_goals": [
-    "implement or start Repository Step 19",
-    "change Customer Privacy worker behavior",
-    "change runtime, routes, contracts, schemas, migrations, dependencies, lockfiles or product behavior",
-    "complete Phase 8A, an expert module or architecture 10/10"
+    "implement the PostgreSQL pending-case discovery source",
+    "register the Customer Privacy worker in crm-application-runtime or crm-api",
+    "add or reclassify manifest capability coordinates or production routes",
+    "change owner execution algorithms, durable evidence, migrations or public APIs",
+    "claim complete process/end-to-end acceptance, Phase 8A closure or architecture 10/10"
   ]
 }
