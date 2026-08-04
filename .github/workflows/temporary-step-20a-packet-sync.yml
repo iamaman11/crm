@@ -26,6 +26,7 @@ jobs:
           python -m pip install 'black==26.3.1' 'ruamel.yaml>=0.18.6,<0.19'
           python - <<'PY'
           from pathlib import Path
+          import re
 
           documents = [
               Path("docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md"),
@@ -66,24 +67,28 @@ jobs:
 
           guard = Path("tests/test_architecture_documentation_consistency.py")
           text = guard.read_text(encoding="utf-8")
-          assertion = '''            for line in document.splitlines():
-                  lowered_line = line.lower()
-                  self.assertFalse(
-                      "step 20" in lowered_line
-                      and "next permitted" in lowered_line
-                      and "step 20b" not in lowered_line,
-                      line,
-                  )
-          '''
           if 'and "step 20b" not in lowered_line' not in text:
-              marker = '''            self.assertNotIn(
-                  "next permitted bounded implementation packet is repository step 20",
-                  lowered,
+              pattern = re.compile(
+                  r'(?P<block>(?P<indent>\s+)self\.assertNotIn\(\n'
+                  r'\s+"next permitted bounded implementation packet is repository step 20",\n'
+                  r'\s+lowered,\n\s+\)\n)'
               )
-          '''
-              if text.count(marker) != 1:
-                  raise SystemExit(f"expected one stable architecture guard marker, found {text.count(marker)}")
-              text = text.replace(marker, marker + assertion, 1)
+              match = pattern.search(text)
+              if match is None:
+                  raise SystemExit("stable architecture semantic assertion not found")
+              indent = match.group("indent")
+              inner = indent + "    "
+              assertion = (
+                  f"{indent}for line in document.splitlines():\n"
+                  f"{inner}lowered_line = line.lower()\n"
+                  f"{inner}self.assertFalse(\n"
+                  f'{inner}    "step 20" in lowered_line\n'
+                  f'{inner}    and "next permitted" in lowered_line\n'
+                  f'{inner}    and "step 20b" not in lowered_line,\n'
+                  f"{inner}    line,\n"
+                  f"{inner})\n"
+              )
+              text = text[: match.end()] + assertion + text[match.end() :]
               guard.write_text(text, encoding="utf-8")
           PY
           black tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py
