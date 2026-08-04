@@ -23,6 +23,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.complexity = read("docs/WORKSPACE_COMPLEXITY_BASELINE.md")
         cls.catalog = read("docs/MODULE_CATALOG.md")
         cls.product_plan = read("docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md")
+        cls.product_plane = read("docs/PHASE8A_CUSTOMER_PRIVACY_PRODUCT_PLANE.md")
         cls.delivery = read("docs/DELIVERY_GOVERNANCE.md")
         cls.adr32 = read(
             "docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md"
@@ -103,7 +104,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                     f"unqualified current 113-package claim: {context}",
                 )
 
-    def test_step_19_is_complete_and_step_20_is_next(self) -> None:
+    def test_step_19_is_complete_step_20a_is_accepted_and_step_20b_is_next(
+        self,
+    ) -> None:
         required = (
             "PR #287",
             "23b2f4ea660bcd46884fe054cd0c37e89b1495c4",
@@ -133,7 +136,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             )
             self.assertNotRegex(document, r"(?m)^\s*-\s*;\s*$")
         self.assertIn("Repository Steps 1–19 are complete", self.status)
-        self.assertIn("Repository Step 20", self.status)
+        self.assertIn("Repository Step 20A is accepted through PR #292", self.status)
+        self.assertIn("Repository Step 20 remains in progress", self.status)
+        self.assertIn("Repository Step 20B", self.status)
         self.assertIn(
             "19. real Customer Privacy worker lifecycle and complete process/end-to-end acceptance — **complete through PR #290**",
             self.plan,
@@ -143,7 +148,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(marker, self.product_plan)
         self.assertIn("After Steps 20–21 complete Phase 8A", self.product_plan)
         self.assertNotIn("After Steps 19–21 complete Phase 8A", self.product_plan)
-        self.assertIn("Repository Step 20 — Phase 8A frontend", self.product_plan)
+        self.assertIn(
+            "Repository Step 20A is accepted through PR #292", self.product_plan
+        )
+        self.assertIn("Repository Step 20B", self.product_plan)
         self.assertNotIn(
             "> Repository Step 19 — real Customer Privacy worker lifecycle",
             self.product_plan,
@@ -224,36 +232,28 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_step_20a_product_plane_packet_is_exact(self) -> None:
+    def test_active_step_20a_evidence_sync_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(
-            self.packet["packet_id"],
-            "repository-step-20a-customer-privacy-product-plane",
-        )
+        self.assertEqual(self.packet["packet_id"], "repository-step-20a-evidence-sync")
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "46f5be276cf2935f1940827581b81cf197b87111"},
+            {"ref": "main", "sha": "fffd6baf35544eea736d183af0a5ba38518cce9a"},
         )
         self.assertEqual(self.packet["tracking_issues"], [194, 126])
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                "apps/web/e2e/customer-privacy.spec.ts",
-                "apps/web/src/App.tsx",
-                "apps/web/src/CustomerPrivacyPage.test.ts",
-                "apps/web/src/CustomerPrivacyPage.tsx",
-                "apps/web/src/customerPrivacyViewModel.ts",
-                "apps/web/src/routes.test.ts",
-                "apps/web/src/routes.ts",
                 "docs/ACTIVE_PACKET.md",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/MODULE_CATALOG.md",
                 "docs/PHASE8A_CUSTOMER_PRIVACY_PRODUCT_PLANE.md",
-                "packages/client/src/customerPrivacy.test.ts",
-                "packages/client/src/customerPrivacy.ts",
-                "packages/client/src/index.ts",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
+                "docs/PROJECT_STATUS.md",
+                "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
                 "repository-packet.json",
-                "scripts/run_e2e.sh",
-                "services/crm-api/tests/seed_e2e_fixture.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
             },
@@ -263,8 +263,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
+                "Customer Privacy Access Export CI",
+                "Customer Privacy Owner Execution CI",
                 "Governance CI",
-                "Product Plane CI",
                 "Rust Generated Sync",
                 "Rust CI",
             ],
@@ -272,13 +273,68 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "add a typed governed Customer Privacy client for the existing case.list and case.get query coordinates with exact contract identity and descriptor-hash verification",
+            "record PR #292 source 938cebed1e78bf7debf40dc544431bfe819970f4 squash merge fffd6baf35544eea736d183af0a5ba38518cce9a and 17 of 17 applicable permanent workflows in every live normative source",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "complete the Step 20B restore SLO observability performance security or supply-chain operations evidence",
+            "start or implement Repository Step 20B operations work",
             self.packet["non_goals"],
         )
+        evidence_documents = (
+            self.status,
+            self.roadmap,
+            self.phase8,
+            self.plan,
+            self.catalog,
+            self.product_plan,
+            self.product_plane,
+            self.complexity,
+        )
+        for document in evidence_documents:
+            for marker in (
+                "PR #292",
+                "938cebed1e78bf7debf40dc544431bfe819970f4",
+                "fffd6baf35544eea736d183af0a5ba38518cce9a",
+                "17 of 17",
+                "Step 20B",
+            ):
+                self.assertIn(marker, document)
+            lowered = document.lower()
+            self.assertNotRegex(
+                lowered, r"repository step 20 is (?:the )?(?:only )?next"
+            )
+            self.assertNotRegex(lowered, r"step 20 is next")
+            self.assertNotIn(
+                "next permitted bounded implementation packet is repository step 20",
+                lowered,
+            )
+
+            for line in document.splitlines():
+                lowered_line = line.lower()
+                self.assertFalse(
+                    "step 20" in lowered_line
+                    and "next permitted" in lowered_line
+                    and "step 20b" not in lowered_line,
+                    line,
+                )
+        self.assertIn("real PostgreSQL", self.product_plane)
+        self.assertIn("assembled `crm-api`", self.product_plane)
+        self.assertIn("Chromium acceptance", self.product_plane)
+        self.assertIn("Repository Step 20 remains in progress", self.product_plane)
+        self.assertNotIn("No Step 20 or later implementation may begin", self.status)
+        self.assertIn("Repository Step 20B may begin only after", self.status)
+        self.assertIn("Stage I — in progress", self.status)
+        self.assertIn(
+            "Stage F generic conformance and contract lifecycle — **Complete through PR #290**",
+            self.roadmap,
+        )
+        self.assertNotIn(
+            "frontend and operations parity remain future work", self.status
+        )
+        self.assertNotIn(
+            "- frontend, accessibility and browser acceptance;", self.roadmap
+        )
+        self.assertNotIn("after accepted Repository Step 19", self.roadmap)
 
     def test_repository_map_and_product_inventory_remain_exact(self) -> None:
         self.assertIn(
