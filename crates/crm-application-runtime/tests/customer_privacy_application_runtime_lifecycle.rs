@@ -54,15 +54,8 @@ async fn assembled_runtime_discovers_executes_replays_and_honors_uninstall() {
 
     seed_tenant_and_actor(&admin, &tenant, &actor).await;
     seed_owner_action_capability(&admin).await;
-    let first_planned_version = seed_bundle(
-        &admin,
-        &tenant,
-        &actor,
-        &first_case,
-        &first_party,
-        "first",
-    )
-    .await;
+    let first_planned_version =
+        seed_bundle(&admin, &tenant, &actor, &first_case, &first_party, "first").await;
 
     let mut first_process = spawn_crm_api(&binary, &database_url, &tenant, &actor, true);
     wait_until_ready(&mut first_process).await;
@@ -153,7 +146,10 @@ struct CrmApiProcess {
 impl CrmApiProcess {
     fn assert_running(&mut self) {
         assert!(
-            self.child.try_wait().expect("poll crm-api process").is_none(),
+            self.child
+                .try_wait()
+                .expect("poll crm-api process")
+                .is_none(),
             "crm-api exited before lifecycle acceptance completed"
         );
     }
@@ -245,10 +241,8 @@ fn ready_response(http_addr: &str) -> bool {
     }
     if stream
         .write_all(
-            format!(
-                "GET /readyz HTTP/1.1\r\nHost: {http_addr}\r\nConnection: close\r\n\r\n"
-            )
-            .as_bytes(),
+            format!("GET /readyz HTTP/1.1\r\nHost: {http_addr}\r\nConnection: close\r\n\r\n")
+                .as_bytes(),
         )
         .is_err()
     {
@@ -372,12 +366,7 @@ async fn record_version(admin: &PgPool, tenant: &str, record_type: &str, record_
     .expect("load runtime lifecycle record version")
 }
 
-async fn assert_completed_evidence(
-    admin: &PgPool,
-    tenant: &str,
-    case_id: &str,
-    party_id: &str,
-) {
+async fn assert_completed_evidence(admin: &PgPool, tenant: &str, case_id: &str, party_id: &str) {
     let outcome_status: String = sqlx::query_scalar(
         "SELECT status FROM crm.customer_privacy_owner_action_outcomes WHERE tenant_id = $1 AND privacy_case_id = $2",
     )
@@ -508,8 +497,7 @@ async fn seed_bundle(
         "customer-privacy.retention-decision",
         decision.decision_id().as_str(),
         1,
-        retention_decision_persisted_payload(&decision)
-            .expect("encode runtime retention decision"),
+        retention_decision_persisted_payload(&decision).expect("encode runtime retention decision"),
     )
     .await;
     privacy_case.version()
@@ -793,19 +781,21 @@ async fn insert_fixture_transaction(
 }
 
 async fn uninstall_customer_privacy(admin: &PgPool, tenant: &str) {
-    let mut transaction = admin.begin().await.expect("begin runtime uninstall fixture");
+    let mut transaction = admin
+        .begin()
+        .await
+        .expect("begin runtime uninstall fixture");
     sqlx::query("SET LOCAL session_replication_role = replica")
         .execute(&mut *transaction)
         .await
         .expect("disable runtime uninstall verification");
-    let result = sqlx::query(
-        "DELETE FROM crm.module_installations WHERE tenant_id = $1 AND module_id = $2",
-    )
-    .bind(tenant)
-    .bind(CUSTOMER_PRIVACY_MODULE_ID)
-    .execute(&mut *transaction)
-    .await
-    .expect("remove Customer Privacy installation");
+    let result =
+        sqlx::query("DELETE FROM crm.module_installations WHERE tenant_id = $1 AND module_id = $2")
+            .bind(tenant)
+            .bind(CUSTOMER_PRIVACY_MODULE_ID)
+            .execute(&mut *transaction)
+            .await
+            .expect("remove Customer Privacy installation");
     assert_eq!(result.rows_affected(), 1);
     transaction
         .commit()
