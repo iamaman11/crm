@@ -12,9 +12,8 @@ use crm_customer_privacy_production::{
     retention_decision_persisted_payload,
 };
 use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ModuleId, PayloadEncoding,
-    RecordId, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TraceId,
-    TypedPayload,
+    ActorId, CapabilityId, CapabilityVersion, DataClass, ModuleId, PayloadEncoding, RecordId,
+    RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TypedPayload,
 };
 use sqlx::{PgPool, Postgres, Transaction};
 use std::sync::Arc;
@@ -89,9 +88,8 @@ async fn postgres_ready_work_is_bounded_resumable_lineage_exact_and_tenant_bound
     let app = PgPool::connect(&database_url)
         .await
         .expect("connect ready-work app pool");
-    let persistence = Arc::new(PostgresOwnerExecutionPersistence::new(Arc::new(
-        PostgresDataStore::from_pool(app),
-    )));
+    let persistence: Arc<dyn OwnerExecutionPersistencePort> =
+        PostgresOwnerExecutionPersistence::new(Arc::new(PostgresDataStore::from_pool(app))).into();
     let tenant_a = TenantId::try_new(TENANT_A).unwrap();
     let tenant_b = TenantId::try_new(TENANT_B).unwrap();
 
@@ -116,24 +114,17 @@ async fn postgres_ready_work_is_bounded_resumable_lineage_exact_and_tenant_bound
     assert!(invocation.trusted_internal);
 
     assert!(load_ready(&persistence, &tenant_b, 5_000_000, 64).await.is_empty());
-    let error = <Arc<PostgresOwnerExecutionPersistence> as OwnerExecutionPersistencePort>::load_ready(
-        &persistence,
-        &tenant_a,
-        5_000_000,
-        0,
-    )
-    .await
-    .expect_err("zero ready-work bound must fail closed");
+    let error = persistence
+        .load_ready(&tenant_a, 5_000_000, 0)
+        .await
+        .expect_err("zero ready-work bound must fail closed");
     assert_eq!(
         error.code.as_str(),
         "CUSTOMER_PRIVACY_OWNER_EXECUTION_READY_WORK_INVALID"
     );
 
-    let first_preparation =
-        <Arc<PostgresOwnerExecutionPersistence> as OwnerExecutionPersistencePort>::prepare_next(
-            &persistence,
-            invocation,
-        )
+    let first_preparation = persistence
+        .prepare_next(invocation)
         .await
         .expect("initialize ready-work checkpoint and attempt");
     let first_attempt = match first_preparation {
@@ -157,20 +148,13 @@ async fn postgres_ready_work_is_bounded_resumable_lineage_exact_and_tenant_bound
     )
     .unwrap();
     assert!(
-        <Arc<PostgresOwnerExecutionPersistence> as OwnerExecutionPersistencePort>::record_outcome(
-            &persistence,
-            &resumed[0],
-            &first_attempt,
-            &outcome,
-        )
-        .await
-        .expect("record ready-work outcome")
+        persistence
+            .record_outcome(&resumed[0], &first_attempt, &outcome)
+            .await
+            .expect("record ready-work outcome")
     );
-    let checkpoint =
-        <Arc<PostgresOwnerExecutionPersistence> as OwnerExecutionPersistencePort>::advance_checkpoint(
-            &persistence,
-            &resumed[0],
-        )
+    let checkpoint = persistence
+        .advance_checkpoint(&resumed[0])
         .await
         .expect("complete ready-work checkpoint");
     assert!(checkpoint.complete);
@@ -180,19 +164,15 @@ async fn postgres_ready_work_is_bounded_resumable_lineage_exact_and_tenant_bound
 }
 
 async fn load_ready(
-    persistence: &Arc<PostgresOwnerExecutionPersistence>,
+    persistence: &Arc<dyn OwnerExecutionPersistencePort>,
     tenant_id: &TenantId,
     now_unix_nanos: i64,
     maximum_items: u32,
 ) -> Vec<crm_customer_privacy_production::OwnerExecutionInvocation> {
-    <Arc<PostgresOwnerExecutionPersistence> as OwnerExecutionPersistencePort>::load_ready(
-        persistence,
-        tenant_id,
-        now_unix_nanos,
-        maximum_items,
-    )
-    .await
-    .expect("load PostgreSQL owner-execution ready work")
+    persistence
+        .load_ready(tenant_id, now_unix_nanos, maximum_items)
+        .await
+        .expect("load PostgreSQL owner-execution ready work")
 }
 
 fn build_case_plan_and_decision() -> (PrivacyCase, PrivacyActionPlan, PrivacyRetentionDecisionSet) {
