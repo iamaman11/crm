@@ -626,8 +626,8 @@ The current count of product-complete expert modules remains **0**. This plan br
 
 This planning document does not start later product work.
 
-The only next permitted implementation packet remains:
+The only next permitted implementation packet is:
 
-> Repository Step 15 — Party tombstone, no-orphan proof and projection/search/cache convergence.
+> Repository Step 19 — real Customer Privacy worker lifecycle and complete process/end-to-end acceptance.
 
-After Steps 15–21 complete Phase 8A and Step 22 resolves architecture/runtime/gate decisions, Step 23 begins the first measured product-extension wave. No Phase 8B–11 implementation may bypass that order.
+After Steps 19–21 complete Phase 8A and Step 22 resolves architecture/runtime/gate decisions, Step 23 begins the first measured product-extension wave. No Phase 8B–11 implementation may bypass that order.
