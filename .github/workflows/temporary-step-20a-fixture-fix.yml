@@ -30,6 +30,7 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
+          import re
 
           source = Path('.github/workflows/temporary-step-20a-packet-sync.yml').read_text(encoding='utf-8')
           marker = "          python - <<'PY'\n"
@@ -40,17 +41,21 @@ jobs:
               line[10:] if line.startswith("          ") else line
               for line in payload.splitlines()
           ) + "\n"
-          old = '''                        page_size: 25,
-                          cursor: String::new(),
-                      },'''
-          new = '''                        page_size: 25,
-                          cursor: String::new(),
-                          kind: 0,
-                          status: 0,
-                      },'''
-          if old not in payload:
-              raise SystemExit('ListPrivacyCasesRequest fixture marker missing')
-          payload = payload.replace(old, new, 1)
+          pattern = re.compile(
+              r"(?P<indent>\s+)page_size: 25,\n"
+              r"(?P=indent)cursor: String::new\(\),\n"
+              r"(?P<close>\s+)},"
+          )
+          replacement = (
+              r"\g<indent>page_size: 25,\n"
+              r"\g<indent>cursor: String::new(),\n"
+              r"\g<indent>kind: 0,\n"
+              r"\g<indent>status: 0,\n"
+              r"\g<close>},"
+          )
+          payload, count = pattern.subn(replacement, payload, count=1)
+          if count != 1:
+              raise SystemExit(f'expected one ListPrivacyCasesRequest fixture, corrected {count}')
           Path('/tmp/step20a_fixture.py').write_text(payload, encoding='utf-8')
           PY
           python /tmp/step20a_fixture.py
