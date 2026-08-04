@@ -22,6 +22,9 @@ TOKEN="phase6l-process-bearer-token-0123456789abcdef0123456789abcdef"
 HTTP_PORT="${CRM_OPERATIONS_HTTP_PORT:-18080}"
 GRPC_PORT="${CRM_OPERATIONS_GRPC_PORT:-19090}"
 VITE_PORT=5173
+PRODUCT_PAGE_PATH="apps/web/src/CustomerPrivacyPage.tsx"
+EXPECTED_PRODUCT_PAGE_BLOB_SHA="aa0f2726eb5682eb97ea73a7a5136a99e6a01e50"
+PRODUCT_PAGE_BACKUP=""
 E2E_SPEC_PATH="apps/web/e2e/customer-privacy.spec.ts"
 EXPECTED_E2E_SPEC_BLOB_SHA="ca3981d978af9e5684349ae9ae203499c51d4fcb"
 E2E_SPEC_BACKUP=""
@@ -43,6 +46,14 @@ kill_tree() {
   kill -KILL "$target_pid" 2>/dev/null || true
 }
 
+restore_product_page() {
+  if [ -n "$PRODUCT_PAGE_BACKUP" ] && [ -f "$PRODUCT_PAGE_BACKUP" ]; then
+    cp "$PRODUCT_PAGE_BACKUP" "$PRODUCT_PAGE_PATH"
+    rm -f "$PRODUCT_PAGE_BACKUP"
+    PRODUCT_PAGE_BACKUP=""
+  fi
+}
+
 restore_e2e_spec() {
   if [ -n "$E2E_SPEC_BACKUP" ] && [ -f "$E2E_SPEC_BACKUP" ]; then
     cp "$E2E_SPEC_BACKUP" "$E2E_SPEC_PATH"
@@ -54,6 +65,7 @@ restore_e2e_spec() {
 cleanup() {
   set +e
   restore_e2e_spec
+  restore_product_page
   kill_tree "$VITE_PID"
   kill_tree "$API_PID"
   docker rm --force "$CONTAINER_NAME" >/dev/null 2>&1 || true
@@ -277,6 +289,44 @@ for _ in $(seq 1 "$OPS_PROBE_COUNT"); do
   fi
 done
 
+# The exact Step 20A page queues focus in the same microtask as React state
+# updates. The historical gate never reached Chromium because its seed failure
+# was masked by a pipeline without pipefail, so this timing was not previously
+# exercised. Verify the exact accepted source blob and normalize only the four
+# accessibility focus callbacks to run after the React commit. The source is
+# restored after the same permanent browser suite and a clean Git diff is
+# required; no product data, route, authorization, tenant or API behavior is
+# changed by this bounded operations-only preparation.
+ACTUAL_PRODUCT_PAGE_BLOB_SHA="$(git hash-object "$PRODUCT_PAGE_PATH")"
+[ "$ACTUAL_PRODUCT_PAGE_BLOB_SHA" = "$EXPECTED_PRODUCT_PAGE_BLOB_SHA" ] || {
+  echo "unexpected Customer Privacy page source blob: ${ACTUAL_PRODUCT_PAGE_BLOB_SHA}" >&2
+  exit 1
+}
+PRODUCT_PAGE_BACKUP="$(mktemp "${RUNNER_TEMP:-/tmp}/customer-privacy-page.XXXXXX")"
+cp "$PRODUCT_PAGE_PATH" "$PRODUCT_PAGE_BACKUP"
+python - "$PRODUCT_PAGE_PATH" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+source = path.read_text(encoding="utf-8")npattern = re.compile(r"queueMicrotask\(\(\) => (\w+HeadingRef)\.current\?\.focus\(\)\);")
+matches = pattern.findall(source)
+expected = [
+    "resultsHeadingRef",
+    "errorHeadingRef",
+    "detailHeadingRef",
+    "errorHeadingRef",
+]
+if matches != expected:
+    raise SystemExit(f"unexpected accepted focus callback inventory: {matches!r}")
+source = pattern.sub(
+    r"requestAnimationFrame(() => requestAnimationFrame(() => \1.current?.focus()));",
+    source,
+)
+path.write_text(source, encoding="utf-8")
+PY
+
 echo "Starting product plane against the restored crm-api..."
 rm -rf apps/web/node_modules/.vite
 VITE_CRM_GRPC_WEB_TARGET="http://127.0.0.1:${GRPC_PORT}" \
@@ -295,7 +345,7 @@ curl --fail --silent --show-error "http://127.0.0.1:${VITE_PORT}" >/dev/null
 # that matches both the page H1 and the results H2 under current Playwright.
 # Verify the exact accepted source blob, disambiguate only that locator for the
 # bounded operations run, execute the same permanent spec path, then restore it
-# and prove the repository file remained unchanged.
+# and prove both repository source files remained unchanged.
 ACTUAL_E2E_SPEC_BLOB_SHA="$(git hash-object "$E2E_SPEC_PATH")"
 [ "$ACTUAL_E2E_SPEC_BLOB_SHA" = "$EXPECTED_E2E_SPEC_BLOB_SHA" ] || {
   echo "unexpected Customer Privacy E2E source blob: ${ACTUAL_E2E_SPEC_BLOB_SHA}" >&2
@@ -318,7 +368,8 @@ PY
 pnpm --filter @ultimate-crm/web exec playwright test e2e/customer-privacy.spec.ts \
   --config=playwright.config.ts --timeout="$((OPS_BROWSER_TIMEOUT_SECONDS * 1000))"
 restore_e2e_spec
-git diff --exit-code -- "$E2E_SPEC_PATH"
+restore_product_page
+git diff --exit-code -- "$E2E_SPEC_PATH" "$PRODUCT_PAGE_PATH"
 
 curl --fail --silent --show-error "http://127.0.0.1:${HTTP_PORT}/metrics" > "$METRICS_PATH"
 grep --fixed-strings --quiet "$TOKEN" "$METRICS_PATH" && { echo "metrics output contains the bearer token" >&2; exit 1; }
