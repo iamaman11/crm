@@ -29,9 +29,9 @@ No direct Customer Privacy record insertion, mock backend, alternate API, new ca
    - run the immutable PostgreSQL 17 image already accepted by the local lifecycle;
    - apply the authoritative migrations and test fixtures;
    - create the Customer Privacy fixture through assembled governed mutations;
-   - create a custom-format logical backup with owner and privilege replay disabled;
+   - create a custom-format logical backup with owner replay disabled while preserving the accepted role ACLs;
    - retain the backup only inside the job with mode `0600` and a recorded SHA-256 digest;
-   - restore into a distinct database and verify the restored schema inventory;
+   - restore into a distinct database, replay the accepted ACLs and verify the restored schema inventory;
    - start the assembled `crm-api` against the restored database and complete the real Chromium Customer Privacy journey.
 
 2. **SLO and performance**
@@ -61,7 +61,7 @@ No direct Customer Privacy record insertion, mock backend, alternate API, new ca
 
 ## Quantitative policy
 
-The machine-readable policy is `customer-privacy-operations-policy.json`. Threshold changes require review-visible policy and test changes; environment variables may select collision-free local ports and artifact directories but may not weaken thresholds.
+The machine-readable policy is `customer-privacy-operations-policy.json`. Threshold changes require review-visible policy and test changes; environment variables may select collision-free local PostgreSQL and API ports and artifact directories but may not weaken thresholds. Browser acceptance intentionally retains the repository-standard Playwright base URL on port `5173`.
 
 Initial committed objectives:
 
