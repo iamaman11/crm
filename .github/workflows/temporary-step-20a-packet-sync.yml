@@ -18,16 +18,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: repository-step-20a-customer-privacy-product-plane
-      - name: Inspect Customer Privacy SQL and authorization fixtures
+      - name: Inspect authoritative PrivacyCase persistence
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== Privacy-related SQL files ==='
-          grep -RIl --include='*.sql' -E 'privacy_cases|privacy_case|customer_privacy\.case\.(list|get)' database | sort || true
-          echo '=== Relevant SQL excerpts ==='
-          while IFS= read -r file; do
-            echo "--- ${file} ---"
-            grep -n -C 8 -E 'privacy_cases|privacy_case|customer_privacy\.case\.(list|get)' "${file}" | head -n 360 || true
-          done < <(grep -RIl --include='*.sql' -E 'privacy_cases|privacy_case|customer_privacy\.case\.(list|get)' database | sort)
-          echo '=== Authorization fixture patterns ==='
-          grep -RIn -C 6 --include='*.sql' -E 'capability_grant|authorization|permission|customer_privacy\.case\.(list|get)' database/tests | head -n 500 || true
+          echo '=== Customer Privacy migration names ==='
+          find database/migrations database/tests -type f | grep -Ei 'privacy|customer.*case' | sort || true
+          echo '=== CREATE TABLE candidates ==='
+          grep -RIn --include='*.sql' -E 'CREATE TABLE crm\.[a-z0-9_]*(privacy|case)[a-z0-9_]*' database/migrations | head -n 300 || true
+          echo '=== Exact capability and permission references ==='
+          grep -RIn -C 10 -E 'customer_privacy\.case\.(list|get)|customer_privacy\.case\.read' database services crates modules tests | head -n 900 || true
+          echo '=== Privacy repository SQL literals ==='
+          grep -RIn -C 8 -E 'FROM crm\.[a-z0-9_]*(privacy|case)|INSERT INTO crm\.[a-z0-9_]*(privacy|case)' crates services | head -n 900 || true
+          echo '=== Tenant grant shape ==='
+          grep -RIn -C 15 -E 'INSERT INTO crm\.tenant_capability_grants|tenant_capability_grants \(' database/tests services | head -n 500 || true
