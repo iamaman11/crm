@@ -114,6 +114,9 @@ def validate_policy(policy: dict[str, Any]) -> None:
         "cargo metadata --locked",
         "pnpm install --frozen-lockfile",
         "scripts/check_action_pinning.py",
+        "Prepare bounded active Customer Privacy query metrics",
+        "Restore bounded active query metrics source",
+        "crm_customer_privacy_query_resolutions_total",
     ):
         if marker not in workflow:
             raise OperationsError(f"operations workflow is missing marker: {marker}")
@@ -182,6 +185,25 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def has_positive_metric_sample(metrics: str, marker: str) -> bool:
+    """Return whether a non-comment Prometheus sample for marker is positive."""
+
+    for raw_line in metrics.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or marker not in line:
+            continue
+        fields = line.rsplit(None, 1)
+        if len(fields) != 2:
+            continue
+        try:
+            value = float(fields[1])
+        except ValueError:
+            continue
+        if math.isfinite(value) and value > 0:
+            return True
+    return False
+
+
 def build_report(args: argparse.Namespace, policy: dict[str, Any]) -> dict[str, Any]:
     latencies = read_latencies(Path(args.latencies))
     probe_count = require_integer(policy, "probe_count", minimum=10)
@@ -210,8 +232,10 @@ def build_report(args: argparse.Namespace, policy: dict[str, Any]) -> dict[str, 
     metrics_path = Path(args.metrics)
     metrics = metrics_path.read_text(encoding="utf-8")
     for marker in require_string_list(policy, "required_metric_markers"):
-        if marker not in metrics:
-            raise OperationsError(f"metrics output is missing marker: {marker}")
+        if not has_positive_metric_sample(metrics, marker):
+            raise OperationsError(
+                f"metrics output is missing positive sample: {marker}"
+            )
     for marker in require_string_list(policy, "forbidden_observability_markers"):
         if marker in metrics:
             raise OperationsError(
@@ -242,6 +266,7 @@ def build_report(args: argparse.Namespace, policy: dict[str, Any]) -> dict[str, 
         "restore_verified": True,
         "browser_verified": True,
         "security_concealment_verified": True,
+        "active_query_metrics_verified": True,
         "observability_redaction_verified": True,
         "supply_chain_inputs_verified": True,
     }
