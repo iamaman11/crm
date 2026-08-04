@@ -18,17 +18,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: repository-step-20a-customer-privacy-product-plane
-      - name: Inspect authoritative PrivacyCase persistence
+      - name: Inspect Customer Privacy mutation fixtures
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== Customer Privacy migration names ==='
-          find database/migrations database/tests -type f | grep -Ei 'privacy|customer.*case' | sort || true
-          echo '=== CREATE TABLE candidates ==='
-          grep -RIn --include='*.sql' -E 'CREATE TABLE crm\.[a-z0-9_]*(privacy|case)[a-z0-9_]*' database/migrations | head -n 300 || true
-          echo '=== Exact capability and permission references ==='
-          grep -RIn -C 10 -E 'customer_privacy\.case\.(list|get)|customer_privacy\.case\.read' database services crates modules tests | head -n 900 || true
-          echo '=== Privacy repository SQL literals ==='
-          grep -RIn -C 8 -E 'FROM crm\.[a-z0-9_]*(privacy|case)|INSERT INTO crm\.[a-z0-9_]*(privacy|case)' crates services | head -n 900 || true
-          echo '=== Tenant grant shape ==='
-          grep -RIn -C 15 -E 'INSERT INTO crm\.tenant_capability_grants|tenant_capability_grants \(' database/tests services | head -n 500 || true
+          echo '=== proto files ==='
+          find proto/crm/customer_privacy/v1 -maxdepth 1 -type f -printf '%f\n' | sort
+          echo '=== capability definition crates ==='
+          grep -RIl --include='*.rs' -E 'customer_privacy\.case\.(create|submit|subject\.verify)' crates | sort | head -n 40
+          echo '=== request construction sites ==='
+          grep -RIn -C 5 --include='*.rs' -E '(Create|Submit|Verify).*Privacy|customer_privacy\.case\.(create|submit|subject\.verify)' crates services | head -n 600 || true
+          echo '=== generic record storage ==='
+          grep -RIn -C 8 --include='*.sql' -E 'CREATE TABLE crm\.records|INSERT INTO crm\.records' database | head -n 300 || true
+          echo '=== capability grant DDL and fixtures ==='
+          grep -RIn -C 8 --include='*.sql' -E 'CREATE TABLE crm\.(tenant_)?capability|INSERT INTO crm\.(tenant_)?capability' database | head -n 500 || true
