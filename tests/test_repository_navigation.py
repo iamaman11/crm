@@ -42,10 +42,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
-                "crates/crm-customer-privacy-application/src/lib.rs",
-                "crates/crm-customer-privacy-application/src/worker.rs",
-                "crates/crm-customer-privacy-production/src/root.rs",
-                "crates/crm-customer-privacy-production/src/worker.rs",
+                "crates/crm-customer-privacy-application/src/execution.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
@@ -64,7 +61,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             ],
         )
         self.assertIn(
-            "deny work discovery and owner effects when durable tenant activation is absent",
+            "implement the existing generic TenantBackgroundWorker contract directly on PrivacyOwnerExecutionService",
+            packet["deliverables"],
+        )
+        self.assertIn(
+            "prove inactive no-side-effect behavior, active delegation and fail-closed duplicate rejection with unit tests while keeping the conservative public Rust surface at 5377",
             packet["deliverables"],
         )
         self.assertIn(
