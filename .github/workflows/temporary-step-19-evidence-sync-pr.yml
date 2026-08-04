@@ -41,22 +41,19 @@ jobs:
               "updated, count = re.subn(pattern, body.rstrip(), text, flags=re.DOTALL)",
               "updated, count = re.subn(pattern, lambda _: body.rstrip(), text, flags=re.DOTALL)",
           )
-          payload = payload.replace(
-              "for relative in normative:\n",
-              '''replacements.extend([
-    ("Step 19 is next", "Step 19 is complete; Step 20 is next"),
-    ("zero Customer Privacy workers", "one Customer Privacy owner worker"),
-    ("- a real Customer Privacy worker lifecycle using the accepted reusable conformance;\n", ""),
-    ("- disable/uninstall fail-closed semantics;\n", ""),
-    ("The next permitted implementation packet is Repository Step 19: the real Customer Privacy worker lifecycle and complete process/end-to-end acceptance. Repository Step 18 is complete through PR #285.", "The next permitted implementation packet is Repository Step 20: Phase 8A frontend, accessibility, browser and operations evidence. Repository Step 19 is complete through PRs #287–#290."),
-    ("No Step 19 or later implementation may start while Step 18 remains unfinished.", "No Step 20 or later implementation may start before the accepted Repository Step 19 closure evidence is synchronized."),
-    ("1–18. accepted and complete\n-> 19. Customer Privacy worker and complete process/end-to-end acceptance\n-> 20. Phase 8A frontend and operations evidence", "1–19. accepted and complete\n-> 20. Phase 8A frontend, accessibility, browser and operations evidence"),
-    ("- **Stage F — in progress:** mutation/query and worker conformance are accepted; contract lifecycle remains.", "- **Stage F — complete through PR #290:** mutation/query and worker conformance, complete contract lifecycle enforcement and real Customer Privacy worker adoption/lifecycle proof are accepted."),
-])
+          additions = r'''replacements.extend([
+              ("Step 19 is next", "Step 19 is complete; Step 20 is next"),
+              ("zero Customer Privacy workers", "one Customer Privacy owner worker"),
+              ("- a real Customer Privacy worker lifecycle using the accepted reusable conformance;\n", ""),
+              ("- disable/uninstall fail-closed semantics;\n", ""),
+              ("The next permitted implementation packet is Repository Step 19: the real Customer Privacy worker lifecycle and complete process/end-to-end acceptance. Repository Step 18 is complete through PR #285.", "The next permitted implementation packet is Repository Step 20: Phase 8A frontend, accessibility, browser and operations evidence. Repository Step 19 is complete through PRs #287–#290."),
+              ("No Step 19 or later implementation may start while Step 18 remains unfinished.", "No Step 20 or later implementation may start before the accepted Repository Step 19 closure evidence is synchronized."),
+              ("1–18. accepted and complete\n-> 19. Customer Privacy worker and complete process/end-to-end acceptance\n-> 20. Phase 8A frontend and operations evidence", "1–19. accepted and complete\n-> 20. Phase 8A frontend, accessibility, browser and operations evidence"),
+              ("- **Stage F — in progress:** mutation/query and worker conformance are accepted; contract lifecycle remains.", "- **Stage F — complete through PR #290:** mutation/query and worker conformance, complete contract lifecycle enforcement and real Customer Privacy worker adoption/lifecycle proof are accepted."),
+          ])
 
-for relative in normative:
-''',
-          )
+          '''
+          payload = payload.replace("for relative in normative:\n", additions + "for relative in normative:\n")
           Path('/tmp/step19_evidence_sync.py').write_text(payload, encoding='utf-8')
           PY
           python /tmp/step19_evidence_sync.py
