@@ -52,6 +52,8 @@ jobs:
                   index
                   for index, line in enumerate(lines)
                   if '["required_checks"]' in line
+                  and index > 0
+                  and lines[index - 1].strip() == "self.assertEqual("
               ]
               if len(candidates) != 1:
                   raise SystemExit(
@@ -80,6 +82,26 @@ jobs:
 
           align_guard(Path("tests/test_architecture_documentation_consistency.py"))
           align_guard(Path("tests/test_repository_navigation.py"))
+
+          navigation_path = Path("tests/test_repository_navigation.py")
+          navigation = navigation_path.read_text(encoding="utf-8")
+          navigation = navigation.replace(
+              '            "Governance CI": ".github/workflows/governance.yml",\n'
+              '            "Product Plane CI": ".github/workflows/product-plane.yml",\n',
+              '            "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",\n'
+              '            "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",\n'
+              '            "Governance CI": ".github/workflows/governance.yml",\n',
+              1,
+          )
+          if "Product Plane CI" in navigation:
+              raise SystemExit("stale Product Plane CI expectation remains in navigation guard")
+          for marker in (
+              "Customer Privacy Access Export CI",
+              "Customer Privacy Owner Execution CI",
+          ):
+              if marker not in navigation:
+                  raise SystemExit(f"missing navigation workflow mapping: {marker}")
+          navigation_path.write_text(navigation, encoding="utf-8")
           PY
           python scripts/generate_repository_navigation.py --write
           black tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py
