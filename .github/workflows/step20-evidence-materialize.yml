@@ -50,6 +50,90 @@ jobs:
           PY
           python scripts/materialize_step20_evidence_sync.py
 
+      - name: Normalize accepted Step 20 current-state wording
+        env:
+          PYTHONPATH: .
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          paths = (
+              "docs/PROJECT_STATUS.md",
+              "docs/IMPLEMENTATION_ROADMAP.md",
+              "docs/PHASE8_DELIVERY_PLAN.md",
+              "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+              "docs/MODULE_CATALOG.md",
+              "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
+              "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
+              "docs/PHASE8A_CUSTOMER_PRIVACY_PRODUCT_PLANE.md",
+              "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
+          )
+          exact = (
+              (
+                  "Repository Step 20B may begin only after the accepted Step 20A evidence is synchronized through this packet.",
+                  "Repository Step 20B is accepted through PR #294; Repository Step 21 Phase 8A closure is next.",
+              ),
+              (
+                  "Step 20B restore, SLO, observability, performance, security and supply-chain operations evidence is the only next permitted packet.",
+                  "Step 20B restore, SLO, observability, performance, security and supply-chain operations evidence is accepted through PR #294; Repository Step 21 Phase 8A closure is the only next permitted packet.",
+              ),
+              (
+                  "Repository Step 20B production operations, restore, SLO, observability, security, performance and supply-chain evidence;",
+                  "Repository Step 21 Phase 8A closure review;",
+              ),
+              (
+                  "Step 20B production operations, restore, SLO, observability, security, performance and supply-chain evidence;",
+                  "Repository Step 21 Phase 8A closure review;",
+              ),
+              (
+                  "Step 20B operations parity remains.",
+                  "Step 20 operations parity is accepted through PR #294.",
+              ),
+          )
+          for name in paths:
+              path = Path(name)
+              text = path.read_text(encoding="utf-8")
+              for old, new in exact:
+                  text = text.replace(old, new)
+              text = re.sub(
+                  r"(?i)\brepository step 20 remains in progress\b",
+                  "Repository Step 20 is complete",
+                  text,
+              )
+              text = re.sub(
+                  r"(?i)\bstep 20 remains in progress\b",
+                  "Step 20 is complete",
+                  text,
+              )
+              text = re.sub(
+                  r"(?i)\brepository step 20b is next\b",
+                  "Repository Step 21 Phase 8A closure is next",
+                  text,
+              )
+              text = re.sub(
+                  r"(?i)\bstep 20b is next\b",
+                  "Step 21 is next",
+                  text,
+              )
+              text = re.sub(
+                  r"(?i)\bstep 20b next\b",
+                  "Step 21 next",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^-> 20\.[^\n]*$",
+                  "-> 20. Phase 8A frontend, accessibility, browser and operations evidence — complete through PRs #292 and #294",
+                  text,
+              )
+              path.write_text(text, encoding="utf-8")
+
+          from scripts.repository_navigation import generated_documents
+          root = Path.cwd()
+          for path, content in generated_documents(root).items():
+              path.write_text(content, encoding="utf-8")
+          PY
+
       - name: Validate synchronized documentation and navigation
         env:
           PYTHONPATH: .
