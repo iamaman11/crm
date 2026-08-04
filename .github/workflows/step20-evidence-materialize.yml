@@ -1,0 +1,51 @@
+name: Step 20 Evidence Materializer
+
+on:
+  push:
+    branches:
+      - repository-step-20-evidence-sync
+
+concurrency:
+  group: step20-evidence-materializer-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: repository-step-20-evidence-sync
+          fetch-depth: 0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+
+      - name: Materialize accepted Step 20 evidence
+        env:
+          PYTHONPATH: .
+        run: python scripts/materialize_step20_evidence_sync.py
+
+      - name: Validate synchronized documentation and navigation
+        env:
+          PYTHONPATH: .
+        run: |
+          python -m unittest tests.test_architecture_documentation_consistency
+          python -m unittest tests.test_repository_navigation
+
+      - name: Commit materialized evidence
+        run: |
+          if git diff --quiet; then
+            echo "Evidence is already materialized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs repository-packet.json tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py
+          git commit -m "docs: synchronize accepted Repository Step 20 evidence"
+          git push origin HEAD:repository-step-20-evidence-sync
