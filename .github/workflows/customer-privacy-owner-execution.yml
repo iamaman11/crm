@@ -7,6 +7,7 @@ on:
     paths:
       - "repository-packet.json"
       - "docs/ACTIVE_PACKET.md"
+      - "crates/crm-application-runtime/tests/customer_privacy_application_runtime_lifecycle.rs"
       - "crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs"
       - "crates/crm-application-runtime/tests/customer_privacy_owner_execution_ready_postgres.rs"
       - "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs"
@@ -23,6 +24,7 @@ on:
     paths:
       - "repository-packet.json"
       - "docs/ACTIVE_PACKET.md"
+      - "crates/crm-application-runtime/tests/customer_privacy_application_runtime_lifecycle.rs"
       - "crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs"
       - "crates/crm-application-runtime/tests/customer_privacy_owner_execution_ready_postgres.rs"
       - "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs"
@@ -104,6 +106,9 @@ jobs:
             -p crm-customer-privacy-postgres \
             -p crm-customer-privacy-production \
             --all-targets -- -D warnings
+          cargo build --locked -p crm-api
+          cargo test --locked -p crm-application-runtime \
+            --test customer_privacy_application_runtime_lifecycle --no-run
           cargo test --locked -p crm-application-runtime \
             --test customer_privacy_owner_execution_postgres --no-run
           cargo test --locked -p crm-application-runtime \
@@ -112,6 +117,8 @@ jobs:
             --test party_tombstone_rebuild_convergence_postgres --no-run
           cargo test --locked -p crm-api \
             --test customer_360_privacy_no_orphan_process_e2e --no-run
+          cargo clippy --locked -p crm-application-runtime \
+            --test customer_privacy_application_runtime_lifecycle -- -D warnings
           cargo clippy --locked -p crm-application-runtime \
             --test customer_privacy_owner_execution_postgres -- -D warnings
           cargo clippy --locked -p crm-application-runtime \
@@ -140,6 +147,15 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0007_contact_point_adapter.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify clean assembled runtime lifecycle
+        shell: bash
+        env:
+          CRM_API_BINARY: ${{ github.workspace }}/target/debug/crm-api
+        run: |
+          set -euo pipefail
+          cargo test --locked -p crm-application-runtime \
+            --test customer_privacy_application_runtime_lifecycle -- --nocapture \
+            2>&1 | tee database/customer-privacy-runtime-lifecycle-clean.log
       - name: Verify clean PostgreSQL ready-work acceptance
         shell: bash
         run: |
@@ -190,6 +206,15 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0007_contact_point_adapter.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Repeat assembled runtime lifecycle after reapply
+        shell: bash
+        env:
+          CRM_API_BINARY: ${{ github.workspace }}/target/debug/crm-api
+        run: |
+          set -euo pipefail
+          cargo test --locked -p crm-application-runtime \
+            --test customer_privacy_application_runtime_lifecycle -- --nocapture \
+            2>&1 | tee database/customer-privacy-runtime-lifecycle-reapplied.log
       - name: Repeat PostgreSQL ready-work acceptance after reapply
         shell: bash
         run: |
@@ -236,12 +261,14 @@ jobs:
             crates/crm-customer-privacy-application/
             crates/crm-customer-privacy-postgres/
             crates/crm-customer-privacy-production/
+            crates/crm-application-runtime/tests/customer_privacy_application_runtime_lifecycle.rs
             crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs
             crates/crm-application-runtime/tests/customer_privacy_owner_execution_ready_postgres.rs
             crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs
             services/crm-api/tests/customer_360_privacy_no_orphan_process_e2e.rs
             database/customer-privacy-owner-execution-*.log
             database/customer-privacy-owner-ready-work-*.log
+            database/customer-privacy-runtime-lifecycle-*.log
             database/customer-privacy-party-rebuild-*.log
             database/customer-privacy-no-orphan-process-*.log
           if-no-files-found: warn
