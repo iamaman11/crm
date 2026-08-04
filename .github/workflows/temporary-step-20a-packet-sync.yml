@@ -1,0 +1,38 @@
+name: Temporary Step 20A Packet Sync
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/temporary-step-20a-packet-sync.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  synchronize:
+    if: github.head_ref == 'repository-step-20a-customer-privacy-product-plane'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: repository-step-20a-customer-privacy-product-plane
+      - name: Inspect existing E2E and seed fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== E2E files ==='
+          find apps/web -type f | grep -E '/e2e/|\.spec\.' | sort || true
+          echo '=== Seed fixture files ==='
+          find . -type f | grep -E 'seed_e2e_fixture|e2e_fixture' | sort || true
+          echo '=== Existing E2E sources ==='
+          while IFS= read -r file; do
+            echo "--- ${file} ---"
+            sed -n '1,260p' "${file}"
+          done < <(find apps/web -type f | grep -E '/e2e/|\.spec\.' | sort)
+          echo '=== Seed fixture source ==='
+          while IFS= read -r file; do
+            echo "--- ${file} ---"
+            sed -n '1,360p' "${file}"
+          done < <(find . -type f | grep -E 'seed_e2e_fixture|e2e_fixture' | sort)
