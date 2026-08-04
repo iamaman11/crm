@@ -14,7 +14,7 @@
   "objective": "Complete the implementation acceptance for Repository Step 19 by proving that the assembled ApplicationRuntime discovers and executes a real Customer Privacy owner action through the registered PostgreSQL-backed phase-260 worker, remains replay-safe, and performs no discovery or effect after Customer Privacy is uninstalled, without adding a crate, dependency, route, manifest coordinate, migration or public Rust item.",
   "allowed_paths": [
     ".github/workflows/customer-privacy-owner-execution.yml",
-    "crates/crm-application-runtime/tests/customer_privacy_application_runtime_lifecycle.rs",
+    "crates/crm-application-runtime/examples/customer_privacy_application_runtime_lifecycle.rs",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
     "tests/test_architecture_documentation_consistency.py",
@@ -61,7 +61,7 @@
   "acceptance": [
     "the branch is based exactly on main commit d1c4dd278853a1e6a426fab284c70b3529d42833",
     "the packet adds zero crates, dependencies, contracts, routes, manifests, schemas, migrations, public ingress or conservative public Rust items",
-    "the test starts the real crm-api binary whose ApplicationRuntime owns the production background registry and does not invoke the Customer Privacy worker or owner service directly",
+    "the explicit lifecycle executable starts the real crm-api binary whose ApplicationRuntime owns the production background registry and does not invoke the Customer Privacy worker or owner service directly",
     "a real planned Party privacy item is discovered through PostgreSQL ready work and executed through the registered crm.customer-privacy/owner-execution worker",
     "the owner action removes the original identifying Party display name and persists one attempt, one successful outcome, one completed checkpoint, audit evidence, one owner event and a converging case transition",
     "restarting the assembled process produces no duplicate Party mutation, attempt, outcome, checkpoint, audit, owner event or case transition",
