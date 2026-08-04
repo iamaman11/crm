@@ -47,11 +47,13 @@ async fn postgres_ready_work_is_bounded_resumable_lineage_exact_and_tenant_bound
     let (privacy_case, plan, decision) = build_case_plan_and_decision();
     seed_record(
         &admin,
-        "owner-ready-fixture-case",
-        "test.record.mutate",
-        "request-owner-ready-fixture-case",
-        "correlation-owner-ready-fixture-case",
-        "trace-owner-ready-fixture-case",
+        FixtureTransaction {
+            transaction_id: "owner-ready-fixture-case",
+            capability_id: "test.record.mutate",
+            request_id: "request-owner-ready-fixture-case",
+            correlation_id: "correlation-owner-ready-fixture-case",
+            trace_id: "trace-owner-ready-fixture-case",
+        },
         "customer-privacy.case",
         CASE_ID,
         privacy_case.version(),
@@ -60,11 +62,13 @@ async fn postgres_ready_work_is_bounded_resumable_lineage_exact_and_tenant_bound
     .await;
     seed_record(
         &admin,
-        "owner-ready-fixture-plan",
-        "test.record.mutate",
-        "request-owner-ready-fixture-plan",
-        "correlation-owner-ready-fixture-plan",
-        "trace-owner-ready-fixture-plan",
+        FixtureTransaction {
+            transaction_id: "owner-ready-fixture-plan",
+            capability_id: "test.record.mutate",
+            request_id: "request-owner-ready-fixture-plan",
+            correlation_id: "correlation-owner-ready-fixture-plan",
+            trace_id: "trace-owner-ready-fixture-plan",
+        },
         ACTION_PLAN_RECORD_TYPE,
         plan.plan_id().as_str(),
         1,
@@ -73,11 +77,13 @@ async fn postgres_ready_work_is_bounded_resumable_lineage_exact_and_tenant_bound
     .await;
     seed_record(
         &admin,
-        READY_TRANSACTION,
-        "customer_privacy.case.approve",
-        READY_REQUEST,
-        READY_CORRELATION,
-        READY_TRACE,
+        FixtureTransaction {
+            transaction_id: READY_TRANSACTION,
+            capability_id: "customer_privacy.case.approve",
+            request_id: READY_REQUEST,
+            correlation_id: READY_CORRELATION,
+            trace_id: READY_TRACE,
+        },
         "customer-privacy.retention-decision",
         decision.decision_id().as_str(),
         1,
@@ -290,14 +296,18 @@ fn action_plan_payload(plan: &PrivacyActionPlan) -> TypedPayload {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[derive(Clone, Copy)]
+struct FixtureTransaction<'a> {
+    transaction_id: &'a str,
+    capability_id: &'a str,
+    request_id: &'a str,
+    correlation_id: &'a str,
+    trace_id: &'a str,
+}
+
 async fn seed_record(
     admin: &PgPool,
-    transaction_id: &str,
-    capability_id: &str,
-    request_id: &str,
-    correlation_id: &str,
-    trace_id: &str,
+    source: FixtureTransaction<'_>,
     record_type: &str,
     record_id: &str,
     version: u64,
@@ -308,15 +318,7 @@ async fn seed_record(
         .execute(&mut *transaction)
         .await
         .expect("disable trigger-backed fixture verification");
-    insert_fixture_transaction(
-        &mut transaction,
-        transaction_id,
-        capability_id,
-        request_id,
-        correlation_id,
-        trace_id,
-    )
-    .await;
+    insert_fixture_transaction(&mut transaction, source).await;
     sqlx::query(
         r#"
         INSERT INTO crm.records (
@@ -339,7 +341,7 @@ async fn seed_record(
     .bind(i64::try_from(payload.maximum_size_bytes).unwrap())
     .bind(payload.retention_policy_id.as_str())
     .bind(payload.bytes)
-    .bind(transaction_id)
+    .bind(source.transaction_id)
     .execute(&mut *transaction)
     .await
     .expect("insert ready-work fixture record");
@@ -351,11 +353,7 @@ async fn seed_record(
 
 async fn insert_fixture_transaction(
     transaction: &mut Transaction<'_, Postgres>,
-    transaction_id: &str,
-    capability_id: &str,
-    request_id: &str,
-    correlation_id: &str,
-    trace_id: &str,
+    source: FixtureTransaction<'_>,
 ) {
     sqlx::query(
         r#"
@@ -367,12 +365,12 @@ async fn insert_fixture_transaction(
         "#,
     )
     .bind(TENANT_A)
-    .bind(transaction_id)
+    .bind(source.transaction_id)
     .bind(ACTOR)
-    .bind(request_id)
-    .bind(correlation_id)
-    .bind(trace_id)
-    .bind(capability_id)
+    .bind(source.request_id)
+    .bind(source.correlation_id)
+    .bind(source.trace_id)
+    .bind(source.capability_id)
     .execute(&mut **transaction)
     .await
     .expect("insert ready-work fixture business transaction");
