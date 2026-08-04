@@ -309,9 +309,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             )
 
             for line in document.splitlines():
-
                 lowered_line = line.lower()
-
                 self.assertFalse(
                     "step 20" in lowered_line
                     and "next permitted" in lowered_line
