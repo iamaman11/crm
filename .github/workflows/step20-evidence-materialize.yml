@@ -4,9 +4,12 @@ on:
   push:
     branches:
       - repository-step-20-evidence-sync
+  pull_request:
+    branches:
+      - main
 
 concurrency:
-  group: step20-evidence-materializer-${{ github.ref }}
+  group: step20-evidence-materializer-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
