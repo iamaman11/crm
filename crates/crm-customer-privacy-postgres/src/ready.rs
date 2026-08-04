@@ -5,9 +5,9 @@ use crm_customer_privacy::{
     decode_retention_decision_state,
 };
 use crm_customer_privacy_application::{
-    RETENTION_APPROVAL_TRIGGER_CAPABILITY, RETENTION_LEGAL_HOLD_TRIGGER_CAPABILITY,
-    RETENTION_TRIGGER_CAPABILITY_VERSION, CheckpointAdvance, ExecutionPreparation,
-    OwnerExecutionInvocation, OwnerExecutionPersistencePort,
+    CheckpointAdvance, ExecutionPreparation, OwnerExecutionInvocation,
+    OwnerExecutionPersistencePort, RETENTION_APPROVAL_TRIGGER_CAPABILITY,
+    RETENTION_LEGAL_HOLD_TRIGGER_CAPABILITY, RETENTION_TRIGGER_CAPABILITY_VERSION,
 };
 use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, ErrorCategory, PortFuture, RecordId,
@@ -201,7 +201,8 @@ fn ready_invocation(
     let decision_bytes = row
         .try_get::<Vec<u8>, _>("decision_payload")
         .map_err(database_error)?;
-    let decision = decode_retention_decision_state(&decision_bytes).map_err(ready_evidence_invalid)?;
+    let decision =
+        decode_retention_decision_state(&decision_bytes).map_err(ready_evidence_invalid)?;
     let privacy_case_id = identifier::<RecordId>(&row, "privacy_case_id")?;
     let action_plan_id = identifier::<RecordId>(&row, "action_plan_id")?;
     let retention_decision_id = identifier::<RecordId>(&row, "retention_decision_id")?;
@@ -319,7 +320,10 @@ mod tests {
             "source_transaction.capability_id IN ($7, $8)",
             "LIMIT $9",
         ] {
-            assert!(READY_WORK_SQL.contains(marker), "missing SQL guard: {marker}");
+            assert!(
+                READY_WORK_SQL.contains(marker),
+                "missing SQL guard: {marker}"
+            );
         }
         assert!(READY_WORK_SQL.contains("DISTINCT ON"));
         assert!(READY_WORK_SQL.contains("completed_at_unix_nanos IS NULL"));

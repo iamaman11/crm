@@ -113,7 +113,11 @@ async fn postgres_ready_work_is_bounded_resumable_lineage_exact_and_tenant_bound
     assert_eq!(invocation.planned_at_unix_nanos, 5_000_000);
     assert!(invocation.trusted_internal);
 
-    assert!(load_ready(&persistence, &tenant_b, 5_000_000, 64).await.is_empty());
+    assert!(
+        load_ready(&persistence, &tenant_b, 5_000_000, 64)
+            .await
+            .is_empty()
+    );
     let error = persistence
         .load_ready(&tenant_a, 5_000_000, 0)
         .await
@@ -158,7 +162,11 @@ async fn postgres_ready_work_is_bounded_resumable_lineage_exact_and_tenant_bound
         .await
         .expect("complete ready-work checkpoint");
     assert!(checkpoint.complete);
-    assert!(load_ready(&persistence, &tenant_a, 6_000_000, 64).await.is_empty());
+    assert!(
+        load_ready(&persistence, &tenant_a, 6_000_000, 64)
+            .await
+            .is_empty()
+    );
 
     cleanup(&admin).await;
 }
@@ -335,7 +343,10 @@ async fn seed_record(
     .execute(&mut *transaction)
     .await
     .expect("insert ready-work fixture record");
-    transaction.commit().await.expect("commit ready-work fixture");
+    transaction
+        .commit()
+        .await
+        .expect("commit ready-work fixture");
 }
 
 async fn insert_fixture_transaction(
@@ -389,7 +400,10 @@ async fn cleanup(admin: &PgPool) {
             .await
             .expect("clean ready-work evidence");
     }
-    transaction.commit().await.expect("commit ready-work cleanup");
+    transaction
+        .commit()
+        .await
+        .expect("commit ready-work cleanup");
 }
 
 fn data_class_name(data_class: DataClass) -> &'static str {
