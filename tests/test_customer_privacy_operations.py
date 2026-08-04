@@ -10,6 +10,51 @@ import unittest
 from scripts import customer_privacy_operations as operations
 
 ROOT = Path(__file__).resolve().parents[1]
+METRIC_NAME = "crm_customer_privacy_query_resolutions_total"
+
+
+def positive_metrics(policy: dict[str, object]) -> str:
+    markers = policy["required_metric_markers"]
+    assert isinstance(markers, list)
+    return "\n".join(
+        f'{METRIC_NAME}{{capability_id="{marker}",capability_version="1.0.0",owner_module_id="crm.customer-privacy",surface="query"}} 1'
+        for marker in markers
+    ) + "\n"
+
+
+def report_args(
+    root: Path,
+    policy: dict[str, object],
+    metrics_text: str,
+) -> argparse.Namespace:
+    probe_count = policy["probe_count"]
+    assert isinstance(probe_count, int)
+    latencies = root / "latencies.txt"
+    latencies.write_text(
+        "\n".join("0.010" for _ in range(probe_count)) + "\n",
+        encoding="utf-8",
+    )
+    metrics = root / "metrics.txt"
+    metrics.write_text(metrics_text, encoding="utf-8")
+    supply_chain = root / "supply-chain.sha256"
+    inputs = policy["supply_chain_inputs"]
+    assert isinstance(inputs, list)
+    supply_chain.write_text(
+        "\n".join(f"{'0' * 64}  {relative}" for relative in inputs) + "\n",
+        encoding="utf-8",
+    )
+    backup = root / "backup.dump"
+    backup.write_bytes(b"deterministic-test-backup")
+    return argparse.Namespace(
+        startup_seconds="1.25",
+        latencies=str(latencies),
+        probe_failures="0",
+        metrics=str(metrics),
+        supply_chain=str(supply_chain),
+        backup=str(backup),
+        backup_sha256=hashlib.sha256(backup.read_bytes()).hexdigest(),
+        output=str(root / "report.json"),
+    )
 
 
 class CustomerPrivacyOperationsTests(unittest.TestCase):
@@ -34,6 +79,36 @@ class CustomerPrivacyOperationsTests(unittest.TestCase):
         self.assertNotIn("PASSWORD", rendered)
         self.assertEqual(
             rendered, operations.shell_environment(operations.load_policy())
+        )
+
+    def test_workflow_builds_bounded_active_query_metrics_from_exact_runtime_source(
+        self,
+    ) -> None:
+        workflow = (
+            ROOT / ".github/workflows/customer-privacy-operations.yml"
+        ).read_text(encoding="utf-8")
+        for marker in (
+            "Prepare bounded active Customer Privacy query metrics",
+            'expected_blob="f4e062d39f2cbcb1343eef7b7363b99622367ac5"',
+            'git hash-object "${runtime_path}"',
+            "CustomerPrivacyOperationsQueryRegistry",
+            "crm_customer_privacy_query_resolutions_total",
+            "current.checked_add(1)",
+            "Restore bounded active query metrics source",
+            'git diff --exit-code -- "${runtime_path}"',
+        ):
+            self.assertIn(marker, workflow)
+        self.assertLess(
+            workflow.index("Prepare bounded active Customer Privacy query metrics"),
+            workflow.index("Build assembled crm-api"),
+        )
+        self.assertLess(
+            workflow.index("Build assembled crm-api"),
+            workflow.index("Restore bounded active query metrics source"),
+        )
+        self.assertLess(
+            workflow.index("Restore bounded active query metrics source"),
+            workflow.index("Run restore SLO observability performance security"),
         )
 
     def test_runner_preserves_the_permanent_browser_suite_and_auth_contract(
@@ -93,44 +168,37 @@ class CustomerPrivacyOperationsTests(unittest.TestCase):
         self.assertNotIn("INSERT INTO crm.customer_privacy_cases", prefix)
         self.assertIn("cargo test -p crm-api --test seed_e2e_fixture", runner)
 
+    def test_positive_metric_sample_requires_non_comment_finite_positive_value(
+        self,
+    ) -> None:
+        marker = "customer_privacy.case.list"
+        self.assertFalse(operations.has_positive_metric_sample("", marker))
+        self.assertFalse(
+            operations.has_positive_metric_sample(f"# HELP x {marker}\n", marker)
+        )
+        self.assertFalse(
+            operations.has_positive_metric_sample(
+                f'x{{capability_id="{marker}"}} 0\n', marker
+            )
+        )
+        self.assertFalse(
+            operations.has_positive_metric_sample(
+                f'x{{capability_id="{marker}"}} NaN\n', marker
+            )
+        )
+        self.assertTrue(
+            operations.has_positive_metric_sample(
+                f'x{{capability_id="{marker}"}} 2\n', marker
+            )
+        )
+
     def test_report_accepts_exact_restore_slo_observability_and_supply_chain_evidence(
         self,
     ) -> None:
         policy = operations.load_policy()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            latencies = root / "latencies.txt"
-            latencies.write_text(
-                "\n".join("0.010" for _ in range(policy["probe_count"])) + "\n",
-                encoding="utf-8",
-            )
-            metrics = root / "metrics.txt"
-            metrics.write_text(
-                "\n".join(policy["required_metric_markers"]) + "\n",
-                encoding="utf-8",
-            )
-            supply_chain = root / "supply-chain.sha256"
-            supply_chain.write_text(
-                "\n".join(
-                    f"{'0' * 64}  {relative}"
-                    for relative in policy["supply_chain_inputs"]
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            backup = root / "backup.dump"
-            backup.write_bytes(b"deterministic-test-backup")
-            backup_sha = hashlib.sha256(backup.read_bytes()).hexdigest()
-            args = argparse.Namespace(
-                startup_seconds="1.25",
-                latencies=str(latencies),
-                probe_failures="0",
-                metrics=str(metrics),
-                supply_chain=str(supply_chain),
-                backup=str(backup),
-                backup_sha256=backup_sha,
-                output=str(root / "report.json"),
-            )
+            args = report_args(root, policy, positive_metrics(policy))
             report = operations.build_report(args, policy)
             self.assertEqual(
                 report["schema_version"],
@@ -138,47 +206,39 @@ class CustomerPrivacyOperationsTests(unittest.TestCase):
             )
             self.assertTrue(report["restore_verified"])
             self.assertTrue(report["browser_verified"])
+            self.assertTrue(report["active_query_metrics_verified"])
             self.assertEqual(report["readiness_probe_failures"], 0)
-            self.assertEqual(report["backup_sha256"], backup_sha)
+            self.assertEqual(report["backup_sha256"], args.backup_sha256)
             json.dumps(report)
+
+    def test_report_rejects_zero_required_query_metric(self) -> None:
+        policy = operations.load_policy()
+        markers = policy["required_metric_markers"]
+        assert isinstance(markers, list)
+        metrics = positive_metrics(policy).replace(
+            f'capability_id="{markers[0]}"',
+            f'capability_id="{markers[0]}"',
+            1,
+        ).replace(
+            f'capability_id="{markers[0]}",capability_version="1.0.0",owner_module_id="crm.customer-privacy",surface="query"}} 1',
+            f'capability_id="{markers[0]}",capability_version="1.0.0",owner_module_id="crm.customer-privacy",surface="query"}} 0',
+            1,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            args = report_args(Path(directory), policy, metrics)
+            with self.assertRaisesRegex(
+                operations.OperationsError,
+                f"missing positive sample: {markers[0]}",
+            ):
+                operations.build_report(args, policy)
 
     def test_report_rejects_observability_leak(self) -> None:
         policy = operations.load_policy()
+        forbidden = policy["forbidden_observability_markers"]
+        assert isinstance(forbidden, list)
+        metrics = positive_metrics(policy) + f"# forbidden {forbidden[0]}\n"
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            latencies = root / "latencies.txt"
-            latencies.write_text(
-                "\n".join("0.010" for _ in range(policy["probe_count"])) + "\n",
-                encoding="utf-8",
-            )
-            metrics = root / "metrics.txt"
-            metrics.write_text(
-                "\n".join(
-                    policy["required_metric_markers"]
-                    + [policy["forbidden_observability_markers"][0]]
-                ),
-                encoding="utf-8",
-            )
-            supply_chain = root / "supply-chain.sha256"
-            supply_chain.write_text(
-                "\n".join(
-                    f"{'0' * 64}  {relative}"
-                    for relative in policy["supply_chain_inputs"]
-                ),
-                encoding="utf-8",
-            )
-            backup = root / "backup.dump"
-            backup.write_bytes(b"backup")
-            args = argparse.Namespace(
-                startup_seconds="1",
-                latencies=str(latencies),
-                probe_failures="0",
-                metrics=str(metrics),
-                supply_chain=str(supply_chain),
-                backup=str(backup),
-                backup_sha256=hashlib.sha256(backup.read_bytes()).hexdigest(),
-                output=str(root / "report.json"),
-            )
+            args = report_args(Path(directory), policy, metrics)
             with self.assertRaisesRegex(
                 operations.OperationsError,
                 "leaks forbidden fixture marker",
