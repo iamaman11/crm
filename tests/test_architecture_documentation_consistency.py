@@ -241,6 +241,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "packages/client/src/index.ts",
                 "repository-packet.json",
                 "scripts/run_e2e.sh",
+                "services/crm-api/tests/seed_e2e_fixture.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
             })
