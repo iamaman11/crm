@@ -67,10 +67,10 @@ Issue #194 remains open. The architecture stage ledger is:
 - Stage E affected-scope CI — **Complete through PR #239; permanent-gate value review remains mandatory at Step 22**;
 - Stage F generic conformance and contract lifecycle — **In progress**;
 - Stage G transitional consolidation — **Complete through PR #259**;
-- Stage H reproducible environment and navigation — **In progress**;
+- Stage H reproducible environment and navigation — **Complete through PR #285**;
 - Stage I frontend and operations parity — **Incomplete**.
 
-Repository Steps 1–17 are complete. Repository Step 18 is **in progress through accepted PRs #281 and #283**; doctor/bootstrap/dev-up/dev-reset are accepted and seed-demo/smoke are the next permitted bounded implementation packet.
+Repository Steps 1–18 are complete. Repository Step 19 is the next permitted bounded implementation packet: the real Customer Privacy worker lifecycle and complete process/end-to-end acceptance.
 
 ### 3.1 Accepted Repository Step 14 closure
 
@@ -128,14 +128,14 @@ Step 17 is accepted through three bounded slices:
 - PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8 — made production zero-usage retirement evidence SHA-256-bound, complete, append-only and fail closed;
 - PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 — proved the coordinate was never externally released through live empty GitHub Releases, tags and deployments, non-publishable packages and no external consumer record, then retired `activities.task.create@1.0.0` while preserving its historical tombstone and keeping `telemetry.zero_since` null.
 
-The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is in progress through accepted PRs #281 and #283: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7 applicable permanent workflows, each on one unchanged exact head. The accepted slices deliver deterministic repository-pinned `doctor`, locked isolated `bootstrap`, and checkout-owned PostgreSQL `dev-up` / `dev-reset` with immutable image pinning, schema-digest reuse, fail-closed ownership checks and permanent real-Docker create/reuse/reset acceptance. The next permitted bounded implementation packet is `seed-demo` and `smoke`; Repository Step 19 remains blocked.
+The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is complete through accepted PRs #281, #283 and #285: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7; PR #285 / source `a522b8b11a0c6f143694f516e7a7f9d522c18ce3` / squash merge `a906f2c514285974113749b8b8ad9446202a5fa1` / 19 of 19 applicable permanent workflows, each on one unchanged exact head. The accepted lifecycle delivers deterministic repository-pinned `doctor`, locked isolated `bootstrap`, checkout-owned PostgreSQL `dev-up` / `dev-reset`, versioned idempotent `seed-demo` through the governed Party mutation gateway and real-process `smoke` proving readiness, permission, authentication and tenant boundaries. The next permitted bounded implementation packet is Repository Step 19: the real Customer Privacy worker lifecycle and complete process/end-to-end acceptance.
 
 
-### 3.5 Accepted Repository Step 18 lifecycle slices
+### 3.5 Accepted Repository Step 18 closure
 
-Repository Step 18 is in progress through accepted PRs #281 and #283: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7 applicable permanent workflows, each on one unchanged exact head. The accepted slices deliver deterministic repository-pinned `doctor`, locked isolated `bootstrap`, and checkout-owned PostgreSQL `dev-up` / `dev-reset` with immutable image pinning, schema-digest reuse, fail-closed ownership checks and permanent real-Docker create/reuse/reset acceptance. The next permitted bounded implementation packet is `seed-demo` and `smoke`; Repository Step 19 remains blocked.
+Repository Step 18 is complete through accepted PRs #281, #283 and #285: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7; PR #285 / source `a522b8b11a0c6f143694f516e7a7f9d522c18ce3` / squash merge `a906f2c514285974113749b8b8ad9446202a5fa1` / 19 of 19 applicable permanent workflows, each on one unchanged exact head. The accepted lifecycle delivers deterministic repository-pinned `doctor`, locked isolated `bootstrap`, checkout-owned PostgreSQL `dev-up` / `dev-reset`, versioned idempotent `seed-demo` through the governed Party mutation gateway and real-process `smoke` proving readiness, permission, authentication and tenant boundaries. The next permitted bounded implementation packet is Repository Step 19: the real Customer Privacy worker lifecycle and complete process/end-to-end acceptance.
 
-The accepted slices change no product behavior or runtime ownership. Step 18 remains open until seed-demo and smoke are accepted on a clean environment.
+The accepted Step 18 lifecycle changes no product ownership, public contract, schema, migration, dependency or lockfile. Step 18 is complete; Step 19 is next and Customer Privacy still publishes zero workers until that packet is accepted.
 
 ### 3.6 Binding next repository sequence
 
@@ -143,7 +143,7 @@ The complete order is normative in the architecture plan. The remaining sequence
 
 16. reusable generic worker conformance — **complete through PR #270**;
 17. contract compatibility, deprecation, consumer-migration and retirement enforcement — **complete through PR #279**;
-18. deterministic local lifecycle commands — **in progress through PRs #281 and #283; doctor/bootstrap/dev-up/dev-reset accepted, seed-demo/smoke next**;
+18. deterministic local lifecycle commands — **complete through PR #285**;
 19. Customer Privacy worker and full process/end-to-end acceptance;
 20. Phase 8A frontend, accessibility, browser and operations evidence;
 21. Phase 8A closure;

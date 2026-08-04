@@ -23,6 +23,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.plan = read("docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md")
         cls.complexity = read("docs/WORKSPACE_COMPLEXITY_BASELINE.md")
         cls.catalog = read("docs/MODULE_CATALOG.md")
+        cls.product_plan = read("docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md")
         cls.delivery = read("docs/DELIVERY_GOVERNANCE.md")
         cls.adr32 = read("docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md")
         cls.active_packet = read("docs/ACTIVE_PACKET.md")
@@ -90,14 +91,14 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         for document in self.normative_documents:
             for marker in ("112", "835", "5,377", "18", "270", "91"):
                 self.assertIn(marker, document)
-            for match in re.finditer(r"113", document):
+            for match in re.finditer(r"113", document):
                 context = document[max(0, match.start() - 120) : match.end() + 120].lower()
                 self.assertTrue(
                     "historical" in context or "→ 112" in context or "step 13" in context,
                     f"unqualified current 113-package claim: {context}",
                 )
 
-    def test_step_17_is_complete_and_step_18_is_in_progress(self) -> None:
+    def test_step_18_is_complete_and_step_19_is_next(self) -> None:
         exact = (
             "PR #275",
             "1c6366b557e255a14a677758fd87f7fe63184a89",
@@ -108,26 +109,34 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "PR #279",
             "0dce0895edec56508df1b4fc880d09ab27fc00df",
             "ea3d3894d05e3a8d814aff69824b593843763d03",
-            "PR #283",
-            "5f4480fafd37cc8c89df60f3688e756d7f881af8",
-            "21e2f73b57d2c35c16eccc15ee3e075e818f488a",
-            "7 of 7",
+            "PR #285",
+            "a522b8b11a0c6f143694f516e7a7f9d522c18ce3",
+            "a906f2c514285974113749b8b8ad9446202a5fa1",
+            "19 of 19",
         )
         for document in self.normative_documents:
             lowered = document.lower()
             for marker in exact:
                 self.assertIn(marker, document)
-            self.assertIn("step 17", lowered)
             self.assertIn("step 18", lowered)
-            self.assertNotRegex(lowered, r"step 17[^\n.;]{0,80}not started")
-        self.assertIn("Repository Steps 1–17 are complete", self.status)
-        self.assertIn("Repository Step 18 is in progress through accepted PRs #281 and #283", self.status)
-        self.assertIn(
-            "17. contract compatibility, deprecation, consumer-migration and retirement lifecycle enforcement — **complete through PR #279**",
-            self.plan,
-        )
+            self.assertIn("step 19", lowered)
+            self.assertNotRegex(lowered, r"step 18[^\n.;]{0,100}(?:not started|in progress)")
+        self.assertIn("Repository Steps 1–18 are complete", self.status)
         self.assertIn("18. deterministic local lifecycle commands", self.plan)
-        self.assertIn("**in progress through PRs #281 and #283; doctor/bootstrap/dev-up/dev-reset accepted, seed-demo/smoke next**", self.plan)
+        self.assertIn("**complete through PR #285**", self.plan)
+        self.assertIn("Repository Step 19", self.status)
+        for marker in (
+            "PR #285",
+            "a522b8b11a0c6f143694f516e7a7f9d522c18ce3",
+            "a906f2c514285974113749b8b8ad9446202a5fa1",
+            "19 of 19",
+            "Repository Step 19",
+        ):
+            self.assertIn(marker, self.product_plan)
+        self.assertNotIn(
+            "Repository Step 15 remains the next implementation packet",
+            self.product_plan,
+        )
 
     def test_product_readiness_is_not_overstated(self) -> None:
         for document in self.normative_documents:
@@ -197,27 +206,21 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_step_18_seed_demo_smoke_packet_is_exact(self) -> None:
+    def test_active_step_18_closure_evidence_sync_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-18-seed-demo-smoke")
+        self.assertEqual(self.packet["packet_id"], "repository-step-18-seed-demo-smoke-evidence-sync")
         self.assertEqual(self.packet["status"], "active")
-        self.assertEqual(
-            self.packet["baseline"],
-            {"ref": "main", "sha": "953b9f929f8e89c351c59ebc01461fffab3689ff"},
-        )
+        self.assertEqual(self.packet["baseline"], {"ref": "main", "sha": "a906f2c514285974113749b8b8ad9446202a5fa1"})
         self.assertEqual(self.packet["tracking_issues"], [194])
-        self.assertEqual(set(self.packet["allowed_paths"]), {'tests/test_architecture_documentation_consistency.py', 'services/crm-api/tests/local_demo_smoke_e2e.rs', 'AGENTS.md', 'tests/test_repository_navigation.py', 'tests/test_local_demo.py', 'affected-scope-policy.json', 'repository-packet.json', 'docs/DEVELOPMENT_WORKFLOW.md', 'scripts/local_demo.py', 'scripts/repo.py', 'docs/ACTIVE_PACKET.md', 'README.md', '.github/workflows/governance.yml'})
-        self.assertEqual(self.packet["required_checks"], ['Affected Scope CI', 'Application Runtime CI', 'Complexity Baseline CI', 'Customer Privacy Access Export CI', 'Customer Privacy Approval CI', 'Customer Privacy Owner Execution CI', 'Customer Privacy Persistence CI', 'Customer Privacy Restriction Policy CI', 'Data Quality Process Runtime CI', 'Database CI', 'Export Process Runtime CI', 'Generic Mutation Query Conformance CI', 'Governance CI', 'Import Process Runtime CI', 'Import Retryable Process Runtime CI', 'PostgreSQL Process Isolation Pilot', 'Product Plane CI', 'Rust Generated Sync', 'Rust CI'])
+        self.assertEqual(set(self.packet["allowed_paths"]), {'repository-packet.json', 'docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md', 'docs/WORKSPACE_COMPLEXITY_BASELINE.md', 'docs/PHASE8_DELIVERY_PLAN.md', 'docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md', 'docs/MODULE_CATALOG.md', 'tests/test_architecture_documentation_consistency.py', 'tests/test_repository_navigation.py', 'docs/PROJECT_STATUS.md', 'docs/ACTIVE_PACKET.md', 'docs/IMPLEMENTATION_ROADMAP.md'})
+        self.assertEqual(self.packet["required_checks"], ['Affected Scope CI', 'Complexity Baseline CI', 'Customer Privacy Access Export CI', 'Customer Privacy Owner Execution CI', 'Governance CI', 'Rust Generated Sync', 'Rust CI'])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "run clean reset, seed, exact replay and smoke as permanent Governance acceptance",
+            "make Repository Step 19 the only next permitted implementation packet",
             self.packet["deliverables"],
         )
-        self.assertIn(
-            "mark Repository Step 18 complete or start Repository Step 19",
-            self.packet["non_goals"],
-        )
+        self.assertIn("implement or start Repository Step 19", self.packet["non_goals"])
 
     def test_repository_map_and_product_inventory_remain_exact(self) -> None:
         self.assertIn("Generated by scripts/generate_repository_navigation.py", self.repository_map)
