@@ -31,12 +31,10 @@ mod platform;
 mod process;
 mod runtime;
 
-pub(crate) use {
-    background::{ProductionBackgroundWorkerDependencies, build_production_background_workers},
-    bootstrap_visibility::{BootstrapVisibilityResource, build_bootstrap_visibility_registry},
-    export_artifact_download_http::export_artifact_download_router,
-    export_selection_bootstrap::bootstrap_export_selection_worker_access,
-};
+pub(crate) use background::*;
+pub(crate) use bootstrap_visibility::*;
+pub(crate) use export_artifact_download_http::*;
+pub(crate) use export_selection_bootstrap::*;
 pub use {
     config::*,
     crm_data_quality_source_composition::{
