@@ -1,0 +1,52 @@
+name: Temporary Step 19 Evidence Sync PR
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/temporary-step-19-evidence-sync.yml"
+      - ".github/workflows/temporary-step-19-evidence-sync-pr.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  synchronize:
+    if: github.head_ref == 'repository-step-19-evidence-sync'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: repository-step-19-evidence-sync
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+      - name: Execute synchronization payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/temporary-step-19-evidence-sync.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n          PY\n", start)
+          payload = source[start:end]
+          payload = "\n".join(line[10:] if line.startswith("          ") else line for line in payload.splitlines()) + "\n"
+          Path('/tmp/step19_evidence_sync.py').write_text(payload, encoding='utf-8')
+          PY
+          python /tmp/step19_evidence_sync.py
+          python scripts/generate_repository_navigation.py --write
+          python -m unittest \
+            tests.test_architecture_documentation_consistency \
+            tests.test_repository_navigation
+          python scripts/check_architecture.py
+          rm .github/workflows/temporary-step-19-evidence-sync.yml
+          rm .github/workflows/temporary-step-19-evidence-sync-pr.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: synchronize Repository Step 19 closure evidence"
+          git push origin HEAD:repository-step-19-evidence-sync
