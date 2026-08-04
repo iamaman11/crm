@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "customer-privacy-operations-policy.json"
 SCHEMA_VERSION = "crm.customer-privacy-operations-policy/v1"
 REPORT_SCHEMA_VERSION = "crm.customer-privacy-operations-report/v1"
+RUNTIME_BLOB_SHA = "f4e062d39f2cbcb1343eef7b7363b99622367ac5"
 
 
 class OperationsError(RuntimeError):
@@ -59,6 +60,162 @@ def require_string_list(policy: dict[str, Any], key: str) -> list[str]:
             f"policy field {key} must be a non-empty unique string list"
         )
     return value
+
+
+def git_blob_sha(data: bytes) -> str:
+    return hashlib.sha1(
+        f"blob {len(data)}\0".encode("ascii") + data,
+        usedforsecurity=False,
+    ).hexdigest()
+
+
+def prepare_runtime_metrics(runtime_path: Path, backup_path: Path) -> None:
+    data = runtime_path.read_bytes()
+    actual_blob = git_blob_sha(data)
+    if actual_blob != RUNTIME_BLOB_SHA:
+        raise OperationsError(f"unexpected application runtime source blob: {actual_blob}")
+    if backup_path.exists():
+        raise OperationsError("bounded runtime source backup already exists")
+    backup_path.parent.mkdir(parents=True, exist_ok=True)
+    backup_path.write_bytes(data)
+    source = data.decode("utf-8")
+    replacements = {
+        "use crm_capability_runtime::{ApprovalEvidence, CapabilityDefinition, CapabilityGateway};": (
+            "use crm_capability_runtime::{\n"
+            "    ApprovalEvidence, CapabilityDefinition, CapabilityGateway, CapabilityRegistryPort,\n"
+            "};"
+        ),
+        "use std::sync::atomic::{AtomicBool, Ordering};": (
+            "use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};"
+        ),
+    }
+    for old, new in replacements.items():
+        if source.count(old) != 1:
+            raise OperationsError(f"unexpected runtime import anchor: {old}")
+        source = source.replace(old, new)
+
+    constants_anchor = "const BACKGROUND_INTERVAL: Duration = Duration::from_secs(1);\n"
+    if source.count(constants_anchor) != 1:
+        raise OperationsError("unexpected runtime constants anchor")
+    instrumentation = r'''
+
+const CUSTOMER_PRIVACY_OPERATIONS_OWNER: &str = "crm.customer-privacy";
+const CUSTOMER_PRIVACY_OPERATIONS_VERSION: &str = "1.0.0";
+const CUSTOMER_PRIVACY_OPERATIONS_LIST: &str = "customer_privacy.case.list";
+const CUSTOMER_PRIVACY_OPERATIONS_GET: &str = "customer_privacy.case.get";
+const CUSTOMER_PRIVACY_OPERATIONS_METRIC: &str =
+    "crm_customer_privacy_query_resolutions_total";
+
+#[derive(Debug, Default)]
+struct CustomerPrivacyOperationsQueryMetrics {
+    list: AtomicU64,
+    get: AtomicU64,
+}
+
+impl CustomerPrivacyOperationsQueryMetrics {
+    fn record(&self, definition: &CapabilityDefinition) {
+        if definition.owner_module_id.as_str() != CUSTOMER_PRIVACY_OPERATIONS_OWNER
+            || definition.capability_version.as_str() != CUSTOMER_PRIVACY_OPERATIONS_VERSION
+        {
+            return;
+        }
+        let count = match definition.capability_id.as_str() {
+            CUSTOMER_PRIVACY_OPERATIONS_LIST => &self.list,
+            CUSTOMER_PRIVACY_OPERATIONS_GET => &self.get,
+            _ => return,
+        };
+        let _ = count.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            current.checked_add(1)
+        });
+    }
+
+    fn render_prometheus(&self) -> String {
+        format!(
+            "# HELP {metric} Observed exact Customer Privacy query resolutions.\n\
+# TYPE {metric} counter\n\
+{metric}{{capability_id=\"{list}\",capability_version=\"{version}\",owner_module_id=\"{owner}\",surface=\"query\"}} {list_count}\n\
+{metric}{{capability_id=\"{get}\",capability_version=\"{version}\",owner_module_id=\"{owner}\",surface=\"query\"}} {get_count}\n",
+            metric = CUSTOMER_PRIVACY_OPERATIONS_METRIC,
+            list = CUSTOMER_PRIVACY_OPERATIONS_LIST,
+            get = CUSTOMER_PRIVACY_OPERATIONS_GET,
+            version = CUSTOMER_PRIVACY_OPERATIONS_VERSION,
+            owner = CUSTOMER_PRIVACY_OPERATIONS_OWNER,
+            list_count = self.list.load(Ordering::Relaxed),
+            get_count = self.get.load(Ordering::Relaxed),
+        )
+    }
+}
+
+#[derive(Clone)]
+struct CustomerPrivacyOperationsQueryRegistry {
+    inner: Arc<dyn CapabilityRegistryPort>,
+    metrics: Arc<CustomerPrivacyOperationsQueryMetrics>,
+}
+
+impl fmt::Debug for CustomerPrivacyOperationsQueryRegistry {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CustomerPrivacyOperationsQueryRegistry")
+            .field("inner", &"dyn CapabilityRegistryPort")
+            .finish()
+    }
+}
+
+impl CapabilityRegistryPort for CustomerPrivacyOperationsQueryRegistry {
+    fn resolve<'a>(
+        &'a self,
+        capability_id: &'a CapabilityId,
+        capability_version: &'a CapabilityVersion,
+    ) -> crm_module_sdk::PortFuture<
+        'a,
+        Result<Option<CapabilityDefinition>, crm_module_sdk::SdkError>,
+    > {
+        Box::pin(async move {
+            let definition = self
+                .inner
+                .resolve(capability_id, capability_version)
+                .await?;
+            if let Some(definition) = definition.as_ref() {
+                self.metrics.record(definition);
+            }
+            Ok(definition)
+        })
+    }
+}
+'''
+    source = source.replace(constants_anchor, constants_anchor + instrumentation)
+
+    store_anchor = (
+        "        let store: PostgresDataStore = (store, event_delivery_observer).into();\n"
+    )
+    if source.count(store_anchor) != 1:
+        raise OperationsError("unexpected contract telemetry store anchor")
+    registry_instrumentation = '''        let customer_privacy_query_metrics =
+            Arc::new(CustomerPrivacyOperationsQueryMetrics::default());
+        let query_registry: Arc<dyn CapabilityRegistryPort> =
+            Arc::new(CustomerPrivacyOperationsQueryRegistry {
+                inner: query_registry,
+                metrics: Arc::clone(&customer_privacy_query_metrics),
+            });
+        let base_contract_usage_metrics_text = Arc::clone(&contract_usage_metrics_text);
+        contract_usage_metrics_text = Arc::new(move || {
+            let mut output = base_contract_usage_metrics_text();
+            output.push_str(&customer_privacy_query_metrics.render_prometheus());
+            output
+        });
+'''
+    source = source.replace(store_anchor, registry_instrumentation + store_anchor)
+    runtime_path.write_text(source, encoding="utf-8")
+
+
+def restore_runtime_metrics(runtime_path: Path, backup_path: Path) -> None:
+    if not backup_path.is_file():
+        raise OperationsError("bounded runtime source backup is missing")
+    runtime_path.write_bytes(backup_path.read_bytes())
+    backup_path.unlink()
+    actual_blob = git_blob_sha(runtime_path.read_bytes())
+    if actual_blob != RUNTIME_BLOB_SHA:
+        raise OperationsError(f"restored application runtime blob is invalid: {actual_blob}")
 
 
 def validate_policy(policy: dict[str, Any]) -> None:
@@ -114,9 +271,8 @@ def validate_policy(policy: dict[str, Any]) -> None:
         "cargo metadata --locked",
         "pnpm install --frozen-lockfile",
         "scripts/check_action_pinning.py",
-        "Prepare bounded active Customer Privacy query metrics",
-        "Restore bounded active query metrics source",
-        "crm_customer_privacy_query_resolutions_total",
+        "prepare-runtime-metrics",
+        "restore-runtime-metrics",
     ):
         if marker not in workflow:
             raise OperationsError(f"operations workflow is missing marker: {marker}")
@@ -186,8 +342,6 @@ def sha256_file(path: Path) -> str:
 
 
 def has_positive_metric_sample(metrics: str, marker: str) -> bool:
-    """Return whether a non-comment Prometheus sample for marker is positive."""
-
     for raw_line in metrics.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or marker not in line:
@@ -277,6 +431,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("check")
     subparsers.add_parser("shell-env")
+    for command in ("prepare-runtime-metrics", "restore-runtime-metrics"):
+        runtime = subparsers.add_parser(command)
+        runtime.add_argument("--runtime", required=True)
+        runtime.add_argument("--backup", required=True)
     report = subparsers.add_parser("report")
     report.add_argument("--startup-seconds", required=True)
     report.add_argument("--latencies", required=True)
@@ -298,6 +456,12 @@ def main(argv: list[str] | None = None) -> int:
             print("Customer Privacy operations policy is valid.")
         elif args.command == "shell-env":
             print(shell_environment(policy))
+        elif args.command == "prepare-runtime-metrics":
+            prepare_runtime_metrics(Path(args.runtime), Path(args.backup))
+            print("Bounded active Customer Privacy query metrics prepared.")
+        elif args.command == "restore-runtime-metrics":
+            restore_runtime_metrics(Path(args.runtime), Path(args.backup))
+            print("Application runtime source restored.")
         else:
             report = build_report(args, policy)
             output = Path(args.output)
