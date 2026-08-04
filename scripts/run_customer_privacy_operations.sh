@@ -17,6 +17,7 @@ SUPPLY_CHAIN_PATH="${ARTIFACT_DIR}/supply-chain.sha256"
 REPORT_PATH="${ARTIFACT_DIR}/report.json"
 API_LOG_PATH="${ARTIFACT_DIR}/crm-api.log"
 VITE_LOG_PATH="${ARTIFACT_DIR}/vite.log"
+POSTGRES_LOG_PATH="${ARTIFACT_DIR}/postgres-error.log"
 TOKEN="phase20b-operations-bearer-token-0123456789abcdef0123456789abcdef"
 HTTP_PORT="${CRM_OPERATIONS_HTTP_PORT:-18080}"
 GRPC_PORT="${CRM_OPERATIONS_GRPC_PORT:-19090}"
@@ -26,7 +27,7 @@ VITE_PID=""
 
 mkdir -p "$ARTIFACT_DIR"
 rm -f "$BACKUP_PATH" "$LATENCY_PATH" "$METRICS_PATH" "$REPORT_PATH" \
-  "$API_LOG_PATH" "$VITE_LOG_PATH" "$SUPPLY_CHAIN_PATH"
+  "$API_LOG_PATH" "$VITE_LOG_PATH" "$POSTGRES_LOG_PATH" "$SUPPLY_CHAIN_PATH"
 
 kill_tree() {
   local target_pid="${1:-}"
@@ -74,6 +75,13 @@ done
 docker exec "$CONTAINER_NAME" pg_isready --username postgres \
   --dbname "$OPS_SOURCE_DATABASE" >/dev/null
 
+admin_psql postgres <<'SQL'
+ALTER SYSTEM SET log_min_error_statement = 'error';
+ALTER SYSTEM SET log_error_verbosity = 'verbose';
+ALTER SYSTEM SET log_parameter_max_length_on_error = 0;
+SELECT pg_reload_conf();
+SQL
+
 apply_database_inputs "$OPS_SOURCE_DATABASE"
 admin_psql "$OPS_SOURCE_DATABASE" <<'SQL'
 DO $operations$
@@ -114,8 +122,13 @@ if [ -n "$MISSING_PRIVILEGES" ]; then
 fi
 
 echo "Creating the governed Customer Privacy fixture through assembled production mutations..."
-DATABASE_URL="$SOURCE_APP_URL" ADMIN_DATABASE_URL="$SOURCE_ADMIN_URL" RUST_BACKTRACE=1 \
-  cargo test -p crm-api --test seed_e2e_fixture -- --nocapture
+if ! DATABASE_URL="$SOURCE_APP_URL" ADMIN_DATABASE_URL="$SOURCE_ADMIN_URL" RUST_BACKTRACE=1 \
+  cargo test -p crm-api --test seed_e2e_fixture -- --nocapture; then
+  docker logs "$CONTAINER_NAME" > "$POSTGRES_LOG_PATH" 2>&1 || true
+  echo "PostgreSQL error tail for governed seed failure:" >&2
+  tail -n 240 "$POSTGRES_LOG_PATH" >&2 || true
+  exit 1
+fi
 
 echo "Creating logical backup evidence with owner replay disabled..."
 docker exec "$CONTAINER_NAME" pg_dump --username postgres \
