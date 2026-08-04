@@ -154,7 +154,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo test --locked -p crm-application-runtime \
-            --test customer_privacy_application_runtime_lifecycle -- --nocapture \
+            --test customer_privacy_application_runtime_lifecycle -- --ignored --nocapture \
             2>&1 | tee database/customer-privacy-runtime-lifecycle-clean.log
       - name: Verify clean PostgreSQL ready-work acceptance
         shell: bash
@@ -213,7 +213,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo test --locked -p crm-application-runtime \
-            --test customer_privacy_application_runtime_lifecycle -- --nocapture \
+            --test customer_privacy_application_runtime_lifecycle -- --ignored --nocapture \
             2>&1 | tee database/customer-privacy-runtime-lifecycle-reapplied.log
       - name: Repeat PostgreSQL ready-work acceptance after reapply
         shell: bash
