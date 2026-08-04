@@ -1,0 +1,58 @@
+name: Temporary Step 20A Fixture Fix
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/temporary-step-20a-fixture-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  synchronize:
+    if: github.head_ref == 'repository-step-20a-customer-privacy-product-plane'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: repository-step-20a-customer-privacy-product-plane
+          fetch-depth: 0
+      - name: Correct governed fixture version and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("services/crm-api/tests/seed_e2e_fixture.rs")
+          text = path.read_text(encoding="utf-8")
+          old = '''    provision_module(
+              &admin,
+              PARTIES_MODULE_ID,
+              "0.3.0",
+              "phase20a-parties-installation",
+              0x70,
+          )'''
+          new = '''    provision_module(
+              &admin,
+              PARTIES_MODULE_ID,
+              "0.4.0",
+              "phase20a-parties-installation",
+              0x70,
+          )'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected exactly one Parties activation marker, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+          cargo fmt --all
+          cargo test -p crm-api --test seed_e2e_fixture --no-run
+          python -m unittest tests.test_architecture_documentation_consistency tests.test_repository_navigation
+          python scripts/check_architecture.py
+          rm .github/workflows/temporary-step-20a-fixture-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test: align Customer Privacy fixture with Parties manifest"
+          git push origin HEAD:repository-step-20a-customer-privacy-product-plane
