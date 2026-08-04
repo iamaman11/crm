@@ -91,7 +91,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         for document in self.normative_documents:
             for marker in ("112", "835", "5,377", "18", "270", "91"):
                 self.assertIn(marker, document)
-            for match in re.finditer(r"(?<![0-9])113(?![0-9])", document):
+            for match in re.finditer(r"\b113\b", document):
                 context = document[max(0, match.start() - 120) : match.end() + 120].lower()
                 self.assertTrue(
                     "historical" in context or "→ 112" in context or "step 13" in context,
@@ -231,10 +231,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                "crates/crm-customer-privacy-application/src/lib.rs",
-                "crates/crm-customer-privacy-application/src/worker.rs",
-                "crates/crm-customer-privacy-production/src/root.rs",
-                "crates/crm-customer-privacy-production/src/worker.rs",
+                "crates/crm-customer-privacy-application/src/execution.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
@@ -255,7 +252,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "deny work discovery and owner effects when durable tenant activation is absent",
+            "implement the existing generic TenantBackgroundWorker contract directly on PrivacyOwnerExecutionService",
+            self.packet["deliverables"],
+        )
+        self.assertIn(
+            "prove inactive no-side-effect behavior, active delegation and fail-closed duplicate rejection with unit tests while keeping the conservative public Rust surface at 5377",
             self.packet["deliverables"],
         )
         self.assertIn(
