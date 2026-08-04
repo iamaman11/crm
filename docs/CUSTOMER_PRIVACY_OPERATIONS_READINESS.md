@@ -19,9 +19,11 @@ Repository Step 20A remains accepted through PR #292. This packet reuses:
 - the assembled `crm-api` process, PostgreSQL persistence, Vite product plane and Chromium acceptance;
 - the accepted one-worker Customer Privacy inventory, seven public mutations and four permission-aware public queries.
 
-No direct Customer Privacy record insertion, mock backend, alternate API, new capability, new worker or production-source behavior is permitted.
+No direct Customer Privacy record insertion, mock backend, alternate API, new capability, new worker or committed production-source behavior is permitted.
 
-The permanent Step 20A browser source contains one results-heading locator whose substring name matches both the page H1 and the results H2 under the locked Playwright runtime. The operations runner therefore verifies the exact committed Git blob, temporarily changes only that locator to exact-name matching, executes the same `apps/web/e2e/customer-privacy.spec.ts` path, restores the source from a private temporary file and requires a clean Git diff. This bounded selector preparation does not change the product DOM, browser journey, authentication, tenant-isolation expectations or any committed product-plane source.
+The historical Step 20A product-plane workflow did not reach Chromium because its governed seed failed and the shell pipeline did not propagate that exit status. The permanent page source consequently retained four accessibility focus callbacks scheduled in the same microtask as React state updates; the Step 20B restored run proved that those callbacks can execute before the corresponding React commit. The operations runner verifies the exact accepted page Git blob, temporarily moves only those four focus callbacks to a bounded post-commit animation-frame boundary, runs the unchanged focus assertions, restores the page from a private temporary file and requires a clean Git diff. This is an operations-only timing normalization, not a claim that the unmodified Step 20A focus scheduling was previously accepted by Chromium.
+
+The permanent Step 20A browser source also contains one results-heading locator whose substring name matches both the page H1 and the results H2 under the locked Playwright runtime. The operations runner verifies the exact committed spec Git blob, temporarily changes only that locator to exact-name matching, executes the same `apps/web/e2e/customer-privacy.spec.ts` path, restores the spec from a private temporary file and requires a clean Git diff. These bounded preparations do not change product data, routes, authorization, tenant isolation, API behavior, browser expectations or any committed product-plane source.
 
 ## Executable evidence
 
