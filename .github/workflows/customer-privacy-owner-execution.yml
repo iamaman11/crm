@@ -134,6 +134,17 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/repo.py packet-check --base "${BASE_SHA}"
+      - name: Prepare assembled crm-api lifecycle launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > target/debug/crm-api-runtime-lifecycle <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          export CRM_API_BEARER_TOKEN="runtime-lifecycle-token-0123456789abcdef0123456789abcdef"
+          exec "$(dirname "$0")/crm-api" "$@"
+          EOF
+          chmod +x target/debug/crm-api-runtime-lifecycle
       - name: Apply clean authoritative schema and fixtures
         shell: bash
         run: |
@@ -150,7 +161,7 @@ jobs:
       - name: Verify clean assembled runtime lifecycle
         shell: bash
         env:
-          CRM_API_BINARY: ${{ github.workspace }}/target/debug/crm-api
+          CRM_API_BINARY: ${{ github.workspace }}/target/debug/crm-api-runtime-lifecycle
         run: |
           set -euo pipefail
           cargo run --locked -p crm-application-runtime \
@@ -209,7 +220,7 @@ jobs:
       - name: Repeat assembled runtime lifecycle after reapply
         shell: bash
         env:
-          CRM_API_BINARY: ${{ github.workspace }}/target/debug/crm-api
+          CRM_API_BINARY: ${{ github.workspace }}/target/debug/crm-api-runtime-lifecycle
         run: |
           set -euo pipefail
           cargo run --locked -p crm-application-runtime \
