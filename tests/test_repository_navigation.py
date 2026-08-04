@@ -56,8 +56,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
+                "Customer Privacy Access Export CI",
                 "Customer Privacy Operations CI",
+                "Customer Privacy Owner Execution CI",
                 "Governance CI",
+                "Rust Generated Sync",
                 "Rust CI",
             ],
         )
@@ -118,8 +121,11 @@ class RepositoryNavigationTests(unittest.TestCase):
         workflow_paths = {
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
             "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
+            "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
             "Customer Privacy Operations CI": ".github/workflows/customer-privacy-operations.yml",
+            "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
             "Governance CI": ".github/workflows/governance.yml",
+            "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
             "Rust CI": ".github/workflows/rust.yml",
         }
         affected = {
