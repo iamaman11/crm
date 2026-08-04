@@ -42,30 +42,13 @@ pub use {
     crm_data_quality_source_composition::{
         DataQualityAggregatePlanner, DataQualityCapabilityExecutor,
     },
-    customer_enrichment_application_worker::{
-        CustomerEnrichmentApplicationWorkerDependencies, OWNER_APPLICATION_POLICY_VERSION,
-        build_customer_enrichment_application_worker,
-    },
-    customer_enrichment_materialization_process::{
-        CustomerEnrichmentMaterializationProcessDependencies,
-        build_customer_enrichment_materialization_process,
-    },
-    customer_enrichment_provider_process::{
-        CustomerEnrichmentProviderProcessDependencies, build_customer_enrichment_provider_process,
-    },
-    customer_enrichment_provider_registry::{
-        ProcessProviderSecretValueSource, ProviderSecretValueSourcePort,
-        ProviderTransportCatalogPort, ProviderTransportRegistration,
-        StaticProviderTransportCatalog, build_customer_enrichment_provider_registry,
-        build_process_customer_enrichment_provider_transport_catalog,
-    },
+    customer_enrichment_application_worker::*,
+    customer_enrichment_materialization_process::*,
+    customer_enrichment_provider_process::*,
+    customer_enrichment_provider_registry::*,
     customer_enrichment_provider_source::GovernedCustomerEnrichmentProviderSource,
-    customer_enrichment_provider_worker::{
-        CustomerEnrichmentProviderWorkerDependencies, build_customer_enrichment_provider_worker,
-    },
-    customer_privacy_access_export::{
-        CustomerDataPrivacyExportTarget, build_customer_privacy_access_export,
-    },
+    customer_enrichment_provider_worker::*,
+    customer_privacy_access_export::*,
     customer_privacy_case_create_promotion::{
         PRODUCTION_REVIEW_POLICY_VERSION, application_mutation_definitions,
         application_query_definitions, build_production_composition,
