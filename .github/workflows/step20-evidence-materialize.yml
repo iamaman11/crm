@@ -39,6 +39,7 @@ jobs:
           python -m unittest tests.test_repository_navigation
 
       - name: Commit materialized evidence
+        # This workflow is temporary and is removed before the review head.
         run: |
           if git diff --quiet; then
             echo "Evidence is already materialized."
