@@ -36,6 +36,19 @@ jobs:
               line[10:] if line.startswith("          ") else line
               for line in payload.splitlines()
           ) + "\n"
+          injection = '''for path in documents:
+              text = path.read_text(encoding="utf-8")
+              text = text.replace(
+                  "The next permitted implementation packet is Repository Step 20: Phase 8A frontend, accessibility, browser and operations evidence.",
+                  "Repository Step 20A is accepted through PR #292. Repository Step 20 remains in progress; Repository Step 20B restore, SLO, observability, performance, security and supply-chain operations evidence is the only next permitted implementation packet.",
+              )
+              path.write_text(text, encoding="utf-8")
+
+          '''
+          marker = "stale = []\n"
+          if payload.count(marker) != 1:
+              raise SystemExit(f"expected one semantic scan marker, found {payload.count(marker)}")
+          payload = payload.replace(marker, injection + marker, 1)
           Path('/tmp/step20a_quality.py').write_text(payload, encoding='utf-8')
           PY
           python /tmp/step20a_quality.py
