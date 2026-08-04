@@ -310,7 +310,8 @@ import re
 import sys
 
 path = Path(sys.argv[1])
-source = path.read_text(encoding="utf-8")npattern = re.compile(r"queueMicrotask\(\(\) => (\w+HeadingRef)\.current\?\.focus\(\)\);")
+source = path.read_text(encoding="utf-8")
+pattern = re.compile(r"queueMicrotask\(\(\) => (\w+HeadingRef)\.current\?\.focus\(\)\);")
 matches = pattern.findall(source)
 expected = [
     "resultsHeadingRef",
