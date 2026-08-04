@@ -213,28 +213,26 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_step_19_runtime_registration_packet_is_exact(self) -> None:
+    def test_active_step_19_runtime_lifecycle_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-19-runtime-registration",
+            "repository-step-19-runtime-lifecycle",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
             {
                 "ref": "main",
-                "sha": "bc653de5f1a853791d3ab4a03f59f3daad54bf54",
+                "sha": "d1c4dd278853a1e6a426fab284c70b3529d42833",
             },
         )
         self.assertEqual(self.packet["tracking_issues"], [194, 126])
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                "crates/crm-application-runtime/src/background.rs",
-                "crates/crm-application-runtime/src/lib.rs",
-                "crates/crm-customer-privacy-production/src/root.rs",
-                "crates/crm-customer-privacy-production/src/worker.rs",
+                ".github/workflows/customer-privacy-owner-execution.yml",
+                "crates/crm-application-runtime/examples/customer_privacy_application_runtime_lifecycle.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
@@ -246,6 +244,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             [
                 "Affected Scope CI",
                 "Application Runtime CI",
+                "Database CI",
                 "Complexity Baseline CI",
                 "Customer Privacy Owner Execution CI",
                 "Governance CI",
@@ -256,11 +255,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "register crm.customer-privacy/owner-execution in the production background registry at phase 260",
+            "run the production crm-api process assembled by ApplicationRuntime and prove that the registered background registry discovers ready Customer Privacy work",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "keep the conservative public Rust surface at 5377 and the exception suppression count at 91",
+            "keep the conservative public Rust surface at 5377, the exception suppression count at 91 and crm-application-runtime source LOC at or below 7269",
             self.packet["deliverables"],
         )
         self.assertIn(
