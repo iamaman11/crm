@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class RepositoryNavigationTests(unittest.TestCase):
+
     def test_active_step_19_evidence_packet_declaration_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
@@ -69,6 +70,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             "make Repository Step 20 frontend, accessibility, browser and operations evidence the only next permitted implementation packet",
             packet["deliverables"],
         )
+
     def test_generated_navigation_is_deterministic_and_current(self) -> None:
         first = generated_documents(ROOT)
         second = generated_documents(ROOT)
@@ -85,6 +87,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
         self.assertIn("`crm.customer-privacy`", first[REPOSITORY_MAP_PATH])
         self.assertEqual(stale_generated_documents(ROOT), [])
+
     def test_module_and_capability_explanations_remain_resolvable(self) -> None:
         module = explain_target(ROOT, "crm.customer-privacy")
         self.assertEqual(module["schema_version"], NAVIGATION_SCHEMA)
@@ -160,6 +163,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertTrue(report["ok"])
         self.assertEqual(report["changed_paths"], packet["allowed_paths"])
         self.assertEqual(report["blockers"], [])
+
     def test_repository_workflow_and_parser_contracts_remain_intact(self) -> None:
         affected = (ROOT / ".github/workflows/affected-scope.yml").read_text(
             encoding="utf-8"
