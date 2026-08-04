@@ -94,6 +94,87 @@ BEGIN
 END
 $operations$;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA crm TO crm_app_test;
+
+-- The production fixture test installs these modules transactionally before
+-- invoking their assembled mutation definitions. Pre-register only the
+-- immutable module/capability metadata required by the platform audit and
+-- business-transaction foreign keys; no Party or Customer Privacy business
+-- data is written here.
+INSERT INTO crm.module_versions (
+  module_id,
+  version,
+  canonicalization_profile,
+  manifest_sha256,
+  normalized_manifest_json,
+  published_at,
+  publisher_id
+)
+VALUES
+  (
+    'crm.parties', '0.4.0', 'crm.cjson/v1', decode(repeat('70', 32), 'hex'),
+    '{}'::jsonb, clock_timestamp(), 'phase20a-test'
+  ),
+  (
+    'crm.customer-privacy', '0.3.0', 'crm.cjson/v1', decode(repeat('71', 32), 'hex'),
+    '{}'::jsonb, clock_timestamp(), 'phase20a-test'
+  )
+ON CONFLICT (module_id, version) DO NOTHING;
+
+INSERT INTO crm.capability_registry (
+  capability_id,
+  capability_version,
+  owner_module_id,
+  owner_module_version,
+  service_name,
+  method_name,
+  input_descriptor_hash,
+  output_descriptor_hash,
+  risk_level,
+  idempotency_required,
+  audit_required,
+  approval_required,
+  ai_callable,
+  marketplace_callable,
+  bulk_allowed,
+  export_allowed,
+  required_permissions,
+  data_classes_touched
+)
+VALUES
+  (
+    'parties.party.create', '1.0.0', 'crm.parties', '0.4.0',
+    'crm.parties.v1.PartyService', 'CreateParty',
+    decode('b4201dd9557911a67f9566845f6d296a8d95471b813e5a602eed87269ec3a753', 'hex'),
+    decode('34f0940abd8c24dbae8895556389ed7be56d0669ba2abdfb7c84779a3e255aeb', 'hex'),
+    'medium', true, true, false, false, false, false, false,
+    ARRAY['parties.party.create'], ARRAY['personal']
+  ),
+  (
+    'customer_privacy.case.create', '1.0.0', 'crm.customer-privacy', '0.3.0',
+    'crm.customer_privacy.v1.CustomerPrivacyService', 'CreatePrivacyCase',
+    decode('329e7a7983c57de769046eaab2092c777c471f7af0f7e33ca9e5d632655f0f21', 'hex'),
+    decode('990af81ec597eab39ef683d2f47e724fa1281d15e14d427d72bbf287fd0fcb80', 'hex'),
+    'high', true, true, false, false, false, false, false,
+    ARRAY['customer_privacy.case.create'], ARRAY['confidential']
+  ),
+  (
+    'customer_privacy.case.submit', '1.0.0', 'crm.customer-privacy', '0.3.0',
+    'crm.customer_privacy.v1.CustomerPrivacyService', 'SubmitPrivacyCase',
+    decode('2cb7ca6881ba9aab2436503959646adebf2e784b4b6e37753e6fe217deb9c9b3', 'hex'),
+    decode('51a85ecec4081b6d4b9d43008d891fbb8de819a195ea99a5c5ebc85aaefa0d89', 'hex'),
+    'high', true, true, false, false, false, false, false,
+    ARRAY['customer_privacy.case.submit'], ARRAY['confidential']
+  ),
+  (
+    'customer_privacy.case.subject.verify', '1.0.0',
+    'crm.customer-privacy', '0.3.0',
+    'crm.customer_privacy.v1.CustomerPrivacyService', 'VerifyPrivacyCaseSubject',
+    decode('5432dda5b34f63efe4346ecf93861b8eeeeb21ab7e6ea77e2f609c3def94e431', 'hex'),
+    decode('5ac298e979717738fba6b79b9f19ff6813f2e6f98c572303feeece3f53534694', 'hex'),
+    'high', true, true, false, false, false, false, false,
+    ARRAY['customer_privacy.case.subject.verify'], ARRAY['confidential']
+  )
+ON CONFLICT (capability_id, capability_version) DO NOTHING;
 SQL
 
 SOURCE_APP_URL="postgres://crm_app_test:crm_app_test@127.0.0.1:${POSTGRES_PORT}/${OPS_SOURCE_DATABASE}"
