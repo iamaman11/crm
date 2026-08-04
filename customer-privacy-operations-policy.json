@@ -14,8 +14,8 @@
     "customer_privacy.case.get"
   ],
   "forbidden_observability_markers": [
-    "privacy-operations-fixture-person",
-    "privacy-operations-party"
+    "privacy-product-plane-party",
+    "Privacy product-plane fixture"
   ],
   "supply_chain_inputs": [
     "Cargo.lock",
