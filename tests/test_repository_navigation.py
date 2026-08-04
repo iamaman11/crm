@@ -23,30 +23,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_step_20a_evidence_sync_packet_declaration_is_exact(self) -> None:
+    def test_active_step_20b_operations_packet_declaration_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(packet["packet_id"], "repository-step-20a-evidence-sync")
+        self.assertEqual(
+            packet["packet_id"], "repository-step-20b-customer-privacy-operations"
+        )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
-            {"ref": "main", "sha": "fffd6baf35544eea736d183af0a5ba38518cce9a"},
+            {"ref": "main", "sha": "d3d066d0446a4936bd61574506e729c9fd9104dc"},
         )
         self.assertEqual(packet["tracking_issues"], [194, 126])
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
+                ".github/workflows/customer-privacy-operations.yml",
+                "affected-scope-policy.json",
+                "customer-privacy-operations-policy.json",
                 "docs/ACTIVE_PACKET.md",
-                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-                "docs/IMPLEMENTATION_ROADMAP.md",
-                "docs/MODULE_CATALOG.md",
-                "docs/PHASE8A_CUSTOMER_PRIVACY_PRODUCT_PLANE.md",
-                "docs/PHASE8_DELIVERY_PLAN.md",
-                "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
-                "docs/PROJECT_STATUS.md",
-                "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
+                "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
                 "repository-packet.json",
+                "scripts/customer_privacy_operations.py",
+                "scripts/run_customer_privacy_operations.sh",
                 "tests/test_architecture_documentation_consistency.py",
+                "tests/test_customer_privacy_operations.py",
                 "tests/test_repository_navigation.py",
             },
         )
@@ -55,21 +56,12 @@ class RepositoryNavigationTests(unittest.TestCase):
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Owner Execution CI",
+                "Customer Privacy Operations CI",
                 "Governance CI",
-                "Rust Generated Sync",
                 "Rust CI",
             ],
         )
-        self.assertIn(
-            "record PR #292 source 938cebed1e78bf7debf40dc544431bfe819970f4 squash merge fffd6baf35544eea736d183af0a5ba38518cce9a and 17 of 17 applicable permanent workflows in every live normative source",
-            packet["deliverables"],
-        )
-        self.assertIn(
-            "start or implement Repository Step 20B operations work",
-            packet["non_goals"],
-        )
+        self.assertIn("raw logical backup", " ".join(packet["non_goals"]))
 
     def test_generated_navigation_is_deterministic_and_current(self) -> None:
         first = generated_documents(ROOT)
@@ -82,11 +74,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-20a-evidence-sync",
+            "repository-step-20b-customer-privacy-operations",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "fffd6baf35544eea736d183af0a5ba38518cce9a", first[ACTIVE_PACKET_PATH]
+            "d3d066d0446a4936bd61574506e729c9fd9104dc", first[ACTIVE_PACKET_PATH]
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
         self.assertIn("`crm.customer-privacy`", first[REPOSITORY_MAP_PATH])
@@ -126,10 +118,8 @@ class RepositoryNavigationTests(unittest.TestCase):
         workflow_paths = {
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
             "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
-            "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
-            "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
+            "Customer Privacy Operations CI": ".github/workflows/customer-privacy-operations.yml",
             "Governance CI": ".github/workflows/governance.yml",
-            "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
             "Rust CI": ".github/workflows/rust.yml",
         }
         affected = {
@@ -141,7 +131,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 20A evidence synchronization"],
+                    "reasons": ["Step 20B operations readiness"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -149,7 +139,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="fffd6baf35544eea736d183af0a5ba38518cce9a",
+                return_value="d3d066d0446a4936bd61574506e729c9fd9104dc",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(

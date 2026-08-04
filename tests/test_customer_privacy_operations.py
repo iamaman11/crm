@@ -22,13 +22,17 @@ class CustomerPrivacyOperationsTests(unittest.TestCase):
         self.assertGreaterEqual(policy["probe_count"], 10)
         self.assertEqual(policy["allowed_probe_failures"], 0)
 
-    def test_shell_environment_is_deterministic_and_contains_no_credentials(self) -> None:
+    def test_shell_environment_is_deterministic_and_contains_no_credentials(
+        self,
+    ) -> None:
         rendered = operations.shell_environment(operations.load_policy())
         self.assertIn("export OPS_POSTGRES_IMAGE=", rendered)
         self.assertIn("export OPS_SOURCE_DATABASE=crm_ops_source", rendered)
         self.assertIn("export OPS_RESTORE_DATABASE=crm_ops_restore", rendered)
         self.assertNotIn("PASSWORD", rendered)
-        self.assertEqual(rendered, operations.shell_environment(operations.load_policy()))
+        self.assertEqual(
+            rendered, operations.shell_environment(operations.load_policy())
+        )
 
     def test_report_accepts_exact_restore_slo_observability_and_supply_chain_evidence(
         self,

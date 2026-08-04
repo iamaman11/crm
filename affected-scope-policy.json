@@ -141,6 +141,21 @@
       "required_workflows": [
         "Governance CI"
       ]
+    },
+    {
+      "id": "customer_privacy_operations",
+      "owner": "platform-operations",
+      "path_patterns": [
+        ".github/workflows/customer-privacy-operations.yml",
+        "customer-privacy-operations-policy.json",
+        "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
+        "scripts/customer_privacy_operations.py",
+        "scripts/run_customer_privacy_operations.sh",
+        "tests/test_customer_privacy_operations.py"
+      ],
+      "required_workflows": [
+        "Customer Privacy Operations CI"
+      ]
     }
   ],
   "neutral_path_patterns": [

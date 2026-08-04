@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import math
@@ -87,8 +88,17 @@ def validate_policy(policy: dict[str, Any]) -> None:
         raise OperationsError(
             "operations supply-chain inputs are missing: " + ", ".join(missing)
         )
-    local_dev = (ROOT / "scripts/local_dev.py").read_text(encoding="utf-8")
-    if image not in local_dev:
+    local_dev_path = ROOT / "scripts/local_dev.py"
+    local_dev_tree = ast.parse(local_dev_path.read_text(encoding="utf-8"))
+    local_dev_image = None
+    for node in local_dev_tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "POSTGRES_IMAGE"
+            for target in node.targets
+        ):
+            local_dev_image = ast.literal_eval(node.value)
+            break
+    if local_dev_image != image:
         raise OperationsError(
             "operations PostgreSQL image must match the accepted local lifecycle image"
         )
@@ -146,7 +156,11 @@ def shell_environment(policy: dict[str, Any]) -> str:
 
 def read_latencies(path: Path) -> list[float]:
     try:
-        values = [float(line.strip()) for line in path.read_text().splitlines() if line.strip()]
+        values = [
+            float(line.strip())
+            for line in path.read_text().splitlines()
+            if line.strip()
+        ]
     except (OSError, ValueError) as error:
         raise OperationsError(f"cannot read readiness latencies: {error}") from error
     if not values or any(value < 0 for value in values):
