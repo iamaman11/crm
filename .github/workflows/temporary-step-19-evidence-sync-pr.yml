@@ -55,13 +55,12 @@ jobs:
               "docs/PROJECT_STATUS.md",
               "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
           )
-          accepted_worker = "one accepted Customer Privacy owner worker: `crm.customer-privacy` / `owner-execution` at phase `260`"
           for relative in documents:
               path = Path(relative)
               text = path.read_text(encoding="utf-8")
               text = re.sub(
-                  r"Repository Step 19 is (?:now )?(?:the )?next[^.\n]*\.",
-                  "Repository Step 19 is complete. Repository Step 20 is the only next permitted implementation packet.",
+                  r"Repository Step 19(?:,[^.\n]{0,140},)? is (?:now )?(?:the )?next[^.\n]*\.",
+                  "Repository Step 19 is complete through PRs #287–#290. Repository Step 20 is the only next permitted implementation packet.",
                   text,
                   flags=re.IGNORECASE,
               )
@@ -79,7 +78,7 @@ jobs:
               )
               text = re.sub(
                   r"Customer Privacy (?:remains at|still has|still publishes) (?:\*\*)?0 (?:Customer Privacy )?workers(?:\*\*)?[^.]*\.",
-                  f"Customer Privacy now has {accepted_worker}.",
+                  "Customer Privacy now has one accepted first-party production owner worker: `crm.customer-privacy` / `owner-execution` at phase `260`.",
                   text,
                   flags=re.IGNORECASE,
               )
@@ -103,12 +102,26 @@ jobs:
                   text,
                   flags=re.IGNORECASE,
               )
+              text = re.sub(
+                  r",?\s*a real Customer Privacy worker lifecycle using the accepted reusable conformance,?",
+                  "",
+                  text,
+                  flags=re.IGNORECASE,
+              )
+              text = re.sub(
+                  r",?\s*disable/uninstall fail-closed semantics,?",
+                  "",
+                  text,
+                  flags=re.IGNORECASE,
+              )
+              text = text.replace(
+                  "this architecture/runtime evidence does not add a Customer Privacy worker or advance Customer Privacy to product complete.",
+                  "the accepted first-party inventory now includes one Customer Privacy owner worker, but this architecture/runtime evidence does not advance Customer Privacy to product complete.",
+              )
               text = text.replace(
                   "The remaining product work after Step 17 is:",
                   "The remaining Phase 8A.11 product work after accepted Repository Step 19 is:",
               )
-              text = text.replace("- disable/uninstall fail-closed semantics;\n", "")
-              text = text.replace("- a real Customer Privacy worker lifecycle using the accepted reusable conformance;\n", "")
               path.write_text(text, encoding="utf-8")
           PY
           python scripts/generate_repository_navigation.py --write
