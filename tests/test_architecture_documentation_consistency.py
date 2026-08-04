@@ -6,7 +6,6 @@ import re
 import tomllib
 import unittest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -25,7 +24,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.catalog = read("docs/MODULE_CATALOG.md")
         cls.product_plan = read("docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md")
         cls.delivery = read("docs/DELIVERY_GOVERNANCE.md")
-        cls.adr32 = read("docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md")
+        cls.adr32 = read(
+            "docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md"
+        )
         cls.active_packet = read("docs/ACTIVE_PACKET.md")
         cls.repository_map = read("docs/generated/REPOSITORY_MAP.md")
         cls.packet = json.loads(read("repository-packet.json"))
@@ -92,9 +93,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             for marker in ("112", "835", "5,377", "18", "270", "91"):
                 self.assertIn(marker, document)
             for match in re.finditer(r"\b113\b", document):
-                context = document[max(0, match.start() - 120) : match.end() + 120].lower()
+                context = document[
+                    max(0, match.start() - 120) : match.end() + 120
+                ].lower()
                 self.assertTrue(
-                    "historical" in context or "→ 112" in context or "step 13" in context,
+                    "historical" in context
+                    or "→ 112" in context
+                    or "step 13" in context,
                     f"unqualified current 113-package claim: {context}",
                 )
 
@@ -215,29 +220,40 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         for disposition in ("retain", "simplify", "merge", "remove"):
             self.assertIn(disposition, self.adr32)
             self.assertIn(disposition, self.delivery)
-        self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
+        self.assertIn(
+            "zero unresolved runtime-fan-in or gate-value decisions", self.plan
+        )
 
-    def test_active_step_19_evidence_sync_packet_is_exact(self) -> None:
+    def test_active_step_20a_product_plane_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-19-evidence-sync")
+        self.assertEqual(
+            self.packet["packet_id"],
+            "repository-step-20a-customer-privacy-product-plane",
+        )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "49c5e35814adceb2be9d4cc2302bf10032b807a0"},
+            {"ref": "main", "sha": "46f5be276cf2935f1940827581b81cf197b87111"},
         )
         self.assertEqual(self.packet["tracking_issues"], [194, 126])
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
+                "apps/web/e2e/customer-privacy.spec.ts",
+                "apps/web/src/App.tsx",
+                "apps/web/src/CustomerPrivacyPage.test.ts",
+                "apps/web/src/CustomerPrivacyPage.tsx",
+                "apps/web/src/customerPrivacyViewModel.ts",
+                "apps/web/src/routes.test.ts",
+                "apps/web/src/routes.ts",
                 "docs/ACTIVE_PACKET.md",
-                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-                "docs/IMPLEMENTATION_ROADMAP.md",
-                "docs/MODULE_CATALOG.md",
-                "docs/PHASE8_DELIVERY_PLAN.md",
-                "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
-                "docs/PROJECT_STATUS.md",
-                "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
+                "docs/PHASE8A_CUSTOMER_PRIVACY_PRODUCT_PLANE.md",
+                "packages/client/src/customerPrivacy.test.ts",
+                "packages/client/src/customerPrivacy.ts",
+                "packages/client/src/index.ts",
                 "repository-packet.json",
+                "scripts/run_e2e.sh",
+                "services/crm-api/tests/seed_e2e_fixture.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
             },
@@ -247,9 +263,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Owner Execution CI",
                 "Governance CI",
+                "Product Plane CI",
                 "Rust Generated Sync",
                 "Rust CI",
             ],
@@ -257,17 +272,19 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "record exact PR #287, #288, #289 and #290 source, squash merge and exact-head workflow evidence in every live normative document",
+            "add a typed governed Customer Privacy client for the existing case.list and case.get query coordinates with exact contract identity and descriptor-hash verification",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "make Repository Step 20 frontend, accessibility, browser and operations evidence the only next permitted implementation packet",
-            self.packet["deliverables"],
+            "complete the Step 20B restore SLO observability performance security or supply-chain operations evidence",
+            self.packet["non_goals"],
         )
-        self.assertIn("implement or start Repository Step 20", self.packet["non_goals"])
 
     def test_repository_map_and_product_inventory_remain_exact(self) -> None:
-        self.assertIn("Generated by scripts/generate_repository_navigation.py", self.repository_map)
+        self.assertIn(
+            "Generated by scripts/generate_repository_navigation.py",
+            self.repository_map,
+        )
         self.assertIn("**Workspace packages:** 112", self.repository_map)
         self.assertRegex(self.repository_map, r"source-digest: sha256:[0-9a-f]{64}")
         inventory_patterns = (
@@ -280,7 +297,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 self.assertRegex(document, pattern)
         self.assertIn("`crm.customer-privacy` / `owner-execution`", self.catalog)
         self.assertIn("phase `260`", self.catalog)
-        self.assertIn("Current merged authoritative/coordination module count: **12**", self.catalog)
+        self.assertIn(
+            "Current merged authoritative/coordination module count: **12**",
+            self.catalog,
+        )
         self.assertIn("Current merged business-module total: **13**", self.catalog)
 
 

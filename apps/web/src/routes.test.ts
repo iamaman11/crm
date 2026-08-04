@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import type { SessionState } from "@ultimate-crm/client";
 import {
   canNavigateToRoute,
   routeForPath,
   type ProductRouteDefinition,
 } from "./routes";
-import type { SessionState } from "@ultimate-crm/client";
 
 const authenticatedSession: SessionState = {
   status: "authenticated",
@@ -44,6 +44,8 @@ describe("Route Eligibility", () => {
     authentication: "required",
     requiredCapability: "metadata.activation.get",
   };
+
+  const privacyRoute = routeForPath("/customer/privacy")!;
 
   it("permits public routes to any session", () => {
     const unauthSession: SessionState = { status: "unauthenticated" };
@@ -134,6 +136,27 @@ describe("Route Eligibility", () => {
         adminStudioRoute,
         authenticatedSession,
         allowed,
+        developmentEnvironment,
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps Customer Privacy hidden without list eligibility", () => {
+    expect(privacyRoute.id).toBe("customer-privacy");
+    expect(privacyRoute.requiredCapability).toBe("customer_privacy.case.list");
+    expect(
+      canNavigateToRoute(
+        privacyRoute,
+        authenticatedSession,
+        { capabilities: new Set(["customer_privacy.case.get"]) },
+        developmentEnvironment,
+      ),
+    ).toBe(false);
+    expect(
+      canNavigateToRoute(
+        privacyRoute,
+        authenticatedSession,
+        { capabilities: new Set(["customer_privacy.case.list"]) },
         developmentEnvironment,
       ),
     ).toBe(true);

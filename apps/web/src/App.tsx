@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   GovernedClient,
+  GovernedCustomerPrivacyClient,
   GovernedMetadataClient,
   ProductClientError,
   type SearchHit,
@@ -14,6 +15,7 @@ import {
 } from "@ultimate-crm/client";
 import { AppShell, FeedbackPanel, PageHeader } from "@ultimate-crm/ui";
 import { AdminStudioPage } from "./AdminStudioPage";
+import { CustomerPrivacyPage } from "./CustomerPrivacyPage";
 import { createDevelopmentSessionStore } from "./developmentSession";
 import {
   canNavigateToRoute,
@@ -42,6 +44,10 @@ const client = new GovernedClient({
   sessionProvider: sessionStore,
 });
 const metadataClient = new GovernedMetadataClient({
+  baseUrl: window.location.origin,
+  sessionProvider: sessionStore,
+});
+const customerPrivacyClient = new GovernedCustomerPrivacyClient({
   baseUrl: window.location.origin,
   sessionProvider: sessionStore,
 });
@@ -122,6 +128,10 @@ function RouteContent({
     return <SearchPage />;
   }
 
+  if (route.id === "customer-privacy") {
+    return <CustomerPrivacyPage client={customerPrivacyClient} />;
+  }
+
   if (route.id === "admin-studio") {
     return <AdminStudioPage client={metadataClient} />;
   }
@@ -156,7 +166,12 @@ function SessionSummary({ session }: { session: SessionState }) {
   if (session.status !== "authenticated") {
     return <span>Signed out</span>;
   }
-  return <span>{session.actorLabel ?? "Authenticated actor"} · {session.tenantLabel ?? session.tenantId}</span>;
+  return (
+    <span>
+      {session.actorLabel ?? "Authenticated actor"} ·{" "}
+      {session.tenantLabel ?? session.tenantId}
+    </span>
+  );
 }
 
 function developmentAccessSnapshot(): NavigationAccessSnapshot {
@@ -174,6 +189,8 @@ function developmentAccessSnapshot(): NavigationAccessSnapshot {
   const capabilities = new Set<KnownProductCapability>();
   const knownCapabilities: readonly KnownProductCapability[] = [
     "search.global.query",
+    "customer_privacy.case.list",
+    "customer_privacy.case.get",
     "metadata.activation.get",
   ];
   for (const capability of knownCapabilities) {
@@ -190,8 +207,8 @@ function SearchPage() {
   const [results, setResults] = useState<SearchHit[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!queryText.trim()) return;
 
     setLoading(true);
@@ -204,24 +221,24 @@ function SearchPage() {
         cursor: "",
       });
       setResults(response.hits);
-    } catch (err) {
-      console.error(err);
-      if (err instanceof ProductClientError) {
-        if (err.kind === "unauthenticated") {
+    } catch (caught) {
+      console.error(caught);
+      if (caught instanceof ProductClientError) {
+        if (caught.kind === "unauthenticated") {
           setError("Your session has expired. Please sign in again.");
-        } else if (err.kind === "permission_denied") {
+        } else if (caught.kind === "permission_denied") {
           setError("You do not have permission to access the requested resource.");
-        } else if (err.kind === "not_found") {
+        } else if (caught.kind === "not_found") {
           setError("The requested resource could not be found.");
-        } else if (err.kind === "invalid_argument") {
+        } else if (caught.kind === "invalid_argument") {
           setError("The search query contains invalid parameters.");
-        } else if (err.kind === "conflict") {
+        } else if (caught.kind === "conflict") {
           setError("A data conflict occurred. Please reload the page.");
-        } else if (err.kind === "rate_limited") {
+        } else if (caught.kind === "rate_limited") {
           setError("Too many requests. Please try again later.");
-        } else if (err.kind === "unavailable") {
+        } else if (caught.kind === "unavailable") {
           setError("The CRM service is temporarily unavailable. Please try again later.");
-        } else if (err.kind === "network") {
+        } else if (caught.kind === "network") {
           setError("Network connection issue. Please check your internet connection.");
         } else {
           setError("An unexpected server error occurred. Please try again later.");
@@ -246,7 +263,7 @@ function SearchPage() {
         <input
           type="text"
           value={queryText}
-          onChange={(e) => setQueryText(e.target.value)}
+          onChange={(event) => setQueryText(event.target.value)}
           placeholder="Type deal or task name..."
           className="crm-input"
           id="search-input"
@@ -269,7 +286,7 @@ function SearchPage() {
       ) : null}
 
       {loading ? (
-        <FeedbackPanel tone="neutral" title="Searching records..." busy={true} />
+        <FeedbackPanel tone="neutral" title="Searching records..." busy />
       ) : null}
 
       {!loading && !error && results.length === 0 && queryText.trim() ? (
@@ -280,7 +297,11 @@ function SearchPage() {
 
       <div className="crm-results-list" id="search-results">
         {results.map((hit, index) => (
-          <div key={`${hit.resourceId}-${index}`} className="crm-hit-card" data-testid="search-hit">
+          <div
+            key={`${hit.resourceId}-${index}`}
+            className="crm-hit-card"
+            data-testid="search-hit"
+          >
             <h3 className="crm-hit-card-title">
               {hit.fields.name || hit.resourceId}
             </h3>

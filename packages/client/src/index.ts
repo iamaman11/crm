@@ -19,6 +19,10 @@ export type {
   RollbackMetadataRevisionOptions,
 } from "./metadata";
 
+export { GovernedCustomerPrivacyClient } from "./customerPrivacy";
+
+export type { ListCustomerPrivacyCasesOptions } from "./customerPrivacy";
+
 export {
   createObjectMetadataDefinitionInput,
   MetadataAuthoringError,
@@ -42,6 +46,11 @@ export type {
 } from "./session";
 
 export type { SearchHit } from "../gen/crm/search/v1/search_pb";
+export type {
+  GetPrivacyCaseResponse,
+  ListPrivacyCasesResponse,
+} from "../gen/crm/customer_privacy/v1/cases_pb";
+export type { PrivacyCase } from "../gen/crm/customer_privacy/v1/types_pb";
 export type {
   ActivateMetadataRevisionResponse,
   GetMetadataActivationResponse,
