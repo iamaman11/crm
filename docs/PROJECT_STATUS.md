@@ -20,7 +20,7 @@ This document is the concise authoritative current-state snapshot. Product depen
 
 Phase 8A.11 / issue #126 is in progress.
 
-Repository Steps 1–19 and the bounded Repository Step 20A product-plane slice are accepted. Repository Step 20A is accepted through PR #292. Repository Step 20 remains in progress; Repository Step 20B restore, SLO, observability, performance, security and supply-chain operations evidence is the only next permitted implementation packet. Architecture Stages A, B, D, E, F, G and H are complete. Stages C and I remain incomplete or in progress according to the architecture plan.
+Repository Steps 1–19 are complete. The bounded Repository Step 20A product-plane slice is accepted. Repository Step 20A is accepted through PR #292. Repository Step 20 remains in progress; Repository Step 20B restore, SLO, observability, performance, security and supply-chain operations evidence is the only next permitted implementation packet. Architecture Stages A, B, D, E, F, G and H are complete. Stages C and I remain incomplete or in progress according to the architecture plan.
 
 Repository Step 14 and Stage G are accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
 
@@ -172,7 +172,7 @@ Step 22 cannot close with an unresolved runtime dependency classification or unr
 
 ## Next permitted repository packet
 
-The next permitted implementation packet is Repository Step 20: Phase 8A frontend, accessibility, browser and operations evidence. Repository Step 19 is complete through PRs #287–#290.
+Repository Step 20A is accepted through PR #292. Repository Step 20 remains in progress; Repository Step 20B restore, SLO, observability, performance, security and supply-chain operations evidence is the only next permitted implementation packet. Repository Step 19 is complete through PRs #287–#290.
 
 No Step 20 or later implementation may begin before the accepted Repository Step 19 closure evidence is synchronized.
 
@@ -203,7 +203,7 @@ Repository Step 19 is complete only through the combined accepted evidence below
 
 The accepted first-party background-worker inventory is now **one Customer Privacy owner worker**: module `crm.customer-privacy`, worker `owner-execution`, phase `260`. This is a production background worker, not a new public capability route; the latest public Customer Privacy inventory remains **seven mutations and four permission-aware public queries**.
 
-Repository Steps 1–19 are complete. Repository Step 20 — Phase 8A frontend, accessibility, browser and operations evidence — is the only next permitted implementation packet. Phase 8A.11 / issue #126 remains in progress; Customer Privacy is not product-complete; current product-complete expert modules remain zero; architecture 10/10 and the Universal CRM product are not declared complete.
+Repository Steps 1–19 are complete. The bounded Repository Step 20A product-plane slice is accepted. Repository Step 20 remains in progress; Repository Step 20B restore, SLO, observability, performance, security and supply-chain operations evidence is the only next permitted implementation packet. Phase 8A.11 / issue #126 remains in progress; Customer Privacy is not product-complete; current product-complete expert modules remain zero; architecture 10/10 and the Universal CRM product are not declared complete.
 
 The Step 19 packets add no crate, dependency, route, public API, module manifest, migration or schema. The conservative public Rust surface remains **5,377**, suppression occurrences remain **91**, and `crm-application-runtime` non-comment/source LOC remains within the frozen **7,269** ceiling.
 

@@ -104,7 +104,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                     f"unqualified current 113-package claim: {context}",
                 )
 
-    def test_step_19_is_complete_and_step_20_is_next(self) -> None:
+    def test_step_19_is_complete_step_20a_is_accepted_and_step_20b_is_next(
+        self,
+    ) -> None:
         required = (
             "PR #287",
             "23b2f4ea660bcd46884fe054cd0c37e89b1495c4",
@@ -134,7 +136,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             )
             self.assertNotRegex(document, r"(?m)^\s*-\s*;\s*$")
         self.assertIn("Repository Steps 1–19 are complete", self.status)
-        self.assertIn("Repository Step 20", self.status)
+        self.assertIn("Repository Step 20A is accepted through PR #292", self.status)
+        self.assertIn("Repository Step 20 remains in progress", self.status)
+        self.assertIn("Repository Step 20B", self.status)
         self.assertIn(
             "19. real Customer Privacy worker lifecycle and complete process/end-to-end acceptance — **complete through PR #290**",
             self.plan,
@@ -144,7 +148,10 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(marker, self.product_plan)
         self.assertIn("After Steps 20–21 complete Phase 8A", self.product_plan)
         self.assertNotIn("After Steps 19–21 complete Phase 8A", self.product_plan)
-        self.assertIn("Repository Step 20 — Phase 8A frontend", self.product_plan)
+        self.assertIn(
+            "Repository Step 20A is accepted through PR #292", self.product_plan
+        )
+        self.assertIn("Repository Step 20B", self.product_plan)
         self.assertNotIn(
             "> Repository Step 19 — real Customer Privacy worker lifecycle",
             self.product_plan,
@@ -300,6 +307,17 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "next permitted bounded implementation packet is repository step 20",
                 lowered,
             )
+
+            for line in document.splitlines():
+
+                lowered_line = line.lower()
+
+                self.assertFalse(
+                    "step 20" in lowered_line
+                    and "next permitted" in lowered_line
+                    and "step 20b" not in lowered_line,
+                    line,
+                )
         self.assertIn("real PostgreSQL", self.product_plane)
         self.assertIn("assembled `crm-api`", self.product_plane)
         self.assertIn("Chromium acceptance", self.product_plane)
