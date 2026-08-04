@@ -40,6 +40,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             set(packet["allowed_paths"]),
             {
                 "crates/crm-application-runtime/src/background.rs",
+                "crates/crm-application-runtime/src/lib.rs",
                 "crates/crm-customer-privacy-production/src/root.rs",
                 "crates/crm-customer-privacy-production/src/worker.rs",
                 "docs/ACTIVE_PACKET.md",
@@ -198,7 +199,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             "CUSTOMER_PRIVACY_OWNER_EXECUTION_WORKER_ID",
             "BackgroundWorkerPhase::new(260)",
             "CustomerPrivacyProductionDependencies",
-            "add_customer_privacy_worker",
+            "privacy_dependencies.try_into()",
         ):
             self.assertIn(marker, background)
         contract_ci = (ROOT / ".github/workflows/contracts.yml").read_text(
