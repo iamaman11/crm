@@ -232,6 +232,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             set(self.packet["allowed_paths"]),
             {
                 "crates/crm-application-runtime/src/background.rs",
+                "crates/crm-application-runtime/src/lib.rs",
                 "crates/crm-customer-privacy-production/src/root.rs",
                 "crates/crm-customer-privacy-production/src/worker.rs",
                 "docs/ACTIVE_PACKET.md",
