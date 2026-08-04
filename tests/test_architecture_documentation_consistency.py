@@ -16,7 +16,6 @@ def read(path: str) -> str:
 
 class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
     @classmethod
-
     def setUpClass(cls) -> None:
         cls.status = read("docs/PROJECT_STATUS.md")
         cls.roadmap = read("docs/IMPLEMENTATION_ROADMAP.md")
@@ -33,7 +32,6 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.workspace = tomllib.loads(read("Cargo.toml"))
 
     @property
-
     def normative_documents(self) -> tuple[str, ...]:
         return self.status, self.roadmap, self.phase8, self.plan, self.catalog
 
@@ -284,6 +282,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("phase `260`", self.catalog)
         self.assertIn("Current merged authoritative/coordination module count: **12**", self.catalog)
         self.assertIn("Current merged business-module total: **13**", self.catalog)
+
 
 if __name__ == "__main__":
     unittest.main()
