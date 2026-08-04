@@ -1,45 +1,40 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-18-seed-demo-smoke",
-  "title": "Add deterministic seed-demo and real-process smoke",
+  "packet_id": "repository-step-18-seed-demo-smoke-evidence-sync",
+  "title": "Synchronize accepted Repository Step 18 closure evidence",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "953b9f929f8e89c351c59ebc01461fffab3689ff"
+    "sha": "a906f2c514285974113749b8b8ad9446202a5fa1"
   },
   "tracking_issues": [
     194
   ],
-  "objective": "Complete the final bounded Repository Step 18 implementation slice with a versioned, idempotent demo dataset and a real crm-api smoke path that reuse the accepted checkout-owned PostgreSQL lifecycle, preserve production authorization/tenant boundaries, and remain permanently accepted without starting frontend or Repository Step 19 work.",
+  "objective": "Record exact PR #285 source, squash merge and 19-of-19 acceptance evidence across every normative source, close Repository Step 18 and make Repository Step 19 the only next permitted implementation packet without changing runtime or product behavior.",
   "allowed_paths": [
-    ".github/workflows/governance.yml",
-    "AGENTS.md",
-    "README.md",
-    "affected-scope-policy.json",
     "docs/ACTIVE_PACKET.md",
-    "docs/DEVELOPMENT_WORKFLOW.md",
-    "repository-packet.json",
-    "scripts/local_demo.py",
-    "scripts/repo.py",
-    "services/crm-api/tests/local_demo_smoke_e2e.rs",
-    "tests/test_architecture_documentation_consistency.py",
-    "tests/test_local_demo.py",
-    "tests/test_repository_navigation.py"
-  ],
-  "forbidden_paths": [
-    ".github/workflows/temporary-**",
-    "Cargo.lock",
-    "Cargo.toml",
-    "apps/**",
-    "contracts/**",
-    "crates/**",
-    "database/**",
     "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
     "docs/IMPLEMENTATION_ROADMAP.md",
     "docs/MODULE_CATALOG.md",
     "docs/PHASE8_DELIVERY_PLAN.md",
     "docs/PROJECT_STATUS.md",
+    "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
     "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
+    "repository-packet.json",
+    "tests/test_architecture_documentation_consistency.py",
+    "tests/test_repository_navigation.py"
+  ],
+  "forbidden_paths": [
+    ".github/workflows/**",
+    "AGENTS.md",
+    "Cargo.lock",
+    "Cargo.toml",
+    "README.md",
+    "affected-scope-policy.json",
+    "apps/**",
+    "contracts/**",
+    "crates/**",
+    "database/**",
     "evidence/**",
     "modules/**",
     "package.json",
@@ -49,51 +44,37 @@
     "requirements-dev.txt",
     "rust-toolchain.toml",
     "schemas/**",
-    "services/crm-api/src/**"
+    "scripts/**",
+    "services/**"
   ],
   "deliverables": [
-    "expose stable seed-demo and smoke commands with human, JSON and mutation-free dry-run output",
-    "create or idempotently replay the versioned local-demo-acme Party only through the governed production mutation gateway",
-    "prove real crm-api readiness, denial without a live query grant, granted authenticated read, authentication denial and tenant isolation",
-    "reuse the accepted checkout-owned PostgreSQL 17 dependency plane and exact Cargo lockfile without direct business-table writes",
-    "run clean reset, seed, exact replay and smoke as permanent Governance acceptance",
-    "document the command contract without marking Repository Step 18 complete before post-merge evidence synchronization"
+    "record exact PR #285 source, squash merge and 19-of-19 workflow evidence in all six normative documents",
+    "mark Repository Step 18 and architecture Stage H complete while keeping Phase 8A, Customer Privacy and architecture 10/10 incomplete",
+    "make Repository Step 19 the only next permitted implementation packet",
+    "update active-packet and documentation-consistency guards to the accepted closure evidence-sync packet",
+    "record the accepted seed-demo/smoke zero-impact result in the historical workspace complexity baseline"
   ],
   "required_checks": [
     "Affected Scope CI",
-    "Application Runtime CI",
     "Complexity Baseline CI",
     "Customer Privacy Access Export CI",
-    "Customer Privacy Approval CI",
     "Customer Privacy Owner Execution CI",
-    "Customer Privacy Persistence CI",
-    "Customer Privacy Restriction Policy CI",
-    "Data Quality Process Runtime CI",
-    "Database CI",
-    "Export Process Runtime CI",
-    "Generic Mutation Query Conformance CI",
     "Governance CI",
-    "Import Process Runtime CI",
-    "Import Retryable Process Runtime CI",
-    "PostgreSQL Process Isolation Pilot",
-    "Product Plane CI",
     "Rust Generated Sync",
     "Rust CI"
   ],
   "acceptance": [
-    "the branch is based exactly on merge commit 953b9f929f8e89c351c59ebc01461fffab3689ff",
-    "two consecutive seed-demo executions use one stable idempotency key and produce one governed demo Party",
-    "smoke starts the real crm-api, verifies readiness and proves permission, authentication and tenant negative paths",
-    "all spawned crm-api processes use kill-on-drop and graceful shutdown cleanup",
-    "dry-run executes neither Docker mutation nor cargo process execution and does not expose admin credentials",
-    "the final diff contains exactly the thirteen declared permanent files and no temporary workflow or synchronizer",
+    "the branch is based exactly on merge commit a906f2c514285974113749b8b8ad9446202a5fa1",
+    "all six normative documents contain PR #285, source a522b8b11a0c6f143694f516e7a7f9d522c18ce3, merge a906f2c514285974113749b8b8ad9446202a5fa1 and 19 of 19",
+    "Repository Step 18 and Stage H are complete while Step 19 is the next permitted packet",
+    "Customer Privacy, Phase 8A and architecture 10/10 remain explicitly incomplete",
+    "the final diff contains only declared documentation, packet, generated navigation and permanent guard files",
     "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments, reviews or review threads"
   ],
   "non_goals": [
-    "mark Repository Step 18 complete or start Repository Step 19",
-    "add frontend or browser acceptance",
-    "change business contracts, schemas, migrations, dependencies, lockfiles or production runtime source",
-    "write Party business tables directly or introduce a second PostgreSQL lifecycle",
-    "claim Phase 8A, an expert module or architecture 10/10 complete"
+    "implement or start Repository Step 19",
+    "change Customer Privacy worker behavior",
+    "change runtime, routes, contracts, schemas, migrations, dependencies, lockfiles or product behavior",
+    "complete Phase 8A, an expert module or architecture 10/10"
   ]
 }

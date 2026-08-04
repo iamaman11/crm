@@ -15,7 +15,7 @@ The target is not merely a database of customers and deals. The completed produc
 
 A feature is not complete because a type, schema, endpoint or backend path exists. Product completion requires authoritative ownership, governed runtime behavior, understandable UX, accessibility, browser acceptance, migration/import paths, observability, recoverability, security and measurable user value.
 
-This plan does not change the single repository execution order. Repository Step 15 remains the next implementation packet. Product waves below begin only when their stated architecture and prior-product dependencies are accepted.
+This plan does not change the single repository execution order. Repository Steps 1–18 are complete; Repository Step 19 is the next implementation packet. Product waves below begin only when their stated architecture and prior-product dependencies are accepted.
 
 ## 2. Product 10/10 definition
 
@@ -77,7 +77,7 @@ Each wave must prove at least one real cross-domain journey through backend, wor
 | Wave | Primary result | Entry dependency | Completion state |
 |---|---|---|---|
 | Phase 8A | Customer master, identity, data quality, enrichment, consent and privacy lifecycle | Current active program | **In progress** |
-| Repository Steps 15–21 | Complete Phase 8A product/runtime/UX/operations evidence | Sequential architecture order | **Next through planned** |
+| Repository Steps 19–21 | Complete remaining Phase 8A product/runtime/UX/operations evidence | Sequential architecture order | **Next through planned** |
 | Repository Step 22 | Architecture remeasurement, runtime fan-in decision and permanent-gate value review | Phase 8A complete | **Planned checkpoint** |
 | Repository Step 23 / Phase 8B.1 | Catalog and effective-dated pricing foundation | Step 22 accepted | **Planned first extension wave** |
 | Repository Step 24 / Phase 8B.2 | Quote/CPQ approvals and process-heavy orchestration foundation | Step 23 accepted | **Planned contrasting extension wave** |
@@ -99,13 +99,11 @@ The wave map is dependency order, not a promise that all work inside one wave be
 
 Phase 8A remains the prerequisite for all customer-facing automation and engagement.
 
-It must finish:
+Accepted prerequisites now include Party tombstone/no-orphan and projection convergence, generic worker conformance, contract lifecycle enforcement, and the complete deterministic local lifecycle through PR #285 / source `a522b8b11a0c6f143694f516e7a7f9d522c18ce3` / merge `a906f2c514285974113749b8b8ad9446202a5fa1` / 19 of 19 applicable permanent workflows.
 
-- Party tombstone and no-orphan semantics;
-- projection/search/cache convergence;
-- generic worker conformance and a real Customer Privacy worker;
-- contract compatibility/deprecation/retirement lifecycle;
-- deterministic local lifecycle commands;
+Phase 8A must still finish:
+
+- a real Customer Privacy worker lifecycle and complete process/end-to-end acceptance;
 - customer privacy frontend/browser/accessibility acceptance;
 - restore, SLO, observability, performance, security and supply-chain evidence.
 
@@ -628,8 +626,8 @@ The current count of product-complete expert modules remains **0**. This plan br
 
 This planning document does not start later product work.
 
-The only next permitted implementation packet remains:
+The only next permitted implementation packet is:
 
-> Repository Step 15 — Party tombstone, no-orphan proof and projection/search/cache convergence.
+> Repository Step 19 — real Customer Privacy worker lifecycle and complete process/end-to-end acceptance.
 
-After Steps 15–21 complete Phase 8A and Step 22 resolves architecture/runtime/gate decisions, Step 23 begins the first measured product-extension wave. No Phase 8B–11 implementation may bypass that order.
+After Steps 19–21 complete Phase 8A and Step 22 resolves architecture/runtime/gate decisions, Step 23 begins the first measured product-extension wave. No Phase 8B–11 implementation may bypass that order.
