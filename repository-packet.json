@@ -7,7 +7,10 @@
     "ref": "main",
     "sha": "fffd6baf35544eea736d183af0a5ba38518cce9a"
   },
-  "tracking_issues": [194, 126],
+  "tracking_issues": [
+    194,
+    126
+  ],
   "objective": "Record the exact accepted source, squash merge and 17-of-17 workflow evidence for Repository Step 20A PR #292 across every live normative source, close only the Step 20A product-plane slice and make Step 20B operations evidence the sole next permitted packet without changing product or runtime behavior.",
   "allowed_paths": [
     "docs/ACTIVE_PACKET.md",
@@ -59,8 +62,9 @@
   "required_checks": [
     "Affected Scope CI",
     "Complexity Baseline CI",
+    "Customer Privacy Access Export CI",
+    "Customer Privacy Owner Execution CI",
     "Governance CI",
-    "Product Plane CI",
     "Rust Generated Sync",
     "Rust CI"
   ],
