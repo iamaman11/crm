@@ -37,6 +37,10 @@ jobs:
           end = source.index("\n          PY\n", start)
           payload = source[start:end]
           payload = "\n".join(line[10:] if line.startswith("          ") else line for line in payload.splitlines()) + "\n"
+          payload = payload.replace(
+              "updated, count = re.subn(pattern, body.rstrip(), text, flags=re.DOTALL)",
+              "updated, count = re.subn(pattern, lambda _: body.rstrip(), text, flags=re.DOTALL)",
+          )
           Path('/tmp/step19_evidence_sync.py').write_text(payload, encoding='utf-8')
           PY
           python /tmp/step19_evidence_sync.py
