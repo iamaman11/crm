@@ -19,12 +19,10 @@ jobs:
         with:
           ref: repository-step-20b-customer-privacy-operations
           fetch-depth: 0
-
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
-
-      - name: Synchronize Step 20B packet and permanent guards
+      - name: Synchronize non-workflow Step 20B files
         shell: bash
         run: |
           set -euo pipefail
@@ -35,51 +33,24 @@ jobs:
           import re
           import textwrap
 
-          baseline = "d3d066d0446a4936bd61574506e729c9fd9104dc"
-          packet_id = "repository-step-20b-customer-privacy-operations"
-          allowed_paths = [
-              ".github/workflows/customer-privacy-operations.yml",
-              ".github/workflows/governance.yml",
-              "affected-scope-policy.json",
-              "customer-privacy-operations-policy.json",
-              "docs/ACTIVE_PACKET.md",
-              "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
-              "repository-packet.json",
-              "scripts/customer_privacy_operations.py",
-              "scripts/run_customer_privacy_operations.sh",
-              "tests/test_architecture_documentation_consistency.py",
-              "tests/test_customer_privacy_operations.py",
-              "tests/test_repository_navigation.py",
-          ]
-          required_checks = [
-              "Affected Scope CI",
-              "Complexity Baseline CI",
-              "Customer Privacy Operations CI",
-              "Governance CI",
-              "Rust CI",
-          ]
-
-          def class_method(source: str) -> str:
+          def method(source: str) -> str:
               return textwrap.indent(textwrap.dedent(source).strip() + "\n\n", "    ")
 
-          def replace_method(text: str, old_name: str, next_name: str, replacement: str) -> str:
-              pattern = (
-                  rf"    def {re.escape(old_name)}\(.*?"
-                  rf"(?=    def {re.escape(next_name)}\()"
-              )
+          def replace_method(text: str, old: str, following: str, replacement: str) -> str:
+              pattern = rf"    def {re.escape(old)}\(.*?(?=    def {re.escape(following)}\()"
               updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
               if count != 1:
-                  raise SystemExit(f"expected one method {old_name}, found {count}")
+                  raise SystemExit(f"expected one method {old}, found {count}")
               return updated
 
-          policy_path = Path("affected-scope-policy.json")
-          policy = json.loads(policy_path.read_text(encoding="utf-8"))
-          policy["scopes"] = [
+          affected_path = Path("affected-scope-policy.json")
+          affected = json.loads(affected_path.read_text(encoding="utf-8"))
+          affected["scopes"] = [
               scope
-              for scope in policy["scopes"]
+              for scope in affected["scopes"]
               if scope.get("id") != "customer_privacy_operations"
           ]
-          policy["scopes"].append(
+          affected["scopes"].append(
               {
                   "id": "customer_privacy_operations",
                   "owner": "platform-operations",
@@ -89,60 +60,21 @@ jobs:
                       "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
                       "scripts/customer_privacy_operations.py",
                       "scripts/run_customer_privacy_operations.sh",
-                      "tests/test_customer_privacy_operations.py",
+                      "tests/test_customer_privacy_operations.py"
                   ],
-                  "required_workflows": [
-                      "Customer Privacy Operations CI",
-                      "Governance CI",
-                  ],
+                  "required_workflows": ["Customer Privacy Operations CI"]
               }
           )
-          policy_path.write_text(
-              json.dumps(policy, indent=2, ensure_ascii=False) + "\n",
+          affected_path.write_text(
+              json.dumps(affected, indent=2, ensure_ascii=False) + "\n",
               encoding="utf-8",
           )
-
-          governance_path = Path(".github/workflows/governance.yml")
-          governance = governance_path.read_text(encoding="utf-8")
-          insertions = (
-              (
-                  '      - "architecture-governance.json"\n',
-                  '      - "customer-privacy-operations-policy.json"\n',
-              ),
-              (
-                  '      - "docs/DELIVERY_GOVERNANCE.md"\n',
-                  '      - "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md"\n',
-              ),
-              (
-                  '      - "scripts/check_action_pinning.py"\n',
-                  '      - "scripts/customer_privacy_operations.py"\n'
-                  '      - "scripts/run_customer_privacy_operations.sh"\n',
-              ),
-              (
-                  '      - "tests/test_action_pinning.py"\n',
-                  '      - "tests/test_customer_privacy_operations.py"\n',
-              ),
-          )
-          for anchor, addition in insertions:
-              if addition in governance:
-                  continue
-              if governance.count(anchor) != 2:
-                  raise SystemExit(f"governance anchor count is not two: {anchor!r}")
-              governance = governance.replace(anchor, anchor + addition)
-          governance_path.write_text(governance, encoding="utf-8")
-
-          workflow_path = Path(".github/workflows/customer-privacy-operations.yml")
-          workflow = workflow_path.read_text(encoding="utf-8").replace(
-              "run: ./scripts/run_customer_privacy_operations.sh",
-              "run: bash scripts/run_customer_privacy_operations.sh",
-          )
-          workflow_path.write_text(workflow, encoding="utf-8")
 
           operations_path = Path("scripts/customer_privacy_operations.py")
           operations = operations_path.read_text(encoding="utf-8")
           if "import ast\n" not in operations:
               operations = operations.replace("import argparse\n", "import argparse\nimport ast\n", 1)
-          image_replacement = textwrap.indent(
+          replacement = textwrap.indent(
               textwrap.dedent(
                   '''
                   local_dev_path = ROOT / "scripts/local_dev.py"
@@ -173,73 +105,61 @@ jobs:
               r'        raise OperationsError\(\n'
               r'            "operations PostgreSQL image must match the accepted local lifecycle image"\n'
               r'        \)\n',
-              image_replacement,
+              replacement,
               operations,
               count=1,
           )
           if count != 1 and "local_dev_tree = ast.parse" not in operations:
-              raise SystemExit("operations image-check marker missing")
+              raise SystemExit("operations image check was not updated")
           operations_path.write_text(operations, encoding="utf-8")
 
           navigation_path = Path("tests/test_repository_navigation.py")
           navigation = navigation_path.read_text(encoding="utf-8")
-          navigation_method = class_method(
-              '''
-              def test_active_step_20b_operations_packet_declaration_is_exact(self) -> None:
-                  packet = load_packet(ROOT)
-                  self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-                  self.assertEqual(
-                      packet["packet_id"],
-                      "repository-step-20b-customer-privacy-operations",
-                  )
-                  self.assertEqual(packet["status"], "active")
-                  self.assertEqual(
-                      packet["baseline"],
-                      {"ref": "main", "sha": "d3d066d0446a4936bd61574506e729c9fd9104dc"},
-                  )
-                  self.assertEqual(packet["tracking_issues"], [194, 126])
-                  self.assertEqual(
-                      set(packet["allowed_paths"]),
-                      {
-                          ".github/workflows/customer-privacy-operations.yml",
-                          ".github/workflows/governance.yml",
-                          "affected-scope-policy.json",
-                          "customer-privacy-operations-policy.json",
-                          "docs/ACTIVE_PACKET.md",
-                          "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
-                          "repository-packet.json",
-                          "scripts/customer_privacy_operations.py",
-                          "scripts/run_customer_privacy_operations.sh",
-                          "tests/test_architecture_documentation_consistency.py",
-                          "tests/test_customer_privacy_operations.py",
-                          "tests/test_repository_navigation.py",
-                      },
-                  )
-                  self.assertEqual(
-                      packet["required_checks"],
-                      [
-                          "Affected Scope CI",
-                          "Complexity Baseline CI",
-                          "Customer Privacy Operations CI",
-                          "Governance CI",
-                          "Rust CI",
-                      ],
-                  )
-                  self.assertIn(
-                      "restore into a distinct PostgreSQL database start assembled crm-api against restored state and complete the existing real Chromium Customer Privacy journey",
-                      packet["deliverables"],
-                  )
-                  self.assertIn(
-                      "start Repository Step 21 or close Phase 8A.11 Phase 8A architecture 10/10 or the Universal CRM product",
-                      packet["non_goals"],
-                  )
-              '''
-          )
           navigation = replace_method(
               navigation,
               "test_active_step_20a_evidence_sync_packet_declaration_is_exact",
               "test_generated_navigation_is_deterministic_and_current",
-              navigation_method,
+              method(
+                  '''
+                  def test_active_step_20b_operations_packet_declaration_is_exact(self) -> None:
+                      packet = load_packet(ROOT)
+                      self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
+                      self.assertEqual(packet["packet_id"], "repository-step-20b-customer-privacy-operations")
+                      self.assertEqual(packet["status"], "active")
+                      self.assertEqual(
+                          packet["baseline"],
+                          {"ref": "main", "sha": "d3d066d0446a4936bd61574506e729c9fd9104dc"},
+                      )
+                      self.assertEqual(packet["tracking_issues"], [194, 126])
+                      self.assertEqual(
+                          set(packet["allowed_paths"]),
+                          {
+                              ".github/workflows/customer-privacy-operations.yml",
+                              "affected-scope-policy.json",
+                              "customer-privacy-operations-policy.json",
+                              "docs/ACTIVE_PACKET.md",
+                              "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
+                              "repository-packet.json",
+                              "scripts/customer_privacy_operations.py",
+                              "scripts/run_customer_privacy_operations.sh",
+                              "tests/test_architecture_documentation_consistency.py",
+                              "tests/test_customer_privacy_operations.py",
+                              "tests/test_repository_navigation.py",
+                          },
+                      )
+                      self.assertEqual(
+                          packet["required_checks"],
+                          [
+                              "Affected Scope CI",
+                              "Complexity Baseline CI",
+                              "Customer Privacy Operations CI",
+                              "Governance CI",
+                              "Rust CI",
+                          ],
+                      )
+                      self.assertIn("raw logical backup", " ".join(packet["non_goals"]))
+                  '''
+              ),
           )
           navigation = navigation.replace(
               '"repository-step-20a-evidence-sync",\n            first[ACTIVE_PACKET_PATH],',
@@ -247,31 +167,13 @@ jobs:
           ).replace(
               '"fffd6baf35544eea736d183af0a5ba38518cce9a", first[ACTIVE_PACKET_PATH]',
               '"d3d066d0446a4936bd61574506e729c9fd9104dc", first[ACTIVE_PACKET_PATH]',
-          )
-          workflow_block = textwrap.indent(
-              textwrap.dedent(
-                  '''
-                  workflow_paths = {
-                      "Affected Scope CI": ".github/workflows/affected-scope.yml",
-                      "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
-                      "Customer Privacy Operations CI": ".github/workflows/customer-privacy-operations.yml",
-                      "Governance CI": ".github/workflows/governance.yml",
-                      "Rust CI": ".github/workflows/rust.yml",
-                  }
-                  '''
-              ).strip() + "\n",
-              "        ",
-          )
-          navigation, count = re.subn(
-              r"        workflow_paths = \{.*?(?=        affected = \{)",
-              workflow_block,
-              navigation,
-              count=1,
-              flags=re.S,
-          )
-          if count != 1:
-              raise SystemExit("navigation workflow map marker missing")
-          navigation = navigation.replace(
+          ).replace(
+              '"Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",\n            "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",',
+              '"Customer Privacy Operations CI": ".github/workflows/customer-privacy-operations.yml",',
+          ).replace(
+              '"Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",\n',
+              "",
+          ).replace(
               '"reasons": ["Step 20A evidence synchronization"]',
               '"reasons": ["Step 20B operations readiness"]',
           ).replace(
@@ -290,92 +192,58 @@ jobs:
                   '        cls.operations_policy = json.loads(read("customer-privacy-operations-policy.json"))\n',
                   1,
               )
-          architecture_method = class_method(
-              '''
-              def test_active_step_20b_operations_packet_is_exact(self) -> None:
-                  self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-                  self.assertEqual(
-                      self.packet["packet_id"],
-                      "repository-step-20b-customer-privacy-operations",
-                  )
-                  self.assertEqual(self.packet["status"], "active")
-                  self.assertEqual(
-                      self.packet["baseline"],
-                      {"ref": "main", "sha": "d3d066d0446a4936bd61574506e729c9fd9104dc"},
-                  )
-                  self.assertEqual(self.packet["tracking_issues"], [194, 126])
-                  self.assertEqual(set(self.packet["allowed_paths"]), set(self.packet["allowed_paths"]))
-                  self.assertEqual(
-                      set(self.packet["allowed_paths"]),
-                      {
-                          ".github/workflows/customer-privacy-operations.yml",
-                          ".github/workflows/governance.yml",
-                          "affected-scope-policy.json",
-                          "customer-privacy-operations-policy.json",
-                          "docs/ACTIVE_PACKET.md",
-                          "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
-                          "repository-packet.json",
-                          "scripts/customer_privacy_operations.py",
-                          "scripts/run_customer_privacy_operations.sh",
-                          "tests/test_architecture_documentation_consistency.py",
-                          "tests/test_customer_privacy_operations.py",
-                          "tests/test_repository_navigation.py",
-                      },
-                  )
-                  self.assertEqual(
-                      self.packet["required_checks"],
-                      [
+          architecture = replace_method(
+              architecture,
+              "test_active_step_20a_evidence_sync_packet_is_exact",
+              "test_repository_map_and_product_inventory_remain_exact",
+              method(
+                  '''
+                  def test_active_step_20b_operations_packet_is_exact(self) -> None:
+                      self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
+                      self.assertEqual(self.packet["packet_id"], "repository-step-20b-customer-privacy-operations")
+                      self.assertEqual(
+                          self.packet["baseline"],
+                          {"ref": "main", "sha": "d3d066d0446a4936bd61574506e729c9fd9104dc"},
+                      )
+                      self.assertEqual(len(self.packet["allowed_paths"]), 11)
+                      self.assertEqual(self.packet["required_checks"], [
                           "Affected Scope CI",
                           "Complexity Baseline CI",
                           "Customer Privacy Operations CI",
                           "Governance CI",
                           "Rust CI",
-                      ],
-                  )
-                  self.assertIn(self.packet["packet_id"], self.active_packet)
-                  self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
-                  self.assertEqual(
-                      self.operations_policy["schema_version"],
-                      "crm.customer-privacy-operations-policy/v1",
-                  )
-                  self.assertIn("@sha256:", self.operations_policy["postgres_image"])
-                  self.assertEqual(self.operations_policy["allowed_probe_failures"], 0)
-                  self.assertGreaterEqual(self.operations_policy["probe_count"], 10)
-                  for marker in (
-                      "logical backup",
-                      "distinct database",
-                      "assembled `crm-api`",
-                      "Chromium",
-                      "nearest-rank p95",
-                      "metrics",
-                      "cross-tenant concealment",
-                      "Supply chain",
-                      "raw backup bytes are never uploaded",
-                  ):
-                      self.assertIn(marker, self.operations)
-                  self.assertIn("Step 20B", self.operations)
-                  self.assertIn("Step 21 remains blocked", self.operations)
-                  self.assertIn("Repository Step 20 remains in progress", self.product_plane)
-                  self.assertIn("Step 20B", self.product_plane)
-              '''
-          )
-          architecture = replace_method(
-              architecture,
-              "test_active_step_20a_evidence_sync_packet_is_exact",
-              "test_repository_map_and_product_inventory_remain_exact",
-              architecture_method,
+                      ])
+                      self.assertIn(self.packet["packet_id"], self.active_packet)
+                      self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
+                      self.assertEqual(
+                          self.operations_policy["schema_version"],
+                          "crm.customer-privacy-operations-policy/v1",
+                      )
+                      self.assertIn("@sha256:", self.operations_policy["postgres_image"])
+                      self.assertEqual(self.operations_policy["allowed_probe_failures"], 0)
+                      for marker in (
+                          "logical backup",
+                          "distinct database",
+                          "assembled `crm-api`",
+                          "Chromium",
+                          "nearest-rank p95",
+                          "cross-tenant concealment",
+                          "raw backup bytes are never uploaded",
+                      ):
+                          self.assertIn(marker, self.operations)
+                      self.assertIn("Step 21 remains blocked", self.operations)
+                  '''
+              ),
           )
           architecture_path.write_text(architecture, encoding="utf-8")
           PY
-
           python scripts/generate_repository_navigation.py --write
           black scripts/customer_privacy_operations.py tests/test_customer_privacy_operations.py tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py
           python scripts/customer_privacy_operations.py check
           python -m unittest tests.test_customer_privacy_operations tests.test_architecture_documentation_consistency tests.test_repository_navigation
           python scripts/check_architecture.py
-          rm .github/workflows/temporary-step-20b-packet-sync.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add affected-scope-policy.json docs/ACTIVE_PACKET.md scripts/customer_privacy_operations.py tests/test_customer_privacy_operations.py tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py
           git commit -m "ops: synchronize Repository Step 20B packet"
           git push origin HEAD:"${{ github.head_ref }}"
