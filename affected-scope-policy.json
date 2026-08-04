@@ -120,8 +120,10 @@
         ".github/pull_request_template.md",
         ".github/workflows/**",
         "AGENTS.md",
+        "customer-privacy-operations-policy.json",
         "docs/ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md",
         "docs/CI_TELEMETRY_BASELINE.md",
+        "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
         "docs/DELIVERY_GOVERNANCE.md",
         "docs/POSTGRESQL_PROCESS_ISOLATION_PILOT.md",
         "docs/RUST_CI_CACHE_PILOT.md",
@@ -130,13 +132,16 @@
         "scripts/check_native_module_composition.py",
         "scripts/check_step13_exit_evidence.py",
         "scripts/check_step13_suppression_baseline.py",
+        "scripts/customer_privacy_operations.py",
         "scripts/local_demo.py",
         "scripts/local_dev.py",
         "scripts/local_lifecycle.py",
         "scripts/prepare_isolated_process_database.sh",
         "scripts/repo.py",
+        "scripts/run_customer_privacy_operations.sh",
         "step13-complexity-policy.json",
-        "step13-suppression-baseline.json"
+        "step13-suppression-baseline.json",
+        "tests/test_customer_privacy_operations.py"
       ],
       "required_workflows": [
         "Governance CI"

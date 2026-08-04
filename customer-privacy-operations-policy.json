@@ -1,0 +1,28 @@
+{
+  "schema_version": "crm.customer-privacy-operations-policy/v1",
+  "postgres_image": "postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193",
+  "source_database": "crm_ops_source",
+  "restore_database": "crm_ops_restore",
+  "backup_format": "custom",
+  "startup_slo_seconds": 30,
+  "probe_count": 25,
+  "readiness_p95_milliseconds": 500,
+  "allowed_probe_failures": 0,
+  "browser_timeout_seconds": 90,
+  "required_metric_markers": [
+    "customer_privacy.case.list",
+    "customer_privacy.case.get"
+  ],
+  "forbidden_observability_markers": [
+    "privacy-product-plane-party",
+    "Privacy product-plane fixture"
+  ],
+  "supply_chain_inputs": [
+    "Cargo.lock",
+    "pnpm-lock.yaml",
+    "rust-toolchain.toml",
+    ".github/workflows/customer-privacy-operations.yml",
+    "scripts/customer_privacy_operations.py",
+    "scripts/run_customer_privacy_operations.sh"
+  ]
+}

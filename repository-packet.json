@@ -1,38 +1,36 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-20a-evidence-sync",
-  "title": "Synchronize accepted Repository Step 20A evidence",
+  "packet_id": "repository-step-20b-customer-privacy-operations",
+  "title": "Prove Customer Privacy operations readiness",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "fffd6baf35544eea736d183af0a5ba38518cce9a"
+    "sha": "d3d066d0446a4936bd61574506e729c9fd9104dc"
   },
   "tracking_issues": [
     194,
     126
   ],
-  "objective": "Record the exact accepted source, squash merge and 17-of-17 workflow evidence for Repository Step 20A PR #292 across every live normative source, close only the Step 20A product-plane slice and make Step 20B operations evidence the sole next permitted packet without changing product or runtime behavior.",
+  "objective": "Complete the implementation portion of Repository Step 20B by proving executable Customer Privacy restore SLO observability performance security and supply-chain operations evidence against an independently restored PostgreSQL database and assembled crm-api without changing business behavior.",
   "allowed_paths": [
+    ".github/workflows/customer-privacy-operations.yml",
+    "affected-scope-policy.json",
+    "customer-privacy-operations-policy.json",
     "docs/ACTIVE_PACKET.md",
-    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-    "docs/IMPLEMENTATION_ROADMAP.md",
-    "docs/MODULE_CATALOG.md",
-    "docs/PHASE8A_CUSTOMER_PRIVACY_PRODUCT_PLANE.md",
-    "docs/PHASE8_DELIVERY_PLAN.md",
-    "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
-    "docs/PROJECT_STATUS.md",
-    "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
+    "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
     "repository-packet.json",
+    "scripts/customer_privacy_operations.py",
+    "scripts/run_customer_privacy_operations.sh",
     "tests/test_architecture_documentation_consistency.py",
+    "tests/test_customer_privacy_operations.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
-    ".github/workflows/**",
+    ".github/workflows/governance.yml",
     "AGENTS.md",
     "Cargo.lock",
     "Cargo.toml",
     "README.md",
-    "affected-scope-policy.json",
     "apps/**",
     "contracts/**",
     "crates/**",
@@ -47,40 +45,45 @@
     "requirements-dev.txt",
     "rust-toolchain.toml",
     "schemas/**",
-    "scripts/**",
     "services/**",
     "tsconfig.base.json"
   ],
   "deliverables": [
-    "record PR #292 source 938cebed1e78bf7debf40dc544431bfe819970f4 squash merge fffd6baf35544eea736d183af0a5ba38518cce9a and 17 of 17 applicable permanent workflows in every live normative source",
-    "mark the bounded Repository Step 20A Customer Privacy product-plane slice accepted while keeping Repository Step 20 Phase 8A.11 Phase 8A architecture 10/10 and the Universal CRM product incomplete",
-    "make Repository Step 20B restore SLO observability performance security and supply-chain operations evidence the only next permitted implementation packet",
-    "preserve the accepted one-worker Customer Privacy inventory and seven-mutation four-query public capability inventory",
-    "preserve the 5377 public Rust surface 91 suppressions and crm-application-runtime 7269 LOC ceiling",
-    "update generated active-packet output and permanent documentation guards without changing product runtime contracts manifests schemas migrations dependencies or lockfiles"
+    "add a permanent Customer Privacy Operations CI gate with immutable action toolchain lockfile and PostgreSQL image inputs",
+    "create a governed Customer Privacy fixture through assembled production mutations then produce a custom-format logical backup with mode 0600 and a SHA-256 digest",
+    "restore into a distinct PostgreSQL database start assembled crm-api against restored state and complete the existing real Chromium Customer Privacy journey",
+    "enforce committed startup readiness zero-failure probe nearest-rank p95 and browser timeout objectives through a machine-readable policy",
+    "exercise health readiness and contract metrics while rejecting bearer token Party fixture and display-name leakage",
+    "record a bounded report and supply-chain SHA-256 manifest without uploading raw backup bytes",
+    "add permanent policy report and repository packet guards without changing product runtime contracts manifests schemas migrations dependencies or lockfiles"
   ],
   "required_checks": [
     "Affected Scope CI",
     "Complexity Baseline CI",
     "Customer Privacy Access Export CI",
+    "Customer Privacy Operations CI",
     "Customer Privacy Owner Execution CI",
     "Governance CI",
     "Rust Generated Sync",
     "Rust CI"
   ],
   "acceptance": [
-    "the branch is based exactly on main merge commit fffd6baf35544eea736d183af0a5ba38518cce9a",
-    "all live normative sources contain PR #292 source 938cebed1e78bf7debf40dc544431bfe819970f4 merge fffd6baf35544eea736d183af0a5ba38518cce9a and 17 of 17 applicable permanent workflows",
-    "the accepted evidence explicitly includes real PostgreSQL assembled crm-api Vite and Chromium success for keyboard list detail session-expiry and cross-tenant concealment",
-    "Repository Step 20A is accepted and Repository Step 20B is the sole next permitted packet while Repository Step 20 remains in progress",
-    "Customer Privacy Phase 8A.11 Phase 8A product-complete expert modules architecture 10/10 and the Universal CRM product remain explicitly incomplete",
-    "the final diff contains only the declared normative documentation generated active packet repository packet and permanent guard files",
-    "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments reviews or review threads"
+    "the branch is based exactly on main merge commit d3d066d0446a4936bd61574506e729c9fd9104dc",
+    "the final diff contains only the eleven declared operations workflow policy documentation generated packet script and permanent guard paths",
+    "the PostgreSQL image is immutable-digest pinned and identical to the accepted local lifecycle image",
+    "the source fixture is created only through the assembled governed gateway and the restored database is independent of the source database",
+    "restored crm-api health readiness metrics and the existing Chromium Customer Privacy journey pass without a mock backend or direct Customer Privacy record writes",
+    "startup readiness probe p95 and browser duration remain within committed policy with zero readiness failures",
+    "metrics and uploaded evidence exclude the bearer token raw backup Party fixture identifier and display-name fixture marker",
+    "Actions remain immutable-SHA pinned Rust metadata is locked product installation is frozen and the committed supply-chain inputs have SHA-256 evidence",
+    "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments reviews or review threads",
+    "Repository Step 20 Phase 8A.11 Phase 8A product-complete expert modules architecture 10/10 and the Universal CRM product remain incomplete until separate accepted evidence synchronization and later closure"
   ],
   "non_goals": [
-    "change the accepted Step 20A typed client browser route accessibility behavior governed seed or Chromium acceptance",
-    "start or implement Repository Step 20B operations work",
-    "change backend behavior authorization tenant isolation persistence workers capabilities contracts manifests schemas migrations dependencies or lockfiles",
-    "close Repository Step 20 Phase 8A.11 Phase 8A architecture 10/10 or the Universal CRM product"
+    "change Customer Privacy capabilities contracts schemas migrations persistence authorization tenant isolation workers or production Rust and TypeScript source behavior",
+    "add restriction release legal-hold release or new public read coordinates",
+    "upload or retain the raw logical backup outside the ephemeral acceptance job",
+    "replace the accepted Product Plane or owner-execution workflows with a parallel product or runtime harness",
+    "start Repository Step 21 or close Phase 8A.11 Phase 8A architecture 10/10 or the Universal CRM product"
   ]
 }
