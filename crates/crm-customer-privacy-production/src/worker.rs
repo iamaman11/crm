@@ -3,8 +3,10 @@ use crate::{
     PostgresOwnerExecutionPersistence, PrivacyOwnerExecutionService,
     build_canonical_internal_owner_execution,
 };
-use crm_application_composition::TenantBackgroundWorker;
-use crm_module_sdk::{ErrorCategory, PortFuture, SdkError, TenantId};
+use crm_application_composition::{ModuleActivationPort, TenantBackgroundWorker};
+use crm_core_data::PostgresDataStore;
+use crm_module_sdk::{ErrorCategory, PortFuture, RecordRef, SdkError, TenantId};
+use crm_query_runtime::{QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -22,6 +24,21 @@ impl std::fmt::Debug for CustomerPrivacyProductionOwnerExecutionWorker {
             .field("ready", &"dyn OwnerExecutionPersistencePort")
             .field("execution", &self.execution)
             .finish()
+    }
+}
+
+impl From<(PostgresDataStore, Arc<dyn ModuleActivationPort>)>
+    for CustomerPrivacyProductionDependencies
+{
+    fn from(
+        (store, activation): (PostgresDataStore, Arc<dyn ModuleActivationPort>),
+    ) -> Self {
+        Self {
+            store,
+            activation,
+            visibility_authorizer: Arc::new(BackgroundOnlyVisibilityAuthorizer),
+            cursor_key: [0x43; 32],
+        }
     }
 }
 
@@ -55,6 +72,24 @@ impl TenantBackgroundWorker for CustomerPrivacyProductionOwnerExecutionWorker {
                 self.execution.execute_next(invocation).await?;
             }
             Ok(())
+        })
+    }
+}
+
+#[derive(Debug)]
+struct BackgroundOnlyVisibilityAuthorizer;
+
+impl QueryVisibilityAuthorizer for BackgroundOnlyVisibilityAuthorizer {
+    fn authorize_visibility<'a>(
+        &'a self,
+        _request: &'a QueryRequest,
+        _resource: &'a RecordRef,
+    ) -> PortFuture<'a, Result<QueryVisibilityDecision, SdkError>> {
+        Box::pin(async {
+            Ok(QueryVisibilityDecision::denied(
+                "customer-privacy-background-only",
+                "not-applicable",
+            ))
         })
     }
 }
