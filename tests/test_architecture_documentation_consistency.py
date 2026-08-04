@@ -133,10 +133,17 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Repository Step 19",
         ):
             self.assertIn(marker, self.product_plan)
-        self.assertNotIn(
+        for stale in (
             "Repository Step 15 remains the next implementation packet",
+            "Repository Step 15 — Party tombstone",
+            "After Steps 15–21 complete Phase 8A",
+        ):
+            self.assertNotIn(stale, self.product_plan)
+        self.assertIn(
+            "Repository Step 19 — real Customer Privacy worker lifecycle",
             self.product_plan,
         )
+        self.assertIn("After Steps 19–21 complete Phase 8A", self.product_plan)
 
     def test_product_readiness_is_not_overstated(self) -> None:
         for document in self.normative_documents:
