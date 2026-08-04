@@ -122,7 +122,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 self.assertIn(marker, document)
             self.assertIn("step 19", lowered)
             self.assertIn("step 20", lowered)
-            self.assertNotRegex(lowered, r"step 19[^\n.;]{0,100}(?:not started|in progress|next)")
+            self.assertNotRegex(
+                lowered,
+                r"step 19[^\n.;]{0,100}(?:not started|in progress|next)",
+            )
+            self.assertNotRegex(document, r"(?m)^\s*-\s*;\s*$")
         self.assertIn("Repository Steps 1–19 are complete", self.status)
         self.assertIn("Repository Step 20", self.status)
         self.assertIn(
@@ -134,18 +138,27 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(marker, self.product_plan)
         self.assertIn("After Steps 20–21 complete Phase 8A", self.product_plan)
         self.assertNotIn("After Steps 19–21 complete Phase 8A", self.product_plan)
+        self.assertIn("Repository Step 20 — Phase 8A frontend", self.product_plan)
+        self.assertNotIn(
+            "> Repository Step 19 — real Customer Privacy worker lifecycle",
+            self.product_plan,
+        )
     def test_product_readiness_is_not_overstated(self) -> None:
         for document in self.normative_documents:
             lowered = document.lower()
             self.assertIn("phase 8a", lowered)
             self.assertIn("customer privacy", lowered)
             self.assertFalse(
-                re.search(r"architecture 10/10 (?:is )?(?:complete|accepted|achieved)", lowered)
+                re.search(
+                    r"architecture 10/10 (?:is )?(?:complete|accepted|achieved)",
+                    lowered,
+                )
             )
         self.assertIn("Phase 8A.11 / issue #126 remains in progress", self.status)
         self.assertIn("Current product-complete expert modules: **0**", self.status)
         self.assertIn("Architecture 10/10 is **not declared**", self.status)
-
+        self.assertIn("Stages C and I remain incomplete or in progress", self.status)
+        self.assertNotIn("Stages C, F and I", self.status)
     def test_architecture_stage_and_step_order_are_complete(self) -> None:
         stages = (
             "A — documentation and policy baseline",

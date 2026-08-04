@@ -20,7 +20,7 @@ This document is the concise authoritative current-state snapshot. Product depen
 
 Phase 8A.11 / issue #126 is in progress.
 
-Repository Steps 1–19 are complete. Repository Step 19 is complete. Repository Step 20 is next: Phase 8A frontend, accessibility, browser and operations evidence. Architecture Stages A, B, D, E, G and H are complete. Stages C, F and I remain incomplete or in progress according to the architecture plan.
+Repository Steps 1–19 are complete. Repository Step 19 is complete. Repository Step 20 is next: Phase 8A frontend, accessibility, browser and operations evidence. Architecture Stages A, B, D, E, F, G and H are complete. Stages C and I remain incomplete or in progress according to the architecture plan.
 
 Repository Step 14 and Stage G are accepted through PR #259 / accepted source `8aa0b33c6609e74f98363071c6e7c44ec59fc098` / squash merge `2b0b558077c444d4469137c8a2bcca2c14ae426` / 36 of 36 applicable permanent workflows on one unchanged meaningful user-authored exact head.
 
@@ -141,8 +141,6 @@ Accepted product/runtime evidence includes scope discovery and immutable snapsho
 Still required before Phase 8A.11 can close:
 
 - restriction and legal-hold release/read lifecycle where required;
--;
--;
 - frontend, accessibility and browser acceptance;
 - production operations, restore, SLO, security and performance evidence.
 

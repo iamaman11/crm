@@ -15,7 +15,7 @@ The target is not merely a database of customers and deals. The completed produc
 
 A feature is not complete because a type, schema, endpoint or backend path exists. Product completion requires authoritative ownership, governed runtime behavior, understandable UX, accessibility, browser acceptance, migration/import paths, observability, recoverability, security and measurable user value.
 
-This plan does not change the single repository execution order. Repository Steps 1–18 are complete; Repository Step 19 is complete through PRs #287–#290. Repository Step 20 is the only next permitted implementation packet. Product waves below begin only when their stated architecture and prior-product dependencies are accepted.
+This plan does not change the single repository execution order. Repository Steps 1–19 are complete. Repository Step 20 is the only next permitted implementation packet. Product waves below begin only when their stated architecture and prior-product dependencies are accepted.
 
 ## 2. Product 10/10 definition
 
@@ -628,7 +628,7 @@ This planning document does not start later product work.
 
 The only next permitted implementation packet is:
 
-> Repository Step 19 — real Customer Privacy worker lifecycle and complete process/end-to-end acceptance.
+> Repository Step 20 — Phase 8A frontend, accessibility, browser and operations evidence.
 
 After Steps 20–21 complete Phase 8A and Step 22 resolves architecture/runtime/gate decisions, Step 23 begins the first measured product-extension wave. No Phase 8B–11 implementation may bypass that order.
 

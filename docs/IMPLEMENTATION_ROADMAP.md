@@ -135,7 +135,7 @@ The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole liv
 
 Repository Step 18 is complete through accepted PRs #281, #283 and #285: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7; PR #285 / source `a522b8b11a0c6f143694f516e7a7f9d522c18ce3` / squash merge `a906f2c514285974113749b8b8ad9446202a5fa1` / 19 of 19 applicable permanent workflows, each on one unchanged exact head. The accepted lifecycle delivers deterministic repository-pinned `doctor`, locked isolated `bootstrap`, checkout-owned PostgreSQL `dev-up` / `dev-reset`, versioned idempotent `seed-demo` through the governed Party mutation gateway and real-process `smoke` proving readiness, permission, authentication and tenant boundaries. The next permitted bounded implementation packet is Repository Step 20: Phase 8A frontend, accessibility, browser and operations evidence.
 
-The accepted Step 18 lifecycle changes no product ownership, public contract, schema, migration, dependency or lockfile. Step 18 is complete; Step 19 is complete; Step 20 is next and Customer Privacy still publishes zero workers until that packet is accepted.
+The accepted Step 18 lifecycle changes no product ownership, public contract, schema, migration, dependency or lockfile. Steps 18 and 19 are complete; Step 20 is next. Customer Privacy now publishes one accepted first-party production owner worker through `crm.customer-privacy` / `owner-execution` at phase `260`.
 
 ### 3.6 Binding next repository sequence
 
@@ -211,8 +211,6 @@ Trusted-internal planning, retention evaluation, replay-safe owner execution, ac
 The remaining Phase 8A.11 product work after accepted Repository Step 19 is:
 
 - restriction and legal-hold release/read lifecycle where required;
--;
--;
 - frontend, accessibility and browser acceptance;
 - production restore, SLO, observability, performance, security and supply-chain evidence.
 
