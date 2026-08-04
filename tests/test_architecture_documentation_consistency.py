@@ -59,7 +59,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "2a0ee9c33fbe23cdf9c6dccb1acc7e3bd8bcba3a",
             "PR #266",
             "ded5d80ae11bbf044b5bfe5b572e8dab521f884a",
-            "1f889a810c82df31c584c397c215cd1b62ee47cad54e64",
+            "1f889a810c82da3d0fee12427eacccbe43613bac",
             "PR #267",
             "f1b72dbee09f152005cb3584b9bcc1573bf2c4fe",
             "4a14a5a0bda6d25d27e7c2da7c5f4809fa1efbdf",
@@ -91,7 +91,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         for document in self.normative_documents:
             for marker in ("112", "835", "5,377", "18", "270", "91"):
                 self.assertIn(marker, document)
-            for match in re.finditer(r"\b113\b", document):
+            for match in re.finditer(r"(?<![0-9])113(?![0-9])", document):
                 context = document[max(0, match.start() - 120) : match.end() + 120].lower()
                 self.assertTrue(
                     "historical" in context or "→ 112" in context or "step 13" in context,
