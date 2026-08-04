@@ -37,7 +37,18 @@ jobs:
       - name: Materialize accepted Step 20 evidence
         env:
           PYTHONPATH: .
-        run: python scripts/materialize_step20_evidence_sync.py
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/materialize_step20_evidence_sync.py")
+          content = path.read_text(encoding="utf-8")
+          old = 're.subn(pattern, replacement.rstrip() + "\\n\\n", text)'
+          new = 're.subn(pattern, lambda _match: replacement.rstrip() + "\\n\\n", text)'
+          if old not in content:
+              raise SystemExit("materializer replacement anchor missing")
+          path.write_text(content.replace(old, new, 1), encoding="utf-8")
+          PY
+          python scripts/materialize_step20_evidence_sync.py
 
       - name: Validate synchronized documentation and navigation
         env:
