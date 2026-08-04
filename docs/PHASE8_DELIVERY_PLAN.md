@@ -97,7 +97,7 @@ Latest accepted public Customer Privacy inventory remains:
 
 - **7 public mutations**;
 - **4 permission-aware public queries**;
-- **0 Customer Privacy workers**.
+- **1 Customer Privacy owner worker** (`crm.customer-privacy` / `owner-execution`, phase `260`).
 
 Trusted-internal planning, retention evaluation, replay-safe owner execution, access/export assembly and exact-nine action execution remain non-public.
 
@@ -122,7 +122,7 @@ Repository Step 16 is complete through:
 - PR #269 / source `74b1d7b0f8764fcd90839b7aab25f8f82fe5e552` / merge `6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd` / 20 of 20 — reusable business-neutral worker conformance and representative Customer Enrichment / CRM API import adoption;
 - PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17 — mechanically observed two-executor contention and exactly-once Party import convergence.
 
-Step 16 proves denial without side effects, retryable progress preservation, exact restart recovery, completed replay, tenant isolation and contention convergence without a generic lease API or production-algorithm change. Customer Privacy still has **0 Customer Privacy workers**; its real worker lifecycle remains Step 19.
+Step 16 proves denial without side effects, retryable progress preservation, exact restart recovery, completed replay, tenant isolation and contention convergence without a generic lease API or production-algorithm change. Customer Privacy still has **1 Customer Privacy owner worker** (`crm.customer-privacy` / `owner-execution`, phase `260`); its real worker lifecycle remains Step 19.
 
 Repository Step 17 is complete through:
 
@@ -130,7 +130,7 @@ Repository Step 17 is complete through:
 - PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8 — made production zero-usage retirement evidence SHA-256-bound, complete, append-only and fail closed;
 - PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 — proved the coordinate was never externally released through live empty GitHub Releases, tags and deployments, non-publishable packages and no external consumer record, then retired `activities.task.create@1.0.0` while preserving its historical tombstone and keeping `telemetry.zero_since` null.
 
-The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is complete through accepted PRs #281, #283 and #285: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7; PR #285 / source `a522b8b11a0c6f143694f516e7a7f9d522c18ce3` / squash merge `a906f2c514285974113749b8b8ad9446202a5fa1` / 19 of 19 applicable permanent workflows, each on one unchanged exact head. The accepted lifecycle delivers deterministic repository-pinned `doctor`, locked isolated `bootstrap`, checkout-owned PostgreSQL `dev-up` / `dev-reset`, versioned idempotent `seed-demo` through the governed Party mutation gateway and real-process `smoke` proving readiness, permission, authentication and tenant boundaries. The next permitted bounded implementation packet is Repository Step 19: the real Customer Privacy worker lifecycle and complete process/end-to-end acceptance.
+The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is complete through accepted PRs #281, #283 and #285: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7; PR #285 / source `a522b8b11a0c6f143694f516e7a7f9d522c18ce3` / squash merge `a906f2c514285974113749b8b8ad9446202a5fa1` / 19 of 19 applicable permanent workflows, each on one unchanged exact head. The accepted lifecycle delivers deterministic repository-pinned `doctor`, locked isolated `bootstrap`, checkout-owned PostgreSQL `dev-up` / `dev-reset`, versioned idempotent `seed-demo` through the governed Party mutation gateway and real-process `smoke` proving readiness, permission, authentication and tenant boundaries. The next permitted bounded implementation packet is Repository Step 20: Phase 8A frontend, accessibility, browser and operations evidence.
 
 
 Exact measured result remains:
@@ -160,20 +160,20 @@ The remaining work is sequenced, not parallel:
 - PR #278 / source `228f459963e571a830aee6c43cddd15e3c9b0d5f` / merge `996d634a33945e618be5ff81c297f0f617ce19d5` / 8 of 8 — made production zero-usage retirement evidence SHA-256-bound, complete, append-only and fail closed;
 - PR #279 / source `0dce0895edec56508df1b4fc880d09ab27fc00df` / merge `ea3d3894d05e3a8d814aff69824b593843763d03` / 22 of 22 — proved the coordinate was never externally released through live empty GitHub Releases, tags and deployments, non-publishable packages and no external consumer record, then retired `activities.task.create@1.0.0` while preserving its historical tombstone and keeping `telemetry.zero_since` null.
 
-The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is complete through accepted PRs #281, #283 and #285: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7; PR #285 / source `a522b8b11a0c6f143694f516e7a7f9d522c18ce3` / squash merge `a906f2c514285974113749b8b8ad9446202a5fa1` / 19 of 19 applicable permanent workflows, each on one unchanged exact head. The accepted lifecycle delivers deterministic repository-pinned `doctor`, locked isolated `bootstrap`, checkout-owned PostgreSQL `dev-up` / `dev-reset`, versioned idempotent `seed-demo` through the governed Party mutation gateway and real-process `smoke` proving readiness, permission, authentication and tenant boundaries. The next permitted bounded implementation packet is Repository Step 19: the real Customer Privacy worker lifecycle and complete process/end-to-end acceptance.
+The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole live create coordinate. `activities.task.create@1.0.0` is absent from the current provider manifest and production capability catalog, rejected before payload decoding, retained only as immutable historical registry/lifecycle evidence and classified `never_externally_released`. The ordinary 30-day/production-zero-usage path remains binding for released contracts; no production history was fabricated. Repository Step 18 is complete through accepted PRs #281, #283 and #285: PR #281 / source `76a0d93d594b6ffbb890f90d3cb9037febf4c3f8` / squash merge `87bc0d33befc4525b62aa7e0e1884abc07e12abf` / 7 of 7; PR #283 / source `5f4480fafd37cc8c89df60f3688e756d7f881af8` / squash merge `21e2f73b57d2c35c16eccc15ee3e075e818f488a` / 7 of 7; PR #285 / source `a522b8b11a0c6f143694f516e7a7f9d522c18ce3` / squash merge `a906f2c514285974113749b8b8ad9446202a5fa1` / 19 of 19 applicable permanent workflows, each on one unchanged exact head. The accepted lifecycle delivers deterministic repository-pinned `doctor`, locked isolated `bootstrap`, checkout-owned PostgreSQL `dev-up` / `dev-reset`, versioned idempotent `seed-demo` through the governed Party mutation gateway and real-process `smoke` proving readiness, permission, authentication and tenant boundaries. The next permitted bounded implementation packet is Repository Step 20: Phase 8A frontend, accessibility, browser and operations evidence.
 
 ### Repository Step 18 — complete through PR #285
 
 - accepted through PR #281: deterministic repository-pinned `doctor` and locked isolated `bootstrap`;
 - accepted through PR #283: checkout-owned PostgreSQL `dev-up` and `dev-reset` with immutable image pinning, schema-digest reuse, fail-closed ownership/reset semantics and permanent real-Docker acceptance;
 - accepted through PR #285 / source `a522b8b11a0c6f143694f516e7a7f9d522c18ce3` / merge `a906f2c514285974113749b8b8ad9446202a5fa1` / 19 of 19: versioned idempotent `seed-demo` through the governed Party gateway and real-process `smoke` with permission, authentication and tenant negative proof;
-- Repository Step 19 is now the next permitted packet.
+- Repository Step 19 is complete through PRs #287–#290. Repository Step 20 is the only next permitted implementation packet.
 
-### Repository Step 19
+### Repository Step 19 — complete through PR #290
 
-- a real Customer Privacy worker lifecycle;
-- complete activation, authorization, lease/replay/crash and process/end-to-end evidence;
-- disable/uninstall fail-closed semantics.
+- real assembled `crm-api` owner-worker lifecycle accepted on clean and rollback/reapplied PostgreSQL schemas;
+- activation, authorization, replay/restart and process/end-to-end evidence accepted;
+- uninstall non-discovery and no-effect behavior accepted.
 
 ### Repository Step 20
 
@@ -185,7 +185,7 @@ The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole liv
 
 - final Phase 8A product and operations closure against every accepted invariant.
 
-No Step 19 or later implementation may begin before Step 18 is accepted and synchronized.
+No Step 20 or later implementation may begin before the accepted Repository Step 19 closure evidence is synchronized.
 
 ## 7. Phase 8A closure criteria
 
@@ -296,12 +296,12 @@ No later product train may be represented as complete from backend/platform work
 
 ## 12. Binding repository continuation
 
-Repository Steps 1–17 are complete.
+Repository Steps 1–19 are complete.
 
 16. Repository Step 16 — reusable worker conformance — **complete through PR #270**;
 17. Repository Step 17 — contract lifecycle enforcement — **complete through PR #279**;
 18. Repository Step 18 — deterministic local lifecycle — **complete through PR #285**;
-19. Repository Step 19 — Customer Privacy worker and full E2E;
+19. Repository Step 19 — Customer Privacy worker and full E2E — **complete through PR #290**;
 20. Repository Step 20 — frontend and operations evidence;
 21. Repository Step 21 — Phase 8A closure;
 22. Repository Step 22 — architecture remeasurement, `crm-application-runtime` fan-in decision and permanent-gate value/cost review, not final 10/10;
@@ -310,3 +310,18 @@ Repository Steps 1–17 are complete.
 25. Repository Step 25 — final architecture 10/10 review only if every normative criterion is mechanically proven.
 
 Architecture 10/10 remains unclaimed. Product-level 10/10 remains a later portfolio result governed by `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md`. Issue #194 and issue #126 remain open. Current product-complete expert modules: **0**.
+
+## Repository Step 19 accepted closure
+
+Repository Step 19 is complete only through the combined accepted evidence below, each on one unchanged exact source head with no unresolved comments, reviews or review threads:
+
+- PR #287 / source `23b2f4ea660bcd46884fe054cd0c37e89b1495c4` / squash merge `c0fec3ae08c836ab483737442ed4377c99c85e9a` / **11 of 11** applicable permanent workflows — added the bounded Customer Privacy owner-worker boundary without public ingress or new schema/dependency surface;
+- PR #288 / source `b99a4fc4ff7ef5cfd47813b487900b4c2a9f3b77` / squash merge `bc653de5f1a853791d3ab4a03f59f3daad54bf54` / **24 of 24** — added PostgreSQL ready-work discovery for planned Customer Privacy owner actions;
+- PR #289 / source `3e21e79e1600727ebcda222af389d568d857cff8` / squash merge `d1c4dd278853a1e6a426fab284c70b3529d42833` / **24 of 24** — registered `crm.customer-privacy` / `owner-execution` at phase `260` in the production `ApplicationRuntime`, with activation gating and replay-safe canonical execution;
+- PR #290 / source `9bbb339f39133955a7f42ea67f3334e597066e2e` / squash merge `49c5e35814adceb2be9d4cc2302bf10032b807a0` / **19 of 19** — proved the assembled real `crm-api` lifecycle on clean and rollback/reapplied PostgreSQL schemas: ready-work discovery, a real Parties privacy action, one durable attempt, successful outcome, completed checkpoint, audit evidence, owner event/outbox and final case transition, plus restart no-duplicate proof and uninstall no-discovery/no-effect proof.
+
+The accepted first-party background-worker inventory is now **one Customer Privacy owner worker**: module `crm.customer-privacy`, worker `owner-execution`, phase `260`. This is a production background worker, not a new public capability route; the latest public Customer Privacy inventory remains **seven mutations and four permission-aware public queries**.
+
+Repository Steps 1–19 are complete. Repository Step 20 — Phase 8A frontend, accessibility, browser and operations evidence — is the only next permitted implementation packet. Phase 8A.11 / issue #126 remains in progress; Customer Privacy is not product-complete; current product-complete expert modules remain zero; architecture 10/10 and the Universal CRM product are not declared complete.
+
+The Step 19 packets add no crate, dependency, route, public API, module manifest, migration or schema. The conservative public Rust surface remains **5,377**, suppression occurrences remain **91**, and `crm-application-runtime` non-comment/source LOC remains within the frozen **7,269** ceiling.
