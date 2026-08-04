@@ -23,6 +23,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.complexity = read("docs/WORKSPACE_COMPLEXITY_BASELINE.md")
         cls.catalog = read("docs/MODULE_CATALOG.md")
         cls.product_plan = read("docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md")
+        cls.product_plane = read("docs/PHASE8A_CUSTOMER_PRIVACY_PRODUCT_PLANE.md")
         cls.delivery = read("docs/DELIVERY_GOVERNANCE.md")
         cls.adr32 = read(
             "docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md"
@@ -224,36 +225,28 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_step_20a_product_plane_packet_is_exact(self) -> None:
+    def test_active_step_20a_evidence_sync_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(
-            self.packet["packet_id"],
-            "repository-step-20a-customer-privacy-product-plane",
-        )
+        self.assertEqual(self.packet["packet_id"], "repository-step-20a-evidence-sync")
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "46f5be276cf2935f1940827581b81cf197b87111"},
+            {"ref": "main", "sha": "fffd6baf35544eea736d183af0a5ba38518cce9a"},
         )
         self.assertEqual(self.packet["tracking_issues"], [194, 126])
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                "apps/web/e2e/customer-privacy.spec.ts",
-                "apps/web/src/App.tsx",
-                "apps/web/src/CustomerPrivacyPage.test.ts",
-                "apps/web/src/CustomerPrivacyPage.tsx",
-                "apps/web/src/customerPrivacyViewModel.ts",
-                "apps/web/src/routes.test.ts",
-                "apps/web/src/routes.ts",
                 "docs/ACTIVE_PACKET.md",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/MODULE_CATALOG.md",
                 "docs/PHASE8A_CUSTOMER_PRIVACY_PRODUCT_PLANE.md",
-                "packages/client/src/customerPrivacy.test.ts",
-                "packages/client/src/customerPrivacy.ts",
-                "packages/client/src/index.ts",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
+                "docs/PROJECT_STATUS.md",
+                "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
                 "repository-packet.json",
-                "scripts/run_e2e.sh",
-                "services/crm-api/tests/seed_e2e_fixture.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
             },
@@ -272,13 +265,45 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "add a typed governed Customer Privacy client for the existing case.list and case.get query coordinates with exact contract identity and descriptor-hash verification",
+            "record PR #292 source 938cebed1e78bf7debf40dc544431bfe819970f4 squash merge fffd6baf35544eea736d183af0a5ba38518cce9a and 17 of 17 applicable permanent workflows in every live normative source",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "complete the Step 20B restore SLO observability performance security or supply-chain operations evidence",
+            "start or implement Repository Step 20B operations work",
             self.packet["non_goals"],
         )
+        evidence_documents = (
+            self.status,
+            self.roadmap,
+            self.phase8,
+            self.plan,
+            self.catalog,
+            self.product_plan,
+            self.product_plane,
+            self.complexity,
+        )
+        for document in evidence_documents:
+            for marker in (
+                "PR #292",
+                "938cebed1e78bf7debf40dc544431bfe819970f4",
+                "fffd6baf35544eea736d183af0a5ba38518cce9a",
+                "17 of 17",
+                "Step 20B",
+            ):
+                self.assertIn(marker, document)
+            lowered = document.lower()
+            self.assertNotRegex(
+                lowered, r"repository step 20 is (?:the )?(?:only )?next"
+            )
+            self.assertNotRegex(lowered, r"step 20 is next")
+            self.assertNotIn(
+                "next permitted bounded implementation packet is repository step 20",
+                lowered,
+            )
+        self.assertIn("real PostgreSQL", self.product_plane)
+        self.assertIn("assembled `crm-api`", self.product_plane)
+        self.assertIn("Chromium acceptance", self.product_plane)
+        self.assertIn("Repository Step 20 remains in progress", self.product_plane)
 
     def test_repository_map_and_product_inventory_remain_exact(self) -> None:
         self.assertIn(

@@ -23,36 +23,29 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_step_20a_product_plane_packet_declaration_is_exact(self) -> None:
+    def test_active_step_20a_evidence_sync_packet_declaration_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(
-            packet["packet_id"], "repository-step-20a-customer-privacy-product-plane"
-        )
+        self.assertEqual(packet["packet_id"], "repository-step-20a-evidence-sync")
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
-            {"ref": "main", "sha": "46f5be276cf2935f1940827581b81cf197b87111"},
+            {"ref": "main", "sha": "fffd6baf35544eea736d183af0a5ba38518cce9a"},
         )
         self.assertEqual(packet["tracking_issues"], [194, 126])
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
-                "apps/web/e2e/customer-privacy.spec.ts",
-                "apps/web/src/App.tsx",
-                "apps/web/src/CustomerPrivacyPage.test.ts",
-                "apps/web/src/CustomerPrivacyPage.tsx",
-                "apps/web/src/customerPrivacyViewModel.ts",
-                "apps/web/src/routes.test.ts",
-                "apps/web/src/routes.ts",
                 "docs/ACTIVE_PACKET.md",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/MODULE_CATALOG.md",
                 "docs/PHASE8A_CUSTOMER_PRIVACY_PRODUCT_PLANE.md",
-                "packages/client/src/customerPrivacy.test.ts",
-                "packages/client/src/customerPrivacy.ts",
-                "packages/client/src/index.ts",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
+                "docs/PROJECT_STATUS.md",
+                "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
                 "repository-packet.json",
-                "scripts/run_e2e.sh",
-                "services/crm-api/tests/seed_e2e_fixture.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
             },
@@ -68,9 +61,14 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "Rust CI",
             ],
         )
-        self.assertIn("Product Plane CI", packet["required_checks"])
-        self.assertIn("packages/client/src/customerPrivacy.ts", packet["allowed_paths"])
-        self.assertIn("apps/web/e2e/customer-privacy.spec.ts", packet["allowed_paths"])
+        self.assertIn(
+            "record PR #292 source 938cebed1e78bf7debf40dc544431bfe819970f4 squash merge fffd6baf35544eea736d183af0a5ba38518cce9a and 17 of 17 applicable permanent workflows in every live normative source",
+            packet["deliverables"],
+        )
+        self.assertIn(
+            "start or implement Repository Step 20B operations work",
+            packet["non_goals"],
+        )
 
     def test_generated_navigation_is_deterministic_and_current(self) -> None:
         first = generated_documents(ROOT)
@@ -83,11 +81,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-20a-customer-privacy-product-plane",
+            "repository-step-20a-evidence-sync",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "46f5be276cf2935f1940827581b81cf197b87111", first[ACTIVE_PACKET_PATH]
+            "fffd6baf35544eea736d183af0a5ba38518cce9a", first[ACTIVE_PACKET_PATH]
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
         self.assertIn("`crm.customer-privacy`", first[REPOSITORY_MAP_PATH])
@@ -141,7 +139,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 20A product-plane acceptance"],
+                    "reasons": ["Step 20A evidence synchronization"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -149,7 +147,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="46f5be276cf2935f1940827581b81cf197b87111",
+                return_value="fffd6baf35544eea736d183af0a5ba38518cce9a",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(
