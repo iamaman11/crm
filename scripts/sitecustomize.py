@@ -125,3 +125,4 @@ def update_complexity() -> None:
     )
 
     path.write_text(content, encoding="utf-8")
+    import usercustomize  # noqa: F401
