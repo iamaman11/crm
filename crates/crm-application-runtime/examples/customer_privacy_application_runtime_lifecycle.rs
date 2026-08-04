@@ -292,34 +292,38 @@ async fn execution_snapshot(
     party_id: &str,
 ) -> ExecutionSnapshot {
     ExecutionSnapshot {
-        checkpoints: count_case_rows(
-            admin,
-            "crm.customer_privacy_owner_execution_checkpoints",
-            tenant,
-            case_id,
+        checkpoints: sqlx::query_scalar(
+            "SELECT count(*) FROM crm.customer_privacy_owner_execution_checkpoints WHERE tenant_id = $1 AND privacy_case_id = $2",
         )
-        .await,
-        attempts: count_case_rows(
-            admin,
-            "crm.customer_privacy_owner_action_attempts",
-            tenant,
-            case_id,
+        .bind(tenant)
+        .bind(case_id)
+        .fetch_one(admin)
+        .await
+        .expect("count runtime owner-execution checkpoints"),
+        attempts: sqlx::query_scalar(
+            "SELECT count(*) FROM crm.customer_privacy_owner_action_attempts WHERE tenant_id = $1 AND privacy_case_id = $2",
         )
-        .await,
-        outcomes: count_case_rows(
-            admin,
-            "crm.customer_privacy_owner_action_outcomes",
-            tenant,
-            case_id,
+        .bind(tenant)
+        .bind(case_id)
+        .fetch_one(admin)
+        .await
+        .expect("count runtime owner-action attempts"),
+        outcomes: sqlx::query_scalar(
+            "SELECT count(*) FROM crm.customer_privacy_owner_action_outcomes WHERE tenant_id = $1 AND privacy_case_id = $2",
         )
-        .await,
-        audit: count_case_rows(
-            admin,
-            "crm.customer_privacy_owner_execution_audit",
-            tenant,
-            case_id,
+        .bind(tenant)
+        .bind(case_id)
+        .fetch_one(admin)
+        .await
+        .expect("count runtime owner-action outcomes"),
+        audit: sqlx::query_scalar(
+            "SELECT count(*) FROM crm.customer_privacy_owner_execution_audit WHERE tenant_id = $1 AND privacy_case_id = $2",
         )
-        .await,
+        .bind(tenant)
+        .bind(case_id)
+        .fetch_one(admin)
+        .await
+        .expect("count runtime owner-execution audit rows"),
         owner_events: sqlx::query_scalar(
             r#"
             SELECT count(*) FROM crm.outbox_events
@@ -337,30 +341,6 @@ async fn execution_snapshot(
         party_version: record_version(admin, tenant, PARTY_RECORD_TYPE, party_id).await,
         case_version: record_version(admin, tenant, "customer-privacy.case", case_id).await,
     }
-}
-
-async fn count_case_rows(admin: &PgPool, table: &'static str, tenant: &str, case_id: &str) -> i64 {
-    let sql = match table {
-        "crm.customer_privacy_owner_execution_checkpoints" => {
-            "SELECT count(*) FROM crm.customer_privacy_owner_execution_checkpoints WHERE tenant_id = $1 AND privacy_case_id = $2"
-        }
-        "crm.customer_privacy_owner_action_attempts" => {
-            "SELECT count(*) FROM crm.customer_privacy_owner_action_attempts WHERE tenant_id = $1 AND privacy_case_id = $2"
-        }
-        "crm.customer_privacy_owner_action_outcomes" => {
-            "SELECT count(*) FROM crm.customer_privacy_owner_action_outcomes WHERE tenant_id = $1 AND privacy_case_id = $2"
-        }
-        "crm.customer_privacy_owner_execution_audit" => {
-            "SELECT count(*) FROM crm.customer_privacy_owner_execution_audit WHERE tenant_id = $1 AND privacy_case_id = $2"
-        }
-        unsupported => panic!("unsupported owner-execution evidence table: {unsupported}"),
-    };
-    sqlx::query_scalar(sql)
-        .bind(tenant)
-        .bind(case_id)
-        .fetch_one(admin)
-        .await
-        .expect("count runtime owner-execution rows")
 }
 
 async fn record_version(admin: &PgPool, tenant: &str, record_type: &str, record_id: &str) -> i64 {
