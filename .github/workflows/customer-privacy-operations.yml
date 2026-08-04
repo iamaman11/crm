@@ -116,6 +116,11 @@ jobs:
         run: pnpm --filter @ultimate-crm/web exec playwright install chromium
 
       - name: Run restore SLO observability performance security and supply-chain acceptance
+        # The governed seed test compiles crm-api from the restored source. Keep
+        # that test build in an isolated target so it cannot replace the exact
+        # operations-instrumented target/debug/crm-api built above.
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/customer-privacy-operations-test-target
         run: bash scripts/run_customer_privacy_operations.sh
 
       - name: Upload bounded operations evidence
