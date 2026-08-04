@@ -91,13 +91,37 @@ docker run --detach --rm --name "$CONTAINER_NAME" \
   --publish "127.0.0.1:${POSTGRES_PORT}:5432" \
   --env "POSTGRES_DB=${OPS_SOURCE_DATABASE}" --env POSTGRES_USER=postgres \
   --env POSTGRES_PASSWORD=postgres "$OPS_POSTGRES_IMAGE" >/dev/null
+
+# The official PostgreSQL entrypoint starts a temporary server while creating
+# the requested database, stops it, and then execs the final server. Waiting on
+# pg_isready alone can observe that temporary server and race the intentional
+# restart. Require the immutable entrypoint completion marker before probing
+# the final server.
 for _ in $(seq 1 120); do
-  docker exec "$CONTAINER_NAME" pg_isready --username postgres \
-    --dbname "$OPS_SOURCE_DATABASE" >/dev/null 2>&1 && break
+  docker logs "$CONTAINER_NAME" 2>&1 | grep --fixed-strings --quiet \
+    "PostgreSQL init process complete; ready for start up." && break
+  sleep 0.5
+done
+if ! docker logs "$CONTAINER_NAME" 2>&1 | grep --fixed-strings --quiet \
+  "PostgreSQL init process complete; ready for start up."; then
+  docker logs "$CONTAINER_NAME" > "$POSTGRES_LOG_PATH" 2>&1 || true
+  echo "PostgreSQL initialization did not reach the final startup boundary." >&2
+  tail -n 240 "$POSTGRES_LOG_PATH" >&2 || true
+  exit 1
+fi
+for _ in $(seq 1 120); do
+  if docker exec "$CONTAINER_NAME" pg_isready --username postgres \
+      --dbname "$OPS_SOURCE_DATABASE" >/dev/null 2>&1 && \
+    docker exec "$CONTAINER_NAME" psql --username postgres \
+      --dbname "$OPS_SOURCE_DATABASE" --no-psqlrc --tuples-only --no-align \
+      --command "SELECT 1;" >/dev/null 2>&1; then
+    break
+  fi
   sleep 0.5
 done
 docker exec "$CONTAINER_NAME" pg_isready --username postgres \
   --dbname "$OPS_SOURCE_DATABASE" >/dev/null
+admin_psql "$OPS_SOURCE_DATABASE" --command "SELECT 1;" >/dev/null
 
 admin_psql postgres <<'SQL'
 ALTER SYSTEM SET log_min_error_statement = 'error';
