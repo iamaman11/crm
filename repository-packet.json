@@ -1,26 +1,28 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-19-owner-execution-worker-boundary",
-  "title": "Add bounded Customer Privacy owner-execution worker boundary",
+  "packet_id": "repository-step-19-postgres-ready-work",
+  "title": "Add PostgreSQL Customer Privacy ready-work discovery",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "a8fa7c1586f9d9a3771f4f23277784b7c3ef7a9e"
+    "sha": "c0fec3ae08c836ab483737442ed4377c99c85e9a"
   },
   "tracking_issues": [
     194,
     126
   ],
-  "objective": "Begin Repository Step 19 by making the accepted Customer Privacy owner-execution service a bounded, activation-gated generic tenant worker without growing the public Rust surface, registering a process worker or changing contracts, routes, schemas, migrations or product-readiness claims.",
+  "objective": "Continue Repository Step 19 with a tenant-bound, bounded PostgreSQL ready-work source that restores exact durable retention transaction lineage for new planned cases and incomplete owner-execution checkpoints, without registering a process worker or changing routes, manifests, schemas, migrations or product-readiness claims.",
   "allowed_paths": [
-    "crates/crm-customer-privacy-application/src/execution.rs",
+    ".github/workflows/customer-privacy-owner-execution.yml",
+    "crates/crm-application-runtime/tests/customer_privacy_owner_execution_ready_postgres.rs",
+    "crates/crm-customer-privacy-postgres/src/lib.rs",
+    "crates/crm-customer-privacy-postgres/src/ready.rs",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
-    ".github/workflows/**",
     "AGENTS.md",
     "Cargo.lock",
     "Cargo.toml",
@@ -40,12 +42,12 @@
     "services/**"
   ],
   "deliverables": [
-    "implement the existing generic TenantBackgroundWorker contract directly on PrivacyOwnerExecutionService",
-    "extend the existing owner-execution persistence port with a backward-compatible ready-work hook whose safe default is no work",
-    "deny ready-work discovery and owner effects when durable tenant activation is absent",
-    "validate the complete bounded batch for exact tenant, trusted provenance, monotonic non-future time and unique execution identity before the first execution",
-    "delegate every accepted item to the existing replay-safe exact-nine owner execution service",
-    "prove inactive no-side-effect behavior, active delegation and fail-closed duplicate rejection with unit tests while keeping the conservative public Rust surface at 5377"
+    "add a private PostgreSQL ready-work adapter without adding a public Rust item, crate or dependency",
+    "select incomplete checkpoints before new planned cases with deterministic tenant-bound bounded ordering",
+    "select only the newest durable retention decision for each not-yet-started planned privacy case",
+    "restore actor, request, correlation, trace and initiating capability lineage from the retention decision business transaction",
+    "strictly decode and validate canonical retention-decision identity before returning trusted-internal work",
+    "prove new-case discovery, exact lineage, cross-tenant concealment, bounded input rejection, checkpoint resumption and completed-work exclusion on clean and rollback-reapplied PostgreSQL"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -56,20 +58,23 @@
     "Rust CI"
   ],
   "acceptance": [
-    "the branch is based exactly on main commit a8fa7c1586f9d9a3771f4f23277784b7c3ef7a9e",
-    "the packet adds zero crates, dependencies, contracts, routes, schemas, migrations, public ingress or conservative public Rust items",
-    "a disabled or uninstalled Customer Privacy module performs no ready-work read and no owner execution",
-    "every active cycle is bounded and rejects an oversized, cross-tenant, untrusted, duplicate, non-monotonic or future-dated source batch before any owner execution",
-    "accepted work is executed only through PrivacyOwnerExecutionService::execute_next and therefore preserves the accepted exact-nine replay-safe coordinator boundary",
-    "Repository Step 19 remains in progress; PostgreSQL ready-work discovery, process registration and complete process/end-to-end acceptance remain absent",
+    "the branch is based exactly on main commit c0fec3ae08c836ab483737442ed4377c99c85e9a",
+    "the packet adds zero crates, dependencies, contracts, routes, manifests, schemas, migrations, public ingress or conservative public Rust items",
+    "all ready-work reads are transaction-local tenant-bound and return at most the requested frozen bound",
+    "incomplete checkpoints are resumed before new planned cases and completed checkpoints are excluded",
+    "new cases use only the newest canonical retention decision matching the planned case action plan",
+    "actor, request, correlation, trace, capability and version are restored exactly from durable business transaction evidence",
+    "malformed, future-dated, cross-tenant or non-governed retention evidence fails closed or remains concealed",
+    "the permanent Customer Privacy Owner Execution workflow proves clean and rollback-reapplied PostgreSQL acceptance",
+    "Repository Step 19 remains in progress; production composition, crm-application-runtime registration and crm-api process acceptance remain absent",
     "Customer Privacy, Phase 8A, product-complete expert modules and architecture 10/10 remain incomplete",
     "one unchanged exact review head passes every applicable permanent workflow with zero unresolved comments, reviews or review threads"
   ],
   "non_goals": [
-    "implement the PostgreSQL pending-case discovery source",
     "register the Customer Privacy worker in crm-application-runtime or crm-api",
     "add or reclassify manifest capability coordinates or production routes",
-    "change owner execution algorithms, durable evidence, migrations or public APIs",
+    "add a queue table, lease protocol, schema migration or new index",
+    "change owner execution algorithms, durable attempt/outcome semantics or public APIs",
     "claim complete process/end-to-end acceptance, Phase 8A closure or architecture 10/10"
   ]
 }
