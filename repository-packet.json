@@ -11,12 +11,9 @@
     194,
     126
   ],
-  "objective": "Begin Repository Step 19 with an owner-owned, activation-gated and bounded Customer Privacy worker application boundary over the accepted replay-safe exact-nine owner execution service, without registering a process worker or changing contracts, routes, schemas, migrations or product-readiness claims.",
+  "objective": "Begin Repository Step 19 by making the accepted Customer Privacy owner-execution service a bounded, activation-gated generic tenant worker without growing the public Rust surface, registering a process worker or changing contracts, routes, schemas, migrations or product-readiness claims.",
   "allowed_paths": [
-    "crates/crm-customer-privacy-application/src/lib.rs",
-    "crates/crm-customer-privacy-application/src/worker.rs",
-    "crates/crm-customer-privacy-production/src/root.rs",
-    "crates/crm-customer-privacy-production/src/worker.rs",
+    "crates/crm-customer-privacy-application/src/execution.rs",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
     "tests/test_architecture_documentation_consistency.py",
@@ -43,11 +40,12 @@
     "services/**"
   ],
   "deliverables": [
-    "add a bounded tenant work-source port and one-step execution port inside the existing Customer Privacy application package",
-    "deny work discovery and owner effects when durable tenant activation is absent",
-    "validate the complete source batch for exact tenant, trusted provenance, monotonic non-future time, uniqueness and requested size before the first execution",
-    "compose the boundary with the accepted exact-nine canonical production owner execution service without adding a crate or dependency",
-    "prove inactive no-side-effect behavior, bounded completion and replay accounting, duplicate and cross-tenant rejection, and source limit enforcement with unit tests"
+    "implement the existing generic TenantBackgroundWorker contract directly on PrivacyOwnerExecutionService",
+    "extend the existing owner-execution persistence port with a backward-compatible ready-work hook whose safe default is no work",
+    "deny ready-work discovery and owner effects when durable tenant activation is absent",
+    "validate the complete bounded batch for exact tenant, trusted provenance, monotonic non-future time and unique execution identity before the first execution",
+    "delegate every accepted item to the existing replay-safe exact-nine owner execution service",
+    "prove inactive no-side-effect behavior, active delegation and fail-closed duplicate rejection with unit tests while keeping the conservative public Rust surface at 5377"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -59,18 +57,19 @@
   ],
   "acceptance": [
     "the branch is based exactly on main commit a8fa7c1586f9d9a3771f4f23277784b7c3ef7a9e",
-    "the packet adds zero crates, dependencies, contracts, routes, schemas, migrations or public ingress",
-    "a disabled or uninstalled Customer Privacy module performs no pending-work read and no owner execution",
+    "the packet adds zero crates, dependencies, contracts, routes, schemas, migrations, public ingress or conservative public Rust items",
+    "a disabled or uninstalled Customer Privacy module performs no ready-work read and no owner execution",
     "every active cycle is bounded and rejects an oversized, cross-tenant, untrusted, duplicate, non-monotonic or future-dated source batch before any owner execution",
-    "the production constructor consumes the existing exact-nine canonical replay-safe owner execution coordinator",
-    "Repository Step 19 remains in progress; Customer Privacy, Phase 8A, product-complete expert modules and architecture 10/10 remain incomplete",
+    "accepted work is executed only through PrivacyOwnerExecutionService::execute_next and therefore preserves the accepted exact-nine replay-safe coordinator boundary",
+    "Repository Step 19 remains in progress; PostgreSQL ready-work discovery, process registration and complete process/end-to-end acceptance remain absent",
+    "Customer Privacy, Phase 8A, product-complete expert modules and architecture 10/10 remain incomplete",
     "one unchanged exact review head passes every applicable permanent workflow with zero unresolved comments, reviews or review threads"
   ],
   "non_goals": [
     "implement the PostgreSQL pending-case discovery source",
     "register the Customer Privacy worker in crm-application-runtime or crm-api",
     "add or reclassify manifest capability coordinates or production routes",
-    "change owner execution algorithms, persistence, migrations or public APIs",
+    "change owner execution algorithms, durable evidence, migrations or public APIs",
     "claim complete process/end-to-end acceptance, Phase 8A closure or architecture 10/10"
   ]
 }
