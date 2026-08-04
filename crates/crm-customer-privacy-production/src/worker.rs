@@ -30,9 +30,7 @@ impl std::fmt::Debug for CustomerPrivacyProductionOwnerExecutionWorker {
 impl From<(PostgresDataStore, Arc<dyn ModuleActivationPort>)>
     for CustomerPrivacyProductionDependencies
 {
-    fn from(
-        (store, activation): (PostgresDataStore, Arc<dyn ModuleActivationPort>),
-    ) -> Self {
+    fn from((store, activation): (PostgresDataStore, Arc<dyn ModuleActivationPort>)) -> Self {
         Self {
             store,
             activation,
