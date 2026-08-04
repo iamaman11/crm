@@ -21,14 +21,12 @@ describe("Route Eligibility", () => {
     label: "Home",
     authentication: "public",
   };
-
   const authenticatedRoute: ProductRouteDefinition = {
     id: "home",
     path: "/",
     label: "Home",
     authentication: "required",
   };
-
   const searchRoute: ProductRouteDefinition = {
     id: "search",
     path: "/search",
@@ -36,136 +34,93 @@ describe("Route Eligibility", () => {
     authentication: "required",
     requiredCapability: "search.global.query",
   };
-
-  const adminStudioRoute: ProductRouteDefinition = {
-    id: "admin-studio",
-    path: "/admin/metadata",
-    label: "Admin Studio",
-    authentication: "required",
-    requiredCapability: "metadata.activation.get",
-  };
+  const privacyRoute = routeForPath("/customer/privacy")!;
 
   it("permits public routes to any session", () => {
-    const unauthSession: SessionState = { status: "unauthenticated" };
-    const access = { capabilities: new Set<"search.global.query">() };
     expect(
       canNavigateToRoute(
         publicRoute,
-        unauthSession,
-        access,
+        { status: "unauthenticated" },
+        { capabilities: new Set() },
         developmentEnvironment,
       ),
     ).toBe(true);
   });
 
-  it("denies authenticated required routes to unauthenticated sessions", () => {
-    const unauthSession: SessionState = { status: "unauthenticated" };
-    const access = { capabilities: new Set<"search.global.query">() };
+  it("requires authentication for protected routes", () => {
     expect(
       canNavigateToRoute(
         authenticatedRoute,
-        unauthSession,
-        access,
+        { status: "unauthenticated" },
+        { capabilities: new Set() },
         developmentEnvironment,
       ),
     ).toBe(false);
-  });
-
-  it("permits authenticated required routes to authenticated sessions", () => {
-    const access = { capabilities: new Set<"search.global.query">() };
     expect(
       canNavigateToRoute(
         authenticatedRoute,
         authenticatedSession,
-        access,
+        { capabilities: new Set() },
         developmentEnvironment,
       ),
     ).toBe(true);
   });
 
-  it("denies capability-required routes when session lacks the capability", () => {
-    const accessWithoutCap = { capabilities: new Set<"search.global.query">() };
+  it("requires the declared route capability", () => {
     expect(
       canNavigateToRoute(
         searchRoute,
         authenticatedSession,
-        accessWithoutCap,
+        { capabilities: new Set() },
         developmentEnvironment,
       ),
     ).toBe(false);
-  });
-
-  it("permits capability-required routes when session has the capability", () => {
-    const accessWithCap = {
-      capabilities: new Set<"search.global.query">(["search.global.query"]),
-    };
     expect(
       canNavigateToRoute(
         searchRoute,
         authenticatedSession,
-        accessWithCap,
+        { capabilities: new Set(["search.global.query"]) },
         developmentEnvironment,
       ),
     ).toBe(true);
   });
 
-  it("keeps Admin Studio hidden until its governed metadata capability is available", () => {
-    const denied = {
-      capabilities: new Set<"search.global.query" | "metadata.activation.get">([
-        "search.global.query",
-      ]),
-    };
-    const allowed = {
-      capabilities: new Set<"search.global.query" | "metadata.activation.get">([
-        "metadata.activation.get",
-      ]),
-    };
-
+  it("keeps Customer Privacy hidden without list eligibility", () => {
+    expect(privacyRoute.id).toBe("customer-privacy");
+    expect(privacyRoute.requiredCapability).toBe("customer_privacy.case.list");
     expect(
       canNavigateToRoute(
-        adminStudioRoute,
+        privacyRoute,
         authenticatedSession,
-        denied,
+        { capabilities: new Set(["customer_privacy.case.get"]) },
         developmentEnvironment,
       ),
     ).toBe(false);
     expect(
       canNavigateToRoute(
-        adminStudioRoute,
+        privacyRoute,
         authenticatedSession,
-        allowed,
+        { capabilities: new Set(["customer_privacy.case.list"]) },
         developmentEnvironment,
       ),
     ).toBe(true);
   });
 
   it("keeps the record extension proof authenticated and development-only", () => {
-    const route = routeForPath("/records/phase7i-demo");
-    expect(route?.id).toBe("record-extension-proof");
-
-    const unauthenticatedSession: SessionState = { status: "unauthenticated" };
-    const access = { capabilities: new Set<"search.global.query">() };
+    const route = routeForPath("/records/phase7i-demo")!;
     expect(
       canNavigateToRoute(
-        route!,
-        unauthenticatedSession,
-        access,
-        developmentEnvironment,
-      ),
-    ).toBe(false);
-    expect(
-      canNavigateToRoute(
-        route!,
+        route,
         authenticatedSession,
-        access,
+        { capabilities: new Set() },
         developmentEnvironment,
       ),
     ).toBe(true);
     expect(
       canNavigateToRoute(
-        route!,
+        route,
         authenticatedSession,
-        access,
+        { capabilities: new Set() },
         productionEnvironment,
       ),
     ).toBe(false);

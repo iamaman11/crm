@@ -3,10 +3,13 @@ import type { SessionState } from "@ultimate-crm/client";
 export type ProductRouteId =
   | "home"
   | "search"
+  | "customer-privacy"
   | "admin-studio"
   | "record-extension-proof";
 export type KnownProductCapability =
   | "search.global.query"
+  | "customer_privacy.case.list"
+  | "customer_privacy.case.get"
   | "metadata.activation.get";
 
 export interface ProductRouteDefinition {
@@ -39,6 +42,13 @@ export const PRODUCT_ROUTES: readonly ProductRouteDefinition[] = [
     label: "Search",
     authentication: "required",
     requiredCapability: "search.global.query",
+  },
+  {
+    id: "customer-privacy",
+    path: "/customer/privacy",
+    label: "Customer Privacy",
+    authentication: "required",
+    requiredCapability: "customer_privacy.case.list",
   },
   {
     id: "admin-studio",
