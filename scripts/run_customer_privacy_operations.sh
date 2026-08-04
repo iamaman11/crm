@@ -20,7 +20,7 @@ VITE_LOG_PATH="${ARTIFACT_DIR}/vite.log"
 TOKEN="phase20b-operations-bearer-token-0123456789abcdef0123456789abcdef"
 HTTP_PORT="${CRM_OPERATIONS_HTTP_PORT:-18080}"
 GRPC_PORT="${CRM_OPERATIONS_GRPC_PORT:-19090}"
-VITE_PORT="${CRM_OPERATIONS_VITE_PORT:-15173}"
+VITE_PORT=5173
 API_PID=""
 VITE_PID=""
 
@@ -91,6 +91,8 @@ done
 docker exec "$CONTAINER_NAME" pg_isready \
   --username postgres --dbname "$OPS_SOURCE_DATABASE" >/dev/null
 
+apply_database_inputs "$OPS_SOURCE_DATABASE"
+
 admin_psql "$OPS_SOURCE_DATABASE" <<'SQL'
 DO $operations$
 BEGIN
@@ -103,8 +105,6 @@ END
 $operations$;
 SQL
 
-apply_database_inputs "$OPS_SOURCE_DATABASE"
-
 SOURCE_APP_URL="postgres://crm_app_test:crm_app_test@127.0.0.1:${POSTGRES_PORT}/${OPS_SOURCE_DATABASE}"
 SOURCE_ADMIN_URL="postgres://postgres:postgres@127.0.0.1:${POSTGRES_PORT}/${OPS_SOURCE_DATABASE}"
 
@@ -113,14 +113,13 @@ DATABASE_URL="$SOURCE_APP_URL" \
 ADMIN_DATABASE_URL="$SOURCE_ADMIN_URL" \
 cargo test -p crm-api --test seed_e2e_fixture -- --nocapture
 
-echo "Creating encrypted-transport-independent logical backup evidence..."
+echo "Creating logical backup evidence with owner replay disabled..."
 docker exec "$CONTAINER_NAME" pg_dump \
   --username postgres \
   --dbname "$OPS_SOURCE_DATABASE" \
   --format custom \
   --compress 9 \
   --no-owner \
-  --no-privileges \
   --file "$BACKUP_IN_CONTAINER"
 docker cp "$CONTAINER_NAME:$BACKUP_IN_CONTAINER" "$BACKUP_PATH" >/dev/null
 chmod 600 "$BACKUP_PATH"
@@ -137,7 +136,6 @@ docker exec "$CONTAINER_NAME" pg_restore \
   --dbname "$OPS_RESTORE_DATABASE" \
   --exit-on-error \
   --no-owner \
-  --no-privileges \
   "$BACKUP_IN_CONTAINER"
 
 SOURCE_TABLE_COUNT="$(admin_psql "$OPS_SOURCE_DATABASE" --tuples-only --no-align --command \
@@ -204,7 +202,7 @@ rm -rf apps/web/node_modules/.vite
 VITE_CRM_GRPC_WEB_TARGET="http://127.0.0.1:${GRPC_PORT}" \
 VITE_CRM_DEV_BEARER_TOKEN="$TOKEN" \
 VITE_CRM_DEV_TENANT_ID=tenant-a \
-VITE_CRM_DEV_CAPABILITIES=customer_privacy.case.list,customer_privacy.case.get,metadata.activation.get \
+VITE_CRM_DEV_CAPABILITIES=search.global.query,customer_privacy.case.list,customer_privacy.case.get,metadata.activation.get \
 pnpm --filter @ultimate-crm/web dev --force --host 127.0.0.1 --port "$VITE_PORT" \
   >"$VITE_LOG_PATH" 2>&1 &
 VITE_PID=$!
@@ -222,7 +220,6 @@ for _ in $(seq 1 120); do
 done
 curl --fail --silent --show-error "http://127.0.0.1:${VITE_PORT}" >/dev/null
 
-PLAYWRIGHT_BASE_URL="http://127.0.0.1:${VITE_PORT}" \
 pnpm --filter @ultimate-crm/web exec playwright test \
   e2e/customer-privacy.spec.ts \
   --config=playwright.config.ts \
