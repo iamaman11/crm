@@ -52,6 +52,20 @@ jobs:
           ), payload.count("stale_patterns = (\n")
           if count != 1:
               raise SystemExit(f"expected one stale-pattern marker, found {count}")
+
+          def indent_method_body(script: str, variable: str) -> str:
+              marker = f"{variable} = '''"
+              start = script.index(marker) + len(marker)
+              end = script.index("\n'''", start)
+              block = script[start:end]
+              lines = block.splitlines()
+              if not lines or not lines[0].lstrip().startswith("def "):
+                  raise SystemExit(f"cannot locate method body for {variable}")
+              corrected = [lines[0]] + [f"    {line}" if line else line for line in lines[1:]]
+              return script[:start] + "\n".join(corrected) + script[end:]
+
+          payload = indent_method_body(payload, "architecture_method")
+          payload = indent_method_body(payload, "navigation_method")
           Path('/tmp/step20a_evidence_sync.py').write_text(payload, encoding='utf-8')
           PY
           python /tmp/step20a_evidence_sync.py
