@@ -343,15 +343,28 @@ async fn execution_snapshot(
     }
 }
 
-async fn count_case_rows(admin: &PgPool, table: &str, tenant: &str, case_id: &str) -> i64 {
-    sqlx::query_scalar(&format!(
-        "SELECT count(*) FROM {table} WHERE tenant_id = $1 AND privacy_case_id = $2"
-    ))
-    .bind(tenant)
-    .bind(case_id)
-    .fetch_one(admin)
-    .await
-    .expect("count runtime owner-execution rows")
+async fn count_case_rows(admin: &PgPool, table: &'static str, tenant: &str, case_id: &str) -> i64 {
+    let sql = match table {
+        "crm.customer_privacy_owner_execution_checkpoints" => {
+            "SELECT count(*) FROM crm.customer_privacy_owner_execution_checkpoints WHERE tenant_id = $1 AND privacy_case_id = $2"
+        }
+        "crm.customer_privacy_owner_action_attempts" => {
+            "SELECT count(*) FROM crm.customer_privacy_owner_action_attempts WHERE tenant_id = $1 AND privacy_case_id = $2"
+        }
+        "crm.customer_privacy_owner_action_outcomes" => {
+            "SELECT count(*) FROM crm.customer_privacy_owner_action_outcomes WHERE tenant_id = $1 AND privacy_case_id = $2"
+        }
+        "crm.customer_privacy_owner_execution_audit" => {
+            "SELECT count(*) FROM crm.customer_privacy_owner_execution_audit WHERE tenant_id = $1 AND privacy_case_id = $2"
+        }
+        unsupported => panic!("unsupported owner-execution evidence table: {unsupported}"),
+    };
+    sqlx::query_scalar(sql)
+        .bind(tenant)
+        .bind(case_id)
+        .fetch_one(admin)
+        .await
+        .expect("count runtime owner-execution rows")
 }
 
 async fn record_version(admin: &PgPool, tenant: &str, record_type: &str, record_id: &str) -> i64 {
