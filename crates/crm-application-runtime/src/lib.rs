@@ -75,8 +75,7 @@ pub use {
     export_selection_source::*,
     gateway_grpc::*,
     native_composition::{
-        PostgresModuleActivation, ProductionCompositionDependencies,
-        application_capability_catalog,
+        PostgresModuleActivation, ProductionCompositionDependencies, application_capability_catalog,
     },
     platform::*,
     process::*,
