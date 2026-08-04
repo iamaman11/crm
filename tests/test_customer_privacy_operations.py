@@ -81,21 +81,18 @@ class CustomerPrivacyOperationsTests(unittest.TestCase):
             rendered, operations.shell_environment(operations.load_policy())
         )
 
-    def test_workflow_builds_bounded_active_query_metrics_from_exact_runtime_source(
-        self,
-    ) -> None:
+    def test_workflow_invokes_bounded_active_query_metrics_helper(self) -> None:
         workflow = (
             ROOT / ".github/workflows/customer-privacy-operations.yml"
         ).read_text(encoding="utf-8")
         for marker in (
             "Prepare bounded active Customer Privacy query metrics",
-            'expected_blob="f4e062d39f2cbcb1343eef7b7363b99622367ac5"',
-            'git hash-object "${runtime_path}"',
-            "CustomerPrivacyOperationsQueryRegistry",
-            "crm_customer_privacy_query_resolutions_total",
-            "current.checked_add(1)",
+            "scripts/customer_privacy_operations.py prepare-runtime-metrics",
+            "--runtime crates/crm-application-runtime/src/runtime.rs",
+            '--backup "${RUNNER_TEMP}/customer-privacy-operations-runtime.rs"',
             "Restore bounded active query metrics source",
-            'git diff --exit-code -- "${runtime_path}"',
+            "scripts/customer_privacy_operations.py restore-runtime-metrics",
+            "git diff --exit-code -- crates/crm-application-runtime/src/runtime.rs",
         ):
             self.assertIn(marker, workflow)
         self.assertLess(
@@ -110,6 +107,31 @@ class CustomerPrivacyOperationsTests(unittest.TestCase):
             workflow.index("Restore bounded active query metrics source"),
             workflow.index("Run restore SLO observability performance security"),
         )
+
+    def test_metrics_helper_guards_patches_and_restores_exact_runtime_source(
+        self,
+    ) -> None:
+        source = (
+            ROOT / "crates/crm-application-runtime/src/runtime.rs"
+        ).read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = root / "runtime.rs"
+            backup = root / "runtime.rs.backup"
+            runtime.write_text(source, encoding="utf-8")
+
+            operations.prepare_runtime_metrics(runtime, backup)
+
+            self.assertEqual(backup.read_text(encoding="utf-8"), source)
+            patched = runtime.read_text(encoding="utf-8")
+            self.assertIn("CustomerPrivacyOperationsQueryRegistry", patched)
+            self.assertIn("crm_customer_privacy_query_resolutions_total", patched)
+            self.assertIn("current.checked_add(1)", patched)
+
+            operations.restore_runtime_metrics(runtime, backup)
+
+            self.assertEqual(runtime.read_text(encoding="utf-8"), source)
+            self.assertFalse(backup.exists())
 
     def test_runner_preserves_the_permanent_browser_suite_and_auth_contract(
         self,
