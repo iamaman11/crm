@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import type { SessionState } from "@ultimate-crm/client";
 import {
   canNavigateToRoute,
   routeForPath,
   type ProductRouteDefinition,
 } from "./routes";
-import type { SessionState } from "@ultimate-crm/client";
 
 const authenticatedSession: SessionState = {
   status: "authenticated",
@@ -21,12 +21,14 @@ describe("Route Eligibility", () => {
     label: "Home",
     authentication: "public",
   };
+
   const authenticatedRoute: ProductRouteDefinition = {
     id: "home",
     path: "/",
     label: "Home",
     authentication: "required",
   };
+
   const searchRoute: ProductRouteDefinition = {
     id: "search",
     path: "/search",
@@ -34,52 +36,106 @@ describe("Route Eligibility", () => {
     authentication: "required",
     requiredCapability: "search.global.query",
   };
+
+  const adminStudioRoute: ProductRouteDefinition = {
+    id: "admin-studio",
+    path: "/admin/metadata",
+    label: "Admin Studio",
+    authentication: "required",
+    requiredCapability: "metadata.activation.get",
+  };
+
   const privacyRoute = routeForPath("/customer/privacy")!;
 
   it("permits public routes to any session", () => {
+    const unauthSession: SessionState = { status: "unauthenticated" };
+    const access = { capabilities: new Set<"search.global.query">() };
     expect(
       canNavigateToRoute(
         publicRoute,
-        { status: "unauthenticated" },
-        { capabilities: new Set() },
+        unauthSession,
+        access,
         developmentEnvironment,
       ),
     ).toBe(true);
   });
 
-  it("requires authentication for protected routes", () => {
+  it("denies authenticated required routes to unauthenticated sessions", () => {
+    const unauthSession: SessionState = { status: "unauthenticated" };
+    const access = { capabilities: new Set<"search.global.query">() };
     expect(
       canNavigateToRoute(
         authenticatedRoute,
-        { status: "unauthenticated" },
-        { capabilities: new Set() },
+        unauthSession,
+        access,
         developmentEnvironment,
       ),
     ).toBe(false);
+  });
+
+  it("permits authenticated required routes to authenticated sessions", () => {
+    const access = { capabilities: new Set<"search.global.query">() };
     expect(
       canNavigateToRoute(
         authenticatedRoute,
         authenticatedSession,
-        { capabilities: new Set() },
+        access,
         developmentEnvironment,
       ),
     ).toBe(true);
   });
 
-  it("requires the declared route capability", () => {
+  it("denies capability-required routes when session lacks the capability", () => {
+    const accessWithoutCap = { capabilities: new Set<"search.global.query">() };
     expect(
       canNavigateToRoute(
         searchRoute,
         authenticatedSession,
-        { capabilities: new Set() },
+        accessWithoutCap,
+        developmentEnvironment,
+      ),
+    ).toBe(false);
+  });
+
+  it("permits capability-required routes when session has the capability", () => {
+    const accessWithCap = {
+      capabilities: new Set<"search.global.query">(["search.global.query"]),
+    };
+    expect(
+      canNavigateToRoute(
+        searchRoute,
+        authenticatedSession,
+        accessWithCap,
+        developmentEnvironment,
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps Admin Studio hidden until its governed metadata capability is available", () => {
+    const denied = {
+      capabilities: new Set<"search.global.query" | "metadata.activation.get">([
+        "search.global.query",
+      ]),
+    };
+    const allowed = {
+      capabilities: new Set<"search.global.query" | "metadata.activation.get">([
+        "metadata.activation.get",
+      ]),
+    };
+
+    expect(
+      canNavigateToRoute(
+        adminStudioRoute,
+        authenticatedSession,
+        denied,
         developmentEnvironment,
       ),
     ).toBe(false);
     expect(
       canNavigateToRoute(
-        searchRoute,
+        adminStudioRoute,
         authenticatedSession,
-        { capabilities: new Set(["search.global.query"]) },
+        allowed,
         developmentEnvironment,
       ),
     ).toBe(true);
@@ -107,20 +163,32 @@ describe("Route Eligibility", () => {
   });
 
   it("keeps the record extension proof authenticated and development-only", () => {
-    const route = routeForPath("/records/phase7i-demo")!;
+    const route = routeForPath("/records/phase7i-demo");
+    expect(route?.id).toBe("record-extension-proof");
+
+    const unauthenticatedSession: SessionState = { status: "unauthenticated" };
+    const access = { capabilities: new Set<"search.global.query">() };
     expect(
       canNavigateToRoute(
-        route,
+        route!,
+        unauthenticatedSession,
+        access,
+        developmentEnvironment,
+      ),
+    ).toBe(false);
+    expect(
+      canNavigateToRoute(
+        route!,
         authenticatedSession,
-        { capabilities: new Set() },
+        access,
         developmentEnvironment,
       ),
     ).toBe(true);
     expect(
       canNavigateToRoute(
-        route,
+        route!,
         authenticatedSession,
-        { capabilities: new Set() },
+        access,
         productionEnvironment,
       ),
     ).toBe(false);
