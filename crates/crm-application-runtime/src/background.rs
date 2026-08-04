@@ -22,10 +22,7 @@ use crm_customer_enrichment_provider_process_composition::{
 };
 use crm_customer_privacy_production::CustomerPrivacyProductionDependencies;
 use crm_global_search_composition::GlobalSearchWorker;
-use crm_module_sdk::{
-    ErrorCategory, EventType, ModuleId, PortFuture, RecordRef, SdkError, TenantId,
-};
-use crm_query_runtime::{QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision};
+use crm_module_sdk::{ErrorCategory, EventType, ModuleId, PortFuture, SdkError, TenantId};
 use crm_sales_activities_capability_composition::{
     DEAL_TIMELINE_PROJECTION_ID, Phase6ProjectionWorker, SalesActivitiesLinkDeliveryOutcome,
     SalesActivitiesLinkEventProcessor, TASK_STATUS_PROJECTION_ID,
@@ -94,57 +91,57 @@ pub(crate) fn build_production_background_workers(
         search_worker,
     } = dependencies;
     let mut builder = BackgroundWorkerRegistryBuilder::new(module_ids);
-    let customer_privacy_owner_execution: Arc<dyn TenantBackgroundWorker> =
-        CustomerPrivacyProductionDependencies {
-            store: store.clone(),
-            activation: activation.clone(),
-            visibility_authorizer: Arc::new(BackgroundOnlyVisibilityAuthorizer),
-            cursor_key: [0x43; 32],
-        }
-        .try_into()?;
-
-    add_worker(
-        &mut builder,
-        activation.clone(),
-        BackgroundWorkerPhase::SOURCE_INGESTION,
-        CUSTOMER_DATA_OPERATIONS_MODULE_ID,
-        IMPORT_EXECUTION_WORKER_ID,
-        Arc::new(ImportExecutionBackgroundWorker::new(
-            import_execution_worker,
-        )),
-    )?;
-    add_worker(
-        &mut builder,
-        activation.clone(),
-        BackgroundWorkerPhase::new(110),
-        CUSTOMER_DATA_OPERATIONS_MODULE_ID,
-        EXPORT_SELECTION_WORKER_ID,
-        Arc::new(ExportSelectionBackgroundWorker::new(
-            export_selection_worker,
-        )),
-    )?;
-    add_worker(
-        &mut builder,
-        activation.clone(),
-        BackgroundWorkerPhase::DOMAIN_LINKING,
-        LINK_MODULE_ID,
-        SALES_ACTIVITIES_LINK_WORKER_ID,
-        Arc::new(SalesActivitiesLinkBackgroundWorker::new(
-            store.clone(),
-            link_processor,
-        )),
-    )?;
+    let privacy_dependencies: CustomerPrivacyProductionDependencies =
+        (store.clone(), activation.clone()).into();
+    let privacy_worker: Arc<dyn TenantBackgroundWorker> = privacy_dependencies.try_into()?;
+    for (phase, module_id, worker_id, worker) in [
+        (
+            BackgroundWorkerPhase::SOURCE_INGESTION,
+            CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+            IMPORT_EXECUTION_WORKER_ID,
+            Arc::new(ImportExecutionBackgroundWorker::new(
+                import_execution_worker,
+            )) as Arc<dyn TenantBackgroundWorker>,
+        ),
+        (
+            BackgroundWorkerPhase::new(110),
+            CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+            EXPORT_SELECTION_WORKER_ID,
+            Arc::new(ExportSelectionBackgroundWorker::new(
+                export_selection_worker,
+            )),
+        ),
+        (
+            BackgroundWorkerPhase::DOMAIN_LINKING,
+            LINK_MODULE_ID,
+            SALES_ACTIVITIES_LINK_WORKER_ID,
+            Arc::new(SalesActivitiesLinkBackgroundWorker::new(
+                store,
+                link_processor,
+            )),
+        ),
+        (
+            CUSTOMER_PRIVACY_OWNER_EXECUTION_PHASE,
+            CUSTOMER_PRIVACY_MODULE_ID,
+            CUSTOMER_PRIVACY_OWNER_EXECUTION_WORKER_ID,
+            privacy_worker,
+        ),
+    ] {
+        add_worker(
+            &mut builder,
+            activation.clone(),
+            phase,
+            module_id,
+            worker_id,
+            worker,
+        )?;
+    }
     add_customer_enrichment_workers(
         &mut builder,
         activation.clone(),
         customer_enrichment_provider_process,
         customer_enrichment_materialization_process,
         customer_enrichment_application_worker,
-    )?;
-    add_customer_privacy_worker(
-        &mut builder,
-        activation.clone(),
-        customer_privacy_owner_execution,
     )?;
     add_worker(
         &mut builder,
@@ -221,21 +218,6 @@ fn add_customer_enrichment_workers(
     )
 }
 
-fn add_customer_privacy_worker(
-    builder: &mut BackgroundWorkerRegistryBuilder,
-    activation: Arc<dyn ModuleActivationPort>,
-    worker: Arc<dyn TenantBackgroundWorker>,
-) -> Result<(), SdkError> {
-    add_worker(
-        builder,
-        activation,
-        CUSTOMER_PRIVACY_OWNER_EXECUTION_PHASE,
-        CUSTOMER_PRIVACY_MODULE_ID,
-        CUSTOMER_PRIVACY_OWNER_EXECUTION_WORKER_ID,
-        worker,
-    )
-}
-
 fn add_worker(
     builder: &mut BackgroundWorkerRegistryBuilder,
     activation: Arc<dyn ModuleActivationPort>,
@@ -254,24 +236,6 @@ fn add_worker(
         .add_in_phase(phase, module_id, worker_id, gated)
         .map(|_| ())
         .map_err(background_composition_error)
-}
-
-#[derive(Debug)]
-struct BackgroundOnlyVisibilityAuthorizer;
-
-impl QueryVisibilityAuthorizer for BackgroundOnlyVisibilityAuthorizer {
-    fn authorize_visibility<'a>(
-        &'a self,
-        _request: &'a QueryRequest,
-        _resource: &'a RecordRef,
-    ) -> PortFuture<'a, Result<QueryVisibilityDecision, SdkError>> {
-        Box::pin(async {
-            Ok(QueryVisibilityDecision::denied(
-                "customer-privacy-background-only",
-                "not-applicable",
-            ))
-        })
-    }
 }
 
 #[derive(Clone)]
@@ -598,10 +562,8 @@ mod tests {
             module_id: &'a ModuleId,
         ) -> PortFuture<'a, Result<bool, SdkError>> {
             Box::pin(async move {
-                Ok(matches!(
-                    module_id.as_str(),
-                    CUSTOMER_ENRICHMENT_MODULE_ID | CUSTOMER_PRIVACY_MODULE_ID
-                ) && self.state.load(Ordering::Acquire) == ACTIVE)
+                Ok(module_id.as_str() == CUSTOMER_ENRICHMENT_MODULE_ID
+                    && self.state.load(Ordering::Acquire) == ACTIVE)
             })
         }
     }
@@ -626,17 +588,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn owner_workers_run_in_phase_order_and_stop_after_disable_or_uninstall() {
+    async fn enrichment_workers_run_in_phase_order_and_stop_after_disable_or_uninstall() {
         let activation = Arc::new(MutableActivation::active());
         let calls = Arc::new(Mutex::new(Vec::new()));
         let mut builder = BackgroundWorkerRegistryBuilder::new(BTreeSet::from([
             CUSTOMER_ENRICHMENT_MODULE_ID.to_owned(),
-            CUSTOMER_PRIVACY_MODULE_ID.to_owned(),
         ]));
         let activation_port: Arc<dyn ModuleActivationPort> = activation.clone();
         add_customer_enrichment_workers(
             &mut builder,
-            activation_port.clone(),
+            activation_port,
             Arc::new(RecordingWorker {
                 calls: calls.clone(),
                 label: "provider",
@@ -648,15 +609,6 @@ mod tests {
             Arc::new(RecordingWorker {
                 calls: calls.clone(),
                 label: "application",
-            }),
-        )
-        .unwrap();
-        add_customer_privacy_worker(
-            &mut builder,
-            activation_port,
-            Arc::new(RecordingWorker {
-                calls: calls.clone(),
-                label: "privacy",
             }),
         )
         .unwrap();
@@ -685,11 +637,6 @@ mod tests {
                     CUSTOMER_ENRICHMENT_MODULE_ID.to_owned(),
                     PARTY_DISPLAY_NAME_APPLICATION_WORKER_ID.to_owned(),
                 ),
-                (
-                    260,
-                    CUSTOMER_PRIVACY_MODULE_ID.to_owned(),
-                    CUSTOMER_PRIVACY_OWNER_EXECUTION_WORKER_ID.to_owned(),
-                ),
             ]
         );
 
@@ -700,7 +647,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             *calls.lock().unwrap(),
-            vec!["provider", "materialization", "application", "privacy"]
+            vec!["provider", "materialization", "application"]
         );
 
         activation.set(DISABLED);
@@ -710,7 +657,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             *calls.lock().unwrap(),
-            vec!["provider", "materialization", "application", "privacy"]
+            vec!["provider", "materialization", "application"]
         );
 
         activation.set(ACTIVE);
@@ -724,11 +671,9 @@ mod tests {
                 "provider",
                 "materialization",
                 "application",
-                "privacy",
                 "provider",
                 "materialization",
                 "application",
-                "privacy",
             ]
         );
 
@@ -740,11 +685,9 @@ mod tests {
                 "provider",
                 "materialization",
                 "application",
-                "privacy",
                 "provider",
                 "materialization",
                 "application",
-                "privacy",
             ]
         );
     }
