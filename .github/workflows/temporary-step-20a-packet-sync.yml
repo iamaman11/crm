@@ -1,0 +1,68 @@
+name: Temporary Step 20A Evidence Correction
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/temporary-step-20a-packet-sync.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  synchronize:
+    if: github.head_ref == 'repository-step-20a-evidence-sync'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: repository-step-20a-evidence-sync
+          fetch-depth: 0
+      - name: Complete evidence synchronization
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'black==26.3.1' 'ruamel.yaml>=0.18.6,<0.19'
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path('.github/workflows/temporary-step-20a-fixture-fix.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n          PY\n", start)
+          payload = source[start:end]
+          payload = "\n".join(
+              line[10:] if line.startswith("          ") else line
+              for line in payload.splitlines()
+          ) + "\n"
+          injection = '''for path in documents:
+              text = path.read_text(encoding="utf-8")
+              text = text.replace(
+                  "Repository Step 20 is the only next permitted implementation packet",
+                  "Repository Step 20A is accepted through PR #292; Repository Step 20 remains in progress and Repository Step 20B is the only next permitted implementation packet",
+              )
+              path.write_text(text, encoding="utf-8")
+
+          '''
+          payload, count = payload.replace(
+              "stale_patterns = (\n",
+              injection + "stale_patterns = (\n",
+              1,
+          ), payload.count("stale_patterns = (\n")
+          if count != 1:
+              raise SystemExit(f"expected one stale-pattern marker, found {count}")
+          Path('/tmp/step20a_evidence_sync.py').write_text(payload, encoding='utf-8')
+          PY
+          python /tmp/step20a_evidence_sync.py
+          python scripts/generate_repository_navigation.py --write
+          black tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py
+          python -m unittest tests.test_architecture_documentation_consistency tests.test_repository_navigation
+          python scripts/check_architecture.py
+          rm .github/workflows/temporary-step-20a-fixture-fix.yml
+          rm .github/workflows/temporary-step-20a-packet-sync.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: synchronize accepted Step 20A evidence"
+          git push origin HEAD:repository-step-20a-evidence-sync
