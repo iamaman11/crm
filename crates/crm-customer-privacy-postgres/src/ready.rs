@@ -85,20 +85,20 @@ SELECT candidate.privacy_case_id,
        candidate.action_plan_id,
        candidate.retention_decision_id,
        candidate.decision_payload,
-       transaction.actor_id,
-       transaction.request_id,
-       transaction.correlation_id,
-       transaction.trace_id,
-       transaction.capability_id,
-       transaction.capability_version
+       source_transaction.actor_id,
+       source_transaction.request_id,
+       source_transaction.correlation_id,
+       source_transaction.trace_id,
+       source_transaction.capability_id,
+       source_transaction.capability_version
 FROM candidates candidate
-JOIN crm.business_transactions transaction
-  ON transaction.tenant_id = $1
- AND transaction.business_transaction_id = candidate.last_business_transaction_id
+JOIN crm.business_transactions source_transaction
+  ON source_transaction.tenant_id = $1
+ AND source_transaction.business_transaction_id = candidate.last_business_transaction_id
 WHERE (candidate.decision_state ->> 'evaluated_at_unix_nanos')::bigint > 0
   AND (candidate.decision_state ->> 'evaluated_at_unix_nanos')::bigint <= $5
-  AND transaction.capability_version = $6
-  AND transaction.capability_id IN ($7, $8)
+  AND source_transaction.capability_version = $6
+  AND source_transaction.capability_id IN ($7, $8)
 ORDER BY candidate.priority ASC,
          candidate.ready_at ASC,
          candidate.privacy_case_id ASC,
@@ -106,7 +106,17 @@ ORDER BY candidate.priority ASC,
 LIMIT $9
 "#;
 
-impl OwnerExecutionPersistencePort for Arc<PostgresOwnerExecutionPersistence> {
+struct ReadyPostgresOwnerExecutionPersistence {
+    inner: PostgresOwnerExecutionPersistence,
+}
+
+impl From<PostgresOwnerExecutionPersistence> for Arc<dyn OwnerExecutionPersistencePort> {
+    fn from(inner: PostgresOwnerExecutionPersistence) -> Self {
+        Arc::new(ReadyPostgresOwnerExecutionPersistence { inner })
+    }
+}
+
+impl OwnerExecutionPersistencePort for ReadyPostgresOwnerExecutionPersistence {
     fn load_ready<'a>(
         &'a self,
         tenant_id: &'a TenantId,
@@ -126,6 +136,7 @@ impl OwnerExecutionPersistencePort for Arc<PostgresOwnerExecutionPersistence> {
             }
             let maximum_items = i64::from(maximum_items);
             let mut transaction = self
+                .inner
                 .store()
                 .pool()
                 .begin()
@@ -162,7 +173,7 @@ impl OwnerExecutionPersistencePort for Arc<PostgresOwnerExecutionPersistence> {
         &'a self,
         invocation: &'a OwnerExecutionInvocation,
     ) -> PortFuture<'a, Result<ExecutionPreparation, SdkError>> {
-        OwnerExecutionPersistencePort::prepare_next(self.as_ref(), invocation)
+        self.inner.prepare_next(invocation)
     }
 
     fn record_outcome<'a>(
@@ -171,19 +182,14 @@ impl OwnerExecutionPersistencePort for Arc<PostgresOwnerExecutionPersistence> {
         attempt: &'a crm_customer_privacy::PrivacyOwnerActionAttempt,
         outcome: &'a crm_customer_privacy::PrivacyOwnerActionOutcome,
     ) -> PortFuture<'a, Result<bool, SdkError>> {
-        OwnerExecutionPersistencePort::record_outcome(
-            self.as_ref(),
-            invocation,
-            attempt,
-            outcome,
-        )
+        self.inner.record_outcome(invocation, attempt, outcome)
     }
 
     fn advance_checkpoint<'a>(
         &'a self,
         invocation: &'a OwnerExecutionInvocation,
     ) -> PortFuture<'a, Result<CheckpointAdvance, SdkError>> {
-        OwnerExecutionPersistencePort::advance_checkpoint(self.as_ref(), invocation)
+        self.inner.advance_checkpoint(invocation)
     }
 }
 
@@ -308,9 +314,9 @@ mod tests {
         for marker in [
             "d.tenant_id = $1",
             "checkpoint.tenant_id = $1",
-            "transaction.tenant_id = $1",
-            "transaction.business_transaction_id = candidate.last_business_transaction_id",
-            "transaction.capability_id IN ($7, $8)",
+            "source_transaction.tenant_id = $1",
+            "source_transaction.business_transaction_id = candidate.last_business_transaction_id",
+            "source_transaction.capability_id IN ($7, $8)",
             "LIMIT $9",
         ] {
             assert!(READY_WORK_SQL.contains(marker), "missing SQL guard: {marker}");
