@@ -122,7 +122,7 @@ Repository Step 16 is complete through:
 - PR #269 / source `74b1d7b0f8764fcd90839b7aab25f8f82fe5e552` / merge `6f82de0a7b2dcd1ab5dd0ae6473d46d7d9d34bdd` / 20 of 20 — reusable business-neutral worker conformance and representative Customer Enrichment / CRM API import adoption;
 - PR #270 / source `8e2baac0822eefbb6d3c474ffce0cee69e3e4e98` / merge `ce0ca881461d1ee8964a11b28c1fcff46cf145cb` / 17 of 17 — mechanically observed two-executor contention and exactly-once Party import convergence.
 
-Step 16 proves denial without side effects, retryable progress preservation, exact restart recovery, completed replay, tenant isolation and contention convergence without a generic lease API or production-algorithm change. Customer Privacy still has **1 Customer Privacy owner worker** (`crm.customer-privacy` / `owner-execution`, phase `260`); its real worker lifecycle remains Step 19.
+Step 16 proves denial without side effects, retryable progress preservation, exact restart recovery, completed replay, tenant isolation and contention convergence without a generic lease API or production-algorithm change. At the Step 16 boundary Customer Privacy still had no production worker; Repository Step 19 subsequently accepted `crm.customer-privacy` / `owner-execution` at phase `260` and its complete assembled lifecycle.
 
 Repository Step 17 is complete through:
 
