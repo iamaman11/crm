@@ -320,7 +320,8 @@ impl TenantBackgroundWorker for PrivacyOwnerExecutionService {
                     "worker cycle time must be after the Unix epoch",
                 ));
             }
-            let module_id = ModuleId::try_new(MODULE_ID).map_err(execution_configuration_invalid)?;
+            let module_id =
+                ModuleId::try_new(MODULE_ID).map_err(execution_configuration_invalid)?;
             if !self.activation.is_active(&tenant_id, &module_id).await? {
                 return Ok(());
             }
@@ -985,8 +986,7 @@ mod execution_tests {
     #[test]
     fn active_worker_cycle_loads_bounded_work_and_delegates_to_replay_safe_execution() {
         let prepared = attempt(EvidenceClass::DestroyableSubjectData, 0);
-        let (service, persistence) =
-            worker_harness(true, vec![invocation(&prepared)]);
+        let (service, persistence) = worker_harness(true, vec![invocation(&prepared)]);
         block_on(service.run_tenant_cycle(prepared.tenant_id().clone(), 6_000_000)).unwrap();
         assert_eq!(persistence.load_calls.load(Ordering::SeqCst), 1);
         assert_eq!(persistence.prepare_calls.load(Ordering::SeqCst), 1);
@@ -996,13 +996,9 @@ mod execution_tests {
     fn invalid_worker_batch_fails_before_any_execution() {
         let prepared = attempt(EvidenceClass::DestroyableSubjectData, 0);
         let duplicate = invocation(&prepared);
-        let (service, persistence) =
-            worker_harness(true, vec![duplicate.clone(), duplicate]);
-        let error = block_on(service.run_tenant_cycle(
-            prepared.tenant_id().clone(),
-            6_000_000,
-        ))
-        .expect_err("duplicate work must fail closed");
+        let (service, persistence) = worker_harness(true, vec![duplicate.clone(), duplicate]);
+        let error = block_on(service.run_tenant_cycle(prepared.tenant_id().clone(), 6_000_000))
+            .expect_err("duplicate work must fail closed");
         assert_eq!(
             error.code.as_str(),
             "CUSTOMER_PRIVACY_OWNER_EXECUTION_WORK_BATCH_INVALID"
