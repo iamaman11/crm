@@ -2,7 +2,7 @@ use crate::{
     RETENTION_APPROVAL_TRIGGER_CAPABILITY, RETENTION_LEGAL_HOLD_TRIGGER_CAPABILITY,
     RETENTION_TRIGGER_CAPABILITY_VERSION,
 };
-use crm_application_composition::ModuleActivationPort;
+use crm_application_composition::{ModuleActivationPort, TenantBackgroundWorker};
 use crm_customer_privacy::{
     MODULE_ID, PrivacyOwnerActionAttempt, PrivacyOwnerActionOutcome, PrivacyOwnerOutcomeStatus,
 };
@@ -10,12 +10,14 @@ use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, CorrelationId, ModuleId, PortFuture, RecordId,
     RequestId, SdkError, TenantId, TraceId,
 };
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 pub const OWNER_ACTION_DISPATCH_CAPABILITY: &str = "customer_privacy.owner_action.dispatch";
 pub const OWNER_OUTCOME_RECORD_CAPABILITY: &str = "customer_privacy.owner_outcome.record";
 pub const OWNER_EXECUTION_CAPABILITY_VERSION: &str = "1.0.0";
 
+const OWNER_EXECUTION_WORK_LIMIT: u32 = 64;
 const EXPECTED_OWNER_MODULES: &[&str] = &[
     "crm.consents",
     "crm.contact-points",
@@ -157,6 +159,15 @@ pub struct CheckpointAdvance {
 }
 
 pub trait OwnerExecutionPersistencePort: Send + Sync {
+    fn load_ready<'a>(
+        &'a self,
+        _tenant_id: &'a TenantId,
+        _now_unix_nanos: i64,
+        _maximum_items: u32,
+    ) -> PortFuture<'a, Result<Vec<OwnerExecutionInvocation>, SdkError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
     fn prepare_next<'a>(
         &'a self,
         invocation: &'a OwnerExecutionInvocation,
@@ -297,6 +308,85 @@ impl PrivacyOwnerExecutionService {
     }
 }
 
+impl TenantBackgroundWorker for PrivacyOwnerExecutionService {
+    fn run_tenant_cycle<'a>(
+        &'a self,
+        tenant_id: TenantId,
+        now_unix_nanos: i64,
+    ) -> PortFuture<'a, Result<(), SdkError>> {
+        Box::pin(async move {
+            if now_unix_nanos <= 0 {
+                return Err(execution_invalid_argument(
+                    "worker cycle time must be after the Unix epoch",
+                ));
+            }
+            let module_id = ModuleId::try_new(MODULE_ID).map_err(execution_configuration_invalid)?;
+            if !self.activation.is_active(&tenant_id, &module_id).await? {
+                return Ok(());
+            }
+            let work = self
+                .persistence
+                .load_ready(&tenant_id, now_unix_nanos, OWNER_EXECUTION_WORK_LIMIT)
+                .await?;
+            validate_work_batch(
+                &tenant_id,
+                now_unix_nanos,
+                OWNER_EXECUTION_WORK_LIMIT,
+                &work,
+            )?;
+            for invocation in work {
+                self.execute_next(invocation).await?;
+            }
+            Ok(())
+        })
+    }
+}
+
+fn validate_work_batch(
+    tenant_id: &TenantId,
+    now_unix_nanos: i64,
+    maximum_items: u32,
+    work: &[OwnerExecutionInvocation],
+) -> Result<(), SdkError> {
+    if work.len() > maximum_items as usize {
+        return Err(worker_batch_invalid(
+            "work source exceeded the requested bounded item limit",
+        ));
+    }
+    let mut identities = BTreeSet::new();
+    for invocation in work {
+        if &invocation.tenant_id != tenant_id {
+            return Err(worker_batch_invalid(
+                "work source returned an invocation for another tenant",
+            ));
+        }
+        if !invocation.trusted_internal {
+            return Err(worker_batch_invalid(
+                "work source returned an invocation without trusted-internal provenance",
+            ));
+        }
+        if invocation.request_started_at_unix_nanos <= 0
+            || invocation.planned_at_unix_nanos < invocation.request_started_at_unix_nanos
+            || invocation.planned_at_unix_nanos > now_unix_nanos
+        {
+            return Err(worker_batch_invalid(
+                "work source returned missing, non-monotonic or future execution time",
+            ));
+        }
+        let identity = (
+            invocation.privacy_case_id.as_str().to_owned(),
+            invocation.action_plan_id.as_str().to_owned(),
+            invocation.retention_decision_id.as_str().to_owned(),
+        );
+        if !identities.insert(identity) {
+            return Err(worker_batch_invalid(
+                "work source returned duplicate execution identity in one cycle",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn owner_request(
     invocation: &OwnerExecutionInvocation,
     attempt: &PrivacyOwnerActionAttempt,
@@ -373,6 +463,16 @@ fn execution_invalid_argument(reference: impl Into<String>) -> SdkError {
     .with_internal_reference(reference)
 }
 
+fn worker_batch_invalid(reference: impl Into<String>) -> SdkError {
+    SdkError::new(
+        "CUSTOMER_PRIVACY_OWNER_EXECUTION_WORK_BATCH_INVALID",
+        crm_module_sdk::ErrorCategory::Conflict,
+        false,
+        "The Customer Privacy owner-execution work batch is invalid.",
+    )
+    .with_internal_reference(reference)
+}
+
 fn execution_configuration_invalid(reference: impl std::fmt::Display) -> SdkError {
     SdkError::new(
         "CUSTOMER_PRIVACY_OWNER_EXECUTION_CONFIGURATION_INVALID",
@@ -395,6 +495,7 @@ mod execution_tests {
     use crm_module_sdk::{DataClass, RetentionPolicyId, SchemaVersion};
     use std::future::Future;
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::task::{Context, Poll, Waker};
 
     fn block_on<F: Future>(future: F) -> F::Output {
@@ -487,6 +588,56 @@ mod execution_tests {
                 self.order.lock().unwrap().push("advance");
                 Ok(self.checkpoint.clone())
             })
+        }
+    }
+
+    #[derive(Debug)]
+    struct WorkerPersistence {
+        work: Vec<OwnerExecutionInvocation>,
+        load_calls: AtomicUsize,
+        prepare_calls: AtomicUsize,
+    }
+
+    impl OwnerExecutionPersistencePort for WorkerPersistence {
+        fn load_ready<'a>(
+            &'a self,
+            _tenant_id: &'a TenantId,
+            _now_unix_nanos: i64,
+            _maximum_items: u32,
+        ) -> PortFuture<'a, Result<Vec<OwnerExecutionInvocation>, SdkError>> {
+            Box::pin(async move {
+                self.load_calls.fetch_add(1, Ordering::SeqCst);
+                Ok(self.work.clone())
+            })
+        }
+
+        fn prepare_next<'a>(
+            &'a self,
+            _invocation: &'a OwnerExecutionInvocation,
+        ) -> PortFuture<'a, Result<ExecutionPreparation, SdkError>> {
+            Box::pin(async move {
+                self.prepare_calls.fetch_add(1, Ordering::SeqCst);
+                Ok(ExecutionPreparation::Complete {
+                    total_items: 1,
+                    durable_outcomes: 1,
+                })
+            })
+        }
+
+        fn record_outcome<'a>(
+            &'a self,
+            _invocation: &'a OwnerExecutionInvocation,
+            _attempt: &'a PrivacyOwnerActionAttempt,
+            _outcome: &'a PrivacyOwnerActionOutcome,
+        ) -> PortFuture<'a, Result<bool, SdkError>> {
+            Box::pin(async { panic!("completed worker work must not record an outcome") })
+        }
+
+        fn advance_checkpoint<'a>(
+            &'a self,
+            _invocation: &'a OwnerExecutionInvocation,
+        ) -> PortFuture<'a, Result<CheckpointAdvance, SdkError>> {
+            Box::pin(async { panic!("completed worker work must not advance a checkpoint") })
         }
     }
 
@@ -647,6 +798,34 @@ mod execution_tests {
         }
     }
 
+    fn worker_harness(
+        active: bool,
+        work: Vec<OwnerExecutionInvocation>,
+    ) -> (PrivacyOwnerExecutionService, Arc<WorkerPersistence>) {
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let owner = Arc::new(RecordingOwner {
+            result: OwnerActionResult {
+                status: PrivacyOwnerOutcomeStatus::Succeeded,
+                safe_failure_code: None,
+            },
+            order,
+            requests: Mutex::new(Vec::new()),
+        });
+        let persistence = Arc::new(WorkerPersistence {
+            work,
+            load_calls: AtomicUsize::new(0),
+            prepare_calls: AtomicUsize::new(0),
+        });
+        (
+            PrivacyOwnerExecutionService::new(
+                Arc::new(Activation { active }),
+                persistence.clone(),
+                exact_endpoints(owner),
+            ),
+            persistence,
+        )
+    }
+
     #[test]
     fn exact_owner_registry_rejects_missing_or_duplicate_owners() {
         let order = Arc::new(Mutex::new(Vec::new()));
@@ -792,5 +971,43 @@ mod execution_tests {
         assert!(owner.requests.lock().unwrap().is_empty());
         assert!(persistence.recorded.lock().unwrap().is_empty());
         assert_eq!(&*order.lock().unwrap(), &["prepare"]);
+    }
+
+    #[test]
+    fn inactive_worker_cycle_does_not_discover_or_execute_work() {
+        let prepared = attempt(EvidenceClass::DestroyableSubjectData, 0);
+        let (service, persistence) = worker_harness(false, vec![invocation(&prepared)]);
+        block_on(service.run_tenant_cycle(prepared.tenant_id().clone(), 6_000_000)).unwrap();
+        assert_eq!(persistence.load_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(persistence.prepare_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn active_worker_cycle_loads_bounded_work_and_delegates_to_replay_safe_execution() {
+        let prepared = attempt(EvidenceClass::DestroyableSubjectData, 0);
+        let (service, persistence) =
+            worker_harness(true, vec![invocation(&prepared)]);
+        block_on(service.run_tenant_cycle(prepared.tenant_id().clone(), 6_000_000)).unwrap();
+        assert_eq!(persistence.load_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(persistence.prepare_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn invalid_worker_batch_fails_before_any_execution() {
+        let prepared = attempt(EvidenceClass::DestroyableSubjectData, 0);
+        let duplicate = invocation(&prepared);
+        let (service, persistence) =
+            worker_harness(true, vec![duplicate.clone(), duplicate]);
+        let error = block_on(service.run_tenant_cycle(
+            prepared.tenant_id().clone(),
+            6_000_000,
+        ))
+        .expect_err("duplicate work must fail closed");
+        assert_eq!(
+            error.code.as_str(),
+            "CUSTOMER_PRIVACY_OWNER_EXECUTION_WORK_BATCH_INVALID"
+        );
+        assert_eq!(persistence.load_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(persistence.prepare_calls.load(Ordering::SeqCst), 0);
     }
 }
