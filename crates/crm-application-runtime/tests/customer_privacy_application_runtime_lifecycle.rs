@@ -30,15 +30,12 @@ const PLANNED_AT: i64 = 9_000_000;
 const DECIDED_AT: i64 = 10_000_000;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires the assembled crm-api binary and authoritative PostgreSQL schema"]
 async fn assembled_runtime_discovers_executes_replays_and_honors_uninstall() {
-    let Ok(binary) = std::env::var("CRM_API_BINARY") else {
-        eprintln!("skipping assembled runtime lifecycle because CRM_API_BINARY is absent");
-        return;
-    };
-    let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("skipping assembled runtime lifecycle because DATABASE_URL is absent");
-        return;
-    };
+    let binary = std::env::var("CRM_API_BINARY")
+        .expect("CRM_API_BINARY must name the assembled crm-api binary");
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must support assembled runtime lifecycle acceptance");
     let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
         .expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
     let admin = PgPool::connect(&admin_database_url)
