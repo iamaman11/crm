@@ -1,29 +1,26 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-19-runtime-registration",
-  "title": "Register Customer Privacy owner execution worker",
+  "packet_id": "repository-step-19-runtime-lifecycle",
+  "title": "Prove Customer Privacy owner worker lifecycle",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "bc653de5f1a853791d3ab4a03f59f3daad54bf54"
+    "sha": "d1c4dd278853a1e6a426fab284c70b3529d42833"
   },
   "tracking_issues": [
     194,
     126
   ],
-  "objective": "Continue Repository Step 19 by composing the PostgreSQL ready-work source with the canonical exact-nine Customer Privacy owner executor and registering the resulting activation-gated worker in the production process host at deterministic phase 260, without adding a crate, dependency, route, manifest coordinate, migration or public Rust item.",
+  "objective": "Complete the implementation acceptance for Repository Step 19 by proving that the assembled ApplicationRuntime discovers and executes a real Customer Privacy owner action through the registered PostgreSQL-backed phase-260 worker, remains replay-safe, and performs no discovery or effect after Customer Privacy is uninstalled, without adding a crate, dependency, route, manifest coordinate, migration or public Rust item.",
   "allowed_paths": [
-    "crates/crm-application-runtime/src/background.rs",
-    "crates/crm-application-runtime/src/lib.rs",
-    "crates/crm-customer-privacy-production/src/root.rs",
-    "crates/crm-customer-privacy-production/src/worker.rs",
+    ".github/workflows/customer-privacy-owner-execution.yml",
+    "crates/crm-application-runtime/tests/customer_privacy_application_runtime_lifecycle.rs",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
-    ".github/workflows/**",
     "AGENTS.md",
     "Cargo.lock",
     "Cargo.toml",
@@ -43,12 +40,13 @@
     "services/**"
   ],
   "deliverables": [
-    "compose a private production worker from the accepted PostgreSQL ready-work source and canonical exact-nine owner execution service",
-    "preserve bounded full-batch tenant, trusted-provenance, monotonic-time and duplicate-identity validation before the first execution",
-    "register crm.customer-privacy/owner-execution in the production background registry at phase 260",
-    "preserve activation gating before ready-work discovery and again before each canonical owner execution step",
-    "prove deterministic phase ordering after Customer Enrichment application work and before projections",
-    "keep the conservative public Rust surface at 5377 and the exception suppression count at 91"
+    "run the production crm-api process assembled by ApplicationRuntime and prove that the registered background registry discovers ready Customer Privacy work",
+    "seed one governed planned privacy case and prove a real canonical Parties owner action through crm.customer-privacy/owner-execution at phase 260",
+    "prove durable attempt, successful outcome, checkpoint, audit, outbox and converging privacy-case transition evidence",
+    "prove a restarted process is idempotent and creates no duplicate authoritative owner-execution or Party evidence",
+    "prove uninstalling Customer Privacy before another process start prevents ready-work discovery and owner effects for newly seeded work",
+    "run the lifecycle acceptance on both clean and rollback/reapplied PostgreSQL schemas",
+    "keep the conservative public Rust surface at 5377, the exception suppression count at 91 and crm-application-runtime source LOC at or below 7269"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -60,22 +58,23 @@
     "Rust CI"
   ],
   "acceptance": [
-    "the branch is based exactly on main commit bc653de5f1a853791d3ab4a03f59f3daad54bf54",
+    "the branch is based exactly on main commit d1c4dd278853a1e6a426fab284c70b3529d42833",
     "the packet adds zero crates, dependencies, contracts, routes, manifests, schemas, migrations, public ingress or conservative public Rust items",
-    "production composition obtains ready work only from the accepted PostgreSQL adapter and executes only through the canonical exact-nine owner service",
-    "the worker is registered exactly once as crm.customer-privacy/owner-execution at phase 260",
-    "the worker runs after the three Customer Enrichment owner phases 240, 245 and 250 and before projection phase 300",
-    "disabled or uninstalled Customer Privacy performs no ready-work discovery or owner execution",
-    "the process host retains all existing worker coordinates and deterministic ordering",
-    "Repository Step 19 remains in progress; full real crm-api lifecycle acceptance and exact closure evidence remain future packets",
-    "Customer Privacy, Phase 8A, product-complete expert modules and architecture 10/10 remain incomplete",
-    "one unchanged exact review head passes every applicable permanent workflow with zero unresolved comments, reviews or review threads"
+    "the test starts the real crm-api binary whose ApplicationRuntime owns the production background registry and does not invoke the Customer Privacy worker or owner service directly",
+    "a real planned Party privacy item is discovered through PostgreSQL ready work and executed through the registered crm.customer-privacy/owner-execution worker",
+    "the owner action removes the original identifying Party display name and persists one attempt, one successful outcome, one completed checkpoint, audit evidence, one owner event and a converging case transition",
+    "restarting the assembled process produces no duplicate Party mutation, attempt, outcome, checkpoint, audit, owner event or case transition",
+    "after the Customer Privacy installation is removed, newly ready work remains undiscovered and produces no Party or owner-execution effect",
+    "the lifecycle acceptance passes against both a clean authoritative schema and the rollback/reapplied schema",
+    "Repository Step 19 implementation acceptance is complete only after one unchanged exact review head passes every applicable permanent workflow with zero unresolved comments, reviews or review threads",
+    "final Repository Step 19 closure evidence remains a separate documentation packet; Customer Privacy, Phase 8A, product-complete expert modules and architecture 10/10 remain incomplete"
   ],
   "non_goals": [
-    "change public Customer Privacy routes, manifest coordinates or authorization contracts",
-    "add a queue, lease protocol, schema migration, new index, crate or dependency",
-    "change owner-specific action semantics, ready-work SQL or durable attempt/outcome evidence",
+    "change public Customer Privacy routes, manifest coordinates, authorization contracts or owner-specific action semantics",
+    "add a queue, lease protocol, schema migration, new index, crate, dependency or public runtime accessor",
+    "invoke the Customer Privacy worker or owner execution service directly in place of the assembled crm-api process",
+    "change PostgreSQL ready-work selection or durable execution evidence contracts",
     "synchronize final Repository Step 19 closure evidence in normative documents",
-    "claim complete crm-api lifecycle acceptance, Phase 8A closure or architecture 10/10"
+    "claim Phase 8A closure, product-complete expert modules or architecture 10/10"
   ]
 }
