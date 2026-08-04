@@ -322,6 +322,20 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("assembled `crm-api`", self.product_plane)
         self.assertIn("Chromium acceptance", self.product_plane)
         self.assertIn("Repository Step 20 remains in progress", self.product_plane)
+        self.assertNotIn("No Step 20 or later implementation may begin", self.status)
+        self.assertIn("Repository Step 20B may begin only after", self.status)
+        self.assertIn("Stage I — in progress", self.status)
+        self.assertIn(
+            "Stage F generic conformance and contract lifecycle — **Complete through PR #290**",
+            self.roadmap,
+        )
+        self.assertNotIn(
+            "frontend and operations parity remain future work", self.status
+        )
+        self.assertNotIn(
+            "- frontend, accessibility and browser acceptance;", self.roadmap
+        )
+        self.assertNotIn("after accepted Repository Step 19", self.roadmap)
 
     def test_repository_map_and_product_inventory_remain_exact(self) -> None:
         self.assertIn(

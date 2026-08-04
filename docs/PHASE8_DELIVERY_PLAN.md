@@ -185,7 +185,7 @@ The accepted Step 17 result keeps `activities.task.create@1.1.0` as the sole liv
 
 - final Phase 8A product and operations closure against every accepted invariant.
 
-No Step 20 or later implementation may begin before the accepted Repository Step 19 closure evidence is synchronized.
+Repository Step 20B may begin only after the accepted Step 20A evidence is synchronized through this packet.
 
 ## 7. Phase 8A closure criteria
 

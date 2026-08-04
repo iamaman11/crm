@@ -65,7 +65,7 @@ Issue #194 remains open. The architecture stage ledger is:
 - Stage C Customer Privacy golden owner and persistence model — **In progress; Party tombstone/no-orphan convergence accepted through Step 15**;
 - Stage D contribution aggregation — **Complete through PR #249**;
 - Stage E affected-scope CI — **Complete through PR #239; permanent-gate value review remains mandatory at Step 22**;
-- Stage F generic conformance and contract lifecycle — **In progress**;
+- Stage F generic conformance and contract lifecycle — **Complete through PR #290**;
 - Stage G transitional consolidation — **Complete through PR #259**;
 - Stage H reproducible environment and navigation — **Complete through PR #285**;
 - Stage I frontend and operations parity — **In progress; Step 20A accepted through PR #292, Step 20B next**.
@@ -208,13 +208,13 @@ Trusted-internal planning, retention evaluation, replay-safe owner execution, ac
 
 ### 5.1 Remaining Phase 8A.11 product work
 
-The remaining Phase 8A.11 product work after accepted Repository Step 19 is:
+The remaining Phase 8A.11 product work after accepted Repository Step 20A is:
 
 - restriction and legal-hold release/read lifecycle where required;
-- frontend, accessibility and browser acceptance;
-- production restore, SLO, observability, performance, security and supply-chain evidence.
+- Repository Step 20B production restore, SLO, observability, performance, security and supply-chain evidence;
+- a full Phase 8A.11 closure review beyond the accepted bounded Step 20A case-read slice.
 
-Repository Step 17 contract lifecycle enforcement is complete. Repository Step 18 now owns only deterministic local lifecycle commands and must not absorb Steps 19–21 or claim a Customer Privacy worker before Step 19.
+Repository Steps 17–19 and the bounded Step 20A slice are accepted. Repository Step 20 remains in progress and Repository Step 20B is the only next permitted implementation packet.
 
 ## 6. Module-readiness accounting
 

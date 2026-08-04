@@ -141,8 +141,8 @@ Accepted product/runtime evidence includes scope discovery and immutable snapsho
 Still required before Phase 8A.11 can close:
 
 - restriction and legal-hold release/read lifecycle where required;
-- frontend, accessibility and browser acceptance;
-- production operations, restore, SLO, security and performance evidence.
+- Repository Step 20B production operations, restore, SLO, observability, security, performance and supply-chain evidence;
+- a full Phase 8A.11 closure review beyond the accepted bounded Step 20A case-read slice.
 
 Customer Privacy and Phase 8A remain incomplete. Current product-complete expert modules: **0**.
 
@@ -156,7 +156,7 @@ Customer Privacy and Phase 8A remain incomplete. Current product-complete expert
 - **Stage F — complete through PR #290:** mutation/query and worker conformance, complete contract lifecycle enforcement and real Customer Privacy worker adoption/lifecycle proof are accepted.
 - **Stage G — complete:** PR #259 proves the first measured behavior-neutral transitional consolidation.
 - **Stage H — complete through PR #285:** explanation, packet checking, generated navigation and the full doctor/bootstrap/dev-up/dev-reset/seed-demo/smoke lifecycle are accepted.
-- **Stage I — incomplete:** frontend and operations parity remain future work.
+- **Stage I — in progress:** the bounded Step 20A frontend, accessibility and browser slice is accepted through PR #292; Step 20B operations parity remains.
 
 Architecture 10/10 is **not declared**. Repository Step 22 is a measurement and decision checkpoint, and final closure remains reserved for Step 25 after every criterion and two contrasting expert-domain waves are mechanically proven.
 
@@ -174,13 +174,13 @@ Step 22 cannot close with an unresolved runtime dependency classification or unr
 
 Repository Step 20A is accepted through PR #292. Repository Step 20 remains in progress; Repository Step 20B restore, SLO, observability, performance, security and supply-chain operations evidence is the only next permitted implementation packet. Repository Step 19 is complete through PRs #287–#290.
 
-No Step 20 or later implementation may begin before the accepted Repository Step 19 closure evidence is synchronized.
+Repository Step 20B may begin only after the accepted Step 20A evidence is synchronized through this packet.
 
 ## Repository continuation order
 
 ```text
 1–19. accepted and complete
--> 20. Phase 8A frontend, accessibility, browser and operations evidence
+-> 20. Phase 8A frontend, accessibility, browser and operations evidence — in progress; Step 20A accepted, Step 20B next
 -> 21. Phase 8A closure
 -> 22. architecture remeasurement + crm-application-runtime fan-in decision + permanent-gate value/cost review — checkpoint, not final 10/10
 -> 23. first contrasting later expert-domain wave validating Step 22
