@@ -107,11 +107,7 @@ impl CustomerPrivacyOwnerExecutionWorker {
             ));
         }
         let module_id = ModuleId::try_new(MODULE_ID).map_err(worker_configuration_invalid)?;
-        if !self
-            .activation
-            .is_active(&tenant_id, &module_id)
-            .await?
-        {
+        if !self.activation.is_active(&tenant_id, &module_id).await? {
             return Ok(OwnerExecutionWorkerCycleResult {
                 active: false,
                 loaded: 0,
@@ -123,11 +119,7 @@ impl CustomerPrivacyOwnerExecutionWorker {
 
         let work = self
             .source
-            .load_ready(
-                &tenant_id,
-                now_unix_nanos,
-                self.maximum_items_per_cycle,
-            )
+            .load_ready(&tenant_id, now_unix_nanos, self.maximum_items_per_cycle)
             .await?;
         validate_work_batch(
             &tenant_id,
@@ -150,9 +142,7 @@ impl CustomerPrivacyOwnerExecutionWorker {
             if execution.complete {
                 result.completed = result.completed.saturating_add(1);
             }
-            if !execution.owner_invoked
-                && execution.attempt_replayed
-                && execution.outcome_replayed
+            if !execution.owner_invoked && execution.attempt_replayed && execution.outcome_replayed
             {
                 result.replayed = result.replayed.saturating_add(1);
             }
@@ -371,10 +361,7 @@ mod tests {
         });
         let execution = Arc::new(Execution {
             calls: Mutex::new(Vec::new()),
-            results: Mutex::new(VecDeque::from([
-                Ok(completed_replay()),
-                Ok(progressed()),
-            ])),
+            results: Mutex::new(VecDeque::from([Ok(completed_replay()), Ok(progressed())])),
         });
         let worker = CustomerPrivacyOwnerExecutionWorker::try_new(
             activation,
@@ -497,10 +484,8 @@ mod tests {
             correlation_id: CorrelationId::try_new(format!("privacy-worker-correlation-{suffix}"))
                 .unwrap(),
             trace_id: TraceId::try_new(format!("privacy-worker-trace-{suffix}")).unwrap(),
-            initiating_capability_id: CapabilityId::try_new(
-                RETENTION_APPROVAL_TRIGGER_CAPABILITY,
-            )
-            .unwrap(),
+            initiating_capability_id: CapabilityId::try_new(RETENTION_APPROVAL_TRIGGER_CAPABILITY)
+                .unwrap(),
             initiating_capability_version: CapabilityVersion::try_new(
                 RETENTION_TRIGGER_CAPABILITY_VERSION,
             )
