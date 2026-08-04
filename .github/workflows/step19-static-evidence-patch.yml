@@ -1,0 +1,107 @@
+name: Step 19 Literal Evidence Patch
+
+on:
+  push:
+    branches:
+      - repository-step-19-runtime-lifecycle
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: repository-step-19-runtime-lifecycle
+      - name: Expand evidence queries to literal SQL calls
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/crm-application-runtime/examples/customer_privacy_application_runtime_lifecycle.rs")
+          text = path.read_text()
+          replacements = {
+          '''        checkpoints: count_case_rows(
+                      admin,
+                      "crm.customer_privacy_owner_execution_checkpoints",
+                      tenant,
+                      case_id,
+                  )
+                  .await,
+          ''': '''        checkpoints: sqlx::query_scalar(
+                      "SELECT count(*) FROM crm.customer_privacy_owner_execution_checkpoints WHERE tenant_id = $1 AND privacy_case_id = $2",
+                  )
+                  .bind(tenant)
+                  .bind(case_id)
+                  .fetch_one(admin)
+                  .await
+                  .expect("count runtime owner-execution checkpoints"),
+          ''',
+          '''        attempts: count_case_rows(
+                      admin,
+                      "crm.customer_privacy_owner_action_attempts",
+                      tenant,
+                      case_id,
+                  )
+                  .await,
+          ''': '''        attempts: sqlx::query_scalar(
+                      "SELECT count(*) FROM crm.customer_privacy_owner_action_attempts WHERE tenant_id = $1 AND privacy_case_id = $2",
+                  )
+                  .bind(tenant)
+                  .bind(case_id)
+                  .fetch_one(admin)
+                  .await
+                  .expect("count runtime owner-action attempts"),
+          ''',
+          '''        outcomes: count_case_rows(
+                      admin,
+                      "crm.customer_privacy_owner_action_outcomes",
+                      tenant,
+                      case_id,
+                  )
+                  .await,
+          ''': '''        outcomes: sqlx::query_scalar(
+                      "SELECT count(*) FROM crm.customer_privacy_owner_action_outcomes WHERE tenant_id = $1 AND privacy_case_id = $2",
+                  )
+                  .bind(tenant)
+                  .bind(case_id)
+                  .fetch_one(admin)
+                  .await
+                  .expect("count runtime owner-action outcomes"),
+          ''',
+          '''        audit: count_case_rows(
+                      admin,
+                      "crm.customer_privacy_owner_execution_audit",
+                      tenant,
+                      case_id,
+                  )
+                  .await,
+          ''': '''        audit: sqlx::query_scalar(
+                      "SELECT count(*) FROM crm.customer_privacy_owner_execution_audit WHERE tenant_id = $1 AND privacy_case_id = $2",
+                  )
+                  .bind(tenant)
+                  .bind(case_id)
+                  .fetch_one(admin)
+                  .await
+                  .expect("count runtime owner-execution audit rows"),
+          ''',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"target evidence block not found: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+          start = text.index("async fn count_case_rows(")
+          end = text.index("async fn record_version(", start)
+          text = text[:start] + text[end:]
+          path.write_text(text)
+          PY
+          cargo fmt --all
+          git config user.name "Repository Synchronization Bot"
+          git config user.email "repository-sync@users.noreply.github.com"
+          git add crates/crm-application-runtime/examples/customer_privacy_application_runtime_lifecycle.rs
+          git commit -m "Repository Step 19: use literal evidence queries"
+          git push origin HEAD:repository-step-19-runtime-lifecycle
