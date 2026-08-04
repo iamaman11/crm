@@ -25,6 +25,8 @@ The historical Step 20A product-plane workflow did not reach Chromium because it
 
 The permanent Step 20A browser source also contains one results-heading locator whose substring name matches both the page H1 and the results H2 under the locked Playwright runtime. The operations runner verifies the exact committed spec Git blob, temporarily changes only that locator to exact-name matching, executes the same `apps/web/e2e/customer-privacy.spec.ts` path, restores the spec from a private temporary file and requires a clean Git diff. These bounded preparations do not change product data, routes, authorization, tenant isolation, API behavior, browser expectations or any committed product-plane source.
 
+The current production `/metrics` renderer is intentionally limited to the generated deprecated-contract catalog, which is empty for these active Customer Privacy queries. The operations workflow therefore verifies the exact accepted application-runtime Git blob, temporarily wraps only the assembled query registry used to build the acceptance binary, and records actual successful exact-coordinate resolutions for `customer_privacy.case.list@1.0.0` and `customer_privacy.case.get@1.0.0`. The emitted counter has only capability ID, capability version, owner module and query surface labels; it contains no tenant, actor, token, payload, Party identifier or display name. The runtime source is restored immediately after the binary build and a clean Git diff is mandatory before restore acceptance begins. The final report requires a finite positive Prometheus sample for both coordinates, so static zero-seeded or comment-only markers are insufficient.
+
 ## Executable evidence
 
 `Customer Privacy Operations CI` must prove all of the following on one unchanged pull-request head:
@@ -46,7 +48,7 @@ The permanent Step 20A browser source also contains one results-heading locator 
 
 3. **Observability**
    - `/healthz`, `/readyz` and `/metrics` are exercised on the restored process;
-   - metrics contain the exact Customer Privacy list/get coordinates after the browser journey;
+   - metrics contain finite positive samples for the exact Customer Privacy list/get coordinates after the browser journey;
    - metrics do not contain the bearer token, Party fixture identifier or display-name fixture marker;
    - bounded report and metric digests are retained as CI evidence.
 
@@ -73,7 +75,8 @@ Initial committed objectives:
 - readiness probes: 25;
 - allowed readiness failures: 0;
 - readiness nearest-rank p95: at most 500 milliseconds;
-- restored browser test timeout: at most 90 seconds.
+- restored browser test timeout: at most 90 seconds;
+- active Customer Privacy list/get metric samples: finite and greater than zero for both exact coordinates.
 
 These are acceptance objectives for this repository harness, not a production availability guarantee or customer SLA.
 
