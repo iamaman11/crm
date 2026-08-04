@@ -6,6 +6,7 @@ mod legacy;
 mod legal_hold;
 mod owner_execution;
 mod restriction;
+mod worker;
 
 pub use access_export::*;
 pub use legacy::*;

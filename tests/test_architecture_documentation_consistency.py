@@ -213,28 +213,28 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_step_19_postgres_ready_work_packet_is_exact(self) -> None:
+    def test_active_step_19_runtime_registration_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-19-postgres-ready-work",
+            "repository-step-19-runtime-registration",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
             {
                 "ref": "main",
-                "sha": "c0fec3ae08c836ab483737442ed4377c99c85e9a",
+                "sha": "bc653de5f1a853791d3ab4a03f59f3daad54bf54",
             },
         )
         self.assertEqual(self.packet["tracking_issues"], [194, 126])
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                ".github/workflows/customer-privacy-owner-execution.yml",
-                "crates/crm-application-runtime/tests/customer_privacy_owner_execution_ready_postgres.rs",
-                "crates/crm-customer-privacy-postgres/src/lib.rs",
-                "crates/crm-customer-privacy-postgres/src/ready.rs",
+                "crates/crm-application-runtime/src/background.rs",
+                "crates/crm-application-runtime/src/lib.rs",
+                "crates/crm-customer-privacy-production/src/root.rs",
+                "crates/crm-customer-privacy-production/src/worker.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
@@ -245,6 +245,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.packet["required_checks"],
             [
                 "Affected Scope CI",
+                "Application Runtime CI",
                 "Complexity Baseline CI",
                 "Customer Privacy Owner Execution CI",
                 "Governance CI",
@@ -255,15 +256,15 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "restore actor, request, correlation, trace and initiating capability lineage from the retention decision business transaction",
+            "register crm.customer-privacy/owner-execution in the production background registry at phase 260",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "prove new-case discovery, exact lineage, cross-tenant concealment, bounded input rejection, checkpoint resumption and completed-work exclusion on clean and rollback-reapplied PostgreSQL",
+            "keep the conservative public Rust surface at 5377 and the exception suppression count at 91",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "register the Customer Privacy worker in crm-application-runtime or crm-api",
+            "synchronize final Repository Step 19 closure evidence in normative documents",
             self.packet["non_goals"],
         )
 

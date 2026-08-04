@@ -20,6 +20,7 @@ use crm_customer_enrichment_materialization_composition::{
 use crm_customer_enrichment_provider_process_composition::{
     CustomerEnrichmentProviderProcessWorker, PROVIDER_PROCESS_WORKER_ID,
 };
+use crm_customer_privacy_production::CustomerPrivacyProductionDependencies;
 use crm_global_search_composition::GlobalSearchWorker;
 use crm_module_sdk::{ErrorCategory, EventType, ModuleId, PortFuture, SdkError, TenantId};
 use crm_sales_activities_capability_composition::{
@@ -34,6 +35,7 @@ use std::sync::Arc;
 
 const SALES_MODULE_ID: &str = "crm.sales";
 const ACTIVITIES_MODULE_ID: &str = "crm.activities";
+const CUSTOMER_PRIVACY_MODULE_ID: &str = "crm.customer-privacy";
 const LINK_SCAN_PAGE_SIZE: u32 = 200;
 const PROJECTION_PAGE_SIZE: u32 = 200;
 const SEARCH_PAGE_SIZE: u32 = 200;
@@ -41,6 +43,7 @@ const SEARCH_PAGE_SIZE: u32 = 200;
 const IMPORT_EXECUTION_WORKER_ID: &str = "party-import-execution";
 const EXPORT_SELECTION_WORKER_ID: &str = "party-export-selection";
 const SALES_ACTIVITIES_LINK_WORKER_ID: &str = "sales-activities-link";
+const CUSTOMER_PRIVACY_OWNER_EXECUTION_WORKER_ID: &str = "owner-execution";
 const DEAL_TIMELINE_PROJECTION_WORKER_ID: &str = "deal-timeline-projection";
 const TASK_STATUS_PROJECTION_WORKER_ID: &str = "task-status-projection";
 const CUSTOMER_360_PROJECTION_WORKER_ID: &str = "customer-360-projection";
@@ -51,6 +54,8 @@ const CUSTOMER_ENRICHMENT_MATERIALIZATION_PHASE: BackgroundWorkerPhase =
     BackgroundWorkerPhase::new(245);
 const CUSTOMER_ENRICHMENT_APPLICATION_PHASE: BackgroundWorkerPhase =
     BackgroundWorkerPhase::new(250);
+const CUSTOMER_PRIVACY_OWNER_EXECUTION_PHASE: BackgroundWorkerPhase =
+    BackgroundWorkerPhase::new(260);
 
 pub(crate) struct ProductionBackgroundWorkerDependencies {
     pub module_ids: BTreeSet<String>,
@@ -86,38 +91,51 @@ pub(crate) fn build_production_background_workers(
         search_worker,
     } = dependencies;
     let mut builder = BackgroundWorkerRegistryBuilder::new(module_ids);
-
-    add_worker(
-        &mut builder,
-        activation.clone(),
-        BackgroundWorkerPhase::SOURCE_INGESTION,
-        CUSTOMER_DATA_OPERATIONS_MODULE_ID,
-        IMPORT_EXECUTION_WORKER_ID,
-        Arc::new(ImportExecutionBackgroundWorker::new(
-            import_execution_worker,
-        )),
-    )?;
-    add_worker(
-        &mut builder,
-        activation.clone(),
-        BackgroundWorkerPhase::new(110),
-        CUSTOMER_DATA_OPERATIONS_MODULE_ID,
-        EXPORT_SELECTION_WORKER_ID,
-        Arc::new(ExportSelectionBackgroundWorker::new(
-            export_selection_worker,
-        )),
-    )?;
-    add_worker(
-        &mut builder,
-        activation.clone(),
-        BackgroundWorkerPhase::DOMAIN_LINKING,
-        LINK_MODULE_ID,
-        SALES_ACTIVITIES_LINK_WORKER_ID,
-        Arc::new(SalesActivitiesLinkBackgroundWorker::new(
-            store,
-            link_processor,
-        )),
-    )?;
+    let privacy_dependencies: CustomerPrivacyProductionDependencies =
+        (store.clone(), activation.clone()).into();
+    let privacy_worker: Arc<dyn TenantBackgroundWorker> = privacy_dependencies.try_into()?;
+    for (phase, module_id, worker_id, worker) in [
+        (
+            BackgroundWorkerPhase::SOURCE_INGESTION,
+            CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+            IMPORT_EXECUTION_WORKER_ID,
+            Arc::new(ImportExecutionBackgroundWorker::new(
+                import_execution_worker,
+            )) as Arc<dyn TenantBackgroundWorker>,
+        ),
+        (
+            BackgroundWorkerPhase::new(110),
+            CUSTOMER_DATA_OPERATIONS_MODULE_ID,
+            EXPORT_SELECTION_WORKER_ID,
+            Arc::new(ExportSelectionBackgroundWorker::new(
+                export_selection_worker,
+            )),
+        ),
+        (
+            BackgroundWorkerPhase::DOMAIN_LINKING,
+            LINK_MODULE_ID,
+            SALES_ACTIVITIES_LINK_WORKER_ID,
+            Arc::new(SalesActivitiesLinkBackgroundWorker::new(
+                store,
+                link_processor,
+            )),
+        ),
+        (
+            CUSTOMER_PRIVACY_OWNER_EXECUTION_PHASE,
+            CUSTOMER_PRIVACY_MODULE_ID,
+            CUSTOMER_PRIVACY_OWNER_EXECUTION_WORKER_ID,
+            privacy_worker,
+        ),
+    ] {
+        add_worker(
+            &mut builder,
+            activation.clone(),
+            phase,
+            module_id,
+            worker_id,
+            worker,
+        )?;
+    }
     add_customer_enrichment_workers(
         &mut builder,
         activation.clone(),
