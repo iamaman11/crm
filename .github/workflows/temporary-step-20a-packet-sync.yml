@@ -46,33 +46,40 @@ jobs:
               encoding="utf-8",
           )
 
-          old = '''                [
-                      "Affected Scope CI",
-                      "Complexity Baseline CI",
-                      "Governance CI",
-                      "Product Plane CI",
-                      "Rust Generated Sync",
-                      "Rust CI",
-                  ],'''
-          new = '''                [
-                      "Affected Scope CI",
-                      "Complexity Baseline CI",
-                      "Customer Privacy Access Export CI",
-                      "Customer Privacy Owner Execution CI",
-                      "Governance CI",
-                      "Rust Generated Sync",
-                      "Rust CI",
-                  ],'''
-          for guard_path in (
-              Path("tests/test_architecture_documentation_consistency.py"),
-              Path("tests/test_repository_navigation.py"),
-          ):
-              text = guard_path.read_text(encoding="utf-8")
-              if text.count(old) != 1:
+          def align_guard(path: Path) -> None:
+              lines = path.read_text(encoding="utf-8").splitlines()
+              candidates = [
+                  index
+                  for index, line in enumerate(lines)
+                  if '["required_checks"]' in line
+              ]
+              if len(candidates) != 1:
                   raise SystemExit(
-                      f"expected one required-check guard in {guard_path}, found {text.count(old)}"
+                      f"expected one required_checks assertion in {path}, found {len(candidates)}"
                   )
-              guard_path.write_text(text.replace(old, new, 1), encoding="utf-8")
+              key_index = candidates[0]
+              start = key_index + 1
+              while start < len(lines) and lines[start].strip() != "[":
+                  start += 1
+              if start == len(lines):
+                  raise SystemExit(f"required_checks list start missing in {path}")
+              end = start + 1
+              while end < len(lines) and lines[end].strip() != "],":
+                  end += 1
+              if end == len(lines):
+                  raise SystemExit(f"required_checks list end missing in {path}")
+              indent = lines[start][: len(lines[start]) - len(lines[start].lstrip())]
+              replacement = [indent + "["]
+              replacement.extend(
+                  indent + "    " + json.dumps(check) + ","
+                  for check in required_checks
+              )
+              replacement.append(indent + "],")
+              lines[start : end + 1] = replacement
+              path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+          align_guard(Path("tests/test_architecture_documentation_consistency.py"))
+          align_guard(Path("tests/test_repository_navigation.py"))
           PY
           python scripts/generate_repository_navigation.py --write
           black tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py
