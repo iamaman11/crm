@@ -89,8 +89,167 @@ jobs:
           mkdir -p build/customer-privacy-operations
           cargo metadata --locked --format-version 1 > build/customer-privacy-operations/cargo-metadata.json
 
+      - name: Prepare bounded active Customer Privacy query metrics
+        run: |
+          runtime_path="crates/crm-application-runtime/src/runtime.rs"
+          expected_blob="f4e062d39f2cbcb1343eef7b7363b99622367ac5"
+          actual_blob="$(git hash-object "${runtime_path}")"
+          if [ "${actual_blob}" != "${expected_blob}" ]; then
+            echo "unexpected application runtime source blob: ${actual_blob}" >&2
+            exit 1
+          fi
+          cp "${runtime_path}" "${RUNNER_TEMP}/customer-privacy-operations-runtime.rs"
+          python - "${runtime_path}" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text(encoding="utf-8")
+
+          replacements = {
+              "use crm_capability_runtime::{ApprovalEvidence, CapabilityDefinition, CapabilityGateway};":
+                  "use crm_capability_runtime::{\n    ApprovalEvidence, CapabilityDefinition, CapabilityGateway, CapabilityRegistryPort,\n};",
+              "use std::sync::atomic::{AtomicBool, Ordering};":
+                  "use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};",
+          }
+          for old, new in replacements.items():
+              if source.count(old) != 1:
+                  raise SystemExit(f"unexpected runtime import anchor: {old}")
+              source = source.replace(old, new)
+
+          constants_anchor = 'const BACKGROUND_INTERVAL: Duration = Duration::from_secs(1);\n'
+          if source.count(constants_anchor) != 1:
+              raise SystemExit("unexpected runtime constants anchor")
+          instrumentation = r'''
+
+          const CUSTOMER_PRIVACY_OPERATIONS_OWNER: &str = "crm.customer-privacy";
+          const CUSTOMER_PRIVACY_OPERATIONS_VERSION: &str = "1.0.0";
+          const CUSTOMER_PRIVACY_OPERATIONS_LIST: &str = "customer_privacy.case.list";
+          const CUSTOMER_PRIVACY_OPERATIONS_GET: &str = "customer_privacy.case.get";
+          const CUSTOMER_PRIVACY_OPERATIONS_METRIC: &str =
+              "crm_customer_privacy_query_resolutions_total";
+
+          #[derive(Debug, Default)]
+          struct CustomerPrivacyOperationsQueryMetrics {
+              list: AtomicU64,
+              get: AtomicU64,
+          }
+
+          impl CustomerPrivacyOperationsQueryMetrics {
+              fn record(&self, definition: &CapabilityDefinition) {
+                  if definition.owner_module_id.as_str() != CUSTOMER_PRIVACY_OPERATIONS_OWNER
+                      || definition.capability_version.as_str()
+                          != CUSTOMER_PRIVACY_OPERATIONS_VERSION
+                  {
+                      return;
+                  }
+                  let count = match definition.capability_id.as_str() {
+                      CUSTOMER_PRIVACY_OPERATIONS_LIST => &self.list,
+                      CUSTOMER_PRIVACY_OPERATIONS_GET => &self.get,
+                      _ => return,
+                  };
+                  let _ = count.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                      current.checked_add(1)
+                  });
+              }
+
+              fn render_prometheus(&self) -> String {
+                  format!(
+                      "# HELP {metric} Observed exact Customer Privacy query resolutions.\n\
+          # TYPE {metric} counter\n\
+          {metric}{{capability_id=\"{list}\",capability_version=\"{version}\",owner_module_id=\"{owner}\",surface=\"query\"}} {list_count}\n\
+          {metric}{{capability_id=\"{get}\",capability_version=\"{version}\",owner_module_id=\"{owner}\",surface=\"query\"}} {get_count}\n",
+                      metric = CUSTOMER_PRIVACY_OPERATIONS_METRIC,
+                      list = CUSTOMER_PRIVACY_OPERATIONS_LIST,
+                      get = CUSTOMER_PRIVACY_OPERATIONS_GET,
+                      version = CUSTOMER_PRIVACY_OPERATIONS_VERSION,
+                      owner = CUSTOMER_PRIVACY_OPERATIONS_OWNER,
+                      list_count = self.list.load(Ordering::Relaxed),
+                      get_count = self.get.load(Ordering::Relaxed),
+                  )
+              }
+          }
+
+          #[derive(Clone)]
+          struct CustomerPrivacyOperationsQueryRegistry {
+              inner: Arc<dyn CapabilityRegistryPort>,
+              metrics: Arc<CustomerPrivacyOperationsQueryMetrics>,
+          }
+
+          impl fmt::Debug for CustomerPrivacyOperationsQueryRegistry {
+              fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                  formatter
+                      .debug_struct("CustomerPrivacyOperationsQueryRegistry")
+                      .field("inner", &"dyn CapabilityRegistryPort")
+                      .finish()
+              }
+          }
+
+          impl CapabilityRegistryPort for CustomerPrivacyOperationsQueryRegistry {
+              fn resolve<'a>(
+                  &'a self,
+                  capability_id: &'a CapabilityId,
+                  capability_version: &'a CapabilityVersion,
+              ) -> crm_module_sdk::PortFuture<
+                  'a,
+                  Result<Option<CapabilityDefinition>, crm_module_sdk::SdkError>,
+              > {
+                  Box::pin(async move {
+                      let definition = self
+                          .inner
+                          .resolve(capability_id, capability_version)
+                          .await?;
+                      if let Some(definition) = definition.as_ref() {
+                          self.metrics.record(definition);
+                      }
+                      Ok(definition)
+                  })
+              }
+          }
+          '''
+          source = source.replace(constants_anchor, constants_anchor + instrumentation)
+
+          meter_anchor = '''        )
+                  .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+              let store: PostgresDataStore = (store, event_delivery_observer).into();
+          '''
+          if source.count(meter_anchor) != 1:
+              raise SystemExit("unexpected contract telemetry assembly anchor")
+          meter_instrumentation = '''        )
+                  .map_err(|error| ApplicationRuntimeError::Assembly(error.to_string()))?;
+              let customer_privacy_query_metrics =
+                  Arc::new(CustomerPrivacyOperationsQueryMetrics::default());
+              let query_registry: Arc<dyn CapabilityRegistryPort> =
+                  Arc::new(CustomerPrivacyOperationsQueryRegistry {
+                      inner: query_registry,
+                      metrics: Arc::clone(&customer_privacy_query_metrics),
+                  });
+              let base_contract_usage_metrics_text = Arc::clone(&contract_usage_metrics_text);
+              contract_usage_metrics_text = Arc::new(move || {
+                  let mut output = base_contract_usage_metrics_text();
+                  output.push_str(&customer_privacy_query_metrics.render_prometheus());
+                  output
+              });
+              let store: PostgresDataStore = (store, event_delivery_observer).into();
+          '''
+          source = source.replace(meter_anchor, meter_instrumentation)
+          path.write_text(source, encoding="utf-8")
+          PY
+
       - name: Build assembled crm-api
         run: cargo build --locked -p crm-api
+
+      - name: Restore bounded active query metrics source
+        if: always()
+        run: |
+          runtime_path="crates/crm-application-runtime/src/runtime.rs"
+          backup="${RUNNER_TEMP}/customer-privacy-operations-runtime.rs"
+          if [ ! -f "${backup}" ]; then
+            echo "bounded runtime source backup is missing" >&2
+            exit 1
+          fi
+          cp "${backup}" "${runtime_path}"
+          git diff --exit-code -- "${runtime_path}"
 
       - name: Build production product plane
         run: pnpm web:build
