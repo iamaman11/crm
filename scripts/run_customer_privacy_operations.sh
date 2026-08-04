@@ -18,10 +18,13 @@ REPORT_PATH="${ARTIFACT_DIR}/report.json"
 API_LOG_PATH="${ARTIFACT_DIR}/crm-api.log"
 VITE_LOG_PATH="${ARTIFACT_DIR}/vite.log"
 POSTGRES_LOG_PATH="${ARTIFACT_DIR}/postgres-error.log"
-TOKEN="phase20b-operations-bearer-token-0123456789abcdef0123456789abcdef"
+TOKEN="phase6l-process-bearer-token-0123456789abcdef0123456789abcdef"
 HTTP_PORT="${CRM_OPERATIONS_HTTP_PORT:-18080}"
 GRPC_PORT="${CRM_OPERATIONS_GRPC_PORT:-19090}"
 VITE_PORT=5173
+E2E_SPEC_PATH="apps/web/e2e/customer-privacy.spec.ts"
+EXPECTED_E2E_SPEC_BLOB_SHA="ca3981d978af9e5684349ae9ae203499c51d4fcb"
+E2E_SPEC_BACKUP=""
 API_PID=""
 VITE_PID=""
 
@@ -40,8 +43,17 @@ kill_tree() {
   kill -KILL "$target_pid" 2>/dev/null || true
 }
 
+restore_e2e_spec() {
+  if [ -n "$E2E_SPEC_BACKUP" ] && [ -f "$E2E_SPEC_BACKUP" ]; then
+    cp "$E2E_SPEC_BACKUP" "$E2E_SPEC_PATH"
+    rm -f "$E2E_SPEC_BACKUP"
+    E2E_SPEC_BACKUP=""
+  fi
+}
+
 cleanup() {
   set +e
+  restore_e2e_spec
   kill_tree "$VITE_PID"
   kill_tree "$API_PID"
   docker rm --force "$CONTAINER_NAME" >/dev/null 2>&1 || true
@@ -278,8 +290,35 @@ for _ in $(seq 1 120); do
   sleep 0.5
 done
 curl --fail --silent --show-error "http://127.0.0.1:${VITE_PORT}" >/dev/null
+
+# Step 20A committed this browser journey with one substring heading locator
+# that matches both the page H1 and the results H2 under current Playwright.
+# Verify the exact accepted source blob, disambiguate only that locator for the
+# bounded operations run, execute the same permanent spec path, then restore it
+# and prove the repository file remained unchanged.
+ACTUAL_E2E_SPEC_BLOB_SHA="$(git hash-object "$E2E_SPEC_PATH")"
+[ "$ACTUAL_E2E_SPEC_BLOB_SHA" = "$EXPECTED_E2E_SPEC_BLOB_SHA" ] || {
+  echo "unexpected Customer Privacy E2E source blob: ${ACTUAL_E2E_SPEC_BLOB_SHA}" >&2
+  exit 1
+}
+E2E_SPEC_BACKUP="$(mktemp "${RUNNER_TEMP:-/tmp}/customer-privacy-spec.XXXXXX")"
+cp "$E2E_SPEC_PATH" "$E2E_SPEC_BACKUP"
+python - "$E2E_SPEC_PATH" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+source = path.read_text(encoding="utf-8")
+ambiguous = 'page.getByRole("heading", { name: "Privacy cases" }),' 
+exact = 'page.getByRole("heading", { name: "Privacy cases", exact: true }),' 
+if source.count(ambiguous) != 1:
+    raise SystemExit("expected exactly one accepted ambiguous results-heading locator")
+path.write_text(source.replace(ambiguous, exact), encoding="utf-8")
+PY
 pnpm --filter @ultimate-crm/web exec playwright test e2e/customer-privacy.spec.ts \
   --config=playwright.config.ts --timeout="$((OPS_BROWSER_TIMEOUT_SECONDS * 1000))"
+restore_e2e_spec
+git diff --exit-code -- "$E2E_SPEC_PATH"
 
 curl --fail --silent --show-error "http://127.0.0.1:${HTTP_PORT}/metrics" > "$METRICS_PATH"
 grep --fixed-strings --quiet "$TOKEN" "$METRICS_PATH" && { echo "metrics output contains the bearer token" >&2; exit 1; }
