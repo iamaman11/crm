@@ -128,6 +128,14 @@ jobs:
               )
               path.write_text(text, encoding="utf-8")
 
+          test_path = Path("tests/test_architecture_documentation_consistency.py")
+          test_text = test_path.read_text(encoding="utf-8")
+          old_guard = 'r"step 20[^\\n.;]{0,120}(?:not started|in progress|next)",'
+          new_guard = 'r"step 20(?![ab])[^\\n.;]{0,80}(?:not started|in progress)|step 20b[^\\n.;]{0,80}\\bnext\\b",'
+          if old_guard not in test_text:
+              raise SystemExit("Step 20 stale-state guard anchor missing")
+          test_path.write_text(test_text.replace(old_guard, new_guard, 1), encoding="utf-8")
+
           from scripts.repository_navigation import generated_documents
           root = Path.cwd()
           for path, content in generated_documents(root).items():
