@@ -8,6 +8,7 @@ on:
       - "repository-packet.json"
       - "docs/ACTIVE_PACKET.md"
       - "crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs"
+      - "crates/crm-application-runtime/tests/customer_privacy_owner_execution_ready_postgres.rs"
       - "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs"
       - "crates/crm-customer-privacy-application/**"
       - "crates/crm-customer-privacy-postgres/**"
@@ -23,6 +24,7 @@ on:
       - "repository-packet.json"
       - "docs/ACTIVE_PACKET.md"
       - "crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs"
+      - "crates/crm-application-runtime/tests/customer_privacy_owner_execution_ready_postgres.rs"
       - "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs"
       - "crates/crm-customer-privacy-application/**"
       - "crates/crm-customer-privacy-postgres/**"
@@ -105,11 +107,15 @@ jobs:
           cargo test --locked -p crm-application-runtime \
             --test customer_privacy_owner_execution_postgres --no-run
           cargo test --locked -p crm-application-runtime \
+            --test customer_privacy_owner_execution_ready_postgres --no-run
+          cargo test --locked -p crm-application-runtime \
             --test party_tombstone_rebuild_convergence_postgres --no-run
           cargo test --locked -p crm-api \
             --test customer_360_privacy_no_orphan_process_e2e --no-run
           cargo clippy --locked -p crm-application-runtime \
             --test customer_privacy_owner_execution_postgres -- -D warnings
+          cargo clippy --locked -p crm-application-runtime \
+            --test customer_privacy_owner_execution_ready_postgres -- -D warnings
           cargo clippy --locked -p crm-application-runtime \
             --test party_tombstone_rebuild_convergence_postgres -- -D warnings
           cargo clippy --locked -p crm-api \
@@ -134,6 +140,13 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0007_contact_point_adapter.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify clean PostgreSQL ready-work acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p crm-application-runtime \
+            --test customer_privacy_owner_execution_ready_postgres -- --nocapture \
+            2>&1 | tee database/customer-privacy-owner-ready-work-clean.log
       - name: Verify clean PostgreSQL crash-window acceptance
         shell: bash
         run: |
@@ -177,6 +190,13 @@ jobs:
           psql --set ON_ERROR_STOP=1 --file database/tests/0007_contact_point_adapter.sql
           psql --set ON_ERROR_STOP=1 --file database/tests/0020_customer_privacy_persistence_fixture.sql
           psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Repeat PostgreSQL ready-work acceptance after reapply
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p crm-application-runtime \
+            --test customer_privacy_owner_execution_ready_postgres -- --nocapture \
+            2>&1 | tee database/customer-privacy-owner-ready-work-reapplied.log
       - name: Repeat PostgreSQL acceptance after reapply
         shell: bash
         run: |
@@ -217,9 +237,11 @@ jobs:
             crates/crm-customer-privacy-postgres/
             crates/crm-customer-privacy-production/
             crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs
+            crates/crm-application-runtime/tests/customer_privacy_owner_execution_ready_postgres.rs
             crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs
             services/crm-api/tests/customer_360_privacy_no_orphan_process_e2e.rs
             database/customer-privacy-owner-execution-*.log
+            database/customer-privacy-owner-ready-work-*.log
             database/customer-privacy-party-rebuild-*.log
             database/customer-privacy-no-orphan-process-*.log
           if-no-files-found: warn
