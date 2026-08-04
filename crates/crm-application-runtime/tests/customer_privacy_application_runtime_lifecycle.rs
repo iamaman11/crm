@@ -469,11 +469,11 @@ async fn seed_bundle(
         admin,
         tenant,
         actor,
-        &format!("runtime-case-{suffix}-{case_id}"),
-        "test.record.mutate",
-        "customer-privacy.case",
-        case_id,
-        privacy_case.version(),
+        (
+            format!("runtime-case-{suffix}-{case_id}"),
+            "test.record.mutate",
+        ),
+        ("customer-privacy.case", case_id, privacy_case.version()),
         privacy_case_persisted_payload(&privacy_case).expect("encode runtime privacy case"),
     )
     .await;
@@ -481,11 +481,11 @@ async fn seed_bundle(
         admin,
         tenant,
         actor,
-        &format!("runtime-plan-{suffix}-{case_id}"),
-        "test.record.mutate",
-        ACTION_PLAN_RECORD_TYPE,
-        plan.plan_id().as_str(),
-        1,
+        (
+            format!("runtime-plan-{suffix}-{case_id}"),
+            "test.record.mutate",
+        ),
+        (ACTION_PLAN_RECORD_TYPE, plan.plan_id().as_str(), 1),
         action_plan_payload(&plan),
     )
     .await;
@@ -493,11 +493,11 @@ async fn seed_bundle(
         admin,
         tenant,
         actor,
-        &format!("runtime-party-{suffix}-{case_id}"),
-        "test.record.mutate",
-        PARTY_RECORD_TYPE,
-        party_id,
-        1,
+        (
+            format!("runtime-party-{suffix}-{case_id}"),
+            "test.record.mutate",
+        ),
+        (PARTY_RECORD_TYPE, party_id, 1),
         party_payload(party_id),
     )
     .await;
@@ -505,11 +505,15 @@ async fn seed_bundle(
         admin,
         tenant,
         actor,
-        &format!("runtime-decision-{suffix}-{case_id}"),
-        "customer_privacy.case.approve",
-        "customer-privacy.retention-decision",
-        decision.decision_id().as_str(),
-        1,
+        (
+            format!("runtime-decision-{suffix}-{case_id}"),
+            "customer_privacy.case.approve",
+        ),
+        (
+            "customer-privacy.retention-decision",
+            decision.decision_id().as_str(),
+            1,
+        ),
         retention_decision_persisted_payload(&decision).expect("encode runtime retention decision"),
     )
     .await;
@@ -708,18 +712,16 @@ async fn seed_owner_action_capability(admin: &PgPool) {
     .expect("seed runtime owner-action capability");
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn seed_record(
     admin: &PgPool,
     tenant: &str,
     actor: &str,
-    transaction_id: &str,
-    capability_id: &str,
-    record_type: &str,
-    record_id: &str,
-    version: u64,
+    transaction_identity: (String, &str),
+    record_identity: (&str, &str, u64),
     payload: TypedPayload,
 ) {
+    let (transaction_id, capability_id) = transaction_identity;
+    let (record_type, record_id, version) = record_identity;
     let mut transaction = admin.begin().await.expect("begin runtime record fixture");
     sqlx::query("SET LOCAL session_replication_role = replica")
         .execute(&mut *transaction)
@@ -729,7 +731,7 @@ async fn seed_record(
         &mut transaction,
         tenant,
         actor,
-        transaction_id,
+        &transaction_id,
         capability_id,
     )
     .await;
@@ -755,7 +757,7 @@ async fn seed_record(
     .bind(i64::try_from(payload.maximum_size_bytes).unwrap())
     .bind(payload.retention_policy_id.as_str())
     .bind(payload.bytes)
-    .bind(transaction_id)
+    .bind(&transaction_id)
     .execute(&mut *transaction)
     .await
     .expect("insert runtime lifecycle record");
