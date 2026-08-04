@@ -23,6 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python -m pip install 'ruamel.yaml>=0.18.6,<0.19'
           python - <<'PY'
           from pathlib import Path
           import re
