@@ -80,7 +80,7 @@ async fn seed_e2e_fixture_records() {
     provision_module(
         &admin,
         PARTIES_MODULE_ID,
-        "0.3.0",
+        "0.4.0",
         "phase20a-parties-installation",
         0x70,
     )
