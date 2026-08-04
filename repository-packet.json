@@ -14,6 +14,7 @@
   "objective": "Continue Repository Step 19 by composing the PostgreSQL ready-work source with the canonical exact-nine Customer Privacy owner executor and registering the resulting activation-gated worker in the production process host at deterministic phase 260, without adding a crate, dependency, route, manifest coordinate, migration or public Rust item.",
   "allowed_paths": [
     "crates/crm-application-runtime/src/background.rs",
+    "crates/crm-application-runtime/src/lib.rs",
     "crates/crm-customer-privacy-production/src/root.rs",
     "crates/crm-customer-privacy-production/src/worker.rs",
     "docs/ACTIVE_PACKET.md",
