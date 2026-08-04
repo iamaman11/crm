@@ -18,21 +18,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: repository-step-20a-customer-privacy-product-plane
-      - name: Inspect existing E2E and seed fixtures
+      - name: Inspect Customer Privacy SQL and authorization fixtures
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== E2E files ==='
-          find apps/web -type f | grep -E '/e2e/|\.spec\.' | sort || true
-          echo '=== Seed fixture files ==='
-          find . -type f | grep -E 'seed_e2e_fixture|e2e_fixture' | sort || true
-          echo '=== Existing E2E sources ==='
+          echo '=== Privacy-related SQL files ==='
+          grep -RIl --include='*.sql' -E 'privacy_cases|privacy_case|customer_privacy\.case\.(list|get)' database | sort || true
+          echo '=== Relevant SQL excerpts ==='
           while IFS= read -r file; do
             echo "--- ${file} ---"
-            sed -n '1,260p' "${file}"
-          done < <(find apps/web -type f | grep -E '/e2e/|\.spec\.' | sort)
-          echo '=== Seed fixture source ==='
-          while IFS= read -r file; do
-            echo "--- ${file} ---"
-            sed -n '1,360p' "${file}"
-          done < <(find . -type f | grep -E 'seed_e2e_fixture|e2e_fixture' | sort)
+            grep -n -C 8 -E 'privacy_cases|privacy_case|customer_privacy\.case\.(list|get)' "${file}" | head -n 360 || true
+          done < <(grep -RIl --include='*.sql' -E 'privacy_cases|privacy_case|customer_privacy\.case\.(list|get)' database | sort)
+          echo '=== Authorization fixture patterns ==='
+          grep -RIn -C 6 --include='*.sql' -E 'capability_grant|authorization|permission|customer_privacy\.case\.(list|get)' database/tests | head -n 500 || true
