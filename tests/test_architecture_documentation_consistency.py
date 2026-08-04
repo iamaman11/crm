@@ -213,25 +213,28 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(disposition, self.delivery)
         self.assertIn("zero unresolved runtime-fan-in or gate-value decisions", self.plan)
 
-    def test_active_step_19_worker_boundary_packet_is_exact(self) -> None:
+    def test_active_step_19_postgres_ready_work_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-19-owner-execution-worker-boundary",
+            "repository-step-19-postgres-ready-work",
         )
         self.assertEqual(self.packet["status"], "active")
         self.assertEqual(
             self.packet["baseline"],
             {
                 "ref": "main",
-                "sha": "a8fa7c1586f9d9a3771f4f23277784b7c3ef7a9e",
+                "sha": "c0fec3ae08c836ab483737442ed4377c99c85e9a",
             },
         )
         self.assertEqual(self.packet["tracking_issues"], [194, 126])
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                "crates/crm-customer-privacy-application/src/execution.rs",
+                ".github/workflows/customer-privacy-owner-execution.yml",
+                "crates/crm-application-runtime/tests/customer_privacy_owner_execution_ready_postgres.rs",
+                "crates/crm-customer-privacy-postgres/src/lib.rs",
+                "crates/crm-customer-privacy-postgres/src/ready.rs",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
@@ -252,15 +255,15 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn(
-            "implement the existing generic TenantBackgroundWorker contract directly on PrivacyOwnerExecutionService",
+            "restore actor, request, correlation, trace and initiating capability lineage from the retention decision business transaction",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "prove inactive no-side-effect behavior, active delegation and fail-closed duplicate rejection with unit tests while keeping the conservative public Rust surface at 5377",
+            "prove new-case discovery, exact lineage, cross-tenant concealment, bounded input rejection, checkpoint resumption and completed-work exclusion on clean and rollback-reapplied PostgreSQL",
             self.packet["deliverables"],
         )
         self.assertIn(
-            "implement the PostgreSQL pending-case discovery source",
+            "register the Customer Privacy worker in crm-application-runtime or crm-api",
             self.packet["non_goals"],
         )
 
