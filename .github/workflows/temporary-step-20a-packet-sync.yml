@@ -1,0 +1,86 @@
+name: Temporary Step 20A Check Alignment
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/temporary-step-20a-packet-sync.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  synchronize:
+    if: github.head_ref == 'repository-step-20a-evidence-sync'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: repository-step-20a-evidence-sync
+          fetch-depth: 0
+      - name: Align packet checks with affected scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'black==26.3.1' 'ruamel.yaml>=0.18.6,<0.19'
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          required_checks = [
+              "Affected Scope CI",
+              "Complexity Baseline CI",
+              "Customer Privacy Access Export CI",
+              "Customer Privacy Owner Execution CI",
+              "Governance CI",
+              "Rust Generated Sync",
+              "Rust CI",
+          ]
+
+          packet_path = Path("repository-packet.json")
+          packet = json.loads(packet_path.read_text(encoding="utf-8"))
+          packet["required_checks"] = required_checks
+          packet_path.write_text(
+              json.dumps(packet, indent=2, ensure_ascii=False) + "\n",
+              encoding="utf-8",
+          )
+
+          old = '''                [
+                      "Affected Scope CI",
+                      "Complexity Baseline CI",
+                      "Governance CI",
+                      "Product Plane CI",
+                      "Rust Generated Sync",
+                      "Rust CI",
+                  ],'''
+          new = '''                [
+                      "Affected Scope CI",
+                      "Complexity Baseline CI",
+                      "Customer Privacy Access Export CI",
+                      "Customer Privacy Owner Execution CI",
+                      "Governance CI",
+                      "Rust Generated Sync",
+                      "Rust CI",
+                  ],'''
+          for guard_path in (
+              Path("tests/test_architecture_documentation_consistency.py"),
+              Path("tests/test_repository_navigation.py"),
+          ):
+              text = guard_path.read_text(encoding="utf-8")
+              if text.count(old) != 1:
+                  raise SystemExit(
+                      f"expected one required-check guard in {guard_path}, found {text.count(old)}"
+                  )
+              guard_path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+          python scripts/generate_repository_navigation.py --write
+          black tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py
+          python -m unittest tests.test_architecture_documentation_consistency tests.test_repository_navigation
+          python scripts/check_architecture.py
+          rm .github/workflows/temporary-step-20a-packet-sync.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: align Step 20A evidence checks with affected scope"
+          git push origin HEAD:repository-step-20a-evidence-sync
