@@ -25,26 +25,18 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path("services/crm-api/tests/seed_e2e_fixture.rs")
           text = path.read_text(encoding="utf-8")
-          old = '''    provision_module(
-              &admin,
-              PARTIES_MODULE_ID,
-              "0.3.0",
-              "phase20a-parties-installation",
-              0x70,
-          )'''
-          new = '''    provision_module(
-              &admin,
-              PARTIES_MODULE_ID,
-              "0.4.0",
-              "phase20a-parties-installation",
-              0x70,
-          )'''
-          if text.count(old) != 1:
-              raise SystemExit(f"expected exactly one Parties activation marker, found {text.count(old)}")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          pattern = re.compile(
+              r'(provision_module\(\s*&admin,\s*PARTIES_MODULE_ID,\s*)"0\.3\.0"'
+              r'(,\s*"phase20a-parties-installation",\s*0x70,\s*\))'
+          )
+          text, count = pattern.subn(r'\g<1>"0.4.0"\g<2>', text, count=1)
+          if count != 1:
+              raise SystemExit(f"expected exactly one Parties activation marker, corrected {count}")
+          path.write_text(text, encoding="utf-8")
           PY
           cargo fmt --all
           cargo test -p crm-api --test seed_e2e_fixture --no-run
