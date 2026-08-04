@@ -82,4 +82,13 @@ These are acceptance objectives for this repository harness, not a production av
 
 ## Non-completion statement
 
-This packet can complete Repository Step 20 only after implementation acceptance and a separate evidence synchronization. It does not by itself close Phase 8A.11, Phase 8A, product-complete expert modules, architecture 10/10 or the Universal CRM product. Repository Step 21 remains blocked until Step 20B is accepted and synchronized.
+This packet can complete Repository Step 20 only after implementation acceptance and a separate evidence synchronization. It does not by itself close Phase 8A.11, Phase 8A, product-complete expert modules, architecture 10/10 or the Universal CRM product. Repository Step 21 is the next permitted packet until Step 20B is accepted and synchronized.
+
+## Repository Step 20 accepted closure
+
+Repository Step 20 is complete through PR #292 / source `938cebed1e78bf7debf40dc544431bfe819970f4` / squash merge `fffd6baf35544eea736d183af0a5ba38518cce9a` / 17 of 17 applicable permanent workflows and PR #294 / source `f9c5faa667f4d5483335ec2cb5bac31596d818c8` / squash merge `ef3457c11646b1069e5e65683d3618b3d470136e` / 8 of 8 applicable permanent workflows, each accepted on one unchanged exact head with zero unresolved comments, reviews or review threads.
+
+Step 20A proves the typed governed Customer Privacy browser product plane against real PostgreSQL, assembled `crm-api`, Vite and Chromium. Step 20B proves independent PostgreSQL logical backup and restore, restored-process startup and readiness, active `customer_privacy.case.list` and `customer_privacy.case.get` metrics, cross-tenant and expired-session concealment, startup `0.101` seconds, nearest-rank readiness p95 `2.977` milliseconds, backup SHA-256 `700b8ae13a71af30010b11877f70b6a4b3efe1b0ec3beddaf0f3e3bc19533d3c`, backup size `1,118,941` bytes and Chromium 3 of 3.
+
+Repository Steps 1–20 are complete. Repository Step 21 Phase 8A closure is the only next permitted implementation packet. Phase 8A.11, Phase 8A, Customer Privacy as a complete product capability, product-complete expert modules, architecture 10/10 and the Universal CRM product remain incomplete.
+

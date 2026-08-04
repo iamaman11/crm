@@ -108,58 +108,43 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                     f"unqualified current 113-package claim: {context}",
                 )
 
-    def test_step_19_is_complete_step_20a_is_accepted_and_step_20b_is_next(
-        self,
-    ) -> None:
+    def test_step_20_is_complete_and_step_21_is_next(self) -> None:
         required = (
-            "PR #287",
-            "23b2f4ea660bcd46884fe054cd0c37e89b1495c4",
-            "c0fec3ae08c836ab483737442ed4377c99c85e9a",
-            "11 of 11",
-            "PR #288",
-            "b99a4fc4ff7ef5cfd47813b487900b4c2a9f3b77",
-            "bc653de5f1a853791d3ab4a03f59f3daad54bf54",
-            "24 of 24",
-            "PR #289",
-            "3e21e79e1600727ebcda222af389d568d857cff8",
-            "d1c4dd278853a1e6a426fab284c70b3529d42833",
-            "PR #290",
-            "9bbb339f39133955a7f42ea67f3334e597066e2e",
-            "49c5e35814adceb2be9d4cc2302bf10032b807a0",
-            "19 of 19",
+            "PR #292",
+            "938cebed1e78bf7debf40dc544431bfe819970f4",
+            "fffd6baf35544eea736d183af0a5ba38518cce9a",
+            "17 of 17",
+            "PR #294",
+            "f9c5faa667f4d5483335ec2cb5bac31596d818c8",
+            "ef3457c11646b1069e5e65683d3618b3d470136e",
+            "8 of 8",
         )
         for document in self.normative_documents:
             lowered = document.lower()
             for marker in required:
                 self.assertIn(marker, document)
-            self.assertIn("step 19", lowered)
             self.assertIn("step 20", lowered)
+            self.assertIn("step 21", lowered)
             self.assertNotRegex(
                 lowered,
-                r"step 19[^\n.;]{0,100}(?:not started|in progress|next)",
+                r"step 20(?![ab])[^\n.;]{0,80}(?:not started|in progress)|step 20b[^\n.;]{0,80}\bnext\b",
             )
             self.assertNotRegex(document, r"(?m)^\s*-\s*;\s*$")
-        self.assertIn("Repository Steps 1–19 are complete", self.status)
-        self.assertIn("Repository Step 20A is accepted through PR #292", self.status)
-        self.assertIn("Repository Step 20 remains in progress", self.status)
-        self.assertIn("Repository Step 20B", self.status)
+        self.assertIn("Repository Steps 1–20 are complete", self.status)
+        self.assertIn("Repository Step 20 is complete through PR #292", self.status)
+        self.assertIn("Repository Step 21 Phase 8A closure", self.status)
         self.assertIn(
-            "19. real Customer Privacy worker lifecycle and complete process/end-to-end acceptance — **complete through PR #290**",
+            "20. Phase 8A frontend, accessibility, browser and operations parity — **complete through PRs #292 and #294**.",
             self.plan,
         )
-        self.assertIn("20. Phase 8A frontend", self.plan)
         for marker in required:
             self.assertIn(marker, self.product_plan)
-        self.assertIn("After Steps 20–21 complete Phase 8A", self.product_plan)
-        self.assertNotIn("After Steps 19–21 complete Phase 8A", self.product_plan)
-        self.assertIn(
-            "Repository Step 20A is accepted through PR #292", self.product_plan
-        )
-        self.assertIn("Repository Step 20B", self.product_plan)
-        self.assertNotIn(
-            "> Repository Step 19 — real Customer Privacy worker lifecycle",
-            self.product_plan,
-        )
+        self.assertIn("After Step 21 complete Phase 8A", self.product_plan)
+        self.assertNotIn("After Steps 20–21 complete Phase 8A", self.product_plan)
+        self.assertIn("Chromium 3 of 3", self.operations)
+        self.assertIn("2.977", self.operations)
+        self.assertIn("0.101", self.operations)
+        self.assertIn("700b8ae13a71af30010b11877f70b6a4b3efe1b0ec3beddaf0f3e3bc19533d3c", self.operations)
 
     def test_product_readiness_is_not_overstated(self) -> None:
         for document in self.normative_documents:
@@ -236,23 +221,20 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_step_20b_operations_packet_is_exact(self) -> None:
+    def test_active_step_20_evidence_sync_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(
-            self.packet["packet_id"], "repository-step-20b-customer-privacy-operations"
-        )
+        self.assertEqual(self.packet["packet_id"], "repository-step-20-evidence-sync")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "d3d066d0446a4936bd61574506e729c9fd9104dc"},
+            {"ref": "main", "sha": "ef3457c11646b1069e5e65683d3618b3d470136e"},
         )
-        self.assertEqual(len(self.packet["allowed_paths"]), 11)
+        self.assertEqual(len(self.packet["allowed_paths"]), 13)
         self.assertEqual(
             self.packet["required_checks"],
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
                 "Customer Privacy Access Export CI",
-                "Customer Privacy Operations CI",
                 "Customer Privacy Owner Execution CI",
                 "Governance CI",
                 "Rust Generated Sync",
@@ -261,23 +243,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         )
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
-        self.assertEqual(
-            self.operations_policy["schema_version"],
-            "crm.customer-privacy-operations-policy/v1",
-        )
-        self.assertIn("@sha256:", self.operations_policy["postgres_image"])
-        self.assertEqual(self.operations_policy["allowed_probe_failures"], 0)
-        for marker in (
-            "logical backup",
-            "distinct database",
-            "assembled `crm-api`",
-            "Chromium",
-            "nearest-rank p95",
-            "cross-tenant concealment",
-            "raw backup bytes are never uploaded",
-        ):
-            self.assertIn(marker, self.operations)
-        self.assertIn("Step 21 remains blocked", self.operations)
+        self.assertIn("PR #294", self.operations)
+        self.assertIn("Chromium 3 of 3", self.operations)
+        self.assertIn("Repository Step 21", self.operations)
 
     def test_repository_map_and_product_inventory_remain_exact(self) -> None:
         self.assertIn(
