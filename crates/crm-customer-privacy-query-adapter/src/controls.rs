@@ -4,9 +4,8 @@ use crm_core_data::{
     PostgresDataStore, RecordGetQuery, RecordListQuery, RecordQueryContinuation, RecordQuerySort,
 };
 use crm_customer_privacy::{
-    CustomerDataLegalHold, LegalHoldScope, LegalHoldStatus, ProcessingRestriction,
-    RestrictionScope, RestrictionStatus, LEGAL_HOLD_RECORD_TYPE, MODULE_ID,
-    RESTRICTION_RECORD_TYPE,
+    CustomerDataLegalHold, LEGAL_HOLD_RECORD_TYPE, LegalHoldScope, LegalHoldStatus, MODULE_ID,
+    ProcessingRestriction, RESTRICTION_RECORD_TYPE, RestrictionScope, RestrictionStatus,
 };
 use crm_customer_privacy_persistence_adapter::{
     legal_hold_from_snapshot, processing_restriction_from_snapshot,
@@ -17,21 +16,19 @@ use crm_module_sdk::{
 };
 use crm_proto_contracts::crm::{customer::v1 as customer, customer_privacy::v1 as wire};
 use crm_query_runtime::{
-    normalized_filter_hash, CursorBinding, CursorCodec, CursorContinuation, QueryExecutionResult,
-    QueryExecutor, QueryRequest, QuerySemanticValidator, QueryVisibilityAuthorizer,
+    CursorBinding, CursorCodec, CursorContinuation, QueryExecutionResult, QueryExecutor,
+    QueryRequest, QuerySemanticValidator, QueryVisibilityAuthorizer, normalized_filter_hash,
 };
 use prost::Message;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-pub const GET_PROCESSING_RESTRICTION_CAPABILITY: &str =
-    "customer_privacy.restriction.get";
+pub const GET_PROCESSING_RESTRICTION_CAPABILITY: &str = "customer_privacy.restriction.get";
 pub const GET_PROCESSING_RESTRICTION_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.GetProcessingRestrictionRequest";
 pub const GET_PROCESSING_RESTRICTION_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.GetProcessingRestrictionResponse";
-pub const GET_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY: &str =
-    "customer_privacy.legal_hold.get";
+pub const GET_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY: &str = "customer_privacy.legal_hold.get";
 pub const GET_CUSTOMER_DATA_LEGAL_HOLD_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.GetCustomerDataLegalHoldRequest";
 pub const GET_CUSTOMER_DATA_LEGAL_HOLD_RESPONSE_SCHEMA: &str =
@@ -90,9 +87,7 @@ pub struct ControlVisibilityResource {
     pub allowed_fields: BTreeSet<String>,
 }
 
-pub fn control_query_visibility_resources(
-    capability_id: &str,
-) -> Vec<ControlVisibilityResource> {
+pub fn control_query_visibility_resources(capability_id: &str) -> Vec<ControlVisibilityResource> {
     let fields = match capability_id {
         GET_PROCESSING_RESTRICTION_CAPABILITY => {
             Some((RESTRICTION_RECORD_TYPE, RESTRICTION_FIELDS))
@@ -149,9 +144,9 @@ impl CustomerPrivacyControlQueryAdapter {
     }
 
     fn cursor_codec(&self) -> Result<&CursorCodec, SdkError> {
-        self.cursor_codec.as_ref().ok_or_else(|| {
-            configuration_invalid("legal-hold list cursor codec is not configured")
-        })
+        self.cursor_codec
+            .as_ref()
+            .ok_or_else(|| configuration_invalid("legal-hold list cursor codec is not configured"))
     }
 
     async fn get_restriction(&self, request: &QueryRequest) -> Result<TypedPayload, SdkError> {
@@ -216,12 +211,8 @@ impl CustomerPrivacyControlQueryAdapter {
             return Err(control_not_found());
         }
         let hold = rehydrate_hold(request, &snapshot)?;
-        require_subject_visible(
-            self.visibility.as_ref(),
-            request,
-            hold.canonical_party_id(),
-        )
-        .await?;
+        require_subject_visible(self.visibility.as_ref(), request, hold.canonical_party_id())
+            .await?;
         let mut public = customer_data_legal_hold_to_wire(&hold)?;
         redact_legal_hold(&mut public, |field| visibility.allows_field(field));
         support::protobuf_payload(
@@ -295,8 +286,7 @@ impl QueryExecutor for CustomerPrivacyControlQueryAdapter {
     }
 }
 
-pub fn control_query_capability_definitions()
--> Result<Vec<CapabilityDefinition>, SdkError> {
+pub fn control_query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     Ok(vec![
         query_definition(
             GET_PROCESSING_RESTRICTION_CAPABILITY,
@@ -380,7 +370,13 @@ async fn collect_holds(
     adapter: &CustomerPrivacyControlQueryAdapter,
     request: &QueryRequest,
     parameters: &ListParameters,
-) -> Result<(Vec<wire::CustomerDataLegalHold>, Option<RecordQueryContinuation>), SdkError> {
+) -> Result<
+    (
+        Vec<wire::CustomerDataLegalHold>,
+        Option<RecordQueryContinuation>,
+    ),
+    SdkError,
+> {
     let mut output = Vec::with_capacity(parameters.page_size as usize);
     let mut after = parameters.after.clone();
     let mut scanned = 0_usize;
@@ -475,8 +471,10 @@ fn list_parameters(
     adapter: &CustomerPrivacyControlQueryAdapter,
     request: &QueryRequest,
 ) -> Result<ListParameters, SdkError> {
-    let command: wire::ListCustomerDataLegalHoldsBySubjectRequest =
-        decode_input(request, LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_REQUEST_SCHEMA)?;
+    let command: wire::ListCustomerDataLegalHoldsBySubjectRequest = decode_input(
+        request,
+        LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_REQUEST_SCHEMA,
+    )?;
     let party_id = party_id(command.canonical_party_ref)?;
     let status = legal_hold_status_filter(command.status)?;
     let page_size = page_size(command.page_size)?;
@@ -740,10 +738,7 @@ fn data_class_to_wire(value: DataClass) -> i32 {
     }
 }
 
-fn redact_restriction(
-    value: &mut wire::ProcessingRestriction,
-    allows: impl Fn(&str) -> bool,
-) {
+fn redact_restriction(value: &mut wire::ProcessingRestriction, allows: impl Fn(&str) -> bool) {
     if !allows("canonical_party_ref") {
         value.canonical_party_ref = None;
     }
@@ -779,10 +774,7 @@ fn redact_restriction(
     }
 }
 
-fn redact_legal_hold(
-    value: &mut wire::CustomerDataLegalHold,
-    allows: impl Fn(&str) -> bool,
-) {
+fn redact_legal_hold(value: &mut wire::CustomerDataLegalHold, allows: impl Fn(&str) -> bool) {
     if !allows("canonical_party_ref") {
         value.canonical_party_ref = None;
     }
@@ -899,16 +891,18 @@ fn party_id(value: Option<customer::PartyRef>) -> Result<RecordId, SdkError> {
 
 fn legal_hold_status_filter(value: Option<i32>) -> Result<Option<i32>, SdkError> {
     value
-        .map(|value| match wire::CustomerDataLegalHoldStatus::try_from(value) {
-            Ok(wire::CustomerDataLegalHoldStatus::Active)
-            | Ok(wire::CustomerDataLegalHoldStatus::Released) => Ok(value),
-            Ok(wire::CustomerDataLegalHoldStatus::Unspecified) | Err(_) => {
-                Err(SdkError::invalid_argument(
-                    "customer_privacy.legal_hold.list.status",
-                    "Status must be active or released.",
-                ))
-            }
-        })
+        .map(
+            |value| match wire::CustomerDataLegalHoldStatus::try_from(value) {
+                Ok(wire::CustomerDataLegalHoldStatus::Active)
+                | Ok(wire::CustomerDataLegalHoldStatus::Released) => Ok(value),
+                Ok(wire::CustomerDataLegalHoldStatus::Unspecified) | Err(_) => {
+                    Err(SdkError::invalid_argument(
+                        "customer_privacy.legal_hold.list.status",
+                        "Status must be active or released.",
+                    ))
+                }
+            },
+        )
         .transpose()
 }
 
@@ -1050,10 +1044,19 @@ mod tests {
     #[test]
     fn legal_hold_list_bounds_and_filter_are_strict() {
         assert_eq!(page_size(0).unwrap(), DEFAULT_PAGE_SIZE);
-        assert_eq!(page_size(MAXIMUM_PAGE_SIZE as i32).unwrap(), MAXIMUM_PAGE_SIZE);
+        assert_eq!(
+            page_size(MAXIMUM_PAGE_SIZE as i32).unwrap(),
+            MAXIMUM_PAGE_SIZE
+        );
         assert!(page_size(-1).is_err());
         assert!(page_size(MAXIMUM_PAGE_SIZE as i32 + 1).is_err());
-        assert!(legal_hold_status_filter(Some(wire::CustomerDataLegalHoldStatus::Active as i32)).is_ok());
-        assert!(legal_hold_status_filter(Some(wire::CustomerDataLegalHoldStatus::Unspecified as i32)).is_err());
+        assert!(
+            legal_hold_status_filter(Some(wire::CustomerDataLegalHoldStatus::Active as i32))
+                .is_ok()
+        );
+        assert!(
+            legal_hold_status_filter(Some(wire::CustomerDataLegalHoldStatus::Unspecified as i32))
+                .is_err()
+        );
     }
 }
