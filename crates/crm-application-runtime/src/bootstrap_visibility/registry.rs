@@ -29,9 +29,12 @@ use crm_customer_privacy_production::{
     GET_PRIVACY_ACTION_PLAN_CAPABILITY, LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY,
     plan_read_visibility_resources as customer_privacy_plan_read_visibility_resources,
 };
-use crm_customer_privacy_query_adapter::query_visibility_resources as customer_privacy_query_visibility_resources;
 use crm_customer_privacy_query_adapter::{
-    GET_PRIVACY_CASE_CAPABILITY, LIST_PRIVACY_CASES_CAPABILITY,
+    GET_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY, GET_PRIVACY_CASE_CAPABILITY,
+    GET_PROCESSING_RESTRICTION_CAPABILITY,
+    LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_CAPABILITY, LIST_PRIVACY_CASES_CAPABILITY,
+    control_query_visibility_resources as customer_privacy_control_visibility_resources,
+    query_visibility_resources as customer_privacy_query_visibility_resources,
 };
 use crm_identity_resolution_capability_adapter::{
     MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
@@ -269,6 +272,18 @@ fn customer_privacy_visibility(
     match capability_id {
         GET_PRIVACY_CASE_CAPABILITY | LIST_PRIVACY_CASES_CAPABILITY => {
             customer_privacy_query_visibility_resources(capability_id)
+                .into_iter()
+                .map(|resource| BootstrapVisibilityResource {
+                    owner_module_id: resource.owner_module_id,
+                    resource_type: resource.resource_type,
+                    allowed_fields: resource.allowed_fields,
+                })
+                .collect()
+        }
+        GET_PROCESSING_RESTRICTION_CAPABILITY
+        | GET_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY
+        | LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_CAPABILITY => {
+            customer_privacy_control_visibility_resources(capability_id)
                 .into_iter()
                 .map(|resource| BootstrapVisibilityResource {
                     owner_module_id: resource.owner_module_id,
