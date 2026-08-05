@@ -129,7 +129,6 @@ async fn seed_e2e_fixture_records() {
     let privacy_case_id = seed_customer_privacy_fixture(&mut grpc).await;
     println!("Seeded Customer Privacy case {privacy_case_id} for {PRIVACY_PARTY_ID}");
 
-    // Trigger sales.deal.create mutation
     let create_definition = mutation_definition(SALES_CREATE);
     let create_payload = payload(
         &create_definition,
@@ -166,7 +165,6 @@ async fn seed_e2e_fixture_records() {
     .await;
     assert_eq!(created, StatusCode::OK);
 
-    // Trigger sales.deal.advance_stage mutation
     let advance_definition = mutation_definition(SALES_ADVANCE);
     let advance_payload = payload(
         &advance_definition,
@@ -198,10 +196,9 @@ async fn seed_e2e_fixture_records() {
 
     wait_for_background_effects(&admin, baseline_tasks, baseline_task_status_documents).await;
 
-    // Verify search matches
-    let query_definition = query_definition(SEARCH_GLOBAL);
+    let search_definition = query_definition(SEARCH_GLOBAL);
     let search_payload = wire_payload(payload(
-        &query_definition,
+        &search_definition,
         search::SearchRequest {
             text: "Phase 6L process deal".to_owned(),
             resource_types: vec!["sales.deal".to_owned()],
@@ -209,27 +206,13 @@ async fn seed_e2e_fixture_records() {
             cursor: String::new(),
         },
     ));
-    let mut grpc = connect_grpc(&grpc_addr).await;
-    let mut request = Request::new(GatewayQueryRequest {
-        owner_module_id: query_definition.owner_module_id.as_str().to_owned(),
-        capability_id: query_definition.capability_id.as_str().to_owned(),
-        capability_version: query_definition.capability_version.as_str().to_owned(),
-        input: Some(search_payload.clone()),
-    });
-    request
-        .metadata_mut()
-        .insert("authorization", format!("Bearer {TOKEN}").parse().unwrap());
-    request
-        .metadata_mut()
-        .insert("x-tenant-id", TENANT.parse().unwrap());
-    let response = grpc
-        .query(request)
-        .await
-        .expect("query search")
-        .into_inner();
-    let output = response.output.expect("output");
-    let page = search::SearchResponse::decode(output.payload.as_slice()).expect("decode response");
-    assert!(page.hits.iter().any(|hit| hit.resource_id == DEAL_ID));
+    wait_for_search_hit(
+        &mut grpc,
+        &search_definition,
+        search_payload,
+        DEAL_ID,
+    )
+    .await;
 
     println!("Stopping crm-api spawned for seeding...");
     let pid = child_guard.child.id().expect("running crm-api has a PID");
@@ -485,6 +468,45 @@ async fn wait_for_background_effects(
             return;
         }
         assert!(Instant::now() < deadline, "background effects timeout");
+        sleep(Duration::from_millis(250)).await;
+    }
+}
+
+async fn wait_for_search_hit(
+    client: &mut ApplicationGatewayServiceClient<tonic::transport::Channel>,
+    definition: &CapabilityDefinition,
+    input: GatewayTypedPayload,
+    resource_id: &str,
+) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let mut request = Request::new(GatewayQueryRequest {
+            owner_module_id: definition.owner_module_id.as_str().to_owned(),
+            capability_id: definition.capability_id.as_str().to_owned(),
+            capability_version: definition.capability_version.as_str().to_owned(),
+            input: Some(input.clone()),
+        });
+        request
+            .metadata_mut()
+            .insert("authorization", format!("Bearer {TOKEN}").parse().unwrap());
+        request
+            .metadata_mut()
+            .insert("x-tenant-id", TENANT.parse().unwrap());
+        let response = client
+            .query(request)
+            .await
+            .expect("query search while waiting for projection")
+            .into_inner();
+        let output = response.output.expect("search output");
+        let page = search::SearchResponse::decode(output.payload.as_slice())
+            .expect("decode search response");
+        if page.hits.iter().any(|hit| hit.resource_id == resource_id) {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "search projection timeout for {resource_id}"
+        );
         sleep(Duration::from_millis(250)).await;
     }
 }
