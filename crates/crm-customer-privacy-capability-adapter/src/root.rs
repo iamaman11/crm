@@ -22,7 +22,7 @@ pub use restriction::*;
 use crm_capability_runtime::CapabilityDefinition;
 use crm_module_sdk::SdkError;
 
-pub const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[
+const IMPLEMENTED_MUTATION_CAPABILITY_IDS: &[&str] = &[
     CREATE_PRIVACY_CASE_CAPABILITY,
     PLACE_PROCESSING_RESTRICTION_CAPABILITY,
     RELEASE_PROCESSING_RESTRICTION_CAPABILITY,
@@ -36,7 +36,7 @@ pub fn capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     Ok(vec![capability_definition()?])
 }
 
-pub fn implemented_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
+fn implemented_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     Ok(vec![
         capability_definition()?,
         place_processing_restriction_capability_definition()?,
