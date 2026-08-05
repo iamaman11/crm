@@ -458,12 +458,13 @@ fn release_processing_restriction_command(
     request: &CapabilityRequest,
 ) -> Result<wire::ReleaseProcessingRestrictionRequest, SdkError> {
     request.context.validate()?;
-    let command = support::decode_request_with_data_class(
-        request,
-        MODULE_ID,
-        RELEASE_PROCESSING_RESTRICTION_REQUEST_SCHEMA,
-        DataClass::Personal,
-    )?;
+    let command: wire::ReleaseProcessingRestrictionRequest =
+        support::decode_request_with_data_class(
+            request,
+            MODULE_ID,
+            RELEASE_PROCESSING_RESTRICTION_REQUEST_SCHEMA,
+            DataClass::Personal,
+        )?;
     positive_version(command.expected_version)?;
     Ok(command)
 }
@@ -472,12 +473,13 @@ fn release_legal_hold_command(
     request: &CapabilityRequest,
 ) -> Result<wire::ReleaseCustomerDataLegalHoldRequest, SdkError> {
     request.context.validate()?;
-    let command = support::decode_request_with_data_class(
-        request,
-        MODULE_ID,
-        RELEASE_CUSTOMER_DATA_LEGAL_HOLD_REQUEST_SCHEMA,
-        DataClass::Personal,
-    )?;
+    let command: wire::ReleaseCustomerDataLegalHoldRequest =
+        support::decode_request_with_data_class(
+            request,
+            MODULE_ID,
+            RELEASE_CUSTOMER_DATA_LEGAL_HOLD_REQUEST_SCHEMA,
+            DataClass::Personal,
+        )?;
     positive_version(command.expected_version)?;
     Ok(command)
 }
@@ -488,7 +490,7 @@ fn processing_restriction_ref(
     let value = value.ok_or_else(|| required("customer_privacy.restriction.ref"))?;
     support::record_ref(
         RESTRICTION_RECORD_TYPE,
-        value.processing_restriction_id,
+        &value.processing_restriction_id,
         "customer_privacy.restriction.ref.processing_restriction_id",
     )
 }
@@ -497,7 +499,7 @@ fn legal_hold_ref(value: Option<wire::CustomerDataLegalHoldRef>) -> Result<Recor
     let value = value.ok_or_else(|| required("customer_privacy.legal_hold.ref"))?;
     support::record_ref(
         LEGAL_HOLD_RECORD_TYPE,
-        value.customer_data_legal_hold_id,
+        &value.customer_data_legal_hold_id,
         "customer_privacy.legal_hold.ref.customer_data_legal_hold_id",
     )
 }
