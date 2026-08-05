@@ -106,6 +106,24 @@ def validate_exact_lock_delta(baseline_text: str, current_text: str) -> None:
         raise RuntimeError("baseline runtime lock record lacks the exact removable edge")
     dependencies.remove(REMOVED_DEPENDENCY)
     if current_runtime != expected_runtime:
+        print(
+            json.dumps(
+                {
+                    "expected_runtime": expected_runtime,
+                    "current_runtime": current_runtime,
+                    "expected_only_dependencies": sorted(
+                        set(expected_runtime.get("dependencies", []))
+                        - set(current_runtime.get("dependencies", []))
+                    ),
+                    "current_only_dependencies": sorted(
+                        set(current_runtime.get("dependencies", []))
+                        - set(expected_runtime.get("dependencies", []))
+                    ),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
         raise RuntimeError(
             "current runtime lock record differs from baseline by more than the exact edge removal"
         )
