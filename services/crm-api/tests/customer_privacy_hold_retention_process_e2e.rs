@@ -99,10 +99,7 @@ async fn legal_hold_lifecycle_is_authorized_canonical_idempotent_queryable_and_a
     .await
     .expect_err("legal-hold placement must require authentication");
     assert_safe_status(&unauthorized, Code::Unauthenticated);
-    assert_eq!(
-        legal_hold_place_evidence(&admin).await,
-        before_unauthorized
-    );
+    assert_eq!(legal_hold_place_evidence(&admin).await, before_unauthorized);
 
     let before = legal_hold_place_evidence(&admin).await;
     let first = mutate(
@@ -180,15 +177,9 @@ async fn legal_hold_lifecycle_is_authorized_canonical_idempotent_queryable_and_a
     assert_eq!(legal_hold_place_evidence(&admin).await, before_missing);
 
     let before_queries = legal_hold_module_evidence(&admin).await;
-    let active = get_hold(
-        &mut grpc,
-        &legal_hold_get,
-        hold_ref.clone(),
-        TENANT_A,
-        true,
-    )
-    .await
-    .expect("read active legal hold through production query ingress");
+    let active = get_hold(&mut grpc, &legal_hold_get, hold_ref.clone(), TENANT_A, true)
+        .await
+        .expect("read active legal hold through production query ingress");
     assert_eq!(
         active.status,
         privacy::CustomerDataLegalHoldStatus::Active as i32
@@ -221,26 +212,14 @@ async fn legal_hold_lifecycle_is_authorized_canonical_idempotent_queryable_and_a
     assert_eq!(unauthenticated.code(), Code::Unauthenticated);
     assert_eq!(legal_hold_module_evidence(&admin).await, before_queries);
 
-    let cross_tenant = get_hold(
-        &mut grpc,
-        &legal_hold_get,
-        hold_ref.clone(),
-        TENANT_B,
-        true,
-    )
-    .await
-    .expect_err("cross-tenant legal-hold read must be concealed");
+    let cross_tenant = get_hold(&mut grpc, &legal_hold_get, hold_ref.clone(), TENANT_B, true)
+        .await
+        .expect_err("cross-tenant legal-hold read must be concealed");
     assert_eq!(cross_tenant.code(), Code::NotFound);
-    let cross_tenant_list = list_holds(
-        &mut grpc,
-        &legal_hold_list,
-        &party_id,
-        None,
-        TENANT_B,
-        true,
-    )
-    .await
-    .expect("cross-tenant legal-hold list must conceal the subject");
+    let cross_tenant_list =
+        list_holds(&mut grpc, &legal_hold_list, &party_id, None, TENANT_B, true)
+            .await
+            .expect("cross-tenant legal-hold list must conceal the subject");
     assert!(cross_tenant_list.customer_data_legal_holds.is_empty());
     assert!(cross_tenant_list.next_cursor.is_empty());
     assert_eq!(legal_hold_module_evidence(&admin).await, before_queries);
@@ -290,15 +269,9 @@ async fn legal_hold_lifecycle_is_authorized_canonical_idempotent_queryable_and_a
     assert_eq!(release_replay.output, release.output);
     assert_eq!(legal_hold_module_evidence(&admin).await, after_release);
 
-    let released_read = get_hold(
-        &mut grpc,
-        &legal_hold_get,
-        hold_ref,
-        TENANT_A,
-        true,
-    )
-    .await
-    .expect("read released legal hold through production query ingress");
+    let released_read = get_hold(&mut grpc, &legal_hold_get, hold_ref, TENANT_A, true)
+        .await
+        .expect("read released legal hold through production query ingress");
     assert_eq!(
         released_read.status,
         privacy::CustomerDataLegalHoldStatus::Released as i32
@@ -390,14 +363,16 @@ async fn list_holds(
         authenticated,
     )
     .await?;
-    Ok(privacy::ListCustomerDataLegalHoldsBySubjectResponse::decode(
-        response
-            .output
-            .expect("legal-hold list output")
-            .payload
-            .as_slice(),
+    Ok(
+        privacy::ListCustomerDataLegalHoldsBySubjectResponse::decode(
+            response
+                .output
+                .expect("legal-hold list output")
+                .payload
+                .as_slice(),
+        )
+        .expect("decode legal-hold list response"),
     )
-    .expect("decode legal-hold list response"))
 }
 
 async fn create_party(
