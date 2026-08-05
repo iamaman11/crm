@@ -69,7 +69,24 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Materialize accepted Repository Step 21 evidence
-        run: python scripts/materialize_step21_evidence.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q 'c21894f47f24e81da1cc150f9ea457fcfdc2bd63' docs/PROJECT_STATUS.md; then
+            echo "Accepted Repository Step 21 evidence is already materialized."
+          else
+            python - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/materialize_step21_evidence.py")
+          text = path.read_text(encoding="utf-8")
+          old = '    "**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 remains in progress.**",'
+          new = '    "**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 is complete.**",'
+          if old not in text:
+              raise SystemExit("missing fail-closed status-headline materializer marker")
+          path.write_text(text.replace(old, new), encoding="utf-8")
+          PY
+            python scripts/materialize_step21_evidence.py
+          fi
       - name: Verify committed lockfile and synchronize canonical formatting
         shell: bash
         run: |
