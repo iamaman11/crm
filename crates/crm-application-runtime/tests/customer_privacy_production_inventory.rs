@@ -11,9 +11,14 @@ const SUBJECT_VERIFY: &str = "customer_privacy.case.subject.verify";
 const APPROVE: &str = "customer_privacy.case.approve";
 const CANCEL: &str = "customer_privacy.case.cancel";
 const RESTRICTION_PLACE: &str = "customer_privacy.restriction.place";
+const RESTRICTION_RELEASE: &str = "customer_privacy.restriction.release";
 const LEGAL_HOLD_PLACE: &str = "customer_privacy.legal_hold.place";
+const LEGAL_HOLD_RELEASE: &str = "customer_privacy.legal_hold.release";
 const GET_CASE: &str = "customer_privacy.case.get";
 const LIST_CASES: &str = "customer_privacy.case.list";
+const GET_RESTRICTION: &str = "customer_privacy.restriction.get";
+const GET_LEGAL_HOLD: &str = "customer_privacy.legal_hold.get";
+const LIST_LEGAL_HOLDS: &str = "customer_privacy.legal_hold.list_by_subject";
 const GET_PLAN: &str = "customer_privacy.case.plan.get";
 const LIST_OWNER_OUTCOMES: &str = "customer_privacy.case.owner_outcomes.list";
 
@@ -31,7 +36,7 @@ struct ClassifiedRoute {
 }
 
 #[test]
-fn customer_privacy_runtime_inventory_promotes_seven_mutations_and_four_queries() {
+fn customer_privacy_runtime_inventory_is_exactly_nine_mutations_and_seven_queries() {
     let runtime_privacy_mutations = application_mutation_definitions()
         .unwrap()
         .into_iter()
@@ -52,7 +57,9 @@ fn customer_privacy_runtime_inventory_promotes_seven_mutations_and_four_queries(
             (APPROVE.to_owned(), "1.0.0".to_owned()),
             (CANCEL.to_owned(), "1.0.0".to_owned()),
             (RESTRICTION_PLACE.to_owned(), "1.0.0".to_owned()),
+            (RESTRICTION_RELEASE.to_owned(), "1.0.0".to_owned()),
             (LEGAL_HOLD_PLACE.to_owned(), "1.0.0".to_owned()),
+            (LEGAL_HOLD_RELEASE.to_owned(), "1.0.0".to_owned()),
         ])
     );
 
@@ -72,6 +79,9 @@ fn customer_privacy_runtime_inventory_promotes_seven_mutations_and_four_queries(
         BTreeSet::from([
             (GET_CASE.to_owned(), "1.0.0".to_owned()),
             (LIST_CASES.to_owned(), "1.0.0".to_owned()),
+            (GET_RESTRICTION.to_owned(), "1.0.0".to_owned()),
+            (GET_LEGAL_HOLD.to_owned(), "1.0.0".to_owned()),
+            (LIST_LEGAL_HOLDS.to_owned(), "1.0.0".to_owned()),
             (GET_PLAN.to_owned(), "1.0.0".to_owned()),
             (LIST_OWNER_OUTCOMES.to_owned(), "1.0.0".to_owned()),
         ])
@@ -79,7 +89,7 @@ fn customer_privacy_runtime_inventory_promotes_seven_mutations_and_four_queries(
 }
 
 #[test]
-fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unchanged() {
+fn all_public_privacy_routes_are_runtime_and_worker_inventory_is_unchanged() {
     let classifications = classifications();
     let actual_non_runtime = classifications
         .non_runtime_contract_routes
@@ -87,32 +97,7 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
         .filter(|route| route.owner_module_id == PRIVACY_OWNER)
         .map(|route| (route.id.clone(), route.version.clone()))
         .collect::<BTreeSet<_>>();
-    let expected_non_runtime = [
-        "customer_privacy.restriction.release",
-        "customer_privacy.restriction.get",
-        "customer_privacy.legal_hold.release",
-        "customer_privacy.legal_hold.get",
-        "customer_privacy.legal_hold.list_by_subject",
-    ]
-    .into_iter()
-    .map(|id| (id.to_owned(), "1.0.0".to_owned()))
-    .collect::<BTreeSet<_>>();
-    assert_eq!(actual_non_runtime, expected_non_runtime);
-    for runtime_id in [
-        CREATE,
-        SUBMIT,
-        SUBJECT_VERIFY,
-        APPROVE,
-        CANCEL,
-        RESTRICTION_PLACE,
-        LEGAL_HOLD_PLACE,
-        GET_CASE,
-        LIST_CASES,
-        GET_PLAN,
-        LIST_OWNER_OUTCOMES,
-    ] {
-        assert!(!actual_non_runtime.iter().any(|(id, _)| id == runtime_id));
-    }
+    assert!(actual_non_runtime.is_empty());
 
     let actual_workers = classifications
         .worker_runtime_routes
@@ -149,7 +134,7 @@ fn remaining_public_privacy_routes_stay_non_runtime_and_worker_inventory_is_unch
             .iter()
             .chain(classifications.non_runtime_contract_routes.iter())
             .all(|route| !route.id.contains("crypto_shred") && !route.id.contains("crypto-shred")),
-        "legal-hold promotion may not introduce or reclassify crypto-shred coordinates"
+        "control lifecycle promotion may not introduce or reclassify crypto-shred coordinates"
     );
 }
 
