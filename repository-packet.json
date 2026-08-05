@@ -1,42 +1,36 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-21-evidence-sync",
-  "title": "Synchronize accepted Repository Step 21 and Phase 8A evidence",
+  "packet_id": "repository-step-22a-remeasurement-inventories",
+  "title": "Remeasure exact architecture and inventory runtime fan-in and permanent gates",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "c21894f47f24e81da1cc150f9ea457fcfdc2bd63"
+    "sha": "4167bd530b91e3a8fc9bfaaf0d02fcdc1f7a20f3"
   },
   "tracking_issues": [
-    194,
-    126,
-    28
+    194
   ],
-  "objective": "Record exact accepted Repository Step 21 evidence across every live normative source, close Phase 8A and issue #126, and make Repository Step 22 architecture remeasurement and decision review the sole next implementation packet without changing product or runtime behavior.",
+  "objective": "Execute the first bounded ADR-032 Step 22 slice by freezing the accepted Phase 8A baseline and extending the existing reproducible complexity analyzer to publish complete machine-readable inventories of crm-application-runtime internal direct dependencies and every permanent workflow and job, without yet classifying, removing, merging or retaining those surfaces.",
   "allowed_paths": [
+    "affected-scope-policy.json",
     "docs/ACTIVE_PACKET.md",
-    "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-    "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
-    "docs/IMPLEMENTATION_ROADMAP.md",
-    "docs/MODULE_CATALOG.md",
-    "docs/PHASE8A_CUSTOMER_PRIVACY_PRODUCT_PLANE.md",
-    "docs/PHASE8_DELIVERY_PLAN.md",
-    "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
-    "docs/PROJECT_STATUS.md",
-    "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
+    "docs/STEP22_ARCHITECTURE_REMEASUREMENT.md",
     "docs/generated/REPOSITORY_MAP.md",
     "repository-packet.json",
+    "scripts/analyze_workspace.py",
+    "step22-architecture-inventory.json",
     "tests/test_architecture_documentation_consistency.py",
-    "tests/test_customer_privacy_owner_scope_contracts.py",
-    "tests/test_repository_navigation.py"
+    "tests/test_repository_navigation.py",
+    "tests/test_workspace_analysis.py"
   ],
   "forbidden_paths": [
+    ".github/workflows/**",
     "AGENTS.md",
     "Cargo.lock",
     "Cargo.toml",
     "README.md",
-    "affected-scope-policy.json",
     "apps/**",
+    "architecture-governance.json",
     "contracts/**",
     "crates/**",
     "customer-privacy-operations-policy.json",
@@ -51,43 +45,46 @@
     "requirements-dev.txt",
     "rust-toolchain.toml",
     "schemas/**",
-    "scripts/**",
     "services/**",
-    "tsconfig.base.json"
+    "step13-complexity-policy.json",
+    "step13-suppression-baseline.json",
+    "tsconfig.base.json",
+    "workspace-dependency-policy.json"
   ],
   "deliverables": [
-    "record PR #296 accepted source fd84cd25dfa25a75eac0fdc4a719cc76c84cfc95 squash merge c21894f47f24e81da1cc150f9ea457fcfdc2bd63 and 35 of 35 exact-head permanent workflow evidence in every live normative source",
-    "record the accepted nine-mutation seven-query one-worker Customer Privacy runtime inventory and release read replay concealment rollback reapply and operations convergence evidence",
-    "mark Repository Step 21 Phase 8A.11 and Phase 8A complete and Customer Privacy product complete while keeping Universal CRM and architecture 10/10 incomplete",
-    "make Repository Step 22 architecture remeasurement runtime-fanin decision and permanent-gate value cost review the sole next permitted implementation packet",
-    "preserve the accepted 112-package 835-edge depth-18 5377-public-item 270-declaration and 91-suppression repository baseline",
-    "update generated navigation and permanent documentation guards without product runtime workflow contract schema migration dependency or lockfile changes"
+    "extend scripts/analyze_workspace.py additively with a deterministic Step 22 inventory section while preserving all existing report fields",
+    "inventory every internal direct dependency of crm-application-runtime with dependency kind manifest section target category and unresolved ADR-032 decision state",
+    "inventory every permanent workflow and every job with stable identifiers structural step counts timeout path-filter and expensive-environment signals",
+    "publish one canonical step22-architecture-inventory.json generated from an exact pull-request source head and a human-readable remeasurement report",
+    "map the canonical Step 22 inventory ledger into the existing platform-operations affected scope without adding a workflow or required gate",
+    "replace the accepted Step 21 active-packet assertion with a permanent Step 22A inventory-only packet and affected-scope ownership guard while retaining historical Step 21 evidence checks",
+    "prove unique complete inventory identifiers canonical formatting and structural equality with a fresh analyzer run after normalizing only the self-referential materialization source commit",
+    "regenerate active packet navigation without changing Rust manifests runtime source workflows product behavior contracts schemas migrations dependencies or lockfiles"
   ],
   "required_checks": [
     "Affected Scope CI",
     "Complexity Baseline CI",
-    "Customer Privacy Access Export CI",
-    "Customer Privacy Hold Retention CI",
-    "Customer Privacy Operations CI",
-    "Customer Privacy Owner Execution CI",
-    "Customer Privacy Restriction Policy CI",
     "Governance CI",
     "Rust Generated Sync",
     "Rust CI"
   ],
   "acceptance": [
-    "the branch is based exactly on main squash merge c21894f47f24e81da1cc150f9ea457fcfdc2bd63",
-    "all live normative sources contain PR #296 source fd84cd25dfa25a75eac0fdc4a719cc76c84cfc95 merge c21894f47f24e81da1cc150f9ea457fcfdc2bd63 and 35 of 35 applicable permanent workflows",
-    "Repository Steps 1 through 21 Phase 8A.11 and Phase 8A are complete and Repository Step 22 is the only next permitted implementation packet",
-    "Customer Privacy is product complete with exactly nine public mutations seven permission-aware public queries and one owner worker while the broader Universal CRM product remains incomplete",
-    "architecture 10/10 remains not declared issue 194 remains open and Step 22 is a checkpoint rather than final closure",
-    "the final diff contains only declared documentation generated packet and permanent guard paths with no temporary materialization or workflow changes",
+    "the branch is based exactly on main commit 4167bd530b91e3a8fc9bfaaf0d02fcdc1f7a20f3",
+    "the analyzer preserves schema crm.workspace-complexity-baseline/v1 and all existing top-level fields while adding an additive step22_inventory object",
+    "every crm-application-runtime internal direct production dev and build dependency appears exactly once with no inferred final ADR-032 classification",
+    "every permanent workflow and every declared workflow job appears exactly once under stable path-based identifiers",
+    "the committed machine-readable inventory is canonical deterministic and structurally matches a fresh analyzer run after normalizing only measurement_source_commit",
+    "affected-scope analysis maps step22-architecture-inventory.json to the existing platform-operations operations scope and still requires Governance CI",
+    "the active-packet documentation guard requires the Step 22A baseline and inventory-only non-goals while historical Step 21 merge evidence remains asserted",
+    "the human report explicitly states that Step 22 remains in progress and runtime dependency classifications gate dispositions remediation and architecture scoring are not decided in this packet",
+    "the final diff changes only declared analyzer policy test inventory documentation packet and generated navigation paths and contains no workflow runtime manifest contract schema migration dependency or lockfile change",
     "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments reviews or review threads"
   ],
   "non_goals": [
-    "change Customer Privacy product runtime authorization tenant isolation persistence workers capabilities contracts manifests schemas migrations dependencies or lockfiles",
-    "change the accepted operations SLO policy or implementation gates",
-    "start Repository Step 22 implementation or declare architecture 10/10 Universal CRM product completion or later Phase 8B completion",
-    "close issue 194"
+    "classify any runtime dependency as removed platform-generic owner-specific-unavoidable or test-only",
+    "remove or move a crm-application-runtime dependency or change runtime fan-in",
+    "assign retain simplify merge or remove dispositions to permanent gates",
+    "add remove rename or modify a permanent workflow job or repository gate",
+    "declare Repository Step 22 complete raise an architecture score start Phase 8B or declare architecture 10/10"
   ]
 }
