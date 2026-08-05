@@ -79,11 +79,21 @@ jobs:
           from pathlib import Path
           path = Path("scripts/materialize_step21_evidence.py")
           text = path.read_text(encoding="utf-8")
-          old = '    "**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 remains in progress.**",'
-          new = '    "**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 is complete.**",'
-          if old not in text:
-              raise SystemExit("missing fail-closed status-headline materializer marker")
-          path.write_text(text.replace(old, new), encoding="utf-8")
+          replacements = (
+              (
+                  '    "**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 remains in progress.**",',
+                  '    "**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 is complete.**",',
+              ),
+              (
+                  '    updated, count = re.subn(pattern, body.rstrip() + "\\n\\n", text, flags=re.S)',
+                  '    updated, count = re.subn(pattern, lambda _: body.rstrip() + "\\n\\n", text, flags=re.S)',
+              ),
+          )
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f"missing fail-closed materializer marker: {old}")
+              text = text.replace(old, new)
+          path.write_text(text, encoding="utf-8")
           PY
             python scripts/materialize_step21_evidence.py
           fi
