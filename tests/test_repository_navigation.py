@@ -38,6 +38,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(packet["tracking_issues"], [194, 126])
         self.assertTrue(
             {
+                ".github/workflows/customer-privacy-approval.yml",
                 "contracts/production-route-classifications.json",
                 "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
                 "crates/crm-customer-privacy-capability-adapter/src/control_release.rs",
