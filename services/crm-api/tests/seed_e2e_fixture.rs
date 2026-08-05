@@ -206,13 +206,7 @@ async fn seed_e2e_fixture_records() {
             cursor: String::new(),
         },
     ));
-    wait_for_search_hit(
-        &mut grpc,
-        &search_definition,
-        search_payload,
-        DEAL_ID,
-    )
-    .await;
+    wait_for_search_hit(&mut grpc, &search_definition, search_payload, DEAL_ID).await;
 
     println!("Stopping crm-api spawned for seeding...");
     let pid = child_guard.child.id().expect("running crm-api has a PID");
