@@ -115,7 +115,7 @@
     },
     {
       "id": "operations",
-      "owner": "platform-operations",
+      "owner": "architecture-governance",
       "path_patterns": [
         ".github/pull_request_template.md",
         ".github/workflows/**",
@@ -141,6 +141,7 @@
         "scripts/run_customer_privacy_operations.sh",
         "step13-complexity-policy.json",
         "step13-suppression-baseline.json",
+        "step22-architecture-inventory.json",
         "tests/test_customer_privacy_operations.py"
       ],
       "required_workflows": [
