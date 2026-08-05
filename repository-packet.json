@@ -22,7 +22,8 @@
     "scripts/check_step22_runtime_fanin_decisions.py",
     "step22-runtime-fanin-decisions.json",
     "tests/test_architecture_documentation_consistency.py",
-    "tests/test_repository_navigation.py"
+    "tests/test_repository_navigation.py",
+    "tests/test_workspace_analysis.py"
   ],
   "forbidden_paths": [
     ".github/workflows/**",
@@ -59,6 +60,7 @@
     "remove only crm-customer-privacy-query-adapter from crm-application-runtime Cargo.toml without adding or moving another direct dependency",
     "update the canonical Step 22 decision ledger with exactly one removed stable ID and exact before-after fan-in evidence of 63 to 62 total and 62 to 61 production dependencies",
     "extend the permanent validator to prove the current direct stable-ID set equals the accepted inventory minus exactly the one removed edge and that the owner package retains the adapter internally",
+    "replace the Step 22A fresh-equality test with an immutable accepted-snapshot plus exact one-edge current-remediation proof while requiring unchanged permanent workflow and job inventories",
     "record exactly eighteen final classifications with sixteen platform-generic one test-only one removed zero owner-specific-unavoidable and forty-five unresolved",
     "update permanent packet and architecture documentation guards and regenerate active packet navigation",
     "preserve the nine-mutation seven-query Customer Privacy inventory runtime behavior PostgreSQL ownership visibility policy schemas contracts workflows dependencies outside the one direct edge and Cargo.lock"
@@ -75,8 +77,10 @@
   ],
   "acceptance": [
     "the branch is based exactly on main commit 6fe0e8e7702b01a78f5db3f174c09b686de27402",
-    "the accepted Step 22A inventory remains immutable and the decision ledger classifies crm-application-runtime::dependencies::crm-customer-privacy-query-adapter as the sole removed edge",
+    "the accepted Step 22A inventory remains immutable and canonical with exact baseline counts sixty-three total sixty-two production one test-only forty-one workflows and forty-two jobs",
+    "the decision ledger classifies crm-application-runtime::dependencies::crm-customer-privacy-query-adapter as the sole removed edge",
     "the current runtime direct stable-ID set equals the accepted sixty-three-row inventory minus exactly that removed stable ID with exact counts sixty-two total sixty-one production and one test-only",
+    "the fresh permanent workflow and job inventories remain structurally equal to the accepted Step 22A snapshot",
     "crm-application-runtime Cargo.toml and source no longer name crm-customer-privacy-query-adapter while crm-customer-privacy-production retains the internal dependency and exposes control_query_capability_definitions",
     "the Customer Privacy public inventory remains exactly nine mutations and seven queries and all affected Rust and PostgreSQL process acceptance passes",
     "the decision ledger contains exactly eighteen final classifications one removal zero owner-specific-unavoidable and forty-five unresolved dependencies",
@@ -91,6 +95,7 @@
     "change capability IDs schemas query results persistence visibility authorization cursor semantics or Customer Privacy lifecycle behavior",
     "assign retain simplify merge or remove dispositions to permanent workflows jobs or repository gates",
     "add remove rename or modify a permanent workflow job or repository gate",
+    "rewrite the accepted Step 22A inventory snapshot to match the remediated current state",
     "declare all runtime classifications complete complete Repository Step 22 start Phase 8B raise an architecture score or declare architecture 10/10"
   ]
 }
