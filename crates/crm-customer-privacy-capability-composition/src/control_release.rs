@@ -18,7 +18,7 @@ use sqlx::{Postgres, Row, Transaction};
 use std::sync::Arc;
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct PostgresCustomerPrivacyRestrictionReleaseGuard;
+struct PostgresCustomerPrivacyRestrictionReleaseGuard;
 
 impl TransactionalAggregateGuard for PostgresCustomerPrivacyRestrictionReleaseGuard {
     fn check<'a>(
@@ -55,7 +55,7 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacyRestrictionReleaseGu
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct PostgresCustomerPrivacyLegalHoldReleaseGuard;
+struct PostgresCustomerPrivacyLegalHoldReleaseGuard;
 
 impl TransactionalAggregateGuard for PostgresCustomerPrivacyLegalHoldReleaseGuard {
     fn check<'a>(
