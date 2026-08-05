@@ -255,7 +255,13 @@ fn customer_enrichment_visibility(
 ) -> Vec<BootstrapVisibilityResource> {
     customer_enrichment_query_visibility_resources(definition.capability_id.as_str())
         .into_iter()
-        .map(|entry| resource(entry.owner_module_id, entry.resource_type, entry.allowed_fields))
+        .map(|entry| {
+            resource(
+                entry.owner_module_id,
+                entry.resource_type,
+                entry.allowed_fields,
+            )
+        })
         .collect()
 }
 
@@ -267,7 +273,13 @@ fn customer_privacy_visibility(
         GET_PRIVACY_CASE_CAPABILITY | LIST_PRIVACY_CASES_CAPABILITY => {
             customer_privacy_query_visibility_resources(capability_id)
                 .into_iter()
-                .map(|entry| resource(entry.owner_module_id, entry.resource_type, entry.allowed_fields))
+                .map(|entry| {
+                    resource(
+                        entry.owner_module_id,
+                        entry.resource_type,
+                        entry.allowed_fields,
+                    )
+                })
                 .collect()
         }
         "customer_privacy.restriction.get"
@@ -275,13 +287,25 @@ fn customer_privacy_visibility(
         | "customer_privacy.legal_hold.list_by_subject" => {
             customer_privacy_control_visibility_resources(capability_id)
                 .into_iter()
-                .map(|entry| resource(entry.owner_module_id, entry.resource_type, entry.allowed_fields))
+                .map(|entry| {
+                    resource(
+                        entry.owner_module_id,
+                        entry.resource_type,
+                        entry.allowed_fields,
+                    )
+                })
                 .collect()
         }
         GET_PRIVACY_ACTION_PLAN_CAPABILITY | LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY => {
             customer_privacy_plan_read_visibility_resources(capability_id)
                 .into_iter()
-                .map(|entry| resource(entry.owner_module_id, entry.resource_type, entry.allowed_fields))
+                .map(|entry| {
+                    resource(
+                        entry.owner_module_id,
+                        entry.resource_type,
+                        entry.allowed_fields,
+                    )
+                })
                 .collect()
         }
         _ => {
