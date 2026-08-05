@@ -174,14 +174,14 @@ jobs:
           for capability in (
             'customer_privacy.case.approve',
             'customer_privacy.restriction.place',
+            'customer_privacy.restriction.release',
+            'customer_privacy.restriction.get',
             'customer_privacy.legal_hold.place',
+            'customer_privacy.legal_hold.release',
+            'customer_privacy.legal_hold.get',
+            'customer_privacy.legal_hold.list_by_subject',
           ):
             assert ('crm.customer-privacy', capability, '1.0.0') not in coordinates
-          for capability in (
-            'customer_privacy.restriction.release',
-            'customer_privacy.legal_hold.release',
-          ):
-            assert ('crm.customer-privacy', capability, '1.0.0') in coordinates
           PY
       - name: Roll back authoritative schema
         shell: bash
