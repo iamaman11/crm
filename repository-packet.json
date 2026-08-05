@@ -13,6 +13,7 @@
   ],
   "objective": "Complete the frozen Customer Privacy processing-restriction and legal-hold public lifecycle by promoting exactly five already-published release and permission-aware read coordinates through the existing governed production runtime, without changing contracts, schemas, migrations, dependencies or broader Phase 8A closure claims.",
   "allowed_paths": [
+    ".github/workflows/customer-privacy-approval.yml",
     ".github/workflows/customer-privacy-hold-retention.yml",
     ".github/workflows/customer-privacy-restriction-policy.yml",
     "contracts/production-route-classifications.json",
