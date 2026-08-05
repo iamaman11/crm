@@ -67,6 +67,16 @@ pub mod domain {
     }
     pub use access_export::*;
 
+    impl ProcessingRestriction {
+        pub const fn effective_from_unix_nanos(&self) -> i64 {
+            self.effective_from_unix_nanos
+        }
+
+        pub const fn expires_at_unix_nanos(&self) -> Option<i64> {
+            self.expires_at_unix_nanos
+        }
+    }
+
     impl CustomerDataLegalHold {
         pub const fn effective_from_unix_nanos(&self) -> i64 {
             self.effective_from_unix_nanos
