@@ -28,6 +28,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         cls.operations_policy = json.loads(
             read("customer-privacy-operations-policy.json")
         )
+        cls.affected_scope_policy = json.loads(read("affected-scope-policy.json"))
         cls.delivery = read("docs/DELIVERY_GOVERNANCE.md")
         cls.adr32 = read(
             "docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md"
@@ -212,33 +213,56 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_step_21_evidence_sync_packet_is_exact(self) -> None:
+    def test_active_step_22a_inventory_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-21-evidence-sync")
+        self.assertEqual(
+            self.packet["packet_id"],
+            "repository-step-22a-remeasurement-inventories",
+        )
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "c21894f47f24e81da1cc150f9ea457fcfdc2bd63"},
+            {"ref": "main", "sha": "4167bd530b91e3a8fc9bfaaf0d02fcdc1f7a20f3"},
         )
-        self.assertEqual(self.packet["tracking_issues"], [194, 126, 28])
+        self.assertEqual(self.packet["tracking_issues"], [194])
         self.assertEqual(
             self.packet["required_checks"],
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Hold Retention CI",
-                "Customer Privacy Operations CI",
-                "Customer Privacy Owner Execution CI",
-                "Customer Privacy Restriction Policy CI",
                 "Governance CI",
                 "Rust Generated Sync",
                 "Rust CI",
             ],
         )
-        self.assertIn("docs/PROJECT_STATUS.md", self.packet["allowed_paths"])
-        self.assertIn("docs/MODULE_CATALOG.md", self.packet["allowed_paths"])
+        allowed_paths = set(self.packet["allowed_paths"])
+        for path in (
+            "affected-scope-policy.json",
+            "docs/STEP22_ARCHITECTURE_REMEASUREMENT.md",
+            "step22-architecture-inventory.json",
+            "tests/test_architecture_documentation_consistency.py",
+        ):
+            self.assertIn(path, allowed_paths)
+        self.assertIn(".github/workflows/**", self.packet["forbidden_paths"])
+        self.assertIn("crates/**", self.packet["forbidden_paths"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
+        non_goals = " ".join(self.packet["non_goals"])
+        self.assertIn("classify any runtime dependency", non_goals)
+        self.assertIn("assign retain simplify merge or remove dispositions", non_goals)
+        self.assertIn("declare Repository Step 22 complete", non_goals)
+
+        operations_scope = next(
+            scope
+            for scope in self.affected_scope_policy["scopes"]
+            if scope["id"] == "operations"
+        )
+        self.assertEqual(operations_scope["owner"], "platform-operations")
+        self.assertIn(
+            "step22-architecture-inventory.json",
+            operations_scope["path_patterns"],
+        )
+        self.assertEqual(operations_scope["required_workflows"], ["Governance CI"])
+
         for marker in (
             "PR #296",
             "fd84cd25dfa25a75eac0fdc4a719cc76c84cfc95",
