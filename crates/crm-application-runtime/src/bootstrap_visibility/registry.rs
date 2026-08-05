@@ -31,8 +31,8 @@ use crm_customer_privacy_production::{
 };
 use crm_customer_privacy_query_adapter::{
     GET_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY, GET_PRIVACY_CASE_CAPABILITY,
-    GET_PROCESSING_RESTRICTION_CAPABILITY,
-    LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_CAPABILITY, LIST_PRIVACY_CASES_CAPABILITY,
+    GET_PROCESSING_RESTRICTION_CAPABILITY, LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_CAPABILITY,
+    LIST_PRIVACY_CASES_CAPABILITY,
     control_query_visibility_resources as customer_privacy_control_visibility_resources,
     query_visibility_resources as customer_privacy_query_visibility_resources,
 };

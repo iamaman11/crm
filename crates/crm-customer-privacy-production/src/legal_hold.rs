@@ -18,25 +18,25 @@ pub use crm_customer_privacy::{
     ScopeDiscoveryLineage, ScopeResource, SubjectVerificationMethod,
     action_plan_state_descriptor_hash, encode_action_plan_state,
 };
-use crm_customer_privacy_application::{
-    place_customer_data_legal_hold_capability_definition,
-    query_capability_definitions_with_complete_control_lifecycle,
-    release_customer_data_legal_hold_capability_definition,
-    release_processing_restriction_capability_definition,
-};
 pub use crm_customer_privacy_application::{
     PrivacyRetentionEvaluationService, RetentionEvaluationCommit, RetentionEvaluationInvocation,
     RetentionEvaluationPersistencePort,
     mutation_capability_definitions_with_complete_control_lifecycle,
     mutation_capability_definitions_with_restrictions_and_legal_holds,
 };
-use crm_customer_privacy_postgres::{
-    postgres_legal_hold_place_executor, postgres_legal_hold_release_executor,
-    postgres_restriction_release_executor,
+use crm_customer_privacy_application::{
+    place_customer_data_legal_hold_capability_definition,
+    query_capability_definitions_with_complete_control_lifecycle,
+    release_customer_data_legal_hold_capability_definition,
+    release_processing_restriction_capability_definition,
 };
 pub use crm_customer_privacy_postgres::{
     PostgresRetentionEvaluationPersistence, legal_hold_persisted_payload,
     privacy_case_persisted_payload,
+};
+use crm_customer_privacy_postgres::{
+    postgres_legal_hold_place_executor, postgres_legal_hold_release_executor,
+    postgres_restriction_release_executor,
 };
 use crm_customer_privacy_query_adapter::{
     CustomerPrivacyControlQueryAdapter, control_query_capability_definitions,
@@ -72,8 +72,7 @@ pub fn build_production_with_holds(
 pub fn build_production_with_complete_control_lifecycle(
     dependencies: CustomerPrivacyProductionDependencies,
 ) -> Result<CustomerPrivacyHoldRetentionProduction, SdkError> {
-    let contribution =
-        build_contribution_with_complete_control_lifecycle(dependencies.clone())?;
+    let contribution = build_contribution_with_complete_control_lifecycle(dependencies.clone())?;
     let mut production = build_production_with_holds(dependencies)?;
     production.base.contribution = contribution;
     Ok(production)
@@ -127,8 +126,7 @@ pub fn build_contribution_with_holds(
 pub fn build_contribution_with_complete_control_lifecycle(
     dependencies: CustomerPrivacyProductionDependencies,
 ) -> Result<ModuleContributionSet, SdkError> {
-    let mutation_inventory =
-        mutation_capability_definitions_with_complete_control_lifecycle()?;
+    let mutation_inventory = mutation_capability_definitions_with_complete_control_lifecycle()?;
     if mutation_inventory.len() != 9 {
         return Err(composition_error(
             "complete Customer Privacy inventory must contain exactly nine mutations",
@@ -183,11 +181,9 @@ pub fn build_contribution_with_complete_control_lifecycle(
         cursor(dependencies.cursor_key)?,
         dependencies.visibility_authorizer,
     ));
-    let query_validator: Arc<dyn QuerySemanticValidator> =
-        Arc::new(ActivationGatedQueryValidator::new(
-            dependencies.activation,
-            control_adapter.clone(),
-        ));
+    let query_validator: Arc<dyn QuerySemanticValidator> = Arc::new(
+        ActivationGatedQueryValidator::new(dependencies.activation, control_adapter.clone()),
+    );
     let query_executor: Arc<dyn QueryExecutor> = control_adapter;
     contribution
         .add_queries(control_queries, query_validator, query_executor)
@@ -201,11 +197,9 @@ fn add_release_mutation(
     activation: Arc<dyn crm_application_composition::ModuleActivationPort>,
     executor: Arc<dyn crm_capability_runtime::TransactionalCapabilityExecutor>,
 ) -> Result<(), SdkError> {
-    let validator: Arc<dyn CapabilitySemanticValidator> =
-        Arc::new(ActivationGatedMutationValidator::new(
-            activation,
-            Arc::new(NoopMutationSemanticValidator),
-        ));
+    let validator: Arc<dyn CapabilitySemanticValidator> = Arc::new(
+        ActivationGatedMutationValidator::new(activation, Arc::new(NoopMutationSemanticValidator)),
+    );
     contribution
         .add_mutations([definition], validator, executor)
         .map_err(composition_error)
@@ -246,8 +240,7 @@ mod tests {
 
     #[test]
     fn complete_control_lifecycle_inventory_is_nine_mutations_and_seven_queries() {
-        let mutations =
-            mutation_capability_definitions_with_complete_control_lifecycle().unwrap();
+        let mutations = mutation_capability_definitions_with_complete_control_lifecycle().unwrap();
         let queries = query_capability_definitions_with_complete_control_lifecycle().unwrap();
         assert_eq!(mutations.len(), 9);
         assert_eq!(queries.len(), 7);
