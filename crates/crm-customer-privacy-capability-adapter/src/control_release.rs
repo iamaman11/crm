@@ -24,8 +24,7 @@ const RELEASE_PROCESSING_RESTRICTION_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.ReleaseProcessingRestrictionRequest";
 const RELEASE_PROCESSING_RESTRICTION_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.ReleaseProcessingRestrictionResponse";
-const PROCESSING_RESTRICTION_RELEASED_EVENT_TYPE: &str =
-    "customer_privacy.restriction.released";
+const PROCESSING_RESTRICTION_RELEASED_EVENT_TYPE: &str = "customer_privacy.restriction.released";
 const PROCESSING_RESTRICTION_RELEASED_EVENT_SCHEMA: &str =
     "crm.customer_privacy.v1.ProcessingRestrictionReleasedEvent";
 
@@ -34,8 +33,7 @@ const RELEASE_CUSTOMER_DATA_LEGAL_HOLD_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.ReleaseCustomerDataLegalHoldRequest";
 const RELEASE_CUSTOMER_DATA_LEGAL_HOLD_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.ReleaseCustomerDataLegalHoldResponse";
-const CUSTOMER_DATA_LEGAL_HOLD_RELEASED_EVENT_TYPE: &str =
-    "customer_privacy.legal_hold.released";
+const CUSTOMER_DATA_LEGAL_HOLD_RELEASED_EVENT_TYPE: &str = "customer_privacy.legal_hold.released";
 const CUSTOMER_DATA_LEGAL_HOLD_RELEASED_EVENT_SCHEMA: &str =
     "crm.customer_privacy.v1.CustomerDataLegalHoldReleasedEvent";
 
