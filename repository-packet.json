@@ -14,7 +14,6 @@
   ],
   "objective": "Record exact accepted Repository Step 21 evidence across every live normative source, close Phase 8A and issue #126, and make Repository Step 22 architecture remeasurement and decision review the sole next implementation packet without changing product or runtime behavior.",
   "allowed_paths": [
-    ".github/workflows/rust-generated-sync.yml",
     "docs/ACTIVE_PACKET.md",
     "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
     "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
@@ -27,7 +26,6 @@
     "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
     "docs/generated/REPOSITORY_MAP.md",
     "repository-packet.json",
-    "scripts/materialize_step21_evidence.py",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_repository_navigation.py"
   ],
@@ -52,6 +50,7 @@
     "requirements-dev.txt",
     "rust-toolchain.toml",
     "schemas/**",
+    "scripts/**",
     "services/**",
     "tsconfig.base.json"
   ],
@@ -81,7 +80,7 @@
     "Repository Steps 1 through 21 Phase 8A.11 and Phase 8A are complete and Repository Step 22 is the only next permitted implementation packet",
     "Customer Privacy is product complete with exactly nine public mutations seven permission-aware public queries and one owner worker while the broader Universal CRM product remains incomplete",
     "architecture 10/10 remains not declared issue 194 remains open and Step 22 is a checkpoint rather than final closure",
-    "the final diff contains only declared documentation generated packet and permanent guard paths and removes the temporary materialization script and workflow edit before acceptance",
+    "the final diff contains only declared documentation generated packet and permanent guard paths with no temporary materialization or workflow changes",
     "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments reviews or review threads"
   ],
   "non_goals": [
