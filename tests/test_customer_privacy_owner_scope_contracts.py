@@ -159,7 +159,7 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
         self.assertIn("bytes cursor_digest_sha256", contributions)
         self.assertIn("CUSTOMER_DATA_CLASS_RESTRICTED = 9;", types)
 
-    def test_status_sources_track_nine_accepted_owners_and_discovery_acceptance(self) -> None:
+    def test_status_sources_track_nine_accepted_owners_and_phase8a_closure(self) -> None:
         project_status = (ROOT / "docs/PROJECT_STATUS.md").read_text(encoding="utf-8")
         module_catalog = (ROOT / "docs/MODULE_CATALOG.md").read_text(encoding="utf-8")
         roadmap = (ROOT / "docs/IMPLEMENTATION_ROADMAP.md").read_text(
@@ -184,7 +184,7 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             self.assertIn("Data Quality", document)
             self.assertIn("Customer Enrichment", document)
             self.assertIn("scope discovery and immutable snapshot", document.lower())
-            self.assertIn("Current product-complete expert modules: **0**", document)
+            self.assertIn("Current product-complete expert modules: **1**", document)
 
         self.assertIn(
             "All nine authoritative owner implementations are accepted", project_status
@@ -193,8 +193,8 @@ class CustomerPrivacyOwnerScopeContractTests(unittest.TestCase):
             "All nine authoritative implementations are accepted", module_catalog
         )
         self.assertIn("Nine-owner set complete", phase_plan)
-        self.assertIn("Phase 8A.11 / issue #126 is in progress", project_status)
-        self.assertIn("Phase 8A remains **In progress**", phase_plan)
+        self.assertIn("Phase 8A.11 / issue #126 is complete", project_status)
+        self.assertIn("Phase 8A is **Complete through PR #296**", phase_plan)
 
         for document in (*authoritative, enrichment_packet):
             self.assertIn("PR #192", document)
