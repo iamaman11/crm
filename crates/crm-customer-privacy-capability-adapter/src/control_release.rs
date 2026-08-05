@@ -20,23 +20,23 @@ use crm_module_sdk::{
 use crm_proto_contracts::crm::{customer::v1 as customer, customer_privacy::v1 as wire};
 
 pub const RELEASE_PROCESSING_RESTRICTION_CAPABILITY: &str = "customer_privacy.restriction.release";
-pub const RELEASE_PROCESSING_RESTRICTION_REQUEST_SCHEMA: &str =
+const RELEASE_PROCESSING_RESTRICTION_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.ReleaseProcessingRestrictionRequest";
-pub const RELEASE_PROCESSING_RESTRICTION_RESPONSE_SCHEMA: &str =
+const RELEASE_PROCESSING_RESTRICTION_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.ReleaseProcessingRestrictionResponse";
-pub const PROCESSING_RESTRICTION_RELEASED_EVENT_TYPE: &str =
+const PROCESSING_RESTRICTION_RELEASED_EVENT_TYPE: &str =
     "customer_privacy.restriction.released";
-pub const PROCESSING_RESTRICTION_RELEASED_EVENT_SCHEMA: &str =
+const PROCESSING_RESTRICTION_RELEASED_EVENT_SCHEMA: &str =
     "crm.customer_privacy.v1.ProcessingRestrictionReleasedEvent";
 
 pub const RELEASE_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY: &str = "customer_privacy.legal_hold.release";
-pub const RELEASE_CUSTOMER_DATA_LEGAL_HOLD_REQUEST_SCHEMA: &str =
+const RELEASE_CUSTOMER_DATA_LEGAL_HOLD_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.ReleaseCustomerDataLegalHoldRequest";
-pub const RELEASE_CUSTOMER_DATA_LEGAL_HOLD_RESPONSE_SCHEMA: &str =
+const RELEASE_CUSTOMER_DATA_LEGAL_HOLD_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.ReleaseCustomerDataLegalHoldResponse";
-pub const CUSTOMER_DATA_LEGAL_HOLD_RELEASED_EVENT_TYPE: &str =
+const CUSTOMER_DATA_LEGAL_HOLD_RELEASED_EVENT_TYPE: &str =
     "customer_privacy.legal_hold.released";
-pub const CUSTOMER_DATA_LEGAL_HOLD_RELEASED_EVENT_SCHEMA: &str =
+const CUSTOMER_DATA_LEGAL_HOLD_RELEASED_EVENT_SCHEMA: &str =
     "crm.customer_privacy.v1.CustomerDataLegalHoldReleasedEvent";
 
 const NANOS_PER_MILLISECOND: i64 = 1_000_000;
@@ -186,7 +186,7 @@ pub fn release_customer_data_legal_hold_capability_definition()
     )
 }
 
-pub fn release_control_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
+fn release_control_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     Ok(vec![
         release_processing_restriction_capability_definition()?,
         release_customer_data_legal_hold_capability_definition()?,
@@ -367,7 +367,7 @@ fn build_legal_hold_release_plan(
     })
 }
 
-pub fn processing_restriction_to_wire(
+fn processing_restriction_to_wire(
     restriction: &ProcessingRestriction,
 ) -> Result<wire::ProcessingRestriction, SdkError> {
     Ok(wire::ProcessingRestriction {
@@ -417,7 +417,7 @@ pub fn processing_restriction_to_wire(
     })
 }
 
-pub fn customer_data_legal_hold_to_wire(
+fn customer_data_legal_hold_to_wire(
     hold: &CustomerDataLegalHold,
 ) -> Result<wire::CustomerDataLegalHold, SdkError> {
     Ok(wire::CustomerDataLegalHold {
