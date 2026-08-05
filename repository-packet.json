@@ -50,8 +50,10 @@
     "repository-packet.json",
     "services/crm-api/tests/customer_privacy_hold_retention_process_e2e.rs",
     "services/crm-api/tests/customer_privacy_restriction_process_e2e.rs",
+    "tests/test_architecture_documentation_consistency.py",
     "tests/test_customer_privacy_contract_inventory.py",
-    "tests/test_production_route_classifications.py"
+    "tests/test_production_route_classifications.py",
+    "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
     "AGENTS.md",
