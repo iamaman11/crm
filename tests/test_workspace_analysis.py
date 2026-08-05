@@ -1,10 +1,13 @@
 """Focused tests for deterministic measurement-only workspace analysis."""
 
+import json
 from pathlib import Path
+import re
 from tempfile import TemporaryDirectory
 import unittest
 
 from scripts.analyze_workspace import (
+    build_report,
     build_step22_inventory,
     categorize_manifest,
     duplicate_dependency_families,
@@ -12,6 +15,9 @@ from scripts.analyze_workspace import (
     runtime_dependency_metrics,
     workflow_metric,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class WorkspaceAnalysisTests(unittest.TestCase):
@@ -27,6 +33,98 @@ class WorkspaceAnalysisTests(unittest.TestCase):
             f"[package]\nname='{name}'\nversion='0.1.0'\n", encoding="utf-8"
         )
         return manifest
+
+    @staticmethod
+    def review_ledger(source: dict[str, object]) -> dict[str, object]:
+        runtime = source["runtime_fanin"]
+        gates = source["permanent_gates"]
+        assert isinstance(runtime, dict)
+        assert isinstance(gates, dict)
+        dependencies = runtime["dependencies"]
+        workflows = gates["workflows"]
+        jobs = gates["jobs"]
+        assert isinstance(dependencies, list)
+        assert isinstance(workflows, list)
+        assert isinstance(jobs, list)
+        return {
+            "schema_version": source["schema_version"],
+            "measurement_source_commit": source["commit_sha"],
+            "phase": source["phase"],
+            "decision_state": "unresolved",
+            "adr": source["adr"],
+            "runtime_fanin": {
+                "package": runtime["package"],
+                "manifest_path": runtime["manifest_path"],
+                "counts": {
+                    "all": runtime["internal_direct_dependency_count"],
+                    "production": runtime["production_count"],
+                    "test_only": runtime["test_only_count"],
+                    "build": runtime["build_count"],
+                },
+                "columns": [
+                    "stable_id",
+                    "dependency_kind",
+                    "target_category",
+                    "target_manifest_path",
+                ],
+                "rows": [
+                    [
+                        item["stable_id"],
+                        item["dependency_kind"],
+                        item["target_category"],
+                        item["target_manifest_path"],
+                    ]
+                    for item in dependencies
+                ],
+            },
+            "permanent_gates": {
+                "counts": {
+                    "workflows": gates["workflow_count"],
+                    "jobs": gates["job_count"],
+                },
+                "workflow_columns": [
+                    "stable_id",
+                    "name",
+                    "job_count",
+                    "action_reference_count",
+                    "run_step_count",
+                    "path_filter_count",
+                    "maximum_timeout_minutes",
+                    "environment_signals",
+                ],
+                "workflow_rows": [
+                    [
+                        item["stable_id"],
+                        item["name"],
+                        item["job_count"],
+                        item["action_reference_count"],
+                        item["run_step_count"],
+                        item["path_filter_count"],
+                        item["maximum_timeout_minutes"],
+                        item["environment_signals"],
+                    ]
+                    for item in workflows
+                ],
+                "job_columns": [
+                    "stable_id",
+                    "action_reference_count",
+                    "run_step_count",
+                    "maximum_timeout_minutes",
+                    "environment_signals",
+                ],
+                "job_rows": [
+                    [
+                        item["stable_id"],
+                        item["action_reference_count"],
+                        item["run_step_count"],
+                        item["maximum_timeout_minutes"],
+                        item["environment_signals"],
+                    ]
+                    for item in jobs
+                ],
+            },
+            "decision_boundary": source["decision_boundary"],
+        }
 
     def test_categorizes_workspace_packages_and_reverse_impact(self) -> None:
         _, root = self.temporary_root()
@@ -300,6 +398,61 @@ jobs:
 
         with self.assertRaisesRegex(ValueError, "duplicate permanent workflow"):
             build_step22_inventory("a" * 40, dependencies, [workflow, workflow])
+
+    def test_committed_step22_ledger_matches_fresh_structural_inventory(self) -> None:
+        path = ROOT / "step22-architecture-inventory.json"
+        committed_text = path.read_text(encoding="utf-8")
+        committed = json.loads(committed_text)
+        self.assertEqual(
+            committed_text,
+            json.dumps(committed, indent=2, sort_keys=True) + "\n",
+        )
+        self.assertRegex(
+            committed["measurement_source_commit"], r"^[0-9a-f]{40}$"
+        )
+        self.assertEqual(committed["phase"], "inventory-only")
+        self.assertEqual(committed["decision_state"], "unresolved")
+        self.assertEqual(
+            committed["runtime_fanin"]["counts"],
+            {"all": 63, "production": 62, "test_only": 1, "build": 0},
+        )
+        self.assertEqual(
+            committed["permanent_gates"]["counts"],
+            {"workflows": 41, "jobs": 42},
+        )
+        runtime_ids = [row[0] for row in committed["runtime_fanin"]["rows"]]
+        workflow_ids = [
+            row[0] for row in committed["permanent_gates"]["workflow_rows"]
+        ]
+        job_ids = [row[0] for row in committed["permanent_gates"]["job_rows"]]
+        self.assertEqual(len(runtime_ids), len(set(runtime_ids)))
+        self.assertEqual(len(workflow_ids), len(set(workflow_ids)))
+        self.assertEqual(len(job_ids), len(set(job_ids)))
+        self.assertTrue(
+            all(identifier.startswith(".github/workflows/") for identifier in job_ids)
+        )
+        self.assertTrue(
+            all("#" in identifier for identifier in job_ids)
+        )
+        self.assertFalse(
+            committed["decision_boundary"]["final_classifications_recorded"]
+        )
+        self.assertFalse(
+            committed["decision_boundary"]["gate_dispositions_recorded"]
+        )
+        self.assertFalse(committed["decision_boundary"]["remediation_performed"])
+        self.assertFalse(committed["decision_boundary"]["step22_complete"])
+
+        fresh = self.review_ledger(build_report(ROOT)["step22_inventory"])
+        fresh["measurement_source_commit"] = committed[
+            "measurement_source_commit"
+        ]
+        self.assertEqual(committed, fresh)
+        self.assertTrue(
+            re.fullmatch(
+                r"[0-9a-f]{40}", committed["measurement_source_commit"]
+            )
+        )
 
 
 if __name__ == "__main__":
