@@ -1,3 +1,4 @@
+use super::CustomerPrivacyVisibilityResource;
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
 use crm_core_data::{
@@ -23,28 +24,28 @@ use prost::Message;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-pub const GET_PROCESSING_RESTRICTION_CAPABILITY: &str = "customer_privacy.restriction.get";
-pub const GET_PROCESSING_RESTRICTION_REQUEST_SCHEMA: &str =
+const GET_PROCESSING_RESTRICTION_CAPABILITY: &str = "customer_privacy.restriction.get";
+const GET_PROCESSING_RESTRICTION_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.GetProcessingRestrictionRequest";
-pub const GET_PROCESSING_RESTRICTION_RESPONSE_SCHEMA: &str =
+const GET_PROCESSING_RESTRICTION_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.GetProcessingRestrictionResponse";
-pub const GET_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY: &str = "customer_privacy.legal_hold.get";
-pub const GET_CUSTOMER_DATA_LEGAL_HOLD_REQUEST_SCHEMA: &str =
+const GET_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY: &str = "customer_privacy.legal_hold.get";
+const GET_CUSTOMER_DATA_LEGAL_HOLD_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.GetCustomerDataLegalHoldRequest";
-pub const GET_CUSTOMER_DATA_LEGAL_HOLD_RESPONSE_SCHEMA: &str =
+const GET_CUSTOMER_DATA_LEGAL_HOLD_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.GetCustomerDataLegalHoldResponse";
-pub const LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_CAPABILITY: &str =
+const LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_CAPABILITY: &str =
     "customer_privacy.legal_hold.list_by_subject";
-pub const LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_REQUEST_SCHEMA: &str =
+const LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.ListCustomerDataLegalHoldsBySubjectRequest";
-pub const LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_RESPONSE_SCHEMA: &str =
+const LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_RESPONSE_SCHEMA: &str =
     "crm.customer_privacy.v1.ListCustomerDataLegalHoldsBySubjectResponse";
-pub const CONTROL_QUERY_CAPABILITY_IDS: &[&str] = &[
+const CONTROL_QUERY_CAPABILITY_IDS: &[&str] = &[
     GET_PROCESSING_RESTRICTION_CAPABILITY,
     GET_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY,
     LIST_CUSTOMER_DATA_LEGAL_HOLDS_BY_SUBJECT_CAPABILITY,
 ];
-pub const PARTY_RECORD_TYPE: &str = "parties.party";
+const PARTY_RECORD_TYPE: &str = "parties.party";
 
 const DEFAULT_PAGE_SIZE: u32 = 50;
 const MAXIMUM_PAGE_SIZE: u32 = 100;
@@ -80,14 +81,9 @@ const LEGAL_HOLD_FIELDS: &[&str] = &[
     "released_at_unix_ms",
 ];
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ControlVisibilityResource {
-    pub owner_module_id: &'static str,
-    pub resource_type: &'static str,
-    pub allowed_fields: BTreeSet<String>,
-}
-
-pub fn control_query_visibility_resources(capability_id: &str) -> Vec<ControlVisibilityResource> {
+pub fn control_query_visibility_resources(
+    capability_id: &str,
+) -> Vec<CustomerPrivacyVisibilityResource> {
     let fields = match capability_id {
         GET_PROCESSING_RESTRICTION_CAPABILITY => {
             Some((RESTRICTION_RECORD_TYPE, RESTRICTION_FIELDS))
@@ -102,12 +98,12 @@ pub fn control_query_visibility_resources(capability_id: &str) -> Vec<ControlVis
         return Vec::new();
     };
     vec![
-        ControlVisibilityResource {
+        CustomerPrivacyVisibilityResource {
             owner_module_id: MODULE_ID,
             resource_type: PARTY_RECORD_TYPE,
             allowed_fields: BTreeSet::new(),
         },
-        ControlVisibilityResource {
+        CustomerPrivacyVisibilityResource {
             owner_module_id: MODULE_ID,
             resource_type,
             allowed_fields: fields.iter().copied().map(str::to_owned).collect(),
@@ -123,14 +119,6 @@ pub struct CustomerPrivacyControlQueryAdapter {
 }
 
 impl CustomerPrivacyControlQueryAdapter {
-    pub fn new(store: PostgresDataStore, visibility: Arc<dyn QueryVisibilityAuthorizer>) -> Self {
-        Self {
-            store,
-            visibility,
-            cursor_codec: None,
-        }
-    }
-
     pub fn new_with_cursor(
         store: PostgresDataStore,
         cursor_codec: CursorCodec,
@@ -631,7 +619,7 @@ fn status_matches(hold: &CustomerDataLegalHold, status: Option<i32>) -> bool {
     })
 }
 
-pub fn processing_restriction_to_wire(
+fn processing_restriction_to_wire(
     restriction: &ProcessingRestriction,
 ) -> Result<wire::ProcessingRestriction, SdkError> {
     Ok(wire::ProcessingRestriction {
@@ -675,7 +663,7 @@ pub fn processing_restriction_to_wire(
     })
 }
 
-pub fn customer_data_legal_hold_to_wire(
+fn customer_data_legal_hold_to_wire(
     hold: &CustomerDataLegalHold,
 ) -> Result<wire::CustomerDataLegalHold, SdkError> {
     Ok(wire::CustomerDataLegalHold {
