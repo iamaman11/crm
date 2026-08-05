@@ -390,7 +390,7 @@ jobs:
         with self.assertRaisesRegex(ValueError, "duplicate permanent workflow"):
             build_step22_inventory("a" * 40, dependencies, [workflow, workflow])
 
-    def test_committed_step22_ledger_matches_fresh_structural_inventory(self) -> None:
+    def test_committed_step22_baseline_is_immutable_and_current_remediation_is_exact(self) -> None:
         path = ROOT / "step22-architecture-inventory.json"
         committed_text = path.read_text(encoding="utf-8")
         committed = json.loads(committed_text)
@@ -411,18 +411,28 @@ jobs:
             committed["permanent_gates"]["counts"],
             {"workflows": 41, "jobs": 42},
         )
-        runtime_ids = [row[0] for row in committed["runtime_fanin"]["rows"]]
-        workflow_ids = [
+
+        accepted_runtime_ids = {
+            row[0] for row in committed["runtime_fanin"]["rows"]
+        }
+        accepted_workflow_ids = [
             row[0] for row in committed["permanent_gates"]["workflow_rows"]
         ]
-        job_ids = [row[0] for row in committed["permanent_gates"]["job_rows"]]
-        self.assertEqual(len(runtime_ids), len(set(runtime_ids)))
-        self.assertEqual(len(workflow_ids), len(set(workflow_ids)))
-        self.assertEqual(len(job_ids), len(set(job_ids)))
-        self.assertTrue(
-            all(identifier.startswith(".github/workflows/") for identifier in job_ids)
+        accepted_job_ids = [
+            row[0] for row in committed["permanent_gates"]["job_rows"]
+        ]
+        self.assertEqual(len(accepted_runtime_ids), 63)
+        self.assertEqual(
+            len(accepted_workflow_ids), len(set(accepted_workflow_ids))
         )
-        self.assertTrue(all("#" in identifier for identifier in job_ids))
+        self.assertEqual(len(accepted_job_ids), len(set(accepted_job_ids)))
+        self.assertTrue(
+            all(
+                identifier.startswith(".github/workflows/")
+                for identifier in accepted_job_ids
+            )
+        )
+        self.assertTrue(all("#" in identifier for identifier in accepted_job_ids))
         self.assertFalse(
             committed["decision_boundary"]["final_classifications_recorded"]
         )
@@ -435,15 +445,66 @@ jobs:
         fresh = json.loads(
             json.dumps(self.review_ledger(build_report(ROOT)["step22_inventory"]))
         )
-        fresh["measurement_source_commit"] = committed[
-            "measurement_source_commit"
-        ]
-        self.assertEqual(committed, fresh)
-        self.assertTrue(
-            re.fullmatch(
-                r"[0-9a-f]{40}", committed["measurement_source_commit"]
+        self.assertRegex(fresh["measurement_source_commit"], r"^[0-9a-f]{40}$")
+        self.assertEqual(fresh["schema_version"], committed["schema_version"])
+        self.assertEqual(fresh["phase"], "inventory-only")
+        self.assertEqual(fresh["decision_state"], "unresolved")
+        self.assertEqual(fresh["adr"], committed["adr"])
+        self.assertEqual(
+            fresh["runtime_fanin"]["package"],
+            committed["runtime_fanin"]["package"],
+        )
+        self.assertEqual(
+            fresh["runtime_fanin"]["manifest_path"],
+            committed["runtime_fanin"]["manifest_path"],
+        )
+        self.assertEqual(
+            fresh["runtime_fanin"]["columns"],
+            committed["runtime_fanin"]["columns"],
+        )
+        self.assertEqual(
+            fresh["runtime_fanin"]["counts"],
+            {"all": 62, "production": 61, "test_only": 1, "build": 0},
+        )
+        self.assertEqual(
+            fresh["permanent_gates"], committed["permanent_gates"]
+        )
+
+        current_runtime_ids = {
+            row[0] for row in fresh["runtime_fanin"]["rows"]
+        }
+        decisions = json.loads(
+            (ROOT / "step22-runtime-fanin-decisions.json").read_text(
+                encoding="utf-8"
             )
         )
+        removed_ids = {
+            stable_id
+            for stable_id, classification, _ in decisions["final_rows"]
+            if classification == "removed"
+        }
+        self.assertEqual(
+            removed_ids,
+            {
+                "crm-application-runtime::dependencies::"
+                "crm-customer-privacy-query-adapter"
+            },
+        )
+        self.assertEqual(accepted_runtime_ids - current_runtime_ids, removed_ids)
+        self.assertEqual(current_runtime_ids - accepted_runtime_ids, set())
+        self.assertEqual(len(current_runtime_ids), 62)
+        self.assertEqual(
+            decisions["remediation_evidence"]["before"],
+            {"all": 63, "production": 62, "test_only": 1},
+        )
+        self.assertEqual(
+            decisions["remediation_evidence"]["after"],
+            {"all": 62, "production": 61, "test_only": 1},
+        )
+        self.assertTrue(
+            decisions["decision_boundary"]["remediation_performed"]
+        )
+        self.assertFalse(decisions["decision_boundary"]["step22_complete"])
 
 
 if __name__ == "__main__":
