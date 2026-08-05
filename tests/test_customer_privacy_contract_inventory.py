@@ -105,6 +105,32 @@ class CustomerPrivacyContractInventoryTests(unittest.TestCase):
             {entry["module_id"] for entry in classifications["empty_runtime_modules"]},
         )
 
+    def test_step_21_registry_fixture_matches_manifest_version_and_coordinates(self) -> None:
+        fixture = (
+            ROOT / "database/tests/0020_customer_privacy_persistence_fixture.sql"
+        ).read_text(encoding="utf-8")
+        self.assertIn("'crm.customer-privacy',\n  '0.3.0'", fixture)
+        for capability_id, method_name in (
+            (
+                "customer_privacy.restriction.release",
+                "ReleaseProcessingRestriction",
+            ),
+            ("customer_privacy.restriction.get", "GetProcessingRestriction"),
+            (
+                "customer_privacy.legal_hold.release",
+                "ReleaseCustomerDataLegalHold",
+            ),
+            ("customer_privacy.legal_hold.get", "GetCustomerDataLegalHold"),
+            (
+                "customer_privacy.legal_hold.list_by_subject",
+                "ListCustomerDataLegalHoldsBySubject",
+            ),
+        ):
+            self.assertIn(f"'{capability_id}'", fixture)
+            self.assertIn(f"'{method_name}'", fixture)
+        self.assertNotIn("INSERT INTO crm.records", fixture)
+        self.assertNotIn("INSERT INTO crm.record_relationships", fixture)
+
 
 if __name__ == "__main__":
     unittest.main()
