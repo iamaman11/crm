@@ -24,10 +24,12 @@ on:
       - "scripts/contract_bindings.py"
       - "scripts/generate_contract_bindings.py"
       - "scripts/generate_repository_navigation.py"
+      - "scripts/materialize_step22c_workspace_guard.py"
       - "scripts/repository_navigation.py"
       - "scripts/repo.py"
       - "scripts/validate_module_manifests.py"
       - "tests/test_repository_navigation.py"
+      - "tests/test_workspace_analysis.py"
       - "contracts/module-contract-bindings.json"
       - "packages/client/src/contract_hashes.ts"
       - "docs/ACTIVE_PACKET.md"
@@ -66,6 +68,24 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
         with:
           components: rustfmt, clippy
+      - name: Materialize immutable Step 22 baseline remediation guard
+        run: |
+          python scripts/materialize_step22c_workspace_guard.py
+          python scripts/check_step22_runtime_fanin_decisions.py
+          python -m unittest -v tests.test_workspace_analysis
+      - name: Commit Step 22C workspace guard when needed
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          if git diff --quiet -- tests/test_workspace_analysis.py; then
+            echo "Step 22C workspace guard is already materialized."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add tests/test_workspace_analysis.py
+            git commit -m "Materialize Step 22C workspace guard"
+            git push origin "HEAD:${HEAD_BRANCH}"
+          fi
       - name: Verify committed lockfile and synchronize canonical formatting
         shell: bash
         run: |
