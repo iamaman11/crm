@@ -109,7 +109,7 @@ class CustomerPrivacyContractInventoryTests(unittest.TestCase):
         fixture = (
             ROOT / "database/tests/0020_customer_privacy_persistence_fixture.sql"
         ).read_text(encoding="utf-8")
-        self.assertIn("'crm.customer-privacy',\n  '0.3.0'", fixture)
+        self.assertRegex(fixture, r"'crm\.customer-privacy',\s*'0\.3\.0'")
         for capability_id, method_name in (
             (
                 "customer_privacy.restriction.release",
