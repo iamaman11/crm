@@ -64,20 +64,6 @@ pub fn build_production_with_holds(
     Ok(CustomerPrivacyHoldRetentionProduction { base, retention })
 }
 
-/// Final Phase 8A Customer Privacy production package.
-///
-/// This preserves the accepted step-six package and adds exactly two release
-/// mutations plus three permission-aware control queries. Retention remains a
-/// trusted-internal service and the existing worker topology is unchanged.
-pub fn build_production_with_complete_control_lifecycle(
-    dependencies: CustomerPrivacyProductionDependencies,
-) -> Result<CustomerPrivacyHoldRetentionProduction, SdkError> {
-    let contribution = build_contribution_with_complete_control_lifecycle(dependencies.clone())?;
-    let mut production = build_production_with_holds(dependencies)?;
-    production.base.contribution = contribution;
-    Ok(production)
-}
-
 pub fn build_internal_retention(
     dependencies: &CustomerPrivacyProductionDependencies,
 ) -> PrivacyRetentionEvaluationService {
@@ -202,7 +188,8 @@ fn add_release_mutation(
     );
     contribution
         .add_mutations([definition], validator, executor)
-        .map_err(composition_error)
+        .map_err(composition_error)?;
+    Ok(())
 }
 
 fn cursor(key: [u8; 32]) -> Result<CursorCodec, SdkError> {
