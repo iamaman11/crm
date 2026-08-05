@@ -270,15 +270,10 @@ async fn restriction_lifecycle_blocks_then_releases_protected_contact_point_crea
     assert_eq!(replay.output, release.output);
     assert_eq!(restriction_module_evidence(&admin).await, after_release);
 
-    let released_read = get_restriction(
-        &mut grpc,
-        &restriction_get,
-        restriction_ref,
-        TENANT_A,
-        true,
-    )
-    .await
-    .expect("read released restriction through production query ingress");
+    let released_read =
+        get_restriction(&mut grpc, &restriction_get, restriction_ref, TENANT_A, true)
+            .await
+            .expect("read released restriction through production query ingress");
     assert_eq!(
         released_read.status,
         privacy::ProcessingRestrictionStatus::Released as i32
@@ -302,10 +297,7 @@ async fn restriction_lifecycle_blocks_then_releases_protected_contact_point_crea
     )
     .await
     .expect("released restriction must no longer deny protected owner mutation");
-    assert_incremented(
-        before_after_release,
-        contact_point_evidence(&admin).await,
-    );
+    assert_incremented(before_after_release, contact_point_evidence(&admin).await);
 
     let unprotected_party = unique_id("restriction-unprotected-party");
     create_party(
