@@ -4,6 +4,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from scripts.check_step22_runtime_fanin_decisions import validate_decisions
 from scripts.repository_navigation import (
     ACTIVE_PACKET_PATH,
     NAVIGATION_SCHEMA,
@@ -23,38 +24,53 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_step_22a_inventory_packet_declaration_is_exact(self) -> None:
+    def test_active_step_22b_runtime_classification_packet_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             packet["packet_id"],
-            "repository-step-22a-remeasurement-inventories",
+            "repository-step-22b-runtime-fanin-classifications",
         )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
-            {"ref": "main", "sha": "4167bd530b91e3a8fc9bfaaf0d02fcdc1f7a20f3"},
+            {"ref": "main", "sha": "4642ea39a7c1c8ad78b1d475a3d5391af8414555"},
         )
         self.assertEqual(packet["tracking_issues"], [194])
         allowed_paths = set(packet["allowed_paths"])
         self.assertTrue(
             {
-                "docs/STEP22_ARCHITECTURE_REMEASUREMENT.md",
-                "scripts/analyze_workspace.py",
-                "step22-architecture-inventory.json",
+                "affected-scope-policy.json",
+                "docs/STEP22_RUNTIME_FANIN_CLASSIFICATION.md",
+                "scripts/check_step22_runtime_fanin_decisions.py",
+                "step22-runtime-fanin-decisions.json",
+                "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
-                "tests/test_workspace_analysis.py",
             }.issubset(allowed_paths)
         )
-        self.assertNotIn(".github/workflows/complexity-baseline.yml", allowed_paths)
+        self.assertNotIn(".github/workflows/rust-generated-sync.yml", allowed_paths)
         self.assertFalse(any(path.startswith("crates/") for path in allowed_paths))
         self.assertIn(".github/workflows/**", packet["forbidden_paths"])
         self.assertIn("crates/**", packet["forbidden_paths"])
+        self.assertIn("step22-architecture-inventory.json", packet["forbidden_paths"])
         deliverables = " ".join(packet["deliverables"])
         non_goals = " ".join(packet["non_goals"])
-        self.assertIn("inventory", deliverables.lower())
-        self.assertIn("crm-application-runtime", deliverables)
-        self.assertIn("declare Repository Step 22 complete", non_goals)
+        self.assertIn("sixteen platform-generic", deliverables)
+        self.assertIn("forty-six", deliverables)
+        self.assertIn("owner-specific dependency as unavoidable", non_goals)
+        self.assertIn("declare all runtime classifications complete", non_goals)
+        self.assertEqual(
+            validate_decisions(ROOT),
+            {
+                "all": 63,
+                "final": 17,
+                "platform_generic": 16,
+                "test_only": 1,
+                "removed": 0,
+                "owner_specific_unavoidable": 0,
+                "unresolved": 46,
+            },
+        )
 
     def test_generated_navigation_is_deterministic_and_current(self) -> None:
         first = generated_documents(ROOT)
@@ -67,11 +83,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-22a-remeasurement-inventories",
+            "repository-step-22b-runtime-fanin-classifications",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "4167bd530b91e3a8fc9bfaaf0d02fcdc1f7a20f3",
+            "4642ea39a7c1c8ad78b1d475a3d5391af8414555",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -125,7 +141,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 22A exact remeasurement inventory"],
+                    "reasons": ["Step 22B bounded runtime fan-in classifications"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -133,7 +149,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="4167bd530b91e3a8fc9bfaaf0d02fcdc1f7a20f3",
+                return_value="4642ea39a7c1c8ad78b1d475a3d5391af8414555",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(
