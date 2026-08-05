@@ -82,7 +82,16 @@ pub fn mutation_capability_definitions_with_complete_control_lifecycle()
     Ok(definitions)
 }
 
+/// Accepted four-query inventory retained for legacy production composition.
 pub fn query_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
+    let mut definitions = case_query_definitions()?;
+    definitions.extend(plan_read_query_capability_definitions()?);
+    Ok(definitions)
+}
+
+/// Frozen Phase 8A inventory with the three permission-aware control reads.
+pub fn query_capability_definitions_with_complete_control_lifecycle()
+-> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = case_query_definitions()?;
     definitions.extend(control_query_capability_definitions()?);
     definitions.extend(plan_read_query_capability_definitions()?);
@@ -99,12 +108,15 @@ mod tests {
         let step_four = mutation_capability_definitions_with_restrictions().unwrap();
         let step_six = mutation_capability_definitions_with_restrictions_and_legal_holds().unwrap();
         let complete = mutation_capability_definitions_with_complete_control_lifecycle().unwrap();
-        let queries = query_capability_definitions().unwrap();
+        let legacy_queries = query_capability_definitions().unwrap();
+        let complete_queries =
+            query_capability_definitions_with_complete_control_lifecycle().unwrap();
         assert_eq!(legacy.len(), 5);
         assert_eq!(step_four.len(), 6);
         assert_eq!(step_six.len(), 7);
         assert_eq!(complete.len(), 9);
-        assert_eq!(queries.len(), 7);
+        assert_eq!(legacy_queries.len(), 4);
+        assert_eq!(complete_queries.len(), 7);
         assert_eq!(
             complete
                 .iter()
