@@ -46,6 +46,7 @@
     "docs/ACTIVE_PACKET.md",
     "docs/generated/REPOSITORY_MAP.md",
     "modules/crm-customer-privacy/src/domain.rs",
+    "modules/crm-customer-privacy/src/lib.rs",
     "repository-packet.json",
     "services/crm-api/tests/customer_privacy_hold_retention_process_e2e.rs",
     "services/crm-api/tests/customer_privacy_restriction_process_e2e.rs",
