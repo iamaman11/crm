@@ -4,6 +4,8 @@
 -- The in-process application catalog remains authoritative for exact descriptors;
 -- this fixture supplies the durable module/capability registry rows required by
 -- audit foreign keys without inserting any Customer Privacy business records.
+-- Historical module versions remain append-only because accepted later fixtures
+-- continue to reference their original published owner version.
 
 INSERT INTO crm.module_versions (
   module_id,
@@ -14,15 +16,25 @@ INSERT INTO crm.module_versions (
   published_at,
   publisher_id
 )
-VALUES (
-  'crm.customer-privacy',
-  '0.3.0',
-  'crm.cjson/v1',
-  decode(repeat('68', 32), 'hex'),
-  '{"module_id":"crm.customer-privacy","version":"0.3.0"}'::jsonb,
-  clock_timestamp(),
-  'customer-platform'
-)
+VALUES
+  (
+    'crm.customer-privacy',
+    '0.2.0',
+    'crm.cjson/v1',
+    decode(repeat('68', 32), 'hex'),
+    '{"module_id":"crm.customer-privacy","version":"0.2.0"}'::jsonb,
+    clock_timestamp(),
+    'customer-platform'
+  ),
+  (
+    'crm.customer-privacy',
+    '0.3.0',
+    'crm.cjson/v1',
+    decode(repeat('7b', 32), 'hex'),
+    '{"module_id":"crm.customer-privacy","version":"0.3.0"}'::jsonb,
+    clock_timestamp(),
+    'customer-platform'
+  )
 ON CONFLICT (module_id, version) DO UPDATE
 SET canonicalization_profile = EXCLUDED.canonicalization_profile,
     manifest_sha256 = EXCLUDED.manifest_sha256,
