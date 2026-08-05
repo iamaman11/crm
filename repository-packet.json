@@ -12,6 +12,7 @@
   ],
   "objective": "Execute the first bounded ADR-032 Step 22 slice by freezing the accepted Phase 8A baseline and extending the existing reproducible complexity analyzer to publish complete machine-readable inventories of crm-application-runtime internal direct dependencies and every permanent workflow and job, without yet classifying, removing, merging or retaining those surfaces.",
   "allowed_paths": [
+    ".github/workflows/rust-generated-sync.yml",
     "docs/ACTIVE_PACKET.md",
     "docs/STEP22_ARCHITECTURE_REMEASUREMENT.md",
     "docs/generated/REPOSITORY_MAP.md",
@@ -22,7 +23,6 @@
     "tests/test_workspace_analysis.py"
   ],
   "forbidden_paths": [
-    ".github/workflows/**",
     "AGENTS.md",
     "Cargo.lock",
     "Cargo.toml",
@@ -54,9 +54,9 @@
     "extend scripts/analyze_workspace.py additively with a deterministic Step 22 inventory section while preserving all existing report fields",
     "inventory every internal direct dependency of crm-application-runtime with dependency kind manifest section target category and unresolved ADR-032 decision state",
     "inventory every permanent workflow and every job with stable identifiers structural step counts timeout path-filter and expensive-environment signals",
-    "publish one canonical step22-architecture-inventory.json generated from the exact accepted Phase 8A baseline and a human-readable remeasurement report",
-    "prove unique complete inventory identifiers and deterministic JSON and Markdown output through focused permanent tests",
-    "regenerate active packet navigation without changing Rust manifests runtime source workflows product behavior contracts schemas migrations dependencies or lockfiles"
+    "publish one canonical step22-architecture-inventory.json generated from an exact pull-request source head and a human-readable remeasurement report",
+    "prove unique complete inventory identifiers canonical formatting and structural equality with a fresh analyzer run after normalizing only the self-referential materialization source commit",
+    "regenerate active packet navigation without changing Rust manifests runtime source permanent workflow behavior product behavior contracts schemas migrations dependencies or lockfiles"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -70,16 +70,16 @@
     "the analyzer preserves schema crm.workspace-complexity-baseline/v1 and all existing top-level fields while adding an additive step22_inventory object",
     "every crm-application-runtime internal direct production dev and build dependency appears exactly once with no inferred final ADR-032 classification",
     "every permanent workflow and every declared workflow job appears exactly once under stable path-based identifiers",
-    "the committed machine-readable inventory is canonical deterministic and matches a fresh analyzer run on the exact pull-request head",
+    "the committed machine-readable inventory is canonical deterministic and structurally matches a fresh analyzer run after normalizing only measurement_source_commit",
     "the human report explicitly states that Step 22 remains in progress and runtime dependency classifications gate dispositions remediation and architecture scoring are not decided in this packet",
-    "the final diff changes only declared analyzer test inventory documentation packet and generated navigation paths",
+    "the final diff restores the permanent Generated Sync workflow and changes only declared analyzer test inventory documentation packet and generated navigation paths",
     "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments reviews or review threads"
   ],
   "non_goals": [
     "classify any runtime dependency as removed platform-generic owner-specific-unavoidable or test-only",
     "remove or move a crm-application-runtime dependency or change runtime fan-in",
     "assign retain simplify merge or remove dispositions to permanent gates",
-    "add remove rename or modify a permanent workflow job or repository gate",
+    "add remove rename or permanently modify a permanent workflow job or repository gate",
     "declare Repository Step 22 complete raise an architecture score start Phase 8B or declare architecture 10/10"
   ]
 }
