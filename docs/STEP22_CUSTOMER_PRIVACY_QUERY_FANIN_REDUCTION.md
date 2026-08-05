@@ -43,6 +43,23 @@ The remediation is deliberately narrow:
 
 No capability ID, schema, public query inventory, route, persistence behavior, visibility policy, cursor behavior or PostgreSQL ownership changes.
 
+## Exact lockfile synchronization
+
+Cargo requires two textual changes inside the existing `crm-application-runtime` lock package record:
+
+1. delete the direct dependency line for `crm-customer-privacy-query-adapter`;
+2. canonicalize the already resolved dependency reference from `prost 0.14.3` to `prost`.
+
+The second change does not update, add or remove a package. The resolved `prost` package identity and version remain unchanged. The one-shot lockfile proof requires the resulting `Cargo.lock` to equal the `main` baseline byte-for-byte after those two exact substitutions, then requires `cargo metadata --locked` to accept it. Parsed comparison additionally requires:
+
+- identical package count and order;
+- identical package names, versions, sources and checksums;
+- every package record outside `crm-application-runtime` to remain equal;
+- the Customer Privacy production record to retain its internal query-adapter dependency;
+- the query-adapter package record to remain present.
+
+No broader Cargo-generated lockfile normalization is accepted.
+
 ## Mechanical proof
 
 Run:
@@ -60,6 +77,8 @@ The permanent validator now fails closed unless:
 - the generic runtime consumes `control_query_capability_definitions` through `crm_customer_privacy_production`;
 - the owner production manifest still retains the adapter internally;
 - the owner production source publicly exposes the inventory function;
+- the runtime lock record no longer contains the adapter edge and uses canonical `prost` spelling rather than `prost 0.14.3`;
+- the owner lock record and adapter package record remain present;
 - the decision ledger records exactly 18 final classifications, 1 removal and 45 unresolved dependencies;
 - no `owner-specific-unavoidable` decision, gate disposition or Step 22 closure is claimed.
 
@@ -73,6 +92,7 @@ This packet does **not**:
 - change the owner production package's internal dependency graph;
 - classify `crm-customer-privacy-production` as unavoidable;
 - remediate any other owner-specific dependency;
+- change a lockfile package identity, resolved version, source or checksum;
 - add, remove or change a permanent workflow or job;
 - assign a permanent-gate value disposition;
 - complete runtime fan-in classification or Repository Step 22;
