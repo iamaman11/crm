@@ -21,12 +21,14 @@ on:
       - "services/**/*.rs"
       - "proto/**/*.proto"
       - "schemas/module.schema.json"
+      - "scripts/analyze_workspace.py"
       - "scripts/contract_bindings.py"
       - "scripts/generate_contract_bindings.py"
       - "scripts/generate_repository_navigation.py"
       - "scripts/repository_navigation.py"
       - "scripts/repo.py"
       - "scripts/validate_module_manifests.py"
+      - "step22-architecture-inventory.json"
       - "tests/test_repository_navigation.py"
       - "contracts/module-contract-bindings.json"
       - "packages/client/src/contract_hashes.ts"
@@ -82,17 +84,125 @@ jobs:
           python scripts/generate_contract_bindings.py --write
       - name: Synchronize generated repository navigation
         run: python scripts/generate_repository_navigation.py --write
-      - name: Commit generated Rust, contract and navigation artifacts when needed
+      - name: Materialize canonical Step 22 review inventory once
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f step22-architecture-inventory.json ]; then
+            echo "Canonical Step 22 review inventory is already materialized."
+            exit 0
+          fi
+          python scripts/analyze_workspace.py --json-output /tmp/workspace-complexity.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("/tmp/workspace-complexity.json").read_text(encoding="utf-8"))
+          source = report["step22_inventory"]
+          gates = source["permanent_gates"]
+          ledger = {
+              "schema_version": source["schema_version"],
+              "measurement_source_commit": source["commit_sha"],
+              "phase": source["phase"],
+              "decision_state": "unresolved",
+              "adr": source["adr"],
+              "runtime_fanin": {
+                  "package": source["runtime_fanin"]["package"],
+                  "manifest_path": source["runtime_fanin"]["manifest_path"],
+                  "counts": {
+                      "all": source["runtime_fanin"]["internal_direct_dependency_count"],
+                      "production": source["runtime_fanin"]["production_count"],
+                      "test_only": source["runtime_fanin"]["test_only_count"],
+                      "build": source["runtime_fanin"]["build_count"],
+                  },
+                  "columns": [
+                      "stable_id",
+                      "dependency_kind",
+                      "target_category",
+                      "target_manifest_path",
+                  ],
+                  "rows": [
+                      [
+                          item["stable_id"],
+                          item["dependency_kind"],
+                          item["target_category"],
+                          item["target_manifest_path"],
+                      ]
+                      for item in source["runtime_fanin"]["dependencies"]
+                  ],
+              },
+              "permanent_gates": {
+                  "counts": {
+                      "workflows": gates["workflow_count"],
+                      "jobs": gates["job_count"],
+                  },
+                  "workflow_columns": [
+                      "stable_id",
+                      "name",
+                      "job_count",
+                      "action_reference_count",
+                      "run_step_count",
+                      "path_filter_count",
+                      "maximum_timeout_minutes",
+                      "environment_signals",
+                  ],
+                  "workflow_rows": [
+                      [
+                          item["stable_id"],
+                          item["name"],
+                          item["job_count"],
+                          item["action_reference_count"],
+                          item["run_step_count"],
+                          item["path_filter_count"],
+                          item["maximum_timeout_minutes"],
+                          item["environment_signals"],
+                      ]
+                      for item in gates["workflows"]
+                  ],
+                  "job_columns": [
+                      "stable_id",
+                      "action_reference_count",
+                      "run_step_count",
+                      "maximum_timeout_minutes",
+                      "environment_signals",
+                  ],
+                  "job_rows": [
+                      [
+                          item["stable_id"],
+                          item["action_reference_count"],
+                          item["run_step_count"],
+                          item["maximum_timeout_minutes"],
+                          item["environment_signals"],
+                      ]
+                      for item in gates["jobs"]
+                  ],
+              },
+              "decision_boundary": source["decision_boundary"],
+          }
+          Path("step22-architecture-inventory.json").write_text(
+              json.dumps(ledger, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+      - name: Commit generated Rust contract navigation and Step 22 inventory artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if [ -z "$(git status --porcelain -- crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md)" ]; then
-            echo "Rust, contract and repository navigation artifacts are already synchronized."
+          paths=(
+            crates modules services
+            packages/client/src/contract_hashes.ts
+            contracts/module-contract-bindings.json
+            docs/ACTIVE_PACKET.md
+            docs/generated/REPOSITORY_MAP.md
+            step22-architecture-inventory.json
+          )
+          if [ -z "$(git status --porcelain -- "${paths[@]}")" ]; then
+            echo "Rust, contract, repository navigation and Step 22 inventory artifacts are already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md
-            git commit -m "Synchronize Rust, contract and repository navigation artifacts"
+            git add "${paths[@]}"
+            git commit -m "Materialize canonical Step 22 architecture inventory"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
