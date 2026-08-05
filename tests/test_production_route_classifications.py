@@ -37,17 +37,6 @@ class ProductionRouteClassificationTests(unittest.TestCase):
                 ),
             },
         )
-        privacy_contract_only = {
-            ("crm.customer-privacy", "customer_privacy.legal_hold.get", "1.0.0"),
-            (
-                "crm.customer-privacy",
-                "customer_privacy.legal_hold.list_by_subject",
-                "1.0.0",
-            ),
-            ("crm.customer-privacy", "customer_privacy.legal_hold.release", "1.0.0"),
-            ("crm.customer-privacy", "customer_privacy.restriction.get", "1.0.0"),
-            ("crm.customer-privacy", "customer_privacy.restriction.release", "1.0.0"),
-        }
         owner_scope_contract_only = {
             ("crm.parties", "parties.privacy.scope.contribute", "1.0.0"),
             (
@@ -101,27 +90,34 @@ class ProductionRouteClassificationTests(unittest.TestCase):
         }
         self.assertEqual(
             non_runtime,
-            legacy_import_contract_only
-            | privacy_contract_only
-            | owner_scope_contract_only,
+            legacy_import_contract_only | owner_scope_contract_only,
         )
-        for runtime_id in {
+        runtime_privacy_ids = {
             "customer_privacy.case.create",
             "customer_privacy.case.submit",
             "customer_privacy.case.subject.verify",
             "customer_privacy.case.approve",
             "customer_privacy.case.cancel",
             "customer_privacy.restriction.place",
+            "customer_privacy.restriction.release",
             "customer_privacy.legal_hold.place",
+            "customer_privacy.legal_hold.release",
             "customer_privacy.case.get",
             "customer_privacy.case.list",
+            "customer_privacy.restriction.get",
+            "customer_privacy.legal_hold.get",
+            "customer_privacy.legal_hold.list_by_subject",
             "customer_privacy.case.plan.get",
             "customer_privacy.case.owner_outcomes.list",
-        }:
+        }
+        for runtime_id in runtime_privacy_ids:
             self.assertNotIn(
                 ("crm.customer-privacy", runtime_id, "1.0.0"),
                 non_runtime,
             )
+        self.assertFalse(
+            any(owner == "crm.customer-privacy" for owner, _, _ in non_runtime)
+        )
         self.assertEqual(empty_modules, {"crm.sales-activities-link"})
         self.assertIn(("crm.search", "search.global.query", "1.0.0"), platform)
         completed_enrichment = {
@@ -166,7 +162,7 @@ class ProductionRouteClassificationTests(unittest.TestCase):
         )
         self.assertFalse(
             any(owner == "crm.customer-privacy" for owner, _, _ in workers),
-            "Customer Privacy workers are not published by the step-six slice",
+            "Customer Privacy public lifecycle is ingress runtime, not worker runtime",
         )
 
 
