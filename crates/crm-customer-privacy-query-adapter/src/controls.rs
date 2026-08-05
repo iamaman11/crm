@@ -855,7 +855,7 @@ fn processing_restriction_ref(
     })?;
     support::record_ref(
         RESTRICTION_RECORD_TYPE,
-        value.processing_restriction_id,
+        &value.processing_restriction_id,
         "customer_privacy.restriction.ref.processing_restriction_id",
     )
 }
@@ -869,7 +869,7 @@ fn legal_hold_ref(value: Option<wire::CustomerDataLegalHoldRef>) -> Result<Recor
     })?;
     support::record_ref(
         LEGAL_HOLD_RECORD_TYPE,
-        value.customer_data_legal_hold_id,
+        &value.customer_data_legal_hold_id,
         "customer_privacy.legal_hold.ref.customer_data_legal_hold_id",
     )
 }
