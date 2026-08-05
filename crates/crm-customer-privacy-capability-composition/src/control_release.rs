@@ -12,7 +12,7 @@ use crm_customer_privacy_capability_adapter::{
     RELEASE_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY, RELEASE_PROCESSING_RESTRICTION_CAPABILITY,
     legal_hold_ref_from_release_request, processing_restriction_ref_from_release_request,
 };
-use crm_module_sdk::{ErrorCategory, PortFuture, RecordId, SdkError};
+use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
 use crm_party_reference_composition::lock_customer_subject_in_transaction;
 use sqlx::{Postgres, Row, Transaction};
 use std::sync::Arc;
