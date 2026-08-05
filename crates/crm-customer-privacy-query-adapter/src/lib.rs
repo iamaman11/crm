@@ -2,7 +2,10 @@
 
 //! Permission-aware Customer Privacy case queries.
 
+mod controls;
 mod list;
+
+pub use controls::*;
 
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{CapabilityDefinition, CapabilityRisk};
