@@ -221,25 +221,35 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_step_20_evidence_sync_packet_is_exact(self) -> None:
+    def test_active_step_21_control_lifecycle_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-20-evidence-sync")
+        self.assertEqual(
+            self.packet["packet_id"],
+            "repository-step-21-customer-privacy-control-lifecycle",
+        )
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "ef3457c11646b1069e5e65683d3618b3d470136e"},
+            {"ref": "main", "sha": "767b12b20f311088a8487446bd9ee6413fb9ac7c"},
         )
-        self.assertEqual(len(self.packet["allowed_paths"]), 13)
         self.assertEqual(
             self.packet["required_checks"],
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Owner Execution CI",
+                "Customer Privacy Hold Retention CI",
+                "Customer Privacy Restriction Policy CI",
                 "Governance CI",
                 "Rust Generated Sync",
                 "Rust CI",
             ],
+        )
+        self.assertIn(
+            "services/crm-api/tests/customer_privacy_hold_retention_process_e2e.rs",
+            self.packet["allowed_paths"],
+        )
+        self.assertIn(
+            "services/crm-api/tests/customer_privacy_restriction_process_e2e.rs",
+            self.packet["allowed_paths"],
         )
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
