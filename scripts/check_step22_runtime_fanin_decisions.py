@@ -7,6 +7,7 @@ from collections import Counter
 import json
 from pathlib import Path
 import sys
+import tomllib
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +22,9 @@ FINAL_CLASSIFICATIONS = {
     "owner-specific-unavoidable",
     "test-only",
 }
+REMOVED_QUERY_STABLE_ID = (
+    "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter"
+)
 EXPECTED_REGISTRATION = {
     "id": "repository-step-22-runtime-fanin",
     "owner": "architecture-governance",
@@ -31,6 +35,18 @@ EXPECTED_REGISTRATION = {
     ),
     "tracking_issue": "#194",
     "validator": "scripts/check_step22_runtime_fanin_decisions.py",
+}
+EXPECTED_REMEDIATION = {
+    "after": {"all": 62, "production": 61, "test_only": 1},
+    "before": {"all": 63, "production": 62, "test_only": 1},
+    "owner_manifest": "crates/crm-customer-privacy-production/Cargo.toml",
+    "owner_source": "crates/crm-customer-privacy-production/src/legal_hold.rs",
+    "removed_stable_ids": [REMOVED_QUERY_STABLE_ID],
+    "replacement_boundary": "crm-customer-privacy-production",
+    "runtime_manifest": "crates/crm-application-runtime/Cargo.toml",
+    "runtime_source": (
+        "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
+    ),
 }
 
 
@@ -105,6 +121,104 @@ def inventory_rows(inventory: dict[str, Any]) -> dict[str, dict[str, str]]:
     return result
 
 
+def current_runtime_direct_ids(root: Path, manifest_path: str) -> set[str]:
+    manifest = tomllib.loads((root / manifest_path).read_text(encoding="utf-8"))
+    ids: set[str] = set()
+    sections = (
+        ("dependencies", "dependencies"),
+        ("dev-dependencies", "dev-dependencies"),
+        ("build-dependencies", "build-dependencies"),
+    )
+    for section, stable_section in sections:
+        dependencies = manifest.get(section, {})
+        if not isinstance(dependencies, dict):
+            raise DecisionLedgerError(f"runtime manifest {section} must be a table")
+        for name in dependencies:
+            if name.startswith("crm-"):
+                ids.add(f"crm-application-runtime::{stable_section}::{name}")
+    return ids
+
+
+def validate_remediation(
+    root: Path,
+    decisions: dict[str, Any],
+    accepted_ids: set[str],
+    final_by_id: dict[str, tuple[str, str]],
+) -> None:
+    remediation = decisions.get("remediation_evidence")
+    if remediation != EXPECTED_REMEDIATION:
+        raise DecisionLedgerError("Step 22C remediation evidence changed")
+
+    current_ids = current_runtime_direct_ids(
+        root, EXPECTED_REMEDIATION["runtime_manifest"]
+    )
+    removed_ids = {
+        stable_id
+        for stable_id, (classification, _) in final_by_id.items()
+        if classification == "removed"
+    }
+    if removed_ids != {REMOVED_QUERY_STABLE_ID}:
+        raise DecisionLedgerError(
+            "Step 22C must record exactly the Customer Privacy query adapter removal"
+        )
+    if current_ids != accepted_ids - removed_ids:
+        added = sorted(current_ids - accepted_ids)
+        missing = sorted((accepted_ids - removed_ids) - current_ids)
+        raise DecisionLedgerError(
+            "current runtime direct dependency surface differs from the accepted "
+            f"inventory minus the one removal: added={added}, missing={missing}"
+        )
+
+    production = sum("::dependencies::" in stable_id for stable_id in current_ids)
+    test_only = sum("::dev-dependencies::" in stable_id for stable_id in current_ids)
+    current_counts = {
+        "all": len(current_ids),
+        "production": production,
+        "test_only": test_only,
+    }
+    if current_counts != EXPECTED_REMEDIATION["after"]:
+        raise DecisionLedgerError(
+            f"current runtime fan-in is not the exact 63 to 62 reduction: {current_counts}"
+        )
+
+    owner_manifest = tomllib.loads(
+        (root / EXPECTED_REMEDIATION["owner_manifest"]).read_text(encoding="utf-8")
+    )
+    owner_dependencies = owner_manifest.get("dependencies", {})
+    if "crm-customer-privacy-query-adapter" not in owner_dependencies:
+        raise DecisionLedgerError(
+            "Customer Privacy production must retain the query adapter internally"
+        )
+
+    runtime_source = (root / EXPECTED_REMEDIATION["runtime_source"]).read_text(
+        encoding="utf-8"
+    )
+    if "crm_customer_privacy_query_adapter" in runtime_source:
+        raise DecisionLedgerError(
+            "generic runtime source still imports Customer Privacy query adapter directly"
+        )
+    for marker in (
+        "crm_customer_privacy_production",
+        "control_query_capability_definitions",
+    ):
+        if marker not in runtime_source:
+            raise DecisionLedgerError(
+                f"generic runtime source is missing replacement boundary marker: {marker}"
+            )
+
+    owner_source = (root / EXPECTED_REMEDIATION["owner_source"]).read_text(
+        encoding="utf-8"
+    )
+    expected_reexport = (
+        "pub use crm_customer_privacy_query_adapter::"
+        "control_query_capability_definitions;"
+    )
+    if expected_reexport not in owner_source:
+        raise DecisionLedgerError(
+            "Customer Privacy production does not expose the control query inventory"
+        )
+
+
 def validate_payload(
     root: Path,
     decisions: dict[str, Any],
@@ -112,8 +226,10 @@ def validate_payload(
 ) -> dict[str, int]:
     if decisions.get("schema_version") != EXPECTED_SCHEMA:
         raise DecisionLedgerError("unexpected runtime fan-in decision schema")
-    if decisions.get("phase") != "partial-classification-only":
-        raise DecisionLedgerError("Step 22B must remain partial-classification-only")
+    if decisions.get("phase") != "partial-classification-and-remediation":
+        raise DecisionLedgerError(
+            "Step 22C must remain partial-classification-and-remediation"
+        )
     if set(decisions.get("allowed_final_classifications", [])) != FINAL_CLASSIFICATIONS:
         raise DecisionLedgerError("ADR-032 final classification enum changed")
 
@@ -189,10 +305,15 @@ def validate_payload(
                 raise DecisionLedgerError(
                     f"test-only entry is not isolated in dev-dependencies: {stable_id}"
                 )
+        elif classification == "removed":
+            if stable_id != REMOVED_QUERY_STABLE_ID:
+                raise DecisionLedgerError(
+                    f"Step 22C does not authorize another removal: {stable_id}"
+                )
         else:
             raise DecisionLedgerError(
-                "Step 22B cannot record removed or owner-specific-unavoidable "
-                "without a separate remediation/evidence packet"
+                "Step 22C cannot record owner-specific-unavoidable without the "
+                "complete ADR-032 evidence contract"
             )
         final_by_id[stable_id] = (classification, boundary_id)
 
@@ -216,21 +337,22 @@ def validate_payload(
             f"got {decisions.get('counts')}"
         )
 
-    boundary = decisions.get("decision_boundary")
     expected_boundary = {
         "all_dependencies_present": True,
         "final_classifications_recorded": False,
         "gate_dispositions_recorded": False,
         "owner_specific_unavoidable_recorded": False,
-        "remediation_performed": False,
+        "remediation_performed": True,
         "step22_complete": False,
     }
-    if boundary != expected_boundary:
-        raise DecisionLedgerError("Step 22B decision boundary is overstated")
+    if decisions.get("decision_boundary") != expected_boundary:
+        raise DecisionLedgerError("Step 22C decision boundary is overstated")
     if not unresolved:
         raise DecisionLedgerError(
-            "Step 22B must not claim full classification or Step 22 closure"
+            "Step 22C must not claim full classification or Step 22 closure"
         )
+
+    validate_remediation(root, decisions, set(inventory_by_id), final_by_id)
     return computed_counts
 
 
@@ -249,14 +371,15 @@ def validate_decisions(root: Path = ROOT) -> dict[str, int]:
 def main() -> int:
     try:
         counts = validate_decisions(ROOT)
-    except (DecisionLedgerError, OSError, json.JSONDecodeError) as error:
+    except (DecisionLedgerError, OSError, json.JSONDecodeError, tomllib.TOMLDecodeError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
     print(
         "Step 22 runtime fan-in decisions passed: "
         f"{counts['final']} final "
         f"({counts['platform_generic']} platform-generic, "
-        f"{counts['test_only']} test-only), "
+        f"{counts['test_only']} test-only, "
+        f"{counts['removed']} removed), "
         f"{counts['unresolved']} unresolved."
     )
     return 0
