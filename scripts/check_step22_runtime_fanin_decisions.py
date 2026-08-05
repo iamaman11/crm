@@ -11,13 +11,26 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DECISIONS_PATH = Path("step22-runtime-fanin-decisions.json")
+GOVERNANCE_PATH = Path("architecture-governance.json")
 EXPECTED_SCHEMA = "crm.step22-runtime-fanin-decisions/v1"
 EXPECTED_INVENTORY_SCHEMA = "crm.step22-architecture-inventory/v1"
+EXPECTED_GOVERNANCE_SCHEMA = "crm.architecture-governance/v1"
 FINAL_CLASSIFICATIONS = {
     "removed",
     "platform-generic",
     "owner-specific-unavoidable",
     "test-only",
+}
+EXPECTED_REGISTRATION = {
+    "id": "repository-step-22-runtime-fanin",
+    "owner": "architecture-governance",
+    "path": DECISIONS_PATH.as_posix(),
+    "review_condition": (
+        "Review on every accepted runtime fan-in classification or remediation "
+        "packet until Repository Step 22 closure."
+    ),
+    "tracking_issue": "#194",
+    "validator": "scripts/check_step22_runtime_fanin_decisions.py",
 }
 
 
@@ -35,6 +48,32 @@ def load_json(root: Path, relative: Path) -> tuple[dict[str, Any], str]:
     if not isinstance(payload, dict):
         raise DecisionLedgerError(f"{relative} must contain a JSON object")
     return payload, text
+
+
+def validate_governance_registration(root: Path) -> None:
+    registry, _ = load_json(root, GOVERNANCE_PATH)
+    if registry.get("schema_version") != EXPECTED_GOVERNANCE_SCHEMA:
+        raise DecisionLedgerError("unexpected architecture governance schema")
+    registrations = registry.get("decision_ledgers")
+    if not isinstance(registrations, list):
+        raise DecisionLedgerError("architecture governance decision_ledgers is missing")
+    matching = [
+        registration
+        for registration in registrations
+        if isinstance(registration, dict)
+        and registration.get("id") == EXPECTED_REGISTRATION["id"]
+    ]
+    if matching != [EXPECTED_REGISTRATION]:
+        raise DecisionLedgerError(
+            "architecture governance must contain exactly one canonical Step 22 "
+            "runtime fan-in registration"
+        )
+    for field in ("path", "validator"):
+        registered_path = matching[0][field]
+        if not (root / registered_path).is_file():
+            raise DecisionLedgerError(
+                f"registered Step 22 {field} does not exist: {registered_path}"
+            )
 
 
 def inventory_rows(inventory: dict[str, Any]) -> dict[str, dict[str, str]]:
@@ -196,6 +235,7 @@ def validate_payload(
 
 
 def validate_decisions(root: Path = ROOT) -> dict[str, int]:
+    validate_governance_registration(root)
     decisions, decisions_text = load_json(root, DECISIONS_PATH)
     if decisions_text != canonical_json(decisions):
         raise DecisionLedgerError(
