@@ -24,11 +24,9 @@ on:
       - "scripts/contract_bindings.py"
       - "scripts/generate_contract_bindings.py"
       - "scripts/generate_repository_navigation.py"
-      - "scripts/materialize_step22b.py"
       - "scripts/repository_navigation.py"
       - "scripts/repo.py"
       - "scripts/validate_module_manifests.py"
-      - "tests/test_architecture_documentation_consistency.py"
       - "tests/test_repository_navigation.py"
       - "contracts/module-contract-bindings.json"
       - "packages/client/src/contract_hashes.ts"
@@ -68,23 +66,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
         with:
           components: rustfmt, clippy
-      - name: Materialize bounded Step 22B permanent guards
-        run: |
-          python scripts/materialize_step22b.py
-          python scripts/check_step22_runtime_fanin_decisions.py
-      - name: Commit bounded Step 22B guard materialization when needed
-        env:
-          HEAD_BRANCH: ${{ github.head_ref }}
-        run: |
-          if git diff --quiet -- tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py; then
-            echo "Step 22B permanent guards are already materialized."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add tests/test_architecture_documentation_consistency.py tests/test_repository_navigation.py
-            git commit -m "Materialize Step 22B permanent guards"
-            git push origin "HEAD:${HEAD_BRANCH}"
-          fi
       - name: Verify committed lockfile and synchronize canonical formatting
         shell: bash
         run: |
