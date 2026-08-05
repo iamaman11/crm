@@ -90,5 +90,13 @@ Repository Step 20 is complete through PR #292 / source `938cebed1e78bf7debf40dc
 
 Step 20A proves the typed governed Customer Privacy browser product plane against real PostgreSQL, assembled `crm-api`, Vite and Chromium. Step 20B proves independent PostgreSQL logical backup and restore, restored-process startup and readiness, active `customer_privacy.case.list` and `customer_privacy.case.get` metrics, cross-tenant and expired-session concealment, startup `0.101` seconds, nearest-rank readiness p95 `2.977` milliseconds, backup SHA-256 `700b8ae13a71af30010b11877f70b6a4b3efe1b0ec3beddaf0f3e3bc19533d3c`, backup size `1,118,941` bytes and Chromium 3 of 3.
 
-Repository Steps 1–20 are complete. Repository Step 21 Phase 8A closure is the only next permitted implementation packet. Phase 8A.11, Phase 8A, Customer Privacy as a complete product capability, product-complete expert modules, architecture 10/10 and the Universal CRM product remain incomplete.
+Repository Steps 1–21 are complete. Repository Step 22 Phase 8A architecture remeasurement, `crm-application-runtime` runtime-fan-in decision and permanent-gate value/cost review is the sole next permitted implementation packet. Phase 8A.11, Phase 8A, Customer Privacy as a complete product capability, product-complete expert modules, architecture 10/10 and the Universal CRM product remain incomplete.
+
+## Accepted Repository Step 21 and Phase 8A closure
+
+PR #296 / accepted source `fd84cd25dfa25a75eac0fdc4a719cc76c84cfc95` / squash merge `c21894f47f24e81da1cc150f9ea457fcfdc2bd63` / 35 of 35 applicable permanent workflows on one unchanged exact head completes Repository Step 21, Phase 8A.11 / issue #126 and Phase 8A.
+
+The accepted final Customer Privacy production inventory is exactly **nine public mutations**, **seven permission-aware public queries** and **one first-party owner worker** (`crm.customer-privacy` / `owner-execution`, phase `260`). The accepted lifecycle includes processing-restriction and legal-hold release/read coordinates, optimistic versioning, exact idempotent replay, immutable event/audit/outbox/business-transaction evidence, FORCE-RLS visibility and uniform concealment, clean PostgreSQL rollback/reapply, real `crm-api` process proof and bounded operations search-projection convergence before backup.
+
+Customer Privacy is the first **Product complete** expert module. Current product-complete expert modules: **1**. The broader Universal CRM product remains incomplete, issue #194 remains open and architecture 10/10 is **not declared**. Repository Step 22 Phase 8A architecture remeasurement, `crm-application-runtime` runtime-fan-in decision and permanent-gate value/cost review is the sole next permitted implementation packet.
 
