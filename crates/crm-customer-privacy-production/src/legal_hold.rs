@@ -64,7 +64,7 @@ pub fn build_production_with_holds(
     Ok(CustomerPrivacyHoldRetentionProduction { base, retention })
 }
 
-pub fn build_internal_retention(
+fn build_internal_retention(
     dependencies: &CustomerPrivacyProductionDependencies,
 ) -> PrivacyRetentionEvaluationService {
     PrivacyRetentionEvaluationService::new(
