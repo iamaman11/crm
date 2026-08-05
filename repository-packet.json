@@ -52,6 +52,7 @@
     "repository-packet.json",
     "services/crm-api/tests/customer_privacy_hold_retention_process_e2e.rs",
     "services/crm-api/tests/customer_privacy_restriction_process_e2e.rs",
+    "services/crm-api/tests/seed_e2e_fixture.rs",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_customer_privacy_contract_inventory.py",
     "tests/test_production_route_classifications.py",
@@ -96,6 +97,7 @@
     "promote customer_privacy.legal_hold.get@1.0.0 and customer_privacy.legal_hold.list_by_subject@1.0.0 as permission-aware side-effect-free FORCE-RLS reads with bounded pagination and concealment",
     "publish exactly the five Step 21 coordinates in the existing Customer Privacy production-process capability-registry fixture at module version 0.3.0",
     "remove exactly the five completed coordinates from non-runtime route classification and preserve the frozen nine-mutation seven-query public inventory",
+    "make the governed operations seed wait for the exact asynchronous search projection before backup instead of relying on a one-shot timing assumption",
     "prove clean PostgreSQL rollback reapply real crm-api authorization tenant isolation denial no-side-effect replay and immutable evidence through existing permanent gates"
   ],
   "required_checks": [
@@ -114,6 +116,7 @@
     "the existing Customer Privacy production-process fixture publishes those five coordinates under manifest version 0.3.0 without inserting business records",
     "release mutations use existing authoritative records shared tenant and canonical Party locking live authorization idempotency atomic state event outbox audit and business transaction evidence",
     "reads are side-effect free use FORCE RLS and permission visibility and uniformly conceal missing cross-tenant hidden and malformed state",
+    "the governed operations seed confirms the exact sales Deal search hit through the production query ingress before logical backup with a bounded convergence deadline",
     "clean PostgreSQL full rollback and reapply repeated acceptance and real crm-api process evidence pass without direct business-table fixtures or alternate runtime",
     "the final diff changes only declared paths and changes no contract protobuf schema migration dependency lockfile module manifest product-plane or normative closure document",
     "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments reviews or review threads"
