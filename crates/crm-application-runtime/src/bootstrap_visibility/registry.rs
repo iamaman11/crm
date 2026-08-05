@@ -281,7 +281,9 @@ fn customer_privacy_visibility(
             collect_resources!(customer_privacy_control_visibility_resources(capability_id))
         }
         GET_PRIVACY_ACTION_PLAN_CAPABILITY | LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY => {
-            collect_resources!(customer_privacy_plan_read_visibility_resources(capability_id))
+            collect_resources!(customer_privacy_plan_read_visibility_resources(
+                capability_id
+            ))
         }
         _ => {
             debug_assert!(
