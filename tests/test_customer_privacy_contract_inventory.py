@@ -131,6 +131,17 @@ class CustomerPrivacyContractInventoryTests(unittest.TestCase):
         self.assertNotIn("INSERT INTO crm.records", fixture)
         self.assertNotIn("INSERT INTO crm.record_relationships", fixture)
 
+    def test_operations_seed_waits_for_exact_search_projection(self) -> None:
+        seed = (ROOT / "services/crm-api/tests/seed_e2e_fixture.rs").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("async fn wait_for_search_hit", seed)
+        self.assertIn("search projection timeout for {resource_id}", seed)
+        self.assertIn("page.hits.iter().any(|hit| hit.resource_id == resource_id)", seed)
+        self.assertNotIn(
+            '"seeded Deal must be visible through governed search"', seed
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
