@@ -113,16 +113,19 @@ jobs:
           cargo test -p crm-customer-privacy-production
           cargo test -p crm-application-runtime \
             --test customer_privacy_production_inventory
-      - name: Prove bounded non-effects
+      - name: Prove bounded retention non-effects
         shell: bash
         run: |
           set -euo pipefail
           changed="$(git diff --name-only '${{ github.event.pull_request.base.sha || github.event.before }}' HEAD 2>/dev/null || true)"
           test -z "$(printf '%s\n' "${changed}" | grep -E 'modules/.*/module\.yaml|proto/|services/crm-api/src/' || true)"
-          ! grep -R -E 'owner_action_(dispatch|outcome)|crypto[_-]shred|tombstone|anonymi[sz]e|legal_hold\.release|restriction\.release' \
+          ! grep -R -E 'owner_action_(dispatch|outcome)|crypto[_-]shred|tombstone|anonymi[sz]e' \
             crates/crm-customer-privacy-application/src/retention.rs \
             crates/crm-customer-privacy-postgres/src/retention.rs \
             crates/crm-customer-privacy-production/src/legal_hold.rs
+          ! grep -R -E 'legal_hold\.release|restriction\.release' \
+            crates/crm-customer-privacy-application/src/retention.rs \
+            crates/crm-customer-privacy-postgres/src/retention.rs
       - name: Apply clean authoritative schema and fixtures
         shell: bash
         run: |
@@ -144,7 +147,7 @@ jobs:
             --test customer_privacy_hold_retention_postgres \
             -- --nocapture \
             2>&1 | tee database/customer-privacy-hold-retention-postgres-clean.log
-      - name: Verify real legal-hold placement process
+      - name: Verify real legal-hold lifecycle process
         shell: bash
         run: |
           set -euo pipefail
