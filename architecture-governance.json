@@ -1,5 +1,15 @@
 {
   "schema_version": "crm.architecture-governance/v1",
+  "decision_ledgers": [
+    {
+      "id": "repository-step-22-runtime-fanin",
+      "owner": "architecture-governance",
+      "path": "step22-runtime-fanin-decisions.json",
+      "review_condition": "Review on every accepted runtime fan-in classification or remediation packet until Repository Step 22 closure.",
+      "tracking_issue": "#194",
+      "validator": "scripts/check_step22_runtime_fanin_decisions.py"
+    }
+  ],
   "exceptions": [],
   "new_crate_justifications": [
     {
