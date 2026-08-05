@@ -33,6 +33,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             {"ref": "main", "sha": "c21894f47f24e81da1cc150f9ea457fcfdc2bd63"},
         )
         self.assertEqual(packet["tracking_issues"], [194, 126, 28])
+        allowed_paths = set(packet["allowed_paths"])
         self.assertTrue(
             {
                 "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
@@ -43,8 +44,11 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "docs/PROJECT_STATUS.md",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
-            }.issubset(set(packet["allowed_paths"]))
+            }.issubset(allowed_paths)
         )
+        self.assertNotIn(".github/workflows/rust-generated-sync.yml", allowed_paths)
+        self.assertFalse(any(path.startswith("scripts/") for path in allowed_paths))
+        self.assertIn("scripts/**", packet["forbidden_paths"])
         self.assertIn("PR #296", " ".join(packet["deliverables"]))
         self.assertIn("Repository Step 22", " ".join(packet["deliverables"]))
 
