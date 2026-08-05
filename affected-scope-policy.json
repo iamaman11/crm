@@ -115,7 +115,7 @@
     },
     {
       "id": "operations",
-      "owner": "architecture-governance",
+      "owner": "platform-operations",
       "path_patterns": [
         ".github/pull_request_template.md",
         ".github/workflows/**",
