@@ -12,6 +12,7 @@
   ],
   "objective": "Execute the first bounded ADR-032 Step 22 slice by freezing the accepted Phase 8A baseline and extending the existing reproducible complexity analyzer to publish complete machine-readable inventories of crm-application-runtime internal direct dependencies and every permanent workflow and job, without yet classifying, removing, merging or retaining those surfaces.",
   "allowed_paths": [
+    "affected-scope-policy.json",
     "docs/ACTIVE_PACKET.md",
     "docs/STEP22_ARCHITECTURE_REMEASUREMENT.md",
     "docs/generated/REPOSITORY_MAP.md",
@@ -27,7 +28,6 @@
     "Cargo.lock",
     "Cargo.toml",
     "README.md",
-    "affected-scope-policy.json",
     "apps/**",
     "architecture-governance.json",
     "contracts/**",
@@ -55,6 +55,7 @@
     "inventory every internal direct dependency of crm-application-runtime with dependency kind manifest section target category and unresolved ADR-032 decision state",
     "inventory every permanent workflow and every job with stable identifiers structural step counts timeout path-filter and expensive-environment signals",
     "publish one canonical step22-architecture-inventory.json generated from an exact pull-request source head and a human-readable remeasurement report",
+    "map the canonical Step 22 inventory ledger into the existing architecture-governance affected scope without adding a workflow or required gate",
     "prove unique complete inventory identifiers canonical formatting and structural equality with a fresh analyzer run after normalizing only the self-referential materialization source commit",
     "regenerate active packet navigation without changing Rust manifests runtime source workflows product behavior contracts schemas migrations dependencies or lockfiles"
   ],
@@ -71,8 +72,9 @@
     "every crm-application-runtime internal direct production dev and build dependency appears exactly once with no inferred final ADR-032 classification",
     "every permanent workflow and every declared workflow job appears exactly once under stable path-based identifiers",
     "the committed machine-readable inventory is canonical deterministic and structurally matches a fresh analyzer run after normalizing only measurement_source_commit",
+    "affected-scope analysis maps step22-architecture-inventory.json to the existing architecture-governance operations scope and still requires Governance CI",
     "the human report explicitly states that Step 22 remains in progress and runtime dependency classifications gate dispositions remediation and architecture scoring are not decided in this packet",
-    "the final diff changes only declared analyzer test inventory documentation packet and generated navigation paths and contains no workflow runtime manifest contract schema migration dependency or lockfile change",
+    "the final diff changes only declared analyzer policy test inventory documentation packet and generated navigation paths and contains no workflow runtime manifest contract schema migration dependency or lockfile change",
     "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments reviews or review threads"
   ],
   "non_goals": [
