@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+import re
 import subprocess
 import tomllib
 
@@ -13,7 +14,15 @@ ROOT = Path(__file__).resolve().parents[1]
 LOCK_PATH = ROOT / "Cargo.lock"
 VALIDATOR_PATH = ROOT / "scripts/check_step22_runtime_fanin_decisions.py"
 REMOVED_DEPENDENCY = "crm-customer-privacy-query-adapter"
+BASELINE_PROST_REFERENCE = "prost 0.14.3"
+CANONICAL_PROST_REFERENCE = "prost"
 REMOVED_LOCK_LINE = ' "crm-customer-privacy-query-adapter",\n'
+BASELINE_PROST_LINE = ' "prost 0.14.3",\n'
+CANONICAL_PROST_LINE = ' "prost",\n'
+RUNTIME_BLOCK = re.compile(
+    r'(?ms)^\[\[package\]\]\nname = "crm-application-runtime"\n.*?'
+    r'(?=^\[\[package\]\]|\Z)'
+)
 
 VALIDATOR_MARKER = '''    if "crm-customer-privacy-query-adapter" not in owner_dependencies:
         raise DecisionLedgerError(
@@ -49,6 +58,14 @@ VALIDATOR_INSERTION = '''    if "crm-customer-privacy-query-adapter" not in owne
     if "crm-customer-privacy-query-adapter" in runtime_lock_dependencies:
         raise DecisionLedgerError(
             "Cargo.lock still records the removed direct runtime query-adapter edge"
+        )
+    if "prost" not in runtime_lock_dependencies:
+        raise DecisionLedgerError(
+            "Cargo.lock does not use Cargo's canonical runtime prost reference"
+        )
+    if "prost 0.14.3" in runtime_lock_dependencies:
+        raise DecisionLedgerError(
+            "Cargo.lock retains the stale version-qualified runtime prost reference"
         )
     owner_lock_dependencies = lock_package("crm-customer-privacy-production").get(
         "dependencies", []
@@ -88,11 +105,34 @@ def unique_package(packages: list[dict], name: str) -> dict:
     return matching[0]
 
 
+def expected_lock_text(baseline_text: str) -> str:
+    matching = RUNTIME_BLOCK.findall(baseline_text)
+    if len(matching) != 1:
+        raise RuntimeError(
+            f"expected exactly one crm-application-runtime lock block, got {len(matching)}"
+        )
+    runtime_block = matching[0]
+    if runtime_block.count(REMOVED_LOCK_LINE) != 1:
+        raise RuntimeError(
+            "baseline runtime lock block must contain exactly one removable adapter line"
+        )
+    if runtime_block.count(BASELINE_PROST_LINE) != 1:
+        raise RuntimeError(
+            "baseline runtime lock block must contain exactly one version-qualified prost line"
+        )
+    expected_runtime_block = runtime_block.replace(REMOVED_LOCK_LINE, "", 1)
+    expected_runtime_block = expected_runtime_block.replace(
+        BASELINE_PROST_LINE, CANONICAL_PROST_LINE, 1
+    )
+    return RUNTIME_BLOCK.sub(lambda _match: expected_runtime_block, baseline_text, count=1)
+
+
 def validate_exact_lock_delta(baseline_text: str, current_text: str) -> None:
-    expected_text = baseline_text.replace(REMOVED_LOCK_LINE, "", 1)
+    expected_text = expected_lock_text(baseline_text)
     if current_text != expected_text:
         raise RuntimeError(
-            "Cargo.lock is not byte-for-byte main minus the exact adapter dependency line"
+            "Cargo.lock differs from main by more than the exact adapter deletion "
+            "and runtime prost reference canonicalization"
         )
 
     baseline = tomllib.loads(baseline_text)
@@ -109,12 +149,19 @@ def validate_exact_lock_delta(baseline_text: str, current_text: str) -> None:
     current_runtime = unique_package(current_packages, "crm-application-runtime")
     expected_runtime = copy.deepcopy(baseline_runtime)
     dependencies = expected_runtime.get("dependencies")
-    if not isinstance(dependencies, list) or dependencies.count(REMOVED_DEPENDENCY) != 1:
+    if not isinstance(dependencies, list):
+        raise RuntimeError("baseline runtime lock dependencies are missing")
+    if dependencies.count(REMOVED_DEPENDENCY) != 1:
         raise RuntimeError("baseline runtime lock record lacks the exact removable edge")
+    if dependencies.count(BASELINE_PROST_REFERENCE) != 1:
+        raise RuntimeError(
+            "baseline runtime lock record lacks the exact version-qualified prost reference"
+        )
     dependencies.remove(REMOVED_DEPENDENCY)
+    dependencies[dependencies.index(BASELINE_PROST_REFERENCE)] = CANONICAL_PROST_REFERENCE
     if current_runtime != expected_runtime:
         raise RuntimeError(
-            "current runtime lock record differs from baseline by more than the exact edge removal"
+            "current runtime lock record differs from the two exact allowed changes"
         )
 
     baseline_without_runtime = [
@@ -139,6 +186,8 @@ def validate_exact_lock_delta(baseline_text: str, current_text: str) -> None:
 def materialize_validator() -> None:
     text = VALIDATOR_PATH.read_text(encoding="utf-8")
     if "Cargo.lock still records the removed direct runtime query-adapter edge" in text:
+        if "Cargo.lock does not use Cargo's canonical runtime prost reference" not in text:
+            raise RuntimeError("partial Step 22C lockfile validator materialization detected")
         return
     if text.count(VALIDATOR_MARKER) != 1:
         raise RuntimeError("validator insertion marker changed")
@@ -150,25 +199,30 @@ def materialize_validator() -> None:
 
 def main() -> None:
     baseline_text = git_show("origin/main:Cargo.lock")
-    if baseline_text.count(REMOVED_LOCK_LINE) != 1:
-        raise RuntimeError(
-            "baseline Cargo.lock must contain exactly one removable adapter dependency line"
-        )
-    LOCK_PATH.write_text(
-        baseline_text.replace(REMOVED_LOCK_LINE, "", 1),
-        encoding="utf-8",
-    )
+    LOCK_PATH.write_text(baseline_text, encoding="utf-8")
     subprocess.run(
-        ["cargo", "metadata", "--locked", "--format-version", "1", "--no-deps"],
+        ["cargo", "metadata", "--format-version", "1", "--no-deps"],
         cwd=ROOT,
         check=True,
         stdout=subprocess.DEVNULL,
     )
     current_text = LOCK_PATH.read_text(encoding="utf-8")
     validate_exact_lock_delta(baseline_text, current_text)
+    subprocess.run(
+        ["cargo", "metadata", "--locked", "--format-version", "1", "--no-deps"],
+        cwd=ROOT,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    if LOCK_PATH.read_text(encoding="utf-8") != current_text:
+        raise RuntimeError("cargo metadata --locked changed the accepted lockfile")
     materialize_validator()
 
     summary = {
+        "canonicalized_dependency": {
+            "after": CANONICAL_PROST_REFERENCE,
+            "before": BASELINE_PROST_REFERENCE,
+        },
         "changed_package": "crm-application-runtime",
         "package_count": len(package_records(tomllib.loads(current_text))),
         "removed_dependency": REMOVED_DEPENDENCY,
