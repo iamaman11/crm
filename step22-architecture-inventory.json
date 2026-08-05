@@ -7,7 +7,7 @@
     "step22_complete": false
   },
   "decision_state": "unresolved",
-  "measurement_source_commit": "582eccbd6f9a55564d0d6efbfd3d26bdf3630d05",
+  "measurement_source_commit": "ace0a2c5af5947c2dc8c390d23036a2f72d65070",
   "permanent_gates": {
     "counts": {
       "jobs": 42,
@@ -400,7 +400,7 @@
       [
         ".github/workflows/rust-generated-sync.yml#sync",
         5,
-        9,
+        8,
         20,
         [
           "process-runtime"
@@ -923,8 +923,8 @@
         "Rust Generated Sync",
         1,
         5,
-        9,
-        31,
+        8,
+        29,
         20,
         [
           "process-runtime"
