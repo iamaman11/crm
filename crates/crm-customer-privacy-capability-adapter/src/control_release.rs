@@ -184,6 +184,7 @@ pub fn release_customer_data_legal_hold_capability_definition()
     )
 }
 
+#[cfg(test)]
 fn release_control_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     Ok(vec![
         release_processing_restriction_capability_definition()?,
