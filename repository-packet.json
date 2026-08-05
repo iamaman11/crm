@@ -1,27 +1,26 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-22a-remeasurement-inventories",
-  "title": "Remeasure exact architecture and inventory runtime fan-in and permanent gates",
+  "packet_id": "repository-step-22b-runtime-fanin-classifications",
+  "title": "Classify conclusive platform-generic and test-only runtime fan-in",
   "status": "active",
   "baseline": {
     "ref": "main",
-    "sha": "4167bd530b91e3a8fc9bfaaf0d02fcdc1f7a20f3"
+    "sha": "4642ea39a7c1c8ad78b1d475a3d5391af8414555"
   },
   "tracking_issues": [
     194
   ],
-  "objective": "Execute the first bounded ADR-032 Step 22 slice by freezing the accepted Phase 8A baseline and extending the existing reproducible complexity analyzer to publish complete machine-readable inventories of crm-application-runtime internal direct dependencies and every permanent workflow and job, without yet classifying, removing, merging or retaining those surfaces.",
+  "objective": "Execute the second bounded ADR-032 Step 22 slice by recording only conclusive platform-generic and test-only classifications against the accepted PR #298 inventory while leaving every owner-specific dependency unresolved until a separate evidence or remediation packet.",
   "allowed_paths": [
     "affected-scope-policy.json",
     "docs/ACTIVE_PACKET.md",
-    "docs/STEP22_ARCHITECTURE_REMEASUREMENT.md",
+    "docs/STEP22_RUNTIME_FANIN_CLASSIFICATION.md",
     "docs/generated/REPOSITORY_MAP.md",
     "repository-packet.json",
-    "scripts/analyze_workspace.py",
-    "step22-architecture-inventory.json",
+    "scripts/check_step22_runtime_fanin_decisions.py",
+    "step22-runtime-fanin-decisions.json",
     "tests/test_architecture_documentation_consistency.py",
-    "tests/test_repository_navigation.py",
-    "tests/test_workspace_analysis.py"
+    "tests/test_repository_navigation.py"
   ],
   "forbidden_paths": [
     ".github/workflows/**",
@@ -48,18 +47,19 @@
     "services/**",
     "step13-complexity-policy.json",
     "step13-suppression-baseline.json",
+    "step22-architecture-inventory.json",
     "tsconfig.base.json",
     "workspace-dependency-policy.json"
   ],
   "deliverables": [
-    "extend scripts/analyze_workspace.py additively with a deterministic Step 22 inventory section while preserving all existing report fields",
-    "inventory every internal direct dependency of crm-application-runtime with dependency kind manifest section target category and unresolved ADR-032 decision state",
-    "inventory every permanent workflow and every job with stable identifiers structural step counts timeout path-filter and expensive-environment signals",
-    "publish one canonical step22-architecture-inventory.json generated from an exact pull-request source head and a human-readable remeasurement report",
-    "map the canonical Step 22 inventory ledger into the existing platform-operations affected scope without adding a workflow or required gate",
-    "replace the accepted Step 21 active-packet assertion with a permanent Step 22A inventory-only packet and affected-scope ownership guard while retaining historical Step 21 evidence checks",
-    "prove unique complete inventory identifiers canonical formatting and structural equality with a fresh analyzer run after normalizing only the self-referential materialization source commit",
-    "regenerate active packet navigation without changing Rust manifests runtime source workflows product behavior contracts schemas migrations dependencies or lockfiles"
+    "publish canonical step22-runtime-fanin-decisions.json bound to accepted PR #298 inventory source ffb8c94373c565de00cccd67c38c80bdb3a12405 and merge 4642ea39a7c1c8ad78b1d475a3d5391af8414555",
+    "record exactly sixteen platform-generic production dependencies and one dev-isolated test-only dependency as final classifications",
+    "leave the exact complementary forty-six inventory dependencies unresolved without invented temporary legacy or review-later classifications",
+    "record named owners protected-boundary rationale authoritative evidence paths and review or removal conditions for every final classification cohort",
+    "add a fail-closed validator that joins the decision ledger to the accepted inventory and checks canonical formatting exact counts evidence paths and bounded decision semantics",
+    "map the decision ledger and validator into the existing platform-operations affected scope without adding or modifying a workflow",
+    "update permanent active-packet and architecture documentation guards while retaining accepted Step 21 and Step 22A evidence",
+    "regenerate active packet navigation without changing runtime manifests source workflows contracts schemas migrations dependencies or lockfiles"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -69,22 +69,22 @@
     "Rust CI"
   ],
   "acceptance": [
-    "the branch is based exactly on main commit 4167bd530b91e3a8fc9bfaaf0d02fcdc1f7a20f3",
-    "the analyzer preserves schema crm.workspace-complexity-baseline/v1 and all existing top-level fields while adding an additive step22_inventory object",
-    "every crm-application-runtime internal direct production dev and build dependency appears exactly once with no inferred final ADR-032 classification",
-    "every permanent workflow and every declared workflow job appears exactly once under stable path-based identifiers",
-    "the committed machine-readable inventory is canonical deterministic and structurally matches a fresh analyzer run after normalizing only measurement_source_commit",
-    "affected-scope analysis maps step22-architecture-inventory.json to the existing platform-operations operations scope and still requires Governance CI",
-    "the active-packet documentation guard requires the Step 22A baseline and inventory-only non-goals while historical Step 21 merge evidence remains asserted",
-    "the human report explicitly states that Step 22 remains in progress and runtime dependency classifications gate dispositions remediation and architecture scoring are not decided in this packet",
-    "the final diff changes only declared analyzer policy test inventory documentation packet and generated navigation paths and contains no workflow runtime manifest contract schema migration dependency or lockfile change",
+    "the branch is based exactly on main commit 4642ea39a7c1c8ad78b1d475a3d5391af8414555",
+    "the decision ledger contains exactly seventeen final stable IDs from the accepted sixty-three-row inventory with sixteen platform-generic and one test-only classification",
+    "the exact remaining forty-six accepted inventory stable IDs remain unresolved by complement and no invented classification label is accepted",
+    "every final boundary definition has a named owner concrete protected-boundary statement existing authoritative evidence paths and an explicit review or removal condition",
+    "platform-generic entries are production technical crates and the test-only entry is isolated under the accepted dev-dependency inventory",
+    "the packet records zero removed and zero owner-specific-unavoidable decisions and explicitly performs no remediation or permanent-gate disposition",
+    "the permanent validator and conformance tests reject duplicate unknown missing or overstated decisions and canonical-format drift",
+    "the final diff changes only declared policy decision documentation packet generated-navigation validator and guard paths and contains no workflow runtime manifest contract schema migration dependency or lockfile change",
     "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments reviews or review threads"
   ],
   "non_goals": [
-    "classify any runtime dependency as removed platform-generic owner-specific-unavoidable or test-only",
-    "remove or move a crm-application-runtime dependency or change runtime fan-in",
-    "assign retain simplify merge or remove dispositions to permanent gates",
+    "classify any owner-specific dependency as unavoidable without the complete ADR-032 evidence contract",
+    "remove move add or otherwise remediate a crm-application-runtime dependency",
+    "edit crm-application-runtime Cargo.toml or runtime source",
+    "assign retain simplify merge or remove dispositions to permanent workflows jobs or repository gates",
     "add remove rename or modify a permanent workflow job or repository gate",
-    "declare Repository Step 22 complete raise an architecture score start Phase 8B or declare architecture 10/10"
+    "declare all runtime classifications complete complete Repository Step 22 start Phase 8B raise an architecture score or declare architecture 10/10"
   ]
 }
