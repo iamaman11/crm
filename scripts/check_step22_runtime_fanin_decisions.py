@@ -190,6 +190,47 @@ def validate_remediation(
             "Customer Privacy production must retain the query adapter internally"
         )
 
+    lockfile = tomllib.loads((root / "Cargo.lock").read_text(encoding="utf-8"))
+    packages = lockfile.get("package", [])
+    if not isinstance(packages, list):
+        raise DecisionLedgerError("Cargo.lock package inventory is missing")
+
+    def lock_package(name: str) -> dict[str, Any]:
+        matching = [
+            package
+            for package in packages
+            if isinstance(package, dict) and package.get("name") == name
+        ]
+        if len(matching) != 1:
+            raise DecisionLedgerError(
+                f"Cargo.lock must contain exactly one {name} package record"
+            )
+        return matching[0]
+
+    runtime_lock_dependencies = lock_package("crm-application-runtime").get(
+        "dependencies", []
+    )
+    if "crm-customer-privacy-query-adapter" in runtime_lock_dependencies:
+        raise DecisionLedgerError(
+            "Cargo.lock still records the removed direct runtime query-adapter edge"
+        )
+    if "prost" not in runtime_lock_dependencies:
+        raise DecisionLedgerError(
+            "Cargo.lock does not retain the canonical runtime prost reference"
+        )
+    if "prost 0.14.3" in runtime_lock_dependencies:
+        raise DecisionLedgerError(
+            "Cargo.lock contains a non-baseline version-qualified runtime prost reference"
+        )
+    owner_lock_dependencies = lock_package("crm-customer-privacy-production").get(
+        "dependencies", []
+    )
+    if "crm-customer-privacy-query-adapter" not in owner_lock_dependencies:
+        raise DecisionLedgerError(
+            "Cargo.lock no longer records the owner-internal query adapter"
+        )
+    lock_package("crm-customer-privacy-query-adapter")
+
     runtime_source = (root / EXPECTED_REMEDIATION["runtime_source"]).read_text(
         encoding="utf-8"
     )
