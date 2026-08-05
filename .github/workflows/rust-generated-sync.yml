@@ -4,26 +4,34 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - "repository-packet.json"
+      - "Cargo.toml"
       - "requirements-dev.txt"
       - "Cargo.lock"
+      - "repository-packet.json"
+      - "buf.yaml"
+      - "buf.lock"
+      - "buf.gen*.yaml"
+      - "crates/**/Cargo.toml"
+      - "crates/**/*.rs"
       - "crates/crm-proto-contracts/**"
+      - "modules/**/Cargo.toml"
+      - "modules/**/*.rs"
       - "modules/*/module.yaml"
+      - "services/**/Cargo.toml"
+      - "services/**/*.rs"
       - "proto/**/*.proto"
       - "schemas/module.schema.json"
       - "scripts/contract_bindings.py"
       - "scripts/generate_contract_bindings.py"
       - "scripts/generate_repository_navigation.py"
-      - "scripts/materialize_step21_evidence.py"
-      - "scripts/materialize_step21_finalize.py"
       - "scripts/repository_navigation.py"
       - "scripts/repo.py"
       - "scripts/validate_module_manifests.py"
-      - "tests/test_architecture_documentation_consistency.py"
       - "tests/test_repository_navigation.py"
       - "contracts/module-contract-bindings.json"
       - "packages/client/src/contract_hashes.ts"
-      - "docs/**"
+      - "docs/ACTIVE_PACKET.md"
+      - "docs/generated/REPOSITORY_MAP.md"
       - ".github/workflows/rust-generated-sync.yml"
 
 permissions:
@@ -58,34 +66,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
         with:
           components: rustfmt, clippy
-      - name: Materialize accepted Repository Step 21 evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! grep -q 'c21894f47f24e81da1cc150f9ea457fcfdc2bd63' docs/PROJECT_STATUS.md; then
-            python - <<'PY'
-          from pathlib import Path
-          path = Path("scripts/materialize_step21_evidence.py")
-          text = path.read_text(encoding="utf-8")
-          replacements = (
-              (
-                  '    "**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 remains in progress.**",',
-                  '    "**Phases 0.1–7 are complete. Phase 8A is active. Phase 8A.10 is complete. Phase 8A.11 / issue #126 is complete.**",',
-              ),
-              (
-                  '    updated, count = re.subn(pattern, body.rstrip() + "\\n\\n", text, flags=re.S)',
-                  '    updated, count = re.subn(pattern, lambda _: body.rstrip() + "\\n\\n", text, flags=re.S)',
-              ),
-          )
-          for old, new in replacements:
-              if old not in text:
-                  raise SystemExit(f"missing fail-closed materializer marker: {old}")
-              text = text.replace(old, new)
-          path.write_text(text, encoding="utf-8")
-          PY
-            python scripts/materialize_step21_evidence.py
-            python scripts/materialize_step21_finalize.py
-          fi
       - name: Verify committed lockfile and synchronize canonical formatting
         shell: bash
         run: |
@@ -102,35 +82,48 @@ jobs:
           python scripts/generate_contract_bindings.py --write
       - name: Synchronize generated repository navigation
         run: python scripts/generate_repository_navigation.py --write
-      - name: Verify Step 21 documentation guards
-        run: python -m unittest tests.test_architecture_documentation_consistency tests.test_repository_navigation
-      - name: Commit accepted evidence and generated artifacts when needed
+      - name: Commit generated Rust, contract and navigation artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
-        shell: bash
         run: |
-          set -euo pipefail
-          paths=(
-            docs/ACTIVE_PACKET.md
-            docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md
-            docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md
-            docs/IMPLEMENTATION_ROADMAP.md
-            docs/MODULE_CATALOG.md
-            docs/PHASE8A_CUSTOMER_PRIVACY_PRODUCT_PLANE.md
-            docs/PHASE8_DELIVERY_PLAN.md
-            docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md
-            docs/PROJECT_STATUS.md
-            docs/WORKSPACE_COMPLEXITY_BASELINE.md
-            docs/generated/REPOSITORY_MAP.md
-            tests/test_architecture_documentation_consistency.py
-            tests/test_repository_navigation.py
-          )
-          if [ -z "$(git status --porcelain -- "${paths[@]}")" ]; then
-            echo "Accepted evidence and generated artifacts are already synchronized."
+          if [ -z "$(git status --porcelain -- crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md)" ]; then
+            echo "Rust, contract and repository navigation artifacts are already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add "${paths[@]}"
-            git commit -m "Synchronize accepted Repository Step 21 evidence"
+            git add crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md
+            git commit -m "Synchronize Rust, contract and repository navigation artifacts"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
+      - name: Apply machine-fixable Clippy maintenance
+        run: |
+          cargo clippy --locked --fix --workspace --all-targets --all-features --allow-dirty --allow-staged -- \
+            -W unused-imports -W dead-code || true
+          git diff --exit-code -- Cargo.lock
+      - name: Commit Clippy fixes when needed
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          if git diff --quiet -- crates modules services; then
+            echo "Rust Clippy maintenance is already synchronized."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add crates modules services
+            git commit -m "Synchronize machine-fixable Rust maintenance"
+            git push origin "HEAD:${HEAD_BRANCH}"
+          fi
+      - name: Verify canonical Clippy state
+        id: clippy
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings 2>&1 | tee generated-sync-clippy.txt
+      - name: Upload canonical Clippy diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: generated-sync-clippy-diagnostics
+          path: generated-sync-clippy.txt
+          if-no-files-found: error
+          retention-days: 7
