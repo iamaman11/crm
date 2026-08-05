@@ -51,6 +51,18 @@ Each cohort entry references a machine-readable boundary definition with a named
 
 `crm-application-runtime::dev-dependencies::crm-consents` is classified `test-only` because it is declared only under `[dev-dependencies]` and is excluded from production fan-in accounting. Its removal condition is explicit: remove the direct dependency when acceptance fixtures no longer construct the Consents owner module directly.
 
+## Governance registration
+
+The decision surface is registered once in `architecture-governance.json` as `repository-step-22-runtime-fanin` with:
+
+- owner `architecture-governance`;
+- tracking issue `#194`;
+- canonical ledger `step22-runtime-fanin-decisions.json`;
+- validator `scripts/check_step22_runtime_fanin_decisions.py`;
+- a continuing review condition on every accepted classification or remediation packet until Step 22 closure.
+
+The registration uses the existing Governance CI surface. No workflow, job, path topology or permanent-gate disposition is added or changed by this packet.
+
 ## Mechanical enforcement
 
 Run:
@@ -62,6 +74,7 @@ python scripts/check_step22_runtime_fanin_decisions.py
 The validator fails closed when:
 
 - the accepted Step 22A source or merge commit changes;
+- the architecture-governance registration is absent, duplicated or differs from the canonical owner/path/validator/issue/review contract;
 - a final stable ID is missing from the accepted inventory or appears twice;
 - the ADR-032 classification enum changes;
 - a boundary lacks an owner, protected-boundary statement, evidence paths or review condition;
