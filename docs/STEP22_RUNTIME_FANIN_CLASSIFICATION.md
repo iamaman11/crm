@@ -1,6 +1,6 @@
 # Repository Step 22B — Runtime Fan-In Classification Cohort
 
-Status: **Active bounded classification packet**  
+Status: **Active bounded partial-classification packet**  
 Tracking issue: #194  
 Binding decision: `docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md`  
 Accepted inventory baseline: PR #298 source `ffb8c94373c565de00cccd67c38c80bdb3a12405`, squash merge `4642ea39a7c1c8ad78b1d475a3d5391af8414555`
