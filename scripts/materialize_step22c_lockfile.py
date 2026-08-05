@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LOCK_PATH = ROOT / "Cargo.lock"
 VALIDATOR_PATH = ROOT / "scripts/check_step22_runtime_fanin_decisions.py"
 REMOVED_DEPENDENCY = "crm-customer-privacy-query-adapter"
+REMOVED_LOCK_LINE = ' "crm-customer-privacy-query-adapter",\n'
 
 VALIDATOR_MARKER = '''    if "crm-customer-privacy-query-adapter" not in owner_dependencies:
         raise DecisionLedgerError(
@@ -88,6 +89,12 @@ def unique_package(packages: list[dict], name: str) -> dict:
 
 
 def validate_exact_lock_delta(baseline_text: str, current_text: str) -> None:
+    expected_text = baseline_text.replace(REMOVED_LOCK_LINE, "", 1)
+    if current_text != expected_text:
+        raise RuntimeError(
+            "Cargo.lock is not byte-for-byte main minus the exact adapter dependency line"
+        )
+
     baseline = tomllib.loads(baseline_text)
     current = tomllib.loads(current_text)
     if baseline.get("version") != current.get("version"):
@@ -106,24 +113,6 @@ def validate_exact_lock_delta(baseline_text: str, current_text: str) -> None:
         raise RuntimeError("baseline runtime lock record lacks the exact removable edge")
     dependencies.remove(REMOVED_DEPENDENCY)
     if current_runtime != expected_runtime:
-        print(
-            json.dumps(
-                {
-                    "expected_runtime": expected_runtime,
-                    "current_runtime": current_runtime,
-                    "expected_only_dependencies": sorted(
-                        set(expected_runtime.get("dependencies", []))
-                        - set(current_runtime.get("dependencies", []))
-                    ),
-                    "current_only_dependencies": sorted(
-                        set(current_runtime.get("dependencies", []))
-                        - set(expected_runtime.get("dependencies", []))
-                    ),
-                },
-                indent=2,
-                sort_keys=True,
-            )
-        )
         raise RuntimeError(
             "current runtime lock record differs from baseline by more than the exact edge removal"
         )
@@ -161,8 +150,16 @@ def materialize_validator() -> None:
 
 def main() -> None:
     baseline_text = git_show("origin/main:Cargo.lock")
+    if baseline_text.count(REMOVED_LOCK_LINE) != 1:
+        raise RuntimeError(
+            "baseline Cargo.lock must contain exactly one removable adapter dependency line"
+        )
+    LOCK_PATH.write_text(
+        baseline_text.replace(REMOVED_LOCK_LINE, "", 1),
+        encoding="utf-8",
+    )
     subprocess.run(
-        ["cargo", "metadata", "--format-version", "1", "--no-deps"],
+        ["cargo", "metadata", "--locked", "--format-version", "1", "--no-deps"],
         cwd=ROOT,
         check=True,
         stdout=subprocess.DEVNULL,
