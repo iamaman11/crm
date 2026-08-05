@@ -43,6 +43,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
                 "docs/PROJECT_STATUS.md",
                 "tests/test_architecture_documentation_consistency.py",
+                "tests/test_customer_privacy_owner_scope_contracts.py",
                 "tests/test_repository_navigation.py",
             }.issubset(allowed_paths)
         )
