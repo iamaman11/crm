@@ -1,0 +1,250 @@
+{
+  "adr": "docs/adr/ADR-032-step-22-runtime-fanin-and-permanent-gate-value.md",
+  "allowed_final_classifications": [
+    "removed",
+    "platform-generic",
+    "owner-specific-unavoidable",
+    "test-only"
+  ],
+  "boundary_definitions": {
+    "capability-platform": {
+      "classification": "platform-generic",
+      "evidence_paths": [
+        "crates/crm-capability-adapters/Cargo.toml",
+        "crates/crm-capability-ingress/Cargo.toml",
+        "crates/crm-capability-plan-support/Cargo.toml",
+        "crates/crm-capability-runtime/Cargo.toml"
+      ],
+      "owner": "capability-platform",
+      "prevented_boundary": "Provides generic ingress, planning, adapter and execution contracts independent of a business owner.",
+      "review_condition": "Re-review if any component takes an owner-specific dependency or route responsibility."
+    },
+    "consents-test-fixture": {
+      "classification": "test-only",
+      "evidence_paths": [
+        "crates/crm-application-runtime/Cargo.toml",
+        "modules/crm-consents/Cargo.toml"
+      ],
+      "owner": "customer-platform",
+      "prevented_boundary": "Supports direct Consents owner construction only in crm-application-runtime acceptance tests.",
+      "review_condition": "Remove when acceptance fixtures no longer construct the Consents owner module directly."
+    },
+    "core-data-platform": {
+      "classification": "platform-generic",
+      "evidence_paths": [
+        "crates/crm-core-data/Cargo.toml",
+        "crates/crm-core-data/src/lib.rs"
+      ],
+      "owner": "data-platform",
+      "prevented_boundary": "Owns generic authoritative data and PostgreSQL execution mechanics.",
+      "review_condition": "Re-review if owner-specific persistence policy is moved into the generic data boundary."
+    },
+    "core-event-platform": {
+      "classification": "platform-generic",
+      "evidence_paths": [
+        "crates/crm-core-events/Cargo.toml",
+        "crates/crm-core-events/src/lib.rs"
+      ],
+      "owner": "event-platform",
+      "prevented_boundary": "Owns generic event contract and delivery mechanics across owners.",
+      "review_condition": "Re-review if the package begins owning a business-domain event lifecycle."
+    },
+    "global-search-platform": {
+      "classification": "platform-generic",
+      "evidence_paths": [
+        "crates/crm-global-search-composition/Cargo.toml",
+        "crates/crm-global-search-composition/src/lib.rs"
+      ],
+      "owner": "search-platform",
+      "prevented_boundary": "Composes cross-owner search contributions behind one generic global-search process boundary.",
+      "review_condition": "Re-review if ordinary owner search extension requires process-host manifest or owner-specific source edits."
+    },
+    "metadata-platform": {
+      "classification": "platform-generic",
+      "evidence_paths": [
+        "crates/crm-metadata-api-adapter/Cargo.toml",
+        "crates/crm-metadata-query-adapter/Cargo.toml"
+      ],
+      "owner": "metadata-platform",
+      "prevented_boundary": "Publishes and queries governed metadata independently of a business owner.",
+      "review_condition": "Re-review if metadata adapters acquire owner-specific policy or persistence responsibility."
+    },
+    "module-sdk-platform": {
+      "classification": "platform-generic",
+      "evidence_paths": [
+        "crates/crm-module-sdk/Cargo.toml",
+        "crates/crm-module-sdk/src/lib.rs"
+      ],
+      "owner": "module-platform",
+      "prevented_boundary": "Defines the generic first-party module SDK and contribution contract.",
+      "review_condition": "Re-review on an incompatible contribution-contract revision or owner-specific API addition."
+    },
+    "owner-contribution-aggregation": {
+      "classification": "platform-generic",
+      "evidence_paths": [
+        "crates/crm-first-party-modules/Cargo.toml",
+        "crates/crm-first-party-modules/src/lib.rs"
+      ],
+      "owner": "module-platform",
+      "prevented_boundary": "Aggregates owner-owned production contributions without making the process host own each capability.",
+      "review_condition": "Re-review if a new owner requires a direct crm-application-runtime dependency instead of an owner contribution."
+    },
+    "protobuf-contract-platform": {
+      "classification": "platform-generic",
+      "evidence_paths": [
+        "crates/crm-proto-contracts/Cargo.toml",
+        "crates/crm-proto-contracts/src/lib.rs"
+      ],
+      "owner": "contract-platform",
+      "prevented_boundary": "Provides generated shared Protobuf contracts without business-owner execution responsibility.",
+      "review_condition": "Re-review if generated contracts become coupled to one owner runtime."
+    },
+    "query-platform": {
+      "classification": "platform-generic",
+      "evidence_paths": [
+        "crates/crm-query-runtime/Cargo.toml",
+        "crates/crm-query-runtime/src/lib.rs"
+      ],
+      "owner": "query-platform",
+      "prevented_boundary": "Provides generic permission-aware query execution independent of one domain.",
+      "review_condition": "Re-review if owner-specific query semantics move into the generic runtime."
+    },
+    "runtime-process-composition": {
+      "classification": "platform-generic",
+      "evidence_paths": [
+        "crates/crm-application-composition/Cargo.toml",
+        "crates/crm-application-composition/src/lib.rs"
+      ],
+      "owner": "runtime-platform",
+      "prevented_boundary": "Keeps generic process assembly separate from owner capability implementations.",
+      "review_condition": "Re-review if ordinary existing-owner capability work requires owner-specific edits in this package."
+    },
+    "search-platform": {
+      "classification": "platform-generic",
+      "evidence_paths": [
+        "crates/crm-search-query-adapter/Cargo.toml",
+        "crates/crm-search-runtime/Cargo.toml"
+      ],
+      "owner": "search-platform",
+      "prevented_boundary": "Provides generic search execution and query adaptation across owners.",
+      "review_condition": "Re-review if owner-specific indexing or visibility rules move into the generic search boundary."
+    }
+  },
+  "counts": {
+    "all": 63,
+    "final": 17,
+    "owner_specific_unavoidable": 0,
+    "platform_generic": 16,
+    "removed": 0,
+    "test_only": 1,
+    "unresolved": 46
+  },
+  "decision_boundary": {
+    "all_dependencies_present": true,
+    "final_classifications_recorded": false,
+    "gate_dispositions_recorded": false,
+    "owner_specific_unavoidable_recorded": false,
+    "remediation_performed": false,
+    "step22_complete": false
+  },
+  "final_row_columns": [
+    "stable_id",
+    "classification",
+    "boundary_id"
+  ],
+  "final_rows": [
+    [
+      "crm-application-runtime::dependencies::crm-application-composition",
+      "platform-generic",
+      "runtime-process-composition"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-capability-adapters",
+      "platform-generic",
+      "capability-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-capability-ingress",
+      "platform-generic",
+      "capability-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-capability-plan-support",
+      "platform-generic",
+      "capability-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-capability-runtime",
+      "platform-generic",
+      "capability-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-core-data",
+      "platform-generic",
+      "core-data-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-core-events",
+      "platform-generic",
+      "core-event-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-first-party-modules",
+      "platform-generic",
+      "owner-contribution-aggregation"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-global-search-composition",
+      "platform-generic",
+      "global-search-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-metadata-api-adapter",
+      "platform-generic",
+      "metadata-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-metadata-query-adapter",
+      "platform-generic",
+      "metadata-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-module-sdk",
+      "platform-generic",
+      "module-sdk-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-proto-contracts",
+      "platform-generic",
+      "protobuf-contract-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-query-runtime",
+      "platform-generic",
+      "query-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-search-query-adapter",
+      "platform-generic",
+      "search-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-search-runtime",
+      "platform-generic",
+      "search-platform"
+    ],
+    [
+      "crm-application-runtime::dev-dependencies::crm-consents",
+      "test-only",
+      "consents-test-fixture"
+    ]
+  ],
+  "inventory_source": {
+    "accepted_source": "ffb8c94373c565de00cccd67c38c80bdb3a12405",
+    "merge_commit": "4642ea39a7c1c8ad78b1d475a3d5391af8414555",
+    "path": "step22-architecture-inventory.json"
+  },
+  "phase": "partial-classification-only",
+  "resolution_rule": "Every accepted inventory stable_id not present in final_rows remains unresolved; null or invented classification labels are forbidden.",
+  "schema_version": "crm.step22-runtime-fanin-decisions/v1"
+}

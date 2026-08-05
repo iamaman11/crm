@@ -6,6 +6,7 @@ import re
 import tomllib
 import unittest
 
+from scripts.check_step22_runtime_fanin_decisions import validate_decisions
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -213,43 +214,50 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_step_22a_inventory_packet_is_exact(self) -> None:
+    def test_active_step_22b_runtime_classification_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-22a-remeasurement-inventories",
+            "repository-step-22b-runtime-fanin-classifications",
         )
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "4167bd530b91e3a8fc9bfaaf0d02fcdc1f7a20f3"},
+            {"ref": "main", "sha": "4642ea39a7c1c8ad78b1d475a3d5391af8414555"},
         )
         self.assertEqual(self.packet["tracking_issues"], [194])
-        self.assertEqual(
-            self.packet["required_checks"],
-            [
-                "Affected Scope CI",
-                "Complexity Baseline CI",
-                "Governance CI",
-                "Rust Generated Sync",
-                "Rust CI",
-            ],
-        )
         allowed_paths = set(self.packet["allowed_paths"])
         for path in (
             "affected-scope-policy.json",
-            "docs/STEP22_ARCHITECTURE_REMEASUREMENT.md",
-            "step22-architecture-inventory.json",
+            "docs/STEP22_RUNTIME_FANIN_CLASSIFICATION.md",
+            "scripts/check_step22_runtime_fanin_decisions.py",
+            "step22-runtime-fanin-decisions.json",
             "tests/test_architecture_documentation_consistency.py",
+            "tests/test_repository_navigation.py",
         ):
             self.assertIn(path, allowed_paths)
         self.assertIn(".github/workflows/**", self.packet["forbidden_paths"])
         self.assertIn("crates/**", self.packet["forbidden_paths"])
+        self.assertIn("step22-architecture-inventory.json", self.packet["forbidden_paths"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
+
+        counts = validate_decisions(ROOT)
+        self.assertEqual(
+            counts,
+            {
+                "all": 63,
+                "final": 17,
+                "platform_generic": 16,
+                "test_only": 1,
+                "removed": 0,
+                "owner_specific_unavoidable": 0,
+                "unresolved": 46,
+            },
+        )
         non_goals = " ".join(self.packet["non_goals"])
-        self.assertIn("classify any runtime dependency", non_goals)
-        self.assertIn("assign retain simplify merge or remove dispositions", non_goals)
-        self.assertIn("declare Repository Step 22 complete", non_goals)
+        self.assertIn("owner-specific dependency as unavoidable", non_goals)
+        self.assertIn("remove move add or otherwise remediate", non_goals)
+        self.assertIn("declare all runtime classifications complete", non_goals)
 
         operations_scope = next(
             scope
@@ -257,19 +265,28 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             if scope["id"] == "operations"
         )
         self.assertEqual(operations_scope["owner"], "platform-operations")
-        self.assertIn(
-            "step22-architecture-inventory.json",
-            operations_scope["path_patterns"],
-        )
+        for path in (
+            "scripts/check_step22_runtime_fanin_decisions.py",
+            "step22-runtime-fanin-decisions.json",
+        ):
+            self.assertIn(path, operations_scope["path_patterns"])
         self.assertEqual(operations_scope["required_workflows"], ["Governance CI"])
 
+        step22b = read("docs/STEP22_RUNTIME_FANIN_CLASSIFICATION.md")
         for marker in (
-            "PR #296",
-            "fd84cd25dfa25a75eac0fdc4a719cc76c84cfc95",
-            "c21894f47f24e81da1cc150f9ea457fcfdc2bd63",
-            "35 of 35",
+            "16",
+            "1",
+            "46",
+            "partial",
+            "Step 22 closure remains blocked",
         ):
-            self.assertIn(marker, self.status)
+            self.assertIn(marker, step22b)
+        for marker in (
+            "PR #298",
+            "ffb8c94373c565de00cccd67c38c80bdb3a12405",
+            "4642ea39a7c1c8ad78b1d475a3d5391af8414555",
+        ):
+            self.assertIn(marker, step22b)
 
     def test_repository_map_and_product_inventory_remain_exact(self) -> None:
         self.assertIn(

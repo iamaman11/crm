@@ -132,6 +132,7 @@
         "scripts/check_native_module_composition.py",
         "scripts/check_step13_exit_evidence.py",
         "scripts/check_step13_suppression_baseline.py",
+        "scripts/check_step22_runtime_fanin_decisions.py",
         "scripts/customer_privacy_operations.py",
         "scripts/local_demo.py",
         "scripts/local_dev.py",
@@ -142,6 +143,7 @@
         "step13-complexity-policy.json",
         "step13-suppression-baseline.json",
         "step22-architecture-inventory.json",
+        "step22-runtime-fanin-decisions.json",
         "tests/test_customer_privacy_operations.py"
       ],
       "required_workflows": [
