@@ -24,9 +24,8 @@ pub use retention::*;
 
 pub use crm_customer_privacy_capability_composition::{
     PostgresCustomerPrivacyApprovalGuard, PostgresCustomerPrivacyCancellationGuard,
-    PostgresCustomerPrivacyLegalHoldPlacementGuard,
-    PostgresCustomerPrivacyLegalHoldReleaseGuard, PostgresCustomerPrivacyPreviousCaseGuard,
-    PostgresCustomerPrivacyRestrictionPlacementGuard,
+    PostgresCustomerPrivacyLegalHoldPlacementGuard, PostgresCustomerPrivacyLegalHoldReleaseGuard,
+    PostgresCustomerPrivacyPreviousCaseGuard, PostgresCustomerPrivacyRestrictionPlacementGuard,
     PostgresCustomerPrivacyRestrictionReleaseGuard,
     PostgresCustomerPrivacySubjectVerificationGuard, postgres_case_approval_executor,
     postgres_case_cancel_executor, postgres_case_create_executor,

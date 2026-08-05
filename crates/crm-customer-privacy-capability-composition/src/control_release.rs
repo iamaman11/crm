@@ -3,15 +3,14 @@ use crm_core_data::{
     PostgresDataStore, PostgresTransactionalAggregateExecutor, TransactionalAggregateGuard,
 };
 use crm_customer_privacy::{
-    decode_legal_hold_state, decode_processing_restriction_state, LEGAL_HOLD_RECORD_TYPE,
-    MODULE_ID, RESTRICTION_RECORD_TYPE,
+    LEGAL_HOLD_RECORD_TYPE, MODULE_ID, RESTRICTION_RECORD_TYPE, decode_legal_hold_state,
+    decode_processing_restriction_state,
 };
 use crm_customer_privacy_capability_adapter::{
-    legal_hold_ref_from_release_request, processing_restriction_ref_from_release_request,
     CustomerPrivacyLegalHoldReleaseCapabilityPlanner,
     CustomerPrivacyRestrictionReleaseCapabilityPlanner,
-    RELEASE_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY,
-    RELEASE_PROCESSING_RESTRICTION_CAPABILITY,
+    RELEASE_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY, RELEASE_PROCESSING_RESTRICTION_CAPABILITY,
+    legal_hold_ref_from_release_request, processing_restriction_ref_from_release_request,
 };
 use crm_module_sdk::{ErrorCategory, PortFuture, RecordId, SdkError};
 use crm_party_reference_composition::lock_customer_subject_in_transaction;
@@ -37,8 +36,8 @@ impl TransactionalAggregateGuard for PostgresCustomerPrivacyRestrictionReleaseGu
                 reference.record_id.as_str(),
             )
             .await?;
-            let restriction = decode_processing_restriction_state(&payload)
-                .map_err(control_state_unavailable)?;
+            let restriction =
+                decode_processing_restriction_state(&payload).map_err(control_state_unavailable)?;
             if restriction.restriction_id() != &reference.record_id
                 || restriction.tenant_id() != &request.context.execution.tenant_id
             {

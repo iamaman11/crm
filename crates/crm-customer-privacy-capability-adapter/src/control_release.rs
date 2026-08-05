@@ -5,9 +5,8 @@ use crm_core_data::{
     RecordMutation, TransactionalAggregatePlanner,
 };
 use crm_customer_privacy::{
-    CustomerDataLegalHold, LegalHoldScope, LegalHoldStatus, ProcessingRestriction,
-    RestrictionScope, RestrictionStatus, LEGAL_HOLD_RECORD_TYPE, MODULE_ID,
-    RESTRICTION_RECORD_TYPE,
+    CustomerDataLegalHold, LEGAL_HOLD_RECORD_TYPE, LegalHoldScope, LegalHoldStatus, MODULE_ID,
+    ProcessingRestriction, RESTRICTION_RECORD_TYPE, RestrictionScope, RestrictionStatus,
 };
 use crm_customer_privacy_persistence_adapter::{
     legal_hold_from_snapshot, legal_hold_persisted_payload, legal_hold_record_ref,
@@ -15,13 +14,12 @@ use crm_customer_privacy_persistence_adapter::{
     processing_restriction_record_ref,
 };
 use crm_module_sdk::{
-    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, RecordRef,
-    RecordSnapshot, SdkError,
+    CapabilityId, CapabilityVersion, DataClass, ErrorCategory, ModuleId, RecordRef, RecordSnapshot,
+    SdkError,
 };
 use crm_proto_contracts::crm::{customer::v1 as customer, customer_privacy::v1 as wire};
 
-pub const RELEASE_PROCESSING_RESTRICTION_CAPABILITY: &str =
-    "customer_privacy.restriction.release";
+pub const RELEASE_PROCESSING_RESTRICTION_CAPABILITY: &str = "customer_privacy.restriction.release";
 pub const RELEASE_PROCESSING_RESTRICTION_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.ReleaseProcessingRestrictionRequest";
 pub const RELEASE_PROCESSING_RESTRICTION_RESPONSE_SCHEMA: &str =
@@ -31,8 +29,7 @@ pub const PROCESSING_RESTRICTION_RELEASED_EVENT_TYPE: &str =
 pub const PROCESSING_RESTRICTION_RELEASED_EVENT_SCHEMA: &str =
     "crm.customer_privacy.v1.ProcessingRestrictionReleasedEvent";
 
-pub const RELEASE_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY: &str =
-    "customer_privacy.legal_hold.release";
+pub const RELEASE_CUSTOMER_DATA_LEGAL_HOLD_CAPABILITY: &str = "customer_privacy.legal_hold.release";
 pub const RELEASE_CUSTOMER_DATA_LEGAL_HOLD_REQUEST_SCHEMA: &str =
     "crm.customer_privacy.v1.ReleaseCustomerDataLegalHoldRequest";
 pub const RELEASE_CUSTOMER_DATA_LEGAL_HOLD_RESPONSE_SCHEMA: &str =
@@ -104,13 +101,7 @@ impl TransactionalAggregatePlanner for CustomerPrivacyRestrictionReleaseCapabili
                 request.context.execution.request_started_at_unix_nanos,
             )
             .map_err(domain_error)?;
-        build_restriction_release_plan(
-            definition,
-            request,
-            current,
-            restriction,
-            previous_version,
-        )
+        build_restriction_release_plan(definition, request, current, restriction, previous_version)
     }
 }
 
@@ -253,9 +244,7 @@ fn build_restriction_release_plan(
 ) -> Result<CapabilityBatchExecutionPlan, SdkError> {
     let next_version = i64::try_from(restriction.version())
         .map_err(|_| plan_invalid("released processing restriction version exceeds i64"))?;
-    if restriction.status() != RestrictionStatus::Released
-        || next_version != previous_version + 1
-    {
+    if restriction.status() != RestrictionStatus::Released || next_version != previous_version + 1 {
         return Err(plan_invalid(
             "restriction.release must advance the active aggregate by one version",
         ));
@@ -624,10 +613,7 @@ fn control_not_found() -> SdkError {
     )
 }
 
-fn control_state_invalid(
-    label: &'static str,
-    reference: impl std::fmt::Display,
-) -> SdkError {
+fn control_state_invalid(label: &'static str, reference: impl std::fmt::Display) -> SdkError {
     SdkError::new(
         "CUSTOMER_PRIVACY_CONTROL_STATE_INVALID",
         ErrorCategory::Unavailable,
