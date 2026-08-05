@@ -137,7 +137,6 @@ class WorkspaceAnalysisTests(unittest.TestCase):
         runtime_manifest = self.write_manifest(
             root, "crates/crm-runtime", "crm-runtime"
         )
-
         metadata = {
             "workspace_members": ["parties-id", "adapter-id", "runtime-id"],
             "packages": [
@@ -161,7 +160,6 @@ class WorkspaceAnalysisTests(unittest.TestCase):
                 },
             ],
         }
-
         metrics, categories = package_metrics(root, metadata)
         by_name = {metric.name: metric for metric in metrics}
         self.assertEqual(categories, {"business-module": 1, "technical-crate": 2})
@@ -181,7 +179,6 @@ class WorkspaceAnalysisTests(unittest.TestCase):
                 {"name": "tokio", "version": "1.45.0"},
             ]
         }
-
         self.assertEqual(
             duplicate_dependency_families(lockfile, {"crm-runtime"}),
             [{"name": "serde", "versions": ["1.0.200", "1.0.210"]}],
@@ -196,9 +193,7 @@ class WorkspaceAnalysisTests(unittest.TestCase):
             "platform": self.write_manifest(
                 root, "crates/crm-platform-runtime", "crm-platform-runtime"
             ),
-            "owner": self.write_manifest(
-                root, "modules/crm-owner", "crm-owner"
-            ),
+            "owner": self.write_manifest(root, "modules/crm-owner", "crm-owner"),
             "test": self.write_manifest(
                 root, "crates/crm-test-support", "crm-test-support"
             ),
@@ -253,7 +248,6 @@ class WorkspaceAnalysisTests(unittest.TestCase):
                 },
             ],
         }
-
         metrics = runtime_dependency_metrics(root, metadata)
         self.assertEqual(len(metrics), 4)
         by_name = {metric.dependency_name: metric for metric in metrics}
@@ -310,7 +304,6 @@ jobs:
 """,
             encoding="utf-8",
         )
-
         metric = workflow_metric(path, root)
         self.assertEqual(metric.stable_id, ".github/workflows/example.yml")
         self.assertEqual(metric.name, "Example CI")
@@ -384,7 +377,6 @@ jobs:
         dependencies = runtime_dependency_metrics(root, metadata)
         workflow = workflow_metric(workflow_path, root)
         inventory = build_step22_inventory("a" * 40, dependencies, [workflow])
-
         self.assertEqual(inventory["phase"], "inventory-only")
         self.assertEqual(
             inventory["runtime_fanin"]["unresolved_decision_count"], 1
@@ -395,7 +387,6 @@ jobs:
             inventory["decision_boundary"]["final_classifications_recorded"]
         )
         self.assertFalse(inventory["decision_boundary"]["step22_complete"])
-
         with self.assertRaisesRegex(ValueError, "duplicate permanent workflow"):
             build_step22_inventory("a" * 40, dependencies, [workflow, workflow])
 
@@ -431,9 +422,7 @@ jobs:
         self.assertTrue(
             all(identifier.startswith(".github/workflows/") for identifier in job_ids)
         )
-        self.assertTrue(
-            all("#" in identifier for identifier in job_ids)
-        )
+        self.assertTrue(all("#" in identifier for identifier in job_ids))
         self.assertFalse(
             committed["decision_boundary"]["final_classifications_recorded"]
         )
@@ -443,7 +432,9 @@ jobs:
         self.assertFalse(committed["decision_boundary"]["remediation_performed"])
         self.assertFalse(committed["decision_boundary"]["step22_complete"])
 
-        fresh = self.review_ledger(build_report(ROOT)["step22_inventory"])
+        fresh = json.loads(
+            json.dumps(self.review_ledger(build_report(ROOT)["step22_inventory"]))
+        )
         fresh["measurement_source_commit"] = committed[
             "measurement_source_commit"
         ]
