@@ -16,35 +16,38 @@ use crm_contact_points_capability_composition::{
 use crm_core_data::{PostgresTransactionalAggregateExecutor, TransactionalAggregatePlanner};
 use crm_customer_privacy_production::{
     CustomerPrivacyProductionDependencies, PostgresCustomerPrivacySubjectPolicy,
-    build_contribution_with_holds as build_customer_privacy_contribution,
-    mutation_capability_definitions_with_restrictions_and_legal_holds,
+    build_contribution_with_complete_control_lifecycle as build_customer_privacy_contribution,
+    mutation_capability_definitions_with_complete_control_lifecycle,
 };
+use crm_customer_privacy_query_adapter::control_query_capability_definitions;
 use crm_module_sdk::{ErrorCategory, ModuleId, SdkError};
 use crm_party_reference_composition::PostgresPartyReferenceReader;
 use std::sync::Arc;
 
 pub use base_runtime::PRODUCTION_REVIEW_POLICY_VERSION;
 
-/// Returns the accepted public mutation inventory plus the exact Customer
-/// Privacy step-six inventory contributed by the owner application package.
+/// Returns the accepted public mutation inventory plus the exact frozen
+/// Customer Privacy nine-mutation owner inventory.
 pub fn application_mutation_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = base_runtime::application_mutation_definitions()?;
-    definitions.extend(mutation_capability_definitions_with_restrictions_and_legal_holds()?);
+    definitions.extend(mutation_capability_definitions_with_complete_control_lifecycle()?);
     Ok(definitions)
 }
 
-/// Returns the accepted query inventory plus the exact Customer Privacy
-/// inventory contributed by the owner application package.
+/// Returns the accepted query inventory plus the exact frozen Customer Privacy
+/// seven-query owner inventory.
 pub fn application_query_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
     let mut definitions = base_runtime::application_query_definitions()?;
     definitions.extend(crm_customer_privacy_production::query_capability_definitions()?);
+    definitions.extend(control_query_capability_definitions()?);
     Ok(definitions)
 }
 
 /// Extends the accepted production composition through owner-owned boundaries:
-/// Customer Privacy contributes restriction and legal-hold placement, while
-/// Contact Points replaces only `contact-point.create` with a final transaction
-/// guard. Generic dispatch and every unrelated owner route remain unchanged.
+/// Customer Privacy contributes the complete restriction and legal-hold
+/// placement, release and permission-aware read lifecycle, while Contact Points
+/// replaces only `contact-point.create` with a final transaction guard. Generic
+/// dispatch and every unrelated owner route remain unchanged.
 pub fn build_production_composition(
     dependencies: ProductionCompositionDependencies,
 ) -> Result<ApplicationComposition, SdkError> {

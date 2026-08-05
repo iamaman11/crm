@@ -23,47 +23,47 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_step_20_evidence_sync_packet_declaration_is_exact(self) -> None:
+    def test_active_step_21_control_lifecycle_packet_declaration_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(packet["packet_id"], "repository-step-20-evidence-sync")
+        self.assertEqual(
+            packet["packet_id"],
+            "repository-step-21-customer-privacy-control-lifecycle",
+        )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
-            {"ref": "main", "sha": "ef3457c11646b1069e5e65683d3618b3d470136e"},
+            {"ref": "main", "sha": "767b12b20f311088a8487446bd9ee6413fb9ac7c"},
         )
         self.assertEqual(packet["tracking_issues"], [194, 126])
-        self.assertEqual(
-            set(packet["allowed_paths"]),
+        self.assertTrue(
             {
-                "docs/ACTIVE_PACKET.md",
-                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-                "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
-                "docs/IMPLEMENTATION_ROADMAP.md",
-                "docs/MODULE_CATALOG.md",
-                "docs/PHASE8A_CUSTOMER_PRIVACY_PRODUCT_PLANE.md",
-                "docs/PHASE8_DELIVERY_PLAN.md",
-                "docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md",
-                "docs/PROJECT_STATUS.md",
-                "docs/WORKSPACE_COMPLEXITY_BASELINE.md",
-                "repository-packet.json",
+                ".github/workflows/customer-privacy-approval.yml",
+                "contracts/production-route-classifications.json",
+                "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
+                "crates/crm-customer-privacy-capability-adapter/src/control_release.rs",
+                "crates/crm-customer-privacy-query-adapter/src/controls.rs",
+                "services/crm-api/tests/customer_privacy_hold_retention_process_e2e.rs",
+                "services/crm-api/tests/customer_privacy_restriction_process_e2e.rs",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
-            },
+            }.issubset(set(packet["allowed_paths"]))
         )
         self.assertEqual(
             packet["required_checks"],
             [
                 "Affected Scope CI",
                 "Complexity Baseline CI",
-                "Customer Privacy Access Export CI",
-                "Customer Privacy Owner Execution CI",
+                "Customer Privacy Hold Retention CI",
+                "Customer Privacy Restriction Policy CI",
                 "Governance CI",
                 "Rust Generated Sync",
                 "Rust CI",
             ],
         )
-        self.assertIn("PR #294", " ".join(packet["deliverables"]))
+        deliverables = " ".join(packet["deliverables"])
+        self.assertIn("customer_privacy.restriction.release@1.0.0", deliverables)
+        self.assertIn("customer_privacy.legal_hold.list_by_subject@1.0.0", deliverables)
 
     def test_generated_navigation_is_deterministic_and_current(self) -> None:
         first = generated_documents(ROOT)
@@ -76,11 +76,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-20-evidence-sync",
+            "repository-step-21-customer-privacy-control-lifecycle",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "ef3457c11646b1069e5e65683d3618b3d470136e", first[ACTIVE_PACKET_PATH]
+            "767b12b20f311088a8487446bd9ee6413fb9ac7c", first[ACTIVE_PACKET_PATH]
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
         self.assertIn("`crm.customer-privacy`", first[REPOSITORY_MAP_PATH])
@@ -120,8 +120,8 @@ class RepositoryNavigationTests(unittest.TestCase):
         workflow_paths = {
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
             "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
-            "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
-            "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
+            "Customer Privacy Hold Retention CI": ".github/workflows/customer-privacy-hold-retention.yml",
+            "Customer Privacy Restriction Policy CI": ".github/workflows/customer-privacy-restriction-policy.yml",
             "Governance CI": ".github/workflows/governance.yml",
             "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
             "Rust CI": ".github/workflows/rust.yml",
@@ -135,7 +135,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 20 evidence synchronization"],
+                    "reasons": ["Step 21 Customer Privacy control lifecycle"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -143,7 +143,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="ef3457c11646b1069e5e65683d3618b3d470136e",
+                return_value="767b12b20f311088a8487446bd9ee6413fb9ac7c",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(

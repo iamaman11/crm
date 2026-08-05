@@ -142,36 +142,6 @@
       "id": "customer_enrichment.privacy.scope.contribute",
       "version": "1.0.0",
       "reason": "Exact owner-side scope contribution wire contract only; no owner implementation, worker registration or public ingress exists yet."
-    },
-    {
-      "owner_module_id": "crm.customer-privacy",
-      "id": "customer_privacy.restriction.release",
-      "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but restriction release remains non-runtime until immutable release evidence and real-process authorization acceptance are complete."
-    },
-    {
-      "owner_module_id": "crm.customer-privacy",
-      "id": "customer_privacy.restriction.get",
-      "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but restriction reads remain non-runtime until permission-aware visibility and cross-tenant concealment acceptance are complete."
-    },
-    {
-      "owner_module_id": "crm.customer-privacy",
-      "id": "customer_privacy.legal_hold.release",
-      "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but legal-hold release remains non-runtime until immutable release evidence and real-process authorization acceptance are complete."
-    },
-    {
-      "owner_module_id": "crm.customer-privacy",
-      "id": "customer_privacy.legal_hold.get",
-      "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but legal-hold reads remain non-runtime until permission-aware visibility and concealment acceptance are complete."
-    },
-    {
-      "owner_module_id": "crm.customer-privacy",
-      "id": "customer_privacy.legal_hold.list_by_subject",
-      "version": "1.0.0",
-      "reason": "FORCE RLS persistence is proven, but subject-scoped legal-hold listing remains non-runtime until shared subject locking, permission-aware visibility and real-process acceptance are complete."
     }
   ],
   "empty_runtime_modules": [
