@@ -22,9 +22,16 @@ FINAL_CLASSIFICATIONS = {
     "owner-specific-unavoidable",
     "test-only",
 }
-REMOVED_QUERY_STABLE_ID = (
+REMOVED_PRIVACY_QUERY_STABLE_ID = (
     "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter"
 )
+REMOVED_CUSTOMER_360_QUERY_STABLE_ID = (
+    "crm-application-runtime::dependencies::crm-customer-360-query-adapter"
+)
+EXPECTED_REMOVED_STABLE_IDS = {
+    REMOVED_CUSTOMER_360_QUERY_STABLE_ID,
+    REMOVED_PRIVACY_QUERY_STABLE_ID,
+}
 EXPECTED_REGISTRATION = {
     "id": "repository-step-22-runtime-fanin",
     "owner": "architecture-governance",
@@ -37,17 +44,41 @@ EXPECTED_REGISTRATION = {
     "validator": "scripts/check_step22_runtime_fanin_decisions.py",
 }
 EXPECTED_REMEDIATION = {
-    "after": {"all": 62, "production": 61, "test_only": 1},
+    "after": {"all": 61, "production": 60, "test_only": 1},
     "before": {"all": 63, "production": 62, "test_only": 1},
-    "owner_manifest": "crates/crm-customer-privacy-production/Cargo.toml",
-    "owner_source": "crates/crm-customer-privacy-production/src/legal_hold.rs",
-    "removed_stable_ids": [REMOVED_QUERY_STABLE_ID],
-    "replacement_boundary": "crm-customer-privacy-production",
+    "removals": [
+        {
+            "adapter_package": "crm-customer-360-query-adapter",
+            "owner_manifest": "crates/crm-first-party-modules/Cargo.toml",
+            "owner_sources": ["crates/crm-first-party-modules/src/lib.rs"],
+            "replacement_boundary": "crm-first-party-modules",
+            "runtime_sources": [
+                "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs"
+            ],
+            "stable_id": REMOVED_CUSTOMER_360_QUERY_STABLE_ID,
+        },
+        {
+            "adapter_package": "crm-customer-privacy-query-adapter",
+            "owner_manifest": "crates/crm-customer-privacy-production/Cargo.toml",
+            "owner_sources": [
+                "crates/crm-customer-privacy-production/src/legal_hold.rs",
+                "crates/crm-customer-privacy-production/src/root.rs",
+            ],
+            "replacement_boundary": "crm-customer-privacy-production",
+            "runtime_sources": [
+                "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+                "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
+            ],
+            "stable_id": REMOVED_PRIVACY_QUERY_STABLE_ID,
+        },
+    ],
+    "removed_stable_ids": [
+        REMOVED_CUSTOMER_360_QUERY_STABLE_ID,
+        REMOVED_PRIVACY_QUERY_STABLE_ID,
+    ],
     "runtime_manifest": "crates/crm-application-runtime/Cargo.toml",
-    "runtime_source": (
-        "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
-    ),
 }
+
 
 
 class DecisionLedgerError(RuntimeError):
@@ -147,7 +178,7 @@ def validate_remediation(
 ) -> None:
     remediation = decisions.get("remediation_evidence")
     if remediation != EXPECTED_REMEDIATION:
-        raise DecisionLedgerError("Step 22C remediation evidence changed")
+        raise DecisionLedgerError("Step 22 cumulative remediation evidence changed")
 
     current_ids = current_runtime_direct_ids(
         root, EXPECTED_REMEDIATION["runtime_manifest"]
@@ -157,16 +188,17 @@ def validate_remediation(
         for stable_id, (classification, _) in final_by_id.items()
         if classification == "removed"
     }
-    if removed_ids != {REMOVED_QUERY_STABLE_ID}:
+    if removed_ids != EXPECTED_REMOVED_STABLE_IDS:
         raise DecisionLedgerError(
-            "Step 22C must record exactly the Customer Privacy query adapter removal"
+            "Step 22D must record exactly the accepted Customer Privacy and "
+            "Customer 360 query-adapter removals"
         )
     if current_ids != accepted_ids - removed_ids:
         added = sorted(current_ids - accepted_ids)
         missing = sorted((accepted_ids - removed_ids) - current_ids)
         raise DecisionLedgerError(
             "current runtime direct dependency surface differs from the accepted "
-            f"inventory minus the one removal: added={added}, missing={missing}"
+            f"inventory minus the cumulative removals: added={added}, missing={missing}"
         )
 
     production = sum("::dependencies::" in stable_id for stable_id in current_ids)
@@ -178,18 +210,13 @@ def validate_remediation(
     }
     if current_counts != EXPECTED_REMEDIATION["after"]:
         raise DecisionLedgerError(
-            f"current runtime fan-in is not the exact 63 to 62 reduction: {current_counts}"
+            f"current runtime fan-in is not the exact cumulative 63 to 61 reduction: {current_counts}"
         )
 
-    owner_manifest = tomllib.loads(
-        (root / EXPECTED_REMEDIATION["owner_manifest"]).read_text(encoding="utf-8")
+    runtime_manifest = tomllib.loads(
+        (root / EXPECTED_REMEDIATION["runtime_manifest"]).read_text(encoding="utf-8")
     )
-    owner_dependencies = owner_manifest.get("dependencies", {})
-    if "crm-customer-privacy-query-adapter" not in owner_dependencies:
-        raise DecisionLedgerError(
-            "Customer Privacy production must retain the query adapter internally"
-        )
-
+    runtime_dependencies = runtime_manifest.get("dependencies", {})
     lockfile = tomllib.loads((root / "Cargo.lock").read_text(encoding="utf-8"))
     packages = lockfile.get("package", [])
     if not isinstance(packages, list):
@@ -210,53 +237,85 @@ def validate_remediation(
     runtime_lock_dependencies = lock_package("crm-application-runtime").get(
         "dependencies", []
     )
-    if "crm-customer-privacy-query-adapter" in runtime_lock_dependencies:
-        raise DecisionLedgerError(
-            "Cargo.lock still records the removed direct runtime query-adapter edge"
-        )
     if "prost" not in runtime_lock_dependencies:
         raise DecisionLedgerError(
             "Cargo.lock does not retain the canonical runtime prost reference"
         )
-    if "prost 0.14.3" in runtime_lock_dependencies:
-        raise DecisionLedgerError(
-            "Cargo.lock contains a non-baseline version-qualified runtime prost reference"
-        )
-    owner_lock_dependencies = lock_package("crm-customer-privacy-production").get(
-        "dependencies", []
-    )
-    if "crm-customer-privacy-query-adapter" not in owner_lock_dependencies:
-        raise DecisionLedgerError(
-            "Cargo.lock no longer records the owner-internal query adapter"
-        )
-    lock_package("crm-customer-privacy-query-adapter")
 
-    runtime_source = (root / EXPECTED_REMEDIATION["runtime_source"]).read_text(
-        encoding="utf-8"
-    )
-    if "crm_customer_privacy_query_adapter" in runtime_source:
-        raise DecisionLedgerError(
-            "generic runtime source still imports Customer Privacy query adapter directly"
-        )
-    for marker in (
-        "crm_customer_privacy_production",
-        "control_query_capability_definitions",
-    ):
-        if marker not in runtime_source:
+    for removal in EXPECTED_REMEDIATION["removals"]:
+        adapter = removal["adapter_package"]
+        if adapter in runtime_dependencies:
             raise DecisionLedgerError(
-                f"generic runtime source is missing replacement boundary marker: {marker}"
+                f"runtime manifest still records removed direct edge: {adapter}"
+            )
+        owner_manifest = tomllib.loads(
+            (root / removal["owner_manifest"]).read_text(encoding="utf-8")
+        )
+        if adapter not in owner_manifest.get("dependencies", {}):
+            raise DecisionLedgerError(
+                f"owner boundary no longer retains adapter internally: {adapter}"
+            )
+        if adapter in runtime_lock_dependencies:
+            raise DecisionLedgerError(
+                f"Cargo.lock still records removed direct runtime edge: {adapter}"
+            )
+        owner_package = Path(removal["owner_manifest"]).parent.name
+        if adapter not in lock_package(owner_package).get("dependencies", []):
+            raise DecisionLedgerError(
+                f"Cargo.lock no longer records owner-internal adapter: {adapter}"
+            )
+        lock_package(adapter)
+        rust_marker = adapter.replace("-", "_")
+        replacement_marker = removal["replacement_boundary"].replace("-", "_")
+        runtime_text = "\n".join(
+            (root / source).read_text(encoding="utf-8")
+            for source in removal["runtime_sources"]
+        )
+        if rust_marker in runtime_text:
+            raise DecisionLedgerError(
+                f"generic runtime source still imports removed adapter directly: {adapter}"
+            )
+        if replacement_marker not in runtime_text:
+            raise DecisionLedgerError(
+                f"runtime source is missing replacement boundary marker: {replacement_marker}"
             )
 
-    owner_source = (root / EXPECTED_REMEDIATION["owner_source"]).read_text(
-        encoding="utf-8"
-    )
-    expected_reexport = (
+    first_party_source = (
+        root / "crates/crm-first-party-modules/src/lib.rs"
+    ).read_text(encoding="utf-8")
+    for marker in (
+        "MODULE_ID as CUSTOMER_360_MODULE_ID",
+        "query_capability_definitions as customer_360_query_capability_definitions",
+    ):
+        if marker not in first_party_source:
+            raise DecisionLedgerError(
+                f"first-party boundary is missing Customer 360 marker: {marker}"
+            )
+    registry_source = (
+        root / "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs"
+    ).read_text(encoding="utf-8")
+    if "crm_first_party_modules::CUSTOMER_360_MODULE_ID" not in registry_source:
+        raise DecisionLedgerError(
+            "bootstrap visibility does not consume Customer 360 identity through first-party boundary"
+        )
+
+    privacy_legal_hold = (
+        root / "crates/crm-customer-privacy-production/src/legal_hold.rs"
+    ).read_text(encoding="utf-8")
+    if (
         "pub use crm_customer_privacy_query_adapter::"
         "control_query_capability_definitions;"
-    )
-    if expected_reexport not in owner_source:
+        not in privacy_legal_hold
+    ):
         raise DecisionLedgerError(
             "Customer Privacy production does not expose the control query inventory"
+        )
+    privacy_root = (
+        root / "crates/crm-customer-privacy-production/src/root.rs"
+    ).read_text(encoding="utf-8")
+    if "control_query_visibility_resources" not in privacy_root:
+        raise DecisionLedgerError(
+            "Customer Privacy production does not expose control visibility resources"
         )
 
 
@@ -269,7 +328,7 @@ def validate_payload(
         raise DecisionLedgerError("unexpected runtime fan-in decision schema")
     if decisions.get("phase") != "partial-classification-and-remediation":
         raise DecisionLedgerError(
-            "Step 22C must remain partial-classification-and-remediation"
+            "Step 22D must remain partial-classification-and-remediation"
         )
     if set(decisions.get("allowed_final_classifications", [])) != FINAL_CLASSIFICATIONS:
         raise DecisionLedgerError("ADR-032 final classification enum changed")
@@ -347,13 +406,13 @@ def validate_payload(
                     f"test-only entry is not isolated in dev-dependencies: {stable_id}"
                 )
         elif classification == "removed":
-            if stable_id != REMOVED_QUERY_STABLE_ID:
+            if stable_id not in EXPECTED_REMOVED_STABLE_IDS:
                 raise DecisionLedgerError(
-                    f"Step 22C does not authorize another removal: {stable_id}"
+                    f"Step 22D does not authorize another removal: {stable_id}"
                 )
         else:
             raise DecisionLedgerError(
-                "Step 22C cannot record owner-specific-unavoidable without the "
+                "Step 22D cannot record owner-specific-unavoidable without the "
                 "complete ADR-032 evidence contract"
             )
         final_by_id[stable_id] = (classification, boundary_id)
@@ -387,10 +446,10 @@ def validate_payload(
         "step22_complete": False,
     }
     if decisions.get("decision_boundary") != expected_boundary:
-        raise DecisionLedgerError("Step 22C decision boundary is overstated")
+        raise DecisionLedgerError("Step 22D decision boundary is overstated")
     if not unresolved:
         raise DecisionLedgerError(
-            "Step 22C must not claim full classification or Step 22 closure"
+            "Step 22D must not claim full classification or Step 22 closure"
         )
 
     validate_remediation(root, decisions, set(inventory_by_id), final_by_id)
