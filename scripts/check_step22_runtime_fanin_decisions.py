@@ -53,7 +53,8 @@ EXPECTED_REMEDIATION = {
             "owner_sources": ["crates/crm-first-party-modules/src/lib.rs"],
             "replacement_boundary": "crm-first-party-modules",
             "runtime_sources": [
-                "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs"
+                "crates/crm-application-runtime/src/background.rs",
+                "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
             ],
             "stable_id": REMOVED_CUSTOMER_360_QUERY_STABLE_ID,
         },

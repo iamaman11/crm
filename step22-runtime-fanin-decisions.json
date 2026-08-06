@@ -299,6 +299,7 @@
         ],
         "replacement_boundary": "crm-first-party-modules",
         "runtime_sources": [
+          "crates/crm-application-runtime/src/background.rs",
           "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs"
         ],
         "stable_id": "crm-application-runtime::dependencies::crm-customer-360-query-adapter"

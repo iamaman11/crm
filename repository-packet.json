@@ -16,6 +16,7 @@
   "allowed_paths": [
     "Cargo.lock",
     "crates/crm-application-runtime/Cargo.toml",
+    "crates/crm-application-runtime/src/background.rs",
     "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
     "crates/crm-first-party-modules/src/lib.rs",
     "docs/ACTIVE_PACKET.md",

@@ -36,7 +36,7 @@ Replacement boundary:
 ## Boundary-preserving implementation
 
 1. `crm-first-party-modules` re-exports `MODULE_ID` as `CUSTOMER_360_MODULE_ID` alongside its existing Customer 360 query inventory export.
-2. `bootstrap_visibility/registry.rs` imports that constant through `crm_first_party_modules`.
+2. `background.rs` and `bootstrap_visibility/registry.rs` import that constant through `crm_first_party_modules`.
 3. `crm-customer-360-query-adapter` is removed only from `crm-application-runtime/Cargo.toml`.
 4. `crm-first-party-modules` retains the adapter internally and continues to build the same production contribution.
 5. The required module-identity export replaces the unused `CRATE_NAME` marker while the existing query-inventory export stays unchanged, keeping both non-comment LOC and the conservative public Rust surface at their accepted baselines.

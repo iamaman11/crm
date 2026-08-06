@@ -42,6 +42,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             {
                 "Cargo.lock",
                 "crates/crm-application-runtime/Cargo.toml",
+                "crates/crm-application-runtime/src/background.rs",
                 "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
                 "crates/crm-first-party-modules/src/lib.rs",
                 "docs/STEP22_CUSTOMER_360_QUERY_FANIN_REDUCTION.md",
