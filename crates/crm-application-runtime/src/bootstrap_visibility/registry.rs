@@ -13,7 +13,6 @@ use crm_consents_capability_adapter::{
 use crm_contact_points_capability_adapter::{
     MODULE_ID as CONTACT_POINTS_MODULE_ID, RECORD_TYPE as CONTACT_POINT_RECORD_TYPE,
 };
-use crm_customer_360_query_adapter::MODULE_ID as CUSTOMER_360_MODULE_ID;
 use crm_customer_accounts_capability_adapter::{
     MODULE_ID as ACCOUNTS_MODULE_ID, RECORD_TYPE as ACCOUNT_RECORD_TYPE,
 };
@@ -32,6 +31,7 @@ use crm_customer_privacy_production::{
     plan_read_visibility_resources as customer_privacy_plan_read_visibility_resources,
     query_visibility_resources as customer_privacy_query_visibility_resources,
 };
+use crm_first_party_modules::CUSTOMER_360_MODULE_ID;
 use crm_identity_resolution_capability_adapter::{
     MERGE_OPERATION_RECORD_TYPE as IDENTITY_RESOLUTION_MERGE_RECORD_TYPE,
     MODULE_ID as IDENTITY_RESOLUTION_MODULE_ID, RECORD_TYPE as IDENTITY_RESOLUTION_RECORD_TYPE,
