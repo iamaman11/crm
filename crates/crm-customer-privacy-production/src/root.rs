@@ -12,6 +12,4 @@ pub use access_export::*;
 pub use legacy::*;
 pub use legal_hold::*;
 pub use owner_execution::*;
-pub use {
-    crm_customer_privacy_query_adapter::control_query_visibility_resources, restriction::*,
-};
+pub use {crm_customer_privacy_query_adapter::control_query_visibility_resources, restriction::*};
