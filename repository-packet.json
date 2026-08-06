@@ -29,7 +29,6 @@
   "forbidden_paths": [
     ".github/workflows/**",
     "AGENTS.md",
-    "Cargo.toml",
     "README.md",
     "affected-scope-policy.json",
     "apps/**",
