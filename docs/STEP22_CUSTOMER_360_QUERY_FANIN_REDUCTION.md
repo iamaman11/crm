@@ -39,7 +39,7 @@ Replacement boundary:
 2. `bootstrap_visibility/registry.rs` imports that constant through `crm_first_party_modules`.
 3. `crm-customer-360-query-adapter` is removed only from `crm-application-runtime/Cargo.toml`.
 4. `crm-first-party-modules` retains the adapter internally and continues to build the same production contribution.
-5. The grouped re-export replaces an existing public re-export line, keeping the conservative public Rust surface at exactly 5,377.
+5. The required module-identity export replaces the unused `CRATE_NAME` marker while the existing query-inventory export stays unchanged, keeping both non-comment LOC and the conservative public Rust surface at their accepted baselines.
 
 No capability coordinate, query inventory, visibility resource, persistence path, authorization rule or runtime route changes.
 
