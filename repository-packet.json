@@ -10,10 +10,11 @@
   "tracking_issues": [
     194
   ],
-  "objective": "Execute one bounded ADR-032 Step 22 remediation by exposing the existing Customer Privacy control-query inventory through the owner production package and removing the redundant direct crm-customer-privacy-query-adapter dependency and source import from crm-application-runtime without changing behavior or the owner-internal dependency graph.",
+  "objective": "Execute one bounded ADR-032 Step 22 remediation by exposing the existing Customer Privacy control-query and visibility contracts through the owner production package and removing the redundant direct crm-customer-privacy-query-adapter dependency and source imports from crm-application-runtime without changing behavior or the owner-internal dependency graph.",
   "allowed_paths": [
     "Cargo.lock",
     "crates/crm-application-runtime/Cargo.toml",
+    "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
     "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
     "crates/crm-customer-privacy-production/src/legal_hold.rs",
     "docs/ACTIVE_PACKET.md",
@@ -54,12 +55,12 @@
     "workspace-dependency-policy.json"
   ],
   "deliverables": [
-    "publicly expose control_query_capability_definitions through the existing crm-customer-privacy-production owner boundary while retaining the query adapter as an internal production dependency",
-    "consume the control-query inventory through crm_customer_privacy_production and remove the direct crm_customer_privacy_query_adapter source import from crm-application-runtime",
+    "publicly expose the Customer Privacy control-query inventory and bootstrap visibility contracts through the existing crm-customer-privacy-production owner boundary while retaining the query adapter as an internal production dependency",
+    "consume Customer Privacy query inventory and visibility contracts through crm_customer_privacy_production and remove every direct crm_customer_privacy_query_adapter source import from crm-application-runtime",
     "remove only crm-customer-privacy-query-adapter from crm-application-runtime Cargo.toml without adding or moving another direct dependency",
     "synchronize Cargo.lock from immutable baseline 6fe0e8e7702b01a78f5db3f174c09b686de27402 by deleting exactly the crm-customer-privacy-query-adapter line from the crm-application-runtime dependency list while every other byte and every package record remains unchanged",
     "update the canonical Step 22 decision ledger with exactly one removed stable ID and exact before-after fan-in evidence of 63 to 62 total and 62 to 61 production dependencies",
-    "extend the permanent validator to prove the current direct stable-ID set equals the accepted inventory minus exactly the one removed edge and that the owner package retains the adapter internally",
+    "extend the permanent validator to prove the current direct stable-ID set equals the accepted inventory minus exactly the one removed edge that no runtime source imports the adapter directly and that the owner package retains the adapter internally",
     "replace the Step 22A fresh-equality test with an immutable accepted-snapshot plus exact one-edge current-remediation proof while requiring unchanged permanent workflow and job inventories",
     "record exactly eighteen final classifications with sixteen platform-generic one test-only one removed zero owner-specific-unavoidable and forty-five unresolved",
     "update permanent packet and architecture documentation guards and regenerate active packet navigation",
@@ -81,7 +82,7 @@
     "the decision ledger classifies crm-application-runtime::dependencies::crm-customer-privacy-query-adapter as the sole removed edge",
     "the current runtime direct stable-ID set equals the accepted sixty-three-row inventory minus exactly that removed stable ID with exact counts sixty-two total sixty-one production and one test-only",
     "the fresh permanent workflow and job inventories remain structurally equal to the accepted Step 22A snapshot",
-    "crm-application-runtime Cargo.toml source and Cargo.lock package record no longer name crm-customer-privacy-query-adapter while crm-customer-privacy-production retains the internal dependency and exposes control_query_capability_definitions",
+    "crm-application-runtime Cargo.toml all runtime source and Cargo.lock package record no longer name crm-customer-privacy-query-adapter while crm-customer-privacy-production retains the internal dependency and exposes the required query inventory and visibility contracts",
     "Cargo.lock equals immutable baseline commit 6fe0e8e7702b01a78f5db3f174c09b686de27402 byte-for-byte except for deletion of exactly one crm-customer-privacy-query-adapter dependency line from the crm-application-runtime package record",
     "the Cargo.lock package multiset identities versions sources checksums and every package record outside crm-application-runtime remain equal to the immutable baseline and cargo metadata --locked accepts the result",
     "the Customer Privacy public inventory remains exactly nine mutations and seven queries and all affected Rust and PostgreSQL process acceptance passes",
