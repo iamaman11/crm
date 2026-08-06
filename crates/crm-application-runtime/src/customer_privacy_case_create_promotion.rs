@@ -17,9 +17,9 @@ use crm_core_data::{PostgresTransactionalAggregateExecutor, TransactionalAggrega
 use crm_customer_privacy_production::{
     CustomerPrivacyProductionDependencies, PostgresCustomerPrivacySubjectPolicy,
     build_contribution_with_complete_control_lifecycle as build_customer_privacy_contribution,
+    control_query_capability_definitions,
     mutation_capability_definitions_with_complete_control_lifecycle,
 };
-use crm_customer_privacy_query_adapter::control_query_capability_definitions;
 use crm_module_sdk::{ErrorCategory, ModuleId, SdkError};
 use crm_party_reference_composition::PostgresPartyReferenceReader;
 use std::sync::Arc;

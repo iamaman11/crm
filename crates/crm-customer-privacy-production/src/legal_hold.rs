@@ -18,32 +18,33 @@ pub use crm_customer_privacy::{
     ScopeDiscoveryLineage, ScopeResource, SubjectVerificationMethod,
     action_plan_state_descriptor_hash, encode_action_plan_state,
 };
-pub use crm_customer_privacy_application::{
-    PrivacyRetentionEvaluationService, RetentionEvaluationCommit, RetentionEvaluationInvocation,
-    RetentionEvaluationPersistencePort,
-    mutation_capability_definitions_with_complete_control_lifecycle,
-    mutation_capability_definitions_with_restrictions_and_legal_holds,
-};
 use crm_customer_privacy_application::{
     place_customer_data_legal_hold_capability_definition,
     query_capability_definitions_with_complete_control_lifecycle,
     release_customer_data_legal_hold_capability_definition,
     release_processing_restriction_capability_definition,
 };
-pub use crm_customer_privacy_postgres::{
-    PostgresRetentionEvaluationPersistence, legal_hold_persisted_payload,
-    privacy_case_persisted_payload,
-};
 use crm_customer_privacy_postgres::{
     postgres_legal_hold_place_executor, postgres_legal_hold_release_executor,
     postgres_restriction_release_executor,
 };
-use crm_customer_privacy_query_adapter::{
-    CustomerPrivacyControlQueryAdapter, control_query_capability_definitions,
-};
+use crm_customer_privacy_query_adapter::CustomerPrivacyControlQueryAdapter;
+pub use crm_customer_privacy_query_adapter::control_query_capability_definitions;
 use crm_module_sdk::{ErrorCategory, SdkError};
 use crm_query_runtime::{CursorCodec, QueryExecutor, QuerySemanticValidator};
 use std::sync::Arc;
+pub use {
+    crm_customer_privacy_application::{
+        PrivacyRetentionEvaluationService, RetentionEvaluationCommit,
+        RetentionEvaluationInvocation, RetentionEvaluationPersistencePort,
+        mutation_capability_definitions_with_complete_control_lifecycle,
+        mutation_capability_definitions_with_restrictions_and_legal_holds,
+    },
+    crm_customer_privacy_postgres::{
+        PostgresRetentionEvaluationPersistence, legal_hold_persisted_payload,
+        privacy_case_persisted_payload,
+    },
+};
 
 /// Complete step-six owner package.
 ///

@@ -341,7 +341,6 @@ dependencies = [
  "crm-customer-enrichment-visibility",
  "crm-customer-enrichment-worker-composition",
  "crm-customer-privacy-production",
- "crm-customer-privacy-query-adapter",
  "crm-data-quality-capability-adapter",
  "crm-data-quality-query-adapter",
  "crm-data-quality-source-composition",

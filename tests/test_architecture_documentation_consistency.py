@@ -7,6 +7,7 @@ import tomllib
 import unittest
 
 from scripts.check_step22_runtime_fanin_decisions import validate_decisions
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -214,30 +215,34 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_step_22b_runtime_classification_packet_is_exact(self) -> None:
+    def test_active_step_22c_customer_privacy_query_fanin_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-22b-runtime-fanin-classifications",
+            "repository-step-22c-customer-privacy-query-fanin-reduction",
         )
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "4642ea39a7c1c8ad78b1d475a3d5391af8414555"},
+            {"ref": "main", "sha": "6fe0e8e7702b01a78f5db3f174c09b686de27402"},
         )
         self.assertEqual(self.packet["tracking_issues"], [194])
         allowed_paths = set(self.packet["allowed_paths"])
         for path in (
-            "affected-scope-policy.json",
-            "docs/STEP22_RUNTIME_FANIN_CLASSIFICATION.md",
+            "crates/crm-application-runtime/Cargo.toml",
+            "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
+            "crates/crm-customer-privacy-production/src/legal_hold.rs",
+            "docs/STEP22_CUSTOMER_PRIVACY_QUERY_FANIN_REDUCTION.md",
             "scripts/check_step22_runtime_fanin_decisions.py",
             "step22-runtime-fanin-decisions.json",
             "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
         ):
             self.assertIn(path, allowed_paths)
-        self.assertIn(".github/workflows/**", self.packet["forbidden_paths"])
-        self.assertIn("crates/**", self.packet["forbidden_paths"])
-        self.assertIn("step22-architecture-inventory.json", self.packet["forbidden_paths"])
+        forbidden_paths = set(self.packet["forbidden_paths"])
+        self.assertIn(".github/workflows/**", forbidden_paths)
+        self.assertNotIn("Cargo.toml", allowed_paths)
+        self.assertNotIn("Cargo.toml", forbidden_paths)
+        self.assertIn("step22-architecture-inventory.json", forbidden_paths)
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
 
@@ -246,17 +251,17 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             counts,
             {
                 "all": 63,
-                "final": 17,
+                "final": 18,
                 "platform_generic": 16,
                 "test_only": 1,
-                "removed": 0,
+                "removed": 1,
                 "owner_specific_unavoidable": 0,
-                "unresolved": 46,
+                "unresolved": 45,
             },
         )
         non_goals = " ".join(self.packet["non_goals"])
-        self.assertIn("owner-specific dependency as unavoidable", non_goals)
-        self.assertIn("remove move add or otherwise remediate", non_goals)
+        self.assertIn("classify crm-customer-privacy-production", non_goals)
+        self.assertIn("remediate another crm-application-runtime dependency", non_goals)
         self.assertIn("declare all runtime classifications complete", non_goals)
 
         operations_scope = next(
@@ -273,20 +278,20 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(operations_scope["required_workflows"], ["Governance CI"])
 
         step22b = read("docs/STEP22_RUNTIME_FANIN_CLASSIFICATION.md")
-        for marker in (
-            "16",
-            "1",
-            "46",
-            "partial",
-            "Step 22 closure remains blocked",
-        ):
+        for marker in ("16", "1", "46", "partial"):
             self.assertIn(marker, step22b)
+
+        step22c = read("docs/STEP22_CUSTOMER_PRIVACY_QUERY_FANIN_REDUCTION.md")
         for marker in (
-            "PR #298",
-            "ffb8c94373c565de00cccd67c38c80bdb3a12405",
-            "4642ea39a7c1c8ad78b1d475a3d5391af8414555",
+            "63",
+            "62",
+            "18",
+            "45",
+            "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter",
+            "6fe0e8e7702b01a78f5db3f174c09b686de27402",
+            "Repository Step 22",
         ):
-            self.assertIn(marker, step22b)
+            self.assertIn(marker, step22c)
 
     def test_repository_map_and_product_inventory_remain_exact(self) -> None:
         self.assertIn(

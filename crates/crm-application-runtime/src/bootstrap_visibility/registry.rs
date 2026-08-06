@@ -26,12 +26,10 @@ use crm_customer_data_operations_query_adapter::LIST_IMPORT_ROWS_CAPABILITY;
 use crm_customer_enrichment::MODULE_ID as CUSTOMER_ENRICHMENT_MODULE_ID;
 use crm_customer_enrichment_visibility::query_visibility_resources as customer_enrichment_query_visibility_resources;
 use crm_customer_privacy_production::{
-    GET_PRIVACY_ACTION_PLAN_CAPABILITY, LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY,
-    plan_read_visibility_resources as customer_privacy_plan_read_visibility_resources,
-};
-use crm_customer_privacy_query_adapter::{
-    GET_PRIVACY_CASE_CAPABILITY, LIST_PRIVACY_CASES_CAPABILITY,
+    GET_PRIVACY_ACTION_PLAN_CAPABILITY, GET_PRIVACY_CASE_CAPABILITY, LIST_PRIVACY_CASES_CAPABILITY,
+    LIST_PRIVACY_OWNER_OUTCOMES_CAPABILITY,
     control_query_visibility_resources as customer_privacy_control_visibility_resources,
+    plan_read_visibility_resources as customer_privacy_plan_read_visibility_resources,
     query_visibility_resources as customer_privacy_query_visibility_resources,
 };
 use crm_identity_resolution_capability_adapter::{

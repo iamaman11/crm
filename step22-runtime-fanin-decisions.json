@@ -49,6 +49,18 @@
       "prevented_boundary": "Owns generic event contract and delivery mechanics across owners.",
       "review_condition": "Re-review if the package begins owning a business-domain event lifecycle."
     },
+    "customer-privacy-query-fanin-remediation": {
+      "classification": "removed",
+      "evidence_paths": [
+        "crates/crm-application-runtime/Cargo.toml",
+        "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
+        "crates/crm-customer-privacy-production/Cargo.toml",
+        "crates/crm-customer-privacy-production/src/legal_hold.rs"
+      ],
+      "owner": "customer-privacy",
+      "prevented_boundary": "Keeps Customer Privacy control-query inventory and adapter ownership behind the sole supported owner production entry point instead of exposing the adapter directly to the generic process host.",
+      "review_condition": "Reopen and block Step 22 if crm-application-runtime regains a direct crm-customer-privacy-query-adapter dependency or source import."
+    },
     "global-search-platform": {
       "classification": "platform-generic",
       "evidence_paths": [
@@ -132,19 +144,19 @@
   },
   "counts": {
     "all": 63,
-    "final": 17,
+    "final": 18,
     "owner_specific_unavoidable": 0,
     "platform_generic": 16,
-    "removed": 0,
+    "removed": 1,
     "test_only": 1,
-    "unresolved": 46
+    "unresolved": 45
   },
   "decision_boundary": {
     "all_dependencies_present": true,
     "final_classifications_recorded": false,
     "gate_dispositions_recorded": false,
     "owner_specific_unavoidable_recorded": false,
-    "remediation_performed": false,
+    "remediation_performed": true,
     "step22_complete": false
   },
   "final_row_columns": [
@@ -187,6 +199,11 @@
       "crm-application-runtime::dependencies::crm-core-events",
       "platform-generic",
       "core-event-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter",
+      "removed",
+      "customer-privacy-query-fanin-remediation"
     ],
     [
       "crm-application-runtime::dependencies::crm-first-party-modules",
@@ -244,7 +261,27 @@
     "merge_commit": "4642ea39a7c1c8ad78b1d475a3d5391af8414555",
     "path": "step22-architecture-inventory.json"
   },
-  "phase": "partial-classification-only",
+  "phase": "partial-classification-and-remediation",
+  "remediation_evidence": {
+    "after": {
+      "all": 62,
+      "production": 61,
+      "test_only": 1
+    },
+    "before": {
+      "all": 63,
+      "production": 62,
+      "test_only": 1
+    },
+    "owner_manifest": "crates/crm-customer-privacy-production/Cargo.toml",
+    "owner_source": "crates/crm-customer-privacy-production/src/legal_hold.rs",
+    "removed_stable_ids": [
+      "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter"
+    ],
+    "replacement_boundary": "crm-customer-privacy-production",
+    "runtime_manifest": "crates/crm-application-runtime/Cargo.toml",
+    "runtime_source": "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
+  },
   "resolution_rule": "Every accepted inventory stable_id not present in final_rows remains unresolved; null or invented classification labels are forbidden.",
   "schema_version": "crm.step22-runtime-fanin-decisions/v1"
 }
