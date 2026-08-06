@@ -40,10 +40,7 @@ use crm_customer_privacy_postgres::{
 };
 use crm_customer_privacy_query_adapter::CustomerPrivacyControlQueryAdapter;
 pub use crm_customer_privacy_query_adapter::control_query_capability_definitions;
-pub use crm_customer_privacy_query_adapter::{
-    GET_PRIVACY_CASE_CAPABILITY, LIST_PRIVACY_CASES_CAPABILITY, control_query_visibility_resources,
-    query_visibility_resources,
-};
+pub use crm_customer_privacy_query_adapter::control_query_visibility_resources;
 use crm_module_sdk::{ErrorCategory, SdkError};
 use crm_query_runtime::{CursorCodec, QueryExecutor, QuerySemanticValidator};
 use std::sync::Arc;
