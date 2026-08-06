@@ -66,7 +66,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
         with:
           components: rustfmt, clippy
-      - name: Materialize exact Step 22D lockfile and synchronize canonical formatting
+      - name: Materialize exact Step 22D packet and lockfile
         shell: bash
         run: |
           set -euo pipefail
@@ -80,6 +80,7 @@ jobs:
               raise SystemExit(f"expected exactly one runtime Customer 360 lock edge, found {text.count(needle)}")
           path.write_text(text.replace(needle, "", 1), encoding="utf-8")
           PY
+          python scripts/materialize_step22d_packet.py
           cargo metadata --locked --format-version 1 --no-deps >/dev/null
           cargo fmt --all
       - name: Synchronize generated contract artifacts
@@ -88,17 +89,17 @@ jobs:
           python scripts/generate_contract_bindings.py --write
       - name: Synchronize generated repository navigation
         run: python scripts/generate_repository_navigation.py --write
-      - name: Commit exact Step 22D lockfile and generated artifacts when needed
+      - name: Commit exact Step 22D packet and generated artifacts
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if [ -z "$(git status --porcelain -- Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md)" ]; then
-            echo "Step 22D lockfile and generated artifacts are already synchronized."
+          if [ -z "$(git status --porcelain -- Cargo.lock crates modules services docs repository-packet.json step22-runtime-fanin-decisions.json scripts/check_step22_runtime_fanin_decisions.py tests packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json)" ]; then
+            echo "Step 22D packet and generated artifacts are already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md
-            git commit -m "Synchronize exact Step 22D lockfile"
+            git add Cargo.lock crates modules services docs repository-packet.json step22-runtime-fanin-decisions.json scripts/check_step22_runtime_fanin_decisions.py tests packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json
+            git commit -m "Materialize Repository Step 22D packet"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
