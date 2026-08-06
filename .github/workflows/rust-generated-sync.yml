@@ -66,30 +66,33 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable resolved 2026-07-25
         with:
           components: rustfmt, clippy
-      - name: Materialize Step 22D lockfile and synchronize canonical formatting
+      - name: Verify committed lockfile and synchronize canonical formatting
         shell: bash
         run: |
           set -euo pipefail
-          cargo generate-lockfile
+          lockfile_before="$(sha256sum Cargo.lock | cut -d ' ' -f1)"
           cargo metadata --locked --format-version 1 --no-deps >/dev/null
           cargo fmt --all
+          lockfile_after="$(sha256sum Cargo.lock | cut -d ' ' -f1)"
+          test "${lockfile_before}" = "${lockfile_after}"
+          git diff --exit-code -- Cargo.lock
       - name: Synchronize generated contract artifacts
         run: |
           cargo run --locked -p crm-proto-contracts --bin generate_hashes -- packages/client/src/contract_hashes.ts
           python scripts/generate_contract_bindings.py --write
       - name: Synchronize generated repository navigation
         run: python scripts/generate_repository_navigation.py --write
-      - name: Commit generated Rust, lockfile, contract and navigation artifacts when needed
+      - name: Commit generated Rust, contract and navigation artifacts when needed
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
-          if [ -z "$(git status --porcelain -- Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md)" ]; then
-            echo "Rust, lockfile, contract and repository navigation artifacts are already synchronized."
+          if [ -z "$(git status --porcelain -- crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md)" ]; then
+            echo "Rust, contract and repository navigation artifacts are already synchronized."
           else
             git config user.name "github-actions[bot]"
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add Cargo.lock crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md
-            git commit -m "Synchronize Step 22D Rust and lockfile artifacts"
+            git add crates modules services packages/client/src/contract_hashes.ts contracts/module-contract-bindings.json docs/ACTIVE_PACKET.md docs/generated/REPOSITORY_MAP.md
+            git commit -m "Synchronize Rust, contract and repository navigation artifacts"
             git push origin "HEAD:${HEAD_BRANCH}"
           fi
       - name: Apply machine-fixable Clippy maintenance
