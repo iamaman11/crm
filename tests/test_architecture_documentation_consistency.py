@@ -238,9 +238,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "tests/test_repository_navigation.py",
         ):
             self.assertIn(path, allowed_paths)
-        self.assertIn(".github/workflows/**", self.packet["forbidden_paths"])
-        self.assertIn("Cargo.lock", self.packet["forbidden_paths"])
-        self.assertIn("step22-architecture-inventory.json", self.packet["forbidden_paths"])
+        forbidden_paths = set(self.packet["forbidden_paths"])
+        self.assertIn(".github/workflows/**", forbidden_paths)
+        self.assertNotIn("Cargo.toml", allowed_paths)
+        self.assertNotIn("Cargo.toml", forbidden_paths)
+        self.assertIn("step22-architecture-inventory.json", forbidden_paths)
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
 
