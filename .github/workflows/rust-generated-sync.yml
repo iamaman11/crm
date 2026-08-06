@@ -75,10 +75,17 @@ jobs:
           from pathlib import Path
           path = Path("Cargo.lock")
           text = path.read_text(encoding="utf-8")
+          package_marker = '[[package]]\nname = "crm-application-runtime"\n'
+          start = text.index(package_marker)
+          end = text.find('[[package]]\n', start + len(package_marker))
+          if end < 0:
+              end = len(text)
+          block = text[start:end]
           needle = ' "crm-customer-360-query-adapter",\n'
-          if text.count(needle) != 1:
-              raise SystemExit(f"expected exactly one runtime Customer 360 lock edge, found {text.count(needle)}")
-          path.write_text(text.replace(needle, "", 1), encoding="utf-8")
+          if block.count(needle) != 1:
+              raise SystemExit(f"expected one runtime Customer 360 lock edge, found {block.count(needle)}")
+          text = text[:start] + block.replace(needle, "", 1) + text[end:]
+          path.write_text(text, encoding="utf-8")
           PY
           python scripts/materialize_step22d_packet.py
           cargo metadata --locked --format-version 1 --no-deps >/dev/null
