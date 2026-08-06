@@ -20,6 +20,7 @@ Step 22C exposes that inventory through the owner production package and removes
 | Internal direct dependencies | 63 | 62 | -1 |
 | Production internal direct dependencies | 62 | 61 | -1 |
 | Test-only internal direct dependencies | 1 | 1 | 0 |
+| Conservative public Rust surface | 5,377 | 5,377 | 0 |
 | Final ADR-032 classifications | 17 | 18 | +1 |
 | `removed` | 0 | 1 | +1 |
 | Unresolved accepted inventory dependencies | 46 | 45 | -1 |
@@ -40,6 +41,7 @@ The remediation is deliberately narrow:
 2. `crm-application-runtime` imports the function through `crm_customer_privacy_production`.
 3. `crm-customer-privacy-query-adapter` is removed only from `crm-application-runtime/Cargo.toml`.
 4. The production package keeps its existing query-adapter dependency and remains responsible for construction of the control-query adapter, validator and executor.
+5. Existing owner-package re-exports are grouped canonically so the conservative public Rust surface remains exactly 5,377 rather than growing for a syntax-only boundary exposure.
 
 No capability ID, schema, public query inventory, route, persistence behavior, visibility policy, cursor behavior or PostgreSQL ownership changes.
 
