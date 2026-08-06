@@ -58,9 +58,9 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertIn("step22-architecture-inventory.json", forbidden_paths)
         deliverables = " ".join(packet["deliverables"])
         non_goals = " ".join(packet["non_goals"])
-        self.assertIn("sixty-three", deliverables)
-        self.assertIn("sixty-two", deliverables)
-        self.assertIn("forty-five", deliverables)
+        self.assertIn("63 to 62", deliverables)
+        self.assertIn("62 to 61", deliverables)
+        self.assertIn("forty-five unresolved", deliverables)
         self.assertIn("classify crm-customer-privacy-production", non_goals)
         self.assertIn("declare all runtime classifications complete", non_goals)
         self.assertEqual(
