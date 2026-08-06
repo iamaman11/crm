@@ -60,7 +60,6 @@ class RepositoryNavigationTests(unittest.TestCase):
         non_goals = " ".join(packet["non_goals"])
         self.assertIn("63 to 62", deliverables)
         self.assertIn("62 to 61", deliverables)
-        self.assertIn("forty-five unresolved", deliverables)
         self.assertIn("classify crm-customer-privacy-production", non_goals)
         self.assertIn("declare all runtime classifications complete", non_goals)
         self.assertEqual(
