@@ -43,6 +43,12 @@ The remediation is deliberately narrow:
 
 No capability ID, schema, public query inventory, route, persistence behavior, visibility policy, cursor behavior or PostgreSQL ownership changes.
 
+## Packet path guard
+
+The packet permits the exact nested manifest `crates/crm-application-runtime/Cargo.toml` and does not permit the workspace-root `Cargo.toml`. The root manifest therefore remains fail-closed as a path outside `allowed_paths`; it does not need a basename-only forbidden pattern that would also match the explicitly allowed nested manifest.
+
+All other broad forbidden path families remain unchanged, and forbidden matches continue to take precedence over allowed matches.
+
 ## Exact lockfile synchronization
 
 The lockfile proof is pinned to immutable baseline commit `6fe0e8e7702b01a78f5db3f174c09b686de27402`; it does not read a moving `main` or `origin/main` ref.
