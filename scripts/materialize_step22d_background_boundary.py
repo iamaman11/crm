@@ -70,21 +70,23 @@ def update_docs() -> None:
 
 
 def update_guards() -> None:
-    marker = '                "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",\n'
-    replacement = (
-        '                "crates/crm-application-runtime/src/background.rs",\n'
-        + marker
-    )
+    registry_literal = f'"{REGISTRY}",'
+    background_literal = f'"{BACKGROUND}",'
     for path in (
         "tests/test_architecture_documentation_consistency.py",
         "tests/test_repository_navigation.py",
     ):
-        text = (ROOT / path).read_text(encoding="utf-8")
-        if BACKGROUND in text:
+        target = ROOT / path
+        lines = target.read_text(encoding="utf-8").splitlines()
+        if any(background_literal in line for line in lines):
             continue
-        if marker not in text:
+        matching = [index for index, line in enumerate(lines) if registry_literal in line]
+        if not matching:
             raise RuntimeError(f"{path}: allowed-path marker missing")
-        (ROOT / path).write_text(text.replace(marker, replacement, 1), encoding="utf-8")
+        index = matching[0]
+        indent = lines[index][: len(lines[index]) - len(lines[index].lstrip())]
+        lines.insert(index, f"{indent}{background_literal}")
+        target.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def main() -> None:
