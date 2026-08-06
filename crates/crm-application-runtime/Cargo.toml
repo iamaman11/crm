@@ -22,7 +22,6 @@ crm-contact-points-capability-composition = { path = "../crm-contact-points-capa
 crm-core-data = { path = "../crm-core-data" }
 crm-core-events = { path = "../crm-core-events" }
 crm-customer-360-composition = { path = "../crm-customer-360-composition" }
-crm-customer-360-query-adapter = { path = "../crm-customer-360-query-adapter" }
 crm-customer-accounts-capability-adapter = { path = "../crm-customer-accounts-capability-adapter" }
 crm-customer-data-operations-capability-adapter = { path = "../crm-customer-data-operations-capability-adapter" }
 crm-customer-data-operations-execution-composition = { path = "../crm-customer-data-operations-execution-composition" }

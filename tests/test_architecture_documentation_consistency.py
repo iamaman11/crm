@@ -215,27 +215,30 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_step_22c_customer_privacy_query_fanin_packet_is_exact(self) -> None:
+    def test_active_step_22d_customer_360_query_fanin_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-22c-customer-privacy-query-fanin-reduction",
+            "repository-step-22d-customer-360-query-fanin-reduction",
         )
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "6fe0e8e7702b01a78f5db3f174c09b686de27402"},
+            {"ref": "main", "sha": "9b2495c9a594f5539aa586f6d775a8ea12442a48"},
         )
         self.assertEqual(self.packet["tracking_issues"], [194])
         allowed_paths = set(self.packet["allowed_paths"])
         for path in (
+            "Cargo.lock",
             "crates/crm-application-runtime/Cargo.toml",
-            "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
-            "crates/crm-customer-privacy-production/src/legal_hold.rs",
-            "docs/STEP22_CUSTOMER_PRIVACY_QUERY_FANIN_REDUCTION.md",
+            "crates/crm-application-runtime/src/background.rs",
+            "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+            "crates/crm-first-party-modules/src/lib.rs",
+            "docs/STEP22_CUSTOMER_360_QUERY_FANIN_REDUCTION.md",
             "scripts/check_step22_runtime_fanin_decisions.py",
             "step22-runtime-fanin-decisions.json",
             "tests/test_architecture_documentation_consistency.py",
             "tests/test_repository_navigation.py",
+            "tests/test_workspace_analysis.py",
         ):
             self.assertIn(path, allowed_paths)
         forbidden_paths = set(self.packet["forbidden_paths"])
@@ -251,16 +254,16 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             counts,
             {
                 "all": 63,
-                "final": 18,
+                "final": 19,
                 "platform_generic": 16,
                 "test_only": 1,
-                "removed": 1,
+                "removed": 2,
                 "owner_specific_unavoidable": 0,
-                "unresolved": 45,
+                "unresolved": 44,
             },
         )
         non_goals = " ".join(self.packet["non_goals"])
-        self.assertIn("classify crm-customer-privacy-production", non_goals)
+        self.assertIn("classify crm-first-party-modules", non_goals)
         self.assertIn("remediate another crm-application-runtime dependency", non_goals)
         self.assertIn("declare all runtime classifications complete", non_goals)
 
@@ -277,21 +280,21 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             self.assertIn(path, operations_scope["path_patterns"])
         self.assertEqual(operations_scope["required_workflows"], ["Governance CI"])
 
-        step22b = read("docs/STEP22_RUNTIME_FANIN_CLASSIFICATION.md")
-        for marker in ("16", "1", "46", "partial"):
-            self.assertIn(marker, step22b)
-
         step22c = read("docs/STEP22_CUSTOMER_PRIVACY_QUERY_FANIN_REDUCTION.md")
+        for marker in ("63", "62", "18", "45", "Customer Privacy"):
+            self.assertIn(marker, step22c)
+
+        step22d = read("docs/STEP22_CUSTOMER_360_QUERY_FANIN_REDUCTION.md")
         for marker in (
-            "63",
             "62",
-            "18",
-            "45",
-            "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter",
-            "6fe0e8e7702b01a78f5db3f174c09b686de27402",
+            "61",
+            "19",
+            "44",
+            "crm-application-runtime::dependencies::crm-customer-360-query-adapter",
+            "9b2495c9a594f5539aa586f6d775a8ea12442a48",
             "Repository Step 22",
         ):
-            self.assertIn(marker, step22c)
+            self.assertIn(marker, step22d)
 
     def test_repository_map_and_product_inventory_remain_exact(self) -> None:
         self.assertIn(

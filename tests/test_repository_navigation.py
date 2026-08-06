@@ -24,30 +24,33 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_step_22c_customer_privacy_query_fanin_packet_is_exact(self) -> None:
+    def test_active_step_22d_customer_360_query_fanin_packet_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             packet["packet_id"],
-            "repository-step-22c-customer-privacy-query-fanin-reduction",
+            "repository-step-22d-customer-360-query-fanin-reduction",
         )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
-            {"ref": "main", "sha": "6fe0e8e7702b01a78f5db3f174c09b686de27402"},
+            {"ref": "main", "sha": "9b2495c9a594f5539aa586f6d775a8ea12442a48"},
         )
         self.assertEqual(packet["tracking_issues"], [194])
         allowed_paths = set(packet["allowed_paths"])
         self.assertTrue(
             {
+                "Cargo.lock",
                 "crates/crm-application-runtime/Cargo.toml",
-                "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
-                "crates/crm-customer-privacy-production/src/legal_hold.rs",
-                "docs/STEP22_CUSTOMER_PRIVACY_QUERY_FANIN_REDUCTION.md",
+                "crates/crm-application-runtime/src/background.rs",
+                "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+                "crates/crm-first-party-modules/src/lib.rs",
+                "docs/STEP22_CUSTOMER_360_QUERY_FANIN_REDUCTION.md",
                 "scripts/check_step22_runtime_fanin_decisions.py",
                 "step22-runtime-fanin-decisions.json",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
+                "tests/test_workspace_analysis.py",
             }.issubset(allowed_paths)
         )
         self.assertNotIn(".github/workflows/rust-generated-sync.yml", allowed_paths)
@@ -58,20 +61,20 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertIn("step22-architecture-inventory.json", forbidden_paths)
         deliverables = " ".join(packet["deliverables"])
         non_goals = " ".join(packet["non_goals"])
-        self.assertIn("63 to 62", deliverables)
         self.assertIn("62 to 61", deliverables)
-        self.assertIn("classify crm-customer-privacy-production", non_goals)
+        self.assertIn("61 to 60", deliverables)
+        self.assertIn("remediate another crm-application-runtime dependency", non_goals)
         self.assertIn("declare all runtime classifications complete", non_goals)
         self.assertEqual(
             validate_decisions(ROOT),
             {
                 "all": 63,
-                "final": 18,
+                "final": 19,
                 "platform_generic": 16,
                 "test_only": 1,
-                "removed": 1,
+                "removed": 2,
                 "owner_specific_unavoidable": 0,
-                "unresolved": 45,
+                "unresolved": 44,
             },
         )
 
@@ -86,11 +89,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-22c-customer-privacy-query-fanin-reduction",
+            "repository-step-22d-customer-360-query-fanin-reduction",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "6fe0e8e7702b01a78f5db3f174c09b686de27402",
+            "9b2495c9a594f5539aa586f6d775a8ea12442a48",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -147,7 +150,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 22C Customer Privacy query fan-in reduction"],
+                    "reasons": ["Step 22D Customer 360 query fan-in reduction"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -155,7 +158,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="6fe0e8e7702b01a78f5db3f174c09b686de27402",
+                return_value="9b2495c9a594f5539aa586f6d775a8ea12442a48",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(

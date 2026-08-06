@@ -121,6 +121,18 @@
       "prevented_boundary": "Provides generic permission-aware query execution independent of one domain.",
       "review_condition": "Re-review if owner-specific query semantics move into the generic runtime."
     },
+    "removed-customer-360-query-adapter": {
+      "classification": "removed",
+      "evidence_paths": [
+        "crates/crm-application-runtime/Cargo.toml",
+        "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+        "crates/crm-first-party-modules/Cargo.toml",
+        "crates/crm-first-party-modules/src/lib.rs"
+      ],
+      "owner": "customer-360",
+      "prevented_boundary": "Keeps Customer 360 query-adapter identity and query inventory behind the existing first-party owner aggregation boundary instead of the generic process host.",
+      "review_condition": "Fail if crm-application-runtime regains a direct Customer 360 query-adapter dependency or source import."
+    },
     "runtime-process-composition": {
       "classification": "platform-generic",
       "evidence_paths": [
@@ -144,12 +156,12 @@
   },
   "counts": {
     "all": 63,
-    "final": 18,
+    "final": 19,
     "owner_specific_unavoidable": 0,
     "platform_generic": 16,
-    "removed": 1,
+    "removed": 2,
     "test_only": 1,
-    "unresolved": 45
+    "unresolved": 44
   },
   "decision_boundary": {
     "all_dependencies_present": true,
@@ -199,6 +211,11 @@
       "crm-application-runtime::dependencies::crm-core-events",
       "platform-generic",
       "core-event-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-customer-360-query-adapter",
+      "removed",
+      "removed-customer-360-query-adapter"
     ],
     [
       "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter",
@@ -264,8 +281,8 @@
   "phase": "partial-classification-and-remediation",
   "remediation_evidence": {
     "after": {
-      "all": 62,
-      "production": 61,
+      "all": 61,
+      "production": 60,
       "test_only": 1
     },
     "before": {
@@ -273,14 +290,40 @@
       "production": 62,
       "test_only": 1
     },
-    "owner_manifest": "crates/crm-customer-privacy-production/Cargo.toml",
-    "owner_source": "crates/crm-customer-privacy-production/src/legal_hold.rs",
+    "removals": [
+      {
+        "adapter_package": "crm-customer-360-query-adapter",
+        "owner_manifest": "crates/crm-first-party-modules/Cargo.toml",
+        "owner_sources": [
+          "crates/crm-first-party-modules/src/lib.rs"
+        ],
+        "replacement_boundary": "crm-first-party-modules",
+        "runtime_sources": [
+          "crates/crm-application-runtime/src/background.rs",
+          "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs"
+        ],
+        "stable_id": "crm-application-runtime::dependencies::crm-customer-360-query-adapter"
+      },
+      {
+        "adapter_package": "crm-customer-privacy-query-adapter",
+        "owner_manifest": "crates/crm-customer-privacy-production/Cargo.toml",
+        "owner_sources": [
+          "crates/crm-customer-privacy-production/src/legal_hold.rs",
+          "crates/crm-customer-privacy-production/src/root.rs"
+        ],
+        "replacement_boundary": "crm-customer-privacy-production",
+        "runtime_sources": [
+          "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+          "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
+        ],
+        "stable_id": "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter"
+      }
+    ],
     "removed_stable_ids": [
+      "crm-application-runtime::dependencies::crm-customer-360-query-adapter",
       "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter"
     ],
-    "replacement_boundary": "crm-customer-privacy-production",
-    "runtime_manifest": "crates/crm-application-runtime/Cargo.toml",
-    "runtime_source": "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
+    "runtime_manifest": "crates/crm-application-runtime/Cargo.toml"
   },
   "resolution_rule": "Every accepted inventory stable_id not present in final_rows remains unresolved; null or invented classification labels are forbidden.",
   "schema_version": "crm.step22-runtime-fanin-decisions/v1"

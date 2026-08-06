@@ -23,6 +23,7 @@ pub use crm_contact_points_capability_composition::{
     query_capability_definitions as contact_points_query_capability_definitions,
 };
 use crm_core_data::PostgresDataStore;
+pub use crm_customer_360_query_adapter::MODULE_ID as CUSTOMER_360_MODULE_ID;
 pub use crm_customer_360_query_adapter::query_capability_definitions as customer_360_query_capability_definitions;
 use crm_customer_360_query_adapter::{
     Customer360ProductionDependencies, build_contribution as build_customer_360_contribution,
@@ -215,5 +216,3 @@ pub fn build_all(
 
     Ok(contributions)
 }
-
-pub const CRATE_NAME: &str = "crm-first-party-modules";

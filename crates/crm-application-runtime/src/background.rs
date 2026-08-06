@@ -5,7 +5,6 @@ use crm_application_composition::{
 use crm_core_data::PostgresDataStore;
 use crm_core_events::EventHistoryRequest;
 use crm_customer_360_composition::Customer360ProjectionWorker;
-use crm_customer_360_query_adapter::MODULE_ID as CUSTOMER_360_MODULE_ID;
 use crm_customer_data_operations_capability_adapter::MODULE_ID as CUSTOMER_DATA_OPERATIONS_MODULE_ID;
 use crm_customer_data_operations_execution_composition::{
     PartyExportSelectionWorker, PartyImportExecutionWorker,
@@ -21,6 +20,7 @@ use crm_customer_enrichment_provider_process_composition::{
     CustomerEnrichmentProviderProcessWorker, PROVIDER_PROCESS_WORKER_ID,
 };
 use crm_customer_privacy_production::CustomerPrivacyProductionDependencies;
+use crm_first_party_modules::CUSTOMER_360_MODULE_ID;
 use crm_global_search_composition::GlobalSearchWorker;
 use crm_module_sdk::{ErrorCategory, EventType, ModuleId, PortFuture, SdkError, TenantId};
 use crm_sales_activities_capability_composition::{
