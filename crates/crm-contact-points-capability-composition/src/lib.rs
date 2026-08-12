@@ -87,13 +87,13 @@ pub struct ContactPointsProductionDependencies {
 }
 
 /// Returns the stable Contact Points module/record identity together with the
-/// owner-provided planner factory needed by guarded process promotion.
+/// owner-provided planner needed by guarded process promotion.
 pub fn contact_points_runtime_boundary() -> (
     &'static str,
     &'static str,
-    fn() -> Arc<dyn TransactionalAggregatePlanner>,
+    Arc<dyn TransactionalAggregatePlanner>,
 ) {
-    (MODULE_ID, RECORD_TYPE, contact_point_planner)
+    (MODULE_ID, RECORD_TYPE, contact_point_planner())
 }
 
 /// Returns the exact Contact Points mutation inventory owned by this production
@@ -179,7 +179,7 @@ fn production_composition_error(error: impl fmt::Display) -> SdkError {
         "CONTACT_POINTS_PRODUCTION_COMPOSITION_INVALID",
         ErrorCategory::Internal,
         false,
-        "The Contact Points production contribution is invalid.",
+        "The production Contact Points contribution is invalid.",
     )
     .with_internal_reference(error.to_string())
 }
