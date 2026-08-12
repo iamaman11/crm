@@ -10,9 +10,7 @@ use crm_capability_runtime::CapabilityDefinition;
 use crm_consents_capability_adapter::{
     MODULE_ID as CONSENTS_MODULE_ID, RECORD_TYPE as CONSENT_RECORD_TYPE,
 };
-use crm_contact_points_capability_adapter::{
-    MODULE_ID as CONTACT_POINTS_MODULE_ID, RECORD_TYPE as CONTACT_POINT_RECORD_TYPE,
-};
+use crm_contact_points_capability_composition::contact_points_runtime_boundary;
 use crm_customer_accounts_capability_adapter::{
     MODULE_ID as ACCOUNTS_MODULE_ID, RECORD_TYPE as ACCOUNT_RECORD_TYPE,
 };
@@ -83,13 +81,14 @@ pub(crate) fn build_bootstrap_visibility_registry() -> Result<BootstrapVisibilit
 {
     let mut providers = BTreeMap::new();
     let (parties_module_id, _, _, _) = parties_runtime_identity();
+    let (contact_points_module_id, _, _) = contact_points_runtime_boundary();
     register(&mut providers, SALES_MODULE_ID, sales_visibility)?;
     register(&mut providers, ACTIVITIES_MODULE_ID, activities_visibility)?;
     register(&mut providers, parties_module_id, parties_visibility)?;
     register(&mut providers, ACCOUNTS_MODULE_ID, accounts_visibility)?;
     register(
         &mut providers,
-        CONTACT_POINTS_MODULE_ID,
+        contact_points_module_id,
         contact_points_visibility,
     )?;
     register(&mut providers, CONSENTS_MODULE_ID, consents_visibility)?;
@@ -188,11 +187,8 @@ fn accounts_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResou
 }
 
 fn contact_points_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
-    vec![resource(
-        CONTACT_POINTS_MODULE_ID,
-        CONTACT_POINT_RECORD_TYPE,
-        contact_point_fields(),
-    )]
+    let (module_id, record_type, _) = contact_points_runtime_boundary();
+    vec![resource(module_id, record_type, contact_point_fields())]
 }
 
 fn consents_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
@@ -303,6 +299,8 @@ fn no_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
 
 fn customer_360_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
     let (parties_module_id, party_record_type, _, _) = parties_runtime_identity();
+    let (contact_points_module_id, contact_point_record_type, _) =
+        contact_points_runtime_boundary();
     vec![
         resource(
             parties_module_id,
@@ -315,8 +313,8 @@ fn customer_360_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityR
             customer_360_account_fields(),
         ),
         resource(
-            CONTACT_POINTS_MODULE_ID,
-            CONTACT_POINT_RECORD_TYPE,
+            contact_points_module_id,
+            contact_point_record_type,
             customer_360_contact_point_fields(),
         ),
         resource(

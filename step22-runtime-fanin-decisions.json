@@ -29,6 +29,21 @@
       "prevented_boundary": "Supports direct Consents owner construction only in crm-application-runtime acceptance tests.",
       "review_condition": "Remove when acceptance fixtures no longer construct the Consents owner module directly."
     },
+    "contact-points-capability-adapter-fanin-remediation": {
+      "classification": "removed",
+      "evidence_paths": [
+        "Cargo.lock",
+        "crates/crm-application-runtime/Cargo.toml",
+        "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+        "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
+        "crates/crm-contact-points-capability-composition/Cargo.toml",
+        "crates/crm-contact-points-capability-composition/src/lib.rs",
+        "scripts/check_step22_runtime_fanin_decisions.py"
+      ],
+      "owner": "crm.contact-points / architecture-governance",
+      "prevented_boundary": "Keeps Contact Points capability-adapter implementation details behind the existing owner production composition boundary instead of exposing the adapter to the generic process host for bootstrap identity or guarded create-promotion planning.",
+      "review_condition": "Fail if crm-application-runtime regains a direct crm-contact-points-capability-adapter dependency or source import while crm-contact-points-capability-composition remains the owner production composition boundary."
+    },
     "core-data-platform": {
       "classification": "platform-generic",
       "evidence_paths": [
@@ -170,12 +185,12 @@
   },
   "counts": {
     "all": 63,
-    "final": 20,
+    "final": 21,
     "owner_specific_unavoidable": 0,
     "platform_generic": 16,
-    "removed": 3,
+    "removed": 4,
     "test_only": 1,
-    "unresolved": 43
+    "unresolved": 42
   },
   "decision_boundary": {
     "all_dependencies_present": true,
@@ -215,6 +230,11 @@
       "crm-application-runtime::dependencies::crm-capability-runtime",
       "platform-generic",
       "capability-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-contact-points-capability-adapter",
+      "removed",
+      "contact-points-capability-adapter-fanin-remediation"
     ],
     [
       "crm-application-runtime::dependencies::crm-core-data",
@@ -300,8 +320,8 @@
   "phase": "partial-classification-and-remediation",
   "remediation_evidence": {
     "after": {
-      "all": 60,
-      "production": 59,
+      "all": 59,
+      "production": 58,
       "test_only": 1
     },
     "before": {
@@ -348,9 +368,23 @@
           "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs"
         ],
         "stable_id": "crm-application-runtime::dependencies::crm-parties-capability-adapter"
+      },
+      {
+        "adapter_package": "crm-contact-points-capability-adapter",
+        "owner_manifest": "crates/crm-contact-points-capability-composition/Cargo.toml",
+        "owner_sources": [
+          "crates/crm-contact-points-capability-composition/src/lib.rs"
+        ],
+        "replacement_boundary": "crm-contact-points-capability-composition",
+        "runtime_sources": [
+          "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+          "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
+        ],
+        "stable_id": "crm-application-runtime::dependencies::crm-contact-points-capability-adapter"
       }
     ],
     "removed_stable_ids": [
+      "crm-application-runtime::dependencies::crm-contact-points-capability-adapter",
       "crm-application-runtime::dependencies::crm-customer-360-query-adapter",
       "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter",
       "crm-application-runtime::dependencies::crm-parties-capability-adapter"

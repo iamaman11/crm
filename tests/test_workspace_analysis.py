@@ -464,7 +464,7 @@ jobs:
         )
         self.assertEqual(
             fresh["runtime_fanin"]["counts"],
-            {"all": 60, "production": 59, "test_only": 1, "build": 0},
+            {"all": 59, "production": 58, "test_only": 1, "build": 0},
         )
         self.assertEqual(
             fresh["permanent_gates"], committed["permanent_gates"]
@@ -487,6 +487,8 @@ jobs:
             removed_ids,
             {
                 "crm-application-runtime::dependencies::"
+                "crm-contact-points-capability-adapter",
+                "crm-application-runtime::dependencies::"
                 "crm-customer-360-query-adapter",
                 "crm-application-runtime::dependencies::"
                 "crm-customer-privacy-query-adapter",
@@ -496,14 +498,14 @@ jobs:
         )
         self.assertEqual(accepted_runtime_ids - current_runtime_ids, removed_ids)
         self.assertEqual(current_runtime_ids - accepted_runtime_ids, set())
-        self.assertEqual(len(current_runtime_ids), 60)
+        self.assertEqual(len(current_runtime_ids), 59)
         self.assertEqual(
             decisions["remediation_evidence"]["before"],
             {"all": 63, "production": 62, "test_only": 1},
         )
         self.assertEqual(
             decisions["remediation_evidence"]["after"],
-            {"all": 60, "production": 59, "test_only": 1},
+            {"all": 59, "production": 58, "test_only": 1},
         )
         self.assertTrue(
             decisions["decision_boundary"]["remediation_performed"]

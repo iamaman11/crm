@@ -143,6 +143,9 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
         contact_points = (
             ROOT / "crates/crm-contact-points-capability-composition/src/lib.rs"
         ).read_text(encoding="utf-8")
+        contact_points_cargo = (
+            ROOT / "crates/crm-contact-points-capability-composition/Cargo.toml"
+        ).read_text(encoding="utf-8")
         relationships = (
             ROOT / "crates/crm-party-relationships-capability-composition/src/lib.rs"
         ).read_text(encoding="utf-8")
@@ -200,6 +203,7 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
         )
 
         for dependency in (
+            "crm-contact-points-capability-adapter =",
             "crm-contact-points-query-adapter =",
             "crm-customer-accounts-query-adapter =",
             "crm-parties-capability-adapter =",
@@ -211,7 +215,6 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
         for dependency in (
             "crm-consents-capability-adapter =",
             "crm-consents-query-adapter =",
-            "crm-contact-points-capability-adapter =",
             "crm-contact-points-capability-composition =",
             "crm-customer-accounts-capability-adapter =",
             "crm-parties-query-adapter =",
@@ -220,6 +223,10 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
             "crm-party-relationships-projection =",
         ):
             self.assertIn(dependency, runtime_cargo)
+        self.assertIn(
+            "crm-contact-points-capability-adapter =",
+            contact_points_cargo,
+        )
 
     def test_identity_data_operations_and_quality_batch_is_owner_aggregated(self) -> None:
         identity = (
@@ -227,12 +234,10 @@ class NativeModuleCompositionReadinessTests(unittest.TestCase):
             / "crates/crm-identity-resolution-capability-composition/src/production_contribution.rs"
         ).read_text(encoding="utf-8")
         data_operations = (
-            ROOT
-            / "crates/crm-customer-data-operations-execution-composition/src/production_contribution.rs"
+            ROOT / "crates/crm-customer-data-operations-execution-composition/src/production_contribution.rs"
         ).read_text(encoding="utf-8")
         data_quality = (
-            ROOT
-            / "crates/crm-data-quality-source-composition/src/production_contribution.rs"
+            ROOT / "crates/crm-data-quality-source-composition/src/production_contribution.rs"
         ).read_text(encoding="utf-8")
         aggregate = (ROOT / "crates/crm-first-party-modules/src/lib.rs").read_text(
             encoding="utf-8"

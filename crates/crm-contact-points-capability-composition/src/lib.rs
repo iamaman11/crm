@@ -11,14 +11,16 @@ use crm_capability_runtime::{
     TransactionalCapabilityExecutor,
 };
 use crm_contact_points_capability_adapter::{
-    CREATE_CAPABILITY, ContactPointCapabilityPlanner, MUTATION_CAPABILITY_IDS,
-    capability_definitions as adapter_mutation_capability_definitions,
+    CREATE_CAPABILITY, ContactPointCapabilityPlanner, MODULE_ID, MUTATION_CAPABILITY_IDS,
+    RECORD_TYPE, capability_definitions as adapter_mutation_capability_definitions,
     referenced_party_id_from_create,
 };
 use crm_contact_points_query_adapter::{
     ContactPointQueryAdapter, query_capability_definitions as adapter_query_capability_definitions,
 };
-use crm_core_data::{PostgresDataStore, PostgresTransactionalAggregateExecutor};
+use crm_core_data::{
+    PostgresDataStore, PostgresTransactionalAggregateExecutor, TransactionalAggregatePlanner,
+};
 use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
 use crm_party_reference_composition::PartyReferenceReader;
 use crm_query_runtime::{
@@ -84,6 +86,16 @@ pub struct ContactPointsProductionDependencies {
     pub cursor_key: [u8; 32],
 }
 
+/// Returns the stable Contact Points module/record identity together with the
+/// owner-provided planner needed by guarded process promotion.
+pub fn contact_points_runtime_boundary() -> (
+    &'static str,
+    &'static str,
+    Arc<dyn TransactionalAggregatePlanner>,
+) {
+    (MODULE_ID, RECORD_TYPE, contact_point_planner())
+}
+
 /// Returns the exact Contact Points mutation inventory owned by this production
 /// composition package.
 pub fn mutation_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
@@ -110,11 +122,9 @@ pub fn build_contribution(
     } = dependencies;
     let mut contributions = ModuleContributionSet::new();
 
-    let mutation_executor: Arc<dyn TransactionalCapabilityExecutor> =
-        Arc::new(PostgresTransactionalAggregateExecutor::new(
-            store.clone(),
-            Arc::new(ContactPointCapabilityPlanner),
-        ));
+    let mutation_executor: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
+        PostgresTransactionalAggregateExecutor::new(store.clone(), contact_point_planner()),
+    );
     let mutation_validator: Arc<dyn CapabilitySemanticValidator> =
         Arc::new(ActivationGatedMutationValidator::new(
             activation.clone(),
@@ -146,6 +156,10 @@ pub fn build_contribution(
         .map_err(production_composition_error)?;
 
     Ok(contributions)
+}
+
+fn contact_point_planner() -> Arc<dyn TransactionalAggregatePlanner> {
+    Arc::new(ContactPointCapabilityPlanner)
 }
 
 fn contact_points_cursor(key: [u8; 32]) -> Result<CursorCodec, SdkError> {
@@ -187,5 +201,3 @@ fn unsupported_capability() -> SdkError {
         "The Contact Point mutation capability is not configured for this composition boundary.",
     )
 }
-
-pub const CRATE_NAME: &str = "crm-contact-points-capability-composition";
