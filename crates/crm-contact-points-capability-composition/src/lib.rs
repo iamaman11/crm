@@ -122,11 +122,9 @@ pub fn build_contribution(
     } = dependencies;
     let mut contributions = ModuleContributionSet::new();
 
-    let mutation_executor: Arc<dyn TransactionalCapabilityExecutor> =
-        Arc::new(PostgresTransactionalAggregateExecutor::new(
-            store.clone(),
-            contact_point_planner(),
-        ));
+    let mutation_executor: Arc<dyn TransactionalCapabilityExecutor> = Arc::new(
+        PostgresTransactionalAggregateExecutor::new(store.clone(), contact_point_planner()),
+    );
     let mutation_validator: Arc<dyn CapabilitySemanticValidator> =
         Arc::new(ActivationGatedMutationValidator::new(
             activation.clone(),

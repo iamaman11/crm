@@ -299,7 +299,8 @@ fn no_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
 
 fn customer_360_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
     let (parties_module_id, party_record_type, _, _) = parties_runtime_identity();
-    let (contact_points_module_id, contact_point_record_type, _) = contact_points_runtime_boundary();
+    let (contact_points_module_id, contact_point_record_type, _) =
+        contact_points_runtime_boundary();
     vec![
         resource(
             parties_module_id,
