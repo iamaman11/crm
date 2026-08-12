@@ -24,48 +24,48 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_step_22f_contact_points_capability_fanin_packet_is_exact(self) -> None:
+    def test_active_step_22f_post_merge_packet_lifecycle_sync_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             packet["packet_id"],
-            "repository-step-22f-contact-points-capability-fanin-reduction",
+            "repository-step-22f-post-merge-packet-lifecycle-sync",
         )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
-            {"ref": "main", "sha": "17985f32806b239f6063159113f72d2f561c6c5a"},
+            {"ref": "main", "sha": "e564180c0525fabf73a022298fa706c54857909f"},
         )
         self.assertEqual(packet["tracking_issues"], [194])
-        allowed_paths = set(packet["allowed_paths"])
-        self.assertTrue(
+        self.assertEqual(
+            set(packet["allowed_paths"]),
             {
-                "Cargo.lock",
-                "crates/crm-application-runtime/Cargo.toml",
-                "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
-                "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
-                "crates/crm-contact-points-capability-composition/src/lib.rs",
-                "docs/STEP22_CONTACT_POINTS_CAPABILITY_FANIN_REDUCTION.md",
-                "scripts/check_step22_runtime_fanin_decisions.py",
-                "step22-runtime-fanin-decisions.json",
+                ".github/workflows/customer-privacy-approval.yml",
+                "docs/ACTIVE_PACKET.md",
+                "repository-packet.json",
                 "tests/test_architecture_documentation_consistency.py",
-                "tests/test_native_module_composition.py",
                 "tests/test_repository_navigation.py",
-                "tests/test_workspace_analysis.py",
-            }.issubset(allowed_paths)
+            },
         )
-        self.assertNotIn(".github/workflows/rust-generated-sync.yml", allowed_paths)
         forbidden_paths = set(packet["forbidden_paths"])
-        self.assertIn(".github/workflows/**", forbidden_paths)
-        self.assertNotIn("Cargo.toml", allowed_paths)
-        self.assertNotIn("Cargo.toml", forbidden_paths)
-        self.assertIn("step22-architecture-inventory.json", forbidden_paths)
+        for path in (
+            "Cargo.lock",
+            "Cargo.toml",
+            "crates/**",
+            "docs/STEP22_CONTACT_POINTS_CAPABILITY_FANIN_REDUCTION.md",
+            "scripts/**",
+            "step22-architecture-inventory.json",
+            "step22-runtime-fanin-decisions.json",
+        ):
+            self.assertIn(path, forbidden_paths)
         deliverables = " ".join(packet["deliverables"])
+        acceptance = " ".join(packet["acceptance"])
         non_goals = " ".join(packet["non_goals"])
-        self.assertIn("60 to 59", deliverables)
-        self.assertIn("59 to 58", deliverables)
-        self.assertIn("remediate another crm-application-runtime dependency", non_goals)
-        self.assertIn("declare all runtime classifications complete", non_goals)
+        self.assertIn("github.event.before", deliverables)
+        self.assertIn("38 of 38", acceptance)
+        self.assertIn("3144ffd9ec8c21c7222e9bcb6e88c4003122cc7e", acceptance)
+        self.assertIn("Step 22G", non_goals)
+        self.assertIn("packet-check", non_goals)
         self.assertEqual(
             validate_decisions(ROOT),
             {
@@ -90,11 +90,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-22f-contact-points-capability-fanin-reduction",
+            "repository-step-22f-post-merge-packet-lifecycle-sync",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "17985f32806b239f6063159113f72d2f561c6c5a",
+            "e564180c0525fabf73a022298fa706c54857909f",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -134,13 +134,9 @@ class RepositoryNavigationTests(unittest.TestCase):
         packet = load_packet(ROOT)
         workflow_paths = {
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
-            "Application Runtime CI": ".github/workflows/application-runtime.yml",
-            "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
-            "Customer Privacy Access Export CI": ".github/workflows/customer-privacy-access-export.yml",
-            "Customer Privacy Owner Execution CI": ".github/workflows/customer-privacy-owner-execution.yml",
+            "Customer Privacy Approval CI": ".github/workflows/customer-privacy-approval.yml",
             "Governance CI": ".github/workflows/governance.yml",
             "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
-            "Rust CI": ".github/workflows/rust.yml",
         }
         affected = {
             "head_sha": "b" * 40,
@@ -151,7 +147,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 22F Contact Points capability fan-in reduction"],
+                    "reasons": ["Step 22F post-merge packet lifecycle sync"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -159,7 +155,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="17985f32806b239f6063159113f72d2f561c6c5a",
+                return_value="e564180c0525fabf73a022298fa706c54857909f",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(
@@ -171,6 +167,24 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertTrue(report["ok"])
         self.assertEqual(report["changed_paths"], packet["allowed_paths"])
         self.assertEqual(report["blockers"], [])
+
+    def test_customer_privacy_approval_uses_actual_change_base_for_packet_check(self) -> None:
+        approval = (
+            ROOT / ".github/workflows/customer-privacy-approval.yml"
+        ).read_text(encoding="utf-8")
+        for marker in (
+            "EVENT_NAME: ${{ github.event_name }}",
+            "PR_BASE_REF: ${{ github.base_ref }}",
+            "PUSH_BEFORE_SHA: ${{ github.event.before }}",
+            'if [ "${EVENT_NAME}" = "pull_request" ]; then',
+            'PACKET_BASE_REF="origin/${PR_BASE_REF}"',
+            'elif [ "${EVENT_NAME}" = "push" ]; then',
+            'PACKET_BASE_REF="${PUSH_BEFORE_SHA}"',
+            'python scripts/repo.py packet-check --base "${PACKET_BASE_REF}"',
+            "0000000000000000000000000000000000000000",
+        ):
+            self.assertIn(marker, approval)
+        self.assertNotIn("github.base_ref || 'main'", approval)
 
     def test_repository_workflow_and_parser_contracts_remain_intact(self) -> None:
         affected = (ROOT / ".github/workflows/affected-scope.yml").read_text(
