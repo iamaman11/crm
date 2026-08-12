@@ -50,6 +50,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "step22-runtime-fanin-decisions.json",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
+                "tests/test_workspace_analysis.py",
             },
         )
         forbidden_paths = set(packet["forbidden_paths"])
