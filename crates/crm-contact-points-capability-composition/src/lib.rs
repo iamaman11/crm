@@ -11,8 +11,8 @@ use crm_capability_runtime::{
     TransactionalCapabilityExecutor,
 };
 use crm_contact_points_capability_adapter::{
-    CREATE_CAPABILITY, ContactPointCapabilityPlanner, MODULE_ID, MUTATION_CAPABILITY_IDS, RECORD_TYPE,
-    capability_definitions as adapter_mutation_capability_definitions,
+    CREATE_CAPABILITY, ContactPointCapabilityPlanner, MODULE_ID, MUTATION_CAPABILITY_IDS,
+    RECORD_TYPE, capability_definitions as adapter_mutation_capability_definitions,
     referenced_party_id_from_create,
 };
 use crm_contact_points_query_adapter::{
