@@ -6,14 +6,12 @@ use crm_application_composition::{
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilitySemanticValidator, TransactionalCapabilityExecutor,
 };
-use crm_contact_points_capability_adapter::{
-    CREATE_CAPABILITY as CONTACT_POINT_CREATE_CAPABILITY, ContactPointCapabilityPlanner,
-    capability_definition as contact_point_capability_definition,
-};
 use crm_contact_points_capability_composition::{
     ContactPointCreateCustomerSubjectGuard, ContactPointPartyReferenceSemanticValidator,
+    contact_points_runtime_boundary,
+    mutation_capability_definitions as contact_point_mutation_capability_definitions,
 };
-use crm_core_data::{PostgresTransactionalAggregateExecutor, TransactionalAggregatePlanner};
+use crm_core_data::PostgresTransactionalAggregateExecutor;
 use crm_customer_privacy_production::{
     CustomerPrivacyProductionDependencies, PostgresCustomerPrivacySubjectPolicy,
     build_contribution_with_complete_control_lifecycle as build_customer_privacy_contribution,
@@ -25,6 +23,8 @@ use crm_party_reference_composition::PostgresPartyReferenceReader;
 use std::sync::Arc;
 
 pub use base_runtime::PRODUCTION_REVIEW_POLICY_VERSION;
+
+const CONTACT_POINT_CREATE_CAPABILITY: &str = "contact-points.contact-point.create";
 
 /// Returns the accepted public mutation inventory plus the exact frozen
 /// Customer Privacy nine-mutation owner inventory.
@@ -92,8 +92,14 @@ pub fn build_production_composition(
         )
         .map_err(composition_error)?;
 
-    let contact_create_definition =
-        contact_point_capability_definition(CONTACT_POINT_CREATE_CAPABILITY)?;
+    let contact_create_definition = contact_point_mutation_capability_definitions()?
+        .into_iter()
+        .find(|definition| definition.capability_id.as_str() == CONTACT_POINT_CREATE_CAPABILITY)
+        .ok_or_else(|| {
+            configuration_error(
+                "the Contact Points owner composition must expose the create capability definition",
+            )
+        })?;
     let contact_semantic_validator: Arc<dyn CapabilitySemanticValidator> =
         Arc::new(ContactPointPartyReferenceSemanticValidator::new(Arc::new(
             PostgresPartyReferenceReader::new(dependencies.store.clone()),
@@ -103,12 +109,11 @@ pub fn build_production_composition(
             dependencies.activation.clone(),
             contact_semantic_validator,
         ));
-    let contact_planner: Arc<dyn TransactionalAggregatePlanner> =
-        Arc::new(ContactPointCapabilityPlanner);
+    let (_, _, contact_point_planner) = contact_points_runtime_boundary();
     let contact_executor: Arc<dyn TransactionalCapabilityExecutor> =
         Arc::new(PostgresTransactionalAggregateExecutor::guarded(
             dependencies.store.clone(),
-            contact_planner,
+            contact_point_planner(),
             Arc::new(ContactPointCreateCustomerSubjectGuard::new(Arc::new(
                 PostgresCustomerPrivacySubjectPolicy,
             ))),
