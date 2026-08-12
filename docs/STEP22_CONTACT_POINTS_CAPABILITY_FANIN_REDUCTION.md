@@ -12,15 +12,16 @@ Active bounded ADR-032 remediation. This packet removes one redundant direct pro
 
 ## Bounded decision
 
-`crm-application-runtime` used `crm-contact-points-capability-adapter` directly only to obtain stable Contact Points module and record identity for generic bootstrap visibility. The complete Contact Points mutation/query production contribution already belongs to `crm-contact-points-capability-composition`, which already depends on and retains the capability adapter internally.
+`crm-application-runtime` used `crm-contact-points-capability-adapter` directly in two production paths inside the same Contact Points cohort: stable module/record identity for generic bootstrap visibility and concrete mutation-planner/definition access while replacing `contact-point.create` with the accepted Customer Privacy transaction guard. The complete Contact Points mutation/query production contribution already belongs to `crm-contact-points-capability-composition`, which already depends on and retains the capability adapter internally.
 
 Step 22F therefore:
 
-1. replaces the unused public `CRATE_NAME` marker in `crm-contact-points-capability-composition` with `contact_points_runtime_identity()` returning the exact owner module and record identity;
-2. makes generic bootstrap visibility consume that owner-composition identity;
-3. removes only the direct `crm-contact-points-capability-adapter` edge from `crm-application-runtime`;
-4. keeps the adapter package and all owner-internal uses unchanged;
-5. keeps Contact Points mutation, query, Party-reference validation, persistence, authorization, tenant isolation and Customer 360 visibility behavior unchanged.
+1. replaces the unused public `CRATE_NAME` marker in `crm-contact-points-capability-composition` with `contact_points_runtime_boundary()`, returning the exact owner module/record identity plus an owner-erased transactional planner;
+2. makes generic bootstrap visibility consume Contact Points identity through that owner boundary;
+3. makes guarded `contact-point.create` promotion obtain its exact definition from the owner mutation inventory and its planner through that owner boundary rather than importing adapter implementation symbols;
+4. removes only the direct `crm-contact-points-capability-adapter` edge from `crm-application-runtime`;
+5. keeps the adapter package and all owner-internal uses unchanged;
+6. keeps Contact Points mutation, query, Party-reference validation, persistence, guarded create behavior, authorization, tenant isolation and Customer 360 visibility behavior unchanged.
 
 ## Exact dependency evidence
 
@@ -51,7 +52,7 @@ Relative to baseline `17985f32806b239f6063159113f72d2f561c6c5a`, `Cargo.lock` ma
 
 ## Public surface invariant
 
-The conservative public Rust surface remains exactly **5,377**. The packet does not add a net public item: it replaces the unused public `crm-contact-points-capability-composition::CRATE_NAME` marker with the consumed public `contact_points_runtime_identity()` accessor.
+The conservative public Rust surface remains exactly **5,377**. The packet does not add a net public item: it replaces the unused public `crm-contact-points-capability-composition::CRATE_NAME` marker with the consumed public `contact_points_runtime_boundary()` accessor. The planner returned by that accessor is erased behind the existing generic `TransactionalAggregatePlanner` trait, so the adapter implementation type does not escape the owner boundary.
 
 ## Permanent guard
 
@@ -60,8 +61,9 @@ The conservative public Rust surface remains exactly **5,377**. The packet does 
 - the direct runtime manifest or lock edge returns;
 - any Rust file under `crates/crm-application-runtime` directly references `crm_contact_points_capability_adapter`;
 - the owner composition stops retaining the adapter internally;
-- bootstrap visibility stops consuming `contact_points_runtime_identity()`;
-- the owner composition loses the identity accessor or restores the retired `CRATE_NAME` marker;
+- bootstrap visibility stops consuming `contact_points_runtime_boundary()`;
+- guarded Contact Point create promotion regains direct adapter implementation access;
+- the owner composition loses the runtime boundary accessor or restores the retired `CRATE_NAME` marker;
 - cumulative fan-in or decision-ledger counts differ from the exact Step 22F state.
 
 ## Explicit non-goals
