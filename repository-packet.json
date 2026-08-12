@@ -1,36 +1,28 @@
 {
   "acceptance": [
-    "the branch is based exactly on main commit eac6707e6799f74e761ede39d852bf8de7ac6a77",
+    "the branch is based exactly on main commit 17985f32806b239f6063159113f72d2f561c6c5a",
     "the accepted Step 22A inventory remains immutable with exact baseline counts sixty-three total sixty-two production one test-only forty-one workflows and forty-two jobs",
-    "the cumulative removed stable-ID set contains exactly the Customer Privacy query-adapter Customer 360 query-adapter and Parties capability-adapter edges",
-    "the current runtime direct stable-ID set equals the accepted inventory minus exactly those three removals with exact counts sixty total fifty-nine production and one test-only",
-    "crm-application-runtime Cargo.toml source and Cargo.lock no longer name crm-parties-capability-adapter as a direct runtime dependency while crm-party-reference-composition retains it internally and exposes parties_runtime_identity",
-    "Cargo.lock equals immutable baseline commit eac6707e6799f74e761ede39d852bf8de7ac6a77 byte-for-byte except for deletion of exactly one crm-parties-capability-adapter dependency line from the crm-application-runtime package record",
-    "Parties mutation query persistence reference validation bootstrap visibility authorization and tenant behavior remain unchanged",
-    "the decision ledger contains exactly twenty final classifications three removals zero owner-specific-unavoidable and forty-three unresolved dependencies",
-    "the conservative public Rust surface remains exactly 5377 by replacing the unused crm-party-reference-composition CRATE_NAME marker with the consumed parties_runtime_identity accessor",
+    "the cumulative removed stable-ID set contains exactly the Customer Privacy query-adapter Customer 360 query-adapter Parties capability-adapter and Contact Points capability-adapter edges",
+    "the current runtime direct stable-ID set equals the accepted inventory minus exactly those four removals with exact counts fifty-nine total fifty-eight production and one test-only",
+    "crm-application-runtime Cargo.toml source and Cargo.lock no longer name crm-contact-points-capability-adapter as a direct runtime dependency while crm-contact-points-capability-composition retains it internally and exposes contact_points_runtime_identity",
+    "Cargo.lock equals immutable baseline commit 17985f32806b239f6063159113f72d2f561c6c5a byte-for-byte except for deletion of exactly one crm-contact-points-capability-adapter dependency line from the crm-application-runtime package record",
+    "Contact Points mutation query Party reference validation bootstrap visibility authorization and tenant behavior remain unchanged",
+    "the decision ledger contains exactly twenty-one final classifications four removals zero owner-specific-unavoidable and forty-two unresolved dependencies",
+    "the conservative public Rust surface remains exactly 5377 by replacing the unused crm-contact-points-capability-composition CRATE_NAME marker with the consumed contact_points_runtime_identity accessor",
     "generated contracts schemas migrations workflows routes workers and permanent-gate dispositions remain unchanged",
-    "the final diff changes only declared lockfile runtime Parties production-reference decision documentation packet generated-navigation validator and guard paths",
-    "one unchanged exact head passes every applicable permanent workflow with zero unresolved comments reviews or review threads"
+    "the final diff changes only declared lockfile runtime Contact Points owner-composition decision documentation packet generated-navigation validator and guard paths",
+    "one unchanged exact human-authored head passes every applicable permanent workflow with zero unresolved comments reviews or review threads"
   ],
   "allowed_paths": [
     "Cargo.lock",
     "crates/crm-application-runtime/Cargo.toml",
-    "crates/crm-application-runtime/examples/customer_privacy_application_runtime_lifecycle.rs",
     "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
-    "crates/crm-application-runtime/src/export_selection_bootstrap.rs",
-    "crates/crm-application-runtime/src/runtime.rs",
-    "crates/crm-application-runtime/tests/party_tombstone_rebuild_convergence_postgres.rs",
-    "crates/crm-application-runtime/tests/postgres_customer_enrichment_application_worker.rs",
-    "crates/crm-application-runtime/tests/support/customer_enrichment_consent_policy.rs",
-    "crates/crm-application-runtime/tests/support/customer_enrichment_suggestion_get/domain.rs",
-    "crates/crm-party-reference-composition/src/lib.rs",
+    "crates/crm-contact-points-capability-composition/src/lib.rs",
     "docs/ACTIVE_PACKET.md",
-    "docs/STEP22_PARTIES_CAPABILITY_FANIN_REDUCTION.md",
+    "docs/STEP22_CONTACT_POINTS_CAPABILITY_FANIN_REDUCTION.md",
     "docs/generated/REPOSITORY_MAP.md",
     "repository-packet.json",
     "scripts/check_step22_runtime_fanin_decisions.py",
-    "scripts/customer_privacy_operations.py",
     "step22-runtime-fanin-decisions.json",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_native_module_composition.py",
@@ -39,19 +31,19 @@
   ],
   "baseline": {
     "ref": "main",
-    "sha": "eac6707e6799f74e761ede39d852bf8de7ac6a77"
+    "sha": "17985f32806b239f6063159113f72d2f561c6c5a"
   },
   "deliverables": [
-    "expose the exact Parties module record and mutation capability identity through crm-party-reference-composition which already owns the Parties production/reference composition and retains crm-parties-capability-adapter internally",
-    "consume all Parties bootstrap identity through crm_party_reference_composition::parties_runtime_identity and remove every direct crm_parties_capability_adapter source import from crm-application-runtime",
-    "remove only crm-parties-capability-adapter from crm-application-runtime Cargo.toml without adding or moving another direct dependency",
-    "synchronize Cargo.lock from immutable baseline eac6707e6799f74e761ede39d852bf8de7ac6a77 by deleting exactly the crm-parties-capability-adapter line from the crm-application-runtime dependency list while every other byte remains unchanged",
-    "record the third exact removed stable ID with fan-in evidence of 61 to 60 total and 60 to 59 production dependencies",
-    "preserve conservative public Rust surface by replacing the unused crm-party-reference-composition CRATE_NAME marker with the consumed parties_runtime_identity accessor",
-    "extend the permanent validator to prove the current direct stable-ID set equals the accepted inventory minus exactly the three cumulative removed edges while each adapter remains behind its accepted owner boundary",
-    "record exactly twenty final classifications with sixteen platform-generic one test-only three removed zero owner-specific-unavoidable and forty-three unresolved",
+    "expose the exact Contact Points module and record identity through crm-contact-points-capability-composition which already owns the Contact Points production composition and retains crm-contact-points-capability-adapter internally",
+    "consume Contact Points bootstrap identity through crm_contact_points_capability_composition::contact_points_runtime_identity and remove every direct crm_contact_points_capability_adapter source import from crm-application-runtime",
+    "remove only crm-contact-points-capability-adapter from crm-application-runtime Cargo.toml without adding or moving another direct dependency",
+    "synchronize Cargo.lock from immutable baseline 17985f32806b239f6063159113f72d2f561c6c5a by deleting exactly the crm-contact-points-capability-adapter line from the crm-application-runtime dependency list while every other byte remains unchanged",
+    "record the fourth exact removed stable ID with fan-in evidence of 60 to 59 total and 59 to 58 production dependencies",
+    "preserve conservative public Rust surface by replacing the unused crm-contact-points-capability-composition CRATE_NAME marker with the consumed contact_points_runtime_identity accessor",
+    "extend the permanent validator to prove the current direct stable-ID set equals the accepted inventory minus exactly the four cumulative removed edges while each adapter remains behind its accepted owner boundary",
+    "record exactly twenty-one final classifications with sixteen platform-generic one test-only four removed zero owner-specific-unavoidable and forty-two unresolved",
     "update permanent packet architecture documentation guards and regenerate active packet navigation",
-    "preserve Parties mutation query persistence reference validation bootstrap visibility authorization tenant and all unrelated runtime behavior"
+    "preserve Contact Points mutation query Party reference validation bootstrap visibility authorization tenant and all unrelated runtime behavior"
   ],
   "forbidden_paths": [
     ".github/workflows/**",
@@ -81,18 +73,18 @@
     "workspace-dependency-policy.json"
   ],
   "non_goals": [
-    "remove crm-parties-capability-adapter from the workspace or from crm-party-reference-composition and other owner-internal consumers",
-    "classify crm-party-reference-composition or another owner-specific dependency as unavoidable",
+    "remove crm-contact-points-capability-adapter from the workspace or from crm-contact-points-capability-composition and other owner-internal consumers",
+    "classify crm-contact-points-capability-composition or another owner-specific dependency as unavoidable",
     "remove move add or otherwise remediate another crm-application-runtime dependency",
-    "change any Cargo.lock byte package identity version source checksum or package record outside the exact crm-application-runtime Parties adapter dependency-line deletion",
-    "change Parties capability IDs query IDs schemas persistence Party reference validation authorization tenant isolation or Customer 360 Search visibility meaning",
+    "change any Cargo.lock byte package identity version source checksum or package record outside the exact crm-application-runtime Contact Points adapter dependency-line deletion",
+    "change Contact Points capability IDs query IDs schemas persistence Party reference validation authorization tenant isolation or Customer 360 visibility meaning",
     "assign retain simplify merge or remove dispositions to permanent workflows jobs or repository gates",
     "add remove rename or modify a permanent workflow job or repository gate",
     "rewrite the accepted Step 22A inventory snapshot to match the remediated current state",
     "declare all runtime classifications complete complete Repository Step 22 start Phase 8B raise an architecture score or declare architecture 10/10"
   ],
-  "objective": "Execute one bounded ADR-032 Step 22 remediation by exposing stable Parties bootstrap identity through the existing crm-party-reference-composition owner production/reference boundary and removing the redundant direct crm-parties-capability-adapter dependency from crm-application-runtime without changing behavior or the owner-internal dependency graph.",
-  "packet_id": "repository-step-22e-parties-capability-fanin-reduction",
+  "objective": "Execute one bounded ADR-032 Step 22 remediation by exposing stable Contact Points bootstrap identity through the existing crm-contact-points-capability-composition owner production boundary and removing the redundant direct crm-contact-points-capability-adapter dependency from crm-application-runtime without changing behavior or the owner-internal dependency graph.",
+  "packet_id": "repository-step-22f-contact-points-capability-fanin-reduction",
   "required_checks": [
     "Affected Scope CI",
     "Application Runtime CI",
@@ -103,7 +95,7 @@
   ],
   "schema_version": "crm.repository-packet/v1",
   "status": "active",
-  "title": "Remove redundant Parties capability-adapter runtime fan-in",
+  "title": "Remove redundant Contact Points capability-adapter runtime fan-in",
   "tracking_issues": [
     194
   ]
