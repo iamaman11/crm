@@ -306,7 +306,7 @@ jobs:
         )
         metric = workflow_metric(path, root)
         self.assertEqual(metric.stable_id, ".github/workflows/example.yml")
-        self.assertEqual(metric.name, "Check CI" if False else "Example CI")
+        self.assertEqual(metric.name, "Example CI")
         self.assertEqual(metric.job_count, 2)
         self.assertEqual(metric.action_reference_count, 1)
         self.assertEqual(metric.run_step_count, 4)
