@@ -16,8 +16,8 @@ use crm_customer_privacy_production::{
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
     DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,
-    PortFuture, RecordId, RecordRef, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, SdkError,
-    TenantId, TraceId, TypedPayload,
+    PortFuture, RecordId, RecordRef, RequestId, RetentionPolicyId, SchemaId, SchemaVersion,
+    SdkError, TenantId, TraceId, TypedPayload,
 };
 use crm_party_reference_composition::{
     PartiesProductionDependencies, build_contribution, parties_runtime_identity,
@@ -607,8 +607,7 @@ async fn seed_party(
                     "{identity}-transaction"
                 ))
                 .expect("Party seed business transaction id"),
-                schema_version: SchemaVersion::try_new("1.0.0")
-                    .expect("Party seed schema version"),
+                schema_version: SchemaVersion::try_new("1.0.0").expect("Party seed schema version"),
                 request_started_at_unix_nanos: CAPTURED_AT - 1_000_000,
             },
         },
