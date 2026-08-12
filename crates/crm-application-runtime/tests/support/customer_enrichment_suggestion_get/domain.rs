@@ -1,13 +1,11 @@
 use super::{NOW, TENANT, actor, tenant};
+use crm_application_composition::ModuleActivationPort;
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as support;
 use crm_capability_runtime::{
     CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor,
 };
-use crm_core_data::{
-    AuditIntent, IdempotencyEvidence, PostgresDataStore, PostgresTransactionalAggregateExecutor,
-    RecordCreatePlan,
-};
+use crm_core_data::{AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan};
 use crm_customer_enrichment::{
     EnrichmentRequest, EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
     ProviderProfileDraft, ProviderProfileVersion, ProviderResponseClass, ProviderResponseReceipt,
@@ -21,24 +19,54 @@ use crm_customer_enrichment_review_adapter::{
 use crm_module_sdk::{
     BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId, DataClass,
     DomainEvent, EventType, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId,
-    RequestId, SchemaVersion, SdkError, TraceId,
+    PortFuture, RecordRef, RequestId, SchemaVersion, SdkError, TenantId, TraceId,
 };
-use crm_parties_capability_adapter::{
-    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY,
-    CREATE_REQUEST_SCHEMA as PARTY_CREATE_REQUEST_SCHEMA, MODULE_ID as PARTY_MODULE_ID,
-    PartyCapabilityPlanner, UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY,
-    UPDATE_REQUEST_SCHEMA as PARTY_UPDATE_REQUEST_SCHEMA,
-    capability_definition as party_capability_definition,
+use crm_party_reference_composition::{
+    PartiesProductionDependencies, build_contribution, parties_runtime_identity,
 };
 use crm_proto_contracts::crm::{
     customer::v1 as customer_wire, customer_enrichment::v1 as wire, parties::v1 as party_wire,
 };
+use crm_query_runtime::{QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision};
 use sqlx::PgPool;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
 const SEED_CAPABILITY: &str = "customer_enrichment.review.seed";
 const PARTY_ID: &str = "party-production-suggestion-1";
+
+#[derive(Debug, Clone, Copy)]
+struct AlwaysActiveModule;
+
+impl ModuleActivationPort for AlwaysActiveModule {
+    fn is_active<'a>(
+        &'a self,
+        _tenant_id: &'a TenantId,
+        _module_id: &'a ModuleId,
+    ) -> PortFuture<'a, Result<bool, SdkError>> {
+        Box::pin(async { Ok(true) })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AllowAllVisibility;
+
+impl QueryVisibilityAuthorizer for AllowAllVisibility {
+    fn authorize_visibility<'a>(
+        &'a self,
+        _request: &'a QueryRequest,
+        _resource: &'a RecordRef,
+    ) -> PortFuture<'a, Result<QueryVisibilityDecision, SdkError>> {
+        Box::pin(async {
+            Ok(QueryVisibilityDecision {
+                resource_visible: true,
+                allowed_fields: BTreeSet::new(),
+                decision_id: "step22e-parties-fixture".to_owned(),
+                policy_version: "step22e-parties-fixture/v1".to_owned(),
+            })
+        })
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EvidenceCounts {
@@ -197,11 +225,33 @@ pub async fn seed_suggestion(
 }
 
 async fn seed_party(store: &PostgresDataStore) -> Result<(), Box<dyn std::error::Error>> {
-    let executor = PostgresTransactionalAggregateExecutor::new(
-        store.clone(),
-        Arc::new(PartyCapabilityPlanner),
-    );
-    let create_definition = party_capability_definition(PARTY_CREATE_CAPABILITY)?;
+    let composition = build_contribution(PartiesProductionDependencies {
+        store: store.clone(),
+        activation: Arc::new(AlwaysActiveModule),
+        visibility_authorizer: Arc::new(AllowAllVisibility),
+        cursor_key: [0x50; 32],
+    })?
+    .build()
+    .map_err(seed_configuration_error)?;
+    let (party_module_id, _, create_capability, update_capability) = parties_runtime_identity();
+    let create_definition = composition
+        .mutation_definitions()
+        .iter()
+        .find(|definition| {
+            definition.owner_module_id.as_str() == party_module_id
+                && definition.capability_id.as_str() == create_capability
+        })
+        .ok_or_else(|| seed_configuration_error("Parties create capability is missing"))?;
+    let update_definition = composition
+        .mutation_definitions()
+        .iter()
+        .find(|definition| {
+            definition.owner_module_id.as_str() == party_module_id
+                && definition.capability_id.as_str() == update_capability
+        })
+        .ok_or_else(|| seed_configuration_error("Parties update capability is missing"))?;
+    let executor = composition.mutation_executor();
+
     let create = party_wire::CreatePartyRequest {
         party_ref: Some(customer_wire::PartyRef {
             party_id: PARTY_ID.to_owned(),
@@ -211,12 +261,11 @@ async fn seed_party(store: &PostgresDataStore) -> Result<(), Box<dyn std::error:
     };
     executor
         .execute(
-            &create_definition,
-            party_request(&create_definition, PARTY_CREATE_REQUEST_SCHEMA, &create, 1)?,
+            create_definition,
+            party_request(create_definition, party_module_id, &create, 1)?,
         )
         .await?;
 
-    let update_definition = party_capability_definition(PARTY_UPDATE_CAPABILITY)?;
     for expected_version in 1_i64..7_i64 {
         let update = party_wire::UpdatePartyRequest {
             party_ref: Some(customer_wire::PartyRef {
@@ -227,10 +276,10 @@ async fn seed_party(store: &PostgresDataStore) -> Result<(), Box<dyn std::error:
         };
         executor
             .execute(
-                &update_definition,
+                update_definition,
                 party_request(
-                    &update_definition,
-                    PARTY_UPDATE_REQUEST_SCHEMA,
+                    update_definition,
+                    party_module_id,
                     &update,
                     u64::try_from(expected_version + 1)?,
                 )?,
@@ -242,16 +291,20 @@ async fn seed_party(store: &PostgresDataStore) -> Result<(), Box<dyn std::error:
 
 fn party_request<M: prost::Message>(
     definition: &CapabilityDefinition,
-    schema_id: &'static str,
+    module_id: &str,
     message: &M,
     sequence: u64,
 ) -> Result<CapabilityRequest, SdkError> {
-    let input =
-        support::protobuf_payload(PARTY_MODULE_ID, schema_id, DataClass::Personal, message)?;
+    let input = support::protobuf_payload(
+        module_id,
+        definition.input_contract.schema_id.as_str(),
+        DataClass::Personal,
+        message,
+    )?;
     let identity = format!("suggestion-production-party-seed-{sequence}");
     Ok(CapabilityRequest {
         context: ModuleExecutionContext {
-            module_id: ModuleId::try_new(PARTY_MODULE_ID).map_err(seed_configuration_error)?,
+            module_id: ModuleId::try_new(module_id).map_err(seed_configuration_error)?,
             execution: ExecutionContext {
                 tenant_id: tenant(TENANT),
                 actor_id: actor(),
@@ -279,7 +332,7 @@ fn party_request<M: prost::Message>(
     })
 }
 
-fn seed_configuration_error(error: crm_module_sdk::IdentifierError) -> SdkError {
+fn seed_configuration_error(error: impl std::fmt::Display) -> SdkError {
     SdkError::new(
         "CUSTOMER_ENRICHMENT_REVIEW_SEED_CONFIGURATION_INVALID",
         crm_module_sdk::ErrorCategory::Internal,

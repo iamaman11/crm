@@ -1,3 +1,4 @@
+use crm_application_composition::ModuleActivationPort;
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as capability_support;
 use crm_capability_runtime::{
@@ -29,16 +30,17 @@ use crm_customer_enrichment_capability_adapter::{
 use crm_module_sdk::{
     BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId, DataClass,
     DomainEvent, EventType, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId,
-    RecordId, RecordRef, RecordType, RequestId, SchemaVersion, SdkError, TraceId,
+    PortFuture, RecordId, RecordRef, RecordType, RequestId, SchemaVersion, SdkError, TenantId,
+    TraceId,
 };
-use crm_parties_capability_adapter::{
-    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY,
-    CREATE_REQUEST_SCHEMA as PARTY_CREATE_REQUEST_SCHEMA, MODULE_ID as PARTIES_MODULE_ID,
-    PartyCapabilityPlanner, capability_definition as party_capability_definition,
+use crm_party_reference_composition::{
+    PartiesProductionDependencies, build_contribution, parties_runtime_identity,
 };
 use crm_proto_contracts::crm::{
     consents::v1 as consent_wire, customer::v1 as customer_wire, parties::v1 as party_wire,
 };
+use crm_query_runtime::{QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use super::customer_enrichment_suggestion_get::{NOW, TENANT, actor, tenant};
@@ -48,6 +50,39 @@ pub const WRONG_PARTY_ID: &str = "party-consent-policy-wrong";
 pub const PURPOSE: &str = "customer_profile_enrichment";
 pub const LEGAL_BASIS: &str = "consent";
 pub const SEED_CAPABILITY: &str = "customer_enrichment.review.seed";
+
+#[derive(Debug, Clone, Copy)]
+struct AlwaysActiveModule;
+
+impl ModuleActivationPort for AlwaysActiveModule {
+    fn is_active<'a>(
+        &'a self,
+        _tenant_id: &'a TenantId,
+        _module_id: &'a ModuleId,
+    ) -> PortFuture<'a, Result<bool, SdkError>> {
+        Box::pin(async { Ok(true) })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AllowAllVisibility;
+
+impl QueryVisibilityAuthorizer for AllowAllVisibility {
+    fn authorize_visibility<'a>(
+        &'a self,
+        _request: &'a QueryRequest,
+        _resource: &'a RecordRef,
+    ) -> PortFuture<'a, Result<QueryVisibilityDecision, SdkError>> {
+        Box::pin(async {
+            Ok(QueryVisibilityDecision {
+                resource_visible: true,
+                allowed_fields: BTreeSet::new(),
+                decision_id: "step22e-parties-fixture".to_owned(),
+                policy_version: "step22e-parties-fixture/v1".to_owned(),
+            })
+        })
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct DefinitionFixture {
@@ -87,11 +122,24 @@ impl ConsentFixtureKind {
 }
 
 pub async fn seed_party(store: &PostgresDataStore) -> Result<(), SdkError> {
-    let definition = party_capability_definition(PARTY_CREATE_CAPABILITY)?;
-    let executor = PostgresTransactionalAggregateExecutor::new(
-        store.clone(),
-        Arc::new(PartyCapabilityPlanner),
-    );
+    let composition = build_contribution(PartiesProductionDependencies {
+        store: store.clone(),
+        activation: Arc::new(AlwaysActiveModule),
+        visibility_authorizer: Arc::new(AllowAllVisibility),
+        cursor_key: [0x50; 32],
+    })?
+    .build()
+    .map_err(configuration_error)?;
+    let (parties_module_id, _, create_capability, _) = parties_runtime_identity();
+    let definition = composition
+        .mutation_definitions()
+        .iter()
+        .find(|definition| {
+            definition.owner_module_id.as_str() == parties_module_id
+                && definition.capability_id.as_str() == create_capability
+        })
+        .ok_or_else(|| configuration_error("Parties create capability is missing"))?;
+    let executor = composition.mutation_executor();
     let command = party_wire::CreatePartyRequest {
         party_ref: Some(customer_wire::PartyRef {
             party_id: PARTY_ID.to_owned(),
@@ -101,11 +149,11 @@ pub async fn seed_party(store: &PostgresDataStore) -> Result<(), SdkError> {
     };
     executor
         .execute(
-            &definition,
+            definition,
             capability_request(
-                &definition,
-                PARTIES_MODULE_ID,
-                PARTY_CREATE_REQUEST_SCHEMA,
+                definition,
+                parties_module_id,
+                definition.input_contract.schema_id.as_str(),
                 DataClass::Personal,
                 &command,
                 "consent-policy-party",
