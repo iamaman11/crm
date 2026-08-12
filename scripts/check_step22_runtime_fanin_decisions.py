@@ -295,6 +295,18 @@ def validate_remediation(
                 f"runtime source is missing replacement boundary marker: {replacement_marker}"
             )
 
+    runtime_source_root = root / "crates/crm-application-runtime"
+    parties_direct_sources = sorted(
+        source.relative_to(root).as_posix()
+        for source in runtime_source_root.rglob("*.rs")
+        if "crm_parties_capability_adapter" in source.read_text(encoding="utf-8")
+    )
+    if parties_direct_sources:
+        raise DecisionLedgerError(
+            "crm-application-runtime still references removed Parties capability adapter "
+            f"outside the owner boundary: {parties_direct_sources}"
+        )
+
     first_party_source = (
         root / "crates/crm-first-party-modules/src/lib.rs"
     ).read_text(encoding="utf-8")
