@@ -38,9 +38,7 @@ use crm_identity_resolution_capability_adapter::{
 };
 use crm_metadata_api_adapter::METADATA_MODULE_ID;
 use crm_module_sdk::{ErrorCategory, SdkError};
-use crm_parties_capability_adapter::{
-    MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE,
-};
+use crm_party_reference_composition::parties_runtime_identity;
 use crm_party_relationships_capability_adapter::{
     MODULE_ID as PARTY_RELATIONSHIPS_MODULE_ID, RECORD_TYPE as PARTY_RELATIONSHIP_RECORD_TYPE,
 };
@@ -84,9 +82,10 @@ impl BootstrapVisibilityRegistry {
 pub(crate) fn build_bootstrap_visibility_registry() -> Result<BootstrapVisibilityRegistry, SdkError>
 {
     let mut providers = BTreeMap::new();
+    let (parties_module_id, _) = parties_runtime_identity();
     register(&mut providers, SALES_MODULE_ID, sales_visibility)?;
     register(&mut providers, ACTIVITIES_MODULE_ID, activities_visibility)?;
-    register(&mut providers, PARTIES_MODULE_ID, parties_visibility)?;
+    register(&mut providers, parties_module_id, parties_visibility)?;
     register(&mut providers, ACCOUNTS_MODULE_ID, accounts_visibility)?;
     register(
         &mut providers,
@@ -176,11 +175,8 @@ fn activities_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityRes
 }
 
 fn parties_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
-    vec![resource(
-        PARTIES_MODULE_ID,
-        PARTY_RECORD_TYPE,
-        party_fields(),
-    )]
+    let (module_id, record_type) = parties_runtime_identity();
+    vec![resource(module_id, record_type, party_fields())]
 }
 
 fn accounts_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
@@ -306,10 +302,11 @@ fn no_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
 }
 
 fn customer_360_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
+    let (parties_module_id, party_record_type) = parties_runtime_identity();
     vec![
         resource(
-            PARTIES_MODULE_ID,
-            PARTY_RECORD_TYPE,
+            parties_module_id,
+            party_record_type,
             customer_360_party_fields(),
         ),
         resource(
@@ -331,6 +328,7 @@ fn customer_360_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityR
 }
 
 fn search_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResource> {
+    let (parties_module_id, party_record_type) = parties_runtime_identity();
     vec![
         resource(SALES_MODULE_ID, SALES_RECORD_TYPE, fields(["name"])),
         resource(
@@ -338,7 +336,7 @@ fn search_visibility(_: &CapabilityDefinition) -> Vec<BootstrapVisibilityResourc
             ACTIVITIES_RECORD_TYPE,
             fields(["subject"]),
         ),
-        resource(PARTIES_MODULE_ID, PARTY_RECORD_TYPE, party_fields()),
+        resource(parties_module_id, party_record_type, party_fields()),
     ]
 }
 
