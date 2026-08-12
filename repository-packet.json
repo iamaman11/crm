@@ -16,6 +16,7 @@
   "allowed_paths": [
     "Cargo.lock",
     "crates/crm-application-runtime/Cargo.toml",
+    "crates/crm-application-runtime/examples/customer_privacy_application_runtime_lifecycle.rs",
     "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
     "crates/crm-application-runtime/src/export_selection_bootstrap.rs",
     "crates/crm-application-runtime/src/runtime.rs",

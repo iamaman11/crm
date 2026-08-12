@@ -1,3 +1,8 @@
+use crm_application_composition::ModuleActivationPort;
+use crm_capability_ingress::semantic_input_hash;
+use crm_capability_plan_support as capability_support;
+use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
+use crm_core_data::PostgresDataStore;
 use crm_customer_privacy_production::{
     ACTION_PLAN_RECORD_TYPE, ACTION_PLAN_STATE_MAXIMUM_BYTES,
     ACTION_PLAN_STATE_RETENTION_POLICY_ID, ACTION_PLAN_STATE_SCHEMA_ID,
@@ -9,16 +14,24 @@ use crm_customer_privacy_production::{
     retention_decision_persisted_payload,
 };
 use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, DataClass, ModuleId, PayloadEncoding, RecordId,
-    RetentionPolicyId, SchemaId, SchemaVersion, TenantId, TypedPayload,
+    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
+    DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,
+    PortFuture, RecordId, RecordRef, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, SdkError,
+    TenantId, TraceId, TypedPayload,
 };
-use crm_parties_capability_adapter::{RECORD_TYPE as PARTY_RECORD_TYPE, persisted_contract};
-use serde_json::{Value, json};
+use crm_party_reference_composition::{
+    PartiesProductionDependencies, build_contribution, parties_runtime_identity,
+};
+use crm_proto_contracts::crm::{customer::v1 as customer_wire, parties::v1 as party_wire};
+use crm_query_runtime::{QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, Row, Transaction};
+use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command, Stdio};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::time::sleep;
 
@@ -40,6 +53,9 @@ async fn main() {
     let admin = PgPool::connect(&admin_database_url)
         .await
         .expect("connect assembled runtime lifecycle admin pool");
+    let store = PostgresDataStore::connect(&database_url, 6)
+        .await
+        .expect("connect assembled runtime lifecycle Party store");
     let run_id = unique_id();
     let tenant = format!("tenant-runtime-privacy-{run_id}");
     let actor = format!("actor-runtime-privacy-{run_id}");
@@ -50,8 +66,16 @@ async fn main() {
 
     seed_tenant_and_actor(&admin, &tenant, &actor).await;
     seed_owner_action_capability(&admin).await;
-    let first_planned_version =
-        seed_bundle(&admin, &tenant, &actor, &first_case, &first_party, "first").await;
+    let first_planned_version = seed_bundle(
+        &admin,
+        &store,
+        &tenant,
+        &actor,
+        &first_case,
+        &first_party,
+        "first",
+    )
+    .await;
 
     let mut first_process = spawn_crm_api(&binary, &database_url, &tenant, &actor, true);
     wait_until_ready(&mut first_process).await;
@@ -89,6 +113,7 @@ async fn main() {
 
     let second_planned_version = seed_bundle(
         &admin,
+        &store,
         &tenant,
         &actor,
         &second_case,
@@ -120,6 +145,39 @@ async fn main() {
         "uninstalled Customer Privacy must prevent discovery and owner effects"
     );
     assert_party_original(&admin, &tenant, &second_party).await;
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AlwaysActiveModule;
+
+impl ModuleActivationPort for AlwaysActiveModule {
+    fn is_active<'a>(
+        &'a self,
+        _tenant_id: &'a TenantId,
+        _module_id: &'a ModuleId,
+    ) -> PortFuture<'a, Result<bool, SdkError>> {
+        Box::pin(async { Ok(true) })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AllowAllVisibility;
+
+impl QueryVisibilityAuthorizer for AllowAllVisibility {
+    fn authorize_visibility<'a>(
+        &'a self,
+        _request: &'a QueryRequest,
+        _resource: &'a RecordRef,
+    ) -> PortFuture<'a, Result<QueryVisibilityDecision, SdkError>> {
+        Box::pin(async {
+            Ok(QueryVisibilityDecision {
+                resource_visible: true,
+                allowed_fields: BTreeSet::new(),
+                decision_id: "step22e-parties-lifecycle-fixture".to_owned(),
+                policy_version: "step22e-parties-lifecycle-fixture/v1".to_owned(),
+            })
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -291,6 +349,7 @@ async fn execution_snapshot(
     case_id: &str,
     party_id: &str,
 ) -> ExecutionSnapshot {
+    let party_record_type = party_record_type();
     ExecutionSnapshot {
         checkpoints: sqlx::query_scalar(
             "SELECT count(*) FROM crm.customer_privacy_owner_execution_checkpoints WHERE tenant_id = $1 AND privacy_case_id = $2",
@@ -333,12 +392,12 @@ async fn execution_snapshot(
             "#,
         )
         .bind(tenant)
-        .bind(PARTY_RECORD_TYPE)
+        .bind(party_record_type)
         .bind(party_id)
         .fetch_one(admin)
         .await
         .expect("count runtime owner events"),
-        party_version: record_version(admin, tenant, PARTY_RECORD_TYPE, party_id).await,
+        party_version: record_version(admin, tenant, party_record_type, party_id).await,
         case_version: record_version(admin, tenant, "customer-privacy.case", case_id).await,
     }
 }
@@ -400,7 +459,7 @@ async fn assert_completed_evidence(admin: &PgPool, tenant: &str, case_id: &str, 
         "SELECT version, payload_bytes FROM crm.records WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
     )
     .bind(tenant)
-    .bind(PARTY_RECORD_TYPE)
+    .bind(party_record_type())
     .bind(party_id)
     .fetch_one(admin)
     .await
@@ -420,7 +479,7 @@ async fn assert_party_original(admin: &PgPool, tenant: &str, party_id: &str) {
         "SELECT version, payload_bytes FROM crm.records WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
     )
     .bind(tenant)
-    .bind(PARTY_RECORD_TYPE)
+    .bind(party_record_type())
     .bind(party_id)
     .fetch_one(admin)
     .await
@@ -433,6 +492,7 @@ async fn assert_party_original(admin: &PgPool, tenant: &str, party_id: &str) {
 
 async fn seed_bundle(
     admin: &PgPool,
+    store: &PostgresDataStore,
     tenant: &str,
     actor: &str,
     case_id: &str,
@@ -465,18 +525,7 @@ async fn seed_bundle(
         action_plan_payload(&plan),
     )
     .await;
-    seed_record(
-        admin,
-        tenant,
-        actor,
-        (
-            format!("runtime-party-{suffix}-{case_id}"),
-            "test.record.mutate",
-        ),
-        (PARTY_RECORD_TYPE, party_id, 1),
-        party_payload(party_id),
-    )
-    .await;
+    seed_party(store, tenant, actor, party_id, suffix).await;
     seed_record(
         admin,
         tenant,
@@ -494,6 +543,89 @@ async fn seed_bundle(
     )
     .await;
     privacy_case.version()
+}
+
+async fn seed_party(
+    store: &PostgresDataStore,
+    tenant: &str,
+    actor: &str,
+    party_id: &str,
+    suffix: &str,
+) {
+    let composition = build_contribution(PartiesProductionDependencies {
+        store: store.clone(),
+        activation: Arc::new(AlwaysActiveModule),
+        visibility_authorizer: Arc::new(AllowAllVisibility),
+        cursor_key: [0x50; 32],
+    })
+    .expect("build Parties lifecycle contribution")
+    .build()
+    .expect("assemble Parties lifecycle contribution");
+    let (parties_module_id, _, create_capability, _) = parties_runtime_identity();
+    let definition = composition
+        .mutation_definitions()
+        .iter()
+        .find(|definition| {
+            definition.owner_module_id.as_str() == parties_module_id
+                && definition.capability_id.as_str() == create_capability
+        })
+        .expect("Parties create definition in lifecycle contribution");
+    let command = party_wire::CreatePartyRequest {
+        party_ref: Some(customer_wire::PartyRef {
+            party_id: party_id.to_owned(),
+        }),
+        kind: party_wire::PartyKind::Person as i32,
+        display_name: ORIGINAL_NAME.to_owned(),
+    };
+    let input = capability_support::protobuf_payload(
+        parties_module_id,
+        definition.input_contract.schema_id.as_str(),
+        DataClass::Personal,
+        &command,
+    )
+    .expect("encode lifecycle Party seed request");
+    let identity = format!("runtime-party-seed-{suffix}");
+    let request = CapabilityRequest {
+        context: ModuleExecutionContext {
+            module_id: ModuleId::try_new(parties_module_id).expect("Parties module id"),
+            execution: ExecutionContext {
+                tenant_id: TenantId::try_new(tenant).expect("lifecycle tenant id"),
+                actor_id: ActorId::try_new(actor).expect("lifecycle actor id"),
+                request_id: RequestId::try_new(format!("{identity}-request"))
+                    .expect("Party seed request id"),
+                correlation_id: CorrelationId::try_new(format!("{identity}-correlation"))
+                    .expect("Party seed correlation id"),
+                causation_id: CausationId::try_new(format!("{identity}-causation"))
+                    .expect("Party seed causation id"),
+                trace_id: TraceId::try_new(format!("{identity}-trace"))
+                    .expect("Party seed trace id"),
+                capability_id: definition.capability_id.clone(),
+                capability_version: definition.capability_version.clone(),
+                idempotency_key: IdempotencyKey::try_new(identity.clone())
+                    .expect("Party seed idempotency key"),
+                business_transaction_id: BusinessTransactionId::try_new(format!(
+                    "{identity}-transaction"
+                ))
+                .expect("Party seed business transaction id"),
+                schema_version: SchemaVersion::try_new("1.0.0")
+                    .expect("Party seed schema version"),
+                request_started_at_unix_nanos: CAPTURED_AT - 1_000_000,
+            },
+        },
+        input_hash: semantic_input_hash(&input),
+        input,
+        approval: None,
+    };
+    composition
+        .mutation_executor()
+        .execute(definition, request)
+        .await
+        .expect("seed lifecycle Party through owner contribution");
+}
+
+fn party_record_type() -> &'static str {
+    let (_, record_type, _, _) = parties_runtime_identity();
+    record_type
 }
 
 fn build_case_plan_and_decision(
@@ -532,7 +664,7 @@ fn build_case_plan_and_decision(
         canonical_party_id.clone(),
         1,
         [ScopeResource::new(
-            PARTY_RECORD_TYPE,
+            party_record_type(),
             canonical_party_id.clone(),
             1,
             DataClass::Personal,
@@ -605,29 +737,6 @@ fn action_plan_payload(plan: &PrivacyActionPlan) -> TypedPayload {
         retention_policy_id: RetentionPolicyId::try_new(ACTION_PLAN_STATE_RETENTION_POLICY_ID)
             .unwrap(),
         bytes: encode_action_plan_state(plan).unwrap(),
-    }
-}
-
-fn party_payload(party_id: &str) -> TypedPayload {
-    let contract = persisted_contract();
-    TypedPayload {
-        owner: ModuleId::try_new(contract.owner).unwrap(),
-        schema_id: SchemaId::try_new(contract.schema_id).unwrap(),
-        schema_version: SchemaVersion::try_new(contract.schema_version).unwrap(),
-        descriptor_hash: contract.descriptor_hash,
-        data_class: DataClass::Personal,
-        encoding: PayloadEncoding::Json,
-        maximum_size_bytes: contract.maximum_size_bytes,
-        retention_policy_id: RetentionPolicyId::try_new(contract.retention_policy_id).unwrap(),
-        bytes: serde_json::to_vec(&json!({
-            "party_id": party_id,
-            "kind": "person",
-            "display_name": ORIGINAL_NAME,
-            "created_at_unix_nanos": 1,
-            "updated_at_unix_nanos": 1,
-            "version": 1
-        }))
-        .unwrap(),
     }
 }
 
