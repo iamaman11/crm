@@ -30,6 +30,7 @@
     "docs/generated/REPOSITORY_MAP.md",
     "repository-packet.json",
     "scripts/check_step22_runtime_fanin_decisions.py",
+    "scripts/customer_privacy_operations.py",
     "step22-runtime-fanin-decisions.json",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_native_module_composition.py",
