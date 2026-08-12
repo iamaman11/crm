@@ -76,6 +76,22 @@
       "prevented_boundary": "Keeps Customer Privacy control-query inventory and adapter ownership behind the sole supported owner production entry point instead of exposing the adapter directly to the generic process host.",
       "review_condition": "Reopen and block Step 22 if crm-application-runtime regains a direct crm-customer-privacy-query-adapter dependency or source import."
     },
+    "data-quality-adapter-fanin-remediation": {
+      "classification": "removed",
+      "evidence_paths": [
+        "Cargo.lock",
+        "crates/crm-application-runtime/Cargo.toml",
+        "crates/crm-application-runtime/tests/data_quality_registration_contract.rs",
+        "crates/crm-data-quality-source-composition/Cargo.toml",
+        "crates/crm-data-quality-source-composition/src/production_contribution.rs",
+        "crates/crm-first-party-modules/Cargo.toml",
+        "crates/crm-first-party-modules/src/lib.rs",
+        "scripts/check_step22_runtime_fanin_decisions.py"
+      ],
+      "owner": "crm.data-quality / architecture-governance",
+      "prevented_boundary": "Keeps Data Quality capability/query adapter implementations behind the existing Data Quality production composition and first-party aggregation boundaries instead of exposing them as redundant direct dependencies of the generic process host.",
+      "review_condition": "Fail if crm-application-runtime regains either direct Data Quality adapter edge or source import while crm-data-quality-source-composition remains the owner production boundary."
+    },
     "global-search-platform": {
       "classification": "platform-generic",
       "evidence_paths": [
@@ -185,12 +201,12 @@
   },
   "counts": {
     "all": 63,
-    "final": 21,
+    "final": 23,
     "owner_specific_unavoidable": 0,
     "platform_generic": 16,
-    "removed": 4,
+    "removed": 6,
     "test_only": 1,
-    "unresolved": 42
+    "unresolved": 40
   },
   "decision_boundary": {
     "all_dependencies_present": true,
@@ -257,6 +273,16 @@
       "customer-privacy-query-fanin-remediation"
     ],
     [
+      "crm-application-runtime::dependencies::crm-data-quality-capability-adapter",
+      "removed",
+      "data-quality-adapter-fanin-remediation"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-data-quality-query-adapter",
+      "removed",
+      "data-quality-adapter-fanin-remediation"
+    ],
+    [
       "crm-application-runtime::dependencies::crm-first-party-modules",
       "platform-generic",
       "owner-contribution-aggregation"
@@ -320,8 +346,8 @@
   "phase": "partial-classification-and-remediation",
   "remediation_evidence": {
     "after": {
-      "all": 59,
-      "production": 58,
+      "all": 57,
+      "production": 56,
       "test_only": 1
     },
     "before": {
@@ -381,12 +407,42 @@
           "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
         ],
         "stable_id": "crm-application-runtime::dependencies::crm-contact-points-capability-adapter"
+      },
+      {
+        "adapter_package": "crm-data-quality-capability-adapter",
+        "owner_manifest": "crates/crm-data-quality-source-composition/Cargo.toml",
+        "owner_sources": [
+          "crates/crm-data-quality-source-composition/src/production_contribution.rs",
+          "crates/crm-first-party-modules/src/lib.rs"
+        ],
+        "replacement_boundary": "crm-data-quality-source-composition",
+        "runtime_sources": [
+          "crates/crm-application-runtime/src/native_composition.rs",
+          "crates/crm-application-runtime/tests/data_quality_registration_contract.rs"
+        ],
+        "stable_id": "crm-application-runtime::dependencies::crm-data-quality-capability-adapter"
+      },
+      {
+        "adapter_package": "crm-data-quality-query-adapter",
+        "owner_manifest": "crates/crm-data-quality-source-composition/Cargo.toml",
+        "owner_sources": [
+          "crates/crm-data-quality-source-composition/src/production_contribution.rs",
+          "crates/crm-first-party-modules/src/lib.rs"
+        ],
+        "replacement_boundary": "crm-data-quality-source-composition",
+        "runtime_sources": [
+          "crates/crm-application-runtime/src/native_composition.rs",
+          "crates/crm-application-runtime/tests/data_quality_registration_contract.rs"
+        ],
+        "stable_id": "crm-application-runtime::dependencies::crm-data-quality-query-adapter"
       }
     ],
     "removed_stable_ids": [
       "crm-application-runtime::dependencies::crm-contact-points-capability-adapter",
       "crm-application-runtime::dependencies::crm-customer-360-query-adapter",
       "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter",
+      "crm-application-runtime::dependencies::crm-data-quality-capability-adapter",
+      "crm-application-runtime::dependencies::crm-data-quality-query-adapter",
       "crm-application-runtime::dependencies::crm-parties-capability-adapter"
     ],
     "runtime_manifest": "crates/crm-application-runtime/Cargo.toml"
