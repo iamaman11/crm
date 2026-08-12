@@ -1,7 +1,7 @@
 use crm_application_composition::ModuleActivationPort;
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as capability_support;
-use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
+use crm_capability_runtime::CapabilityRequest;
 use crm_core_data::PostgresDataStore;
 use crm_customer_privacy_production::{
     ACTION_PLAN_RECORD_TYPE, ACTION_PLAN_STATE_MAXIMUM_BYTES,
