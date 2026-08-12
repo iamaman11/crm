@@ -113,7 +113,7 @@ pub fn build_production_composition(
     let contact_executor: Arc<dyn TransactionalCapabilityExecutor> =
         Arc::new(PostgresTransactionalAggregateExecutor::guarded(
             dependencies.store.clone(),
-            contact_point_planner(),
+            contact_point_planner,
             Arc::new(ContactPointCreateCustomerSubjectGuard::new(Arc::new(
                 PostgresCustomerPrivacySubjectPolicy,
             ))),
