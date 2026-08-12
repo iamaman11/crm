@@ -17,6 +17,8 @@
     "Cargo.lock",
     "crates/crm-application-runtime/Cargo.toml",
     "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+    "crates/crm-application-runtime/src/export_selection_bootstrap.rs",
+    "crates/crm-application-runtime/src/runtime.rs",
     "crates/crm-party-reference-composition/src/lib.rs",
     "docs/ACTIVE_PACKET.md",
     "docs/STEP22_PARTIES_CAPABILITY_FANIN_REDUCTION.md",
@@ -25,6 +27,7 @@
     "scripts/check_step22_runtime_fanin_decisions.py",
     "step22-runtime-fanin-decisions.json",
     "tests/test_architecture_documentation_consistency.py",
+    "tests/test_native_module_composition.py",
     "tests/test_repository_navigation.py",
     "tests/test_workspace_analysis.py"
   ],
@@ -33,8 +36,8 @@
     "sha": "eac6707e6799f74e761ede39d852bf8de7ac6a77"
   },
   "deliverables": [
-    "expose the exact Parties module and record identity through crm-party-reference-composition which already owns the Parties production/reference composition and retains crm-parties-capability-adapter internally",
-    "consume Parties bootstrap visibility identity through crm_party_reference_composition::parties_runtime_identity and remove every direct crm_parties_capability_adapter source import from crm-application-runtime",
+    "expose the exact Parties module record and mutation capability identity through crm-party-reference-composition which already owns the Parties production/reference composition and retains crm-parties-capability-adapter internally",
+    "consume all Parties bootstrap identity through crm_party_reference_composition::parties_runtime_identity and remove every direct crm_parties_capability_adapter source import from crm-application-runtime",
     "remove only crm-parties-capability-adapter from crm-application-runtime Cargo.toml without adding or moving another direct dependency",
     "synchronize Cargo.lock from immutable baseline eac6707e6799f74e761ede39d852bf8de7ac6a77 by deleting exactly the crm-parties-capability-adapter line from the crm-application-runtime dependency list while every other byte remains unchanged",
     "record the third exact removed stable ID with fan-in evidence of 61 to 60 total and 60 to 59 production dependencies",
@@ -82,7 +85,7 @@
     "rewrite the accepted Step 22A inventory snapshot to match the remediated current state",
     "declare all runtime classifications complete complete Repository Step 22 start Phase 8B raise an architecture score or declare architecture 10/10"
   ],
-  "objective": "Execute one bounded ADR-032 Step 22 remediation by exposing Parties bootstrap identity through the existing crm-party-reference-composition owner production/reference boundary and removing the redundant direct crm-parties-capability-adapter dependency from crm-application-runtime without changing behavior or the owner-internal dependency graph.",
+  "objective": "Execute one bounded ADR-032 Step 22 remediation by exposing stable Parties bootstrap identity through the existing crm-party-reference-composition owner production/reference boundary and removing the redundant direct crm-parties-capability-adapter dependency from crm-application-runtime without changing behavior or the owner-internal dependency graph.",
   "packet_id": "repository-step-22e-parties-capability-fanin-reduction",
   "required_checks": [
     "Affected Scope CI",

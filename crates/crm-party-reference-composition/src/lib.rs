@@ -21,7 +21,8 @@ use crm_module_sdk::{
     ErrorCategory, ModuleId, PortFuture, RecordId, RecordType, SdkError, TenantId,
 };
 use crm_parties_capability_adapter::{
-    MODULE_ID as PARTIES_MODULE_ID, PartyCapabilityPlanner, RECORD_TYPE,
+    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, MODULE_ID as PARTIES_MODULE_ID,
+    PartyCapabilityPlanner, RECORD_TYPE, UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY,
     capability_definitions as adapter_mutation_capability_definitions,
 };
 use crm_parties_query_adapter::{
@@ -86,11 +87,21 @@ pub struct PartiesProductionDependencies {
     pub cursor_key: [u8; 32],
 }
 
-/// Exposes the exact Parties module and record identity through the existing
-/// owner production/reference boundary so generic process composition does not
-/// depend on the capability adapter merely to bootstrap visibility metadata.
-pub fn parties_runtime_identity() -> (&'static str, &'static str) {
-    (PARTIES_MODULE_ID, RECORD_TYPE)
+/// Exposes the exact Parties module, record and mutation capability identity through the existing
+/// owner production/reference boundary so generic process composition does not depend on the
+/// capability adapter merely to bootstrap stable metadata.
+pub fn parties_runtime_identity() -> (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+) {
+    (
+        PARTIES_MODULE_ID,
+        RECORD_TYPE,
+        PARTY_CREATE_CAPABILITY,
+        PARTY_UPDATE_CAPABILITY,
+    )
 }
 
 /// Returns the exact Parties mutation inventory owned by this production

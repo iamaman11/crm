@@ -61,11 +61,8 @@ use crm_module_sdk::{
     ActorId, CapabilityId, CapabilityVersion, Clock, EventDelivery, ModuleId, RandomSource,
     RecordType, SchemaVersion, TenantId, TypedPayload,
 };
-use crm_parties_capability_adapter::{
-    CREATE_CAPABILITY as PARTY_CREATE_CAPABILITY, MODULE_ID as PARTIES_MODULE_ID,
-    RECORD_TYPE as PARTY_RECORD_TYPE, UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY,
-};
 use crm_parties_query_adapter::{GET_CAPABILITY as PARTY_GET_CAPABILITY, PartyQueryAdapter};
+use crm_party_reference_composition::parties_runtime_identity;
 use crm_query_runtime::{CursorCodec, QueryGateway};
 use crm_sales_activities_capability_composition::{
     Phase6ProjectionWorker, SalesActivitiesLinkEventProcessor,
@@ -929,11 +926,12 @@ fn bootstrap_import_execution_worker_access(
     worker_actor_id: &ActorId,
 ) -> Result<(), ApplicationRuntimeError> {
     let expires_at = expiry(now_unix_nanos)?;
+    let (parties_module_id, _, party_create_capability, _) = parties_runtime_identity();
     let party_create = mutation_definitions
         .iter()
         .find(|definition| {
-            definition.owner_module_id.as_str() == PARTIES_MODULE_ID
-                && definition.capability_id.as_str() == PARTY_CREATE_CAPABILITY
+            definition.owner_module_id.as_str() == parties_module_id
+                && definition.capability_id.as_str() == party_create_capability
         })
         .ok_or_else(|| {
             ApplicationRuntimeError::Assembly(
@@ -974,11 +972,12 @@ fn bootstrap_customer_enrichment_provider_process_access(
     access: CustomerEnrichmentProviderProcessAccess<'_>,
 ) -> Result<(), ApplicationRuntimeError> {
     let expires_at = expiry(now_unix_nanos)?;
+    let (parties_module_id, party_record_type, _, _) = parties_runtime_identity();
     let party_get = access
         .query_definitions
         .iter()
         .find(|definition| {
-            definition.owner_module_id.as_str() == PARTIES_MODULE_ID
+            definition.owner_module_id.as_str() == parties_module_id
                 && definition.capability_id.as_str() == PARTY_GET_CAPABILITY
         })
         .ok_or_else(|| {
@@ -1011,8 +1010,8 @@ fn bootstrap_customer_enrichment_provider_process_access(
             tenant_id,
             party_get,
             BootstrapVisibilityResource {
-                owner_module_id: PARTIES_MODULE_ID,
-                resource_type: PARTY_RECORD_TYPE,
+                owner_module_id: parties_module_id,
+                resource_type: party_record_type,
                 allowed_fields: BTreeSet::from(["display_name".to_owned()]),
             },
             expires_at,
@@ -1061,12 +1060,13 @@ fn bootstrap_customer_enrichment_application_worker_access(
     access: CustomerEnrichmentApplicationWorkerAccess<'_>,
 ) -> Result<(), ApplicationRuntimeError> {
     let expires_at = expiry(now_unix_nanos)?;
+    let (parties_module_id, _, _, party_update_capability) = parties_runtime_identity();
     let party_update = access
         .mutation_definitions
         .iter()
         .find(|definition| {
-            definition.owner_module_id.as_str() == PARTIES_MODULE_ID
-                && definition.capability_id.as_str() == PARTY_UPDATE_CAPABILITY
+            definition.owner_module_id.as_str() == parties_module_id
+                && definition.capability_id.as_str() == party_update_capability
         })
         .ok_or_else(|| {
             ApplicationRuntimeError::Assembly(
