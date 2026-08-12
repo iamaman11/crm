@@ -215,15 +215,15 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_step_22e_parties_capability_fanin_packet_is_exact(self) -> None:
+    def test_active_step_22f_contact_points_capability_fanin_packet_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-22e-parties-capability-fanin-reduction",
+            "repository-step-22f-contact-points-capability-fanin-reduction",
         )
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "eac6707e6799f74e761ede39d852bf8de7ac6a77"},
+            {"ref": "main", "sha": "17985f32806b239f6063159113f72d2f561c6c5a"},
         )
         self.assertEqual(self.packet["tracking_issues"], [194])
         allowed_paths = set(self.packet["allowed_paths"])
@@ -231,11 +231,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Cargo.lock",
             "crates/crm-application-runtime/Cargo.toml",
             "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
-            "crates/crm-party-reference-composition/src/lib.rs",
-            "docs/STEP22_PARTIES_CAPABILITY_FANIN_REDUCTION.md",
+            "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
+            "crates/crm-contact-points-capability-composition/src/lib.rs",
+            "docs/STEP22_CONTACT_POINTS_CAPABILITY_FANIN_REDUCTION.md",
             "scripts/check_step22_runtime_fanin_decisions.py",
             "step22-runtime-fanin-decisions.json",
             "tests/test_architecture_documentation_consistency.py",
+            "tests/test_native_module_composition.py",
             "tests/test_repository_navigation.py",
             "tests/test_workspace_analysis.py",
         ):
@@ -253,16 +255,16 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             counts,
             {
                 "all": 63,
-                "final": 20,
+                "final": 21,
                 "platform_generic": 16,
                 "test_only": 1,
-                "removed": 3,
+                "removed": 4,
                 "owner_specific_unavoidable": 0,
-                "unresolved": 43,
+                "unresolved": 42,
             },
         )
         non_goals = " ".join(self.packet["non_goals"])
-        self.assertIn("classify crm-party-reference-composition", non_goals)
+        self.assertIn("classify crm-contact-points-capability-composition", non_goals)
         self.assertIn("remediate another crm-application-runtime dependency", non_goals)
         self.assertIn("declare all runtime classifications complete", non_goals)
 
@@ -306,6 +308,18 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "Parties",
         ):
             self.assertIn(marker, step22e)
+
+        step22f = read("docs/STEP22_CONTACT_POINTS_CAPABILITY_FANIN_REDUCTION.md")
+        for marker in (
+            "60",
+            "59",
+            "21",
+            "42",
+            "crm-application-runtime::dependencies::crm-contact-points-capability-adapter",
+            "17985f32806b239f6063159113f72d2f561c6c5a",
+            "Contact Points",
+        ):
+            self.assertIn(marker, step22f)
 
     def test_repository_map_and_product_inventory_remain_exact(self) -> None:
         self.assertIn(
