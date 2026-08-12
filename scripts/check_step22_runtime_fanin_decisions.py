@@ -355,7 +355,7 @@ def validate_remediation(
             "bootstrap visibility does not consume Parties identity through the owner production/reference boundary"
         )
     if (
-        "crm_contact_points_capability_composition::contact_points_runtime_identity"
+        "crm_contact_points_capability_composition::contact_points_runtime_boundary"
         not in registry_source
     ):
         raise DecisionLedgerError(
@@ -377,16 +377,16 @@ def validate_remediation(
     contact_points_composition_source = (
         root / "crates/crm-contact-points-capability-composition/src/lib.rs"
     ).read_text(encoding="utf-8")
-    if "pub fn contact_points_runtime_identity()" not in contact_points_composition_source:
+    if "pub fn contact_points_runtime_boundary()" not in contact_points_composition_source:
         raise DecisionLedgerError(
-            "Contact Points production composition boundary does not expose runtime identity"
+            "Contact Points production composition boundary does not expose the runtime boundary accessor"
         )
     if (
         'pub const CRATE_NAME: &str = "crm-contact-points-capability-composition"'
         in contact_points_composition_source
     ):
         raise DecisionLedgerError(
-            "Contact Points runtime identity addition must remain public-surface neutral by retiring the unused CRATE_NAME marker"
+            "Contact Points runtime boundary addition must remain public-surface neutral by retiring the unused CRATE_NAME marker"
         )
 
     privacy_legal_hold = (
