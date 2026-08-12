@@ -312,7 +312,6 @@ dependencies = [
  "crm-consents",
  "crm-consents-capability-adapter",
  "crm-consents-query-adapter",
- "crm-contact-points-capability-adapter",
  "crm-contact-points-capability-composition",
  "crm-core-data",
  "crm-core-events",
