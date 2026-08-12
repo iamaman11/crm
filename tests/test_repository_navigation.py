@@ -24,17 +24,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_step_22d_customer_360_query_fanin_packet_is_exact(self) -> None:
+    def test_active_step_22e_parties_capability_fanin_packet_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             packet["packet_id"],
-            "repository-step-22d-customer-360-query-fanin-reduction",
+            "repository-step-22e-parties-capability-fanin-reduction",
         )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
-            {"ref": "main", "sha": "9b2495c9a594f5539aa586f6d775a8ea12442a48"},
+            {"ref": "main", "sha": "eac6707e6799f74e761ede39d852bf8de7ac6a77"},
         )
         self.assertEqual(packet["tracking_issues"], [194])
         allowed_paths = set(packet["allowed_paths"])
@@ -42,10 +42,9 @@ class RepositoryNavigationTests(unittest.TestCase):
             {
                 "Cargo.lock",
                 "crates/crm-application-runtime/Cargo.toml",
-                "crates/crm-application-runtime/src/background.rs",
                 "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
-                "crates/crm-first-party-modules/src/lib.rs",
-                "docs/STEP22_CUSTOMER_360_QUERY_FANIN_REDUCTION.md",
+                "crates/crm-party-reference-composition/src/lib.rs",
+                "docs/STEP22_PARTIES_CAPABILITY_FANIN_REDUCTION.md",
                 "scripts/check_step22_runtime_fanin_decisions.py",
                 "step22-runtime-fanin-decisions.json",
                 "tests/test_architecture_documentation_consistency.py",
@@ -61,20 +60,20 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertIn("step22-architecture-inventory.json", forbidden_paths)
         deliverables = " ".join(packet["deliverables"])
         non_goals = " ".join(packet["non_goals"])
-        self.assertIn("62 to 61", deliverables)
         self.assertIn("61 to 60", deliverables)
+        self.assertIn("60 to 59", deliverables)
         self.assertIn("remediate another crm-application-runtime dependency", non_goals)
         self.assertIn("declare all runtime classifications complete", non_goals)
         self.assertEqual(
             validate_decisions(ROOT),
             {
                 "all": 63,
-                "final": 19,
+                "final": 20,
                 "platform_generic": 16,
                 "test_only": 1,
-                "removed": 2,
+                "removed": 3,
                 "owner_specific_unavoidable": 0,
-                "unresolved": 44,
+                "unresolved": 43,
             },
         )
 
@@ -89,11 +88,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-22d-customer-360-query-fanin-reduction",
+            "repository-step-22e-parties-capability-fanin-reduction",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "9b2495c9a594f5539aa586f6d775a8ea12442a48",
+            "eac6707e6799f74e761ede39d852bf8de7ac6a77",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -150,7 +149,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 22D Customer 360 query fan-in reduction"],
+                    "reasons": ["Step 22E Parties capability fan-in reduction"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -158,7 +157,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="9b2495c9a594f5539aa586f6d775a8ea12442a48",
+                return_value="eac6707e6799f74e761ede39d852bf8de7ac6a77",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(
