@@ -31,10 +31,11 @@ Do not reconstruct current status from historical packet documents, old PR descr
 | Add or change a capability | `DEVELOPMENT_WORKFLOW.md` | `MODULE_DEVELOPMENT.md`, `repo.py explain`, owner manifest and generated map |
 | Add a new owner domain | `MODULE_DEVELOPMENT.md` | `MODULE_CATALOG.md`, architecture plan, relevant ADRs |
 | Add cross-domain behavior | `APPLICATION_ARCHITECTURE.md` | link-module rules in `AGENTS.md` and `MODULE_DEVELOPMENT.md` |
+| Design passport recognition and identity-document customer flows | `PASSPORT_RECOGNITION_AND_IDENTITY_DOCUMENTS_PLAN.md` | `SYSTEM_INVARIANTS.md`, Parties contracts/manifest, `crm-core-files`, Customer Privacy and Customer 360 boundaries |
 | Change Protobuf or public contracts | `SYSTEM_INVARIANTS.md` | contract registry docs, module manifest bindings, Contract CI |
 | Change PostgreSQL schema or persistence | `SYSTEM_INVARIANTS.md` | owner migrations, Database CI, rollback/reapply acceptance |
 | Change composition, routes or workers | `APPLICATION_ARCHITECTURE.md` | contribution package, route classifications, application-runtime parity tests |
-| Improve architecture or developer experience | `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` | issue #194 and measured baseline |
+| Improve architecture or developer experience | `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` | `ULTIMATE_ARCHITECTURE_10_OF_10_REVIEW_AND_CLOSURE_PLAN.md`, issue #194 and measured baseline |
 | Prepare or review a PR | `DEVELOPMENT_WORKFLOW.md` | `DELIVERY_GOVERNANCE.md`, `repo.py packet-check`, affected-scope report |
 | Coordinate multiple agents | `MULTI_AGENT_DEVELOPMENT.md` | `CODEX_AGENT_QUALIFICATION.md`, exact-SHA handoff |
 | Check product completeness | `MODULE_CATALOG.md` | `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md`, `CRM_CAPABILITY_COVERAGE.md`, roadmap and status |
@@ -57,6 +58,8 @@ Do not reconstruct current status from historical packet documents, old PR descr
 | Business owner and completeness accounting | `MODULE_CATALOG.md` |
 | Work-in-progress scope | active GitHub issue and PR |
 | Historical acceptance boundary | accepted packet document and merged PR evidence |
+
+The passport-recognition and ultimate-architecture review documents are expert design companions. They do not override the source-of-truth hierarchy above or change the repository execution order by themselves.
 
 When two descriptive documents disagree, follow the higher source and treat the lower document as stale. Generated navigation carries deterministic source digests but never overrides its authoritative inputs.
 
@@ -102,6 +105,18 @@ python scripts/repo.py packet-check --base origin/main
 python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
 python scripts/repo.py quality
+python scripts/repo.py doctor
+python scripts/repo.py doctor --profile bootstrap
+python scripts/repo.py bootstrap --dry-run
+python scripts/repo.py bootstrap
+python scripts/repo.py dev-up --dry-run
+python scripts/repo.py dev-up
+python scripts/repo.py dev-reset --dry-run
+python scripts/repo.py dev-reset
+python scripts/repo.py seed-demo --dry-run
+python scripts/repo.py seed-demo
+python scripts/repo.py smoke --dry-run
+python scripts/repo.py smoke
 ```
 
 Generated navigation:
@@ -113,18 +128,7 @@ python scripts/generate_repository_navigation.py --write
 
 `packet-check` validates the declared baseline, allowed/forbidden paths, affected packages, selected workflows, changed contracts/routes/workers/migrations and generated freshness. `conformance` rejects stale generated navigation.
 
-Planned and required for the 10/10 target:
-
-```bash
-python scripts/repo.py doctor
-python scripts/repo.py bootstrap
-python scripts/repo.py dev-up
-python scripts/repo.py dev-reset
-python scripts/repo.py seed-demo
-python scripts/repo.py smoke
-```
-
-A command listed as planned must not be represented as implemented until it exists and is covered by permanent tests.
+The deterministic local lifecycle (`doctor`, locked `bootstrap`, checkout-owned PostgreSQL `dev-up` / `dev-reset`, governed `seed-demo` and real-process `smoke`) is implemented and covered by permanent acceptance. Treat any documentation that still calls these commands merely planned as stale.
 
 ## 6. Generated navigation
 
@@ -142,6 +146,7 @@ Generated outputs use deterministic ordering and embedded SHA-256 source digests
 - **Normative:** invariants, accepted ADRs, architecture, delivery governance, product portfolio and workflow rules.
 - **Current state:** project status, active phase plan, module catalog and active issues.
 - **Generated navigation:** active packet, repository map and explain/packet-check reports.
+- **Expert design companions:** bounded design/closure analysis such as passport recognition or the independent 10/10 architecture review; these may propose future implementation but do not supersede normative order.
 - **Historical:** accepted packet documents and merged PR evidence.
 - **Orientation:** root README, `AGENTS.md` and this index.
 
