@@ -11,7 +11,7 @@ use crm_capability_runtime::{
     TransactionalCapabilityExecutor,
 };
 use crm_contact_points_capability_adapter::{
-    CREATE_CAPABILITY, ContactPointCapabilityPlanner, MUTATION_CAPABILITY_IDS,
+    CREATE_CAPABILITY, ContactPointCapabilityPlanner, MODULE_ID, MUTATION_CAPABILITY_IDS, RECORD_TYPE,
     capability_definitions as adapter_mutation_capability_definitions,
     referenced_party_id_from_create,
 };
@@ -82,6 +82,12 @@ pub struct ContactPointsProductionDependencies {
     pub activation: Arc<dyn ModuleActivationPort>,
     pub visibility_authorizer: Arc<dyn QueryVisibilityAuthorizer>,
     pub cursor_key: [u8; 32],
+}
+
+/// Returns the stable Contact Points module and record identity owned by this
+/// production composition boundary.
+pub fn contact_points_runtime_identity() -> (&'static str, &'static str) {
+    (MODULE_ID, RECORD_TYPE)
 }
 
 /// Returns the exact Contact Points mutation inventory owned by this production
@@ -187,5 +193,3 @@ fn unsupported_capability() -> SdkError {
         "The Contact Point mutation capability is not configured for this composition boundary.",
     )
 }
-
-pub const CRATE_NAME: &str = "crm-contact-points-capability-composition";
