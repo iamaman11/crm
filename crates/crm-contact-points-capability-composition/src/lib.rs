@@ -179,7 +179,7 @@ fn production_composition_error(error: impl fmt::Display) -> SdkError {
         "CONTACT_POINTS_PRODUCTION_COMPOSITION_INVALID",
         ErrorCategory::Internal,
         false,
-        "The production Contact Points contribution is invalid.",
+        "The Contact Points production contribution is invalid.",
     )
     .with_internal_reference(error.to_string())
 }
