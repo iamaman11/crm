@@ -34,10 +34,18 @@ REMOVED_PARTIES_CAPABILITY_STABLE_ID = (
 REMOVED_CONTACT_POINTS_CAPABILITY_STABLE_ID = (
     "crm-application-runtime::dependencies::crm-contact-points-capability-adapter"
 )
+REMOVED_DATA_QUALITY_CAPABILITY_STABLE_ID = (
+    "crm-application-runtime::dependencies::crm-data-quality-capability-adapter"
+)
+REMOVED_DATA_QUALITY_QUERY_STABLE_ID = (
+    "crm-application-runtime::dependencies::crm-data-quality-query-adapter"
+)
 EXPECTED_REMOVED_STABLE_IDS = {
     REMOVED_CONTACT_POINTS_CAPABILITY_STABLE_ID,
     REMOVED_CUSTOMER_360_QUERY_STABLE_ID,
     REMOVED_PRIVACY_QUERY_STABLE_ID,
+    REMOVED_DATA_QUALITY_CAPABILITY_STABLE_ID,
+    REMOVED_DATA_QUALITY_QUERY_STABLE_ID,
     REMOVED_PARTIES_CAPABILITY_STABLE_ID,
 }
 EXPECTED_REGISTRATION = {
@@ -52,7 +60,7 @@ EXPECTED_REGISTRATION = {
     "validator": "scripts/check_step22_runtime_fanin_decisions.py",
 }
 EXPECTED_REMEDIATION = {
-    "after": {"all": 59, "production": 58, "test_only": 1},
+    "after": {"all": 57, "production": 56, "test_only": 1},
     "before": {"all": 63, "production": 62, "test_only": 1},
     "removals": [
         {
@@ -93,7 +101,9 @@ EXPECTED_REMEDIATION = {
         {
             "adapter_package": "crm-contact-points-capability-adapter",
             "owner_manifest": "crates/crm-contact-points-capability-composition/Cargo.toml",
-            "owner_sources": ["crates/crm-contact-points-capability-composition/src/lib.rs"],
+            "owner_sources": [
+                "crates/crm-contact-points-capability-composition/src/lib.rs"
+            ],
             "replacement_boundary": "crm-contact-points-capability-composition",
             "runtime_sources": [
                 "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
@@ -101,13 +111,36 @@ EXPECTED_REMEDIATION = {
             ],
             "stable_id": REMOVED_CONTACT_POINTS_CAPABILITY_STABLE_ID,
         },
+        {
+            "adapter_package": "crm-data-quality-capability-adapter",
+            "owner_manifest": "crates/crm-data-quality-source-composition/Cargo.toml",
+            "owner_sources": [
+                "crates/crm-data-quality-source-composition/src/production_contribution.rs",
+                "crates/crm-first-party-modules/src/lib.rs",
+            ],
+            "replacement_boundary": "crm-data-quality-source-composition",
+            "runtime_sources": [
+                "crates/crm-application-runtime/src/native_composition.rs",
+                "crates/crm-application-runtime/tests/data_quality_registration_contract.rs",
+            ],
+            "stable_id": REMOVED_DATA_QUALITY_CAPABILITY_STABLE_ID,
+        },
+        {
+            "adapter_package": "crm-data-quality-query-adapter",
+            "owner_manifest": "crates/crm-data-quality-source-composition/Cargo.toml",
+            "owner_sources": [
+                "crates/crm-data-quality-source-composition/src/production_contribution.rs",
+                "crates/crm-first-party-modules/src/lib.rs",
+            ],
+            "replacement_boundary": "crm-data-quality-source-composition",
+            "runtime_sources": [
+                "crates/crm-application-runtime/src/native_composition.rs",
+                "crates/crm-application-runtime/tests/data_quality_registration_contract.rs",
+            ],
+            "stable_id": REMOVED_DATA_QUALITY_QUERY_STABLE_ID,
+        },
     ],
-    "removed_stable_ids": [
-        REMOVED_CONTACT_POINTS_CAPABILITY_STABLE_ID,
-        REMOVED_CUSTOMER_360_QUERY_STABLE_ID,
-        REMOVED_PRIVACY_QUERY_STABLE_ID,
-        REMOVED_PARTIES_CAPABILITY_STABLE_ID,
-    ],
+    "removed_stable_ids": sorted(EXPECTED_REMOVED_STABLE_IDS),
     "runtime_manifest": "crates/crm-application-runtime/Cargo.toml",
 }
 
@@ -170,7 +203,6 @@ def inventory_rows(inventory: dict[str, Any]) -> dict[str, dict[str, str]]:
     ]
     if columns != expected_columns or not isinstance(rows, list):
         raise DecisionLedgerError("inventory runtime_fanin tabular contract changed")
-
     result: dict[str, dict[str, str]] = {}
     for raw in rows:
         if not isinstance(raw, list) or len(raw) != len(expected_columns):
@@ -186,12 +218,11 @@ def inventory_rows(inventory: dict[str, Any]) -> dict[str, dict[str, str]]:
 def current_runtime_direct_ids(root: Path, manifest_path: str) -> set[str]:
     manifest = tomllib.loads((root / manifest_path).read_text(encoding="utf-8"))
     ids: set[str] = set()
-    sections = (
+    for section, stable_section in (
         ("dependencies", "dependencies"),
         ("dev-dependencies", "dev-dependencies"),
         ("build-dependencies", "build-dependencies"),
-    )
-    for section, stable_section in sections:
+    ):
         dependencies = manifest.get(section, {})
         if not isinstance(dependencies, dict):
             raise DecisionLedgerError(f"runtime manifest {section} must be a table")
@@ -207,8 +238,7 @@ def validate_remediation(
     accepted_ids: set[str],
     final_by_id: dict[str, tuple[str, str]],
 ) -> None:
-    remediation = decisions.get("remediation_evidence")
-    if remediation != EXPECTED_REMEDIATION:
+    if decisions.get("remediation_evidence") != EXPECTED_REMEDIATION:
         raise DecisionLedgerError("Step 22 cumulative remediation evidence changed")
 
     current_ids = current_runtime_direct_ids(
@@ -221,27 +251,24 @@ def validate_remediation(
     }
     if removed_ids != EXPECTED_REMOVED_STABLE_IDS:
         raise DecisionLedgerError(
-            "Step 22F must record exactly the accepted Customer Privacy, Customer 360, "
-            "Parties and Contact Points capability-adapter removals"
+            "Step 22G must record exactly the six accepted cumulative removals"
         )
     if current_ids != accepted_ids - removed_ids:
         added = sorted(current_ids - accepted_ids)
         missing = sorted((accepted_ids - removed_ids) - current_ids)
         raise DecisionLedgerError(
             "current runtime direct dependency surface differs from the accepted "
-            f"inventory minus the cumulative removals: added={added}, missing={missing}"
+            f"inventory minus cumulative removals: added={added}, missing={missing}"
         )
 
-    production = sum("::dependencies::" in stable_id for stable_id in current_ids)
-    test_only = sum("::dev-dependencies::" in stable_id for stable_id in current_ids)
     current_counts = {
         "all": len(current_ids),
-        "production": production,
-        "test_only": test_only,
+        "production": sum("::dependencies::" in item for item in current_ids),
+        "test_only": sum("::dev-dependencies::" in item for item in current_ids),
     }
     if current_counts != EXPECTED_REMEDIATION["after"]:
         raise DecisionLedgerError(
-            f"current runtime fan-in is not the exact cumulative 63 to 59 reduction: {current_counts}"
+            f"current runtime fan-in is not the exact cumulative 63 to 57 reduction: {current_counts}"
         )
 
     runtime_manifest = tomllib.loads(
@@ -296,8 +323,8 @@ def validate_remediation(
                 f"Cargo.lock no longer records owner-internal adapter: {adapter}"
             )
         lock_package(adapter)
+
         rust_marker = adapter.replace("-", "_")
-        replacement_marker = removal["replacement_boundary"].replace("-", "_")
         runtime_text = "\n".join(
             (root / source).read_text(encoding="utf-8")
             for source in removal["runtime_sources"]
@@ -306,32 +333,30 @@ def validate_remediation(
             raise DecisionLedgerError(
                 f"generic runtime source still imports removed adapter directly: {adapter}"
             )
+        replacement_marker = removal["replacement_boundary"].replace("-", "_")
         if replacement_marker not in runtime_text:
             raise DecisionLedgerError(
                 f"runtime source is missing replacement boundary marker: {replacement_marker}"
             )
 
     runtime_source_root = root / "crates/crm-application-runtime"
-    parties_direct_sources = sorted(
-        source.relative_to(root).as_posix()
-        for source in runtime_source_root.rglob("*.rs")
-        if "crm_parties_capability_adapter" in source.read_text(encoding="utf-8")
+    forbidden_markers = (
+        "crm_parties_capability_adapter",
+        "crm_contact_points_capability_adapter",
+        "crm_data_quality_capability_adapter",
+        "crm_data_quality_query_adapter",
     )
-    if parties_direct_sources:
-        raise DecisionLedgerError(
-            "crm-application-runtime still references removed Parties capability adapter "
-            f"outside the owner boundary: {parties_direct_sources}"
+    for marker in forbidden_markers:
+        direct_sources = sorted(
+            source.relative_to(root).as_posix()
+            for source in runtime_source_root.rglob("*.rs")
+            if marker in source.read_text(encoding="utf-8")
         )
-    contact_points_direct_sources = sorted(
-        source.relative_to(root).as_posix()
-        for source in runtime_source_root.rglob("*.rs")
-        if "crm_contact_points_capability_adapter" in source.read_text(encoding="utf-8")
-    )
-    if contact_points_direct_sources:
-        raise DecisionLedgerError(
-            "crm-application-runtime still references removed Contact Points capability adapter "
-            f"outside the owner boundary: {contact_points_direct_sources}"
-        )
+        if direct_sources:
+            raise DecisionLedgerError(
+                f"crm-application-runtime still references removed adapter marker "
+                f"{marker}: {direct_sources}"
+            )
 
     first_party_source = (
         root / "crates/crm-first-party-modules/src/lib.rs"
@@ -339,28 +364,54 @@ def validate_remediation(
     for marker in (
         "MODULE_ID as CUSTOMER_360_MODULE_ID",
         "query_capability_definitions as customer_360_query_capability_definitions",
+        "build_data_quality_contribution",
+        "mutation_capability_definitions as data_quality_mutation_capability_definitions",
+        "query_capability_definitions as data_quality_query_capability_definitions",
     ):
         if marker not in first_party_source:
             raise DecisionLedgerError(
-                f"first-party boundary is missing Customer 360 marker: {marker}"
+                f"first-party boundary is missing accepted aggregation marker: {marker}"
             )
+
     registry_source = (
         root / "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs"
     ).read_text(encoding="utf-8")
-    if "crm_first_party_modules::CUSTOMER_360_MODULE_ID" not in registry_source:
-        raise DecisionLedgerError(
-            "bootstrap visibility does not consume Customer 360 identity through first-party boundary"
-        )
-    if "crm_party_reference_composition::parties_runtime_identity" not in registry_source:
-        raise DecisionLedgerError(
-            "bootstrap visibility does not consume Parties identity through the owner production/reference boundary"
-        )
-    if (
-        "crm_contact_points_capability_composition::contact_points_runtime_boundary"
-        not in registry_source
+    for marker, message in (
+        (
+            "crm_first_party_modules::CUSTOMER_360_MODULE_ID",
+            "Customer 360 identity through first-party boundary",
+        ),
+        (
+            "crm_party_reference_composition::parties_runtime_identity",
+            "Parties identity through owner boundary",
+        ),
+        (
+            "crm_contact_points_capability_composition::contact_points_runtime_boundary",
+            "Contact Points identity through owner boundary",
+        ),
     ):
+        if marker not in registry_source:
+            raise DecisionLedgerError(f"bootstrap visibility lost {message}")
+
+    data_quality_owner = (
+        root / "crates/crm-data-quality-source-composition/src/production_contribution.rs"
+    ).read_text(encoding="utf-8")
+    for marker in (
+        "crm_data_quality_capability_adapter",
+        "crm_data_quality_query_adapter",
+        "pub fn mutation_capability_definitions()",
+        "pub fn query_capability_definitions()",
+    ):
+        if marker not in data_quality_owner:
+            raise DecisionLedgerError(
+                f"Data Quality owner composition lost required marker: {marker}"
+            )
+    data_quality_test = (
+        root / "crates/crm-application-runtime/tests/data_quality_registration_contract.rs"
+    ).read_text(encoding="utf-8")
+    if "crm_data_quality_source_composition" not in data_quality_test:
         raise DecisionLedgerError(
-            "bootstrap visibility does not consume Contact Points identity through the owner production composition boundary"
+            "Data Quality registration test does not consume the existing owner composition boundary"
         )
 
     party_reference_source = (
@@ -372,22 +423,22 @@ def validate_remediation(
         )
     if 'pub const CRATE_NAME: &str = "crm-party-reference-composition"' in party_reference_source:
         raise DecisionLedgerError(
-            "Parties runtime identity addition must remain public-surface neutral by retiring the unused CRATE_NAME marker"
+            "Parties runtime identity must remain public-surface neutral"
         )
 
-    contact_points_composition_source = (
+    contact_points_source = (
         root / "crates/crm-contact-points-capability-composition/src/lib.rs"
     ).read_text(encoding="utf-8")
-    if "pub fn contact_points_runtime_boundary()" not in contact_points_composition_source:
+    if "pub fn contact_points_runtime_boundary()" not in contact_points_source:
         raise DecisionLedgerError(
-            "Contact Points production composition boundary does not expose the runtime boundary accessor"
+            "Contact Points production composition boundary lost runtime accessor"
         )
     if (
         'pub const CRATE_NAME: &str = "crm-contact-points-capability-composition"'
-        in contact_points_composition_source
+        in contact_points_source
     ):
         raise DecisionLedgerError(
-            "Contact Points runtime boundary addition must remain public-surface neutral by retiring the unused CRATE_NAME marker"
+            "Contact Points runtime boundary must remain public-surface neutral"
         )
 
     privacy_legal_hold = (
@@ -399,7 +450,7 @@ def validate_remediation(
         not in privacy_legal_hold
     ):
         raise DecisionLedgerError(
-            "Customer Privacy production does not expose the control query inventory"
+            "Customer Privacy production lost control query inventory"
         )
     privacy_root = (
         root / "crates/crm-customer-privacy-production/src/root.rs"
@@ -419,30 +470,31 @@ def validate_payload(
         raise DecisionLedgerError("unexpected runtime fan-in decision schema")
     if decisions.get("phase") != "partial-classification-and-remediation":
         raise DecisionLedgerError(
-            "Step 22F must remain partial-classification-and-remediation"
+            "Step 22G must remain partial-classification-and-remediation"
         )
     if set(decisions.get("allowed_final_classifications", [])) != FINAL_CLASSIFICATIONS:
         raise DecisionLedgerError("ADR-032 final classification enum changed")
 
     source = decisions.get("inventory_source")
-    if not isinstance(source, dict):
-        raise DecisionLedgerError("inventory_source is required")
-    if source.get("path") != "step22-architecture-inventory.json":
-        raise DecisionLedgerError("decision ledger must bind the accepted inventory path")
-    if source.get("accepted_source") != "ffb8c94373c565de00cccd67c38c80bdb3a12405":
-        raise DecisionLedgerError("decision ledger accepted source is not PR #298")
-    if source.get("merge_commit") != "4642ea39a7c1c8ad78b1d475a3d5391af8414555":
-        raise DecisionLedgerError("decision ledger baseline is not the Step 22A merge")
+    expected_source = {
+        "accepted_source": "ffb8c94373c565de00cccd67c38c80bdb3a12405",
+        "merge_commit": "4642ea39a7c1c8ad78b1d475a3d5391af8414555",
+        "path": "step22-architecture-inventory.json",
+    }
+    if source != expected_source:
+        raise DecisionLedgerError("decision ledger no longer binds exact Step 22A inventory")
 
     inventory_by_id = inventory_rows(inventory)
-    final_columns = decisions.get("final_row_columns")
-    if final_columns != ["stable_id", "classification", "boundary_id"]:
+    if decisions.get("final_row_columns") != [
+        "stable_id",
+        "classification",
+        "boundary_id",
+    ]:
         raise DecisionLedgerError("final decision row columns changed")
     raw_final_rows = decisions.get("final_rows")
+    boundaries = decisions.get("boundary_definitions")
     if not isinstance(raw_final_rows, list):
         raise DecisionLedgerError("final_rows must be a list")
-
-    boundaries = decisions.get("boundary_definitions")
     if not isinstance(boundaries, dict) or not boundaries:
         raise DecisionLedgerError("boundary_definitions must be non-empty")
 
@@ -451,10 +503,8 @@ def validate_payload(
         if not isinstance(raw, list) or len(raw) != 3:
             raise DecisionLedgerError("invalid final decision row")
         stable_id, classification, boundary_id = raw
-        if stable_id in final_by_id:
-            raise DecisionLedgerError(f"duplicate final stable_id: {stable_id}")
-        if stable_id not in inventory_by_id:
-            raise DecisionLedgerError(f"unknown final stable_id: {stable_id}")
+        if stable_id in final_by_id or stable_id not in inventory_by_id:
+            raise DecisionLedgerError(f"invalid or duplicate final stable_id: {stable_id}")
         if classification not in FINAL_CLASSIFICATIONS:
             raise DecisionLedgerError(f"invalid classification for {stable_id}")
         boundary = boundaries.get(boundary_id)
@@ -499,11 +549,11 @@ def validate_payload(
         elif classification == "removed":
             if stable_id not in EXPECTED_REMOVED_STABLE_IDS:
                 raise DecisionLedgerError(
-                    f"Step 22F does not authorize another removal: {stable_id}"
+                    f"Step 22G does not authorize another removal: {stable_id}"
                 )
         else:
             raise DecisionLedgerError(
-                "Step 22F cannot record owner-specific-unavoidable without the "
+                "Step 22G cannot record owner-specific-unavoidable without the "
                 "complete ADR-032 evidence contract"
             )
         final_by_id[stable_id] = (classification, boundary_id)
@@ -522,10 +572,19 @@ def validate_payload(
         "owner_specific_unavoidable": computed["owner-specific-unavoidable"],
         "unresolved": len(unresolved),
     }
-    if decisions.get("counts") != computed_counts:
+    expected_counts = {
+        "all": 63,
+        "final": 23,
+        "platform_generic": 16,
+        "test_only": 1,
+        "removed": 6,
+        "owner_specific_unavoidable": 0,
+        "unresolved": 40,
+    }
+    if computed_counts != expected_counts or decisions.get("counts") != expected_counts:
         raise DecisionLedgerError(
-            f"decision counts changed: expected {computed_counts}, "
-            f"got {decisions.get('counts')}"
+            f"Step 22G decision counts drifted: computed={computed_counts} "
+            f"recorded={decisions.get('counts')}"
         )
 
     expected_boundary = {
@@ -537,10 +596,10 @@ def validate_payload(
         "step22_complete": False,
     }
     if decisions.get("decision_boundary") != expected_boundary:
-        raise DecisionLedgerError("Step 22F decision boundary is overstated")
+        raise DecisionLedgerError("Step 22G decision boundary is overstated")
     if not unresolved:
         raise DecisionLedgerError(
-            "Step 22F must not claim full classification or Step 22 closure"
+            "Step 22G must not claim full classification or Step 22 closure"
         )
 
     validate_remediation(root, decisions, set(inventory_by_id), final_by_id)
@@ -562,7 +621,12 @@ def validate_decisions(root: Path = ROOT) -> dict[str, int]:
 def main() -> int:
     try:
         counts = validate_decisions(ROOT)
-    except (DecisionLedgerError, OSError, json.JSONDecodeError, tomllib.TOMLDecodeError) as error:
+    except (
+        DecisionLedgerError,
+        OSError,
+        json.JSONDecodeError,
+        tomllib.TOMLDecodeError,
+    ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
     print(

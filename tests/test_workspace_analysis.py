@@ -464,7 +464,7 @@ jobs:
         )
         self.assertEqual(
             fresh["runtime_fanin"]["counts"],
-            {"all": 59, "production": 58, "test_only": 1, "build": 0},
+            {"all": 57, "production": 56, "test_only": 1, "build": 0},
         )
         self.assertEqual(
             fresh["permanent_gates"], committed["permanent_gates"]
@@ -477,6 +477,18 @@ jobs:
             (ROOT / "step22-runtime-fanin-decisions.json").read_text(
                 encoding="utf-8"
             )
+        )
+        self.assertEqual(
+            decisions["counts"],
+            {
+                "all": 63,
+                "final": 23,
+                "platform_generic": 16,
+                "test_only": 1,
+                "removed": 6,
+                "owner_specific_unavoidable": 0,
+                "unresolved": 40,
+            },
         )
         removed_ids = {
             stable_id
@@ -493,19 +505,23 @@ jobs:
                 "crm-application-runtime::dependencies::"
                 "crm-customer-privacy-query-adapter",
                 "crm-application-runtime::dependencies::"
+                "crm-data-quality-capability-adapter",
+                "crm-application-runtime::dependencies::"
+                "crm-data-quality-query-adapter",
+                "crm-application-runtime::dependencies::"
                 "crm-parties-capability-adapter",
             },
         )
         self.assertEqual(accepted_runtime_ids - current_runtime_ids, removed_ids)
         self.assertEqual(current_runtime_ids - accepted_runtime_ids, set())
-        self.assertEqual(len(current_runtime_ids), 59)
+        self.assertEqual(len(current_runtime_ids), 57)
         self.assertEqual(
             decisions["remediation_evidence"]["before"],
             {"all": 63, "production": 62, "test_only": 1},
         )
         self.assertEqual(
             decisions["remediation_evidence"]["after"],
-            {"all": 59, "production": 58, "test_only": 1},
+            {"all": 57, "production": 56, "test_only": 1},
         )
         self.assertTrue(
             decisions["decision_boundary"]["remediation_performed"]
