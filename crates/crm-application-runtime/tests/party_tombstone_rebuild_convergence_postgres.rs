@@ -1,4 +1,7 @@
 use crm_application_composition::ModuleActivationPort;
+use crm_capability_ingress::semantic_input_hash;
+use crm_capability_plan_support as capability_support;
+use crm_capability_runtime::CapabilityRequest;
 use crm_core_data::PostgresDataStore;
 use crm_customer_360_composition::{
     CUSTOMER_360_CONTRIBUTION_RESOURCE_TYPE, CUSTOMER_360_PROJECTION_ID,
@@ -17,13 +20,17 @@ use crm_customer_privacy_production::{
 };
 use crm_global_search_composition::{GlobalSearchWorker, INITIAL_GLOBAL_SEARCH_GENERATION_ID};
 use crm_module_sdk::{
-    ActorId, CapabilityId, CapabilityVersion, CorrelationId, DataClass, ModuleId, PayloadEncoding,
-    PortFuture, RecordId, RecordRef, RetentionPolicyId, SchemaId, SchemaVersion, SdkError,
+    ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, CorrelationId,
+    DataClass, ExecutionContext, IdempotencyKey, ModuleExecutionContext, ModuleId, PayloadEncoding,
+    PortFuture, RecordId, RecordRef, RequestId, RetentionPolicyId, SchemaId, SchemaVersion, SdkError,
     TenantId, TraceId, TypedPayload,
 };
-use crm_parties_capability_adapter::{RECORD_TYPE as PARTY_RECORD_TYPE, persisted_contract};
+use crm_party_reference_composition::{
+    PartiesProductionDependencies, build_contribution, parties_runtime_identity,
+};
+use crm_proto_contracts::crm::{customer::v1 as customer_wire, parties::v1 as party_wire};
 use crm_query_runtime::{QueryRequest, QueryVisibilityAuthorizer, QueryVisibilityDecision};
-use serde_json::{Value, json};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use std::sync::Arc;
@@ -90,13 +97,11 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
         &format!("fixture-decision-{run_id}"),
     )
     .await;
-    seed_record(
-        &admin,
+    seed_party(
+        &database_url,
         &tenant,
-        PARTY_RECORD_TYPE,
+        &actor,
         &party_id,
-        1,
-        party_payload(&party_id),
         &format!("fixture-party-{run_id}"),
     )
     .await;
@@ -163,7 +168,7 @@ async fn production_owner_execution_rebuilds_stale_party_derived_state() {
         "#,
     )
     .bind(&tenant)
-    .bind(PARTY_RECORD_TYPE)
+    .bind(party_record_type())
     .bind(&party_id)
     .fetch_one(&admin)
     .await
@@ -257,6 +262,86 @@ impl QueryVisibilityAuthorizer for DenyVisibility {
     }
 }
 
+async fn seed_party(database_url: &str, tenant: &str, actor: &str, party_id: &str, suffix: &str) {
+    let store = PostgresDataStore::connect(database_url, 2)
+        .await
+        .expect("connect Party rebuild convergence seed store");
+    let composition = build_contribution(PartiesProductionDependencies {
+        store,
+        activation: Arc::new(AlwaysActive),
+        visibility_authorizer: Arc::new(DenyVisibility),
+        cursor_key: [0x50; 32],
+    })
+    .expect("build Parties rebuild convergence contribution")
+    .build()
+    .expect("assemble Parties rebuild convergence contribution");
+    let (parties_module_id, _, create_capability, _) = parties_runtime_identity();
+    let definition = composition
+        .mutation_definitions()
+        .iter()
+        .find(|definition| {
+            definition.owner_module_id.as_str() == parties_module_id
+                && definition.capability_id.as_str() == create_capability
+        })
+        .expect("Parties create definition in rebuild convergence contribution");
+    let command = party_wire::CreatePartyRequest {
+        party_ref: Some(customer_wire::PartyRef {
+            party_id: party_id.to_owned(),
+        }),
+        kind: party_wire::PartyKind::Person as i32,
+        display_name: ORIGINAL_NAME.to_owned(),
+    };
+    let input = capability_support::protobuf_payload(
+        parties_module_id,
+        definition.input_contract.schema_id.as_str(),
+        DataClass::Personal,
+        &command,
+    )
+    .expect("encode rebuild convergence Party seed request");
+    let identity = format!("party-rebuild-seed-{suffix}");
+    let request = CapabilityRequest {
+        context: ModuleExecutionContext {
+            module_id: ModuleId::try_new(parties_module_id).expect("Parties module id"),
+            execution: ExecutionContext {
+                tenant_id: TenantId::try_new(tenant).expect("Party rebuild tenant id"),
+                actor_id: ActorId::try_new(actor).expect("Party rebuild actor id"),
+                request_id: RequestId::try_new(format!("{identity}-request"))
+                    .expect("Party seed request id"),
+                correlation_id: CorrelationId::try_new(format!("{identity}-correlation"))
+                    .expect("Party seed correlation id"),
+                causation_id: CausationId::try_new(format!("{identity}-causation"))
+                    .expect("Party seed causation id"),
+                trace_id: TraceId::try_new(format!("{identity}-trace"))
+                    .expect("Party seed trace id"),
+                capability_id: definition.capability_id.clone(),
+                capability_version: definition.capability_version.clone(),
+                idempotency_key: IdempotencyKey::try_new(identity.clone())
+                    .expect("Party seed idempotency key"),
+                business_transaction_id: BusinessTransactionId::try_new(format!(
+                    "{identity}-transaction"
+                ))
+                .expect("Party seed business transaction id"),
+                schema_version: SchemaVersion::try_new("1.0.0")
+                    .expect("Party seed schema version"),
+                request_started_at_unix_nanos: CAPTURED_AT - 1_000_000,
+            },
+        },
+        input_hash: semantic_input_hash(&input),
+        input,
+        approval: None,
+    };
+    composition
+        .mutation_executor()
+        .execute(definition, request)
+        .await
+        .expect("seed Party rebuild fixture through owner contribution");
+}
+
+fn party_record_type() -> &'static str {
+    let (_, record_type, _, _) = parties_runtime_identity();
+    record_type
+}
+
 fn build_case_plan_and_decision(
     tenant: &str,
     actor: &str,
@@ -293,7 +378,7 @@ fn build_case_plan_and_decision(
         canonical_party_id.clone(),
         1,
         [ScopeResource::new(
-            PARTY_RECORD_TYPE.to_owned(),
+            party_record_type(),
             canonical_party_id.clone(),
             1,
             DataClass::Personal,
@@ -366,29 +451,6 @@ fn action_plan_payload(plan: &PrivacyActionPlan) -> TypedPayload {
         retention_policy_id: RetentionPolicyId::try_new(ACTION_PLAN_STATE_RETENTION_POLICY_ID)
             .unwrap(),
         bytes: encode_action_plan_state(plan).unwrap(),
-    }
-}
-
-fn party_payload(party_id: &str) -> TypedPayload {
-    let contract = persisted_contract();
-    TypedPayload {
-        owner: ModuleId::try_new(contract.owner).unwrap(),
-        schema_id: SchemaId::try_new(contract.schema_id).unwrap(),
-        schema_version: SchemaVersion::try_new(contract.schema_version).unwrap(),
-        descriptor_hash: contract.descriptor_hash,
-        data_class: DataClass::Personal,
-        encoding: PayloadEncoding::Json,
-        maximum_size_bytes: contract.maximum_size_bytes,
-        retention_policy_id: RetentionPolicyId::try_new(contract.retention_policy_id).unwrap(),
-        bytes: serde_json::to_vec(&json!({
-            "party_id": party_id,
-            "kind": "person",
-            "display_name": ORIGINAL_NAME,
-            "created_at_unix_nanos": 1,
-            "updated_at_unix_nanos": 1,
-            "version": 1
-        }))
-        .unwrap(),
     }
 }
 
@@ -576,7 +638,7 @@ async fn seed_stale_customer_360(
     .bind(CUSTOMER_360_CONTRIBUTION_RESOURCE_TYPE)
     .bind(party_id)
     .bind(source_event_id)
-    .bind(PARTY_RECORD_TYPE)
+    .bind(party_record_type())
     .bind(ORIGINAL_NAME)
     .execute(admin)
     .await
@@ -614,7 +676,7 @@ async fn assert_authoritative_party_minimized(admin: &PgPool, tenant: &str, part
         "SELECT version, payload_bytes, deleted_at IS NULL AS retained_tombstone FROM crm.records WHERE tenant_id = $1 AND record_type = $2 AND record_id = $3",
     )
     .bind(tenant)
-    .bind(PARTY_RECORD_TYPE)
+    .bind(party_record_type())
     .bind(party_id)
     .fetch_one(admin)
     .await
@@ -699,7 +761,7 @@ async fn assert_search_tombstone(
     )
     .bind(tenant)
     .bind(projection_id)
-    .bind(PARTY_RECORD_TYPE)
+    .bind(party_record_type())
     .bind(party_id)
     .bind(ORIGINAL_NAME)
     .fetch_one(admin)
