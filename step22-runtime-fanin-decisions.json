@@ -35,12 +35,13 @@
         "Cargo.lock",
         "crates/crm-application-runtime/Cargo.toml",
         "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+        "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
         "crates/crm-contact-points-capability-composition/Cargo.toml",
         "crates/crm-contact-points-capability-composition/src/lib.rs",
         "scripts/check_step22_runtime_fanin_decisions.py"
       ],
       "owner": "crm.contact-points / architecture-governance",
-      "prevented_boundary": "Keeps Contact Points capability-adapter implementation details behind the existing owner production composition boundary instead of exposing the adapter to the generic process host merely for module and record identity.",
+      "prevented_boundary": "Keeps Contact Points capability-adapter implementation details behind the existing owner production composition boundary instead of exposing the adapter to the generic process host for bootstrap identity or guarded create-promotion planning.",
       "review_condition": "Fail if crm-application-runtime regains a direct crm-contact-points-capability-adapter dependency or source import while crm-contact-points-capability-composition remains the owner production composition boundary."
     },
     "core-data-platform": {
@@ -376,7 +377,8 @@
         ],
         "replacement_boundary": "crm-contact-points-capability-composition",
         "runtime_sources": [
-          "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs"
+          "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+          "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
         ],
         "stable_id": "crm-application-runtime::dependencies::crm-contact-points-capability-adapter"
       }
