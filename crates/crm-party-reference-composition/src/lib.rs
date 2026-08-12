@@ -86,6 +86,13 @@ pub struct PartiesProductionDependencies {
     pub cursor_key: [u8; 32],
 }
 
+/// Exposes the exact Parties module and record identity through the existing
+/// owner production/reference boundary so generic process composition does not
+/// depend on the capability adapter merely to bootstrap visibility metadata.
+pub fn parties_runtime_identity() -> (&'static str, &'static str) {
+    (PARTIES_MODULE_ID, RECORD_TYPE)
+}
+
 /// Returns the exact Parties mutation inventory owned by this production
 /// composition package.
 pub fn mutation_capability_definitions() -> Result<Vec<CapabilityDefinition>, SdkError> {
@@ -281,5 +288,3 @@ fn configuration_error(error: crm_module_sdk::IdentifierError) -> SdkError {
     )
     .with_internal_reference(error.to_string())
 }
-
-pub const CRATE_NAME: &str = "crm-party-reference-composition";
