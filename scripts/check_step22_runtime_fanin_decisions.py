@@ -179,6 +179,12 @@ def validate_governance_registration(root: Path) -> None:
             "architecture governance must contain exactly one canonical Step 22 "
             "runtime fan-in registration"
         )
+    for field in ("path", "validator"):
+        registered_path = matching[0][field]
+        if not (root / registered_path).is_file():
+            raise DecisionLedgerError(
+                f"registered Step 22 {field} does not exist: {registered_path}"
+            )
 
 
 def inventory_rows(inventory: dict[str, Any]) -> dict[str, dict[str, str]]:
@@ -446,6 +452,13 @@ def validate_remediation(
         raise DecisionLedgerError(
             "Customer Privacy production lost control query inventory"
         )
+    privacy_root = (
+        root / "crates/crm-customer-privacy-production/src/root.rs"
+    ).read_text(encoding="utf-8")
+    if "control_query_visibility_resources" not in privacy_root:
+        raise DecisionLedgerError(
+            "Customer Privacy production does not expose control visibility resources"
+        )
 
 
 def validate_payload(
@@ -546,6 +559,9 @@ def validate_payload(
         final_by_id[stable_id] = (classification, boundary_id)
 
     unresolved = set(inventory_by_id) - set(final_by_id)
+    if set(final_by_id) | unresolved != set(inventory_by_id):
+        raise DecisionLedgerError("decision coverage does not match inventory")
+
     computed = Counter(classification for classification, _ in final_by_id.values())
     computed_counts = {
         "all": len(inventory_by_id),
