@@ -24,58 +24,62 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_step_22f_post_merge_packet_lifecycle_sync_is_exact(self) -> None:
+    def test_active_step_22g_data_quality_adapter_fanin_reduction_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             packet["packet_id"],
-            "repository-step-22f-post-merge-packet-lifecycle-sync",
+            "repository-step-22g-data-quality-adapter-fanin-reduction",
         )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
-            {"ref": "main", "sha": "e564180c0525fabf73a022298fa706c54857909f"},
+            {"ref": "main", "sha": "7c714fe4edac2c382a38957506acd149416d4464"},
         )
         self.assertEqual(packet["tracking_issues"], [194])
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
-                ".github/workflows/customer-privacy-approval.yml",
+                "Cargo.lock",
+                "crates/crm-application-runtime/Cargo.toml",
+                "crates/crm-application-runtime/tests/data_quality_registration_contract.rs",
                 "docs/ACTIVE_PACKET.md",
+                "docs/STEP22_DATA_QUALITY_ADAPTER_FANIN_REDUCTION.md",
                 "repository-packet.json",
+                "scripts/check_step22_runtime_fanin_decisions.py",
+                "step22-runtime-fanin-decisions.json",
                 "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
             },
         )
         forbidden_paths = set(packet["forbidden_paths"])
         for path in (
-            "Cargo.lock",
-            "Cargo.toml",
-            "crates/**",
-            "docs/STEP22_CONTACT_POINTS_CAPABILITY_FANIN_REDUCTION.md",
-            "scripts/**",
+            ".github/**",
+            "crates/crm-data-quality-capability-adapter/**",
+            "crates/crm-data-quality-query-adapter/**",
+            "crates/crm-data-quality-source-composition/**",
+            "crates/crm-first-party-modules/**",
+            "docs/generated/REPOSITORY_MAP.md",
             "step22-architecture-inventory.json",
-            "step22-runtime-fanin-decisions.json",
         ):
             self.assertIn(path, forbidden_paths)
         deliverables = " ".join(packet["deliverables"])
         acceptance = " ".join(packet["acceptance"])
         non_goals = " ".join(packet["non_goals"])
-        self.assertIn("github.event.before", deliverables)
-        self.assertIn("38 of 38", acceptance)
-        self.assertIn("3144ffd9ec8c21c7222e9bcb6e88c4003122cc7e", acceptance)
-        self.assertIn("Step 22G", non_goals)
-        self.assertIn("packet-check", non_goals)
+        self.assertIn("57 total 56 production 1 test-only", deliverables)
+        self.assertIn("23 final 6 removed 40 unresolved", deliverables)
+        self.assertIn("crm-data-quality-source-composition", acceptance)
+        self.assertIn("Identity Resolution", non_goals)
         self.assertEqual(
             validate_decisions(ROOT),
             {
                 "all": 63,
-                "final": 21,
+                "final": 23,
                 "platform_generic": 16,
                 "test_only": 1,
-                "removed": 4,
+                "removed": 6,
                 "owner_specific_unavoidable": 0,
-                "unresolved": 42,
+                "unresolved": 40,
             },
         )
 
@@ -90,11 +94,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-22f-post-merge-packet-lifecycle-sync",
+            "repository-step-22g-data-quality-adapter-fanin-reduction",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "e564180c0525fabf73a022298fa706c54857909f",
+            "7c714fe4edac2c382a38957506acd149416d4464",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -134,9 +138,13 @@ class RepositoryNavigationTests(unittest.TestCase):
         packet = load_packet(ROOT)
         workflow_paths = {
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
-            "Customer Privacy Approval CI": ".github/workflows/customer-privacy-approval.yml",
+            "Application Runtime CI": ".github/workflows/application-runtime.yml",
+            "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
+            "Data Quality Privacy Scope CI": ".github/workflows/data-quality-privacy-scope.yml",
+            "Data Quality Process Runtime CI": ".github/workflows/data-quality-process-runtime.yml",
             "Governance CI": ".github/workflows/governance.yml",
             "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
+            "Rust CI": ".github/workflows/rust.yml",
         }
         affected = {
             "head_sha": "b" * 40,
@@ -147,7 +155,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 22F post-merge packet lifecycle sync"],
+                    "reasons": ["Step 22G Data Quality adapter fan-in reduction"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -155,7 +163,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="e564180c0525fabf73a022298fa706c54857909f",
+                return_value="7c714fe4edac2c382a38957506acd149416d4464",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(
