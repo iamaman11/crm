@@ -97,6 +97,7 @@ EXPECTED_REMEDIATION = {
             "replacement_boundary": "crm-contact-points-capability-composition",
             "runtime_sources": [
                 "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+                "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
             ],
             "stable_id": REMOVED_CONTACT_POINTS_CAPABILITY_STABLE_ID,
         },
