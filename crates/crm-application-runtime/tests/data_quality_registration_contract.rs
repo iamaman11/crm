@@ -27,6 +27,9 @@ fn application_runtime_registers_exact_data_quality_definition_publications() {
         assert_eq!(definition.risk, expected.risk);
         assert_eq!(definition.output_contract, expected.output_contract);
         assert_eq!(definition.mutation, expected.mutation);
-        assert_eq!(definition.requires_idempotency, expected.requires_idempotency);
+        assert_eq!(
+            definition.requires_idempotency,
+            expected.requires_idempotency
+        );
     }
 }
