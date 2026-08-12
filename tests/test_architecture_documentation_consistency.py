@@ -215,40 +215,53 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_step_22f_contact_points_capability_fanin_packet_is_exact(self) -> None:
+    def test_active_step_22f_post_merge_packet_lifecycle_sync_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-22f-contact-points-capability-fanin-reduction",
+            "repository-step-22f-post-merge-packet-lifecycle-sync",
         )
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "17985f32806b239f6063159113f72d2f561c6c5a"},
+            {"ref": "main", "sha": "e564180c0525fabf73a022298fa706c54857909f"},
         )
         self.assertEqual(self.packet["tracking_issues"], [194])
-        allowed_paths = set(self.packet["allowed_paths"])
+        self.assertEqual(
+            set(self.packet["allowed_paths"]),
+            {
+                ".github/workflows/customer-privacy-approval.yml",
+                "docs/ACTIVE_PACKET.md",
+                "repository-packet.json",
+                "tests/test_architecture_documentation_consistency.py",
+                "tests/test_repository_navigation.py",
+            },
+        )
+        forbidden_paths = set(self.packet["forbidden_paths"])
         for path in (
             "Cargo.lock",
-            "crates/crm-application-runtime/Cargo.toml",
-            "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
-            "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs",
-            "crates/crm-contact-points-capability-composition/src/lib.rs",
+            "Cargo.toml",
+            "crates/**",
             "docs/STEP22_CONTACT_POINTS_CAPABILITY_FANIN_REDUCTION.md",
-            "scripts/check_step22_runtime_fanin_decisions.py",
+            "scripts/**",
+            "step22-architecture-inventory.json",
             "step22-runtime-fanin-decisions.json",
-            "tests/test_architecture_documentation_consistency.py",
-            "tests/test_native_module_composition.py",
-            "tests/test_repository_navigation.py",
-            "tests/test_workspace_analysis.py",
         ):
-            self.assertIn(path, allowed_paths)
-        forbidden_paths = set(self.packet["forbidden_paths"])
-        self.assertIn(".github/workflows/**", forbidden_paths)
-        self.assertNotIn("Cargo.toml", allowed_paths)
-        self.assertNotIn("Cargo.toml", forbidden_paths)
-        self.assertIn("step22-architecture-inventory.json", forbidden_paths)
+            self.assertIn(path, forbidden_paths)
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
+
+        approval = read(".github/workflows/customer-privacy-approval.yml")
+        for marker in (
+            "EVENT_NAME: ${{ github.event_name }}",
+            "PR_BASE_REF: ${{ github.base_ref }}",
+            "PUSH_BEFORE_SHA: ${{ github.event.before }}",
+            'PACKET_BASE_REF="origin/${PR_BASE_REF}"',
+            'PACKET_BASE_REF="${PUSH_BEFORE_SHA}"',
+            'python scripts/repo.py packet-check --base "${PACKET_BASE_REF}"',
+            "0000000000000000000000000000000000000000",
+        ):
+            self.assertIn(marker, approval)
+        self.assertNotIn("github.base_ref || 'main'", approval)
 
         counts = validate_decisions(ROOT)
         self.assertEqual(
@@ -263,10 +276,12 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "unresolved": 42,
             },
         )
+        acceptance = " ".join(self.packet["acceptance"])
         non_goals = " ".join(self.packet["non_goals"])
-        self.assertIn("classify crm-contact-points-capability-composition", non_goals)
-        self.assertIn("remediate another crm-application-runtime dependency", non_goals)
-        self.assertIn("declare all runtime classifications complete", non_goals)
+        self.assertIn("38 of 38", acceptance)
+        self.assertIn("3144ffd9ec8c21c7222e9bcb6e88c4003122cc7e", acceptance)
+        self.assertIn("Step 22G", non_goals)
+        self.assertIn("packet-check", non_goals)
 
         operations_scope = next(
             scope
