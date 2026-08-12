@@ -9,9 +9,9 @@ Baseline: PR #301 squash merge `eac6707e6799f74e761ede39d852bf8de7ac6a77`
 
 Step 22A froze 63 direct internal dependencies of `crm-application-runtime`. Step 22C removed the Customer Privacy query-adapter edge and Step 22D removed the Customer 360 query-adapter edge, leaving 61 current direct internal dependencies: 60 production and 1 test-only.
 
-`crm-party-reference-composition` already owns the complete Parties production/reference composition boundary. It retains `crm-parties-capability-adapter` internally, builds Parties mutation/query contributions, validates Party references and centralizes Party transaction/reference semantics. The generic process runtime nevertheless still depended directly on `crm-parties-capability-adapter` only to obtain the Parties `MODULE_ID` and `RECORD_TYPE` for bootstrap visibility metadata.
+`crm-party-reference-composition` already owns the complete Parties production/reference composition boundary. It retains `crm-parties-capability-adapter` internally, builds Parties mutation/query contributions, validates Party references and centralizes Party transaction/reference semantics. The generic process runtime nevertheless still depended directly on `crm-parties-capability-adapter` only to obtain stable Parties bootstrap identity metadata: `MODULE_ID`, `RECORD_TYPE`, `CREATE_CAPABILITY` and `UPDATE_CAPABILITY`. It did not require Parties business execution semantics from that adapter.
 
-Step 22E exposes the exact Parties runtime identity through the existing Parties production/reference boundary and removes the redundant adapter dependency from the generic runtime.
+Step 22E exposes that exact stable Parties runtime identity through the existing Parties production/reference boundary and removes the redundant adapter dependency and direct source imports from the generic runtime.
 
 ## Exact before and after
 
@@ -40,7 +40,7 @@ Before:
 ```text
 crm-application-runtime
   -> crm-parties-capability-adapter
-       -> MODULE_ID / RECORD_TYPE
+       -> MODULE_ID / RECORD_TYPE / CREATE_CAPABILITY / UPDATE_CAPABILITY
 
 crm-application-runtime
   -> crm-party-reference-composition
@@ -57,7 +57,7 @@ crm-application-runtime
        -> crm-parties-capability-adapter (owner-internal)
 ```
 
-The runtime no longer knows the capability adapter as a direct dependency. The existing owner boundary remains responsible for the adapter and exposes only the minimal stable identity required for bootstrap composition.
+The runtime no longer knows the capability adapter as a direct dependency or direct source import. The existing owner boundary remains responsible for the adapter and exposes only the minimal stable identity required for bootstrap composition.
 
 ## Public-surface neutrality
 
@@ -73,7 +73,7 @@ and replaces it with the one public runtime-identity accessor actually consumed 
 
 This packet changes no Parties capability ID, query ID, Protobuf schema, persisted-state schema, record type, database migration, tenant/RLS semantics, authorization rule, idempotency behavior, audit/event behavior, Party reference validation, Customer 360 visibility meaning or Search visibility meaning.
 
-Bootstrap visibility still uses exactly the same Parties owner-module and record-type values. Only their package-level source is moved behind the existing owner production/reference boundary.
+Bootstrap visibility and worker bootstrap authorization still use exactly the same Parties module, record and mutation capability identifiers. Only their package-level source is moved behind the existing owner production/reference boundary.
 
 ## Lockfile contract
 
@@ -84,10 +84,10 @@ Bootstrap visibility still uses exactly the same Parties owner-module and record
 Permanent validation must prove all of the following:
 
 - the runtime manifest no longer directly depends on `crm-parties-capability-adapter`;
-- runtime bootstrap visibility no longer imports the adapter;
+- no `crm-application-runtime` production source directly imports `crm_parties_capability_adapter`;
 - `crm-party-reference-composition` still depends on and owns the adapter internally;
 - the owner boundary exports `parties_runtime_identity()`;
-- the runtime consumes that exact boundary;
+- the runtime consumes that exact boundary for Parties module, record and mutation capability identity;
 - the current direct runtime set is exactly the immutable Step 22A set minus the three accepted removals;
 - counts are exactly 60 total / 59 production / 1 test-only;
 - the decision ledger is exactly 20 final / 3 removed / 43 unresolved;
