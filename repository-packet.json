@@ -19,6 +19,7 @@
     "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
     "crates/crm-application-runtime/src/export_selection_bootstrap.rs",
     "crates/crm-application-runtime/src/runtime.rs",
+    "crates/crm-application-runtime/tests/postgres_customer_enrichment_application_worker.rs",
     "crates/crm-application-runtime/tests/support/customer_enrichment_consent_policy.rs",
     "crates/crm-application-runtime/tests/support/customer_enrichment_suggestion_get/domain.rs",
     "crates/crm-party-reference-composition/src/lib.rs",

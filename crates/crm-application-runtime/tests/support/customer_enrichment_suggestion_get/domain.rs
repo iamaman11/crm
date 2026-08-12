@@ -2,9 +2,7 @@ use super::{NOW, TENANT, actor, tenant};
 use crm_application_composition::ModuleActivationPort;
 use crm_capability_ingress::semantic_input_hash;
 use crm_capability_plan_support as support;
-use crm_capability_runtime::{
-    CapabilityDefinition, CapabilityRequest, TransactionalCapabilityExecutor,
-};
+use crm_capability_runtime::{CapabilityDefinition, CapabilityRequest};
 use crm_core_data::{AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan};
 use crm_customer_enrichment::{
     EnrichmentRequest, EnrichmentRequestDraft, MappingDraft, MappingNormalization, MappingVersion,
