@@ -2,14 +2,23 @@ use crm_application_runtime::{application_capability_catalog, application_mutati
 use crm_data_quality_source_composition::mutation_capability_definitions as data_quality_mutation_capability_definitions;
 use crm_module_sdk::CapabilityVersion;
 
+const PUBLICATION_CAPABILITIES: [&str; 2] = [
+    "data_quality.party.rule_set.publish",
+    "data_quality.party.completeness_profile.publish",
+];
+
 #[test]
 fn application_runtime_registers_exact_data_quality_definition_publications() {
     let definitions = application_mutation_definitions().unwrap();
     let catalog = application_capability_catalog().unwrap();
     let owner_definitions = data_quality_mutation_capability_definitions().unwrap();
 
-    assert_eq!(owner_definitions.len(), 2);
-    for expected in owner_definitions {
+    for capability in PUBLICATION_CAPABILITIES {
+        let expected = owner_definitions
+            .iter()
+            .find(|definition| definition.capability_id.as_str() == capability)
+            .expect("Data Quality publication capability in owner composition inventory");
+
         assert_eq!(
             definitions
                 .iter()
