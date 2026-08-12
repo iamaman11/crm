@@ -353,7 +353,6 @@ dependencies = [
  "crm-metadata-api-adapter",
  "crm-metadata-query-adapter",
  "crm-module-sdk",
- "crm-parties-capability-adapter",
  "crm-parties-query-adapter",
  "crm-party-reference-composition",
  "crm-party-relationships-capability-adapter",

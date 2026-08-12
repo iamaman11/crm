@@ -12,12 +12,10 @@ use crm_customer_data_operations_query_adapter::{
     GET_EXPORT_JOB_CAPABILITY, LIST_EXPORT_JOBS_CAPABILITY,
 };
 use crm_module_sdk::{ActorId, ModuleId, RecordType};
-use crm_parties_capability_adapter::{
-    MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE,
-};
 use crm_parties_query_adapter::{
     GET_CAPABILITY as PARTY_GET_QUERY_CAPABILITY, LIST_CAPABILITY as PARTY_LIST_QUERY_CAPABILITY,
 };
+use crm_party_reference_composition::parties_runtime_identity;
 use std::collections::BTreeSet;
 
 const POLICY_VERSION: &str = "application-bootstrap/v1";
@@ -40,15 +38,16 @@ pub(crate) fn bootstrap_export_selection_worker_access(
     let expires_at = now_unix_nanos.checked_add(LIFETIME_NANOS).ok_or_else(|| {
         ApplicationRuntimeError::Assembly("export worker grant expiry overflow".to_owned())
     })?;
+    let (parties_module_id, party_record_type, _, _) = parties_runtime_identity();
     let party_list = find_query(
         access.query_definitions,
-        PARTIES_MODULE_ID,
+        parties_module_id,
         PARTY_LIST_QUERY_CAPABILITY,
         "Party list",
     )?;
     let party_get = find_query(
         access.query_definitions,
-        PARTIES_MODULE_ID,
+        parties_module_id,
         PARTY_GET_QUERY_CAPABILITY,
         "Party get",
     )?;
@@ -90,8 +89,8 @@ pub(crate) fn bootstrap_export_selection_worker_access(
             tenant_id,
             access.worker_actor_id,
             party_list,
-            PARTIES_MODULE_ID,
-            PARTY_RECORD_TYPE,
+            parties_module_id,
+            party_record_type,
             ["kind", "display_name"],
             expires_at,
         )?;
@@ -108,8 +107,8 @@ pub(crate) fn bootstrap_export_selection_worker_access(
             tenant_id,
             &execution_actor_id,
             party_get,
-            PARTIES_MODULE_ID,
-            PARTY_RECORD_TYPE,
+            parties_module_id,
+            party_record_type,
             ["kind", "display_name"],
             expires_at,
         )?;

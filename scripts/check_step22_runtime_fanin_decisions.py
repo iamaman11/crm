@@ -28,9 +28,13 @@ REMOVED_PRIVACY_QUERY_STABLE_ID = (
 REMOVED_CUSTOMER_360_QUERY_STABLE_ID = (
     "crm-application-runtime::dependencies::crm-customer-360-query-adapter"
 )
+REMOVED_PARTIES_CAPABILITY_STABLE_ID = (
+    "crm-application-runtime::dependencies::crm-parties-capability-adapter"
+)
 EXPECTED_REMOVED_STABLE_IDS = {
     REMOVED_CUSTOMER_360_QUERY_STABLE_ID,
     REMOVED_PRIVACY_QUERY_STABLE_ID,
+    REMOVED_PARTIES_CAPABILITY_STABLE_ID,
 }
 EXPECTED_REGISTRATION = {
     "id": "repository-step-22-runtime-fanin",
@@ -44,7 +48,7 @@ EXPECTED_REGISTRATION = {
     "validator": "scripts/check_step22_runtime_fanin_decisions.py",
 }
 EXPECTED_REMEDIATION = {
-    "after": {"all": 61, "production": 60, "test_only": 1},
+    "after": {"all": 60, "production": 59, "test_only": 1},
     "before": {"all": 63, "production": 62, "test_only": 1},
     "removals": [
         {
@@ -72,14 +76,24 @@ EXPECTED_REMEDIATION = {
             ],
             "stable_id": REMOVED_PRIVACY_QUERY_STABLE_ID,
         },
+        {
+            "adapter_package": "crm-parties-capability-adapter",
+            "owner_manifest": "crates/crm-party-reference-composition/Cargo.toml",
+            "owner_sources": ["crates/crm-party-reference-composition/src/lib.rs"],
+            "replacement_boundary": "crm-party-reference-composition",
+            "runtime_sources": [
+                "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+            ],
+            "stable_id": REMOVED_PARTIES_CAPABILITY_STABLE_ID,
+        },
     ],
     "removed_stable_ids": [
         REMOVED_CUSTOMER_360_QUERY_STABLE_ID,
         REMOVED_PRIVACY_QUERY_STABLE_ID,
+        REMOVED_PARTIES_CAPABILITY_STABLE_ID,
     ],
     "runtime_manifest": "crates/crm-application-runtime/Cargo.toml",
 }
-
 
 
 class DecisionLedgerError(RuntimeError):
@@ -191,8 +205,8 @@ def validate_remediation(
     }
     if removed_ids != EXPECTED_REMOVED_STABLE_IDS:
         raise DecisionLedgerError(
-            "Step 22D must record exactly the accepted Customer Privacy and "
-            "Customer 360 query-adapter removals"
+            "Step 22E must record exactly the accepted Customer Privacy, "
+            "Customer 360 and Parties capability-adapter removals"
         )
     if current_ids != accepted_ids - removed_ids:
         added = sorted(current_ids - accepted_ids)
@@ -211,7 +225,7 @@ def validate_remediation(
     }
     if current_counts != EXPECTED_REMEDIATION["after"]:
         raise DecisionLedgerError(
-            f"current runtime fan-in is not the exact cumulative 63 to 61 reduction: {current_counts}"
+            f"current runtime fan-in is not the exact cumulative 63 to 60 reduction: {current_counts}"
         )
 
     runtime_manifest = tomllib.loads(
@@ -281,6 +295,18 @@ def validate_remediation(
                 f"runtime source is missing replacement boundary marker: {replacement_marker}"
             )
 
+    runtime_source_root = root / "crates/crm-application-runtime"
+    parties_direct_sources = sorted(
+        source.relative_to(root).as_posix()
+        for source in runtime_source_root.rglob("*.rs")
+        if "crm_parties_capability_adapter" in source.read_text(encoding="utf-8")
+    )
+    if parties_direct_sources:
+        raise DecisionLedgerError(
+            "crm-application-runtime still references removed Parties capability adapter "
+            f"outside the owner boundary: {parties_direct_sources}"
+        )
+
     first_party_source = (
         root / "crates/crm-first-party-modules/src/lib.rs"
     ).read_text(encoding="utf-8")
@@ -298,6 +324,22 @@ def validate_remediation(
     if "crm_first_party_modules::CUSTOMER_360_MODULE_ID" not in registry_source:
         raise DecisionLedgerError(
             "bootstrap visibility does not consume Customer 360 identity through first-party boundary"
+        )
+    if "crm_party_reference_composition::parties_runtime_identity" not in registry_source:
+        raise DecisionLedgerError(
+            "bootstrap visibility does not consume Parties identity through the owner production/reference boundary"
+        )
+
+    party_reference_source = (
+        root / "crates/crm-party-reference-composition/src/lib.rs"
+    ).read_text(encoding="utf-8")
+    if "pub fn parties_runtime_identity()" not in party_reference_source:
+        raise DecisionLedgerError(
+            "Parties production/reference boundary does not expose runtime identity"
+        )
+    if 'pub const CRATE_NAME: &str = "crm-party-reference-composition"' in party_reference_source:
+        raise DecisionLedgerError(
+            "Parties runtime identity addition must remain public-surface neutral by retiring the unused CRATE_NAME marker"
         )
 
     privacy_legal_hold = (
@@ -329,7 +371,7 @@ def validate_payload(
         raise DecisionLedgerError("unexpected runtime fan-in decision schema")
     if decisions.get("phase") != "partial-classification-and-remediation":
         raise DecisionLedgerError(
-            "Step 22D must remain partial-classification-and-remediation"
+            "Step 22E must remain partial-classification-and-remediation"
         )
     if set(decisions.get("allowed_final_classifications", [])) != FINAL_CLASSIFICATIONS:
         raise DecisionLedgerError("ADR-032 final classification enum changed")
@@ -409,11 +451,11 @@ def validate_payload(
         elif classification == "removed":
             if stable_id not in EXPECTED_REMOVED_STABLE_IDS:
                 raise DecisionLedgerError(
-                    f"Step 22D does not authorize another removal: {stable_id}"
+                    f"Step 22E does not authorize another removal: {stable_id}"
                 )
         else:
             raise DecisionLedgerError(
-                "Step 22D cannot record owner-specific-unavoidable without the "
+                "Step 22E cannot record owner-specific-unavoidable without the "
                 "complete ADR-032 evidence contract"
             )
         final_by_id[stable_id] = (classification, boundary_id)
@@ -447,10 +489,10 @@ def validate_payload(
         "step22_complete": False,
     }
     if decisions.get("decision_boundary") != expected_boundary:
-        raise DecisionLedgerError("Step 22D decision boundary is overstated")
+        raise DecisionLedgerError("Step 22E decision boundary is overstated")
     if not unresolved:
         raise DecisionLedgerError(
-            "Step 22D must not claim full classification or Step 22 closure"
+            "Step 22E must not claim full classification or Step 22 closure"
         )
 
     validate_remediation(root, decisions, set(inventory_by_id), final_by_id)

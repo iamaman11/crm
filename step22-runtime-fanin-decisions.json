@@ -101,6 +101,20 @@
       "prevented_boundary": "Aggregates owner-owned production contributions without making the process host own each capability.",
       "review_condition": "Re-review if a new owner requires a direct crm-application-runtime dependency instead of an owner contribution."
     },
+    "parties-capability-adapter-fanin-remediation": {
+      "classification": "removed",
+      "evidence_paths": [
+        "Cargo.lock",
+        "crates/crm-application-runtime/Cargo.toml",
+        "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+        "crates/crm-party-reference-composition/Cargo.toml",
+        "crates/crm-party-reference-composition/src/lib.rs",
+        "scripts/check_step22_runtime_fanin_decisions.py"
+      ],
+      "owner": "crm.parties / architecture-governance",
+      "prevented_boundary": "Keeps Parties capability-adapter implementation details behind the existing Parties production/reference composition boundary instead of exposing the adapter to the generic process host merely for module and record identity.",
+      "review_condition": "Fail if crm-application-runtime regains a direct crm-parties-capability-adapter dependency or source import while crm-party-reference-composition remains the owner production/reference boundary."
+    },
     "protobuf-contract-platform": {
       "classification": "platform-generic",
       "evidence_paths": [
@@ -156,12 +170,12 @@
   },
   "counts": {
     "all": 63,
-    "final": 19,
+    "final": 20,
     "owner_specific_unavoidable": 0,
     "platform_generic": 16,
-    "removed": 2,
+    "removed": 3,
     "test_only": 1,
-    "unresolved": 44
+    "unresolved": 43
   },
   "decision_boundary": {
     "all_dependencies_present": true,
@@ -248,6 +262,11 @@
       "module-sdk-platform"
     ],
     [
+      "crm-application-runtime::dependencies::crm-parties-capability-adapter",
+      "removed",
+      "parties-capability-adapter-fanin-remediation"
+    ],
+    [
       "crm-application-runtime::dependencies::crm-proto-contracts",
       "platform-generic",
       "protobuf-contract-platform"
@@ -281,8 +300,8 @@
   "phase": "partial-classification-and-remediation",
   "remediation_evidence": {
     "after": {
-      "all": 61,
-      "production": 60,
+      "all": 60,
+      "production": 59,
       "test_only": 1
     },
     "before": {
@@ -317,11 +336,24 @@
           "crates/crm-application-runtime/src/customer_privacy_case_create_promotion.rs"
         ],
         "stable_id": "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter"
+      },
+      {
+        "adapter_package": "crm-parties-capability-adapter",
+        "owner_manifest": "crates/crm-party-reference-composition/Cargo.toml",
+        "owner_sources": [
+          "crates/crm-party-reference-composition/src/lib.rs"
+        ],
+        "replacement_boundary": "crm-party-reference-composition",
+        "runtime_sources": [
+          "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs"
+        ],
+        "stable_id": "crm-application-runtime::dependencies::crm-parties-capability-adapter"
       }
     ],
     "removed_stable_ids": [
       "crm-application-runtime::dependencies::crm-customer-360-query-adapter",
-      "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter"
+      "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter",
+      "crm-application-runtime::dependencies::crm-parties-capability-adapter"
     ],
     "runtime_manifest": "crates/crm-application-runtime/Cargo.toml"
   },

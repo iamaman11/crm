@@ -18,9 +18,7 @@ use crm_capability_runtime::{
     ApprovalEvidence, CapabilityApprovalVerifier, CapabilityDefinition, CapabilityGateway,
     CapabilityRateLimiter, CapabilityRequest, RateLimitDecision,
 };
-use crm_core_data::{
-    AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan, RecordGetQuery,
-};
+use crm_core_data::{AuditIntent, IdempotencyEvidence, PostgresDataStore, RecordCreatePlan};
 use crm_customer_enrichment::{
     APPLICATION_ATTEMPT_RECORD_TYPE, ApprovalRequirement, ReviewDecision, ReviewDecisionKind,
 };
@@ -38,18 +36,22 @@ use crm_module_sdk::testing::FixedClock;
 use crm_module_sdk::{
     ActorId, BusinessTransactionId, CapabilityId, CapabilityVersion, CausationId, Clock,
     CorrelationId, DataClass, DomainEvent, EventType, ExecutionContext, IdempotencyKey,
-    ModuleExecutionContext, ModuleId, PortFuture, RecordId, RecordType, RequestId, SchemaVersion,
+    ModuleExecutionContext, ModuleId, PortFuture, RecordRef, RecordType, RequestId, SchemaVersion,
     SdkError, TraceId,
 };
-use crm_parties_capability_adapter::{
-    MODULE_ID as PARTIES_MODULE_ID, RECORD_TYPE as PARTY_RECORD_TYPE,
-    UPDATE_CAPABILITY as PARTY_UPDATE_CAPABILITY, party_from_snapshot,
-};
 use crm_parties_query_adapter::{
-    GET_CAPABILITY as PARTY_GET_CAPABILITY, query_capability_definition as party_query_definition,
+    GET_CAPABILITY as PARTY_GET_CAPABILITY, PartyQueryAdapter,
+    query_capability_definition as party_query_definition,
 };
-use crm_proto_contracts::crm::customer_enrichment::v1 as wire;
-use crm_query_runtime::QueryVisibilityAuthorizer;
+use crm_party_reference_composition::parties_runtime_identity;
+use crm_proto_contracts::crm::{
+    customer::v1 as customer_wire, customer_enrichment::v1 as wire, parties::v1 as party_wire,
+};
+use crm_query_runtime::{
+    CursorCodec, QueryExecutionContext, QueryExecutor, QueryRequest, QueryVisibilityAuthorizer,
+    QueryVisibilityDecision,
+};
+use prost::Message as _;
 use sqlx::PgPool;
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -102,12 +104,13 @@ async fn production_application_worker_uses_governed_party_gateway_and_recovers_
         cursor_key: CURSOR_KEY,
     })
     .expect("assemble production composition");
+    let (parties_module_id, _, _, party_update_capability) = parties_runtime_identity();
     let party_update_definition = composition
         .mutation_definitions()
         .iter()
         .find(|definition| {
-            definition.owner_module_id.as_str() == PARTIES_MODULE_ID
-                && definition.capability_id.as_str() == PARTY_UPDATE_CAPABILITY
+            definition.owner_module_id.as_str() == parties_module_id
+                && definition.capability_id.as_str() == party_update_capability
         })
         .cloned()
         .expect("Party update route in production composition");
@@ -260,10 +263,11 @@ async fn production_application_worker_uses_governed_party_gateway_and_recovers_
 }
 
 async fn activate_modules(store: &PostgresDataStore) {
+    let (parties_module_id, _, _, _) = parties_runtime_identity();
     store
         .bootstrap_activate_published_modules(
             &BTreeSet::from([tenant(TENANT)]),
-            &BTreeSet::from([MODULE_ID.to_owned(), PARTIES_MODULE_ID.to_owned()]),
+            &BTreeSet::from([MODULE_ID.to_owned(), parties_module_id.to_owned()]),
         )
         .await
         .expect("activate Customer Enrichment and Parties");
@@ -385,13 +389,14 @@ fn worker_party_visibility(
     definition: &CapabilityDefinition,
     actor_id: &ActorId,
 ) -> QueryVisibilityGrant {
+    let (_, party_record_type, _, _) = parties_runtime_identity();
     QueryVisibilityGrant {
         tenant_id: tenant(TENANT),
         actor_id: actor_id.clone(),
         capability_id: definition.capability_id.clone(),
         capability_version: definition.capability_version.clone(),
         owner_module_id: definition.owner_module_id.clone(),
-        record_type: RecordType::try_new(PARTY_RECORD_TYPE).expect("Party record type"),
+        record_type: RecordType::try_new(party_record_type).expect("Party record type"),
         record_id: None,
         allowed_fields: BTreeSet::from(["display_name".to_owned()]),
         policy_version: "application-worker-visibility-v1".to_owned(),
@@ -414,21 +419,77 @@ async fn party_state(
     store: &PostgresDataStore,
     suggestion: &crm_customer_enrichment::Suggestion,
 ) -> (i64, String) {
-    let party_id = RecordId::try_new(suggestion.target().resource_id.as_str())
-        .expect("canonical suggestion Party id");
-    let snapshot = store
-        .get_record_for_query(&RecordGetQuery {
+    let (parties_module_id, _, _, _) = parties_runtime_identity();
+    let definition = party_query_definition(PARTY_GET_CAPABILITY).expect("Party get definition");
+    let adapter = PartyQueryAdapter::new(
+        store.clone(),
+        CursorCodec::new(CURSOR_KEY).expect("Party state cursor key"),
+        Arc::new(AllowPartyStateVisibility),
+    )
+    .expect("build Party state query adapter");
+    let input = plan_support::protobuf_payload(
+        parties_module_id,
+        definition.input_contract.schema_id.as_str(),
+        DataClass::Personal,
+        &party_wire::GetPartyRequest {
+            party_ref: Some(customer_wire::PartyRef {
+                party_id: suggestion.target().resource_id.as_str().to_owned(),
+            }),
+        },
+    )
+    .expect("encode Party state query");
+    let request = QueryRequest {
+        owner_module_id: definition.owner_module_id.clone(),
+        context: QueryExecutionContext {
             tenant_id: tenant(TENANT),
-            owner_module_id: ModuleId::try_new(PARTIES_MODULE_ID).expect("Parties module id"),
-            record_type: RecordType::try_new(PARTY_RECORD_TYPE).expect("Party record type"),
-            record_id: party_id,
-        })
+            actor_id: actor(),
+            request_id: RequestId::try_new("application-worker-party-state-request")
+                .expect("Party state request id"),
+            correlation_id: CorrelationId::try_new("application-worker-party-state-correlation")
+                .expect("Party state correlation id"),
+            trace_id: TraceId::try_new("application-worker-party-state-trace")
+                .expect("Party state trace id"),
+            capability_id: definition.capability_id.clone(),
+            capability_version: definition.capability_version.clone(),
+            schema_version: SchemaVersion::try_new("1.0.0").expect("Party state schema version"),
+            request_started_at_unix_nanos: NOW,
+        },
+        input_hash: semantic_input_hash(&input),
+        input,
+    };
+    let result = adapter
+        .execute(&definition, request)
         .await
-        .expect("read Party state")
-        .expect("Party exists");
-    let version = snapshot.version;
-    let party = party_from_snapshot(&snapshot).expect("decode Party state");
-    (version, party.display_name().to_owned())
+        .expect("read Party state through query adapter");
+    let response = party_wire::GetPartyResponse::decode(result.output.bytes.as_slice())
+        .expect("decode Party state query response");
+    let party = response.party.expect("Party exists");
+    let version = party
+        .resource_version
+        .as_ref()
+        .expect("Party resource version")
+        .version;
+    (version, party.display_name)
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AllowPartyStateVisibility;
+
+impl QueryVisibilityAuthorizer for AllowPartyStateVisibility {
+    fn authorize_visibility<'a>(
+        &'a self,
+        _request: &'a QueryRequest,
+        _resource: &'a RecordRef,
+    ) -> PortFuture<'a, Result<QueryVisibilityDecision, SdkError>> {
+        Box::pin(async {
+            Ok(QueryVisibilityDecision {
+                resource_visible: true,
+                allowed_fields: BTreeSet::from(["display_name".to_owned()]),
+                decision_id: "application-worker-party-state".to_owned(),
+                policy_version: "application-worker-party-state/v1".to_owned(),
+            })
+        })
+    }
 }
 
 fn test_configuration_error(error: impl std::fmt::Display) -> SdkError {
