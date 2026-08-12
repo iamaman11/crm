@@ -90,12 +90,7 @@ pub struct PartiesProductionDependencies {
 /// Exposes the exact Parties module, record and mutation capability identity through the existing
 /// owner production/reference boundary so generic process composition does not depend on the
 /// capability adapter merely to bootstrap stable metadata.
-pub fn parties_runtime_identity() -> (
-    &'static str,
-    &'static str,
-    &'static str,
-    &'static str,
-) {
+pub fn parties_runtime_identity() -> (&'static str, &'static str, &'static str, &'static str) {
     (
         PARTIES_MODULE_ID,
         RECORD_TYPE,
