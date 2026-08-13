@@ -25,6 +25,9 @@ FINAL_CLASSIFICATIONS = {
 REMOVED_PRIVACY_QUERY_STABLE_ID = (
     "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter"
 )
+REMOVED_CONSENTS_QUERY_STABLE_ID = (
+    "crm-application-runtime::dependencies::crm-consents-query-adapter"
+)
 REMOVED_CUSTOMER_360_QUERY_STABLE_ID = (
     "crm-application-runtime::dependencies::crm-customer-360-query-adapter"
 )
@@ -53,6 +56,7 @@ REMOVED_IDENTITY_QUERY_STABLE_ID = (
     "crm-application-runtime::dependencies::crm-identity-resolution-query-adapter"
 )
 EXPECTED_REMOVED_STABLE_IDS = {
+    REMOVED_CONSENTS_QUERY_STABLE_ID,
     REMOVED_CONTACT_POINTS_CAPABILITY_STABLE_ID,
     REMOVED_CUSTOMER_360_QUERY_STABLE_ID,
     REMOVED_PRIVACY_QUERY_STABLE_ID,
@@ -76,7 +80,7 @@ EXPECTED_REGISTRATION = {
     "validator": "scripts/check_step22_runtime_fanin_decisions.py",
 }
 EXPECTED_REMEDIATION = {
-    "after": {"all": 53, "production": 52, "test_only": 1},
+    "after": {"all": 52, "production": 51, "test_only": 1},
     "before": {"all": 63, "production": 62, "test_only": 1},
     "removals": [
         {
@@ -201,6 +205,19 @@ EXPECTED_REMEDIATION = {
             ],
             "stable_id": REMOVED_IDENTITY_QUERY_STABLE_ID,
         },
+        {
+            "adapter_package": "crm-consents-query-adapter",
+            "owner_manifest": "crates/crm-consents-capability-composition/Cargo.toml",
+            "owner_sources": [
+                "crates/crm-consents-capability-composition/src/lib.rs",
+                "crates/crm-first-party-modules/src/lib.rs",
+            ],
+            "replacement_boundary": "crm-first-party-modules",
+            "runtime_sources": [
+                "crates/crm-application-runtime/src/native_composition.rs",
+            ],
+            "stable_id": REMOVED_CONSENTS_QUERY_STABLE_ID,
+        },
     ],
     "removed_stable_ids": sorted(EXPECTED_REMOVED_STABLE_IDS),
     "runtime_manifest": "crates/crm-application-runtime/Cargo.toml",
@@ -313,7 +330,7 @@ def validate_remediation(
     }
     if removed_ids != EXPECTED_REMOVED_STABLE_IDS:
         raise DecisionLedgerError(
-            "Step 22H must record exactly the ten accepted cumulative removals"
+            "Step 22I must record exactly the eleven accepted cumulative removals"
         )
     if current_ids != accepted_ids - removed_ids:
         added = sorted(current_ids - accepted_ids)
@@ -330,7 +347,7 @@ def validate_remediation(
     }
     if current_counts != EXPECTED_REMEDIATION["after"]:
         raise DecisionLedgerError(
-            f"current runtime fan-in is not the exact cumulative 63 to 53 reduction: {current_counts}"
+            f"current runtime fan-in is not the exact cumulative 63 to 52 reduction: {current_counts}"
         )
 
     runtime_manifest = tomllib.loads(
@@ -403,6 +420,7 @@ def validate_remediation(
 
     runtime_source_root = root / "crates/crm-application-runtime"
     forbidden_markers = (
+        "crm_consents_query_adapter",
         "crm_parties_capability_adapter",
         "crm_contact_points_capability_adapter",
         "crm_data_quality_capability_adapter",
@@ -428,6 +446,9 @@ def validate_remediation(
         root / "crates/crm-first-party-modules/src/lib.rs"
     ).read_text(encoding="utf-8")
     for marker in (
+        "build_consents_contribution",
+        "mutation_capability_definitions as consents_mutation_capability_definitions",
+        "query_capability_definitions as consents_query_capability_definitions",
         "MODULE_ID as CUSTOMER_360_MODULE_ID",
         "query_capability_definitions as customer_360_query_capability_definitions",
         "build_data_quality_contribution",
@@ -459,6 +480,18 @@ def validate_remediation(
             "Contact Points identity through owner boundary",
         ),
         (
+            "crm_consents_capability_adapter",
+            "Consents capability-adapter bootstrap identity",
+        ),
+        (
+            "MODULE_ID as CONSENTS_MODULE_ID",
+            "Consents module identity",
+        ),
+        (
+            "RECORD_TYPE as CONSENT_RECORD_TYPE",
+            "Consents record identity",
+        ),
+        (
             "crm_identity_resolution_capability_adapter",
             "Identity Resolution capability-adapter bootstrap identity",
         ),
@@ -477,6 +510,21 @@ def validate_remediation(
     ):
         if marker not in registry_source:
             raise DecisionLedgerError(f"bootstrap visibility lost {message}")
+
+    consents_owner = (
+        root / "crates/crm-consents-capability-composition/src/lib.rs"
+    ).read_text(encoding="utf-8")
+    for marker in (
+        "crm_consents_capability_adapter",
+        "crm_consents_query_adapter",
+        "pub fn mutation_capability_definitions()",
+        "pub fn query_capability_definitions()",
+        "ConsentQueryAdapter::new",
+    ):
+        if marker not in consents_owner:
+            raise DecisionLedgerError(
+                f"Consents owner composition lost required marker: {marker}"
+            )
 
     data_quality_owner = (
         root / "crates/crm-data-quality-source-composition/src/production_contribution.rs"
@@ -572,7 +620,7 @@ def validate_payload(
         raise DecisionLedgerError("unexpected runtime fan-in decision schema")
     if decisions.get("phase") != "partial-classification-and-remediation":
         raise DecisionLedgerError(
-            "Step 22H must remain partial-classification-and-remediation"
+            "Step 22I must remain partial-classification-and-remediation"
         )
     if set(decisions.get("allowed_final_classifications", [])) != FINAL_CLASSIFICATIONS:
         raise DecisionLedgerError("ADR-032 final classification enum changed")
@@ -655,11 +703,11 @@ def validate_payload(
         elif classification == "removed":
             if stable_id not in EXPECTED_REMOVED_STABLE_IDS:
                 raise DecisionLedgerError(
-                    f"Step 22H does not authorize another removal: {stable_id}"
+                    f"Step 22I does not authorize another removal: {stable_id}"
                 )
         else:
             raise DecisionLedgerError(
-                "Step 22H cannot record owner-specific-unavoidable without the "
+                "Step 22I cannot record owner-specific-unavoidable without the "
                 "complete ADR-032 evidence contract"
             )
         final_by_id[stable_id] = (classification, boundary_id)
@@ -680,19 +728,19 @@ def validate_payload(
     }
     expected_counts = {
         "all": 63,
-        "final": 27,
+        "final": 28,
         "platform_generic": 16,
         "test_only": 1,
-        "removed": 10,
+        "removed": 11,
         "owner_specific_unavoidable": 0,
-        "unresolved": 36,
+        "unresolved": 35,
     }
     if (
         computed_counts != expected_counts
         or decisions.get("counts") != expected_counts
     ):
         raise DecisionLedgerError(
-            f"Step 22H decision counts drifted: computed={computed_counts} "
+            f"Step 22I decision counts drifted: computed={computed_counts} "
             f"recorded={decisions.get('counts')}"
         )
 
@@ -705,10 +753,10 @@ def validate_payload(
         "step22_complete": False,
     }
     if decisions.get("decision_boundary") != expected_boundary:
-        raise DecisionLedgerError("Step 22H decision boundary is overstated")
+        raise DecisionLedgerError("Step 22I decision boundary is overstated")
     if not unresolved:
         raise DecisionLedgerError(
-            "Step 22H must not claim full classification or Step 22 closure"
+            "Step 22I must not claim full classification or Step 22 closure"
         )
 
     validate_remediation(root, decisions, set(inventory_by_id), final_by_id)
