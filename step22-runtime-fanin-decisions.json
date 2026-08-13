@@ -19,6 +19,23 @@
       "prevented_boundary": "Provides generic ingress, planning, adapter and execution contracts independent of a business owner.",
       "review_condition": "Re-review if any component takes an owner-specific dependency or route responsibility."
     },
+    "consents-query-adapter-fanin-remediation": {
+      "classification": "removed",
+      "evidence_paths": [
+        "Cargo.lock",
+        "crates/crm-application-runtime/Cargo.toml",
+        "crates/crm-application-runtime/src/bootstrap_visibility/registry.rs",
+        "crates/crm-application-runtime/src/native_composition.rs",
+        "crates/crm-consents-capability-composition/Cargo.toml",
+        "crates/crm-consents-capability-composition/src/lib.rs",
+        "crates/crm-first-party-modules/Cargo.toml",
+        "crates/crm-first-party-modules/src/lib.rs",
+        "scripts/check_step22_runtime_fanin_decisions.py"
+      ],
+      "owner": "crm.consents / architecture-governance",
+      "prevented_boundary": "Keeps the Consents query-adapter implementation behind the existing Consents owner production composition and first-party aggregation boundaries instead of exposing a redundant direct query edge to the generic process host.",
+      "review_condition": "Fail if crm-application-runtime regains a direct crm-consents-query-adapter dependency or source import while crm-consents-capability-composition remains the accepted Consents production boundary."
+    },
     "consents-test-fixture": {
       "classification": "test-only",
       "evidence_paths": [
@@ -216,12 +233,12 @@
   },
   "counts": {
     "all": 63,
-    "final": 27,
+    "final": 28,
     "owner_specific_unavoidable": 0,
     "platform_generic": 16,
-    "removed": 10,
+    "removed": 11,
     "test_only": 1,
-    "unresolved": 36
+    "unresolved": 35
   },
   "decision_boundary": {
     "all_dependencies_present": true,
@@ -261,6 +278,11 @@
       "crm-application-runtime::dependencies::crm-capability-runtime",
       "platform-generic",
       "capability-platform"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-consents-query-adapter",
+      "removed",
+      "consents-query-adapter-fanin-remediation"
     ],
     [
       "crm-application-runtime::dependencies::crm-contact-points-capability-adapter",
@@ -381,8 +403,8 @@
   "phase": "partial-classification-and-remediation",
   "remediation_evidence": {
     "after": {
-      "all": 53,
-      "production": 52,
+      "all": 52,
+      "production": 51,
       "test_only": 1
     },
     "before": {
@@ -518,9 +540,23 @@
           "crates/crm-application-runtime/src/native_composition.rs"
         ],
         "stable_id": "crm-application-runtime::dependencies::crm-identity-resolution-query-adapter"
+      },
+      {
+        "adapter_package": "crm-consents-query-adapter",
+        "owner_manifest": "crates/crm-consents-capability-composition/Cargo.toml",
+        "owner_sources": [
+          "crates/crm-consents-capability-composition/src/lib.rs",
+          "crates/crm-first-party-modules/src/lib.rs"
+        ],
+        "replacement_boundary": "crm-first-party-modules",
+        "runtime_sources": [
+          "crates/crm-application-runtime/src/native_composition.rs"
+        ],
+        "stable_id": "crm-application-runtime::dependencies::crm-consents-query-adapter"
       }
     ],
     "removed_stable_ids": [
+      "crm-application-runtime::dependencies::crm-consents-query-adapter",
       "crm-application-runtime::dependencies::crm-contact-points-capability-adapter",
       "crm-application-runtime::dependencies::crm-customer-360-query-adapter",
       "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter",
