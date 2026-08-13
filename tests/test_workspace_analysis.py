@@ -464,7 +464,7 @@ jobs:
         )
         self.assertEqual(
             fresh["runtime_fanin"]["counts"],
-            {"all": 57, "production": 56, "test_only": 1, "build": 0},
+            {"all": 53, "production": 52, "test_only": 1, "build": 0},
         )
         self.assertEqual(
             fresh["permanent_gates"], committed["permanent_gates"]
@@ -482,12 +482,12 @@ jobs:
             decisions["counts"],
             {
                 "all": 63,
-                "final": 23,
+                "final": 27,
                 "platform_generic": 16,
                 "test_only": 1,
-                "removed": 6,
+                "removed": 10,
                 "owner_specific_unavoidable": 0,
-                "unresolved": 40,
+                "unresolved": 36,
             },
         )
         removed_ids = {
@@ -509,19 +509,27 @@ jobs:
                 "crm-application-runtime::dependencies::"
                 "crm-data-quality-query-adapter",
                 "crm-application-runtime::dependencies::"
+                "crm-identity-resolution-capability-composition",
+                "crm-application-runtime::dependencies::"
+                "crm-identity-resolution-merge-composition",
+                "crm-application-runtime::dependencies::"
+                "crm-identity-resolution-merge-query-adapter",
+                "crm-application-runtime::dependencies::"
+                "crm-identity-resolution-query-adapter",
+                "crm-application-runtime::dependencies::"
                 "crm-parties-capability-adapter",
             },
         )
         self.assertEqual(accepted_runtime_ids - current_runtime_ids, removed_ids)
         self.assertEqual(current_runtime_ids - accepted_runtime_ids, set())
-        self.assertEqual(len(current_runtime_ids), 57)
+        self.assertEqual(len(current_runtime_ids), 53)
         self.assertEqual(
             decisions["remediation_evidence"]["before"],
             {"all": 63, "production": 62, "test_only": 1},
         )
         self.assertEqual(
             decisions["remediation_evidence"]["after"],
-            {"all": 57, "production": 56, "test_only": 1},
+            {"all": 53, "production": 52, "test_only": 1},
         )
         self.assertTrue(
             decisions["decision_boundary"]["remediation_performed"]
