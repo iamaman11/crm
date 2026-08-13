@@ -1,14 +1,16 @@
 {
   "acceptance": [
-    "the branch is based exactly on main commit 7c714fe4edac2c382a38957506acd149416d4464",
+    "the branch is based exactly on main commit 48e3f2f3e0049505b92a08ac56320ce18a1a41d1",
     "the immutable Step 22A inventory remains unchanged at 63 total 62 production and 1 test-only accepted runtime direct internal dependencies",
-    "crm-application-runtime has no production Rust source use of crm-data-quality-capability-adapter or crm-data-quality-query-adapter and the only direct Data Quality adapter test use is moved through the existing crm-data-quality-source-composition owner boundary",
-    "crm-data-quality-source-composition continues to retain both Data Quality adapters internally and crm-first-party-modules continues to aggregate its mutation and query contribution without new generic-runtime owner semantics",
-    "the direct crm-application-runtime manifest and lock edges to crm-data-quality-capability-adapter and crm-data-quality-query-adapter are removed while both adapter package records and owner-internal lock edges remain",
-    "the Step 22 runtime state becomes exactly 57 total 56 production and 1 test-only direct internal dependencies with 23 final classifications 6 removals zero owner-specific-unavoidable and 40 unresolved dependencies",
-    "the permanent workspace-analysis current-state guard independently reproduces exactly 57 total 56 production 1 test-only and the same six cumulative removals without changing the immutable Step 22A baseline",
+    "crm-application-runtime has no Rust source test or example use of crm-identity-resolution-capability-composition crm-identity-resolution-merge-composition crm-identity-resolution-query-adapter or crm-identity-resolution-merge-query-adapter",
+    "crm-identity-resolution-capability-composition continues to retain crm-identity-resolution-merge-composition and both Identity Resolution query adapters internally and continues to construct candidate and merge mutation/query production behavior",
+    "crm-first-party-modules continues to aggregate Identity Resolution through crm-identity-resolution-capability-composition and continues to expose the existing mutation and query definition inventories consumed by generic application composition",
+    "crm-identity-resolution-capability-adapter remains a direct runtime edge because bootstrap visibility still consumes its Identity Resolution module and record constants",
+    "the direct crm-application-runtime manifest and lock edges to the four removed Identity Resolution packages are absent while their package records and owner-internal lock edges remain",
+    "the Step 22 runtime state becomes exactly 53 total 52 production and 1 test-only direct internal dependencies with 27 final classifications 10 removals zero owner-specific-unavoidable and 36 unresolved dependencies",
+    "the permanent workspace-analysis current-state guard independently reproduces exactly 53 total 52 production 1 test-only and the same ten cumulative removals without changing the immutable Step 22A baseline",
     "the conservative public Rust surface remains exactly 5377 with no new public item",
-    "the historical Step 22F implementation and lifecycle packet evidence remains unchanged",
+    "the historical Step 22G implementation and post-merge evidence remain unchanged",
     "generated repository navigation is synchronized only by canonical repository tooling",
     "one unchanged exact human-authored head passes every applicable permanent pull-request workflow with zero unresolved comments reviews or review threads",
     "after merge the merge tree is bit-for-bit identical to the exact-green candidate tree and every push-triggered workflow on the resulting main SHA succeeds before another Step 22 dependency cohort begins"
@@ -16,9 +18,8 @@
   "allowed_paths": [
     "Cargo.lock",
     "crates/crm-application-runtime/Cargo.toml",
-    "crates/crm-application-runtime/tests/data_quality_registration_contract.rs",
     "docs/ACTIVE_PACKET.md",
-    "docs/STEP22_DATA_QUALITY_ADAPTER_FANIN_REDUCTION.md",
+    "docs/STEP22_IDENTITY_RESOLUTION_FANIN_REDUCTION.md",
     "repository-packet.json",
     "scripts/check_step22_runtime_fanin_decisions.py",
     "step22-runtime-fanin-decisions.json",
@@ -28,17 +29,17 @@
   ],
   "baseline": {
     "ref": "main",
-    "sha": "7c714fe4edac2c382a38957506acd149416d4464"
+    "sha": "48e3f2f3e0049505b92a08ac56320ce18a1a41d1"
   },
   "deliverables": [
-    "remove the two redundant direct production Data Quality adapter dependencies from crm-application-runtime as one owner-backed dependency cohort",
-    "keep both adapters owned and consumed by crm-data-quality-source-composition and keep production mutation query execution authorization visibility and persistence semantics unchanged",
-    "move the Data Quality runtime registration integration test away from direct capability-adapter constants and verify the same two publication coordinates through the existing owner composition definition inventory",
-    "update the cumulative Step 22 decision ledger and permanent fan-in validator to exactly 57 total 56 production 1 test-only and 23 final 6 removed 40 unresolved",
-    "synchronize the permanent workspace-analysis current-state guard to independently reproduce the exact Step 22G fan-in and cumulative removal set while preserving the immutable accepted inventory",
-    "keep the accepted Step 22A inventory immutable and preserve step22_complete false",
-    "keep the conservative public Rust surface at 5377 without adding a public accessor or marker",
-    "regenerate Cargo.lock and docs/ACTIVE_PACKET.md canonically and keep docs/generated/REPOSITORY_MAP.md unchanged because workspace members module manifests and routes do not change"
+    "remove the redundant direct crm-identity-resolution-capability-composition, crm-identity-resolution-merge-composition, crm-identity-resolution-query-adapter and crm-identity-resolution-merge-query-adapter production dependencies from crm-application-runtime as one Identity Resolution owner/process cohort",
+    "retain crm-identity-resolution-capability-adapter as a direct runtime dependency because bootstrap visibility still consumes its module and record identity constants",
+    "keep all four removed packages owned and consumed transitively by crm-identity-resolution-capability-composition and keep production candidate/merge mutation and query execution semantics unchanged",
+    "keep Identity Resolution production contribution and mutation/query inventories entering generic application composition only through crm-first-party-modules",
+    "update the cumulative Step 22 decision ledger and permanent fan-in validator to exactly 53 total 52 production 1 test-only and 27 final 10 removed 36 unresolved",
+    "synchronize the permanent workspace-analysis current-state guard to reproduce the exact Step 22H fan-in and cumulative removal set while preserving the immutable accepted inventory",
+    "keep the conservative public Rust surface at 5377 without adding a public accessor constant type function trait or re-export",
+    "regenerate Cargo.lock and docs/ACTIVE_PACKET.md canonically and keep docs/generated/REPOSITORY_MAP.md unchanged because workspace members module manifests routes and public APIs do not change"
   ],
   "forbidden_paths": [
     ".github/**",
@@ -48,13 +49,15 @@
     "apps/**",
     "architecture-governance.json",
     "contracts/**",
-    "crates/crm-data-quality-capability-adapter/**",
-    "crates/crm-data-quality-query-adapter/**",
-    "crates/crm-data-quality-source-composition/**",
     "crates/crm-first-party-modules/**",
+    "crates/crm-identity-resolution-capability-adapter/**",
+    "crates/crm-identity-resolution-capability-composition/**",
+    "crates/crm-identity-resolution-merge-composition/**",
+    "crates/crm-identity-resolution-merge-query-adapter/**",
+    "crates/crm-identity-resolution-query-adapter/**",
     "customer-privacy-operations-policy.json",
     "database/**",
-    "docs/STEP22_CONTACT_POINTS_CAPABILITY_FANIN_REDUCTION.md",
+    "docs/STEP22_DATA_QUALITY_ADAPTER_FANIN_REDUCTION.md",
     "docs/generated/REPOSITORY_MAP.md",
     "evidence/**",
     "modules/**",
@@ -74,29 +77,29 @@
     "workspace-dependency-policy.json"
   ],
   "non_goals": [
-    "change Data Quality mutation query authorization visibility persistence worker or business semantics",
-    "remove either Data Quality adapter package from the workspace or from crm-data-quality-source-composition",
-    "add a new public Data Quality owner accessor solely to reduce generic runtime fan-in",
-    "remediate or classify any Identity Resolution Consents Customer Data Operations Customer Enrichment or other unresolved dependency",
+    "remove or replace the direct crm-identity-resolution-capability-adapter runtime edge used by bootstrap visibility",
+    "change Identity Resolution candidate merge mutation query authorization visibility persistence or business semantics",
+    "edit Identity Resolution owner composition query adapter merge composition or first-party aggregation implementation",
+    "add a new public Identity Resolution accessor solely to reduce generic runtime fan-in",
+    "remediate or classify Consents Customer Data Operations Customer Enrichment Party Relationships or any other unresolved dependency",
     "change a permanent workflow or gate disposition",
     "rewrite the immutable Step 22A inventory or weaken fail-closed Step 22 validation",
     "complete all runtime classifications complete Repository Step 22 start Phase 8B raise an architecture score or declare architecture 10/10"
   ],
-  "objective": "Reduce crm-application-runtime owner-specific fan-in by removing the redundant direct Data Quality capability and query adapter edges while retaining all Data Quality production semantics behind the existing crm-data-quality-source-composition owner boundary.",
-  "packet_id": "repository-step-22g-data-quality-adapter-fanin-reduction",
+  "objective": "Reduce crm-application-runtime owner-specific fan-in by removing four redundant direct Identity Resolution composition/query edges while retaining production mutation/query semantics behind the existing crm-identity-resolution-capability-composition owner boundary and first-party aggregation.",
+  "packet_id": "repository-step-22h-identity-resolution-fanin-reduction",
   "required_checks": [
     "Affected Scope CI",
     "Application Runtime CI",
     "Complexity Baseline CI",
-    "Data Quality Privacy Scope CI",
-    "Data Quality Process Runtime CI",
     "Governance CI",
+    "Identity Resolution Privacy Scope CI",
     "Rust Generated Sync",
     "Rust CI"
   ],
   "schema_version": "crm.repository-packet/v1",
   "status": "active",
-  "title": "Reduce Data Quality adapter fan-in",
+  "title": "Reduce Identity Resolution fan-in",
   "tracking_issues": [
     194
   ]
