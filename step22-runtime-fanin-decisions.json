@@ -102,6 +102,21 @@
       "prevented_boundary": "Composes cross-owner search contributions behind one generic global-search process boundary.",
       "review_condition": "Re-review if ordinary owner search extension requires process-host manifest or owner-specific source edits."
     },
+    "identity-resolution-fanin-remediation": {
+      "classification": "removed",
+      "evidence_paths": [
+        "Cargo.lock",
+        "crates/crm-application-runtime/Cargo.toml",
+        "crates/crm-first-party-modules/Cargo.toml",
+        "crates/crm-first-party-modules/src/lib.rs",
+        "crates/crm-identity-resolution-capability-composition/Cargo.toml",
+        "crates/crm-identity-resolution-capability-composition/src/production_contribution.rs",
+        "scripts/check_step22_runtime_fanin_decisions.py"
+      ],
+      "owner": "crm.identity-resolution / architecture-governance",
+      "prevented_boundary": "Keeps Identity Resolution owner composition, merge composition and candidate/merge query implementation details behind the existing first-party aggregation and Identity Resolution owner production boundary instead of exposing redundant direct edges to the generic process host.",
+      "review_condition": "Fail if crm-application-runtime regains any of the four removed Identity Resolution composition/query edges or source imports while crm-first-party-modules and crm-identity-resolution-capability-composition remain the accepted production boundaries."
+    },
     "metadata-platform": {
       "classification": "platform-generic",
       "evidence_paths": [
@@ -201,12 +216,12 @@
   },
   "counts": {
     "all": 63,
-    "final": 23,
+    "final": 27,
     "owner_specific_unavoidable": 0,
     "platform_generic": 16,
-    "removed": 6,
+    "removed": 10,
     "test_only": 1,
-    "unresolved": 40
+    "unresolved": 36
   },
   "decision_boundary": {
     "all_dependencies_present": true,
@@ -293,6 +308,26 @@
       "global-search-platform"
     ],
     [
+      "crm-application-runtime::dependencies::crm-identity-resolution-capability-composition",
+      "removed",
+      "identity-resolution-fanin-remediation"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-identity-resolution-merge-composition",
+      "removed",
+      "identity-resolution-fanin-remediation"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-identity-resolution-merge-query-adapter",
+      "removed",
+      "identity-resolution-fanin-remediation"
+    ],
+    [
+      "crm-application-runtime::dependencies::crm-identity-resolution-query-adapter",
+      "removed",
+      "identity-resolution-fanin-remediation"
+    ],
+    [
       "crm-application-runtime::dependencies::crm-metadata-api-adapter",
       "platform-generic",
       "metadata-platform"
@@ -346,8 +381,8 @@
   "phase": "partial-classification-and-remediation",
   "remediation_evidence": {
     "after": {
-      "all": 57,
-      "production": 56,
+      "all": 53,
+      "production": 52,
       "test_only": 1
     },
     "before": {
@@ -435,6 +470,54 @@
           "crates/crm-application-runtime/tests/data_quality_registration_contract.rs"
         ],
         "stable_id": "crm-application-runtime::dependencies::crm-data-quality-query-adapter"
+      },
+      {
+        "adapter_package": "crm-identity-resolution-capability-composition",
+        "owner_manifest": "crates/crm-first-party-modules/Cargo.toml",
+        "owner_sources": [
+          "crates/crm-first-party-modules/src/lib.rs"
+        ],
+        "replacement_boundary": "crm-first-party-modules",
+        "runtime_sources": [
+          "crates/crm-application-runtime/src/native_composition.rs"
+        ],
+        "stable_id": "crm-application-runtime::dependencies::crm-identity-resolution-capability-composition"
+      },
+      {
+        "adapter_package": "crm-identity-resolution-merge-composition",
+        "owner_manifest": "crates/crm-identity-resolution-capability-composition/Cargo.toml",
+        "owner_sources": [
+          "crates/crm-identity-resolution-capability-composition/src/production_contribution.rs"
+        ],
+        "replacement_boundary": "crm-first-party-modules",
+        "runtime_sources": [
+          "crates/crm-application-runtime/src/native_composition.rs"
+        ],
+        "stable_id": "crm-application-runtime::dependencies::crm-identity-resolution-merge-composition"
+      },
+      {
+        "adapter_package": "crm-identity-resolution-merge-query-adapter",
+        "owner_manifest": "crates/crm-identity-resolution-capability-composition/Cargo.toml",
+        "owner_sources": [
+          "crates/crm-identity-resolution-capability-composition/src/production_contribution.rs"
+        ],
+        "replacement_boundary": "crm-first-party-modules",
+        "runtime_sources": [
+          "crates/crm-application-runtime/src/native_composition.rs"
+        ],
+        "stable_id": "crm-application-runtime::dependencies::crm-identity-resolution-merge-query-adapter"
+      },
+      {
+        "adapter_package": "crm-identity-resolution-query-adapter",
+        "owner_manifest": "crates/crm-identity-resolution-capability-composition/Cargo.toml",
+        "owner_sources": [
+          "crates/crm-identity-resolution-capability-composition/src/production_contribution.rs"
+        ],
+        "replacement_boundary": "crm-first-party-modules",
+        "runtime_sources": [
+          "crates/crm-application-runtime/src/native_composition.rs"
+        ],
+        "stable_id": "crm-application-runtime::dependencies::crm-identity-resolution-query-adapter"
       }
     ],
     "removed_stable_ids": [
@@ -443,6 +526,10 @@
       "crm-application-runtime::dependencies::crm-customer-privacy-query-adapter",
       "crm-application-runtime::dependencies::crm-data-quality-capability-adapter",
       "crm-application-runtime::dependencies::crm-data-quality-query-adapter",
+      "crm-application-runtime::dependencies::crm-identity-resolution-capability-composition",
+      "crm-application-runtime::dependencies::crm-identity-resolution-merge-composition",
+      "crm-application-runtime::dependencies::crm-identity-resolution-merge-query-adapter",
+      "crm-application-runtime::dependencies::crm-identity-resolution-query-adapter",
       "crm-application-runtime::dependencies::crm-parties-capability-adapter"
     ],
     "runtime_manifest": "crates/crm-application-runtime/Cargo.toml"
