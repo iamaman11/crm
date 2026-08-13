@@ -49,7 +49,6 @@ crm-global-search-composition = { path = "../crm-global-search-composition" }
 crm-identity-resolution-capability-adapter = { path = "../crm-identity-resolution-capability-adapter" }
 crm-identity-resolution-capability-composition = { path = "../crm-identity-resolution-capability-composition" }
 crm-identity-resolution-merge-composition = { path = "../crm-identity-resolution-merge-composition" }
-crm-identity-resolution-query-adapter = { path = "../crm-identity-resolution-query-adapter" }
 crm-identity-resolution-merge-query-adapter = { path = "../crm-identity-resolution-merge-query-adapter" }
 crm-metadata-api-adapter = { path = "../crm-metadata-api-adapter" }
 crm-metadata-query-adapter = { path = "../crm-metadata-query-adapter" }
