@@ -44,6 +44,7 @@ After Step 22H:
 - runtime direct internal dependencies: **53**;
 - production: **52**;
 - test-only: **1**.
+- exact runtime state: **53 total / 52 production / 1 test-only**.
 
 The cumulative removed stable-ID set becomes exactly ten entries, adding:
 
