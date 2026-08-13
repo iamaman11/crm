@@ -215,15 +215,15 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_step_22h_identity_resolution_fanin_reduction_is_exact(self) -> None:
+    def test_active_step_22i_consents_query_adapter_fanin_reduction_is_exact(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             self.packet["packet_id"],
-            "repository-step-22h-identity-resolution-fanin-reduction",
+            "repository-step-22i-consents-query-adapter-fanin-reduction",
         )
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "48e3f2f3e0049505b92a08ac56320ce18a1a41d1"},
+            {"ref": "main", "sha": "fab78b95afb66344af2dccbff87121cd24ba3cd5"},
         )
         self.assertEqual(self.packet["tracking_issues"], [194])
         self.assertEqual(
@@ -232,7 +232,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
                 "Cargo.lock",
                 "crates/crm-application-runtime/Cargo.toml",
                 "docs/ACTIVE_PACKET.md",
-                "docs/STEP22_IDENTITY_RESOLUTION_FANIN_REDUCTION.md",
+                "docs/STEP22_CONSENTS_QUERY_ADAPTER_FANIN_REDUCTION.md",
                 "repository-packet.json",
                 "scripts/check_step22_runtime_fanin_decisions.py",
                 "step22-runtime-fanin-decisions.json",
@@ -244,12 +244,11 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         forbidden_paths = set(self.packet["forbidden_paths"])
         for path in (
             ".github/**",
+            "crates/crm-consents-capability-adapter/**",
+            "crates/crm-consents-capability-composition/**",
+            "crates/crm-consents-query-adapter/**",
             "crates/crm-first-party-modules/**",
-            "crates/crm-identity-resolution-capability-adapter/**",
-            "crates/crm-identity-resolution-capability-composition/**",
-            "crates/crm-identity-resolution-merge-composition/**",
-            "crates/crm-identity-resolution-merge-query-adapter/**",
-            "crates/crm-identity-resolution-query-adapter/**",
+            "docs/STEP22_IDENTITY_RESOLUTION_FANIN_REDUCTION.md",
             "docs/generated/REPOSITORY_MAP.md",
             "step22-architecture-inventory.json",
         ):
@@ -275,25 +274,26 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             counts,
             {
                 "all": 63,
-                "final": 27,
+                "final": 28,
                 "platform_generic": 16,
                 "test_only": 1,
-                "removed": 10,
+                "removed": 11,
                 "owner_specific_unavoidable": 0,
-                "unresolved": 36,
+                "unresolved": 35,
             },
         )
         acceptance = " ".join(self.packet["acceptance"])
         non_goals = " ".join(self.packet["non_goals"])
         for marker in (
-            "53 total 52 production",
-            "27 final classifications 10 removals",
-            "36 unresolved",
+            "52 total 51 production",
+            "28 final classifications 11 removals",
+            "35 unresolved",
             "5377",
-            "crm-identity-resolution-capability-adapter",
+            "crm-consents-capability-adapter",
+            "crm-consents-query-adapter",
         ):
             self.assertIn(marker, acceptance)
-        self.assertIn("Consents", non_goals)
+        self.assertIn("Contact Points", non_goals)
         self.assertIn("step22_complete false", " ".join(self.packet["deliverables"]))
 
         operations_scope = next(
@@ -378,6 +378,19 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "5,377",
         ):
             self.assertIn(marker, step22h)
+
+        step22i = read("docs/STEP22_CONSENTS_QUERY_ADAPTER_FANIN_REDUCTION.md")
+        for marker in (
+            "53 total / 52 production / 1 test-only",
+            "52 total / 51 production / 1 test-only",
+            "28 final",
+            "11 removed",
+            "35 unresolved",
+            "crm-application-runtime::dependencies::crm-consents-query-adapter",
+            "fab78b95afb66344af2dccbff87121cd24ba3cd5",
+            "5,377",
+        ):
+            self.assertIn(marker, step22i)
 
     def test_repository_map_and_product_inventory_remain_exact(self) -> None:
         self.assertIn(

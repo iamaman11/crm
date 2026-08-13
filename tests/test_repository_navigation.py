@@ -24,17 +24,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_step_22h_identity_resolution_fanin_reduction_is_exact(self) -> None:
+    def test_active_step_22i_consents_query_adapter_fanin_reduction_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(
             packet["packet_id"],
-            "repository-step-22h-identity-resolution-fanin-reduction",
+            "repository-step-22i-consents-query-adapter-fanin-reduction",
         )
         self.assertEqual(packet["status"], "active")
         self.assertEqual(
             packet["baseline"],
-            {"ref": "main", "sha": "48e3f2f3e0049505b92a08ac56320ce18a1a41d1"},
+            {"ref": "main", "sha": "fab78b95afb66344af2dccbff87121cd24ba3cd5"},
         )
         self.assertEqual(packet["tracking_issues"], [194])
         self.assertEqual(
@@ -43,7 +43,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "Cargo.lock",
                 "crates/crm-application-runtime/Cargo.toml",
                 "docs/ACTIVE_PACKET.md",
-                "docs/STEP22_IDENTITY_RESOLUTION_FANIN_REDUCTION.md",
+                "docs/STEP22_CONSENTS_QUERY_ADAPTER_FANIN_REDUCTION.md",
                 "repository-packet.json",
                 "scripts/check_step22_runtime_fanin_decisions.py",
                 "step22-runtime-fanin-decisions.json",
@@ -55,12 +55,11 @@ class RepositoryNavigationTests(unittest.TestCase):
         forbidden_paths = set(packet["forbidden_paths"])
         for path in (
             ".github/**",
+            "crates/crm-consents-capability-adapter/**",
+            "crates/crm-consents-capability-composition/**",
+            "crates/crm-consents-query-adapter/**",
             "crates/crm-first-party-modules/**",
-            "crates/crm-identity-resolution-capability-adapter/**",
-            "crates/crm-identity-resolution-capability-composition/**",
-            "crates/crm-identity-resolution-merge-composition/**",
-            "crates/crm-identity-resolution-merge-query-adapter/**",
-            "crates/crm-identity-resolution-query-adapter/**",
+            "docs/STEP22_IDENTITY_RESOLUTION_FANIN_REDUCTION.md",
             "docs/generated/REPOSITORY_MAP.md",
             "step22-architecture-inventory.json",
         ):
@@ -68,21 +67,21 @@ class RepositoryNavigationTests(unittest.TestCase):
         deliverables = " ".join(packet["deliverables"])
         acceptance = " ".join(packet["acceptance"])
         non_goals = " ".join(packet["non_goals"])
-        self.assertIn("53 total 52 production 1 test-only", deliverables)
-        self.assertIn("27 final 10 removed 36 unresolved", deliverables)
-        self.assertIn("crm-identity-resolution-capability-composition", acceptance)
-        self.assertIn("crm-identity-resolution-capability-adapter", acceptance)
-        self.assertIn("Consents", non_goals)
+        self.assertIn("52 total 51 production 1 test-only", deliverables)
+        self.assertIn("28 final 11 removed 35 unresolved", deliverables)
+        self.assertIn("crm-consents-query-adapter", acceptance)
+        self.assertIn("crm-consents-capability-adapter", acceptance)
+        self.assertIn("Contact Points", non_goals)
         self.assertEqual(
             validate_decisions(ROOT),
             {
                 "all": 63,
-                "final": 27,
+                "final": 28,
                 "platform_generic": 16,
                 "test_only": 1,
-                "removed": 10,
+                "removed": 11,
                 "owner_specific_unavoidable": 0,
-                "unresolved": 36,
+                "unresolved": 35,
             },
         )
 
@@ -97,11 +96,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-22h-identity-resolution-fanin-reduction",
+            "repository-step-22i-consents-query-adapter-fanin-reduction",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "48e3f2f3e0049505b92a08ac56320ce18a1a41d1",
+            "fab78b95afb66344af2dccbff87121cd24ba3cd5",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -143,8 +142,8 @@ class RepositoryNavigationTests(unittest.TestCase):
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
             "Application Runtime CI": ".github/workflows/application-runtime.yml",
             "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
+            "Consents Privacy Scope CI": ".github/workflows/consents-privacy-scope.yml",
             "Governance CI": ".github/workflows/governance.yml",
-            "Identity Resolution Privacy Scope CI": ".github/workflows/identity-resolution-privacy-scope.yml",
             "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
             "Rust CI": ".github/workflows/rust.yml",
         }
@@ -157,7 +156,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 22H Identity Resolution fan-in reduction"],
+                    "reasons": ["Step 22I Consents query-adapter fan-in reduction"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -165,7 +164,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="48e3f2f3e0049505b92a08ac56320ce18a1a41d1",
+                return_value="fab78b95afb66344af2dccbff87121cd24ba3cd5",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(
