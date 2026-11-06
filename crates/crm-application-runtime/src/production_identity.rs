@@ -1,10 +1,15 @@
 //! One closed-pilot sign-in boundary. Not a second business authorization engine.
 use crate::{ApplicationConfig, build_bootstrap_visibility_registry};
-use crm_capability_adapters::{AuthorizationGrant, LiveAuthorizationStore, LiveQueryVisibilityStore, QueryVisibilityGrant};
+use crm_capability_adapters::{
+    AuthorizationGrant, LiveAuthorizationStore, LiveQueryVisibilityStore, QueryVisibilityGrant,
+};
 use crm_capability_ingress::{AccessTokenGrant, AccessTokenStore};
 use crm_capability_runtime::CapabilityDefinition;
 use crm_module_sdk::{ActorId, ModuleId, RecordType, TenantId};
-use ring::{digest, rand::{SecureRandom, SystemRandom}};
+use ring::{
+    digest,
+    rand::{SecureRandom, SystemRandom},
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
@@ -66,7 +71,9 @@ pub(crate) struct PilotAuthenticated {
 }
 
 fn now_nanos() -> Result<i64, ()> {
-    let d = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|_| ())?;
+    let d = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| ())?;
     i64::try_from(d.as_nanos()).map_err(|_| ())
 }
 
@@ -78,9 +85,13 @@ fn sha(input: &[u8]) -> [u8; 32] {
 }
 
 fn constant_equal(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() { return false; }
+    if a.len() != b.len() {
+        return false;
+    }
     let mut mismatch = 0_u8;
-    for (x,y) in a.iter().zip(b) { mismatch |= x ^ y; }
+    for (x, y) in a.iter().zip(b) {
+        mismatch |= x ^ y;
+    }
     mismatch == 0
 }
 
@@ -101,7 +112,10 @@ fn cookie_token(value: &str) -> Option<&str> {
     for item in value.split(';') {
         let (name, token) = item.trim().split_once('=')?;
         if name == COOKIE {
-            if result.is_some() || token.len() != 64 || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
+            if result.is_some()
+                || token.len() != 64
+                || !token.bytes().all(|b| b.is_ascii_hexdigit())
+            {
                 return None;
             }
             result = Some(token);
@@ -124,13 +138,14 @@ impl PilotIdentity {
             .map_err(|_| "CRM_PUBLIC_ORIGIN is required for pilot login")?;
         if !public_origin.starts_with("https://")
             || public_origin.contains('/') && public_origin["https://".len()..].contains('/')
-            || public_origin.contains('?') || public_origin.contains('#')
+            || public_origin.contains('?')
+            || public_origin.contains('#')
             || public_origin.len() < "https://a.b".len()
         {
             return Err("CRM_PUBLIC_ORIGIN must be an HTTPS origin without a path");
         }
-        let input: Vec<OperatorInput> = serde_json::from_str(&value)
-            .map_err(|_| "CRM_PILOT_OPERATORS is not valid JSON")?;
+        let input: Vec<OperatorInput> =
+            serde_json::from_str(&value).map_err(|_| "CRM_PILOT_OPERATORS is not valid JSON")?;
         if input.is_empty() || input.len() > 16 {
             return Err("CRM_PILOT_OPERATORS requires 1 to 16 operators");
         }
@@ -140,19 +155,22 @@ impl PilotIdentity {
         for op in input {
             if op.username.is_empty()
                 || op.username.len() > 80
-                || !op.username.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                || !op
+                    .username
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
                 || op.password.len() < PASSWORD_MIN
                 || op.capabilities.is_empty()
                 || !names.insert(op.username.clone())
             {
                 return Err("CRM_PILOT_OPERATORS has invalid or duplicate operator");
             }
-            let actor_id = ActorId::try_new(op.actor_id)
-                .map_err(|_| "invalid pilot actor")?;
-            let tenant_id = TenantId::try_new(op.tenant_id)
-                .map_err(|_| "invalid pilot tenant")?;
+            let actor_id = ActorId::try_new(op.actor_id).map_err(|_| "invalid pilot actor")?;
+            let tenant_id = TenantId::try_new(op.tenant_id).map_err(|_| "invalid pilot tenant")?;
             if !config.tenant_ids.contains(&tenant_id) || !actors.insert(actor_id.clone()) {
-                return Err("pilot operator must have a unique actor and an active configured tenant");
+                return Err(
+                    "pilot operator must have a unique actor and an active configured tenant",
+                );
             }
             operators.push(PilotOperator {
                 username: op.username,
@@ -178,40 +196,57 @@ impl PilotIdentity {
         mutation: &[CapabilityDefinition],
         query: &[CapabilityDefinition],
     ) -> Result<(), &'static str> {
-        let registry = build_bootstrap_visibility_registry().map_err(|_| "pilot visibility registry unavailable")?;
-        let expiry = now.checked_add(SESSION_SECONDS * 1_000_000_000)
+        let registry = build_bootstrap_visibility_registry()
+            .map_err(|_| "pilot visibility registry unavailable")?;
+        let expiry = now
+            .checked_add(SESSION_SECONDS * 1_000_000_000)
             .ok_or("pilot grant expiry overflow")?;
         for operator in self.operators.iter() {
             let mut found = BTreeSet::new();
             for definition in mutation.iter().chain(query) {
-                if !operator.capabilities.contains(definition.capability_id.as_str()) { continue; }
+                if !operator
+                    .capabilities
+                    .contains(definition.capability_id.as_str())
+                {
+                    continue;
+                }
                 found.insert(definition.capability_id.as_str().to_owned());
-                grants.upsert(AuthorizationGrant {
-                    tenant_id: operator.tenant_id.clone(),
-                    actor_id: operator.actor_id.clone(),
-                    policy_id: definition.authorization_policy_id.clone(),
-                    capability_id: definition.capability_id.clone(),
-                    capability_version: definition.capability_version.clone(),
-                    owner_module_id: definition.owner_module_id.clone(),
-                    policy_version: POLICY.to_owned(),
-                    expires_at_unix_nanos: Some(expiry),
-                }).map_err(|_| "pilot grant failed")?;
-                if query.iter().any(|candidate| candidate.capability_id == definition.capability_id) {
-                    for resource in registry.resources_for(definition).map_err(|_| "pilot query visibility unavailable")? {
-                        visibility.upsert(QueryVisibilityGrant {
-                            tenant_id: operator.tenant_id.clone(),
-                            actor_id: operator.actor_id.clone(),
-                            capability_id: definition.capability_id.clone(),
-                            capability_version: definition.capability_version.clone(),
-                            owner_module_id: ModuleId::try_new(resource.owner_module_id)
-                                .map_err(|_| "pilot resource owner invalid")?,
-                            record_type: RecordType::try_new(resource.resource_type)
-                                .map_err(|_| "pilot resource type invalid")?,
-                            record_id: None,
-                            allowed_fields: resource.allowed_fields,
-                            policy_version: POLICY.to_owned(),
-                            expires_at_unix_nanos: Some(expiry),
-                        }).map_err(|_| "pilot visibility grant failed")?;
+                grants
+                    .upsert(AuthorizationGrant {
+                        tenant_id: operator.tenant_id.clone(),
+                        actor_id: operator.actor_id.clone(),
+                        policy_id: definition.authorization_policy_id.clone(),
+                        capability_id: definition.capability_id.clone(),
+                        capability_version: definition.capability_version.clone(),
+                        owner_module_id: definition.owner_module_id.clone(),
+                        policy_version: POLICY.to_owned(),
+                        expires_at_unix_nanos: Some(expiry),
+                    })
+                    .map_err(|_| "pilot grant failed")?;
+                if query
+                    .iter()
+                    .any(|candidate| candidate.capability_id == definition.capability_id)
+                {
+                    for resource in registry
+                        .resources_for(definition)
+                        .map_err(|_| "pilot query visibility unavailable")?
+                    {
+                        visibility
+                            .upsert(QueryVisibilityGrant {
+                                tenant_id: operator.tenant_id.clone(),
+                                actor_id: operator.actor_id.clone(),
+                                capability_id: definition.capability_id.clone(),
+                                capability_version: definition.capability_version.clone(),
+                                owner_module_id: ModuleId::try_new(resource.owner_module_id)
+                                    .map_err(|_| "pilot resource owner invalid")?,
+                                record_type: RecordType::try_new(resource.resource_type)
+                                    .map_err(|_| "pilot resource type invalid")?,
+                                record_id: None,
+                                allowed_fields: resource.allowed_fields,
+                                policy_version: POLICY.to_owned(),
+                                expires_at_unix_nanos: Some(expiry),
+                            })
+                            .map_err(|_| "pilot visibility grant failed")?;
                     }
                 }
             }
@@ -222,46 +257,75 @@ impl PilotIdentity {
         Ok(())
     }
 
-    pub(crate) fn public_origin(&self) -> &str { &self.public_origin }
+    pub(crate) fn public_origin(&self) -> &str {
+        &self.public_origin
+    }
 
     pub(crate) fn sign_in(&self, name: &str, password: &str) -> Result<String, ()> {
         let digest = sha(password.as_bytes());
         // Compare every configured operator; do not reveal account existence.
-        let operator = self.operators.iter().find(|o| o.username == name
-            && constant_equal(&o.password_digest, &digest)).ok_or(())?;
+        let operator = self
+            .operators
+            .iter()
+            .find(|o| o.username == name && constant_equal(&o.password_digest, &digest))
+            .ok_or(())?;
         let now = now_nanos()?;
         let until = now.checked_add(SESSION_SECONDS * 1_000_000_000).ok_or(())?;
         let token = secret()?;
         let csrf = secret()?;
-        self.tokens.issue(token.as_bytes(), AccessTokenGrant {
-            actor_id: operator.actor_id.clone(),
-            tenant_ids: BTreeSet::from([operator.tenant_id.clone()]),
-            authentication_id: format!("pilot:{}", operator.username),
-            expires_at_unix_nanos: until,
-        }).map_err(|_| ())?;
+        self.tokens
+            .issue(
+                token.as_bytes(),
+                AccessTokenGrant {
+                    actor_id: operator.actor_id.clone(),
+                    tenant_ids: BTreeSet::from([operator.tenant_id.clone()]),
+                    authentication_id: format!("pilot:{}", operator.username),
+                    expires_at_unix_nanos: until,
+                },
+            )
+            .map_err(|_| ())?;
         let mut sessions = self.sessions.lock().map_err(|_| ())?;
         sessions.retain(|_, v| v.expires_at_nanos > now);
         if sessions.len() >= 128 {
             self.tokens.revoke(token.as_bytes()).ok();
             return Err(());
         }
-        sessions.insert(sha(token.as_bytes()), PilotSession {
-            username: operator.username.clone(),
-            csrf,
-            expires_at_nanos: until,
-        });
+        sessions.insert(
+            sha(token.as_bytes()),
+            PilotSession {
+                username: operator.username.clone(),
+                csrf,
+                expires_at_nanos: until,
+            },
+        );
         Ok(token)
     }
 
-    pub(crate) fn authorize(&self, cookies: &str, csrf: Option<&str>) -> Option<PilotAuthenticated> {
+    pub(crate) fn authorize(
+        &self,
+        cookies: &str,
+        csrf: Option<&str>,
+    ) -> Option<PilotAuthenticated> {
         let token = cookie_token(cookies)?;
         let now = now_nanos().ok()?;
-        let session = self.sessions.lock().ok()?.get(&sha(token.as_bytes()))?.clone();
-        if session.expires_at_nanos <= now { return None; }
-        if let Some(provided) = csrf {
-            if !constant_equal(provided.as_bytes(), session.csrf.as_bytes()) { return None; }
+        let session = self
+            .sessions
+            .lock()
+            .ok()?
+            .get(&sha(token.as_bytes()))?
+            .clone();
+        if session.expires_at_nanos <= now {
+            return None;
         }
-        let operator = self.operators.iter().find(|o| o.username == session.username)?;
+        if let Some(provided) = csrf {
+            if !constant_equal(provided.as_bytes(), session.csrf.as_bytes()) {
+                return None;
+            }
+        }
+        let operator = self
+            .operators
+            .iter()
+            .find(|o| o.username == session.username)?;
         Some(PilotAuthenticated {
             authorization: format!("Bearer {token}"),
             snapshot: PilotSessionSnapshot {
@@ -276,17 +340,28 @@ impl PilotIdentity {
     }
 
     pub(crate) fn sign_out(&self, cookies: &str, csrf: &str) -> bool {
-        let Some(token) = cookie_token(cookies) else { return false };
-        if self.authorize(cookies, Some(csrf)).is_none() { return false; }
-        let removed = self.sessions.lock().ok()
+        let Some(token) = cookie_token(cookies) else {
+            return false;
+        };
+        if self.authorize(cookies, Some(csrf)).is_none() {
+            return false;
+        }
+        let removed = self
+            .sessions
+            .lock()
+            .ok()
             .and_then(|mut s| s.remove(&sha(token.as_bytes())));
-        if removed.is_none() { return false; }
+        if removed.is_none() {
+            return false;
+        }
         self.tokens.revoke(token.as_bytes()).is_ok()
     }
 }
 
 pub(crate) fn set_cookie(token: &str) -> String {
-    format!("{COOKIE}={token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_SECONDS}")
+    format!(
+        "{COOKIE}={token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_SECONDS}"
+    )
 }
 pub(crate) fn clear_cookie() -> String {
     format!("{COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0")
@@ -299,8 +374,14 @@ mod tests {
     #[test]
     fn duplicate_cookie_is_rejected() {
         let token = "a".repeat(64);
-        assert_eq!(cookie_token(&format!("{COOKIE}={token}")), Some(token.as_str()));
-        assert_eq!(cookie_token(&format!("{COOKIE}={token}; {COOKIE}={token}")), None);
+        assert_eq!(
+            cookie_token(&format!("{COOKIE}={token}")),
+            Some(token.as_str())
+        );
+        assert_eq!(
+            cookie_token(&format!("{COOKIE}={token}; {COOKIE}={token}")),
+            None
+        );
         assert_eq!(cookie_token("x=1"), None);
         assert_eq!(cookie_token("x"), None);
     }
@@ -309,15 +390,15 @@ mod tests {
     fn secret_is_random_and_cookie_flags_are_strict() {
         let a = secret().unwrap();
         let b = secret().unwrap();
-        assert_ne!(a,b);
-        assert_eq!(a.len(),64);
+        assert_ne!(a, b);
+        assert_eq!(a.len(), 64);
         assert!(set_cookie(&a).contains("HttpOnly; Secure; SameSite=Strict"));
         assert!(clear_cookie().contains("Max-Age=0"));
     }
 
     #[test]
     fn compares_digest_in_constant_time_shape() {
-        assert!(constant_equal(&sha(b"a"),&sha(b"a")));
-        assert!(!constant_equal(&sha(b"a"),&sha(b"b")));
+        assert!(constant_equal(&sha(b"a"), &sha(b"a")));
+        assert!(!constant_equal(&sha(b"a"), &sha(b"b")));
     }
 }
