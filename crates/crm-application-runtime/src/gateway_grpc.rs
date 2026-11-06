@@ -6,8 +6,8 @@ use crm_module_sdk::{
     RetentionPolicyId, SchemaId, SchemaVersion, TypedPayload,
 };
 use std::sync::Arc;
-use tonic::{Request, Response, Status};
 use tonic::metadata::{MetadataMap, MetadataValue};
+use tonic::{Request, Response, Status};
 
 pub mod gateway_v1 {
     tonic::include_proto!("crm.gateway.v1");
@@ -95,18 +95,29 @@ impl gateway_v1::application_gateway_service_server::ApplicationGatewayService
 
 /// Cookie traffic is converted to the existing bearer authenticator only inside the
 /// server. Original service/worker bearer requests without cookies are unchanged.
-fn verify_pilot_cookie(components: &ApplicationComponents, metadata: &mut MetadataMap) -> Result<(), Status> {
-    let Some(cookie) = metadata.get("cookie") else { return Ok(()) };
+fn verify_pilot_cookie(
+    components: &ApplicationComponents,
+    metadata: &mut MetadataMap,
+) -> Result<(), Status> {
+    let Some(cookie) = metadata.get("cookie") else {
+        return Ok(());
+    };
     if metadata.get("authorization").is_some() {
         return Err(Status::unauthenticated("ambiguous authentication"));
     }
-    let pilot = components.pilot_identity.as_ref()
+    let pilot = components
+        .pilot_identity
+        .as_ref()
         .ok_or_else(|| Status::unauthenticated("session unavailable"))?;
-    let cookie = cookie.to_str().map_err(|_| Status::unauthenticated("invalid session"))?;
-    let csrf = metadata.get("x-crm-csrf")
+    let cookie = cookie
+        .to_str()
+        .map_err(|_| Status::unauthenticated("invalid session"))?;
+    let csrf = metadata
+        .get("x-crm-csrf")
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default();
-    let principal = pilot.authorize(cookie, Some(csrf))
+    let principal = pilot
+        .authorize(cookie, Some(csrf))
         .ok_or_else(|| Status::unauthenticated("invalid session"))?;
     let bearer = MetadataValue::try_from(principal.authorization.as_str())
         .map_err(|_| Status::unauthenticated("invalid session"))?;

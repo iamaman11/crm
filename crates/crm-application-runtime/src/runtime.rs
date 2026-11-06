@@ -310,10 +310,14 @@ impl ApplicationRuntime {
         }
 
         if let Some(ref pilot) = pilot_identity {
-            pilot.provision(
-                &authorization_store, &visibility_store,
-                &mutation_definitions, &query_definitions,
-            ).map_err(|error| ApplicationRuntimeError::Assembly(error.to_owned()))?;
+            pilot
+                .provision(
+                    &authorization_store,
+                    &visibility_store,
+                    &mutation_definitions,
+                    &query_definitions,
+                )
+                .map_err(|error| ApplicationRuntimeError::Assembly(error.to_owned()))?;
         }
 
         let mutation_gateway = Arc::new(CapabilityGateway::new(
@@ -743,11 +747,14 @@ struct PilotLoginForm {
 }
 
 async fn login_page() -> Html<&'static str> {
-    Html("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>CRM sign in</title></head><body><main><h1>Sign in to CRM</h1><form method=\"post\" action=\"/auth/login\"><label>Username <input name=\"username\" autocomplete=\"username\" required></label><label>Password <input name=\"password\" type=\"password\" autocomplete=\"current-password\" required></label><button type=\"submit\">Sign in</button></form></main></body></html>")
+    Html(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>CRM sign in</title></head><body><main><h1>Sign in to CRM</h1><form method=\"post\" action=\"/auth/login\"><label>Username <input name=\"username\" autocomplete=\"username\" required></label><label>Password <input name=\"password\" type=\"password\" autocomplete=\"current-password\" required></label><button type=\"submit\">Sign in</button></form></main></body></html>",
+    )
 }
 
 fn verified_origin(headers: &HeaderMap, pilot: &PilotIdentity) -> bool {
-    headers.get(header::ORIGIN)
+    headers
+        .get(header::ORIGIN)
         .and_then(|value| value.to_str().ok())
         .is_some_and(|origin| origin == pilot.public_origin())
 }
@@ -770,7 +777,9 @@ async fn login(
     if let Ok(value) = HeaderValue::from_str(&set_cookie(&token)) {
         response.headers_mut().insert(header::SET_COOKIE, value);
     }
-    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
 }
 
@@ -785,7 +794,9 @@ async fn auth_session(State(state): State<HttpState>, headers: HeaderMap) -> Res
         return StatusCode::UNAUTHORIZED.into_response();
     };
     let mut result = Json(authenticated.snapshot).into_response();
-    result.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    result
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     result
 }
 
@@ -796,8 +807,14 @@ async fn logout(State(state): State<HttpState>, headers: HeaderMap) -> Response 
     if !verified_origin(&headers, pilot) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    let cookie = headers.get(header::COOKIE).and_then(|h| h.to_str().ok()).unwrap_or_default();
-    let csrf = headers.get("x-crm-csrf").and_then(|h| h.to_str().ok()).unwrap_or_default();
+    let cookie = headers
+        .get(header::COOKIE)
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or_default();
+    let csrf = headers
+        .get("x-crm-csrf")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or_default();
     if !pilot.sign_out(cookie, csrf) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
@@ -805,21 +822,34 @@ async fn logout(State(state): State<HttpState>, headers: HeaderMap) -> Response 
     if let Ok(value) = HeaderValue::from_str(&clear_cookie()) {
         response.headers_mut().insert(header::SET_COOKIE, value);
     }
-    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
 }
 
-fn resolve_cookie_session(components: &ApplicationComponents, headers: &mut HeaderMap) -> Result<(), Response> {
-    let Some(cookie) = headers.get(header::COOKIE) else { return Ok(()) };
+fn resolve_cookie_session(
+    components: &ApplicationComponents,
+    headers: &mut HeaderMap,
+) -> Result<(), Response> {
+    let Some(cookie) = headers.get(header::COOKIE) else {
+        return Ok(());
+    };
     if headers.contains_key(header::AUTHORIZATION) {
         return Err(StatusCode::UNAUTHORIZED.into_response());
     }
     let Some(ref pilot) = components.pilot_identity else {
         return Err(StatusCode::UNAUTHORIZED.into_response());
     };
-    let cookie = cookie.to_str().map_err(|_| StatusCode::UNAUTHORIZED.into_response())?;
-    let csrf = headers.get("x-crm-csrf").and_then(|v| v.to_str().ok()).unwrap_or_default();
-    let principal = pilot.authorize(cookie, Some(csrf))
+    let cookie = cookie
+        .to_str()
+        .map_err(|_| StatusCode::UNAUTHORIZED.into_response())?;
+    let csrf = headers
+        .get("x-crm-csrf")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    let principal = pilot
+        .authorize(cookie, Some(csrf))
         .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
     let value = HeaderValue::from_str(&principal.authorization)
         .map_err(|_| StatusCode::UNAUTHORIZED.into_response())?;

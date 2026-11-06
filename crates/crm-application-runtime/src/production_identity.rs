@@ -397,16 +397,29 @@ mod tests {
 
     fn fixture() -> PilotIdentity {
         let configured = [
-            ("alice", "01234567890123456789012345678901", "actor-a", "tenant-a"),
-            ("bob", "abcdefghijklmnopqrstuvwxyzABCDEF", "actor-b", "tenant-b"),
+            (
+                "alice",
+                "01234567890123456789012345678901",
+                "actor-a",
+                "tenant-a",
+            ),
+            (
+                "bob",
+                "abcdefghijklmnopqrstuvwxyzABCDEF",
+                "actor-b",
+                "tenant-b",
+            ),
         ];
-        let operators = configured.into_iter().map(|(username,password,actor,tenant)| PilotOperator {
-            username: username.to_owned(),
-            password_digest: sha(password.as_bytes()),
-            actor_id: ActorId::try_new(actor).unwrap(),
-            tenant_id: TenantId::try_new(tenant).unwrap(),
-            capabilities: BTreeSet::from(["search.global.query".to_owned()]),
-        }).collect();
+        let operators = configured
+            .into_iter()
+            .map(|(username, password, actor, tenant)| PilotOperator {
+                username: username.to_owned(),
+                password_digest: sha(password.as_bytes()),
+                actor_id: ActorId::try_new(actor).unwrap(),
+                tenant_id: TenantId::try_new(tenant).unwrap(),
+                capabilities: BTreeSet::from(["search.global.query".to_owned()]),
+            })
+            .collect();
         PilotIdentity {
             operators: Arc::new(operators),
             sessions: Arc::new(Mutex::new(BTreeMap::new())),
@@ -419,8 +432,12 @@ mod tests {
     fn two_operators_get_distinct_tenant_bound_sessions_and_logout_revokes() {
         let pilot = fixture();
         assert!(pilot.sign_in("alice", "bad-password").is_err());
-        let alice = pilot.sign_in("alice", "01234567890123456789012345678901").unwrap();
-        let bob = pilot.sign_in("bob", "abcdefghijklmnopqrstuvwxyzABCDEF").unwrap();
+        let alice = pilot
+            .sign_in("alice", "01234567890123456789012345678901")
+            .unwrap();
+        let bob = pilot
+            .sign_in("bob", "abcdefghijklmnopqrstuvwxyzABCDEF")
+            .unwrap();
         let alice_cookie = format!("{COOKIE}={alice}");
         let bob_cookie = format!("{COOKIE}={bob}");
         let a = pilot.authorize(&alice_cookie, None).unwrap();
@@ -439,10 +456,17 @@ mod tests {
     #[test]
     fn expired_sessions_fail_closed() {
         let pilot = fixture();
-        let token = pilot.sign_in("alice", "01234567890123456789012345678901").unwrap();
+        let token = pilot
+            .sign_in("alice", "01234567890123456789012345678901")
+            .unwrap();
         let cookie = format!("{COOKIE}={token}");
-        pilot.sessions.lock().unwrap().get_mut(&sha(token.as_bytes()))
-            .unwrap().expires_at_nanos = 0;
+        pilot
+            .sessions
+            .lock()
+            .unwrap()
+            .get_mut(&sha(token.as_bytes()))
+            .unwrap()
+            .expires_at_nanos = 0;
         assert!(pilot.authorize(&cookie, None).is_none());
         assert!(!pilot.sign_out(&cookie, "invalid"));
     }
