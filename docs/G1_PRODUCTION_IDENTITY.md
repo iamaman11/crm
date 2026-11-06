@@ -1,48 +1,36 @@
-# G1 — Production Identity and Browser Sessions (implementation work in progress)
+# G1 — One simple sign-in path for the closed CRM pilot
 
-Status: **IN PROGRESS / NOT ACCEPTED / NO PRODUCTION LOGIN YET**  
-Issue: #311; parent gates: #310; accepted baseline: `main@cd5fc1bc3ff2a92e4a265a40a1bb816648ec2e17`  
-Scope: **one production authentication boundary**, not new business modules or identity microservices.
+State: **IN PROGRESS — NOT ACCEPTED**. Issue #311, plan #310, draft PR #318.
+Baseline: `main@cd5fc1bc3ff2a92e4a265a40a1bb816648ec2e17`.
 
-## Actual existing architecture
+## Principle
 
-- `crm-capability-ingress::RequestAuthenticator` is the **only** authentication-to-principal boundary used by both HTTP and gRPC. `AuthenticatedPrincipal` binds one Actor to explicit Tenant IDs. ADR-029 governs it.
-- `crm-application-runtime::assemble` currently creates an in-memory hashed `AccessTokenStore`, a process-configured bootstrap bearer, and in-memory live authorization/query-visibility stores. It is a development/process bootstrap, **not** a multiuser production identity system.
-- `packages/client/src/session.ts` and `apps/web/src/developmentSession.ts` currently implement an explicit browser development bearer. Real production login was absent from main.
-- Business owner modules and governed mutation/query gates are correct architectural destinations. **No direct writes or bypass** from identity code.
+**One entry, one session, one existing permission boundary.** No OIDC/SSO platform, JWT subsystem, identity microservice, custom role editor, extra worker, new business crate, background refresh daemon or second authorization engine just to test the first useful CRM.
 
-## Selected production design
+The existing `crm-capability-ingress::RequestAuthenticator` and live authorization/query checks remain the **only** actor/tenant/capability authority. The existing `crm-api` process owns login and session. The browser receives no process bootstrap bearer; it only gets a server-verified display snapshot and a secure, HttpOnly same-origin cookie.
 
-Use **external OIDC Authorization Code + PKCE with confidential backend (BFF) integration in existing `crm-api`**, one configurable standards-compliant provider per deployment, no in-process password store, no new service, no token in browser JS or URL after callback. Fallback to local dev bearer is **strictly DEV-only** and must fail closed in production.
+## Smallest useful closed-pilot implementation
 
-### Required external configuration
+1. **Operator setup:** explicitly provision two pilot test operators and tenant memberships in server-side configuration, outside the repository or built frontend. No self-sign-up, user administration UI, or reusable password database. Secrets are never committed, displayed in logs or shipped to the browser.
+2. **Login:** a single server-validated sign-in flow on `/auth/login`. Successful login issues a short-lived, unguessable, HttpOnly/Secure/SameSite cookie. Server, not browser metadata, chooses the actor and permitted tenants. Failed login does not start a session.
+3. **Session:** `GET /auth/session` returns only actor/tenant display information, expiry, CSRF value and a server-derived allowlist of visible capabilities; no bearer or password. The existing `RequestAuthenticator` and governed gateway re-check every data request. Access checks, tenant isolation, FORCE RLS and audit are unchanged.
+4. **Logout:** `POST /auth/logout` with CSRF invalidates the server session and cookie. Expiry, revocation or process restart cause **re-login**; silent session reconstruction is not required for the pilot. The user remains signed out on errors.
+5. **Browser:** no production fallback to `VITE_CRM_DEV_*`, hardcoded user or administrative `CRM_API_BEARER_TOKEN`; one visible **Sign in / Sign out** experience. All protected routes fail closed unless the server attests to a valid session.
 
-An HTTPS public origin, issuer metadata/JWKS, client ID, confidential client credential (server secret), allowed callback URL, and explicitly provisioned users/tenant memberships/roles. No provider account/secret is present in the GitHub repository and no user-specific IdP choice is inferred. The IdP is **a deployment dependency**; no client-side bypass if it is unavailable.
+**Test/pilot limitation:** this is intentionally a small explicit pilot identity configuration, not a public multiuser identity service. It must never be enabled as the public-production login solely because the browser tests pass. Any rollout outside the closed test environment requires separate approval in #313/#314 of persistent identity provisioning, secure HTTPS proxy/cookie/CSRF behavior, deployment secret lifecycle and operator/user recovery, with OIDC/SSO considered **only if actual deployment requirements justify it**.
 
-### Browser ↔ server contract (implemented first; server implementation pending)
+## Essential, not optional, safety
 
-- `GET /auth/session`, same-origin credentials, no-store: `200` with `{status:"authenticated",tenantId,actorLabel,tenantLabel,expiresAtUnixMillis,csrfToken,capabilities}` only after validated session, actor, tenant and server-side permissions; `401/403` without privileged payload otherwise; errors fail closed.
-- `GET /auth/login`: server starts state+nonce+PKCE, redirect to configured IdP. Fail closed when absent/invalid config.
-- `GET /auth/callback`: validate exact state, one-time login attempt, nonce, issuer, audience, signature, time bounds and code exchange **server-side**. Session rotation on login; prevent session fixation.
-- `POST /auth/logout`: same-origin authenticated session + CSRF, revoke on server, expire session cookie, return `204` only on confirmed local revocation.
-- Gateway gRPC-web uses same-origin **HttpOnly Secure SameSite** cookie; JS sees only a non-credential CSRF value and display snapshot. Cookie-based gateway requests use `x-crm-csrf`, no `authorization` header from JS.
-- All auth endpoints and gRPC-web must reside behind the **same origin HTTPS reverse proxy** in #313. Browser may never hold `CRM_API_BEARER_TOKEN`.
+- No identity/tenant comes from browser claims, URL, or developer feature flags.
+- Cookie material is unpredictable, never readable by JavaScript, expires, is revoked on logout; server side verifies it on every protected HTTP **and gRPC-web** request.
+- Unsafe cookie requests require CSRF protection; only trusted same-origin HTTPS entry; no auth leakage into logs or frontend artifacts.
+- Actor/tenant permissions remain enforced by the existing gateway and PostgreSQL RLS; admin/service bootstrap bearer is not exposed.
+- Even pilot tests must prove permitted and denied reads/writes, two actors and tenants, forbidden cross-tenant access, bad cookie, expiry, logout, restart, and server failure. No UI-only sign-in simulation.
 
-## Mandatory server implementation before G1 acceptance
+## No extra architecture
 
-- Secure OIDC code exchange+identity verification, no unverified JWT parsing. Whitelisted issuer/endpoints; explicit algorithm; key rotation; bounded network failures; correct state/nonce/PKCE; safe redirect targets.
-- Durable tenant membership, actor identity mapping, roles/grants, revocation/session expiry and restart-safe session storage through a **platform-owned** existing PostgreSQL boundary, not business owner tables. Hash session handles at rest, bound expiration and rotation, require cryptographic randomness, no cookie/log secret leak.
-- The same authenticated principal and live authorization applies to HTTP/gRPC ingress, privacy, search and background/worker access. A browser cannot select another actor or tenant by sending metadata.
-- Strict origin, Host and proxy trust, CSRF protection on state-changing cookie requests, secure cookie attributes and safe redirects; no direct unauthenticated access to application gateway.
-- Explicit first-admin provisioning: bind a known IdP subject to a tenant and scoped permissions from a server-side operator action, never via a browser bootstrap token.
-- Built web user journey: login → authorized navigation → logout/revocation/expiry → failed/disabled IdP and offline cases.
-- Negative tests: invalid issuer/signature/audience/nonce/state, replayed callback, disabled user/tenant, revoked grant after login, expired/forged cookie/CSRF, cross-tenant requests, network failure, restart, concurrent logout and no-leak assertions.
-- Match one exact head SHA, browser **production build** and real Postgres, then full applicable CI and independent acceptance. **No G1 checkbox may be checked on browser adapter tests alone.**
+Reuse `crates/crm-application-runtime`, `crates/crm-capability-ingress`, `packages/client` and `apps/web`. Keep all code close to its owner. Zero new business owner modules; no alternative CRUD API or duplicate policy tables. Do not add persistence, OIDC, refresh-token lifecycles, or other cross-process machinery **until actual pilot testing demonstrates why it is needed**.
 
-## Incremental draft implementation notes
+## Current implementation, accurately
 
-The browser adapter and its unit tests are intentionally fail-closed and are a **partial G1 implementation only**. The backend `/auth/*` handlers, signed identity, durable store and production E2E do **not yet exist**. Until those are completed and independently tested, this branch remains draft and no G1 readiness is asserted.
-
-## Extension complexity measurement
-
-Target **zero new Rust crates**, no new business owner, no edits to generic router/worker algorithms, no duplicate permissions service. If any new adapter dependency becomes unavoidable, explain its trust boundary, security review and lockfile impact in #311. No Step 22R requirement is waived.
+Draft PR #318 currently contains **only** the fail-closed browser cookie session adapter, sign-out UI, unit tests and G1 governance packet. The backend login/session/logout handlers, integration of cookie identity into both transports and real process-level user/tenant tests are still **missing**. G1 is NO-GO and PR remains draft until they are implemented and tested. No production deployment is permitted on this draft.
