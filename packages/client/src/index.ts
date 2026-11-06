@@ -65,5 +65,5 @@ export type {
   PublishMetadataBundleResponse,
   RollbackMetadataRevisionResponse,
 } from "../gen/crm/metadata/v1/metadata_pb";
-\nexport { GovernedCrmClient, PartyKind, ContactPointKind, DealStatus, TaskPriority } from "./crm";
+export { GovernedCrmClient, PartyKind, ContactPointKind, DealStatus, TaskPriority } from "./crm";
 export type { Party, Account, ContactPoint, Deal, Task, Page as CrmPage } from "./crm";

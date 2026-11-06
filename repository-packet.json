@@ -29,7 +29,9 @@
     "packages/client/src/crm.test.ts",
     "packages/client/src/index.ts",
     "packages/client/src/session.ts",
-    "crates/crm-application-runtime/src/production_identity.rs"
+    "crates/crm-application-runtime/src/production_identity.rs",
+    "tests/test_repository_navigation.py",
+    "tests/test_architecture_documentation_consistency.py"
   ],
   "forbidden_paths": [
     "modules/**",
