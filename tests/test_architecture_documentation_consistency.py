@@ -233,6 +233,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "tests/test_architecture_documentation_consistency.py",
             "crates/crm-application-runtime/src/config.rs",
             "crates/crm-application-runtime/src/runtime.rs",
+            "crates/crm-application-runtime/src/gateway_grpc.rs",
             "crates/crm-application-runtime/src/lib.rs",
             "crates/crm-application-runtime/src/production_identity.rs",
             "crates/crm-application-runtime/Cargo.toml",
