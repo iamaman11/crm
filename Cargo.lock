@@ -359,6 +359,7 @@ dependencies = [
  "crm-search-runtime",
  "http",
  "prost",
+ "ring",
  "prost-build",
  "protoc-bin-vendored",
  "serde",
