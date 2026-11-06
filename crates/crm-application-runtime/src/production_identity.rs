@@ -313,10 +313,10 @@ impl PilotIdentity {
         if session.expires_at_nanos <= now {
             return None;
         }
-        if let Some(provided) = csrf {
-            if !constant_equal(provided.as_bytes(), session.csrf.as_bytes()) {
-                return None;
-            }
+        if let Some(provided) = csrf
+            && !constant_equal(provided.as_bytes(), session.csrf.as_bytes())
+        {
+            return None;
         }
         let operator = self
             .operators
