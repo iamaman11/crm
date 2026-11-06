@@ -25,6 +25,7 @@ Do not reconstruct current status from historical packet documents, old PR descr
 | Task | Read first | Then inspect |
 |---|---|---|
 | Understand what is being built now | `PROJECT_STATUS.md`, `ACTIVE_PACKET.md` | `IMPLEMENTATION_ROADMAP.md`, `PHASE8_DELIVERY_PLAN.md`, active issue |
+| First usable closed-pilot CRM and modular developer path | [`FIRST_USABLE_CRM_PILOT.md`](FIRST_USABLE_CRM_PILOT.md) | #310 (G0–G5), #311–#316; ADR-033 and active packet determine allowed work |
 | Understand the complete future CRM product | `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md` | `CRM_CAPABILITY_COVERAGE.md`, `IMPLEMENTATION_ROADMAP.md`, `MODULE_CATALOG.md` |
 | Understand automation, triggers, robots, pipelines or Kanban | `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md` sections 7–9 | `SYSTEM_INVARIANTS.md`, `APPLICATION_ARCHITECTURE.md`, owner capability contracts |
 | Understand architecture boundaries | `SYSTEM_INVARIANTS.md` | `APPLICATION_ARCHITECTURE.md`, accepted ADRs |
