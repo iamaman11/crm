@@ -35,6 +35,11 @@ kill_descendants() {
 
 # Ensure cleanup of background services and Docker container on exit
 cleanup() {
+  local exit_status=$?
+  if [ "$exit_status" -ne 0 ]; then
+    echo "E2E failed. Last PostgreSQL server errors:" >&2
+    docker logs --tail 160 "$CONTAINER_NAME" 2>&1 | tail -n 160 || true
+  fi
   echo "Cleaning up background services..."
   
   if [ -n "$API_PID" ]; then
