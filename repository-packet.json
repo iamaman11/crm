@@ -34,7 +34,9 @@
     "database/migrations/20261106_0001_production_identity.down.sql",
     "crates/crm-application-runtime/tests/production_identity.rs",
     "crates/crm-application-runtime/src/gateway_grpc.rs",
-    "scripts/customer_privacy_operations.py"
+    "scripts/customer_privacy_operations.py",
+    "step13-complexity-policy.json",
+    "tests/test_step13_exit_evidence.py"
   ],
   "forbidden_paths": [
     ".github/**",
@@ -59,7 +61,8 @@
     "exact G1 baseline, scoped code changes, deterministic generated packet and CI acceptance without bypass",
     "no new business crates, duplicate authorization system, OIDC/SSO subsystem, or fake production readiness",
     "preserve the accepted Step22H direct-runtime inventory, decisions ledger and remaining Step22R obligations unchanged",
-    "update only the exact trusted runtime blob SHA in existing Customer Privacy operations metrics source guard after G1 runtime changed; keep all failure and restore checks intact"
+    "update only the exact trusted runtime blob SHA in existing Customer Privacy operations metrics source guard after G1 runtime changed; keep all failure and restore checks intact",
+    "accepted G1 product identity cost is explicitly calibrated against historic ADR-031 ceilings with actual measurements, no unregistered suppressions and no extra budget slack"
   ],
   "required_checks": [
     "Affected Scope CI",
@@ -77,7 +80,8 @@
     "short session expires, revoked on logout, fails closed after server restart and on CSRF or cookie error",
     "HTTP and gRPC-web are both bound to the existing RequestAuthenticator and governed permissions",
     "no new authorization engine, business modules, OIDC integration or public production claim",
-    "all changes confined to G1 whitelist; generated navigation deterministic; selected exact-head checks pass and main push checks pass after merging"
+    "all changes confined to G1 whitelist; generated navigation deterministic; selected exact-head checks pass and main push checks pass after merging",
+    "Step13 policy retains the exact historic budgets and raises only measured identity-specific ceilings under review #194; all checks remain blocking"
   ],
   "non_goals": [
     "add OAuth/OIDC JWT SSO, separate identity service, multi-provider configuration or refresh-token daemon for a closed test pilot",
