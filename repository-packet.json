@@ -37,7 +37,8 @@
     "scripts/customer_privacy_operations.py",
     "step13-complexity-policy.json",
     "tests/test_step13_exit_evidence.py",
-    "scripts/run_customer_privacy_operations.sh"
+    "scripts/run_customer_privacy_operations.sh",
+    "services/crm-api/tests/process_e2e.rs"
   ],
   "forbidden_paths": [
     ".github/**",
@@ -49,8 +50,7 @@
     "crates/crm-first-party-modules/**",
     "docs/generated/REPOSITORY_MAP.md",
     "step22-runtime-fanin-decisions.json",
-    "step22-architecture-inventory.json",
-    "services/**"
+    "step22-architecture-inventory.json"
   ],
   "deliverables": [
     "one configured closed-pilot operator login path in existing crm-api with no password database or SSO provider",
@@ -64,7 +64,8 @@
     "preserve the accepted Step22H direct-runtime inventory, decisions ledger and remaining Step22R obligations unchanged",
     "update only the exact trusted runtime blob SHA in existing Customer Privacy operations metrics source guard after G1 runtime changed; keep all failure and restore checks intact",
     "accepted G1 product identity cost is explicitly calibrated against historic ADR-031 ceilings with actual measurements, no unregistered suppressions and no extra budget slack",
-    "fix the proven existing Customer Privacy PostgreSQL final-startup false-negative caused by grep -q SIGPIPE under pipefail, without changing acceptance behavior or wait bounds"
+    "fix the proven existing Customer Privacy PostgreSQL final-startup false-negative caused by grep -q SIGPIPE under pipefail, without changing acceptance behavior or wait bounds",
+    "production crm-api process integration verifies two configured operators, session cookies, gRPC query grants and tenant denial in the same existing process test"
   ],
   "required_checks": [
     "Affected Scope CI",
