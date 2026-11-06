@@ -46,3 +46,11 @@ G1 code is **not accepted by CI**. Exact-head intermediate runs measured the old
 Customer Privacy Operations currently pins the exact `runtime.rs` Git blob SHA in `scripts/customer_privacy_operations.py` and must verify the **same** source used in G1; do not delete the guard or weaken accepted checks. Rust Generated Sync can format changed files; only the final **human-authored** unchanged SHA with complete applicable checks may be accepted. Historical CI passes on earlier heads are not acceptance of later heads.
 
 **Mandatory functional proof not yet supplied:** running HTTPS same-origin built browser + process HTTP/gRPC-web + PostgreSQL with two genuinely distinct operators/tenants, successful permitted operations, denied cross-tenant and revoked operations, malformed cookie/CSRF/expiry/restart and a safe backup/recovery run. A login form and unit-level token assertions alone do not pass G1. Additional enhancements beyond the necessary safe working CRM are deferred until **after actual real production launch**, not before.
+
+## G1 process-level regression test added (pending acceptance)
+
+The **existing** `services/crm-api/tests/process_e2e.rs`, which is already executed in Application Runtime CI against PostgreSQL, now starts `crm-api` with two configured operators (Alice/tenant-a and Bob/tenant-b) and executes actual HTTP login, session, logout, and gRPC search requests. It checks malformed credentials, Secure/HttpOnly/SameSite cookie flags, CSRF, denial of cross-tenant gRPC queries, and revoked HTTP sessions. This is an **executable real-process test**, not mock-based proof, but it counts only after the CI job actually passes on the final exact head.
+
+A review of the existing gRPC service found `query` had omitted cookie-to-principal verification while `mutate` performed it. Both methods now invoke `verify_pilot_cookie` before the shared governed middleware; the Python architecture test explicitly checks both call sites to prevent a silent regression. These changes are intentionally limited to the existing transport seam, without a new authorization implementation.
+
+**Still required:** HTTPS same-origin deployed proxy with a **production web build** in the browser, actual two-tenant user acceptance and complete final exact-head CI; no production-readiness claim from a local HTTP process fixture alone.
