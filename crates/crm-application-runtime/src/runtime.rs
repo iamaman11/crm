@@ -1,4 +1,5 @@
 use crate::export_selection_bootstrap::ExportSelectionWorkerAccess;
+use crate::production_identity::{PilotIdentity, clear_cookie, set_cookie};
 include!("generated_contract_telemetry.rs");
 use crate::{
     ApplicationConfig, ApplicationGatewayService, BootstrapVisibilityResource,
@@ -16,10 +17,10 @@ use crate::{
     build_production_background_workers, build_production_composition,
 };
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode};
-use axum::response::{IntoResponse, Response};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
-use axum::{Json, Router};
+use axum::{Form, Json, Router};
 use crm_application_composition::BackgroundWorkerRegistry;
 use crm_capability_adapters::{
     AuthorizationGrant, FixedWindowRateLimiter, GatewayCapabilityClient,
@@ -101,6 +102,7 @@ pub struct ApplicationComponents {
     last_worker_error: Arc<Mutex<Option<String>>>,
     clock: Arc<dyn Clock>,
     tenant_ids: BTreeSet<TenantId>,
+    pub(crate) pilot_identity: Option<PilotIdentity>,
 }
 
 impl fmt::Debug for ApplicationComponents {
@@ -139,6 +141,8 @@ impl ApplicationRuntime {
         }
 
         let access_tokens = AccessTokenStore::default();
+        let pilot_identity = PilotIdentity::from_environment(&config, access_tokens.clone())
+            .map_err(|error| ApplicationRuntimeError::Assembly(error.to_owned()))?;
         access_tokens
             .issue(
                 config.bearer_token.as_bytes(),
@@ -303,6 +307,13 @@ impl ApplicationRuntime {
                 &customer_enrichment_materialization_definition,
                 &customer_enrichment_materialization_worker_actor_id,
             )?;
+        }
+
+        if let Some(ref pilot) = pilot_identity {
+            pilot.provision(
+                &authorization_store, &visibility_store,
+                &mutation_definitions, &query_definitions,
+            ).map_err(|error| ApplicationRuntimeError::Assembly(error.to_owned()))?;
         }
 
         let mutation_gateway = Arc::new(CapabilityGateway::new(
@@ -521,6 +532,7 @@ impl ApplicationRuntime {
             last_worker_error: Arc::new(Mutex::new(None)),
             clock,
             tenant_ids: config.tenant_ids.clone(),
+            pilot_identity,
         });
 
         Ok(Self { config, components })
@@ -656,6 +668,9 @@ async fn run_http_server(
         .route("/healthz", get(health))
         .route("/readyz", get(ready))
         .route("/metrics", get(metrics))
+        .route("/auth/login", get(login_page).post(login))
+        .route("/auth/session", get(auth_session))
+        .route("/auth/logout", post(logout))
         .route(
             "/v1/mutations/{owner_module_id}/{capability_id}/{capability_version}",
             post(mutation),
@@ -721,12 +736,106 @@ async fn ready(State(state): State<HttpState>) -> impl IntoResponse {
     }
 }
 
+#[derive(serde::Deserialize)]
+struct PilotLoginForm {
+    username: String,
+    password: String,
+}
+
+async fn login_page() -> Html<&'static str> {
+    Html("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>CRM sign in</title></head><body><main><h1>Sign in to CRM</h1><form method=\"post\" action=\"/auth/login\"><label>Username <input name=\"username\" autocomplete=\"username\" required></label><label>Password <input name=\"password\" type=\"password\" autocomplete=\"current-password\" required></label><button type=\"submit\">Sign in</button></form></main></body></html>")
+}
+
+fn verified_origin(headers: &HeaderMap, pilot: &PilotIdentity) -> bool {
+    headers.get(header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|origin| origin == pilot.public_origin())
+}
+
+async fn login(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Form(form): Form<PilotLoginForm>,
+) -> Response {
+    let Some(ref pilot) = state.components.pilot_identity else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    if !verified_origin(&headers, pilot) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let Ok(token) = pilot.sign_in(&form.username, &form.password) else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    let mut response = Redirect::to("/").into_response();
+    if let Ok(value) = HeaderValue::from_str(&set_cookie(&token)) {
+        response.headers_mut().insert(header::SET_COOKIE, value);
+    }
+    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+async fn auth_session(State(state): State<HttpState>, headers: HeaderMap) -> Response {
+    let Some(ref pilot) = state.components.pilot_identity else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    let Some(cookie) = headers.get(header::COOKIE).and_then(|h| h.to_str().ok()) else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    let Some(authenticated) = pilot.authorize(cookie, None) else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    let mut result = Json(authenticated.snapshot).into_response();
+    result.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    result
+}
+
+async fn logout(State(state): State<HttpState>, headers: HeaderMap) -> Response {
+    let Some(ref pilot) = state.components.pilot_identity else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    if !verified_origin(&headers, pilot) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let cookie = headers.get(header::COOKIE).and_then(|h| h.to_str().ok()).unwrap_or_default();
+    let csrf = headers.get("x-crm-csrf").and_then(|h| h.to_str().ok()).unwrap_or_default();
+    if !pilot.sign_out(cookie, csrf) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    if let Ok(value) = HeaderValue::from_str(&clear_cookie()) {
+        response.headers_mut().insert(header::SET_COOKIE, value);
+    }
+    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+fn resolve_cookie_session(components: &ApplicationComponents, headers: &mut HeaderMap) -> Result<(), Response> {
+    let Some(cookie) = headers.get(header::COOKIE) else { return Ok(()) };
+    if headers.contains_key(header::AUTHORIZATION) {
+        return Err(StatusCode::UNAUTHORIZED.into_response());
+    }
+    let Some(ref pilot) = components.pilot_identity else {
+        return Err(StatusCode::UNAUTHORIZED.into_response());
+    };
+    let cookie = cookie.to_str().map_err(|_| StatusCode::UNAUTHORIZED.into_response())?;
+    let csrf = headers.get("x-crm-csrf").and_then(|v| v.to_str().ok()).unwrap_or_default();
+    let principal = pilot.authorize(cookie, Some(csrf))
+        .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
+    let value = HeaderValue::from_str(&principal.authorization)
+        .map_err(|_| StatusCode::UNAUTHORIZED.into_response())?;
+    headers.insert(header::AUTHORIZATION, value);
+    Ok(())
+}
+
 async fn mutation(
     State(state): State<HttpState>,
     Path(path): Path<PathCoordinate>,
-    headers: HeaderMap,
+    mut headers: HeaderMap,
     Json(body): Json<HttpMutationBody>,
 ) -> Response {
+    if let Err(response) = resolve_cookie_session(&state.components, &mut headers) {
+        return response;
+    }
     let (input, approval) = match body.into_parts() {
         Ok(parts) => parts,
         Err(()) => return bad_approval(),
@@ -756,9 +865,12 @@ async fn mutation(
 async fn query(
     State(state): State<HttpState>,
     Path(path): Path<PathCoordinate>,
-    headers: HeaderMap,
+    mut headers: HeaderMap,
     Json(input): Json<TypedPayload>,
 ) -> Response {
+    if let Err(response) = resolve_cookie_session(&state.components, &mut headers) {
+        return response;
+    }
     let route = match capability_route(&path, &input) {
         Ok(route) => route,
         Err(()) => return bad_route(),
