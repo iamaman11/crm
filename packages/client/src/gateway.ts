@@ -95,7 +95,7 @@ export class GovernedClient {
         schemaId: "crm.search.v1.SearchRequest",
         schemaVersion: "1.0.0",
         descriptorHash,
-        dataClass: "confidential",
+        dataClass: "personal",
         encoding: "protobuf",
         maximumSizeBytes: 1048576n,
         retentionPolicyId: "standard",
@@ -157,10 +157,10 @@ export class GovernedClient {
           retryable: false,
         });
       }
-      if (output.dataClass !== "confidential") {
+      if (output.dataClass !== "personal") {
         throw new ProductClientError({
           kind: "internal",
-          message: `Contract verification failed: expected dataClass "confidential", got "${output.dataClass}"`,
+          message: `Contract verification failed: expected dataClass "personal", got "${output.dataClass}"`,
           retryable: false,
         });
       }

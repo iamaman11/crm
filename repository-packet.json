@@ -37,7 +37,10 @@
     "apps/web/e2e/g2-crm.spec.ts",
     "scripts/run_e2e.sh",
     ".github/workflows/product-plane.yml",
-    "services/crm-api/tests/seed_e2e_fixture.rs"
+    "services/crm-api/tests/seed_e2e_fixture.rs",
+    "packages/client/src/gateway.ts",
+    "packages/client/src/gateway.test.ts",
+    "apps/web/e2e/customer-privacy.spec.ts"
   ],
   "forbidden_paths": [
     "modules/**",

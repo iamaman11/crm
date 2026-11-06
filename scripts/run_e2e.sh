@@ -130,13 +130,19 @@ cargo test -p crm-api --test seed_e2e_fixture
 # test-only and are never compiled into the browser.
 G2_PILOT_OPERATORS='[{"username":"alice","password":"01234567890123456789012345678901","actor_id":"actor-a","tenant_id":"tenant-a","capabilities":["parties.party.create","parties.party.get","parties.party.list","parties.party.update","accounts.account.create","accounts.account.list","contact-points.contact-point.create","contact-points.contact-point.get","contact-points.contact-point.list","contact-points.contact-point.update","sales.deal.create","sales.deal.get","sales.deal.list","sales.deal.update","sales.deal.advance_stage","activities.task.create","activities.task.get","activities.task.list","activities.task.update","activities.task.complete"]},{"username":"bob","password":"abcdefghijklmnopqrstuvwxyzABCDEF","actor_id":"actor-b","tenant_id":"tenant-b","capabilities":["parties.party.list","accounts.account.list","contact-points.contact-point.list","sales.deal.list","activities.task.list"]}]'
 start_api() {
+  local tenant_ids="tenant-a"
+  local pilot_operators=""
+  if [ "${1:-legacy}" = "g2" ]; then
+    tenant_ids="tenant-a,tenant-b"
+    pilot_operators="$G2_PILOT_OPERATORS"
+  fi
   CRM_DATABASE_URL="postgres://crm_app_test:crm_app_test@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
   CRM_API_BEARER_TOKEN=phase6l-process-bearer-token-0123456789abcdef0123456789abcdef \
   CRM_API_ACTOR_ID=actor-a \
-  CRM_API_TENANTS=tenant-a,tenant-b \
+  CRM_API_TENANTS="$tenant_ids" \
   CRM_BOOTSTRAP_ALLOW_PHASE6=true \
   CRM_PUBLIC_ORIGIN=https://127.0.0.1:5174 \
-  CRM_PILOT_OPERATORS="$G2_PILOT_OPERATORS" \
+  CRM_PILOT_OPERATORS="$pilot_operators" \
   CRM_CURSOR_SIGNING_KEY=phase6l-cursor-signing-key-0123456789abcdef0123456789abcdef \
   CRM_APPROVAL_SIGNING_KEY=phase6l-approval-signing-key-0123456789abcdef0123456789abcdef \
   CRM_GRPC_BIND=127.0.0.1:9090 \
@@ -144,8 +150,8 @@ start_api() {
   ./target/debug/crm-api &
   API_PID=$!
 }
-echo "Starting crm-api service..."
-start_api
+echo "Starting legacy single-tenant crm-api for existing negative tests..."
+start_api legacy
 
 # Wait for backend to be ready
 echo "Waiting for crm-api to be ready..."
@@ -206,6 +212,19 @@ echo "Legacy E2E tests passed successfully!"
 # G2 must run the compiled browser with real cookies/CSRF, not the DEV session
 # used by older E2E tests. The self-signed HTTPS key exists only inside this
 # disposable CI workspace and is never stored in the repository.
+# The legacy negative test intentionally expects tenant-b to be forbidden.
+# Only after it passes, restart the same real API against the same DB with
+# two explicitly authorized pilot users to prove G2 tenant isolation.
+kill "$API_PID"
+wait "$API_PID" || true
+API_PID=""
+start_api g2
+for _ in $(seq 1 60); do
+  if curl --fail --silent http://127.0.0.1:8080/readyz >/dev/null 2>&1; then break; fi
+  if ! kill -0 "$API_PID" 2>/dev/null; then echo "G2 pilot crm-api did not start"; exit 1; fi
+  sleep 1
+done
+curl --fail --silent http://127.0.0.1:8080/readyz >/dev/null
 echo "Starting production-build G2 browser acceptance..."
 test -f apps/web/dist/index.html
 G2_TMP="$(mktemp -d)"
@@ -234,7 +253,7 @@ echo "Restarting crm-api against the SAME PostgreSQL database..."
 kill "$API_PID"
 wait "$API_PID" || true
 API_PID=""
-start_api
+start_api g2
 for _ in $(seq 1 60); do
   if curl --fail --silent http://127.0.0.1:8080/readyz >/dev/null 2>&1; then break; fi
   if ! kill -0 "$API_PID" 2>/dev/null; then echo "crm-api restart failed"; exit 1; fi

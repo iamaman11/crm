@@ -241,6 +241,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "apps/web/vite.config.ts", "apps/web/playwright.config.ts",
             "apps/web/e2e/g2-crm.spec.ts", "scripts/run_e2e.sh",
             "services/crm-api/tests/seed_e2e_fixture.rs",
+            "packages/client/src/gateway.ts", "packages/client/src/gateway.test.ts",
+            "apps/web/e2e/customer-privacy.spec.ts",
             ".github/workflows/product-plane.yml",
             "apps/web/src/CustomersPage.tsx", "apps/web/src/DealsPage.tsx", "apps/web/src/TasksPage.tsx",
             "packages/client/src/crm.ts", "packages/client/src/crm.test.ts",
