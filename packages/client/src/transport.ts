@@ -23,7 +23,13 @@ export function createApplicationGatewayClient(
     const requestId = idFactory();
 
     if (session.status === "authenticated") {
-      request.header.set("authorization", `Bearer ${session.bearerToken}`);
+      if (session.authentication === "cookie") {
+        // HttpOnly session cookie is managed by the same-origin server, not JS.
+        request.header.set("x-crm-csrf", session.csrfToken);
+      } else {
+        // Legacy bearer transport is available only to the explicit DEV harness.
+        request.header.set("authorization", `Bearer ${session.bearerToken}`);
+      }
       request.header.set(TENANT_HEADER, session.tenantId);
     }
     request.header.set(REQUEST_ID_HEADER, requestId);

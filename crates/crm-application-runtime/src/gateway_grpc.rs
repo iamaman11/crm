@@ -6,6 +6,7 @@ use crm_module_sdk::{
     RetentionPolicyId, SchemaId, SchemaVersion, TypedPayload,
 };
 use std::sync::Arc;
+use tonic::metadata::{MetadataMap, MetadataValue};
 use tonic::{Request, Response, Status};
 
 pub mod gateway_v1 {
@@ -41,7 +42,8 @@ impl gateway_v1::application_gateway_service_server::ApplicationGatewayService
         &self,
         request: Request<MutateRequest>,
     ) -> Result<Response<MutateResponse>, Status> {
-        let metadata = request.metadata().clone();
+        let mut metadata = request.metadata().clone();
+        verify_pilot_cookie(&self.components, &mut metadata)?;
         let request = request.into_inner();
         let input = decode_payload(request.input)?;
         let approval = decode_approval(request.approval)?;
@@ -72,7 +74,8 @@ impl gateway_v1::application_gateway_service_server::ApplicationGatewayService
         &self,
         request: Request<QueryRequest>,
     ) -> Result<Response<QueryResponse>, Status> {
-        let metadata = request.metadata().clone();
+        let mut metadata = request.metadata().clone();
+        verify_pilot_cookie(&self.components, &mut metadata)?;
         let request = request.into_inner();
         let input = decode_payload(request.input)?;
         let route = decode_route(
@@ -89,6 +92,38 @@ impl gateway_v1::application_gateway_service_server::ApplicationGatewayService
         *response.metadata_mut() = metadata;
         Ok(response)
     }
+}
+
+/// Cookie traffic is converted to the existing bearer authenticator only inside the
+/// server. Original service/worker bearer requests without cookies are unchanged.
+fn verify_pilot_cookie(
+    components: &ApplicationComponents,
+    metadata: &mut MetadataMap,
+) -> Result<(), Status> {
+    let Some(cookie) = metadata.get("cookie") else {
+        return Ok(());
+    };
+    if metadata.get("authorization").is_some() {
+        return Err(Status::unauthenticated("ambiguous authentication"));
+    }
+    let pilot = components
+        .pilot_identity
+        .as_ref()
+        .ok_or_else(|| Status::unauthenticated("session unavailable"))?;
+    let cookie = cookie
+        .to_str()
+        .map_err(|_| Status::unauthenticated("invalid session"))?;
+    let csrf = metadata
+        .get("x-crm-csrf")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    let principal = pilot
+        .authorize(cookie, Some(csrf))
+        .ok_or_else(|| Status::unauthenticated("invalid session"))?;
+    let bearer = MetadataValue::try_from(principal.authorization.as_str())
+        .map_err(|_| Status::unauthenticated("invalid session"))?;
+    metadata.insert("authorization", bearer);
+    Ok(())
 }
 
 fn decode_route(

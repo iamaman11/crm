@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "customer-privacy-operations-policy.json"
 SCHEMA_VERSION = "crm.customer-privacy-operations-policy/v1"
 REPORT_SCHEMA_VERSION = "crm.customer-privacy-operations-report/v1"
-RUNTIME_BLOB_SHA = "6a907f81146e4bd3f34c9761480ea0e2e4a99e1b"
+RUNTIME_BLOB_SHA = "4b8fabd6a70666e108c89b5c4e07ae3761f8f508"
 
 
 class OperationsError(RuntimeError):

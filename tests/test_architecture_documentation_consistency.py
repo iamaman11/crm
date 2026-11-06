@@ -215,31 +215,52 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_g0_pilot_governance_does_not_close_step22(self) -> None:
+    def test_pilot_cookie_is_checked_on_both_grpc_methods(self) -> None:
+        gateway = read("crates/crm-application-runtime/src/gateway_grpc.rs")
+        mutation = gateway.split("    async fn mutate(", 1)[1].split("    async fn query(", 1)[0]
+        query = gateway.split("    async fn query(", 1)[1].split(
+            "fn verify_pilot_cookie(", 1
+        )[0]
+        for method in (mutation, query):
+            self.assertIn("let mut metadata = request.metadata().clone();", method)
+            self.assertIn(
+                "verify_pilot_cookie(&self.components, &mut metadata)?;", method
+            )
+            self.assertIn("*governed_request.metadata_mut() = metadata;", method)
+
+    def test_active_g1_identity_is_strict_and_preserves_step22(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-22p-g0-pilot-governance-transition")
-        self.assertEqual(
-            self.packet["baseline"],
-            {"ref": "main", "sha": "fab78b95afb66344af2dccbff87121cd24ba3cd5"},
-        )
-        self.assertEqual(self.packet["tracking_issues"], [310, 194])
-        self.assertEqual(
-            set(self.packet["allowed_paths"]),
-            {
-                "docs/adr/ADR-033-closed-pilot-validation-within-step-22.md",
-                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-                "docs/IMPLEMENTATION_ROADMAP.md",
-                "docs/PHASE8_DELIVERY_PLAN.md",
-                "docs/DELIVERY_GOVERNANCE.md",
-                "docs/PROJECT_STATUS.md",
-                "docs/README.md",
-                "docs/FIRST_USABLE_CRM_PILOT.md",
-                "docs/ACTIVE_PACKET.md",
-                "repository-packet.json",
-                "tests/test_repository_navigation.py",
-                "tests/test_architecture_documentation_consistency.py",
-            },
-        )
+        self.assertEqual(self.packet["packet_id"], "repository-step-22p-g1-production-identity")
+        self.assertEqual(self.packet["baseline"], {"ref": "main", "sha": "cd5fc1bc3ff2a92e4a265a40a1bb816648ec2e17"})
+        self.assertEqual(self.packet["tracking_issues"], [311, 310])
+        self.assertEqual(set(self.packet["allowed_paths"]), {
+            "apps/web/src/App.tsx",
+            "apps/web/src/productionSession.ts",
+            "apps/web/src/productionSession.test.ts",
+            "packages/client/src/session.ts",
+            "packages/client/src/transport.ts",
+            "docs/G1_PRODUCTION_IDENTITY.md",
+            "docs/ACTIVE_PACKET.md",
+            "repository-packet.json",
+            "step13-complexity-policy.json",
+            "tests/test_step13_exit_evidence.py",
+            "tests/test_repository_navigation.py",
+            "tests/test_architecture_documentation_consistency.py",
+            "crates/crm-application-runtime/src/config.rs",
+            "crates/crm-application-runtime/src/runtime.rs",
+            "crates/crm-application-runtime/src/gateway_grpc.rs",
+            "services/crm-api/tests/process_e2e.rs",
+            "scripts/customer_privacy_operations.py",
+            "scripts/run_customer_privacy_operations.sh",
+            "crates/crm-application-runtime/src/lib.rs",
+            "crates/crm-application-runtime/src/production_identity.rs",
+            "crates/crm-application-runtime/Cargo.toml",
+            "crates/crm-capability-ingress/src/authentication.rs",
+            "Cargo.lock",
+            "database/migrations/20261106_0001_production_identity.up.sql",
+            "database/migrations/20261106_0001_production_identity.down.sql",
+            "crates/crm-application-runtime/tests/production_identity.rs",
+        })
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn("ADR-033", self.plan)
@@ -247,16 +268,13 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("ADR-033", self.status)
         self.assertIn("Step 22R", self.plan)
         self.assertIn("36 unresolved", self.status)
-        self.assertIn("Step22", " ".join(self.packet["acceptance"]))
-        self.assertIn("Step23", " ".join(self.packet["non_goals"]))
+        self.assertIn("Step22H", " ".join(self.packet["deliverables"]))
         self.assertIn("Step 22", self.adr32)
-        counts = validate_decisions(ROOT)
-        self.assertEqual(
-            counts,
-            {"all": 63, "final": 27, "platform_generic": 16,
-             "test_only": 1, "removed": 10, "owner_specific_unavoidable": 0,
-             "unresolved": 36},
-        )
+        self.assertEqual(validate_decisions(ROOT), {
+            "all": 63, "final": 27, "platform_generic": 16,
+            "test_only": 1, "removed": 10, "owner_specific_unavoidable": 0,
+            "unresolved": 36,
+        })
 
         approval = read(".github/workflows/customer-privacy-approval.yml")
         for check in (

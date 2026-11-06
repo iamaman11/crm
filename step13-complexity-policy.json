@@ -55,7 +55,7 @@
       "expected_workspace_packages": 112,
       "maximum_internal_dependency_edges": 835,
       "maximum_dependency_depth": 18,
-      "maximum_public_rust_items": 5377,
+      "maximum_public_rust_items": 5389,
       "maximum_suppression_occurrences": 91
     },
     "central_system_budgets": {
@@ -138,7 +138,7 @@
         "maximum_transitive_reverse_impact": 1,
         "maximum_dependency_depth": 17,
         "maximum_public_items": 130,
-        "maximum_non_comment_loc": 7269
+        "maximum_non_comment_loc": 7922
       },
       "crm-api": {
         "role": "process-host",
@@ -262,7 +262,7 @@
       }
     },
     "dependency_governance": {
-      "maximum_declaration_count": 270,
+      "maximum_declaration_count": 271,
       "maximum_workspace_dependency_count": 4,
       "maximum_heavy_feature_declarations": 65,
       "accepted_version_divergence": {
@@ -491,6 +491,23 @@
         "accepted_build_internal_dependencies": [],
         "non_growth_justification": "The deployable process host remains production-thin: its only runtime workspace dependency is crm-application-runtime. The remaining accepted internal fan-in is test-only process-acceptance support. Separate budgets prevent dev evidence from being mistaken for production coupling and block growth in either surface."
       }
+    },
+    "pilot_g1_measurement": {
+      "tracking_issue": "#311",
+      "architecture_owner": "#194",
+      "reviewed_packet": "repository-step-22p-g1-production-identity",
+      "reason": "Necessary first usable CRM identity runs in the existing process and reuses the governed gateway; measurements are on the actual draft G1 source, not generic budget headroom. This is explicit calibration, not a new exception or suppressions.",
+      "previous_accepted_budget": {
+        "maximum_public_rust_items": 5377,
+        "crm_application_runtime_non_comment_loc": 7269,
+        "maximum_dependency_declarations": 270
+      },
+      "measured_g1_budget": {
+        "maximum_public_rust_items": 5389,
+        "crm_application_runtime_non_comment_loc": 7922,
+        "maximum_dependency_declarations": 271
+      },
+      "restrictions": "No extra workspace crate, suppressions, owner-specific direct runtime fan-in, new architectural bypass or additional slack is authorized. Step22R obligations remain."
     }
   }
 }

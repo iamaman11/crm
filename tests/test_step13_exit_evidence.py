@@ -185,13 +185,37 @@ class Step13ExitEvidenceTests(unittest.TestCase):
                 "expected_workspace_packages": 112,
                 "maximum_internal_dependency_edges": 835,
                 "maximum_dependency_depth": 18,
-                "maximum_public_rust_items": 5377,
+                "maximum_public_rust_items": 5389,
                 "maximum_suppression_occurrences": 91,
             },
         )
         self.assertEqual(
             exit_policy["dependency_governance"]["maximum_declaration_count"],
-            270,
+            271,
+        )
+
+        accepted_g1 = exit_policy["pilot_g1_measurement"]
+        self.assertEqual(accepted_g1["tracking_issue"], "#311")
+        self.assertEqual(accepted_g1["architecture_owner"], "#194")
+        self.assertEqual(
+            accepted_g1["previous_accepted_budget"],
+            {
+                "maximum_public_rust_items": 5377,
+                "crm_application_runtime_non_comment_loc": 7269,
+                "maximum_dependency_declarations": 270,
+            },
+        )
+        self.assertEqual(
+            accepted_g1["measured_g1_budget"],
+            {
+                "maximum_public_rust_items": 5389,
+                "crm_application_runtime_non_comment_loc": 7922,
+                "maximum_dependency_declarations": 271,
+            },
+        )
+        self.assertEqual(
+            exit_policy["central_system_budgets"]["crm-application-runtime"]["maximum_non_comment_loc"],
+            7922,
         )
 
         central = exit_policy["central_system_budgets"]

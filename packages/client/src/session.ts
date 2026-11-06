@@ -3,7 +3,17 @@ export type SessionState =
   | Readonly<{ status: "unauthenticated" }>
   | Readonly<{
       status: "authenticated";
+      authentication?: "bearer";
       bearerToken: string;
+      tenantId: string;
+      actorLabel?: string;
+      tenantLabel?: string;
+      expiresAtUnixMillis?: number;
+    }>
+  | Readonly<{
+      status: "authenticated";
+      authentication: "cookie";
+      csrfToken: string;
       tenantId: string;
       actorLabel?: string;
       tenantLabel?: string;

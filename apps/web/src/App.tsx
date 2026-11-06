@@ -1,7 +1,7 @@
 import {
   Suspense,
   lazy,
-  useMemo,
+  useEffect,
   useSyncExternalStore,
   useState,
 } from "react";
@@ -18,6 +18,12 @@ import { AdminStudioPage } from "./AdminStudioPage";
 import { CustomerPrivacyPage } from "./CustomerPrivacyPage";
 import { createDevelopmentSessionStore } from "./developmentSession";
 import {
+  PRODUCTION_LOGIN_PATH,
+  createProductionSessionStore,
+  fetchProductionSession,
+  logoutProductionSession,
+} from "./productionSession";
+import {
   canNavigateToRoute,
   PRODUCT_ROUTES,
   routeForPath,
@@ -26,7 +32,9 @@ import {
   type ProductEnvironment,
 } from "./routes";
 
-const sessionStore = createDevelopmentSessionStore();
+const sessionStore = import.meta.env.DEV
+  ? createDevelopmentSessionStore()
+  : createProductionSessionStore();
 if (import.meta.env.DEV) {
   window.sessionStore = sessionStore;
 }
@@ -57,7 +65,43 @@ export function App() {
     (listener) => sessionStore.subscribe(listener),
     () => sessionStore.getSnapshot(),
   );
-  const access = useMemo(() => developmentAccessSnapshot(), []);
+  const [access, setAccess] = useState<NavigationAccessSnapshot>(
+    () => import.meta.env.DEV
+      ? developmentAccessSnapshot()
+      : { capabilities: new Set<KnownProductCapability>() },
+  );
+  const [identityError, setIdentityError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) return;
+    let active = true;
+    fetchProductionSession()
+      .then((snapshot) => {
+        if (!active) return;
+        sessionStore.setState(snapshot.session);
+        setAccess(snapshot.access);
+      })
+      .catch(() => {
+        if (!active) return;
+        // A failed identity read must not invent a user or grant.
+        sessionStore.clearProtectedState("logout");
+        setAccess({ capabilities: new Set<KnownProductCapability>() });
+        setIdentityError("Unable to verify your session. Try signing in again.");
+      });
+    return () => { active = false; };
+  }, []);
+
+  async function signOut() {
+    setIdentityError(null);
+    try {
+      await logoutProductionSession(session);
+      sessionStore.clearProtectedState("logout");
+      setAccess({ capabilities: new Set<KnownProductCapability>() });
+    } catch {
+      // Do not claim a remote logout succeeded when revocation failed.
+      setIdentityError("Sign out could not be confirmed. Please retry.");
+    }
+  }
   const currentRoute = routeForPath(window.location.pathname);
   const navigation = PRODUCT_ROUTES.filter((route) =>
     canNavigateToRoute(route, session, access, productEnvironment),
@@ -72,8 +116,20 @@ export function App() {
     <AppShell
       productName="Ultimate CRM"
       navigation={navigation}
-      accountSlot={<SessionSummary session={session} />}
+      accountSlot={
+        <span>
+          <SessionSummary session={session} />
+          {!import.meta.env.DEV && session.status === "authenticated" ? (
+            <>{" "}<button type="button" onClick={() => { void signOut(); }}>Sign out</button></>
+          ) : null}
+        </span>
+      }
     >
+      {identityError ? (
+        <FeedbackPanel tone="danger" title="Identity service unavailable">
+          {identityError}
+        </FeedbackPanel>
+      ) : null}
       <RouteContent session={session} access={access} />
     </AppShell>
   );
@@ -86,16 +142,23 @@ function RouteContent({
   session: SessionState;
   access: NavigationAccessSnapshot;
 }) {
+  if (session.status === "unknown") {
+    return <FeedbackPanel tone="neutral" title="Checking your session" busy />;
+  }
   if (session.status !== "authenticated") {
     return (
       <>
         <PageHeader
           eyebrow="Product shell"
           title="Authentication required"
-          description="The browser product plane does not invent an actor or tenant. Configure the explicit development session adapter for local integration; production identity integration remains a replaceable boundary."
+          description="CRM requires a verified server-side identity and tenant membership."
         />
         <FeedbackPanel tone="warning" title="No authenticated session">
-          Set the development-only bearer token and tenant variables when running locally. The governed backend remains authoritative for authentication and tenant access.
+          {import.meta.env.DEV ? (
+            <>Configure the development-only session adapter for local integration.</>
+          ) : (
+            <a href={PRODUCTION_LOGIN_PATH}>Sign in securely</a>
+          )}
         </FeedbackPanel>
       </>
     );

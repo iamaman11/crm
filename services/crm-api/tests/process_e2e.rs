@@ -43,6 +43,7 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
         .await
         .expect("connect Phase 6L admin evidence reader");
     provision_link_module(&admin).await;
+    provision_pilot_actors(&admin).await;
 
     let baseline_tasks = task_count(&admin).await;
     let baseline_task_status_documents = task_status_document_count(&admin).await;
@@ -60,7 +61,12 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
         .env("CRM_GRPC_BIND", &grpc_addr)
         .env("CRM_API_BEARER_TOKEN", TOKEN)
         .env("CRM_API_ACTOR_ID", ACTOR)
-        .env("CRM_API_TENANTS", TENANT)
+        .env("CRM_API_TENANTS", "tenant-a,tenant-b")
+        .env("CRM_PUBLIC_ORIGIN", "https://crm.example.test")
+        .env(
+            "CRM_PILOT_OPERATORS",
+            r#"[{"username":"alice","password":"01234567890123456789012345678901","actor_id":"pilot-alice","tenant_id":"tenant-a","capabilities":["search.global.query","sales.deal.create"]},{"username":"bob","password":"abcdefghijklmnopqrstuvwxyzABCDEF","actor_id":"pilot-bob","tenant_id":"tenant-b","capabilities":["search.global.query","sales.deal.create"]}]"#,
+        )
         .env(
             "CRM_CURSOR_SIGNING_KEY",
             "phase6l-cursor-signing-key-0123456789abcdef",
@@ -251,6 +257,373 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
         );
         sleep(Duration::from_millis(250)).await;
     }
+
+    // G1: ordinary production crm-api process, using the same token and governed
+    // gateway as service/worker identities, never a frontend bearer secret.
+    let login_client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("build redirect-disabled pilot login client");
+    let login_url = format!("http://{http_addr}/auth/login");
+    let missing = login_client
+        .get(format!("http://{http_addr}/auth/session"))
+        .send()
+        .await
+        .expect("query unauthenticated pilot session");
+    assert_eq!(missing.status(), StatusCode::UNAUTHORIZED);
+    let invalid = login_client
+        .post(&login_url)
+        .header("origin", "https://crm.example.test")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("username=alice&password=incorrect".to_owned())
+        .send()
+        .await
+        .expect("reject incorrect pilot login");
+    assert_eq!(invalid.status(), StatusCode::UNAUTHORIZED);
+
+    let foreign_origin = login_client
+        .post(&login_url)
+        .header("origin", "https://foreign.example.test")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("username=alice&password=01234567890123456789012345678901")
+        .send()
+        .await
+        .expect("reject login from a foreign origin");
+    assert_eq!(foreign_origin.status(), StatusCode::FORBIDDEN);
+
+    let mut pilot_sessions = Vec::new();
+    for (username, password, tenant) in [
+        ("alice", "01234567890123456789012345678901", "tenant-a"),
+        ("bob", "abcdefghijklmnopqrstuvwxyzABCDEF", "tenant-b"),
+    ] {
+        let response = login_client
+            .post(&login_url)
+            .header("origin", "https://crm.example.test")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(format!("username={username}&password={password}"))
+            .send()
+            .await
+            .expect("post valid pilot login");
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let set_cookie = response
+            .headers()
+            .get(reqwest::header::SET_COOKIE)
+            .expect("pilot set-cookie")
+            .to_str()
+            .expect("pilot set-cookie text")
+            .to_owned();
+        assert!(set_cookie.contains("HttpOnly; Secure; SameSite=Strict"));
+        let cookie = set_cookie
+            .split(';')
+            .next()
+            .expect("pilot cookie")
+            .to_owned();
+        let details = login_client
+            .get(format!("http://{http_addr}/auth/session"))
+            .header("cookie", &cookie)
+            .send()
+            .await
+            .expect("read authenticated pilot session");
+        assert_eq!(details.status(), StatusCode::OK);
+        let json: serde_json::Value = details.json().await.expect("decode session display");
+        assert_eq!(json["tenantId"], tenant);
+        assert_eq!(json["actorLabel"], username);
+        let csrf = json["csrfToken"].as_str().expect("csrf display").to_owned();
+        assert_eq!(csrf.len(), 64);
+        pilot_sessions.push((cookie, csrf, tenant));
+    }
+
+    // Exercise the same browser-facing HTTP query transport against the live
+    // process and PostgreSQL, not only the direct gRPC service.
+    let http_search_url = format!(
+        "http://{http_addr}/v1/queries/{}/{}/{}",
+        search_definition.owner_module_id,
+        search_definition.capability_id,
+        search_definition.capability_version
+    );
+    let http_search_payload = payload(
+        &search_definition,
+        search::SearchRequest {
+            text: "Phase 6L process deal".to_owned(),
+            resource_types: vec!["sales.deal".to_owned()],
+            page_size: 25,
+            cursor: String::new(),
+        },
+    );
+    for (cookie, csrf, tenant) in &pilot_sessions {
+        let allowed = login_client
+            .post(&http_search_url)
+            .header("cookie", cookie)
+            .header("x-crm-csrf", csrf)
+            .header("x-tenant-id", *tenant)
+            .json(&http_search_payload)
+            .send()
+            .await
+            .expect("pilot authorized HTTP query");
+        assert_eq!(allowed.status(), StatusCode::OK);
+
+        let wrong_tenant = if *tenant == "tenant-a" {
+            "tenant-b"
+        } else {
+            "tenant-a"
+        };
+        let denied = login_client
+            .post(&http_search_url)
+            .header("cookie", cookie)
+            .header("x-crm-csrf", csrf)
+            .header("x-tenant-id", wrong_tenant)
+            .json(&http_search_payload)
+            .send()
+            .await
+            .expect("pilot cross-tenant HTTP query");
+        assert!(
+            matches!(
+                denied.status(),
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
+            ),
+            "cross-tenant HTTP query must be denied, got {}",
+            denied.status()
+        );
+
+        let missing_csrf = login_client
+            .post(&http_search_url)
+            .header("cookie", cookie)
+            .header("x-tenant-id", *tenant)
+            .json(&http_search_payload)
+            .send()
+            .await
+            .expect("pilot HTTP query without CSRF");
+        assert_eq!(missing_csrf.status(), StatusCode::UNAUTHORIZED);
+
+        let ambiguous_authentication = login_client
+            .post(&http_search_url)
+            .header("cookie", cookie)
+            .bearer_auth(TOKEN)
+            .header("x-crm-csrf", csrf)
+            .header("x-tenant-id", *tenant)
+            .json(&http_search_payload)
+            .send()
+            .await
+            .expect("pilot HTTP query with ambiguous credentials");
+        assert_eq!(ambiguous_authentication.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // A real operator must be able to write in their own tenant, while the
+    // identical authenticated request is forbidden for a different tenant.
+    for (index, (cookie, csrf, tenant)) in pilot_sessions.iter().enumerate() {
+        let pilot_create = payload(
+            &create_definition,
+            sales::CreateDealRequest {
+                deal_id: format!("phase6l-pilot-deal-{index}-{http_port}"),
+                name: format!("Pilot operator {index} deal"),
+                owner: Some(actor_owner()),
+                account: None,
+                primary_contact: None,
+                stage: Some(sales::DealStage {
+                    pipeline_id: "pipeline.phase6l".to_owned(),
+                    stage_id: "qualification".to_owned(),
+                    ordinal: 1,
+                }),
+                amount: Some(core::ExactMoney {
+                    minor_units: "1000".to_owned(),
+                    currency_code: "USD".to_owned(),
+                }),
+                expected_close_date: None,
+                probability_basis_points: 1000,
+            },
+        );
+        let mutation_endpoint = mutation_url(&http_addr, &create_definition);
+        let allowed = login_client
+            .post(&mutation_endpoint)
+            .header("cookie", cookie)
+            .header("x-crm-csrf", csrf)
+            .header("x-tenant-id", *tenant)
+            .header(
+                "idempotency-key",
+                format!("pilot-own-create-{index}-{http_port}"),
+            )
+            .json(&pilot_create)
+            .send()
+            .await
+            .expect("pilot authorized HTTP mutation");
+        assert_eq!(allowed.status(), StatusCode::OK);
+
+        let foreign_tenant = if *tenant == "tenant-a" {
+            "tenant-b"
+        } else {
+            "tenant-a"
+        };
+        let denied = login_client
+            .post(&mutation_endpoint)
+            .header("cookie", cookie)
+            .header("x-crm-csrf", csrf)
+            .header("x-tenant-id", foreign_tenant)
+            .header(
+                "idempotency-key",
+                format!("pilot-foreign-create-{index}-{http_port}"),
+            )
+            .json(&pilot_create)
+            .send()
+            .await
+            .expect("reject pilot foreign tenant mutation");
+        assert!(
+            matches!(
+                denied.status(),
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
+            ),
+            "foreign tenant mutation must be denied, got {}",
+            denied.status()
+        );
+
+        let without_csrf = login_client
+            .post(&mutation_endpoint)
+            .header("cookie", cookie)
+            .header("x-tenant-id", *tenant)
+            .header(
+                "idempotency-key",
+                format!("pilot-no-csrf-{index}-{http_port}"),
+            )
+            .json(&pilot_create)
+            .send()
+            .await
+            .expect("reject pilot mutation without CSRF");
+        assert_eq!(without_csrf.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    for (index, (cookie, csrf, tenant)) in pilot_sessions.iter().enumerate() {
+        let mut request = Request::new(GatewayQueryRequest {
+            owner_module_id: search_definition.owner_module_id.as_str().to_owned(),
+            capability_id: search_definition.capability_id.as_str().to_owned(),
+            capability_version: search_definition.capability_version.as_str().to_owned(),
+            input: Some(search_payload.clone()),
+        });
+        request
+            .metadata_mut()
+            .insert("cookie", cookie.parse().unwrap());
+        request
+            .metadata_mut()
+            .insert("x-crm-csrf", csrf.parse().unwrap());
+        request
+            .metadata_mut()
+            .insert("x-tenant-id", tenant.parse().unwrap());
+        let response = grpc
+            .query(request)
+            .await
+            .expect("pilot authorized gRPC query");
+        let page = search::SearchResponse::decode(
+            response
+                .into_inner()
+                .output
+                .expect("search output")
+                .payload
+                .as_slice(),
+        )
+        .expect("pilot search response");
+        if index == 1 {
+            assert!(
+                page.hits.iter().all(|hit| hit.resource_id != DEAL_ID),
+                "tenant-b must not read tenant-a indexed deal"
+            );
+        }
+        let mut wrong_tenant = Request::new(GatewayQueryRequest {
+            owner_module_id: search_definition.owner_module_id.as_str().to_owned(),
+            capability_id: search_definition.capability_id.as_str().to_owned(),
+            capability_version: search_definition.capability_version.as_str().to_owned(),
+            input: Some(search_payload.clone()),
+        });
+        wrong_tenant
+            .metadata_mut()
+            .insert("cookie", cookie.parse().unwrap());
+        wrong_tenant
+            .metadata_mut()
+            .insert("x-crm-csrf", csrf.parse().unwrap());
+        wrong_tenant.metadata_mut().insert(
+            "x-tenant-id",
+            if *tenant == "tenant-a" {
+                "tenant-b"
+            } else {
+                "tenant-a"
+            }
+            .parse()
+            .unwrap(),
+        );
+        assert!(
+            grpc.query(wrong_tenant).await.is_err(),
+            "cross-tenant request must fail at the existing governed gateway"
+        );
+
+        let mut no_csrf = Request::new(GatewayQueryRequest {
+            owner_module_id: search_definition.owner_module_id.as_str().to_owned(),
+            capability_id: search_definition.capability_id.as_str().to_owned(),
+            capability_version: search_definition.capability_version.as_str().to_owned(),
+            input: Some(search_payload.clone()),
+        });
+        no_csrf
+            .metadata_mut()
+            .insert("cookie", cookie.parse().unwrap());
+        no_csrf
+            .metadata_mut()
+            .insert("x-tenant-id", tenant.parse().unwrap());
+        assert_eq!(
+            grpc.query(no_csrf).await.unwrap_err().code(),
+            tonic::Code::Unauthenticated
+        );
+    }
+
+    let (alice_cookie, alice_csrf, _) = &pilot_sessions[0];
+    let missing_origin_logout = login_client
+        .post(format!("http://{http_addr}/auth/logout"))
+        .header("cookie", alice_cookie)
+        .header("x-crm-csrf", alice_csrf)
+        .send()
+        .await
+        .expect("reject logout without an origin");
+    assert_eq!(missing_origin_logout.status(), StatusCode::FORBIDDEN);
+    let invalid_logout = login_client
+        .post(format!("http://{http_addr}/auth/logout"))
+        .header("origin", "https://crm.example.test")
+        .header("cookie", alice_cookie)
+        .header("x-crm-csrf", "incorrect")
+        .send()
+        .await
+        .expect("invalid logout response");
+    assert_eq!(invalid_logout.status(), StatusCode::UNAUTHORIZED);
+    let confirmed_logout = login_client
+        .post(format!("http://{http_addr}/auth/logout"))
+        .header("origin", "https://crm.example.test")
+        .header("cookie", alice_cookie)
+        .header("x-crm-csrf", alice_csrf)
+        .send()
+        .await
+        .expect("valid logout response");
+    assert_eq!(confirmed_logout.status(), StatusCode::NO_CONTENT);
+    let revoked = login_client
+        .get(format!("http://{http_addr}/auth/session"))
+        .header("cookie", alice_cookie)
+        .send()
+        .await
+        .expect("revoked session check");
+    assert_eq!(revoked.status(), StatusCode::UNAUTHORIZED);
+    let mut revoked_grpc_query = Request::new(GatewayQueryRequest {
+        owner_module_id: search_definition.owner_module_id.as_str().to_owned(),
+        capability_id: search_definition.capability_id.as_str().to_owned(),
+        capability_version: search_definition.capability_version.as_str().to_owned(),
+        input: Some(search_payload.clone()),
+    });
+    revoked_grpc_query
+        .metadata_mut()
+        .insert("cookie", alice_cookie.parse().unwrap());
+    revoked_grpc_query
+        .metadata_mut()
+        .insert("x-crm-csrf", alice_csrf.parse().unwrap());
+    revoked_grpc_query
+        .metadata_mut()
+        .insert("x-tenant-id", TENANT.parse().unwrap());
+    assert_eq!(
+        grpc.query(revoked_grpc_query).await.unwrap_err().code(),
+        tonic::Code::Unauthenticated,
+        "logout must revoke the session for gRPC too"
+    );
 
     send_sigint(&child).await;
     let exit = timeout(Duration::from_secs(15), child.wait())
@@ -483,6 +856,55 @@ async fn task_status_document_count(admin: &PgPool) -> i64 {
     .fetch_one(admin)
     .await
     .expect("count Task status projection documents")
+}
+
+// Pilot login actors are ordinary platform actors, not a second identity domain.
+// Real installations provision them through the supported tenant/actor lifecycle;
+// this isolated PostgreSQL process fixture supplies the same existing rows.
+async fn provision_pilot_actors(admin: &PgPool) {
+    for (tenant, bootstrap_actor, operator, transaction_id) in [
+        ("tenant-a", "actor-a", "pilot-alice", "tx-bootstrap-a"),
+        ("tenant-b", "actor-b", "pilot-bob", "tx-bootstrap-b"),
+    ] {
+        let mut transaction = admin.begin().await.expect("start pilot actor fixture");
+        sqlx::query(
+            r#"
+            SELECT
+                set_config('app.tenant_id', $1, true),
+                set_config('app.actor_id', $2, true),
+                set_config('app.request_id', 'g1-pilot-actor-fixture', true),
+                set_config('app.capability_id', 'test.record.mutate', true),
+                set_config('app.capability_version', '1.0.0', true),
+                set_config('app.business_transaction_id', $3, true)
+            "#,
+        )
+        .bind(tenant)
+        .bind(bootstrap_actor)
+        .bind(transaction_id)
+        .execute(&mut *transaction)
+        .await
+        .expect("bind pilot actor fixture context");
+        sqlx::query(
+            r#"
+            INSERT INTO crm.actors (
+                tenant_id, actor_id, actor_type, status,
+                display_name, last_business_transaction_id
+            )
+            VALUES ($1, $2, 'user', 'active', $2, $3)
+            ON CONFLICT (tenant_id, actor_id) DO NOTHING
+            "#,
+        )
+        .bind(tenant)
+        .bind(operator)
+        .bind(transaction_id)
+        .execute(&mut *transaction)
+        .await
+        .expect("register pilot actor under authoritative platform tenant");
+        transaction
+            .commit()
+            .await
+            .expect("commit pilot actor fixture");
+    }
 }
 
 async fn provision_link_module(admin: &PgPool) {

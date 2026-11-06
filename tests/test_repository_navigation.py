@@ -24,36 +24,48 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_g0_pilot_governance_packet_is_exact(self) -> None:
+    def test_active_g1_identity_packet_is_exact_and_bounded(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(packet["packet_id"], "repository-step-22p-g0-pilot-governance-transition")
+        self.assertEqual(packet["packet_id"], "repository-step-22p-g1-production-identity")
         self.assertEqual(packet["status"], "active")
-        self.assertEqual(packet["baseline"], {"ref": "main", "sha": "fab78b95afb66344af2dccbff87121cd24ba3cd5"})
-        self.assertEqual(packet["tracking_issues"], [310, 194])
+        self.assertEqual(packet["baseline"], {"ref": "main", "sha": "cd5fc1bc3ff2a92e4a265a40a1bb816648ec2e17"})
+        self.assertEqual(packet["tracking_issues"], [311, 310])
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
-                "docs/adr/ADR-033-closed-pilot-validation-within-step-22.md",
-                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
-                "docs/IMPLEMENTATION_ROADMAP.md",
-                "docs/PHASE8_DELIVERY_PLAN.md",
-                "docs/DELIVERY_GOVERNANCE.md",
-                "docs/PROJECT_STATUS.md",
-                "docs/README.md",
-                "docs/FIRST_USABLE_CRM_PILOT.md",
+                "apps/web/src/App.tsx",
+                "apps/web/src/productionSession.ts",
+                "apps/web/src/productionSession.test.ts",
+                "packages/client/src/session.ts",
+                "packages/client/src/transport.ts",
+                "docs/G1_PRODUCTION_IDENTITY.md",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
+                "step13-complexity-policy.json",
+                "tests/test_step13_exit_evidence.py",
                 "tests/test_repository_navigation.py",
                 "tests/test_architecture_documentation_consistency.py",
+                "crates/crm-application-runtime/src/config.rs",
+                "crates/crm-application-runtime/src/runtime.rs",
+                "crates/crm-application-runtime/src/gateway_grpc.rs",
+                "services/crm-api/tests/process_e2e.rs",
+                "scripts/customer_privacy_operations.py",
+                "scripts/run_customer_privacy_operations.sh",
+                "crates/crm-application-runtime/src/lib.rs",
+                "crates/crm-application-runtime/src/production_identity.rs",
+                "crates/crm-application-runtime/Cargo.toml",
+                "crates/crm-capability-ingress/src/authentication.rs",
+                "Cargo.lock",
+                "database/migrations/20261106_0001_production_identity.up.sql",
+                "database/migrations/20261106_0001_production_identity.down.sql",
+                "crates/crm-application-runtime/tests/production_identity.rs",
             },
         )
-        forbidden = set(packet["forbidden_paths"])
-        for path in (".github/**", "apps/**", "crates/**", "modules/**", "services/**", "database/**", "proto/**", "scripts/**", "docs/generated/REPOSITORY_MAP.md"):
-            self.assertIn(path, forbidden)
+        for path in (".github/**", "modules/**", "contracts/**", "proto/**", "docs/generated/REPOSITORY_MAP.md"):
+            self.assertIn(path, packet["forbidden_paths"])
         self.assertIn("Step22H", " ".join(packet["deliverables"]))
-        self.assertIn("Step23", " ".join(packet["non_goals"]) + " " + " ".join(packet["acceptance"]))
-        self.assertIn("Step22", " ".join(packet["acceptance"]))
+        self.assertIn("public production", " ".join(packet["non_goals"]))
         self.assertEqual(
             validate_decisions(ROOT),
             {"all": 63, "final": 27, "platform_generic": 16,
@@ -72,11 +84,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-22p-g0-pilot-governance-transition",
+            "repository-step-22p-g1-production-identity",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "fab78b95afb66344af2dccbff87121cd24ba3cd5",
+            "cd5fc1bc3ff2a92e4a265a40a1bb816648ec2e17",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -122,6 +134,8 @@ class RepositoryNavigationTests(unittest.TestCase):
             "Identity Resolution Privacy Scope CI": ".github/workflows/identity-resolution-privacy-scope.yml",
             "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
             "Rust CI": ".github/workflows/rust.yml",
+            "Product Plane CI": ".github/workflows/product-plane.yml",
+            "Database CI": ".github/workflows/database.yml",
         }
         affected = {
             "head_sha": "b" * 40,
@@ -132,7 +146,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 22P G0 pilot governance-only transition"],
+                    "reasons": ["Step 22P G1 production identity packet"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -140,7 +154,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="fab78b95afb66344af2dccbff87121cd24ba3cd5",
+                return_value="cd5fc1bc3ff2a92e4a265a40a1bb816648ec2e17",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(
