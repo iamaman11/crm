@@ -841,9 +841,7 @@ fn resolve_cookie_session(
     let Some(ref pilot) = components.pilot_identity else {
         return Err(StatusCode::UNAUTHORIZED);
     };
-    let cookie = cookie
-        .to_str()
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let cookie = cookie.to_str().map_err(|_| StatusCode::UNAUTHORIZED)?;
     let csrf = headers
         .get("x-crm-csrf")
         .and_then(|v| v.to_str().ok())
@@ -851,8 +849,8 @@ fn resolve_cookie_session(
     let principal = pilot
         .authorize(cookie, Some(csrf))
         .ok_or_else(|| StatusCode::UNAUTHORIZED)?;
-    let value = HeaderValue::from_str(&principal.authorization)
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let value =
+        HeaderValue::from_str(&principal.authorization).map_err(|_| StatusCode::UNAUTHORIZED)?;
     headers.insert(header::AUTHORIZATION, value);
     Ok(())
 }
