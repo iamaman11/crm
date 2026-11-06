@@ -28,7 +28,7 @@ This roadmap defines dependency order for a universal modular expert CRM platfor
 8. An ordinary capability added to an existing owner creates zero new crates by default.
 9. Generic router and worker algorithms do not change merely to register one owner capability.
 10. Feature behavior and physical crate consolidation remain separate packets.
-11. Repository implementation is strictly sequential: only the first unfinished item in the architecture plan section 2.4 may start.
+11. Repository implementation is strictly sequential: only the first unfinished packet or bounded subpacket in the architecture plan section 2.4, including ADR-033 Step 22P / G0, may start.
 12. Only one implementation packet may be active; evidence synchronization closes the accepted packet before the next implementation begins.
 13. Only merged `main` work may be represented as complete.
 14. A new permanent gate requires a concrete failure mode, non-duplication rationale, expected cost, named owner and retirement/review condition before acceptance.
@@ -43,6 +43,7 @@ This roadmap defines dependency order for a universal modular expert CRM platfor
 | 0.1–7 | #3–#10 | Governed platform, Sales/Activities proof, search, product shell and native composition | **Complete** |
 | 8 | #11 | Expert modules and product-quality CRM experience | **In progress** |
 | 8A | #28 | canonical customer master, identity, consent and governed customer-data lifecycle | **Complete through PR #296** |
+| 8A-P | #310 | Closed-pilot usability: real identity, customer/deal/task workflow, minimal deployment, recovery and immutable release evidence | **Planned under ADR-033 Step 22P before Step 22 closure; not Phase 8A product-completion expansion or Phase 8B** |
 | 8B | #29 | Product Catalog, Pricing, CPQ, Quotes and quote-to-revenue lifecycle | **Planned; blocked on completed Phase 8A and Repository Step 22; first extension wave is Step 23** |
 | 8C | future bounded issues | Universal workflow automation, triggers, robots, approvals, programmable actions, pipelines, funnels, Kanban and configurable work | **Planned; minimum process primitives are first proven in Step 24** |
 | 8D | future bounded issues | Expanded sales execution, cadences, territories, quotas, forecasting and revenue operations | **Planned** |
@@ -69,6 +70,8 @@ Issue #194 remains open. The architecture stage ledger is:
 - Stage G transitional consolidation — **Complete through PR #259**;
 - Stage H reproducible environment and navigation — **Complete through PR #285**;
 - Stage I frontend and operations parity — **complete through PR #296**.
+
+**2026-11-06 sequencing decision / ADR-033:** after merged Step 22H / PR #309, the next bounded packet is Step 22P G0 (#310), followed sequentially by #311–#316 and Step 22R mandatory ADR-032 completion. No Step 23/Phase 8B may start before Step 22R. Pilot readiness is not enterprise production certification. The existing historical milestone text below records the previously accepted Step 21 checkpoint and does not change this current order.
 
 Repository Steps 1–21 are complete. The bounded Repository Step 20A product-plane slice is accepted. Repository Step 20A is accepted through PR #292. Repository Step 21 is complete through PR #296 / accepted source `fd84cd25dfa25a75eac0fdc4a719cc76c84cfc95` / squash merge `c21894f47f24e81da1cc150f9ea457fcfdc2bd63` / 35 of 35 applicable permanent workflows on one unchanged exact head. Phase 8A.11 and Phase 8A are complete. Repository Step 22 Phase 8A architecture remeasurement, `crm-application-runtime` runtime-fan-in decision and permanent-gate value/cost review is the sole next permitted implementation packet.
 
