@@ -1,9 +1,9 @@
 //! One closed-pilot sign-in boundary. Not a second business authorization engine.
-use crate::{ApplicationConfig, BootstrapVisibilityResource, build_bootstrap_visibility_registry};
+use crate::{ApplicationConfig, build_bootstrap_visibility_registry};
 use crm_capability_adapters::{AuthorizationGrant, LiveAuthorizationStore, LiveQueryVisibilityStore, QueryVisibilityGrant};
 use crm_capability_ingress::{AccessTokenGrant, AccessTokenStore};
 use crm_capability_runtime::CapabilityDefinition;
-use crm_module_sdk::{ActorId, CapabilityId, ModuleId, RecordType, TenantId};
+use crm_module_sdk::{ActorId, ModuleId, RecordType, TenantId};
 use ring::{digest, rand::{SecureRandom, SystemRandom}};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
