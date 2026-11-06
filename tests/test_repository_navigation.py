@@ -72,11 +72,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-22h-identity-resolution-fanin-reduction",
+            "repository-step-22p-g0-pilot-governance-transition",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "48e3f2f3e0049505b92a08ac56320ce18a1a41d1",
+            "fab78b95afb66344af2dccbff87121cd24ba3cd5",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -120,7 +120,6 @@ class RepositoryNavigationTests(unittest.TestCase):
             "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
             "Governance CI": ".github/workflows/governance.yml",
             "Identity Resolution Privacy Scope CI": ".github/workflows/identity-resolution-privacy-scope.yml",
-            "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
             "Rust Generated Sync": ".github/workflows/rust-generated-sync.yml",
             "Rust CI": ".github/workflows/rust.yml",
         }
