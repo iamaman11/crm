@@ -110,7 +110,13 @@ fn secret() -> Result<String, ()> {
 fn cookie_token(value: &str) -> Option<&str> {
     let mut result = None;
     for item in value.split(';') {
-        let (name, token) = item.trim().split_once('=')?;
+        let part = item.trim();
+        let Some((name, token)) = part.split_once('=') else {
+            if part == COOKIE {
+                return None;
+            }
+            continue;
+        };
         if name == COOKIE {
             if result.is_some()
                 || token.len() != 64
@@ -380,6 +386,9 @@ mod tests {
         );
         assert_eq!(cookie_token("x=1"), None);
         assert_eq!(cookie_token("x"), None);
+        assert_eq!(cookie_token(&format!("other_cookie=ok; {COOKIE}={token}")), Some(token.as_str()));
+        assert_eq!(cookie_token(&format!("bad_other_cookie; {COOKIE}={token}")), Some(token.as_str()));
+        assert_eq!(cookie_token(&format!("{COOKIE}; other_cookie=ok")), None);
     }
 
     #[test]
