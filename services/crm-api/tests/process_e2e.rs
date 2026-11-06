@@ -43,6 +43,7 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
         .await
         .expect("connect Phase 6L admin evidence reader");
     provision_link_module(&admin).await;
+    provision_pilot_actors(&admin).await;
 
     let baseline_tasks = task_count(&admin).await;
     let baseline_task_status_documents = task_status_document_count(&admin).await;
@@ -855,6 +856,52 @@ async fn task_status_document_count(admin: &PgPool) -> i64 {
     .fetch_one(admin)
     .await
     .expect("count Task status projection documents")
+}
+
+// Pilot login actors are ordinary platform actors, not a second identity domain.
+// Real installations provision them through the supported tenant/actor lifecycle;
+// this isolated PostgreSQL process fixture supplies the same existing rows.
+async fn provision_pilot_actors(admin: &PgPool) {
+    for (tenant, bootstrap_actor, operator, transaction_id) in [
+        ("tenant-a", "actor-a", "pilot-alice", "tx-bootstrap-a"),
+        ("tenant-b", "actor-b", "pilot-bob", "tx-bootstrap-b"),
+    ] {
+        let mut transaction = admin.begin().await.expect("start pilot actor fixture");
+        sqlx::query(
+            r#"
+            SELECT
+                set_config('app.tenant_id', $1, true),
+                set_config('app.actor_id', $2, true),
+                set_config('app.request_id', 'g1-pilot-actor-fixture', true),
+                set_config('app.capability_id', 'test.record.mutate', true),
+                set_config('app.capability_version', '1.0.0', true),
+                set_config('app.business_transaction_id', $3, true)
+            "#,
+        )
+        .bind(tenant)
+        .bind(bootstrap_actor)
+        .bind(transaction_id)
+        .execute(&mut *transaction)
+        .await
+        .expect("bind pilot actor fixture context");
+        sqlx::query(
+            r#"
+            INSERT INTO crm.actors (
+                tenant_id, actor_id, actor_type, status,
+                display_name, last_business_transaction_id
+            )
+            VALUES ($1, $2, 'user', 'active', $2, $3)
+            ON CONFLICT (tenant_id, actor_id) DO NOTHING
+            "#,
+        )
+        .bind(tenant)
+        .bind(operator)
+        .bind(transaction_id)
+        .execute(&mut *transaction)
+        .await
+        .expect("register pilot actor under authoritative platform tenant");
+        transaction.commit().await.expect("commit pilot actor fixture");
+    }
 }
 
 async fn provision_link_module(admin: &PgPool) {
