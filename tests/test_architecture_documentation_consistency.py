@@ -215,6 +215,19 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
+    def test_pilot_cookie_is_checked_on_both_grpc_methods(self) -> None:
+        gateway = read("crates/crm-application-runtime/src/gateway_grpc.rs")
+        mutation = gateway.split("    async fn mutate(", 1)[1].split("    async fn query(", 1)[0]
+        query = gateway.split("    async fn query(", 1)[1].split(
+            "fn verify_pilot_cookie(", 1
+        )[0]
+        for method in (mutation, query):
+            self.assertIn("let mut metadata = request.metadata().clone();", method)
+            self.assertIn(
+                "verify_pilot_cookie(&self.components, &mut metadata)?;", method
+            )
+            self.assertIn("*governed_request.metadata_mut() = metadata;", method)
+
     def test_active_g1_identity_is_strict_and_preserves_step22(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(self.packet["packet_id"], "repository-step-22p-g1-production-identity")
