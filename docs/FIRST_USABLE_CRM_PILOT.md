@@ -1,6 +1,6 @@
 # First Usable CRM — Pilot Execution and Developer Checkpoints
 
-**Document state:** PROPOSAL — **not normative, not merged, not production-ready**  
+**Document class:** Non-normative navigation; release/deployment is **not** accepted. G0 is accepted only after ADR-033 and the exact-head governance packet are merged.  
 **Date:** 2026-11-06  
 **Inventory baseline:** `main@fab78b95afb66344af2dccbff87121cd24ba3cd5` (recheck immediately before code work).  
 **Executable coordination board:** [#310](https://github.com/iamaman11/crm/issues/310)
@@ -11,7 +11,7 @@ The repository has a modular Rust CRM backend, authoritative PostgreSQL state an
 
 This page is a **short navigation/checkpoint proposal**, not a second roadmap. The canonical scope, status, owner/evidence and GO/NO-GO are on issue #310 and its linked children. Normative truth remains in `docs/SYSTEM_INVARIANTS.md`, accepted contracts/ADRs, `docs/APPLICATION_ARCHITECTURE.md`, `docs/IMPLEMENTATION_ROADMAP.md`, `docs/PROJECT_STATUS.md`, `docs/DEVELOPMENT_WORKFLOW.md` and existing issue #194. When conflicting, follow existing precedence and mark this proposal BLOCKED until G0 alignment is accepted.
 
-**Important active packet conflict:** `repository-packet.json` currently tracks Step22H / #194 and disallows changes to many product and documentation paths. **Do not pretend the current packet permits a pilot implementation.** G0 first records an explicit reviewed implementation-order/ADR decision and synchronizes normative roadmap/status and the active packet/affected analysis as needed. This draft alone does **not** change that order.
+**Active packet discipline:** merged Step22H is historical; the G0 planning PR declares a new narrowly scoped **Step 22P / G0** packet based on the actual Step22H merged `main` SHA. Each subsequent G1–G5 implementation must declare its **own** bounded packet after previous acceptance. Do not expand G0 to include runtime/product implementation and do not treat a draft ADR or a failed CI as accepted.
 
 ## 2. Smallest complete user result
 
@@ -63,9 +63,9 @@ States: `PLANNED → IMPLEMENTING → CI_GREEN → INSTALLED → ACCEPTED`, or `
 
 ## 6. Proposed work sequence
 
-**First: G0**. Approve scope change without silently superseding the existing ADR-032 Step 22 implementation order. Record the exact accepted approach in #310 and relevant normative documents. Avoid a rival roadmap.
+**First: G0**. Accept ADR-033's explicit **scheduling** amendment, with all ADR-032 Step 22 **closure** obligations intact. The G0 packet does not authorize product implementation; it just establishes the next governed order after Step22H. No rival roadmap.
 
-**Next: parallel bounded implementation where independent:** #311 (identity boundary), #312 (product UX), #313 (deploy), #315 (DX/module extension). The production journey of #312 depends on #311; release deployment depends on their exact interfaces.
+**Next: sequential bounded packets, one active implementation at a time:** #311 (identity), #312 (product UX), #313 (deployment), #314–#315 (immutable release verification and measured extension cost), #316 (installed acceptance). Architecture Step22R then resumes outstanding ADR-032 obligations before Step23. Specification/review can be prepared early, but do not run overlapping implementation heads.
 
 **Throughout:** #314 checks actual production-built artifacts and security/tenant/restore; implement fixes in committed source, not runner-time transformations. Keep architecture-wide fan-in/gate-value refactors tracked separately in #194 unless an actual pilot blocker is proven.
 
@@ -94,4 +94,4 @@ Always record: issue and gate; baseline and final **commit SHA**; precise owners
 - [#194](https://github.com/iamaman11/crm/issues/194): architecture/developer-experience Step 22–25 program.
 - [#310](https://github.com/iamaman11/crm/issues/310): **single first-pilot execution plan**, with child #311–#316.
 
-**Proposal acceptance rule:** Do not merge this documentation as a new authoritative execution order until the G0 governance conflict is reviewed and resolved. Even after merge, issue #310 remains the live checkpoint board; this file is a short developer and pilot navigation aid.
+**Acceptance rule:** This document never overrides the governing ADR-033, architecture plan, roadmap or packet. Merge the G0 documentation only when strict packet-check, generated navigation and every required exact-head CI are green; after merge, issue #310 remains the live checkpoint board. No G1–G5 work is treated as accepted by this planning document.
