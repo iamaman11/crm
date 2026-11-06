@@ -488,6 +488,14 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
     }
 
     let (alice_cookie, alice_csrf, _) = &pilot_sessions[0];
+    let missing_origin_logout = login_client
+        .post(format!("http://{http_addr}/auth/logout"))
+        .header("cookie", alice_cookie)
+        .header("x-crm-csrf", alice_csrf)
+        .send()
+        .await
+        .expect("reject logout without an origin");
+    assert_eq!(missing_origin_logout.status(), StatusCode::FORBIDDEN);
     let invalid_logout = login_client
         .post(format!("http://{http_addr}/auth/logout"))
         .header("origin", "https://crm.example.test")
@@ -513,6 +521,26 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
         .await
         .expect("revoked session check");
     assert_eq!(revoked.status(), StatusCode::UNAUTHORIZED);
+    let mut revoked_grpc_query = Request::new(GatewayQueryRequest {
+        owner_module_id: search_definition.owner_module_id.as_str().to_owned(),
+        capability_id: search_definition.capability_id.as_str().to_owned(),
+        capability_version: search_definition.capability_version.as_str().to_owned(),
+        input: Some(search_payload.clone()),
+    });
+    revoked_grpc_query
+        .metadata_mut()
+        .insert("cookie", alice_cookie.parse().unwrap());
+    revoked_grpc_query
+        .metadata_mut()
+        .insert("x-crm-csrf", alice_csrf.parse().unwrap());
+    revoked_grpc_query
+        .metadata_mut()
+        .insert("x-tenant-id", TENANT.parse().unwrap());
+    assert_eq!(
+        grpc.query(revoked_grpc_query).await.unwrap_err().code(),
+        tonic::Code::Unauthenticated,
+        "logout must revoke the session for gRPC too"
+    );
 
     send_sigint(&child).await;
     let exit = timeout(Duration::from_secs(15), child.wait())
