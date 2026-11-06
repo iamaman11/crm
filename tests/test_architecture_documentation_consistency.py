@@ -234,6 +234,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "crates/crm-application-runtime/src/config.rs",
             "crates/crm-application-runtime/src/runtime.rs",
             "crates/crm-application-runtime/src/gateway_grpc.rs",
+            "scripts/customer_privacy_operations.py",
             "crates/crm-application-runtime/src/lib.rs",
             "crates/crm-application-runtime/src/production_identity.rs",
             "crates/crm-application-runtime/Cargo.toml",
