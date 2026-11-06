@@ -3,6 +3,12 @@
 State: **IN PROGRESS — NOT ACCEPTED**. Issue #311, plan #310, draft PR #318.
 Baseline: `main@cd5fc1bc3ff2a92e4a265a40a1bb816648ec2e17`.
 
+## Verified tenant-bound mutation checkpoint — 2026-11-07
+
+The unchanged full `crm-api` + PostgreSQL process test on implementation candidate `54d825ed286f71a945c13cb2685df0d17464c65d` reached **PASS** for `Verify full crm-api process lifecycle` in [Application Runtime CI](https://github.com/iamaman11/crm/actions/runs/42302215969/job/128182592573). Each pilot actor now has an authoritative `crm.actors` row in the isolated test fixture. The test proves successful tenant-bound `sales.deal.create` under cookie credentials as well as forbidden cross-tenant/CSRF requests, existing query and logout/revocation checks. Earlier candidate without actor provisioning returned HTTP 503 for permitted mutation, proving why provisioning is a correctness prerequisite; this is not a reason to weaken transactional foreign keys. The SQL fixture is for CI only. Real installation must provision tenant-bound actors through the supported platform setup (G3/#313).
+
+The earlier implementation head failed parallel formatting preflight; `Rust Generated Sync` applied the canonical formatter in bot commit `d864d2c02f5efc8014f991bc60e275b40b51f9b0`. This documentation update is a human-authored follow-up candidate; **G1 is still NO-GO until the new exact head passes all selected CI**, then is merged and post-merge checks are confirmed.
+
 ## Principle
 
 **One entry, one session, one existing permission boundary.** No OIDC/SSO platform, JWT subsystem, identity microservice, custom role editor, extra worker, new business crate, background refresh daemon or second authorization engine just to test the first useful CRM.
