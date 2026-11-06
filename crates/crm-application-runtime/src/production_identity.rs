@@ -197,9 +197,6 @@ impl PilotIdentity {
     ) -> Result<(), &'static str> {
         let registry = build_bootstrap_visibility_registry()
             .map_err(|_| "pilot visibility registry unavailable")?;
-        let expiry = now
-            .checked_add(SESSION_SECONDS * 1_000_000_000)
-            .ok_or("pilot grant expiry overflow")?;
         for operator in self.operators.iter() {
             let mut found = BTreeSet::new();
             for definition in mutation.iter().chain(query) {
