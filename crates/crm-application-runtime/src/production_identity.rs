@@ -450,6 +450,30 @@ mod tests {
         assert!(pilot.authorize(&bob_cookie, None).is_some());
     }
 
+    #[tokio::test]
+    async fn cookie_session_uses_existing_tenant_bound_authenticator_and_revocation() {
+        use crm_capability_ingress::{
+            AuthenticationError, BearerTokenAuthenticator, RequestAuthenticator,
+        };
+        let pilot = fixture();
+        let token = pilot
+            .sign_in("alice", "01234567890123456789012345678901")
+            .unwrap();
+        let cookie = format!("{COOKIE}={token}");
+        let session = pilot.authorize(&cookie, None).unwrap();
+        let authenticator =
+            BearerTokenAuthenticator::new(pilot.tokens.clone(), Arc::new(crate::SystemClock));
+        let principal = authenticator.authenticate(&session.authorization).await.unwrap();
+        assert_eq!(principal.actor_id, ActorId::try_new("actor-a").unwrap());
+        assert!(principal.permits_tenant(&TenantId::try_new("tenant-a").unwrap()));
+        assert!(!principal.permits_tenant(&TenantId::try_new("tenant-b").unwrap()));
+        assert!(pilot.sign_out(&cookie, &session.snapshot.csrf_token));
+        assert_eq!(
+            authenticator.authenticate(&session.authorization).await.unwrap_err(),
+            AuthenticationError::RevokedCredentials
+        );
+    }
+
     #[test]
     fn expired_sessions_fail_closed() {
         let pilot = fixture();
