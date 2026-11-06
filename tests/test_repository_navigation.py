@@ -50,6 +50,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "crates/crm-application-runtime/src/runtime.rs",
                 "crates/crm-application-runtime/src/gateway_grpc.rs",
                 "scripts/customer_privacy_operations.py",
+                "scripts/run_customer_privacy_operations.sh",
                 "crates/crm-application-runtime/src/lib.rs",
                 "crates/crm-application-runtime/src/production_identity.rs",
                 "crates/crm-application-runtime/Cargo.toml",
