@@ -133,10 +133,12 @@ At most one implementation packet may be active. The next permitted packet is th
 19. real Customer Privacy worker lifecycle and complete process/end-to-end acceptance — **complete through PR #290**;
 20. Phase 8A frontend, accessibility, browser and operations parity — **complete through PRs #292 and #294**.
 21. Phase 8A closure — **complete through PR #296**;
-22. Phase 8A architecture remeasurement, `crm-application-runtime` fan-in decision and permanent-gate value/cost review — **checkpoint, not final 10/10**;
+22. Phase 8A architecture remeasurement, `crm-application-runtime` fan-in decision and permanent-gate value/cost review — **in progress; bounded remediation through merged Step 22H / PR #309; 36 runtime classifications and permanent-gate dispositions unresolved; mandatory closure remains before Step 23**;
 23. first Phase 8B expert-domain wave proving bounded extension cost and validating the Step 22 runtime/gate conclusions;
 24. second contrasting expert-domain wave proving bounded extension cost as module count grows and validating the Step 22 runtime/gate conclusions;
 25. final architecture 10/10 closure review only when every Section 13 criterion is mechanically proven.
+
+**Step 22P / G0 first usable CRM pilot schedule (ADR-033, issue #310, bounded subpackets):** after accepted Step 22H, first the **G0 planning and packet transition**; then sequential G1 production identity (#311), G2 everyday CRM product UX (#312), G3 minimal deployment/backup/restore (#313), G4 immutable release verification and DX cost proof (#314–#315), G5 independent closed-pilot acceptance (#316). **Only one active packet at a time.** A pilot GO is not Step 22 or Phase 8B completion. After pilot G5, **Step 22R resumes and finishes all mandatory ADR-032 runtime classifications, safe removals, permanent-gate value/cost dispositions and architecture remeasurement** before Step 23. This is an explicit scheduling amendment, not a waiver of the original Step 22 exit contract. Each product subpacket must supply a fresh exact baseline, strict path whitelist, explicit required workflows and real production-artifact verification; neither Stage 22H's stale packet nor a mere issue comment authorizes implementation. `docs/FIRST_USABLE_CRM_PILOT.md` is orientation only; #310 is the executable checkpoint board.
 
 Feature behavior and crate consolidation must be separate PRs. Documentation evidence synchronization must be separate from implementation when the packet rules require an accepted implementation merge first.
 
