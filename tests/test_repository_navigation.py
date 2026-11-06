@@ -47,6 +47,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "crates/crm-application-runtime/src/config.rs",
                 "crates/crm-application-runtime/src/runtime.rs",
                 "crates/crm-application-runtime/src/gateway_grpc.rs",
+                "scripts/customer_privacy_operations.py",
                 "crates/crm-application-runtime/src/lib.rs",
                 "crates/crm-application-runtime/src/production_identity.rs",
                 "crates/crm-application-runtime/Cargo.toml",
@@ -57,7 +58,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "crates/crm-application-runtime/tests/production_identity.rs",
             },
         )
-        for path in (".github/**", "modules/**", "contracts/**", "proto/**", "scripts/**", "docs/generated/REPOSITORY_MAP.md"):
+        for path in (".github/**", "modules/**", "contracts/**", "proto/**", "docs/generated/REPOSITORY_MAP.md"):
             self.assertIn(path, packet["forbidden_paths"])
         self.assertIn("Step22H", " ".join(packet["deliverables"]))
         self.assertIn("public production", " ".join(packet["non_goals"]))
