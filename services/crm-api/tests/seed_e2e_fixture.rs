@@ -76,6 +76,10 @@ async fn seed_e2e_fixture_records() {
         .await
         .expect("connect admin database");
 
+    // Register the published production contract inventory in this isolated database.
+    // The existing SQL fixture only includes historical capabilities. The audit FK must
+    // cover every ordinary owner operation used by G2, without bypassing the FK.
+    provision_g2_contract_registry(&admin).await;
     provision_link_module(&admin).await;
     provision_module(
         &admin,
@@ -645,6 +649,113 @@ async fn task_status_document_count(admin: &PgPool) -> i64 {
     .fetch_one(admin)
     .await
     .unwrap()
+}
+
+/// Test-only published contract registration for the ephemeral PostgreSQL pilot.
+///
+/// The existing capability registry is durable audit metadata; the runtime's
+/// authoritative contract definitions still enforce exact versions and payload
+/// hashes. Import the RPC names from the generated binding inventory rather
+/// than manufacturing service names or weakening the SQL foreign key.
+async fn provision_g2_contract_registry(admin: &PgPool) {
+    let published: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/module-contract-bindings.json"
+    ))
+    .expect("parse generated module contract bindings");
+    let modules = published["modules"].as_array().expect("contract modules");
+
+    const OWNERS: [(&str, &str); 6] = [
+        ("crm.parties", "0.4.0"),
+        ("crm.customer-accounts", "0.3.0"),
+        ("crm.contact-points", "0.3.0"),
+        ("crm.sales", "0.2.0"),
+        ("crm.activities", "0.1.2"),
+        ("crm.customer-privacy", "0.3.0"),
+    ];
+    for (module_id, version) in OWNERS {
+        sqlx::query(
+            r#"
+            INSERT INTO crm.module_versions (
+              module_id, version, canonicalization_profile, manifest_sha256,
+              normalized_manifest_json, published_at, publisher_id
+            )
+            VALUES ($1, $2, 'crm.cjson/v1', $3, '{}'::jsonb,
+                    clock_timestamp(), 'g2-e2e-contract-fixture')
+            ON CONFLICT (module_id, version) DO NOTHING
+            "#,
+        )
+        .bind(module_id)
+        .bind(version)
+        .bind(vec![0x42_u8; 32])
+        .execute(admin)
+        .await
+        .expect("provision published owner module version");
+    }
+
+    let definitions = application_mutation_definitions()
+        .expect("published production mutations")
+        .into_iter()
+        .chain(application_query_definitions().expect("published production queries"));
+
+    for definition in definitions {
+        let owner = definition.owner_module_id.as_str();
+        let Some((_, owner_version)) = OWNERS.iter().find(|(id, _)| *id == owner) else {
+            continue;
+        };
+        let binding = modules
+            .iter()
+            .find(|module| module["module_id"].as_str() == Some(owner))
+            .and_then(|module| module["capabilities"].as_array())
+            .and_then(|capabilities| capabilities.iter().find(|entry| {
+                entry["id"].as_str() == Some(definition.capability_id.as_str())
+                    && entry["version"].as_str() == Some(definition.capability_version.as_str())
+            }))
+            .expect("published G2 capability has generated RPC binding");
+        let rpc = binding["rpc"].as_str().expect("published RPC name");
+        let (service, method) = rpc.rsplit_once('.').expect("qualified published RPC");
+        let response = definition
+            .output_contract
+            .as_ref()
+            .expect("published G2 RPC has response contract");
+        let risk = format!("{:?}", definition.risk).to_ascii_lowercase();
+        let data_classes: Vec<String> = definition
+            .input_contract
+            .allowed_data_classes
+            .iter()
+            .map(|class| format!("{class:?}").to_ascii_lowercase())
+            .collect();
+
+        sqlx::query(
+            r#"
+            INSERT INTO crm.capability_registry (
+              capability_id, capability_version, owner_module_id, owner_module_version,
+              service_name, method_name, input_descriptor_hash, output_descriptor_hash,
+              risk_level, idempotency_required, audit_required, approval_required,
+              ai_callable, marketplace_callable, bulk_allowed, export_allowed,
+              data_classes_touched
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                    false, false, false, false, $13)
+            ON CONFLICT (capability_id, capability_version) DO NOTHING
+            "#,
+        )
+        .bind(definition.capability_id.as_str())
+        .bind(definition.capability_version.as_str())
+        .bind(owner)
+        .bind(*owner_version)
+        .bind(service)
+        .bind(method)
+        .bind(definition.input_contract.descriptor_hash.as_slice())
+        .bind(response.descriptor_hash.as_slice())
+        .bind(risk)
+        .bind(definition.requires_idempotency)
+        .bind(definition.mutation)
+        .bind(definition.requires_approval)
+        .bind(&data_classes)
+        .execute(admin)
+        .await
+        .expect("register published capability for G2 audit lineage");
+    }
 }
 
 async fn provision_module(
