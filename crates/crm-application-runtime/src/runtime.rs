@@ -848,7 +848,7 @@ fn resolve_cookie_session(
         .unwrap_or_default();
     let principal = pilot
         .authorize(cookie, Some(csrf))
-        .ok_or_else(|| StatusCode::UNAUTHORIZED)?;
+        .ok_or(StatusCode::UNAUTHORIZED)?;
     let value =
         HeaderValue::from_str(&principal.authorization).map_err(|_| StatusCode::UNAUTHORIZED)?;
     headers.insert(header::AUTHORIZATION, value);
