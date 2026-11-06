@@ -119,7 +119,9 @@ jobs:
           sudo apt-get install --yes postgresql-client
 
       - name: Run E2E Integration Suite
-        run: ./scripts/run_e2e.sh 2>&1 | tee product-plane-e2e.log
+        run: |
+          set -o pipefail
+          ./scripts/run_e2e.sh 2>&1 | tee product-plane-e2e.log
 
       - name: Upload Product Plane diagnostics on failure
         if: failure()

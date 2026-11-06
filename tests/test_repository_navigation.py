@@ -38,13 +38,14 @@ class RepositoryNavigationTests(unittest.TestCase):
             "apps/web/src/CrmPageUtils.ts", "apps/web/src/CrmPageUtils.test.ts",
             "apps/web/vite.config.ts", "apps/web/playwright.config.ts",
             "apps/web/e2e/g2-crm.spec.ts", "scripts/run_e2e.sh",
+            ".github/workflows/product-plane.yml",
             "apps/web/src/CustomersPage.tsx", "apps/web/src/DealsPage.tsx", "apps/web/src/TasksPage.tsx",
             "packages/client/src/crm.ts", "packages/client/src/crm.test.ts",
             "packages/client/src/index.ts", "packages/client/src/session.ts",
             "crates/crm-application-runtime/src/production_identity.rs",
             "tests/test_repository_navigation.py", "tests/test_architecture_documentation_consistency.py",
         })
-        for path in (".github/**", "modules/**", "contracts/**", "proto/**", "docs/generated/REPOSITORY_MAP.md"):
+        for path in (".github/actions/**", "modules/**", "contracts/**", "proto/**", "docs/generated/REPOSITORY_MAP.md"):
             self.assertIn(path, packet["forbidden_paths"])
         self.assertIn("typed browser gateway client", " ".join(packet["deliverables"]))
         self.assertIn("production", " ".join(packet["non_goals"]))
