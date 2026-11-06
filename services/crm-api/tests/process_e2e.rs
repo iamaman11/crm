@@ -900,7 +900,10 @@ async fn provision_pilot_actors(admin: &PgPool) {
         .execute(&mut *transaction)
         .await
         .expect("register pilot actor under authoritative platform tenant");
-        transaction.commit().await.expect("commit pilot actor fixture");
+        transaction
+            .commit()
+            .await
+            .expect("commit pilot actor fixture");
     }
 }
 
