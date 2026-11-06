@@ -386,8 +386,14 @@ mod tests {
         );
         assert_eq!(cookie_token("x=1"), None);
         assert_eq!(cookie_token("x"), None);
-        assert_eq!(cookie_token(&format!("other_cookie=ok; {COOKIE}={token}")), Some(token.as_str()));
-        assert_eq!(cookie_token(&format!("bad_other_cookie; {COOKIE}={token}")), Some(token.as_str()));
+        assert_eq!(
+            cookie_token(&format!("other_cookie=ok; {COOKIE}={token}")),
+            Some(token.as_str())
+        );
+        assert_eq!(
+            cookie_token(&format!("bad_other_cookie; {COOKIE}={token}")),
+            Some(token.as_str())
+        );
         assert_eq!(cookie_token(&format!("{COOKIE}; other_cookie=ok")), None);
     }
 
