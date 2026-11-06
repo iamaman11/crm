@@ -395,6 +395,58 @@ mod tests {
         assert!(clear_cookie().contains("Max-Age=0"));
     }
 
+    fn fixture() -> PilotIdentity {
+        let configured = [
+            ("alice", "01234567890123456789012345678901", "actor-a", "tenant-a"),
+            ("bob", "abcdefghijklmnopqrstuvwxyzABCDEF", "actor-b", "tenant-b"),
+        ];
+        let operators = configured.into_iter().map(|(username,password,actor,tenant)| PilotOperator {
+            username: username.to_owned(),
+            password_digest: sha(password.as_bytes()),
+            actor_id: ActorId::try_new(actor).unwrap(),
+            tenant_id: TenantId::try_new(tenant).unwrap(),
+            capabilities: BTreeSet::from(["search.global.query".to_owned()]),
+        }).collect();
+        PilotIdentity {
+            operators: Arc::new(operators),
+            sessions: Arc::new(Mutex::new(BTreeMap::new())),
+            tokens: AccessTokenStore::default(),
+            public_origin: "https://crm.example.test".to_owned(),
+        }
+    }
+
+    #[test]
+    fn two_operators_get_distinct_tenant_bound_sessions_and_logout_revokes() {
+        let pilot = fixture();
+        assert!(pilot.sign_in("alice", "bad-password").is_err());
+        let alice = pilot.sign_in("alice", "01234567890123456789012345678901").unwrap();
+        let bob = pilot.sign_in("bob", "abcdefghijklmnopqrstuvwxyzABCDEF").unwrap();
+        let alice_cookie = format!("{COOKIE}={alice}");
+        let bob_cookie = format!("{COOKIE}={bob}");
+        let a = pilot.authorize(&alice_cookie, None).unwrap();
+        let b = pilot.authorize(&bob_cookie, None).unwrap();
+        assert_eq!(a.snapshot.tenant_id, "tenant-a");
+        assert_eq!(b.snapshot.tenant_id, "tenant-b");
+        assert_ne!(a.authorization, b.authorization);
+        assert!(pilot.authorize(&alice_cookie, Some("bad-csrf")).is_none());
+        assert!(!pilot.sign_out(&alice_cookie, "bad-csrf"));
+        assert!(pilot.authorize(&alice_cookie, None).is_some());
+        assert!(pilot.sign_out(&alice_cookie, &a.snapshot.csrf_token));
+        assert!(pilot.authorize(&alice_cookie, None).is_none());
+        assert!(pilot.authorize(&bob_cookie, None).is_some());
+    }
+
+    #[test]
+    fn expired_sessions_fail_closed() {
+        let pilot = fixture();
+        let token = pilot.sign_in("alice", "01234567890123456789012345678901").unwrap();
+        let cookie = format!("{COOKIE}={token}");
+        pilot.sessions.lock().unwrap().get_mut(&sha(token.as_bytes()))
+            .unwrap().expires_at_nanos = 0;
+        assert!(pilot.authorize(&cookie, None).is_none());
+        assert!(!pilot.sign_out(&cookie, "invalid"));
+    }
+
     #[test]
     fn compares_digest_in_constant_time_shape() {
         assert!(constant_equal(&sha(b"a"), &sha(b"a")));
