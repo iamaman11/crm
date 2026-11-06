@@ -29,6 +29,7 @@ mod gateway_grpc;
 mod native_composition;
 mod platform;
 mod process;
+mod production_identity;
 mod runtime;
 
 pub(crate) use background::*;
