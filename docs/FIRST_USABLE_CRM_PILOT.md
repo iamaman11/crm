@@ -50,7 +50,7 @@ An exception requires evidence in the issue/PR: why the existing owner boundary 
 
 ## 5. Checkpoints: evidence, not prose
 
-| Gate | Responsible issue | Evidence to attach to #310 | Current state |
+| Gate | Responsible issue | Evidence to attach to #310 | Initial planning baseline (2026-11-06) |
 |---|---|---|---|
 | **G0 — decision & governance** | #310, #315, #194 | reviewed normative sequence / packet alignment, exact baseline and honest CI snapshot | **OPEN** |
 | **G1 — production identity** | #311 | production-built login/logout/expiry/revocation, tenant/actor negative tests, no web secrets | **NO-GO** |
@@ -59,7 +59,7 @@ An exception requires evidence in the issue/PR: why the existing owner boundary 
 | **G4 — release verification** | #314, #315 | unchanged build artifacts, all applicable checks, security/tenant/failure tests, extension-cost evidence | **NO-GO** |
 | **G5 — installed pilot** | #316 | real operator trial, restart, backup restore, UX/performance notes, explicit signed GO/NO-GO | **NO-GO** |
 
-States: `PLANNED → IMPLEMENTING → CI_GREEN → INSTALLED → ACCEPTED`, or `BLOCKED`. **CI_GREEN is never proof of installation or final acceptance.** Close each issue only when its own evidence is attached. Close #310 only on G5 **closed-pilot** GO.
+The states above are **historical planning-baseline snapshots**, not a duplicate live dashboard. The only current gate state is in #310. States: `PLANNED → IMPLEMENTING → CI_GREEN → INSTALLED → ACCEPTED`, or `BLOCKED`. **CI_GREEN is never proof of installation or final acceptance.** Close each issue only when its own evidence is attached. Close #310 only on G5 **closed-pilot** GO.
 
 ## 6. Proposed work sequence
 
