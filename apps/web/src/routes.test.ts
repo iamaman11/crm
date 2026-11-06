@@ -162,6 +162,24 @@ describe("Route Eligibility", () => {
     ).toBe(true);
   });
 
+  it("gates ordinary CRM routes against the server capability snapshot", () => {
+    const routes = [
+      ["/customers", "parties.party.list"],
+      ["/deals", "sales.deal.list"],
+      ["/tasks", "activities.task.list"],
+    ] as const;
+    for (const [path, capability] of routes) {
+      const route = routeForPath(path)!;
+      expect(route?.requiredCapability).toBe(capability);
+      expect(canNavigateToRoute(route, authenticatedSession,
+        { capabilities: new Set() }, productionEnvironment)).toBe(false);
+      expect(canNavigateToRoute(route, authenticatedSession,
+        { capabilities: new Set([capability]) }, productionEnvironment)).toBe(true);
+      expect(canNavigateToRoute(route, { status: "unauthenticated" },
+        { capabilities: new Set([capability]) }, productionEnvironment)).toBe(false);
+    }
+  });
+
   it("keeps the record extension proof authenticated and development-only", () => {
     const route = routeForPath("/records/phase7i-demo");
     expect(route?.id).toBe("record-extension-proof");

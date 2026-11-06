@@ -10,10 +10,11 @@ const valid = () => ({
   status: "authenticated",
   tenantId: "tenant-a",
   actorLabel: "Operator",
+  actorId: "operator-a",
   tenantLabel: "Team A",
   expiresAtUnixMillis: Date.now() + 30_000,
   csrfToken: "01234567890123456789012345678901",
-  capabilities: ["search.global.query", "metadata.activation.get"],
+  capabilities: ["search.global.query", "metadata.activation.get", "parties.party.list", "sales.deal.list"],
 });
 
 function fakeResponse(body: unknown, status = 200): typeof fetch {
@@ -34,9 +35,10 @@ describe("production identity adapter", () => {
     const result = await fetchProductionSession(fetcher);
     expect(result.session.status).toBe("authenticated");
     expect(result.session).not.toHaveProperty("bearerToken");
+    expect(result.session).toHaveProperty("actorId", "operator-a");
     expect(result.session).toHaveProperty("authentication", "cookie");
     expect([...result.access.capabilities].sort()).toEqual([
-      "metadata.activation.get", "search.global.query",
+      "metadata.activation.get", "parties.party.list", "sales.deal.list", "search.global.query",
     ]);
     expect(fetcher).toHaveBeenCalledWith("/auth/session", expect.objectContaining({
       credentials: "same-origin",
