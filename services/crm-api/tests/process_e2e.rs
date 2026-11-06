@@ -60,7 +60,12 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
         .env("CRM_GRPC_BIND", &grpc_addr)
         .env("CRM_API_BEARER_TOKEN", TOKEN)
         .env("CRM_API_ACTOR_ID", ACTOR)
-        .env("CRM_API_TENANTS", TENANT)
+        .env("CRM_API_TENANTS", "tenant-a,tenant-b")
+        .env("CRM_PUBLIC_ORIGIN", "https://crm.example.test")
+        .env(
+            "CRM_PILOT_OPERATORS",
+            r#"[{"username":"alice","password":"01234567890123456789012345678901","actor_id":"pilot-alice","tenant_id":"tenant-a","capabilities":["search.global.query"]},{"username":"bob","password":"abcdefghijklmnopqrstuvwxyzABCDEF","actor_id":"pilot-bob","tenant_id":"tenant-b","capabilities":["search.global.query"]}]"#,
+        )
         .env(
             "CRM_CURSOR_SIGNING_KEY",
             "phase6l-cursor-signing-key-0123456789abcdef",
@@ -251,6 +256,113 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
         );
         sleep(Duration::from_millis(250)).await;
     }
+
+    // G1: ordinary production crm-api process, using the same token and governed
+    // gateway as service/worker identities, never a frontend bearer secret.
+    let login_client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("build redirect-disabled pilot login client");
+    let login_url = format!("http://{http_addr}/auth/login");
+    let missing = login_client
+        .get(format!("http://{http_addr}/auth/session"))
+        .send().await.expect("query unauthenticated pilot session");
+    assert_eq!(missing.status(), StatusCode::UNAUTHORIZED);
+    let invalid = login_client.post(&login_url)
+        .header("origin", "https://crm.example.test")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("username=alice&password=incorrect".to_owned())
+        .send().await.expect("reject incorrect pilot login");
+    assert_eq!(invalid.status(), StatusCode::UNAUTHORIZED);
+
+    let mut pilot_sessions = Vec::new();
+    for (username, password, tenant) in [
+        ("alice", "01234567890123456789012345678901", "tenant-a"),
+        ("bob", "abcdefghijklmnopqrstuvwxyzABCDEF", "tenant-b"),
+    ] {
+        let response = login_client.post(&login_url)
+            .header("origin", "https://crm.example.test")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(format!("username={username}&password={password}"))
+            .send().await.expect("post valid pilot login");
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let set_cookie = response.headers()
+            .get(reqwest::header::SET_COOKIE).expect("pilot set-cookie")
+            .to_str().expect("pilot set-cookie text").to_owned();
+        assert!(set_cookie.contains("HttpOnly; Secure; SameSite=Strict"));
+        let cookie = set_cookie.split(';').next().expect("pilot cookie").to_owned();
+        let details = login_client.get(format!("http://{http_addr}/auth/session"))
+            .header("cookie", &cookie)
+            .send().await.expect("read authenticated pilot session");
+        assert_eq!(details.status(), StatusCode::OK);
+        let json: serde_json::Value = details.json().await.expect("decode session display");
+        assert_eq!(json["tenantId"], tenant);
+        assert_eq!(json["actorLabel"], username);
+        let csrf = json["csrfToken"].as_str().expect("csrf display").to_owned();
+        assert_eq!(csrf.len(), 64);
+        pilot_sessions.push((cookie, csrf, tenant));
+    }
+
+    for (index, (cookie, csrf, tenant)) in pilot_sessions.iter().enumerate() {
+        let mut request = Request::new(GatewayQueryRequest {
+            owner_module_id: search_definition.owner_module_id.as_str().to_owned(),
+            capability_id: search_definition.capability_id.as_str().to_owned(),
+            capability_version: search_definition.capability_version.as_str().to_owned(),
+            input: Some(search_payload.clone()),
+        });
+        request.metadata_mut().insert("cookie", cookie.parse().unwrap());
+        request.metadata_mut().insert("x-crm-csrf", csrf.parse().unwrap());
+        request.metadata_mut().insert("x-tenant-id", tenant.parse().unwrap());
+        let response = grpc.query(request).await.expect("pilot authorized gRPC query");
+        let page = search::SearchResponse::decode(
+            response.into_inner().output.expect("search output").payload.as_slice()
+        ).expect("pilot search response");
+        if index == 1 {
+            assert!(page.hits.iter().all(|hit| hit.resource_id != DEAL_ID),
+                "tenant-b must not read tenant-a indexed deal");
+        }
+        let mut wrong_tenant = Request::new(GatewayQueryRequest {
+            owner_module_id: search_definition.owner_module_id.as_str().to_owned(),
+            capability_id: search_definition.capability_id.as_str().to_owned(),
+            capability_version: search_definition.capability_version.as_str().to_owned(),
+            input: Some(search_payload.clone()),
+        });
+        wrong_tenant.metadata_mut().insert("cookie", cookie.parse().unwrap());
+        wrong_tenant.metadata_mut().insert("x-crm-csrf", csrf.parse().unwrap());
+        wrong_tenant.metadata_mut().insert(
+            "x-tenant-id", if *tenant == "tenant-a" { "tenant-b" } else { "tenant-a" }.parse().unwrap(),
+        );
+        assert!(grpc.query(wrong_tenant).await.is_err(),
+            "cross-tenant request must fail at the existing governed gateway");
+
+        let mut no_csrf = Request::new(GatewayQueryRequest {
+            owner_module_id: search_definition.owner_module_id.as_str().to_owned(),
+            capability_id: search_definition.capability_id.as_str().to_owned(),
+            capability_version: search_definition.capability_version.as_str().to_owned(),
+            input: Some(search_payload.clone()),
+        });
+        no_csrf.metadata_mut().insert("cookie", cookie.parse().unwrap());
+        no_csrf.metadata_mut().insert("x-tenant-id", tenant.parse().unwrap());
+        assert_eq!(grpc.query(no_csrf).await.unwrap_err().code(), tonic::Code::Unauthenticated);
+    }
+
+    let (alice_cookie, alice_csrf, _) = &pilot_sessions[0];
+    let invalid_logout = login_client.post(format!("http://{http_addr}/auth/logout"))
+        .header("origin", "https://crm.example.test")
+        .header("cookie", alice_cookie)
+        .header("x-crm-csrf", "incorrect")
+        .send().await.expect("invalid logout response");
+    assert_eq!(invalid_logout.status(), StatusCode::UNAUTHORIZED);
+    let confirmed_logout = login_client.post(format!("http://{http_addr}/auth/logout"))
+        .header("origin", "https://crm.example.test")
+        .header("cookie", alice_cookie)
+        .header("x-crm-csrf", alice_csrf)
+        .send().await.expect("valid logout response");
+    assert_eq!(confirmed_logout.status(), StatusCode::NO_CONTENT);
+    let revoked = login_client.get(format!("http://{http_addr}/auth/session"))
+        .header("cookie", alice_cookie)
+        .send().await.expect("revoked session check");
+    assert_eq!(revoked.status(), StatusCode::UNAUTHORIZED);
 
     send_sigint(&child).await;
     let exit = timeout(Duration::from_secs(15), child.wait())
