@@ -437,7 +437,10 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
             .header("cookie", cookie)
             .header("x-crm-csrf", csrf)
             .header("x-tenant-id", *tenant)
-            .header("idempotency-key", format!("pilot-own-create-{index}-{http_port}"))
+            .header(
+                "idempotency-key",
+                format!("pilot-own-create-{index}-{http_port}"),
+            )
             .json(&pilot_create)
             .send()
             .await
@@ -454,7 +457,10 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
             .header("cookie", cookie)
             .header("x-crm-csrf", csrf)
             .header("x-tenant-id", foreign_tenant)
-            .header("idempotency-key", format!("pilot-foreign-create-{index}-{http_port}"))
+            .header(
+                "idempotency-key",
+                format!("pilot-foreign-create-{index}-{http_port}"),
+            )
             .json(&pilot_create)
             .send()
             .await
@@ -472,7 +478,10 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
             .post(&mutation_endpoint)
             .header("cookie", cookie)
             .header("x-tenant-id", *tenant)
-            .header("idempotency-key", format!("pilot-no-csrf-{index}-{http_port}"))
+            .header(
+                "idempotency-key",
+                format!("pilot-no-csrf-{index}-{http_port}"),
+            )
             .json(&pilot_create)
             .send()
             .await
