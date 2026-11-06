@@ -280,6 +280,16 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
         .expect("reject incorrect pilot login");
     assert_eq!(invalid.status(), StatusCode::UNAUTHORIZED);
 
+    let foreign_origin = login_client
+        .post(&login_url)
+        .header("origin", "https://foreign.example.test")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("username=alice&password=01234567890123456789012345678901")
+        .send()
+        .await
+        .expect("reject login from a foreign origin");
+    assert_eq!(foreign_origin.status(), StatusCode::FORBIDDEN);
+
     let mut pilot_sessions = Vec::new();
     for (username, password, tenant) in [
         ("alice", "01234567890123456789012345678901", "tenant-a"),
@@ -320,6 +330,77 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
         let csrf = json["csrfToken"].as_str().expect("csrf display").to_owned();
         assert_eq!(csrf.len(), 64);
         pilot_sessions.push((cookie, csrf, tenant));
+    }
+
+    // Exercise the same browser-facing HTTP query transport against the live
+    // process and PostgreSQL, not only the direct gRPC service.
+    let http_search_url = format!(
+        "http://{http_addr}/v1/queries/{}/{}/{}",
+        search_definition.owner_module_id,
+        search_definition.capability_id,
+        search_definition.capability_version
+    );
+    let http_search_payload = payload(
+        &search_definition,
+        search::SearchRequest {
+            text: "Phase 6L process deal".to_owned(),
+            resource_types: vec!["sales.deal".to_owned()],
+            page_size: 25,
+            cursor: String::new(),
+        },
+    );
+    for (cookie, csrf, tenant) in &pilot_sessions {
+        let allowed = login_client
+            .post(&http_search_url)
+            .header("cookie", cookie)
+            .header("x-crm-csrf", csrf)
+            .header("x-tenant-id", *tenant)
+            .json(&http_search_payload)
+            .send()
+            .await
+            .expect("pilot authorized HTTP query");
+        assert_eq!(allowed.status(), StatusCode::OK);
+
+        let wrong_tenant = if *tenant == "tenant-a" { "tenant-b" } else { "tenant-a" };
+        let denied = login_client
+            .post(&http_search_url)
+            .header("cookie", cookie)
+            .header("x-crm-csrf", csrf)
+            .header("x-tenant-id", wrong_tenant)
+            .json(&http_search_payload)
+            .send()
+            .await
+            .expect("pilot cross-tenant HTTP query");
+        assert!(
+            matches!(
+                denied.status(),
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
+            ),
+            "cross-tenant HTTP query must be denied, got {}",
+            denied.status()
+        );
+
+        let missing_csrf = login_client
+            .post(&http_search_url)
+            .header("cookie", cookie)
+            .header("x-tenant-id", *tenant)
+            .json(&http_search_payload)
+            .send()
+            .await
+            .expect("pilot HTTP query without CSRF");
+        assert_eq!(missing_csrf.status(), StatusCode::UNAUTHORIZED);
+
+        let ambiguous_authentication = login_client
+            .post(&http_search_url)
+            .header("cookie", cookie)
+            .bearer_auth(TOKEN)
+            .header("x-crm-csrf", csrf)
+            .header("x-tenant-id", *tenant)
+            .json(&http_search_payload)
+            .send()
+            .await
+            .expect("pilot HTTP query with ambiguous credentials");
+        assert_eq!(ambiguous_authentication.status(), StatusCode::UNAUTHORIZED);
     }
 
     for (index, (cookie, csrf, tenant)) in pilot_sessions.iter().enumerate() {
