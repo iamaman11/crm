@@ -33,7 +33,8 @@
     "database/migrations/20261106_0001_production_identity.up.sql",
     "database/migrations/20261106_0001_production_identity.down.sql",
     "crates/crm-application-runtime/tests/production_identity.rs",
-    "crates/crm-application-runtime/src/gateway_grpc.rs"
+    "crates/crm-application-runtime/src/gateway_grpc.rs",
+    "scripts/customer_privacy_operations.py"
   ],
   "forbidden_paths": [
     ".github/**",
@@ -46,8 +47,7 @@
     "docs/generated/REPOSITORY_MAP.md",
     "step22-runtime-fanin-decisions.json",
     "step22-architecture-inventory.json",
-    "services/**",
-    "scripts/**"
+    "services/**"
   ],
   "deliverables": [
     "one configured closed-pilot operator login path in existing crm-api with no password database or SSO provider",
@@ -58,7 +58,8 @@
     "negative tests for missing forged expired cookie bad CSRF failed login restart and denied permissions",
     "exact G1 baseline, scoped code changes, deterministic generated packet and CI acceptance without bypass",
     "no new business crates, duplicate authorization system, OIDC/SSO subsystem, or fake production readiness",
-    "preserve the accepted Step22H direct-runtime inventory, decisions ledger and remaining Step22R obligations unchanged"
+    "preserve the accepted Step22H direct-runtime inventory, decisions ledger and remaining Step22R obligations unchanged",
+    "update only the exact trusted runtime blob SHA in existing Customer Privacy operations metrics source guard after G1 runtime changed; keep all failure and restore checks intact"
   ],
   "required_checks": [
     "Affected Scope CI",
