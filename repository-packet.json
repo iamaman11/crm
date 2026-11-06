@@ -56,7 +56,8 @@
     "two test operators and two tenants with denial of cross-tenant queries and mutations through existing gateway and FORCE RLS",
     "negative tests for missing forged expired cookie bad CSRF failed login restart and denied permissions",
     "exact G1 baseline, scoped code changes, deterministic generated packet and CI acceptance without bypass",
-    "no new business crates, duplicate authorization system, OIDC/SSO subsystem, or fake production readiness"
+    "no new business crates, duplicate authorization system, OIDC/SSO subsystem, or fake production readiness",
+    "preserve the accepted Step22H direct-runtime inventory, decisions ledger and remaining Step22R obligations unchanged"
   ],
   "required_checks": [
     "Affected Scope CI",
