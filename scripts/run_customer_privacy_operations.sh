@@ -98,12 +98,12 @@ docker run --detach --rm --name "$CONTAINER_NAME" \
 # restart. Require the immutable entrypoint completion marker before probing
 # the final server.
 for _ in $(seq 1 120); do
-  docker logs "$CONTAINER_NAME" 2>&1 | grep --fixed-strings --quiet \
-    "PostgreSQL init process complete; ready for start up." && break
+  docker logs "$CONTAINER_NAME" 2>&1 | grep --fixed-strings \
+    "PostgreSQL init process complete; ready for start up." >/dev/null && break
   sleep 0.5
 done
-if ! docker logs "$CONTAINER_NAME" 2>&1 | grep --fixed-strings --quiet \
-  "PostgreSQL init process complete; ready for start up."; then
+if ! docker logs "$CONTAINER_NAME" 2>&1 | grep --fixed-strings \
+  "PostgreSQL init process complete; ready for start up." >/dev/null; then
   docker logs "$CONTAINER_NAME" > "$POSTGRES_LOG_PATH" 2>&1 || true
   echo "PostgreSQL initialization did not reach the final startup boundary." >&2
   tail -n 240 "$POSTGRES_LOG_PATH" >&2 || true
