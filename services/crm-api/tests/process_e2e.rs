@@ -64,7 +64,7 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
         .env("CRM_PUBLIC_ORIGIN", "https://crm.example.test")
         .env(
             "CRM_PILOT_OPERATORS",
-            r#"[{"username":"alice","password":"01234567890123456789012345678901","actor_id":"pilot-alice","tenant_id":"tenant-a","capabilities":["search.global.query"]},{"username":"bob","password":"abcdefghijklmnopqrstuvwxyzABCDEF","actor_id":"pilot-bob","tenant_id":"tenant-b","capabilities":["search.global.query"]}]"#,
+            r#"[{"username":"alice","password":"01234567890123456789012345678901","actor_id":"pilot-alice","tenant_id":"tenant-a","capabilities":["search.global.query","sales.deal.create"]},{"username":"bob","password":"abcdefghijklmnopqrstuvwxyzABCDEF","actor_id":"pilot-bob","tenant_id":"tenant-b","capabilities":["search.global.query","sales.deal.create"]}]"#,
         )
         .env(
             "CRM_CURSOR_SIGNING_KEY",
@@ -405,6 +405,79 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
             .await
             .expect("pilot HTTP query with ambiguous credentials");
         assert_eq!(ambiguous_authentication.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // A real operator must be able to write in their own tenant, while the
+    // identical authenticated request is forbidden for a different tenant.
+    for (index, (cookie, csrf, tenant)) in pilot_sessions.iter().enumerate() {
+        let pilot_create = payload(
+            &create_definition,
+            sales::CreateDealRequest {
+                deal_id: format!("phase6l-pilot-deal-{index}-{http_port}"),
+                name: format!("Pilot operator {index} deal"),
+                owner: Some(actor_owner()),
+                account: None,
+                primary_contact: None,
+                stage: Some(sales::DealStage {
+                    pipeline_id: "pipeline.phase6l".to_owned(),
+                    stage_id: "qualification".to_owned(),
+                    ordinal: 1,
+                }),
+                amount: Some(core::ExactMoney {
+                    minor_units: "1000".to_owned(),
+                    currency_code: "USD".to_owned(),
+                }),
+                expected_close_date: None,
+                probability_basis_points: 1000,
+            },
+        );
+        let mutation_endpoint = mutation_url(&http_addr, &create_definition);
+        let allowed = login_client
+            .post(&mutation_endpoint)
+            .header("cookie", cookie)
+            .header("x-crm-csrf", csrf)
+            .header("x-tenant-id", *tenant)
+            .header("idempotency-key", format!("pilot-own-create-{index}-{http_port}"))
+            .json(&pilot_create)
+            .send()
+            .await
+            .expect("pilot authorized HTTP mutation");
+        assert_eq!(allowed.status(), StatusCode::OK);
+
+        let foreign_tenant = if *tenant == "tenant-a" {
+            "tenant-b"
+        } else {
+            "tenant-a"
+        };
+        let denied = login_client
+            .post(&mutation_endpoint)
+            .header("cookie", cookie)
+            .header("x-crm-csrf", csrf)
+            .header("x-tenant-id", foreign_tenant)
+            .header("idempotency-key", format!("pilot-foreign-create-{index}-{http_port}"))
+            .json(&pilot_create)
+            .send()
+            .await
+            .expect("reject pilot foreign tenant mutation");
+        assert!(
+            matches!(
+                denied.status(),
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
+            ),
+            "foreign tenant mutation must be denied, got {}",
+            denied.status()
+        );
+
+        let without_csrf = login_client
+            .post(&mutation_endpoint)
+            .header("cookie", cookie)
+            .header("x-tenant-id", *tenant)
+            .header("idempotency-key", format!("pilot-no-csrf-{index}-{http_port}"))
+            .json(&pilot_create)
+            .send()
+            .await
+            .expect("reject pilot mutation without CSRF");
+        assert_eq!(without_csrf.status(), StatusCode::UNAUTHORIZED);
     }
 
     for (index, (cookie, csrf, tenant)) in pilot_sessions.iter().enumerate() {
