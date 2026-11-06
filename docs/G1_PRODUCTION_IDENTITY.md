@@ -17,7 +17,7 @@ The existing `crm-capability-ingress::RequestAuthenticator` and live authorizati
 4. **Logout:** `POST /auth/logout` with CSRF invalidates the server session and cookie. Expiry, revocation or process restart cause **re-login**; silent session reconstruction is not required for the pilot. The user remains signed out on errors.
 5. **Browser:** no production fallback to `VITE_CRM_DEV_*`, hardcoded user or administrative `CRM_API_BEARER_TOKEN`; one visible **Sign in / Sign out** experience. All protected routes fail closed unless the server attests to a valid session.
 
-**Test/pilot limitation:** this is intentionally a small explicit pilot identity configuration, not a public multiuser identity service. It must never be enabled as the public-production login solely because the browser tests pass. Any rollout outside the closed test environment requires separate approval in #313/#314 of persistent identity provisioning, secure HTTPS proxy/cookie/CSRF behavior, deployment secret lifecycle and operator/user recovery, with OIDC/SSO considered **only if actual deployment requirements justify it**.
+**Release boundary:** the initial implementation remains deliberately small. Before actual production launch, verify only the **mandatory baseline** for safe use: authenticated access, tenant isolation, existing authorization/RLS, secure cookie/CSRF/HTTPS, release installation, backup and recovery, and absence of critical defects (#313/#314). **Additional strengthening and optional complexity belong strictly AFTER the CRM is in real production operation**, prioritized from observed incidents, measurements and actual needs—not during pilot development or pre-production preparation. OIDC/SSO, extra role tooling and refresh infrastructure are not prerequisites unless a fundamental launch blocker is proved.
 
 ## Essential, not optional, safety
 
@@ -29,7 +29,7 @@ The existing `crm-capability-ingress::RequestAuthenticator` and live authorizati
 
 ## No extra architecture
 
-Reuse `crates/crm-application-runtime`, `crates/crm-capability-ingress`, `packages/client` and `apps/web`. Keep all code close to its owner. Zero new business owner modules; no alternative CRUD API or duplicate policy tables. Do not add persistence, OIDC, refresh-token lifecycles, or other cross-process machinery **until actual pilot testing demonstrates why it is needed**.
+Reuse `crates/crm-application-runtime`, `crates/crm-capability-ingress`, `packages/client` and `apps/web`. Keep all code close to its owner. Zero new business owner modules; no alternative CRUD API or duplicate policy tables. Do not add OIDC, refresh-token lifecycles, optional persistence layers or other cross-process machinery as speculative preparation. **Additional improvements are evaluated only AFTER real production launch**, based on actual use; necessary correctness, security and recovery checks remain part of the initial working implementation.
 
 ## Current implementation, accurately
 
