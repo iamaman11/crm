@@ -190,7 +190,6 @@ impl PilotIdentity {
 
     pub(crate) fn provision(
         &self,
-        now: i64,
         grants: &LiveAuthorizationStore,
         visibility: &LiveQueryVisibilityStore,
         mutation: &[CapabilityDefinition],
@@ -220,7 +219,7 @@ impl PilotIdentity {
                         capability_version: definition.capability_version.clone(),
                         owner_module_id: definition.owner_module_id.clone(),
                         policy_version: POLICY.to_owned(),
-                        expires_at_unix_nanos: Some(expiry),
+                        expires_at_unix_nanos: None,
                     })
                     .map_err(|_| "pilot grant failed")?;
                 if query
@@ -244,7 +243,7 @@ impl PilotIdentity {
                                 record_id: None,
                                 allowed_fields: resource.allowed_fields,
                                 policy_version: POLICY.to_owned(),
-                                expires_at_unix_nanos: Some(expiry),
+                                expires_at_unix_nanos: None,
                             })
                             .map_err(|_| "pilot visibility grant failed")?;
                     }
