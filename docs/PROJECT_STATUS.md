@@ -16,7 +16,7 @@ This document is the concise authoritative current-state snapshot. Product depen
 
 ## Current position
 
-**Accepted main baseline:** `fab78b95afb66344af2dccbff87121cd24ba3cd5`; Steps 1–21 and Step 22H (PR #309) are merged. **Step 22 is incomplete:** 53 total / 52 production / 1 test-only runtime dependencies; 27 final (10 removed), **36 unresolved**, and outstanding permanent-gate dispositions. **Next bounded implementation packet under ADR-033 is Step 22P / G0 (#310), not a user-facing deployed product.** When G0 is accepted, G1–G5 pilot subpackets execute sequentially; **Step 22R remains mandatory before Step 23 / Phase 8B**. Architecture 10/10 and public production are not declared. Draft #317 itself only proposes this decision until its checks pass and it merges.
+**Accepted main baseline:** `fab78b95afb66344af2dccbff87121cd24ba3cd5`; Steps 1–21 and Step 22H (PR #309) are merged. **Step 22 is incomplete:** 53 total / 52 production / 1 test-only runtime dependencies; 27 final (10 removed), **36 unresolved**, and outstanding permanent-gate dispositions. **The Step 22P / G0 transition (#310) is the scope of this documentation candidate; it does not deliver a user-facing product.** After G0 merges and its exact-head/push checks pass, **G1 (#311) is next**; later G2–G5 pilot subpackets execute sequentially; **Step 22R remains mandatory before Step 23 / Phase 8B**. Architecture 10/10 and public production are not declared. Draft #317 itself only proposes this decision until its checks pass and it merges.
 
 The historical Step 21 checkpoint narrative below remains accepted historical evidence, not the current next-packet declaration.
 
