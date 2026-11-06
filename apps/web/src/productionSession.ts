@@ -103,7 +103,7 @@ export async function logoutProductionSession(
     redirect: "error",
     headers: { "x-crm-csrf": session.csrfToken },
   });
-  if (!response.ok && response.status !== 401) {
+  if (response.status !== 204) {
     throw new Error("Could not confirm session logout");
   }
 }
