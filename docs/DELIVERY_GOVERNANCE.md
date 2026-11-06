@@ -54,7 +54,7 @@ Current strict sequence status (read back 2026-11-06; ADR-033):
 
 - Repository Steps 1–21 — **Complete**;
 - Repository Step 22A–22H — bounded fan-in work accepted through merged PR #309; Step 22 overall **incomplete**;
-- Repository Step 22P / G0 pilot governance transition — **next packet**, followed sequentially by #311–#316 only after G0 exact-head acceptance;
+- Repository Step 22P / G0 pilot governance transition — **current documentation packet; after merged exact-SHA acceptance, #311 / G1 is next**, followed sequentially by #312–#316;
 - Repository Step 22R — resumes and completes the remaining mandatory ADR-032 runtime-fan-in, permanent-gate and remeasurement obligations;
 - Repository Steps 23–25 / broad Phase 8B expansion — **blocked** until Step 22R closure.
 
