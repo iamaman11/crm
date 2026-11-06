@@ -77,7 +77,19 @@ until docker exec "${CONTAINER_NAME}" pg_isready -U "${E2E_DB_USER}" >/dev/null 
   echo "Waiting for ephemeral postgres to be ready..."
   sleep 0.5
 done
-echo "PostgreSQL is ready!"
+# postgres:16-alpine briefly starts an initdb-only server before restarting
+# the final TCP server. pg_isready during initdb is not reliable acceptance.
+until docker logs "${CONTAINER_NAME}" 2>&1 | grep -q 'PostgreSQL init process complete; ready for start up.'; do
+  if [ "$(docker inspect -f '{{.State.Running}}' "${CONTAINER_NAME}" 2>/dev/null)" != "true" ]; then
+    echo "PostgreSQL container exited during initialization." >&2
+    exit 1
+  fi
+  sleep 0.5
+done
+until docker exec "${CONTAINER_NAME}" pg_isready -U "${E2E_DB_USER}" >/dev/null 2>&1; do
+  sleep 0.5
+done
+echo "PostgreSQL final server is ready!"
 
 # Create test database
 docker exec -i "${CONTAINER_NAME}" psql -U "${E2E_DB_USER}" -c "CREATE DATABASE ${DB_NAME};"

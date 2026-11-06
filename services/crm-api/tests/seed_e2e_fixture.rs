@@ -706,10 +706,12 @@ async fn provision_g2_contract_registry(admin: &PgPool) {
             .iter()
             .find(|module| module["module_id"].as_str() == Some(owner))
             .and_then(|module| module["capabilities"].as_array())
-            .and_then(|capabilities| capabilities.iter().find(|entry| {
-                entry["id"].as_str() == Some(definition.capability_id.as_str())
-                    && entry["version"].as_str() == Some(definition.capability_version.as_str())
-            }))
+            .and_then(|capabilities| {
+                capabilities.iter().find(|entry| {
+                    entry["id"].as_str() == Some(definition.capability_id.as_str())
+                        && entry["version"].as_str() == Some(definition.capability_version.as_str())
+                })
+            })
             .expect("published G2 capability has generated RPC binding");
         let rpc = binding["rpc"].as_str().expect("published RPC name");
         let (service, method) = rpc.rsplit_once('.').expect("qualified published RPC");
