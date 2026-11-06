@@ -361,7 +361,11 @@ async fn crm_api_process_serves_http_grpc_workers_and_graceful_shutdown() {
             .expect("pilot authorized HTTP query");
         assert_eq!(allowed.status(), StatusCode::OK);
 
-        let wrong_tenant = if *tenant == "tenant-a" { "tenant-b" } else { "tenant-a" };
+        let wrong_tenant = if *tenant == "tenant-a" {
+            "tenant-b"
+        } else {
+            "tenant-a"
+        };
         let denied = login_client
             .post(&http_search_url)
             .header("cookie", cookie)
