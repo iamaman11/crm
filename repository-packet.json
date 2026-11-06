@@ -32,7 +32,8 @@
     "Cargo.lock",
     "database/migrations/20261106_0001_production_identity.up.sql",
     "database/migrations/20261106_0001_production_identity.down.sql",
-    "crates/crm-application-runtime/tests/production_identity.rs"
+    "crates/crm-application-runtime/tests/production_identity.rs",
+    "crates/crm-application-runtime/src/gateway_grpc.rs"
   ],
   "forbidden_paths": [
     ".github/**",
