@@ -74,7 +74,8 @@ impl gateway_v1::application_gateway_service_server::ApplicationGatewayService
         &self,
         request: Request<QueryRequest>,
     ) -> Result<Response<QueryResponse>, Status> {
-        let metadata = request.metadata().clone();
+        let mut metadata = request.metadata().clone();
+        verify_pilot_cookie(&self.components, &mut metadata)?;
         let request = request.into_inner();
         let input = decode_payload(request.input)?;
         let route = decode_route(
