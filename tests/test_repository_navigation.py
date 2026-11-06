@@ -42,6 +42,8 @@ class RepositoryNavigationTests(unittest.TestCase):
                 "docs/G1_PRODUCTION_IDENTITY.md",
                 "docs/ACTIVE_PACKET.md",
                 "repository-packet.json",
+                "step13-complexity-policy.json",
+                "tests/test_step13_exit_evidence.py",
                 "tests/test_repository_navigation.py",
                 "tests/test_architecture_documentation_consistency.py",
                 "crates/crm-application-runtime/src/config.rs",
