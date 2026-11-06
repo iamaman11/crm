@@ -59,7 +59,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         for path in (".github/**", "modules/**", "contracts/**", "proto/**", "scripts/**", "docs/generated/REPOSITORY_MAP.md"):
             self.assertIn(path, packet["forbidden_paths"])
         self.assertIn("Step22H", " ".join(packet["deliverables"]))
-        self.assertIn("frontend adapter", " ".join(packet["non_goals"]))
+        self.assertIn("public production", " ".join(packet["non_goals"]))
         self.assertEqual(
             validate_decisions(ROOT),
             {"all": 63, "final": 27, "platform_generic": 16,
