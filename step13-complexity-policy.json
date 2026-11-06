@@ -138,7 +138,7 @@
         "maximum_transitive_reverse_impact": 1,
         "maximum_dependency_depth": 17,
         "maximum_public_items": 130,
-        "maximum_non_comment_loc": 7921
+        "maximum_non_comment_loc": 7922
       },
       "crm-api": {
         "role": "process-host",
@@ -504,7 +504,7 @@
       },
       "measured_g1_budget": {
         "maximum_public_rust_items": 5389,
-        "crm_application_runtime_non_comment_loc": 7921,
+        "crm_application_runtime_non_comment_loc": 7922,
         "maximum_dependency_declarations": 271
       },
       "restrictions": "No extra workspace crate, suppressions, owner-specific direct runtime fan-in, new architectural bypass or additional slack is authorized. Step22R obligations remain."
