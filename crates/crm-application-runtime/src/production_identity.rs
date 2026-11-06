@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const COOKIE: &str = "crm_pilot_session";
-const SESSION_SECONDS: i64 = 60 * 60 * 8;
+const SESSION_SECS: i64 = 60 * 60 * 8;
 const PASSWORD_MIN: usize = 32;
 const POLICY: &str = "pilot-operator/v1";
 
@@ -273,7 +273,7 @@ impl PilotIdentity {
             .find(|o| o.username == name && constant_equal(&o.password_digest, &digest))
             .ok_or(())?;
         let now = now_nanos()?;
-        let until = now.checked_add(SESSION_SECONDS * 1_000_000_000).ok_or(())?;
+        let until = now.checked_add(SESSION_SECS * 1_000_000_000).ok_or(())?;
         let token = secret()?;
         let csrf = secret()?;
         self.tokens
@@ -363,9 +363,7 @@ impl PilotIdentity {
 }
 
 pub(crate) fn set_cookie(token: &str) -> String {
-    format!(
-        "{COOKIE}={token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_SECONDS}"
-    )
+    format!("{COOKIE}={token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_SECS}")
 }
 pub(crate) fn clear_cookie() -> String {
     format!("{COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0")
