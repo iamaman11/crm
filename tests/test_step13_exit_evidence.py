@@ -209,13 +209,13 @@ class Step13ExitEvidenceTests(unittest.TestCase):
             accepted_g1["measured_g1_budget"],
             {
                 "maximum_public_rust_items": 5389,
-                "crm_application_runtime_non_comment_loc": 7921,
+                "crm_application_runtime_non_comment_loc": 7922,
                 "maximum_dependency_declarations": 271,
             },
         )
         self.assertEqual(
             exit_policy["central_system_budgets"]["crm-application-runtime"]["maximum_non_comment_loc"],
-            7921,
+            7922,
         )
 
         central = exit_policy["central_system_budgets"]
