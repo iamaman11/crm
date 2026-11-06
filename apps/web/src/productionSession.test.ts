@@ -90,6 +90,9 @@ describe("production identity adapter", () => {
     await expect(logoutProductionSession(result.session, fakeResponse({}, 503))).rejects.toThrow(
       "Could not confirm session logout",
     );
+    await expect(logoutProductionSession(result.session, fakeResponse({}, 401))).rejects.toThrow(
+      "Could not confirm session logout",
+    );
   });
 
   it("rejects unauthenticated logout and never fabricates a server session", async () => {
