@@ -72,9 +72,7 @@ pub(crate) struct PilotAuthenticated {
 }
 
 fn now_nanos() -> Result<i64, ()> {
-    let d = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| ())?;
+    let d = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|_| ())?;
     i64::try_from(d.as_nanos()).map_err(|_| ())
 }
 
