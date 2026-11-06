@@ -63,6 +63,7 @@ crm-search-query-adapter = { path = "../crm-search-query-adapter" }
 crm-search-runtime = { path = "../crm-search-runtime" }
 http = "1"
 prost = "0.14"
+ring = "0.17"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
