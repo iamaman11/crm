@@ -831,28 +831,28 @@ async fn logout(State(state): State<HttpState>, headers: HeaderMap) -> Response 
 fn resolve_cookie_session(
     components: &ApplicationComponents,
     headers: &mut HeaderMap,
-) -> Result<(), Response> {
+) -> Result<(), StatusCode> {
     let Some(cookie) = headers.get(header::COOKIE) else {
         return Ok(());
     };
     if headers.contains_key(header::AUTHORIZATION) {
-        return Err(StatusCode::UNAUTHORIZED.into_response());
+        return Err(StatusCode::UNAUTHORIZED);
     }
     let Some(ref pilot) = components.pilot_identity else {
-        return Err(StatusCode::UNAUTHORIZED.into_response());
+        return Err(StatusCode::UNAUTHORIZED);
     };
     let cookie = cookie
         .to_str()
-        .map_err(|_| StatusCode::UNAUTHORIZED.into_response())?;
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
     let csrf = headers
         .get("x-crm-csrf")
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default();
     let principal = pilot
         .authorize(cookie, Some(csrf))
-        .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
+        .ok_or_else(|| StatusCode::UNAUTHORIZED)?;
     let value = HeaderValue::from_str(&principal.authorization)
-        .map_err(|_| StatusCode::UNAUTHORIZED.into_response())?;
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
     headers.insert(header::AUTHORIZATION, value);
     Ok(())
 }
@@ -863,8 +863,8 @@ async fn mutation(
     mut headers: HeaderMap,
     Json(body): Json<HttpMutationBody>,
 ) -> Response {
-    if let Err(response) = resolve_cookie_session(&state.components, &mut headers) {
-        return response;
+    if let Err(status) = resolve_cookie_session(&state.components, &mut headers) {
+        return status.into_response();
     }
     let (input, approval) = match body.into_parts() {
         Ok(parts) => parts,
@@ -898,8 +898,8 @@ async fn query(
     mut headers: HeaderMap,
     Json(input): Json<TypedPayload>,
 ) -> Response {
-    if let Err(response) = resolve_cookie_session(&state.components, &mut headers) {
-        return response;
+    if let Err(status) = resolve_cookie_session(&state.components, &mut headers) {
+        return status.into_response();
     }
     let route = match capability_route(&path, &input) {
         Ok(route) => route,
