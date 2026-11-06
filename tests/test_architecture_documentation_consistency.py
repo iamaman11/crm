@@ -238,6 +238,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "apps/web/src/App.tsx", "apps/web/src/routes.ts", "apps/web/src/routes.test.ts",
             "apps/web/src/productionSession.ts", "apps/web/src/productionSession.test.ts",
             "apps/web/src/CrmPageUtils.ts", "apps/web/src/CrmPageUtils.test.ts",
+            "apps/web/vite.config.ts", "apps/web/playwright.config.ts",
+            "apps/web/e2e/g2-crm.spec.ts", "scripts/run_e2e.sh",
             "apps/web/src/CustomersPage.tsx", "apps/web/src/DealsPage.tsx", "apps/web/src/TasksPage.tsx",
             "packages/client/src/crm.ts", "packages/client/src/crm.test.ts",
             "packages/client/src/index.ts", "packages/client/src/session.ts",
