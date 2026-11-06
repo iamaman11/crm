@@ -215,86 +215,57 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "zero unresolved runtime-fan-in or gate-value decisions", self.plan
         )
 
-    def test_active_step_22h_identity_resolution_fanin_reduction_is_exact(self) -> None:
+    def test_active_g0_pilot_governance_does_not_close_step22(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(
-            self.packet["packet_id"],
-            "repository-step-22h-identity-resolution-fanin-reduction",
-        )
+        self.assertEqual(self.packet["packet_id"], "repository-step-22p-g0-pilot-governance-transition")
         self.assertEqual(
             self.packet["baseline"],
-            {"ref": "main", "sha": "48e3f2f3e0049505b92a08ac56320ce18a1a41d1"},
+            {"ref": "main", "sha": "fab78b95afb66344af2dccbff87121cd24ba3cd5"},
         )
-        self.assertEqual(self.packet["tracking_issues"], [194])
+        self.assertEqual(self.packet["tracking_issues"], [310, 194])
         self.assertEqual(
             set(self.packet["allowed_paths"]),
             {
-                "Cargo.lock",
-                "crates/crm-application-runtime/Cargo.toml",
+                "docs/adr/ADR-033-closed-pilot-validation-within-step-22.md",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/DELIVERY_GOVERNANCE.md",
+                "docs/PROJECT_STATUS.md",
+                "docs/README.md",
+                "docs/FIRST_USABLE_CRM_PILOT.md",
                 "docs/ACTIVE_PACKET.md",
-                "docs/STEP22_IDENTITY_RESOLUTION_FANIN_REDUCTION.md",
                 "repository-packet.json",
-                "scripts/check_step22_runtime_fanin_decisions.py",
-                "step22-runtime-fanin-decisions.json",
-                "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
-                "tests/test_workspace_analysis.py",
+                "tests/test_architecture_documentation_consistency.py",
             },
         )
-        forbidden_paths = set(self.packet["forbidden_paths"])
-        for path in (
-            ".github/**",
-            "crates/crm-first-party-modules/**",
-            "crates/crm-identity-resolution-capability-adapter/**",
-            "crates/crm-identity-resolution-capability-composition/**",
-            "crates/crm-identity-resolution-merge-composition/**",
-            "crates/crm-identity-resolution-merge-query-adapter/**",
-            "crates/crm-identity-resolution-query-adapter/**",
-            "docs/generated/REPOSITORY_MAP.md",
-            "step22-architecture-inventory.json",
-        ):
-            self.assertIn(path, forbidden_paths)
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
-
-        approval = read(".github/workflows/customer-privacy-approval.yml")
-        for marker in (
-            "EVENT_NAME: ${{ github.event_name }}",
-            "PR_BASE_REF: ${{ github.base_ref }}",
-            "PUSH_BEFORE_SHA: ${{ github.event.before }}",
-            'PACKET_BASE_REF="origin/${PR_BASE_REF}"',
-            'PACKET_BASE_REF="${PUSH_BEFORE_SHA}"',
-            'python scripts/repo.py packet-check --base "${PACKET_BASE_REF}"',
-            "0000000000000000000000000000000000000000",
-        ):
-            self.assertIn(marker, approval)
-        self.assertNotIn("github.base_ref || 'main'", approval)
-
+        self.assertIn("ADR-033", self.plan)
+        self.assertIn("ADR-033", self.roadmap)
+        self.assertIn("ADR-033", self.status)
+        self.assertIn("Step 22R", self.plan)
+        self.assertIn("36 unresolved", self.status)
+        self.assertIn("Step22", " ".join(self.packet["acceptance"]))
+        self.assertIn("Step23", " ".join(self.packet["non_goals"]))
+        self.assertIn("Step 22", self.adr32)
         counts = validate_decisions(ROOT)
         self.assertEqual(
             counts,
-            {
-                "all": 63,
-                "final": 27,
-                "platform_generic": 16,
-                "test_only": 1,
-                "removed": 10,
-                "owner_specific_unavoidable": 0,
-                "unresolved": 36,
-            },
+            {"all": 63, "final": 27, "platform_generic": 16,
+             "test_only": 1, "removed": 10, "owner_specific_unavoidable": 0,
+             "unresolved": 36},
         )
-        acceptance = " ".join(self.packet["acceptance"])
-        non_goals = " ".join(self.packet["non_goals"])
-        for marker in (
-            "53 total 52 production",
-            "27 final classifications 10 removals",
-            "36 unresolved",
-            "5377",
-            "crm-identity-resolution-capability-adapter",
+
+        approval = read(".github/workflows/customer-privacy-approval.yml")
+        for check in (
+            "EVENT_NAME: ${{ github.event_name }}",
+            'PACKET_BASE_REF="origin/${PR_BASE_REF}"',
+            'PACKET_BASE_REF="${PUSH_BEFORE_SHA}"',
+            'python scripts/repo.py packet-check --base "${PACKET_BASE_REF}"',
         ):
-            self.assertIn(marker, acceptance)
-        self.assertIn("Consents", non_goals)
-        self.assertIn("step22_complete false", " ".join(self.packet["deliverables"]))
+            self.assertIn(check, approval)
 
         operations_scope = next(
             scope

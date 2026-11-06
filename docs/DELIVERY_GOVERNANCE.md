@@ -50,11 +50,15 @@ A numbered repository step may use multiple small atomic PRs when needed, but:
 
 Parallel work is allowed only when ownership boundaries and dependencies are explicit and the work cannot invalidate another packet's exact candidate.
 
-Current strict sequence status:
+Current strict sequence status (read back 2026-11-06; ADR-033):
 
-- Repository Steps 1–14 — **Complete**;
-- Repository Step 15 — **next and not started**;
-- Repository Steps 16–25 — blocked by the first earlier unfinished step.
+- Repository Steps 1–21 — **Complete**;
+- Repository Step 22A–22H — bounded fan-in work accepted through merged PR #309; Step 22 overall **incomplete**;
+- Repository Step 22P / G0 pilot governance transition — **current documentation packet; after merged exact-SHA acceptance, #311 / G1 is next**, followed sequentially by #312–#316;
+- Repository Step 22R — resumes and completes the remaining mandatory ADR-032 runtime-fan-in, permanent-gate and remeasurement obligations;
+- Repository Steps 23–25 / broad Phase 8B expansion — **blocked** until Step 22R closure.
+
+ADR-033 changes **scheduling only**, not the absolute architecture invariants, source-of-truth precedence, one-active-packet policy or Step 22 exit contract.
 
 ## 4. Packet entry criteria
 

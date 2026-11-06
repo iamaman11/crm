@@ -22,6 +22,8 @@ Phase 8 is split into a sequenced portfolio:
 - **Phase 8G** — Customer Success, partner management, projects, documents and e-signature;
 - **Phase 8H** — analytics, integrations, Admin Studio, low-code and product-surface maturity.
 
+**ADR-033 / Step 22P sequencing amendment:** a narrow **8A-P closed-pilot usability track** (#310, #311–#316) runs within the still-open Step 22 after merged Step 22H and before Step 22R closure. This is not Phase 8B/C domain expansion, not a replacement for Phase 8A accepted evidence and not a claim of product 10/10. The ADR-032 remaining dependency/gate decisions must finish in Step 22R before any Phase 8B work begins.
+
 The complete functional and completion contract for these waves is normative in `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md`. Phase 8A is **Complete through PR #296** with PR #296 / accepted source `fd84cd25dfa25a75eac0fdc4a719cc76c84cfc95` / squash merge `c21894f47f24e81da1cc150f9ea457fcfdc2bd63` / 35 of 35 applicable permanent workflows on one unchanged exact head. Repository Step 22 now remeasures architecture, resolves `crm-application-runtime` fan-in and reviews permanent-gate value/cost before Phase 8B implementation; it does not automatically declare 10/10.
 
 ## 2. Delivery rules

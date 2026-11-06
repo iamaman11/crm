@@ -24,66 +24,41 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_step_22h_identity_resolution_fanin_reduction_is_exact(self) -> None:
+    def test_active_g0_pilot_governance_packet_is_exact(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(
-            packet["packet_id"],
-            "repository-step-22h-identity-resolution-fanin-reduction",
-        )
+        self.assertEqual(packet["packet_id"], "repository-step-22p-g0-pilot-governance-transition")
         self.assertEqual(packet["status"], "active")
-        self.assertEqual(
-            packet["baseline"],
-            {"ref": "main", "sha": "48e3f2f3e0049505b92a08ac56320ce18a1a41d1"},
-        )
-        self.assertEqual(packet["tracking_issues"], [194])
+        self.assertEqual(packet["baseline"], {"ref": "main", "sha": "fab78b95afb66344af2dccbff87121cd24ba3cd5"})
+        self.assertEqual(packet["tracking_issues"], [310, 194])
         self.assertEqual(
             set(packet["allowed_paths"]),
             {
-                "Cargo.lock",
-                "crates/crm-application-runtime/Cargo.toml",
+                "docs/adr/ADR-033-closed-pilot-validation-within-step-22.md",
+                "docs/ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md",
+                "docs/IMPLEMENTATION_ROADMAP.md",
+                "docs/PHASE8_DELIVERY_PLAN.md",
+                "docs/DELIVERY_GOVERNANCE.md",
+                "docs/PROJECT_STATUS.md",
+                "docs/README.md",
+                "docs/FIRST_USABLE_CRM_PILOT.md",
                 "docs/ACTIVE_PACKET.md",
-                "docs/STEP22_IDENTITY_RESOLUTION_FANIN_REDUCTION.md",
                 "repository-packet.json",
-                "scripts/check_step22_runtime_fanin_decisions.py",
-                "step22-runtime-fanin-decisions.json",
-                "tests/test_architecture_documentation_consistency.py",
                 "tests/test_repository_navigation.py",
-                "tests/test_workspace_analysis.py",
+                "tests/test_architecture_documentation_consistency.py",
             },
         )
-        forbidden_paths = set(packet["forbidden_paths"])
-        for path in (
-            ".github/**",
-            "crates/crm-first-party-modules/**",
-            "crates/crm-identity-resolution-capability-adapter/**",
-            "crates/crm-identity-resolution-capability-composition/**",
-            "crates/crm-identity-resolution-merge-composition/**",
-            "crates/crm-identity-resolution-merge-query-adapter/**",
-            "crates/crm-identity-resolution-query-adapter/**",
-            "docs/generated/REPOSITORY_MAP.md",
-            "step22-architecture-inventory.json",
-        ):
-            self.assertIn(path, forbidden_paths)
-        deliverables = " ".join(packet["deliverables"])
-        acceptance = " ".join(packet["acceptance"])
-        non_goals = " ".join(packet["non_goals"])
-        self.assertIn("53 total 52 production 1 test-only", deliverables)
-        self.assertIn("27 final 10 removed 36 unresolved", deliverables)
-        self.assertIn("crm-identity-resolution-capability-composition", acceptance)
-        self.assertIn("crm-identity-resolution-capability-adapter", acceptance)
-        self.assertIn("Consents", non_goals)
+        forbidden = set(packet["forbidden_paths"])
+        for path in (".github/**", "apps/**", "crates/**", "modules/**", "services/**", "database/**", "proto/**", "scripts/**", "docs/generated/REPOSITORY_MAP.md"):
+            self.assertIn(path, forbidden)
+        self.assertIn("Step22H", " ".join(packet["deliverables"]))
+        self.assertIn("Step23", " ".join(packet["non_goals"]) + " " + " ".join(packet["acceptance"]))
+        self.assertIn("Step22", " ".join(packet["acceptance"]))
         self.assertEqual(
             validate_decisions(ROOT),
-            {
-                "all": 63,
-                "final": 27,
-                "platform_generic": 16,
-                "test_only": 1,
-                "removed": 10,
-                "owner_specific_unavoidable": 0,
-                "unresolved": 36,
-            },
+            {"all": 63, "final": 27, "platform_generic": 16,
+             "test_only": 1, "removed": 10, "owner_specific_unavoidable": 0,
+             "unresolved": 36},
         )
 
     def test_generated_navigation_is_deterministic_and_current(self) -> None:
@@ -97,11 +72,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-22h-identity-resolution-fanin-reduction",
+            "repository-step-22p-g0-pilot-governance-transition",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "48e3f2f3e0049505b92a08ac56320ce18a1a41d1",
+            "fab78b95afb66344af2dccbff87121cd24ba3cd5",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -157,7 +132,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 22H Identity Resolution fan-in reduction"],
+                    "reasons": ["Step 22P G0 pilot governance-only transition"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -165,7 +140,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="48e3f2f3e0049505b92a08ac56320ce18a1a41d1",
+                return_value="fab78b95afb66344af2dccbff87121cd24ba3cd5",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(
