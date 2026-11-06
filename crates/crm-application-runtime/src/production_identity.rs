@@ -463,13 +463,19 @@ mod tests {
         let session = pilot.authorize(&cookie, None).unwrap();
         let authenticator =
             BearerTokenAuthenticator::new(pilot.tokens.clone(), Arc::new(crate::SystemClock));
-        let principal = authenticator.authenticate(&session.authorization).await.unwrap();
+        let principal = authenticator
+            .authenticate(&session.authorization)
+            .await
+            .unwrap();
         assert_eq!(principal.actor_id, ActorId::try_new("actor-a").unwrap());
         assert!(principal.permits_tenant(&TenantId::try_new("tenant-a").unwrap()));
         assert!(!principal.permits_tenant(&TenantId::try_new("tenant-b").unwrap()));
         assert!(pilot.sign_out(&cookie, &session.snapshot.csrf_token));
         assert_eq!(
-            authenticator.authenticate(&session.authorization).await.unwrap_err(),
+            authenticator
+                .authenticate(&session.authorization)
+                .await
+                .unwrap_err(),
             AuthenticationError::RevokedCredentials
         );
     }
