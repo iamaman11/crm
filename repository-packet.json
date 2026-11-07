@@ -1,89 +1,60 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-22p-g2-useful-crm",
-  "title": "G2 useful CRM: customers, contacts, deals and tasks",
+  "packet_id": "repository-step-23-cloudflare-native-experiment",
+  "title": "Cloudflare CRM: Access-only D1 tenant isolation and first native customer API",
   "status": "active",
-  "objective": "Build the first useful browser CRM on existing Party, Account, Contact Point, Sales and Activities owners, using the existing production identity and governed gateway. No new owners, generic CRUD backend, alternative storage or additional authorization service.",
+  "objective": "Isolated experiment for #321/#322: validate an understandable native Cloudflare Worker + D1 architecture in a dedicated CRM account without changing accepted Rust/PostgreSQL production owners. Never merge into main until functionality, invariants and security are independently proven.",
   "baseline": {
     "ref": "main",
-    "sha": "ddd6e738d0e11d6ff214caea6eb42de378b9f1c9"
+    "sha": "4ec3b416d77857347f797f185ad3981a95219b04"
   },
   "tracking_issues": [
-    312,
+    321,
+    322,
     310
   ],
   "allowed_paths": [
     "repository-packet.json",
     "docs/ACTIVE_PACKET.md",
-    "apps/web/src/App.tsx",
-    "apps/web/src/routes.ts",
-    "apps/web/src/routes.test.ts",
-    "apps/web/src/productionSession.ts",
-    "apps/web/src/productionSession.test.ts",
-    "apps/web/src/CrmPageUtils.ts",
-    "apps/web/src/CustomersPage.tsx",
-    "apps/web/src/DealsPage.tsx",
-    "apps/web/src/TasksPage.tsx",
-    "apps/web/src/CrmPageUtils.test.ts",
-    "packages/client/src/crm.ts",
-    "packages/client/src/crm.test.ts",
-    "packages/client/src/index.ts",
-    "packages/client/src/session.ts",
-    "crates/crm-application-runtime/src/production_identity.rs",
-    "tests/test_repository_navigation.py",
-    "tests/test_architecture_documentation_consistency.py",
-    "apps/web/vite.config.ts",
-    "apps/web/playwright.config.ts",
-    "apps/web/e2e/g2-crm.spec.ts",
-    "scripts/run_e2e.sh",
-    ".github/workflows/product-plane.yml",
-    "services/crm-api/tests/seed_e2e_fixture.rs",
-    "packages/client/src/gateway.ts",
-    "packages/client/src/gateway.test.ts",
-    "apps/web/e2e/customer-privacy.spec.ts",
-    "apps/web/src/CustomerPrivacyPage.tsx",
-    "scripts/run_customer_privacy_operations.sh",
-    "tests/test_customer_privacy_operations.py"
+    "apps/cloudflare-crm/worker/index.mjs",
+    "apps/cloudflare-crm/migrations/0001_initial.sql",
+    "apps/cloudflare-crm/test/worker.test.mjs",
+    "apps/cloudflare-crm/cloudflare.config.ts",
+    "apps/cloudflare-crm/README.md",
+    ".github/workflows/cloudflare-crm-spike.yml"
   ],
   "forbidden_paths": [
     "modules/**",
     "proto/**",
     "contracts/**",
     "schemas/**",
-    "crates/crm-first-party-modules/**",
+    "crates/**",
     ".github/actions/**",
-    "crates/crm-core-permissions/**",
     "docs/generated/REPOSITORY_MAP.md"
   ],
   "deliverables": [
-    "typed browser gateway client reusing published proto messages, descriptor hashes, exact owner capability versions and mutation idempotency",
-    "ordinary Customers, Deals and Tasks routes, forms, validation, loading/error/empty states, keyboard controls and permission-aware navigation",
-    "customer create/list/search/open/update, person and organization identities, contact create/list/update, optional governed account link",
-    "deal create/list/read/update/stage and task create/list/read/update/complete, with owner identity confirmed by the server session",
-    "single owner for each business entity and no frontend database, new business crates, duplicate auth or universal CRUD",
-    "tests including authenticated and unauthorized flows, invalid inputs and real PostgreSQL process persistence proof before acceptance",
-    "check exact GitHub SHA before and after CI; production-built browser and physical installation are separately evidenced"
+    "dedicated account CRM with isolated crm-dev D1 and workers.dev namespace, no unrelated account changes",
+    "small Cloudflare Worker customer API with only Access-verified identity, D1 tenant membership and scoped SQL",
+    "D1 customer create+update audit transaction using one atomic batch, no untrusted tenant identifier",
+    "minimal deterministic Node tests and GitHub Actions source checks; no invented browser or production evidence",
+    "Cloudflare cf CLI source-controlled configuration, initially undeployed pending enabled Access protection",
+    "preserve accepted legacy G2 unchanged and keep prior Docker G3 as unmerged historical baseline"
   ],
   "required_checks": [
-    "Governance CI",
+    "Cloudflare CRM Spike CI",
     "Affected Scope CI",
-    "Rust Generated Sync",
-    "Rust CI",
-    "Product Plane CI",
-    "Application Runtime CI",
-    "Database CI"
+    "Governance CI"
   ],
   "acceptance": [
-    "all changed files remain within the G2 active packet; packet generation and repository navigation are in sync",
-    "customers, contact points, accounts, deals, tasks use existing governed owner contracts and exact published versions",
-    "browser sign-in, create/edit/link/stage/complete/reload workflow succeeds against live crm-api and real PostgreSQL",
-    "multi-tenant non-disclosure, denial and data persistence on service restart are demonstrated",
-    "user interface exposes neither opaque IDs nor bearer tokens, provides comprehensible error states and prevents double submissions",
-    "required exact-head CI is green before merge, main push checks pass after merge"
+    "all changed source files are documented in the active packet and the generated navigation digest matches",
+    "Node worker tests prove no unauthorized read, tenant binding on reads and writes, atomic audit, validation and version headers",
+    "Access is enabled and enforced on a dedicated Worker before exposing real CRM records",
+    "D1 migrations and actual browser/tenant/recovery acceptance are mandatory before Cloudflare G3 GO",
+    "new architecture must be simpler to develop, diagnose and run than pre-existing Docker/PostgreSQL; no unproven production claims"
   ],
   "non_goals": [
-    "launch production, upgrade deployment or claims of physical pilot acceptance before G3/G5",
-    "create new CRUD engine or new domain crates, duplicate auth/storage, broad platform rearchitecture",
-    "advanced Kanban, forecasting, campaign automation, microservices or broad CI infrastructure rewrite"
+    "deploy CRM while Cloudflare Access is not enabled or without accepted authorization rules",
+    "alter current main G2 architecture or delete currently accepted Rust/PostgreSQL sources",
+    "introduce containers, VM, external database, queue, AI, or a parallel auth service before necessity is shown"
   ]
 }

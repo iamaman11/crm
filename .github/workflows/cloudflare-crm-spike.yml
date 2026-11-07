@@ -1,0 +1,40 @@
+name: Cloudflare CRM Spike CI
+
+on:
+  pull_request:
+    paths:
+      - "apps/cloudflare-crm/**"
+      - ".github/workflows/cloudflare-crm-spike.yml"
+      - "repository-packet.json"
+      - "docs/ACTIVE_PACKET.md"
+  push:
+    branches:
+      - feature/cloudflare-native-crm-20261107
+    paths:
+      - "apps/cloudflare-crm/**"
+      - ".github/workflows/cloudflare-crm-spike.yml"
+      - "repository-packet.json"
+      - "docs/ACTIVE_PACKET.md"
+
+permissions:
+  contents: read
+
+jobs:
+  cloudflare-crm-spike:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Test native Cloudflare customer API (no network or credentials)
+        run: node --test apps/cloudflare-crm/test/worker.test.mjs
+      - name: Guard exact account/D1 ownership and deny unauthenticated access
+        shell: bash
+        run: |
+          grep -F 'accountId: "5bd5e1e1e813f061afc259e91334262d"' apps/cloudflare-crm/cloudflare.config.ts
+          grep -F '35fc7ee9-9710-485f-8fb3-f5a398b229b4' apps/cloudflare-crm/cloudflare.config.ts
+          grep -F 'if (!ctx.access) return null' apps/cloudflare-crm/worker/index.mjs
