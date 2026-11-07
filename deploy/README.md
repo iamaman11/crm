@@ -48,3 +48,14 @@ against `https://localhost` with a CI-local certificate. It checks origin reject
 valid/invalid operator authentication, cookie session, CSRF and sign-out revocation.
 `--local-insecure-tls` is **CI-only** and rejects non-local origins; it is never a
 production TLS bypass. A real host must use a DNS-backed trusted certificate.
+
+## Installed business and archive acceptance
+
+Governance CI also executes `deploy/smoke_business.py` against the same built
+HTTPS origin and production capability catalogue: authenticated Party create,
+update, get and list, explicit tenant-header denial, and readback after API
+restart. After writes are quiesced, it creates a database archive and restores
+it to a separate PostgreSQL instance, comparing authoritative records,
+audit, outbox, idempotency and transaction counts. This is a test of the
+Party workflow only; contact, deal and task flows, external host TLS and
+upgrade/rollback remain explicit pending acceptance criteria.
