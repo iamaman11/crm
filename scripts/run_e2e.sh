@@ -247,7 +247,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 curl --insecure --fail --silent https://127.0.0.1:5174/ >/dev/null
-pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts --reporter=list
+pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts --reporter=list --retries=0
 
 echo "Restarting crm-api against the SAME PostgreSQL database..."
 kill "$API_PID"
@@ -261,6 +261,6 @@ for _ in $(seq 1 60); do
 done
 curl --fail --silent http://127.0.0.1:8080/readyz >/dev/null
 export G2_TEST_PHASE=after
-pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts --reporter=list
+pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts --reporter=list --retries=0
 echo "G2 built-browser PostgreSQL, tenant and restart acceptance passed."
 
