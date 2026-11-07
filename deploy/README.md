@@ -26,7 +26,7 @@ The Compose file deliberately sets `CRM_BOOTSTRAP_ALLOW_PHASE6=false`: the legac
 
 ## Upgrade and rollback boundary
 
-Record the exact git commit + built image digest; take and independently restore a backup before a schema-changing upgrade. Compose recreates the same three long-running services. The migration journal rejects changed scripts; the migrator executes each migration in a single transaction plus checksum checkpoint (only SQL files with top-level BEGIN/COMMIT). **No automatic destructive database rollback**: application rollback is allowed only while compatible with migrated schema; otherwise restore a separately verified pre-upgrade backup in an isolated environment. Full acceptance and measured recovery are tracked in #313.
+Record the exact git commit + built image digest; take and independently restore a backup before a schema-changing upgrade. Compose recreates the same three long-running services. The migration journal rejects changed scripts; the migrator executes each migration in a single transaction plus checksum checkpoint (both originally wrapped and unwrapped published SQL migrations). **No automatic destructive database rollback**: application rollback is allowed only while compatible with migrated schema; otherwise restore a separately verified pre-upgrade backup in an isolated environment. Full acceptance and measured recovery are tracked in #313.
 
 ## Next required G3 code
 

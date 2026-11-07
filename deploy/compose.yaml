@@ -2,7 +2,7 @@ name: crm-pilot
 
 services:
   database:
-    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    image: postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: crm
@@ -17,7 +17,7 @@ services:
       retries: 30
 
   migrate:
-    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    image: postgres:17-alpine
     restart: "no"
     depends_on:
       database:
