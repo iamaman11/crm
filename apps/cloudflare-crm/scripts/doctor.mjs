@@ -37,7 +37,7 @@ if(requested) {
 } else {
   // All migrations are read-only inputs; new ordered migrations need no doctor changes.
   const migration = readdirSync(resolve(root,"migrations"))
-    .filter(name => /^\\d+.*\\.sql$/.test(name)).sort()
+    .filter(name => /^\d+.*\.sql$/.test(name)).sort()
     .map(name => read("migrations/"+name)).join("\n");
   const ui=read(rootOwner.ui), api=read(rootOwner.api), test=read(rootOwner.tests);
   const checks=[];
