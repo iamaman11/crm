@@ -45,6 +45,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             "tests/test_workspace_analysis.py",
             "tests/test_repository_navigation.py",
             "apps/cloudflare-crm/scripts/deploy.mjs",
+            "tests/test_architecture_documentation_consistency.py",
         })
         for path in (".github/actions/**", "modules/**", "contracts/**", "proto/**", "docs/generated/REPOSITORY_MAP.md"):
             self.assertIn(path, packet["forbidden_paths"])
