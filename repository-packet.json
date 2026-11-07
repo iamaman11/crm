@@ -33,6 +33,7 @@
     "deploy/smoke_business.py",
     "deploy/smoke_https.py",
     "deploy/upgrade_drill.sh",
+    "deploy/two_version_drill.sh",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
     "services/crm-api/src/main.rs",
@@ -59,7 +60,7 @@
     "one-shot first tenant, active operator actors, published production capability and module installation (IMPLEMENTED, PHYSICAL ACCEPTANCE PENDING)",
     "idempotent checksum-verified migrations and non-superuser runtime PostgreSQL role",
     "operator environment, backup and separate fresh-environment restore commands",
-    "previous exact-head 24/24 CI: installed and independently restored browser CRM; new head: local-CA HTTPS verification, OCI source/image provenance and isolated additive migration/recreation drill (CI PENDING)"
+    "exact head G3 installed and restored CRM 24/24 PASS before two-version slice; real accepted historical G2 binary versus current G3 rollback and browser readback (new CI pending)"
   ],
   "required_checks": [
     "Affected Scope CI",
