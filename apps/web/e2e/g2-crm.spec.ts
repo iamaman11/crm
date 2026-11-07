@@ -3,6 +3,9 @@ import { expect, test } from "@playwright/test";
 // These tests are deliberately excluded from the ordinary DEV-mode E2E run.
 // They require the built browser bundle, the real cookie login, crm-api and PostgreSQL.
 test.describe("G2 production-built CRM workflow", () => {
+  // Mutation tests share an ephemeral PostgreSQL fixture. Retrying a partial
+  // workflow would create a second record instead of replaying the same case.
+  test.describe.configure({ retries: 0 });
   test.skip(!process.env.G2_E2E, "Runs only in the real PostgreSQL pilot acceptance stage");
 
   const prefix = process.env.G2_RUN_ID ?? "g2-e2e";
@@ -41,12 +44,12 @@ test.describe("G2 production-built CRM workflow", () => {
     await page.getByLabel("Name", { exact: true }).fill(organization);
     await page.getByRole("button", { name: "Save customer" }).dblclick();
     await expect(page.getByRole("heading", { name: organization })).toBeVisible();
-    await expect(page.getByRole("status")).toContainText(/Customer saved|Customer account/);
-    await expect(page.getByRole("button", { name: new RegExp(organization + " · Organization") })).toHaveCount(1);
+    await expect(page.getByRole("status").filter({ hasText: /Customer saved|Customer account/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: organization + " · Organization", exact: true })).toHaveCount(1);
 
     await page.getByLabel("Email or phone").fill(email);
     await page.getByRole("button", { name: "Save contact" }).click();
-    await expect(page.getByRole("status")).toContainText("Contact saved");
+    await expect(page.getByRole("status").filter({ hasText: "Contact saved." })).toBeVisible();
     await expect(page.getByText("Email: " + email)).toBeVisible();
     await page.getByRole("button", { name: "Edit", exact: true }).click();
     await page.getByLabel("Contact detail").fill("updated." + email);
