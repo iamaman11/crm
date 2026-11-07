@@ -264,20 +264,16 @@ jobs:
           "${compose[@]}" build api web
           "${compose[@]}" up -d --wait api web
           python deploy/smoke_https.py --env deploy/.env --origin https://localhost --local-insecure-tls
-          "${compose[@]}" exec -T database psql -X -v ON_ERROR_STOP=1 -U postgres -d crm <<'SQL'
-          DO $
-          BEGIN
-            IF (SELECT count(*) FROM crm.actors WHERE tenant_id='g3-ci-tenant' AND status='active') <> 2
-               OR (SELECT count(*) FROM crm.module_installations WHERE tenant_id='g3-ci-tenant' AND status='active') < 12
-               OR (SELECT count(*) FROM crm.audit_records WHERE tenant_id='g3-ci-tenant') <> 1
-               OR (SELECT count(*) FROM crm.outbox_events WHERE tenant_id='g3-ci-tenant') <> 1
-               OR (SELECT count(*) FROM crm.business_transactions WHERE tenant_id='g3-ci-tenant') <> 1
-            THEN
-              RAISE EXCEPTION 'real first-install tenant, actors, module state or evidence incomplete';
-            END IF;
-          END
-          $;
-          SQL
+          # Query the authoritative PostgreSQL rows, without fragile heredoc SQL quoting.
+          installed_counts="$("${compose[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c "
+            SELECT
+              (SELECT count(*) FROM crm.actors WHERE tenant_id='g3-ci-tenant' AND status='active'),
+              (SELECT count(*) FROM crm.module_installations WHERE tenant_id='g3-ci-tenant' AND status='active'),
+              (SELECT count(*) FROM crm.audit_records WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.outbox_events WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.business_transactions WHERE tenant_id='g3-ci-tenant')
+          ")"
+          test "$installed_counts" = "2|14|1|1|1"
           # A unique CI-only sentinel proves data persistence; no demo fixtures are installed.
           "${compose[@]}" exec -T database psql -X -v ON_ERROR_STOP=1 -U postgres -d crm -c             "INSERT INTO crm.tenants (tenant_id, status, data_region) VALUES ('g3-recovery-sentinel', 'active', 'eu-central')"
           bash deploy/backup.sh "$RUNNER_TEMP/g3-recovery"
