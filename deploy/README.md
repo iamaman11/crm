@@ -39,3 +39,12 @@ Record the exact git commit + built image digest; take and independently restore
 ## Next required G3 code
 
 Prove first-install provisioning against clean PostgreSQL, then production-built HTTPS browser CRUD, persistence after restart, cross-tenant denial, full business/audit/outbox recovery, and exact-head CI. Keep this PR draft/NO-GO until all are proven.
+
+## Installation-level HTTPS smoke
+
+The existing Governance CI builds the actual production React and Caddy images,
+starts the API with a fresh provisioned PostgreSQL and executes `deploy/smoke_https.py`
+against `https://localhost` with a CI-local certificate. It checks origin rejection,
+valid/invalid operator authentication, cookie session, CSRF and sign-out revocation.
+`--local-insecure-tls` is **CI-only** and rejects non-local origins; it is never a
+production TLS bypass. A real host must use a DNS-backed trusted certificate.
