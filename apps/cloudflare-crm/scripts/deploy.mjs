@@ -49,12 +49,57 @@ if (!check.ok || !scripts.success ||
     !(scripts.result || []).some(x => x.id === "crm-dev")) {
   throw new Error("Deployed Worker failed Cloudflare API readback");
 }
+// Check real deployed bindings, not only the upload response.
+const readback = await fetch(api + "/workers/scripts/crm-dev/settings", {
+  headers: { Authorization: "Bearer " + token },
+});
+const settings = await readback.json();
+const binding = (name) => (settings.result?.bindings || []).find(x => x.name === name);
+if (!readback.ok || !settings.success ||
+    binding("GIT_SHA")?.text !== sha || binding("DB")?.id !== database) {
+  throw new Error("Cloudflare binding readback does not match exact source SHA/D1 target");
+}
+// A new script is not automatically reachable on workers.dev.
+const subdomainEndpoint = api + "/workers/scripts/crm-dev/subdomain";
+const currentRoute = await fetch(subdomainEndpoint, {
+  headers: { Authorization: "Bearer " + token },
+});
+const route = await currentRoute.json();
+if (!currentRoute.ok || !route.success) throw new Error("Worker route readback failed");
+if (!route.result.enabled || route.result.previews_enabled) {
+  const update = await fetch(subdomainEndpoint, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: true, previews_enabled: false }),
+  });
+  const result = await update.json();
+  if (!update.ok || !result.success) throw new Error("Worker route activation failed");
+}
+// Public visitors must encounter Access, never an unprotected API/SPA.
+const url = "https://crm-dev.crm-5bd5e1e1.workers.dev/api/health";
+const anonymous = await fetch(url, { redirect: "manual" });
+if (anonymous.status === 200 || anonymous.status >= 500) {
+  throw new Error("Unsafe/unavailable CRM Access boundary: HTTP " + anonymous.status);
+}
+const userId = requireValue("CRM_E2E_A_CLIENT_ID");
+const userSecret = requireValue("CRM_E2E_A_CLIENT_SECRET");
+const authorized = await fetch(url, {
+  headers: { "CF-Access-Client-Id": userId, "CF-Access-Client-Secret": userSecret },
+  redirect: "manual",
+});
+if (authorized.status !== 200) {
+  throw new Error("Cloudflare Access service authentication failed: HTTP " + authorized.status);
+}
+const content = await authorized.json();
+if (content.service !== "crm-dev" || content.status !== "ok") {
+  throw new Error("Cloudflare authenticated health response mismatch");
+}
 console.log(JSON.stringify({
   event: "crm.deploy",
   service: "crm-dev",
   sha,
   account,
   database,
-  state: "api-upload-verified",
+  state: "sha-d1-route-and-Access-smoke-verified",
   browserE2E: "NOT_TESTED",
 }));
