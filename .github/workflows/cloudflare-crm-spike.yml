@@ -31,13 +31,14 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
+      - name: Install CRM dependencies
+        run: npm install --no-audit --no-fund
+        working-directory: apps/cloudflare-crm
       - name: Run CRM API tests
         run: npm test
         working-directory: apps/cloudflare-crm
       - name: Build React CRM
-        run: |
-          npm install --no-audit --no-fund
-          npm run build
+        run: npm run build
         working-directory: apps/cloudflare-crm
       - name: Check CRM target
         run: |
