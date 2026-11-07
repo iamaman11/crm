@@ -1,9 +1,9 @@
 {
   "schema_version": "crm.repository-packet/v1",
   "packet_id": "repository-step-23-cloudflare-native-experiment",
-  "title": "Cloudflare CRM: Access-only D1 tenant isolation and first native customer API",
+  "title": "Cloudflare CRM: simple working customers, contacts, deals and tasks pilot",
   "status": "active",
-  "objective": "Isolated experiment for #321/#322: validate an understandable native Cloudflare Worker + D1 architecture in a dedicated CRM account without changing accepted Rust/PostgreSQL production owners. Never merge into main until functionality, invariants and security are independently proven.",
+  "objective": "Build a simple, usable test CRM on one Cloudflare Worker + D1 with React UI. Prioritize working functionality and speed. Defer optional hardening and infrastructure additions until after real production.",
   "baseline": {
     "ref": "main",
     "sha": "4ec3b416d77857347f797f185ad3981a95219b04"
@@ -27,7 +27,13 @@
     "tests/test_workspace_analysis.py",
     "tests/test_repository_navigation.py",
     "apps/cloudflare-crm/scripts/deploy.mjs",
-    "tests/test_architecture_documentation_consistency.py"
+    "tests/test_architecture_documentation_consistency.py",
+    "apps/cloudflare-crm/web/index.html",
+    "apps/cloudflare-crm/web/src/main.jsx",
+    "apps/cloudflare-crm/web/src/styles.css",
+    "apps/cloudflare-crm/package.json",
+    "apps/cloudflare-crm/vite.config.mjs",
+    "apps/cloudflare-crm/wrangler.jsonc"
   ],
   "forbidden_paths": [
     "modules/**",
@@ -39,12 +45,12 @@
     "docs/generated/REPOSITORY_MAP.md"
   ],
   "deliverables": [
-    "dedicated account CRM with isolated crm-dev D1 and workers.dev namespace, no unrelated account changes",
-    "small Cloudflare Worker customer API with only Access-verified identity, D1 tenant membership and scoped SQL",
-    "D1 customer create+update audit transaction using one atomic batch, no untrusted tenant identifier",
-    "minimal deterministic Node tests and GitHub Actions source checks; no invented browser or production evidence",
-    "Cloudflare cf CLI source-controlled configuration, initially undeployed pending enabled Access protection",
-    "preserve accepted legacy G2 unchanged and keep prior Docker G3 as unmerged historical baseline"
+    "dedicated CRM account and D1; no unrelated account changes",
+    "single Worker with Access-verified identity and tenant-scoped records",
+    "create, list, edit, search and delete customers, contacts, deals and tasks",
+    "React/Vite UI built and deployed as Cloudflare Static Assets",
+    "simple Node tests, source CI and one native Wrangler deployment",
+    "preserve earlier G2 and do not merge historical Docker G3"
   ],
   "required_checks": [
     "Cloudflare CRM Spike CI",
@@ -53,11 +59,11 @@
     "Product Plane CI"
   ],
   "acceptance": [
-    "all changed source files are documented in the active packet and the generated navigation digest matches",
-    "Node worker tests prove no unauthorized read, tenant binding on reads and writes, atomic audit, validation and version headers",
-    "Access is enabled and enforced on a dedicated Worker before exposing real CRM records",
-    "D1 migrations and actual browser/tenant/recovery acceptance are mandatory before Cloudflare G3 GO",
-    "new architecture must be simpler to develop, diagnose and run than pre-existing Docker/PostgreSQL; no unproven production claims"
+    "all changed paths are in the active packet and generated navigation is current",
+    "working CRUD for customers, contacts, deals and tasks",
+    "usable browser UI on desktop and phone, saved records survive refresh",
+    "GitHub CI builds the exact source and publishes a protected CRM app",
+    "defer advanced hardening and extra infrastructure until after real production"
   ],
   "non_goals": [
     "deploy CRM while Cloudflare Access is not enabled or without accepted authorization rules",

@@ -1,0 +1,17 @@
+{
+  "name": "cloudflare-crm",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "vite": "7.2.2",
+    "wrangler": "4.45.3"
+  }
+}
