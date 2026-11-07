@@ -233,6 +233,7 @@ jobs:
           from pathlib import Path
           from secrets import token_hex
           from re import sub
+          import json
           source = Path("deploy/.env.example").read_text()
           source = sub("REPLACE_WITH_RANDOM_64_HEX", lambda _: token_hex(32), source)
           source = source.replace("REPLACE_TENANT_ID", "g3-ci-tenant")
@@ -240,6 +241,25 @@ jobs:
           source = source.replace("REPLACE_USER_ACTOR", "g3-ci-admin")
           source = source.replace("REPLACE_USERNAME", "g3-admin")
           source = source.replace("crm.example.com", "localhost")
+          source = source.replace("CRM_API_TENANTS=g3-ci-tenant",
+                                  "CRM_API_TENANTS=g3-ci-tenant,g3-ci-other")
+          # Disposable CI operators use the existing G2 browser test credentials.
+          # These are NEVER added to a production image or normal .env.example.
+          operator_line = next(line for line in source.splitlines()
+                               if line.startswith("CRM_PILOT_OPERATORS="))
+          operators = json.loads(operator_line.split("=", 1)[1].strip("'"))
+          operators[0]["username"] = "alice"
+          operators[0]["password"] = "01234567890123456789012345678901"
+          operators.append({
+              "username": "bob", "password": "abcdefghijklmnopqrstuvwxyzABCDEF",
+              "actor_id": "g3-ci-bob", "tenant_id": "g3-ci-other",
+              "capabilities": [
+                  "parties.party.list", "contact-points.contact-point.list",
+                  "accounts.account.list", "sales.deal.list", "activities.task.list",
+              ],
+          })
+          source = source.replace(operator_line, "CRM_PILOT_OPERATORS='" +
+                                  json.dumps(operators, separators=(",", ":")) + "'")
           Path("deploy/.env").write_text(source)
           Path("deploy/.env").chmod(0o600)
           PY
@@ -269,10 +289,21 @@ jobs:
             /published-contracts.json > "$RUNNER_TEMP/g3-contracts.json"
           python deploy/smoke_business.py --phase initial --env deploy/.env \
             --catalog "$RUNNER_TEMP/g3-contracts.json"
+          # Existing production-browser scenario, now against real Compose/Caddy.
+          pnpm install --frozen-lockfile
+          pnpm --filter @ultimate-crm/web exec playwright install --with-deps chromium
+          G2_E2E=1 G2_E2E_BASE_URL=https://localhost G2_TEST_PHASE=before \
+            G2_RUN_ID="g3-${{ github.run_id }}" \
+            pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
+            --reporter=list --retries=0
           "${compose[@]}" restart api
           "${compose[@]}" up -d --wait api
           python deploy/smoke_business.py --phase verify --env deploy/.env \
             --catalog "$RUNNER_TEMP/g3-contracts.json"
+          G2_E2E=1 G2_E2E_BASE_URL=https://localhost G2_TEST_PHASE=after \
+            G2_RUN_ID="g3-${{ github.run_id }}" \
+            pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
+            --reporter=list --retries=0
           # Quiesce writers for a stable independent database archive.
           "${compose[@]}" stop web api
           # Query the authoritative PostgreSQL rows, without fragile heredoc SQL quoting.
@@ -287,6 +318,9 @@ jobs:
           IFS='|' read -r actor_count module_count audit_count outbox_count tx_count <<< "$installed_counts"
           test "$actor_count" = "2"
           test "$module_count" = "14"
+          other_actors="$("${compose[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c \
+            "SELECT count(*) FROM crm.actors WHERE tenant_id='g3-ci-other' AND status='active'")"
+          test "$other_actors" = "2"
           test "$audit_count" -ge 3
           test "$outbox_count" -ge 3
           test "$tx_count" -ge 3
@@ -329,6 +363,14 @@ jobs:
           test "$source_counts" = "$recovered_counts"
           restored_migrations="$("${restored[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c             "SELECT count(*) FROM public.crm_schema_migrations")"
           test "$restored_migrations" -ge 20
+          # The source web/API stay stopped: verify real customer/contact/deal/task
+          # readback through the independently restored installed HTTPS stack.
+          "${restored[@]}" up -d --wait api web
+          python deploy/smoke_https.py --env deploy/.env --origin https://localhost --local-insecure-tls
+          G2_E2E=1 G2_E2E_BASE_URL=https://localhost G2_TEST_PHASE=after \
+            G2_RUN_ID="g3-${{ github.run_id }}" \
+            pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
+            --reporter=list --retries=0
       - name: Enforce immutable module publication compatibility
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}

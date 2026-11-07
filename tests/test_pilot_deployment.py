@@ -61,6 +61,18 @@ class PilotDeploymentSourceTests(unittest.TestCase):
                          "g3-foreign-tenant", "accepted=(401, 403, 404)"):
             self.assertIn(expected, script)
 
+    def test_installed_and_restored_browser_workflow(self) -> None:
+        governance = (ROOT / ".github/workflows/governance.yml").read_text()
+        playwright = (ROOT / "apps/web/playwright.config.ts").read_text()
+        self.assertEqual(governance.count("e2e/g2-crm.spec.ts"), 3)
+        for marker in ("G2_E2E_BASE_URL=https://localhost",
+                       "G2_TEST_PHASE=before", "G2_TEST_PHASE=after",
+                       "pnpm install --frozen-lockfile",
+                       "g3-ci-other", "other_actors",
+                       'restored[@]}" up -d --wait api web'):
+            self.assertIn(marker, governance)
+        self.assertIn("process.env.G2_E2E_BASE_URL", playwright)
+
     def test_same_origin_gateway_and_no_dev_identity(self) -> None:
         caddy = (DEPLOY / "Caddyfile").read_text()
         for item in ("/crm.gateway.v1.ApplicationGatewayService/*",

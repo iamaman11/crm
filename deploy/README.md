@@ -59,3 +59,13 @@ it to a separate PostgreSQL instance, comparing authoritative records,
 audit, outbox, idempotency and transaction counts. This is a test of the
 Party workflow only; contact, deal and task flows, external host TLS and
 upgrade/rollback remain explicit pending acceptance criteria.
+
+The Governance CI now reuses the **existing G2 production browser Playwright
+scenario** without copying business test logic. Against installed Caddy HTTPS,
+two independently provisioned disposable tenants verify the full
+customer/contact/deal/task flow, tenant non-disclosure, browser reload and API
+restart. The same readback runs against the **independently restored Compose
+project** with the original API/web stopped. This proves recovered application
+usability, not merely PostgreSQL row counts. Fixed G2 operator credentials
+are restricted to disposable CI; normal installation remains operator-configured.
+Trusted-host TLS and real upgrade/rollback remain G3 blockers.

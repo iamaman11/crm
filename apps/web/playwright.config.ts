@@ -9,7 +9,7 @@ export default defineConfig({
   reporter: [["html", { open: "never" }], ["list"]],
   use: {
     baseURL: process.env.G2_E2E === "1"
-      ? "https://127.0.0.1:5174"
+      ? (process.env.G2_E2E_BASE_URL ?? "https://127.0.0.1:5174")
       : "http://localhost:5173",
     ignoreHTTPSErrors: process.env.G2_E2E === "1",
     trace: "on-first-retry",

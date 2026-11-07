@@ -15,6 +15,7 @@
   "allowed_paths": [
     ".dockerignore",
     ".github/workflows/governance.yml",
+    "apps/web/playwright.config.ts",
     ".gitignore",
     "affected-scope-policy.json",
     "crates/crm-application-runtime/src/lib.rs",
@@ -56,7 +57,7 @@
     "one-shot first tenant, active operator actors, published production capability and module installation (IMPLEMENTED, PHYSICAL ACCEPTANCE PENDING)",
     "idempotent checksum-verified migrations and non-superuser runtime PostgreSQL role",
     "operator environment, backup and separate fresh-environment restore commands",
-    "exact-SHA installation, browser and recovery evidence (PENDING)"
+    "exact-SHA installed browser customer/contact/deal/task workflow, second-tenant denial, API restart and independently restored-app readback (CI PENDING)"
   ],
   "required_checks": [
     "Affected Scope CI",
