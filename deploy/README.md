@@ -121,3 +121,36 @@ between these two exact binaries and the tested additive schema only.
 Schema-destructive upgrades and unknown versions remain out of scope.
 Independent host, publicly trusted HTTPS and portable registry image-digest
 distribution must still be verified for G3 acceptance.
+
+## Transfer exact built images without a registry
+
+From a clean checkout at the **same exact Git commit** as the installed
+running Compose stack:
+
+```bash
+python3 deploy/image_bundle.py export --directory /private/crm-bundle
+```
+
+Copy that directory securely to another host together with a clean checkout
+of the exact commit (not a moving branch). Create a **private independent**
+`deploy/.env` on the destination, with correct host DNS and credentials.
+Never copy credentials in the image archive. Then:
+
+```bash
+python3 deploy/image_bundle.py verify --directory /private/crm-bundle
+docker compose --env-file deploy/.env -f deploy/compose.yaml \
+  -f /private/crm-bundle/compose.images.yaml up -d --no-build --wait api web
+```
+
+This is a normal five-image Docker archive (database, migrate, provision,
+API, web), a portable manifest recording the Git SHA, archive checksum and
+all five OCI SHA-256 image IDs, and a verified pinned Compose override.
+Verification refuses the wrong Git checkout, modified override, corrupted
+archive or unexpected imported image. Source files and DB backups are
+**not** stored in the archive. Keep it private: binaries may be proprietary.
+
+In Governance CI the independently restored CRM now starts from this
+exact verified archive with `--no-build`, not a separate Rust/React build.
+That proves no-rebuild recovery on the same CI host. A genuine second
+server and publicly trusted HTTPS still require independent physical GO.
+No registry, deployment service or additional permanent container is added.

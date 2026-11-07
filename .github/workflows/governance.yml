@@ -221,7 +221,7 @@ jobs:
       - name: Verify G3 packaging and migration boundaries
         run: |
           python -m unittest -v tests.test_pilot_deployment
-          python -m py_compile deploy/provision.py deploy/smoke_https.py deploy/smoke_business.py deploy/release_evidence.py
+          python -m py_compile deploy/provision.py deploy/smoke_https.py deploy/smoke_business.py deploy/release_evidence.py deploy/image_bundle.py
           bash -n deploy/{migrate,backup,restore,upgrade_drill,two_version_drill}.sh
           docker compose --env-file deploy/.env.example -f deploy/compose.yaml config --quiet
       - name: G3 live PostgreSQL migration and isolated recovery drill
@@ -335,6 +335,9 @@ jobs:
             pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
             --reporter=list --retries=0
           python deploy/release_evidence.py --output "$RUNNER_TEMP/g3-after-two-versions.json"
+          # Export and verify exact OCI image artifacts before independent recovery.
+          python deploy/image_bundle.py export --directory "$RUNNER_TEMP/g3-images"
+          python deploy/image_bundle.py verify --directory "$RUNNER_TEMP/g3-images"
           # Quiesce writers for a stable independent database archive.
           "${compose[@]}" stop web api
           # Query the authoritative PostgreSQL rows, without fragile heredoc SQL quoting.
@@ -370,7 +373,8 @@ jobs:
           archives=("$RUNNER_TEMP/g3-recovery"/crm-*.dump)
           test "${#archives[@]}" -eq 1
           bash deploy/restore.sh "${archives[0]}" "$restored_project"
-          restored=(docker compose --project-name "$restored_project" --env-file deploy/.env -f deploy/compose.yaml)
+          restored=(docker compose --project-name "$restored_project" --env-file deploy/.env \
+            -f deploy/compose.yaml -f "$RUNNER_TEMP/g3-images/compose.images.yaml")
           restored_rows="$("${restored[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c             "SELECT count(*) FROM crm.tenants WHERE tenant_id = 'g3-recovery-sentinel'")"
           test "$restored_rows" = "1"
           restored_evidence="$("${restored[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c "SELECT
@@ -396,7 +400,7 @@ jobs:
           test "$restored_migrations" -ge 20
           # The source web/API stay stopped: verify real customer/contact/deal/task
           # readback through the independently restored installed HTTPS stack.
-          "${restored[@]}" up -d --wait api web
+          "${restored[@]}" up -d --no-build --wait api web
           python deploy/smoke_https.py --env deploy/.env --origin https://localhost --local-insecure-tls
           "${restored[@]}" cp web:/data/caddy/pki/authorities/local/root.crt "$RUNNER_TEMP/g3-restored-ca.crt"
           python deploy/smoke_https.py --env deploy/.env --origin https://localhost \

@@ -107,6 +107,18 @@ class PilotDeploymentSourceTests(unittest.TestCase):
             self.assertIn(marker, workflow)
         self.assertEqual(workflow.count("e2e/g2-crm.spec.ts"), 6)
 
+    def test_portable_image_bundle_and_recovered_no_build_stack(self) -> None:
+        bundle = (DEPLOY / "image_bundle.py").read_text()
+        ci = (ROOT / ".github/workflows/governance.yml").read_text()
+        for marker in ("docker", "save", "load", "images_archive_sha256",
+                       "compose.images.yaml", "source_revision()",
+                       "sha256_file", "image_ids", "crm-pilot/"):
+            self.assertIn(marker, bundle)
+        for marker in ("image_bundle.py export", "image_bundle.py verify",
+                       "g3-images/compose.images.yaml",
+                       'up -d --no-build --wait api web'):
+            self.assertIn(marker, ci)
+
     def test_same_origin_gateway_and_no_dev_identity(self) -> None:
         caddy = (DEPLOY / "Caddyfile").read_text()
         for item in ("/crm.gateway.v1.ApplicationGatewayService/*",
