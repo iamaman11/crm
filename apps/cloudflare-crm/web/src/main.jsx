@@ -61,14 +61,14 @@ function App(){
  const rows=items[tab].filter(row=>JSON.stringify(row).toLowerCase().includes(search.toLowerCase()));
  const buttons=row=><span className="row-actions"><button className="ghost" onClick={()=>open(row)}>Изменить</button>
   <button className="delete" onClick={()=>remove(row)}>Удалить</button></span>;
- const field=([key,label,type,options])=><label key={key}><span>{label}</span>
-  {type==="customer"?<select required value={form[key]||""} onChange={e=>setForm({...form,[key]:e.target.value})}>
+ const field=([key,label,type,options])=><div className="field" key={key}><label htmlFor={"crm-"+key}>{label}</label>
+  {type==="customer"?<select id={"crm-"+key} required value={form[key]||""} onChange={e=>setForm({...form,[key]:e.target.value})}>
    <option value="">Выберите клиента</option>{items.customers.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select>
-  :type==="select"?<select value={form[key]??""} onChange={e=>setForm({...form,[key]:e.target.value})}>
+  :type==="select"?<select id={"crm-"+key} value={form[key]??""} onChange={e=>setForm({...form,[key]:e.target.value})}>
    {options.map(v=><option value={v} key={v}>{names[v]||v}</option>)}</select>
-  :<input type={type} required={["name","title"].includes(key)} min={type==="number"?0:undefined}
+  :<input id={"crm-"+key} type={type} required={["name","title"].includes(key)} min={type==="number"?0:undefined}
    step={type==="number"?"0.01":undefined} value={form[key]??""}
-   onChange={e=>setForm({...form,[key]:e.target.value})}/>}</label>;
+   onChange={e=>setForm({...form,[key]:e.target.value})}/>}</div>;
  return <><header><strong>CRM</strong><span>Тестовое рабочее пространство</span></header>
   <main><div className="heading"><div><h1>Моя CRM</h1><p>Клиенты, контакты, сделки и задачи — в одном месте</p></div>
    <button className="ghost" onClick={()=>reload().then(()=>{setMessage("Обновлено");setError(false)}).catch(e=>{setMessage(e.message);setError(true)})}>Обновить</button></div>

@@ -38,6 +38,7 @@ async function edit(section, oldTitle, field, value, newTitle) {
   if (["Этап", "Статус", "Тип", "Клиент"].includes(field)) await input.selectOption(value);
   else await input.fill(value);
   await page.getByRole("button", { name: "Сохранить" }).click();
+  await page.getByRole("status").getByText("Сохранено").waitFor({ timeout: 12000 });
   await check(newTitle);
 }
 async function remove(section, title) {
@@ -59,6 +60,8 @@ async function cleanup() {
 }
 let result = "FAIL";
 try {
+  const session = await context.request.get(url + "/api/session");
+  if (session.status() !== 200) throw Error("Protected CRM API session HTTP " + session.status());
   const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
   if (response.status() !== 200) throw Error("Protected CRM page HTTP " + response.status());
   await page.getByRole("heading", { name: "Моя CRM" }).waitFor({ timeout: 12000 });
@@ -70,7 +73,9 @@ try {
   await create("Сделки", "сделку", { "Клиент": { label: customer }, "Название сделки": deal, "Этап": "new", "Сумма": "120" }, deal);
   await create("Задачи", "задачу", { "Клиент": { label: customer }, "Что сделать": task, "Статус": "open" }, task);
   await edit("Сделки", deal, "Этап", "won", deal);
+  await (await rowFor(deal)).getByText("Выиграна", { exact: true }).waitFor();
   await edit("Задачи", task, "Статус", "done", task);
+  await (await rowFor(task)).getByText("Готово", { exact: true }).waitFor();
   await tab("Клиенты").click();
   await page.getByRole("textbox", { name: "Поиск" }).fill(customer);
   await check(customer);
