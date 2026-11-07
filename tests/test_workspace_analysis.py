@@ -474,13 +474,13 @@ jobs:
             row for row in expected_gates["workflow_rows"]
             if row[0] == ".github/workflows/governance.yml"
         )
-        governance[4] += 1  # one mandatory deployment validation step
+        governance[4] += 2  # packaging and isolated restore
         governance[5] += 12  # 6 precise path filters for both PR and push
         job = next(
             row for row in expected_gates["job_rows"]
             if row[0] == ".github/workflows/governance.yml#governance"
         )
-        job[2] += 1
+        job[2] += 2
         self.assertEqual(fresh["permanent_gates"], expected_gates)
         governance_source = (ROOT / ".github/workflows/governance.yml").read_text()
         self.assertIn("deploy/**", governance_source)
