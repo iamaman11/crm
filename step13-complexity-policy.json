@@ -55,7 +55,7 @@
       "expected_workspace_packages": 112,
       "maximum_internal_dependency_edges": 835,
       "maximum_dependency_depth": 18,
-      "maximum_public_rust_items": 5389,
+      "maximum_public_rust_items": 5390,
       "maximum_suppression_occurrences": 91
     },
     "central_system_budgets": {
@@ -138,7 +138,7 @@
         "maximum_transitive_reverse_impact": 1,
         "maximum_dependency_depth": 17,
         "maximum_public_items": 130,
-        "maximum_non_comment_loc": 7922
+        "maximum_non_comment_loc": 7929
       },
       "crm-api": {
         "role": "process-host",
@@ -147,7 +147,7 @@
         "maximum_transitive_reverse_impact": 0,
         "maximum_dependency_depth": 18,
         "maximum_public_items": 2,
-        "maximum_non_comment_loc": 9
+        "maximum_non_comment_loc": 19
       }
     },
     "process_host_dependency_allowlists": {
@@ -508,6 +508,23 @@
         "maximum_dependency_declarations": 271
       },
       "restrictions": "No extra workspace crate, suppressions, owner-specific direct runtime fan-in, new architectural bypass or additional slack is authorized. Step22R obligations remain."
+    },
+    "pilot_g3_measurement": {
+      "tracking_issue": "#313",
+      "architecture_owner": "#194",
+      "reviewed_packet": "repository-step-22p-g3-deployable-crm",
+      "reason": "One first-install deployment exports existing owner-authored production capability definitions from the existing process host. Exact observed G3 complexity values are calibrated, preserving all workspace edges, dependencies, suppressions, workflow/job counts and lifecycle boundaries. No extra runtime service or source-level fixture is authorized.",
+      "previous_g1_budget": {
+        "maximum_public_rust_items": 5389,
+        "crm_application_runtime_non_comment_loc": 7922,
+        "crm_api_non_comment_loc": 9
+      },
+      "measured_g3_budget": {
+        "maximum_public_rust_items": 5390,
+        "crm_application_runtime_non_comment_loc": 7929,
+        "crm_api_non_comment_loc": 19
+      },
+      "restrictions": "This is an exact G3 calibration, no slack; follow-up changes still require evidence under the existing Step13 and Step22 governance."
     }
   }
 }

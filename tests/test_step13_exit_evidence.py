@@ -185,7 +185,7 @@ class Step13ExitEvidenceTests(unittest.TestCase):
                 "expected_workspace_packages": 112,
                 "maximum_internal_dependency_edges": 835,
                 "maximum_dependency_depth": 18,
-                "maximum_public_rust_items": 5389,
+                "maximum_public_rust_items": 5390,
                 "maximum_suppression_occurrences": 91,
             },
         )
@@ -215,8 +215,13 @@ class Step13ExitEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(
             exit_policy["central_system_budgets"]["crm-application-runtime"]["maximum_non_comment_loc"],
-            7922,
+            7929,
         )
+        self.assertEqual(exit_policy["central_system_budgets"]["crm-api"]["maximum_non_comment_loc"], 19)
+        g3 = exit_policy["pilot_g3_measurement"]
+        self.assertEqual(g3["tracking_issue"], "#313")
+        self.assertEqual(g3["previous_g1_budget"]["maximum_public_rust_items"], 5389)
+        self.assertEqual(g3["measured_g3_budget"]["maximum_public_rust_items"], 5390)
 
         central = exit_policy["central_system_budgets"]
         expected_reductions = {

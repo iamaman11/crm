@@ -466,9 +466,33 @@ jobs:
             fresh["runtime_fanin"]["counts"],
             {"all": 53, "production": 52, "test_only": 1, "build": 0},
         )
-        self.assertEqual(
-            fresh["permanent_gates"], committed["permanent_gates"]
+        # Preserve the immutable Step22 baseline. Allow only the explicitly
+        # governed addition of a G3 packaging check in the existing Governance
+        # workflow (no new permanent workflow or job and no other gate changes).
+        expected_gates = json.loads(json.dumps(committed["permanent_gates"]))
+        governance = next(
+            row for row in expected_gates["workflow_rows"]
+            if row[0] == ".github/workflows/governance.yml"
         )
+        governance[4] += 2  # packaging and isolated restore
+        governance[5] += 12  # 6 precise path filters for both PR and push
+        governance[6] = 105  # measured G3 image-build acceptance timeout
+        # G3 now runs the existing real Chromium UI suite in this SAME
+        # permanent workflow: record the new measured browser environment
+        # signal without altering immutable Step 22 inventory/gate counts.
+        governance[7] = ["browser", "docker", "process-runtime"]
+        job = next(
+            row for row in expected_gates["job_rows"]
+            if row[0] == ".github/workflows/governance.yml#governance"
+        )
+        job[2] += 2
+        job[3] = 105  # same existing job, no additional permanent gate
+        job[4] = ["browser", "docker"]
+        self.assertEqual(fresh["permanent_gates"], expected_gates)
+        governance_source = (ROOT / ".github/workflows/governance.yml").read_text()
+        self.assertIn("deploy/**", governance_source)
+        self.assertIn("python -m unittest -v tests.test_pilot_deployment", governance_source)
+        self.assertIn("docker compose --env-file deploy/.env.example", governance_source)
 
         current_runtime_ids = {
             row[0] for row in fresh["runtime_fanin"]["rows"]

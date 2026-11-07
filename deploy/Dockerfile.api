@@ -1,0 +1,33 @@
+# Build once: the application binary also supplies the exact compiled capability catalogue.
+FROM rust:1.97.1-bookworm AS build
+WORKDIR /app
+COPY . .
+RUN cargo build --release --locked -p crm-api
+RUN /app/target/release/crm-api --published-contracts > /app/published-contracts.json
+
+# Reuse the repository's canonical runtime-manifest compiler (never test fixtures).
+FROM python:3.13-slim-bookworm AS manifests
+WORKDIR /app
+RUN pip install --no-cache-dir 'jsonschema>=4.23,<5' 'ruamel.yaml>=0.18.6,<0.19'
+COPY scripts/compile_module_manifest_ir.py scripts/module_manifest_projection.py scripts/validate_module_manifests.py /app/scripts/
+COPY schemas/module.schema.json /app/schemas/module.schema.json
+COPY modules /app/modules
+RUN python scripts/compile_module_manifest_ir.py --output-dir /compiled-manifests
+
+# An exiting installation step, not an additional permanent service.
+FROM postgres:17-bookworm AS provision
+RUN apt-get update && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /app/published-contracts.json /published-contracts.json
+COPY --from=manifests /compiled-manifests /manifests
+COPY contracts/module-contract-bindings.json /module-contract-bindings.json
+COPY deploy/provision.py /provision.py
+ENTRYPOINT ["python3", "/provision.py"]
+
+FROM debian:bookworm-slim AS api
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /app/target/release/crm-api /usr/local/bin/crm-api
+USER 65532:65532
+EXPOSE 8080 9090
+ENTRYPOINT ["crm-api"]

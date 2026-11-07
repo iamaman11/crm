@@ -1,0 +1,13 @@
+.git
+.gitignore
+**/.env
+**/.env.*
+**/node_modules
+**/dist
+target
+.venv
+**/__pycache__
+**/*.pyc
+deploy/backups
+test-results
+playwright-report

@@ -66,6 +66,12 @@ on:
       - "tests/test_customer_privacy_contract_inventory.py"
       - "tests/test_customer_privacy_owner_scope_contracts.py"
       - "tests/test_ci_event_policy.py"
+      - "deploy/**"
+      - ".dockerignore"
+      - ".gitignore"
+      - "affected-scope-policy.json"
+      - "repository-packet.json"
+      - "tests/test_pilot_deployment.py"
       - "tests/test_action_pinning.py"
       - "tests/test_affected_scope.py"
       - "tests/test_local_demo.py"
@@ -149,6 +155,12 @@ on:
       - "tests/test_customer_privacy_contract_inventory.py"
       - "tests/test_customer_privacy_owner_scope_contracts.py"
       - "tests/test_ci_event_policy.py"
+      - "deploy/**"
+      - ".dockerignore"
+      - ".gitignore"
+      - "affected-scope-policy.json"
+      - "repository-packet.json"
+      - "tests/test_pilot_deployment.py"
       - "tests/test_action_pinning.py"
       - "tests/test_affected_scope.py"
       - "tests/test_local_demo.py"
@@ -180,7 +192,7 @@ permissions:
 jobs:
   governance:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 105
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -206,6 +218,173 @@ jobs:
           version: "11.12.0"
       - name: Install validation dependencies
         run: python -m pip install --requirement requirements-dev.txt
+      - name: Verify G3 packaging and migration boundaries
+        run: |
+          python -m unittest -v tests.test_pilot_deployment
+          python -m py_compile deploy/provision.py deploy/smoke_https.py deploy/smoke_business.py deploy/release_evidence.py
+          bash -n deploy/{migrate,backup,restore,upgrade_drill}.sh
+          docker compose --env-file deploy/.env.example -f deploy/compose.yaml config --quiet
+      - name: G3 live PostgreSQL migration and isolated recovery drill
+        env:
+          COMPOSE_PROJECT_NAME: crm-g3-ci-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from secrets import token_hex
+          from re import sub
+          import json
+          source = Path("deploy/.env.example").read_text()
+          source = sub("REPLACE_WITH_RANDOM_64_HEX", lambda _: token_hex(32), source)
+          source = source.replace("REPLACE_TENANT_ID", "g3-ci-tenant")
+          source = source.replace("REPLACE_SERVICE_ACTOR_ID", "g3-ci-service")
+          source = source.replace("REPLACE_USER_ACTOR", "g3-ci-admin")
+          source = source.replace("REPLACE_USERNAME", "g3-admin")
+          source = source.replace("crm.example.com", "localhost")
+          source = source.replace("CRM_API_TENANTS=g3-ci-tenant",
+                                  "CRM_API_TENANTS=g3-ci-tenant,g3-ci-other")
+          # Disposable CI operators use the existing G2 browser test credentials.
+          # These are NEVER added to a production image or normal .env.example.
+          operator_line = next(line for line in source.splitlines()
+                               if line.startswith("CRM_PILOT_OPERATORS="))
+          operators = json.loads(operator_line.split("=", 1)[1].strip("'"))
+          operators[0]["username"] = "alice"
+          operators[0]["password"] = "01234567890123456789012345678901"
+          operators.append({
+              "username": "bob", "password": "abcdefghijklmnopqrstuvwxyzABCDEF",
+              "actor_id": "g3-ci-bob", "tenant_id": "g3-ci-other",
+              "capabilities": [
+                  "parties.party.list", "contact-points.contact-point.list",
+                  "accounts.account.list", "sales.deal.list", "activities.task.list",
+              ],
+          })
+          source = source.replace(operator_line, "CRM_PILOT_OPERATORS='" +
+                                  json.dumps(operators, separators=(",", ":")) + "'")
+          Path("deploy/.env").write_text(source)
+          Path("deploy/.env").chmod(0o600)
+          PY
+          restored_project="crm-restore-${{ github.run_id }}"
+          compose=(docker compose --env-file deploy/.env -f deploy/compose.yaml)
+          cleanup() {
+            docker compose --project-name "$restored_project" --env-file deploy/.env -f deploy/compose.yaml down -v || true
+            "${compose[@]}" down -v || true
+            rm -f deploy/.env
+            rm -rf "$RUNNER_TEMP/g3-recovery"
+          }
+          trap cleanup EXIT
+          "${compose[@]}" up -d --wait database
+          "${compose[@]}" run --rm migrate
+          "${compose[@]}" run --rm migrate
+          # Build the SAME production definitions and compiled canonical manifests,
+          # then exercise the regular one-shot first-install path twice.
+          "${compose[@]}" build provision
+          "${compose[@]}" run --rm provision
+          "${compose[@]}" run --rm provision
+          # Exercise the installed service stack, never a test-only HTTP server.
+          "${compose[@]}" build api web
+          "${compose[@]}" up -d --wait api web
+          python deploy/smoke_https.py --env deploy/.env --origin https://localhost --local-insecure-tls
+          "${compose[@]}" cp web:/data/caddy/pki/authorities/local/root.crt "$RUNNER_TEMP/g3-local-ca.crt"
+          python deploy/smoke_https.py --env deploy/.env --origin https://localhost \
+            --ca-bundle "$RUNNER_TEMP/g3-local-ca.crt"
+          # Use the exact definitions compiled into this production application.
+          "${compose[@]}" run --rm --no-deps --entrypoint cat provision \
+            /published-contracts.json > "$RUNNER_TEMP/g3-contracts.json"
+          python deploy/smoke_business.py --phase initial --env deploy/.env \
+            --catalog "$RUNNER_TEMP/g3-contracts.json"
+          # Existing production-browser scenario, now against real Compose/Caddy.
+          pnpm install --frozen-lockfile
+          pnpm --filter @ultimate-crm/web exec playwright install --with-deps chromium
+          G2_E2E=1 G2_E2E_BASE_URL=https://localhost G2_TEST_PHASE=before \
+            G2_RUN_ID="g3-${{ github.run_id }}" \
+            pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
+            --reporter=list --retries=0
+          "${compose[@]}" restart api
+          "${compose[@]}" up -d --wait api
+          python deploy/smoke_business.py --phase verify --env deploy/.env \
+            --catalog "$RUNNER_TEMP/g3-contracts.json"
+          G2_E2E=1 G2_E2E_BASE_URL=https://localhost G2_TEST_PHASE=after \
+            G2_RUN_ID="g3-${{ github.run_id }}" \
+            pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
+            --reporter=list --retries=0
+          # CI-only additive schema upgrade, pinned-image recreate, real UI readback.
+          python deploy/release_evidence.py --output "$RUNNER_TEMP/g3-installed.json"
+          bash deploy/upgrade_drill.sh
+          G2_E2E=1 G2_E2E_BASE_URL=https://localhost G2_TEST_PHASE=after \
+            G2_RUN_ID="g3-${{ github.run_id }}" \
+            pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
+            --reporter=list --retries=0
+          python deploy/release_evidence.py --output "$RUNNER_TEMP/g3-upgraded.json"
+          # Quiesce writers for a stable independent database archive.
+          "${compose[@]}" stop web api
+          # Query the authoritative PostgreSQL rows, without fragile heredoc SQL quoting.
+          installed_counts="$("${compose[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c "
+            SELECT
+              (SELECT count(*) FROM crm.actors WHERE tenant_id='g3-ci-tenant' AND status='active'),
+              (SELECT count(*) FROM crm.module_installations WHERE tenant_id='g3-ci-tenant' AND status='active'),
+              (SELECT count(*) FROM crm.audit_records WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.outbox_events WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.business_transactions WHERE tenant_id='g3-ci-tenant')
+          ")"
+          IFS='|' read -r actor_count module_count audit_count outbox_count tx_count <<< "$installed_counts"
+          test "$actor_count" = "2"
+          test "$module_count" = "14"
+          other_actors="$("${compose[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c \
+            "SELECT count(*) FROM crm.actors WHERE tenant_id='g3-ci-other' AND status='active'")"
+          test "$other_actors" = "2"
+          test "$audit_count" -ge 3
+          test "$outbox_count" -ge 3
+          test "$tx_count" -ge 3
+          # A unique CI-only sentinel proves data persistence; no demo fixtures are installed.
+          "${compose[@]}" exec -T database psql -X -v ON_ERROR_STOP=1 -U postgres -d crm -c             "INSERT INTO crm.tenants (tenant_id, status, data_region) VALUES ('g3-recovery-sentinel', 'active', 'eu-central')"
+          source_counts="$("${compose[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c "
+            SELECT
+              (SELECT count(*) FROM crm.records WHERE tenant_id='g3-ci-tenant' AND record_type='parties.party'),
+              (SELECT count(*) FROM crm.audit_records WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.outbox_events WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.idempotency_records WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.business_transactions WHERE tenant_id='g3-ci-tenant')
+          ")"
+          test "${source_counts%%|*}" -ge 1
+          bash deploy/backup.sh "$RUNNER_TEMP/g3-recovery"
+          archives=("$RUNNER_TEMP/g3-recovery"/crm-*.dump)
+          test "${#archives[@]}" -eq 1
+          bash deploy/restore.sh "${archives[0]}" "$restored_project"
+          restored=(docker compose --project-name "$restored_project" --env-file deploy/.env -f deploy/compose.yaml)
+          restored_rows="$("${restored[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c             "SELECT count(*) FROM crm.tenants WHERE tenant_id = 'g3-recovery-sentinel'")"
+          test "$restored_rows" = "1"
+          restored_evidence="$("${restored[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c "SELECT
+              (SELECT count(*) FROM crm.actors WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.module_installations WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.audit_records WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.outbox_events WHERE tenant_id='g3-ci-tenant')")"
+          IFS='|' read -r restored_actors restored_modules restored_audit restored_outbox <<< "$restored_evidence"
+          test "$restored_actors" = "2"
+          test "$restored_modules" = "14"
+          test "$restored_audit" -ge 3
+          test "$restored_outbox" -ge 3
+          recovered_counts="$("${restored[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c "
+            SELECT
+              (SELECT count(*) FROM crm.records WHERE tenant_id='g3-ci-tenant' AND record_type='parties.party'),
+              (SELECT count(*) FROM crm.audit_records WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.outbox_events WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.idempotency_records WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.business_transactions WHERE tenant_id='g3-ci-tenant')
+          ")"
+          test "$source_counts" = "$recovered_counts"
+          restored_migrations="$("${restored[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c             "SELECT count(*) FROM public.crm_schema_migrations")"
+          test "$restored_migrations" -ge 20
+          # The source web/API stay stopped: verify real customer/contact/deal/task
+          # readback through the independently restored installed HTTPS stack.
+          "${restored[@]}" up -d --wait api web
+          python deploy/smoke_https.py --env deploy/.env --origin https://localhost --local-insecure-tls
+          "${restored[@]}" cp web:/data/caddy/pki/authorities/local/root.crt "$RUNNER_TEMP/g3-restored-ca.crt"
+          python deploy/smoke_https.py --env deploy/.env --origin https://localhost \
+            --ca-bundle "$RUNNER_TEMP/g3-restored-ca.crt"
+          G2_E2E=1 G2_E2E_BASE_URL=https://localhost G2_TEST_PHASE=after \
+            G2_RUN_ID="g3-${{ github.run_id }}" \
+            pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
+            --reporter=list --retries=0
       - name: Enforce immutable module publication compatibility
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}

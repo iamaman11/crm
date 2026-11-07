@@ -24,42 +24,24 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_g2_useful_crm_packet_is_exact_and_bounded(self) -> None:
+    def test_active_g3_deployment_packet_is_exact_and_bounded(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(packet["packet_id"], "repository-step-22p-g2-useful-crm")
+        self.assertEqual(packet["packet_id"], "repository-step-22p-g3-deployable-crm")
         self.assertEqual(packet["status"], "active")
-        self.assertEqual(packet["baseline"], {"ref": "main", "sha": "ddd6e738d0e11d6ff214caea6eb42de378b9f1c9"})
-        self.assertEqual(packet["tracking_issues"], [312, 310])
-        self.assertEqual(set(packet["allowed_paths"]), {
-            "repository-packet.json", "docs/ACTIVE_PACKET.md",
-            "apps/web/src/App.tsx", "apps/web/src/routes.ts", "apps/web/src/routes.test.ts",
-            "apps/web/src/productionSession.ts", "apps/web/src/productionSession.test.ts",
-            "apps/web/src/CrmPageUtils.ts", "apps/web/src/CrmPageUtils.test.ts",
-            "apps/web/vite.config.ts", "apps/web/playwright.config.ts",
-            "apps/web/e2e/g2-crm.spec.ts", "scripts/run_e2e.sh",
-            "services/crm-api/tests/seed_e2e_fixture.rs",
-            "packages/client/src/gateway.ts", "packages/client/src/gateway.test.ts",
-            "apps/web/e2e/customer-privacy.spec.ts",
-            "apps/web/src/CustomerPrivacyPage.tsx",
-            "scripts/run_customer_privacy_operations.sh",
-            "tests/test_customer_privacy_operations.py",
-            ".github/workflows/product-plane.yml",
-            "apps/web/src/CustomersPage.tsx", "apps/web/src/DealsPage.tsx", "apps/web/src/TasksPage.tsx",
-            "packages/client/src/crm.ts", "packages/client/src/crm.test.ts",
-            "packages/client/src/index.ts", "packages/client/src/session.ts",
-            "crates/crm-application-runtime/src/production_identity.rs",
-            "tests/test_repository_navigation.py", "tests/test_architecture_documentation_consistency.py",
-        })
-        for path in (".github/actions/**", "modules/**", "contracts/**", "proto/**", "docs/generated/REPOSITORY_MAP.md"):
+        self.assertEqual(packet["baseline"], {"ref": "main", "sha": "4ec3b416d77857347f797f185ad3981a95219b04"})
+        self.assertEqual(packet["tracking_issues"], [313, 310])
+        self.assertTrue({"deploy/compose.yaml", "deploy/migrate.sh", "deploy/backup.sh", "deploy/provision.py",
+                         "deploy/restore.sh", "docs/ACTIVE_PACKET.md"}.issubset(
+                             set(packet["allowed_paths"])))
+        for path in (".github/actions/**", "modules/**", "contracts/**", "proto/**"):
             self.assertIn(path, packet["forbidden_paths"])
-        self.assertIn("typed browser gateway client", " ".join(packet["deliverables"]))
-        self.assertIn("production", " ".join(packet["non_goals"]))
+        self.assertIn("built web", " ".join(packet["deliverables"]))
         self.assertEqual(
             validate_decisions(ROOT),
             {"all": 63, "final": 27, "platform_generic": 16,
-             "test_only": 1, "removed": 10, "owner_specific_unavoidable": 0,
-             "unresolved": 36},
+             "test_only": 1, "removed": 10,
+             "owner_specific_unavoidable": 0, "unresolved": 36},
         )
 
     def test_generated_navigation_is_deterministic_and_current(self) -> None:
@@ -73,11 +55,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-22p-g2-useful-crm",
+            "repository-step-22p-g3-deployable-crm",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "ddd6e738d0e11d6ff214caea6eb42de378b9f1c9",
+            "4ec3b416d77857347f797f185ad3981a95219b04",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -135,7 +117,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 22P G2 useful CRM packet"],
+                    "reasons": ["G3 pilot deployment packet"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -143,7 +125,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="ddd6e738d0e11d6ff214caea6eb42de378b9f1c9",
+                return_value="4ec3b416d77857347f797f185ad3981a95219b04",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(

@@ -1,0 +1,14 @@
+FROM node:24.18.0-bookworm AS build
+WORKDIR /app
+RUN npm install --global pnpm@11.12.0
+COPY . .
+RUN pnpm install --frozen-lockfile
+# The generated TypeScript Protobuf client is intentionally NOT committed.
+# Use the existing authoritative Proto input and locked local generators.
+RUN pnpm exec buf generate --template buf.gen.web.yaml
+RUN pnpm --filter @ultimate-crm/web build
+
+FROM caddy:2-alpine
+COPY deploy/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/apps/web/dist /srv
+EXPOSE 80 443

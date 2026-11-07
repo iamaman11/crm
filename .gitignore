@@ -19,4 +19,4 @@ packages/client/gen/
 playwright-report/
 test-results/
 *.tsbuildinfo
-
+/deploy/backups/
