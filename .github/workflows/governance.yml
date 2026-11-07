@@ -192,7 +192,7 @@ permissions:
 jobs:
   governance:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 105
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -221,6 +221,7 @@ jobs:
       - name: Verify G3 packaging and migration boundaries
         run: |
           python -m unittest -v tests.test_pilot_deployment
+          python -m py_compile deploy/provision.py
           bash -n deploy/{migrate,backup,restore}.sh
           docker compose --env-file deploy/.env.example -f deploy/compose.yaml config --quiet
       - name: G3 live PostgreSQL migration and isolated recovery drill
@@ -234,6 +235,10 @@ jobs:
           from re import sub
           source = Path("deploy/.env.example").read_text()
           source = sub("REPLACE_WITH_RANDOM_64_HEX", lambda _: token_hex(32), source)
+          source = source.replace("REPLACE_TENANT_ID", "g3-ci-tenant")
+          source = source.replace("REPLACE_SERVICE_ACTOR_ID", "g3-ci-service")
+          source = source.replace("REPLACE_USER_ACTOR", "g3-ci-admin")
+          source = source.replace("REPLACE_USERNAME", "g3-admin")
           Path("deploy/.env").write_text(source)
           Path("deploy/.env").chmod(0o600)
           PY
@@ -249,6 +254,25 @@ jobs:
           "${compose[@]}" up -d --wait database
           "${compose[@]}" run --rm migrate
           "${compose[@]}" run --rm migrate
+          # Build the SAME production definitions and compiled canonical manifests,
+          # then exercise the regular one-shot first-install path twice.
+          "${compose[@]}" build provision
+          "${compose[@]}" run --rm provision
+          "${compose[@]}" run --rm provision
+          "${compose[@]}" exec -T database psql -X -v ON_ERROR_STOP=1 -U postgres -d crm <<'SQL'
+          DO $
+          BEGIN
+            IF (SELECT count(*) FROM crm.actors WHERE tenant_id='g3-ci-tenant' AND status='active') <> 2
+               OR (SELECT count(*) FROM crm.module_installations WHERE tenant_id='g3-ci-tenant' AND status='active') < 12
+               OR (SELECT count(*) FROM crm.audit_records WHERE tenant_id='g3-ci-tenant') <> 1
+               OR (SELECT count(*) FROM crm.outbox_events WHERE tenant_id='g3-ci-tenant') <> 1
+               OR (SELECT count(*) FROM crm.business_transactions WHERE tenant_id='g3-ci-tenant') <> 1
+            THEN
+              RAISE EXCEPTION 'real first-install tenant, actors, module state or evidence incomplete';
+            END IF;
+          END
+          $;
+          SQL
           # A unique CI-only sentinel proves data persistence; no demo fixtures are installed.
           "${compose[@]}" exec -T database psql -X -v ON_ERROR_STOP=1 -U postgres -d crm -c             "INSERT INTO crm.tenants (tenant_id, status, data_region) VALUES ('g3-recovery-sentinel', 'active', 'eu-central')"
           bash deploy/backup.sh "$RUNNER_TEMP/g3-recovery"
@@ -258,6 +282,15 @@ jobs:
           restored=(docker compose --project-name "$restored_project" --env-file deploy/.env -f deploy/compose.yaml)
           restored_rows="$("${restored[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c             "SELECT count(*) FROM crm.tenants WHERE tenant_id = 'g3-recovery-sentinel'")"
           test "$restored_rows" = "1"
+          restored_evidence="$("${restored[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c "SELECT
+              (SELECT count(*) FROM crm.actors WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.module_installations WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.audit_records WHERE tenant_id='g3-ci-tenant'),
+              (SELECT count(*) FROM crm.outbox_events WHERE tenant_id='g3-ci-tenant')")"
+          case "$restored_evidence" in
+            "2|"*"|1|1") ;;
+            *) echo "Restore evidence mismatch" >&2; exit 1 ;;
+          esac
           restored_migrations="$("${restored[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c             "SELECT count(*) FROM public.crm_schema_migrations")"
           test "$restored_migrations" -ge 20
       - name: Enforce immutable module publication compatibility

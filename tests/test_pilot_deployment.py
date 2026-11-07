@@ -62,7 +62,8 @@ class PilotDeploymentSourceTests(unittest.TestCase):
         governance = (ROOT / ".github/workflows/governance.yml").read_text()
         for item in ("G3 live PostgreSQL migration and isolated recovery drill",
                      "run --rm migrate", "bash deploy/backup.sh",
-                     "bash deploy/restore.sh", "g3-recovery-sentinel",
+                     "bash deploy/restore.sh", "g3-recovery-sentinel", '"${compose[@]}" run --rm provision',
+                     "crm.module_installations", "crm.audit_records",
                      "crm_schema_migrations", "down -v"):
             self.assertIn(item, governance)
 
