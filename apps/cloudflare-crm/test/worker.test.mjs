@@ -89,7 +89,7 @@ test("authenticated non-email service identity receives an isolated pilot worksp
   const result = await crmFetch(url("/api/session"), { DB: database }, service);
   assert.equal(result.status, 200);
   const membership = database.queries.find(q => q.sql.includes("FROM crm_users"));
-  assert.deepEqual(membership.values, ["crm-e2e@local.invalid"]);
+  assert.deepEqual(membership.values, ["service:service-token.access"]);
 });
 
 test("missing or malformed Access JWT is rejected with Static Assets routing", async () => {
@@ -98,5 +98,22 @@ test("missing or malformed Access JWT is rejected with Static Assets routing", a
   assert.equal(missing.status, 401);
   const malformed = await crmFetch(url("/api/session", { headers: { "Cf-Access-Jwt-Assertion": "not.a.jwt" } }), { DB: database }, {});
   assert.equal(malformed.status, 401);
+  assert.equal(database.queries.length, 0);
+});
+
+test("two Access service credentials map to distinct workspace keys", async () => {
+  const first = db(), second = db();
+  const service = id => ({ access: { getIdentity: async () => ({ common_name: id + ".access" }) } });
+  assert.equal((await crmFetch(url("/api/session"), { DB: first }, service("e2e-a"))).status, 200);
+  assert.equal((await crmFetch(url("/api/session"), { DB: second }, service("e2e-b"))).status, 200);
+  const getKey = database => database.queries.find(q => q.sql.includes("FROM crm_users")).values[0];
+  assert.notEqual(getKey(first), getKey(second));
+});
+test("Access without a user or service-token identity is not a CRM workspace", async () => {
+  const database = db();
+  const response = await crmFetch(url("/api/session"), { DB: database }, {
+    access: { getIdentity: async () => ({}) },
+  });
+  assert.equal(response.status, 403);
   assert.equal(database.queries.length, 0);
 });

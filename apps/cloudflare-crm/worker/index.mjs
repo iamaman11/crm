@@ -56,38 +56,47 @@ async function requestBody(request) {
   try { return JSON.parse(text); } catch { return null; }
 }
 
+function identityKey(identity) {
+  const email = typeof identity?.email === "string" ? identity.email.trim().toLowerCase() : "";
+  if (email) return email;
+  // Each verified Cloudflare Access service token has its own common_name.
+  const name = identity?.common_name;
+  return typeof name === "string" && /^[a-z0-9.-]{8,120}\.access$/i.test(name)
+    ? "service:" + name.toLowerCase() : null;
+}
+
 async function actorFor(ctx, db, request) {
-  let email;
+  let identity;
   if (ctx.access) {
-    const identity = await ctx.access.getIdentity();
-    email = identity?.email?.toLowerCase();
+    identity = await ctx.access.getIdentity();
   } else {
+    // Static Assets do not pass ctx.access through the internal router.
     const token = request.headers.get("cf-access-jwt-assertion");
     if (!token) return null;
     try {
-      const { payload } = await jwtVerify(token, ACCESS_KEYS, {
+      const verified = await jwtVerify(token, ACCESS_KEYS, {
         issuer: ACCESS_ISSUER, audience: ACCESS_AUDIENCE,
       });
-      email = typeof payload.email === "string" ? payload.email.toLowerCase() : null;
+      identity = verified.payload;
     } catch {
       return null;
     }
   }
-  // The two existing Access service tokens use one dedicated test workspace.
-  email ||= "crm-e2e@local.invalid";
+  const key = identityKey(identity);
+  if (!key) return null;
   const user = await db.prepare(
     "SELECT tenant_id, role FROM crm_users WHERE email = ? AND active = 1"
-  ).bind(email).first();
+  ).bind(key).first();
   if (user) return { tenant: user.tenant_id, role: user.role };
-  // Closed test pilot: a real Access-authenticated human gets an empty personal workspace.
+  // A newly authenticated user or service token gets its own simple test workspace.
   const tenant = crypto.randomUUID();
   await db.batch([
     db.prepare("INSERT OR IGNORE INTO crm_tenants (id, name) VALUES (?, ?)").bind(tenant, "Test CRM"),
-    db.prepare("INSERT OR IGNORE INTO crm_users (email, tenant_id, role) VALUES (?, ?, ?)").bind(email, tenant, "admin"),
+    db.prepare("INSERT OR IGNORE INTO crm_users (email, tenant_id, role) VALUES (?, ?, ?)").bind(key, tenant, "admin"),
   ]);
   const enrolled = await db.prepare(
     "SELECT tenant_id, role FROM crm_users WHERE email = ? AND active = 1"
-  ).bind(email).first();
+  ).bind(key).first();
   return enrolled ? { tenant: enrolled.tenant_id, role: enrolled.role } : null;
 }
 

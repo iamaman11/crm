@@ -1,5 +1,6 @@
 import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
+import assert from "node:assert/strict";
 
 const url = "https://crm-dev.crm-5bd5e1e1.workers.dev";
 const headers = {
@@ -58,6 +59,51 @@ async function cleanup() {
     }
   }
 }
+async function checkIndependentWorkspaces(customerName) {
+  const id = process.env.CRM_E2E_B_CLIENT_ID, secret = process.env.CRM_E2E_B_CLIENT_SECRET;
+  if (!id || !secret) throw Error("Missing second Access service identity");
+  const other = await browser.newContext({
+    extraHTTPHeaders: { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret },
+  });
+  let ownB = null;
+  try {
+    const listA = await context.request.get(url + "/api/customers");
+    assert.equal(listA.status(), 200);
+    const a = (await listA.json()).items.find(item => item.name === customerName);
+    assert.ok(a, "A must see its customer");
+    const sessionB = await other.request.get(url + "/api/session");
+    assert.equal(sessionB.status(), 200, "B must authenticate normally");
+    const createdB = await other.request.post(url + "/api/customers", {
+      data: { name: customerName + " B", kind: "organization" },
+    });
+    assert.equal(createdB.status(), 201, "B must create its own customer");
+    ownB = (await createdB.json()).item;
+    assert.notEqual(a.tenant_id, ownB.tenant_id, "A/B must use different workspaces");
+    for (const [viewer, mine, foreign] of [
+      [context, a, ownB], [other, ownB, a],
+    ]) {
+      const list = await viewer.request.get(url + "/api/customers");
+      assert.equal(list.status(), 200);
+      const rows = (await list.json()).items;
+      assert.ok(rows.some(row => row.id === mine.id), "own record visible");
+      assert.ok(!rows.some(row => row.id === foreign.id), "foreign record hidden");
+      assert.equal((await viewer.request.get(url + "/api/customers/" + foreign.id)).status(), 404);
+      assert.equal((await viewer.request.patch(url + "/api/customers/" + foreign.id, {
+        data: { name: customerName + " foreign edit", kind: "organization" },
+      })).status(), 404);
+      assert.equal((await viewer.request.delete(url + "/api/customers/" + foreign.id)).status(), 404);
+      assert.equal((await viewer.request.post(url + "/api/contacts", {
+        data: { customer_id: foreign.id, name: customerName + " foreign contact" },
+      })).status(), 422);
+    }
+    console.log(JSON.stringify({ event: "crm.workspace-e2e", result: "PASS",
+      tests: "two Access identities, different tenants, CRUD and contact isolation" }));
+  } finally {
+    if (ownB) await other.request.delete(url + "/api/customers/" + ownB.id).catch(() => {});
+    await other.close();
+  }
+}
+
 let result = "FAIL";
 try {
   const session = await context.request.get(url + "/api/session");
@@ -85,6 +131,7 @@ try {
   await page.locator(".mobile").getByText(task, { exact: true }).waitFor({ timeout: 12000 });
   await page.screenshot({ path: "apps/cloudflare-crm/e2e-mobile.png" });
   await page.setViewportSize({ width: 1366, height: 900 });
+  await checkIndependentWorkspaces(customer);
   await remove("Задачи", task);
   await remove("Сделки", deal);
   await remove("Контакты", contact);
