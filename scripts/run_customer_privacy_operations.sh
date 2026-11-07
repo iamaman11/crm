@@ -22,6 +22,10 @@ TOKEN="phase6l-process-bearer-token-0123456789abcdef0123456789abcdef"
 HTTP_PORT="${CRM_OPERATIONS_HTTP_PORT:-18080}"
 GRPC_PORT="${CRM_OPERATIONS_GRPC_PORT:-19090}"
 VITE_PORT=5173
+PRODUCT_PAGE_PATH="apps/web/src/CustomerPrivacyPage.tsx"
+EXPECTED_PRODUCT_PAGE_BLOB_SHA="20d8258ae8f5b0a47a10177a4cece014e20a23a9"
+E2E_SPEC_PATH="apps/web/e2e/customer-privacy.spec.ts"
+EXPECTED_E2E_SPEC_BLOB_SHA="ce88badfc55604e121491235b672faff45ddbce7"
 API_PID=""
 VITE_PID=""
 
@@ -289,6 +293,14 @@ for _ in $(seq 1 "$OPS_PROBE_COUNT"); do
   fi
 done
 
+# G2 permanently fixes focus after React commit. Verify that this is the
+# exact reviewed component and execute it unchanged (no temporary code patches).
+ACTUAL_PRODUCT_PAGE_BLOB_SHA="$(git hash-object "$PRODUCT_PAGE_PATH")"
+[ "$ACTUAL_PRODUCT_PAGE_BLOB_SHA" = "$EXPECTED_PRODUCT_PAGE_BLOB_SHA" ] || {
+  echo "unexpected Customer Privacy page source blob: ${ACTUAL_PRODUCT_PAGE_BLOB_SHA}" >&2
+  exit 1
+}
+
 echo "Starting product plane against the restored crm-api..."
 rm -rf apps/web/node_modules/.vite
 VITE_CRM_GRPC_WEB_TARGET="http://127.0.0.1:${GRPC_PORT}" \
@@ -303,8 +315,16 @@ for _ in $(seq 1 120); do
 done
 curl --fail --silent --show-error "http://127.0.0.1:${VITE_PORT}" >/dev/null
 
+# The accepted G2 spec permanently disambiguates its results heading.
+# Pin the exact source blob and execute it unchanged: no in-run code patches.
+ACTUAL_E2E_SPEC_BLOB_SHA="$(git hash-object "$E2E_SPEC_PATH")"
+[ "$ACTUAL_E2E_SPEC_BLOB_SHA" = "$EXPECTED_E2E_SPEC_BLOB_SHA" ] || {
+  echo "unexpected Customer Privacy E2E source blob: ${ACTUAL_E2E_SPEC_BLOB_SHA}" >&2
+  exit 1
+}
 pnpm --filter @ultimate-crm/web exec playwright test e2e/customer-privacy.spec.ts \
   --config=playwright.config.ts --timeout="$((OPS_BROWSER_TIMEOUT_SECONDS * 1000))"
+git diff --exit-code -- "$E2E_SPEC_PATH" "$PRODUCT_PAGE_PATH"
 
 curl --fail --silent --show-error "http://127.0.0.1:${HTTP_PORT}/metrics" > "$METRICS_PATH"
 grep --fixed-strings --quiet "$TOKEN" "$METRICS_PATH" && { echo "metrics output contains the bearer token" >&2; exit 1; }
