@@ -28,6 +28,7 @@
     "deploy/migrate.sh",
     "deploy/provision.py",
     "deploy/restore.sh",
+    "deploy/smoke_business.py",
     "deploy/smoke_https.py",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
