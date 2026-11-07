@@ -42,7 +42,7 @@ test.describe("G2 production-built CRM workflow", () => {
     await page.getByRole("button", { name: "Save customer" }).dblclick();
     await expect(page.getByRole("heading", { name: organization })).toBeVisible();
     await expect(page.getByText("Customer saved.", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: new RegExp(organization + " · Organization") })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: organization + " · Organization", exact: true })).toHaveCount(1);
 
     await page.getByLabel("Email or phone").fill(email);
     await page.getByRole("button", { name: "Save contact" }).click();
