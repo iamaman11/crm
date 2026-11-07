@@ -37,6 +37,17 @@ class PilotDeploymentSourceTests(unittest.TestCase):
         for forbidden in ("database/tests/", "seed-demo", "crm_app_test"):
             self.assertNotIn(forbidden, provision)
 
+    def test_real_https_browser_boundary_is_exercised(self) -> None:
+        workflow = (ROOT / ".github/workflows/governance.yml").read_text()
+        smoke = (DEPLOY / "smoke_https.py").read_text()
+        for requirement in ("build api web", "up -d --wait api web",
+                            "python deploy/smoke_https.py", "https://localhost"):
+            self.assertIn(requirement, workflow)
+        for requirement in ("/auth/login", "/auth/session", "/auth/logout",
+                            "csrfToken", "CookieJar", "https://localhost"):
+            self.assertIn(requirement, smoke)
+        self.assertIn('origin != "https://localhost"', smoke)
+
     def test_same_origin_gateway_and_no_dev_identity(self) -> None:
         caddy = (DEPLOY / "Caddyfile").read_text()
         for item in ("/crm.gateway.v1.ApplicationGatewayService/*",

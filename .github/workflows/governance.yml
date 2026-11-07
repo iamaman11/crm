@@ -221,7 +221,7 @@ jobs:
       - name: Verify G3 packaging and migration boundaries
         run: |
           python -m unittest -v tests.test_pilot_deployment
-          python -m py_compile deploy/provision.py
+          python -m py_compile deploy/provision.py deploy/smoke_https.py
           bash -n deploy/{migrate,backup,restore}.sh
           docker compose --env-file deploy/.env.example -f deploy/compose.yaml config --quiet
       - name: G3 live PostgreSQL migration and isolated recovery drill
@@ -239,6 +239,7 @@ jobs:
           source = source.replace("REPLACE_SERVICE_ACTOR_ID", "g3-ci-service")
           source = source.replace("REPLACE_USER_ACTOR", "g3-ci-admin")
           source = source.replace("REPLACE_USERNAME", "g3-admin")
+          source = source.replace("crm.example.com", "localhost")
           Path("deploy/.env").write_text(source)
           Path("deploy/.env").chmod(0o600)
           PY
@@ -259,6 +260,10 @@ jobs:
           "${compose[@]}" build provision
           "${compose[@]}" run --rm provision
           "${compose[@]}" run --rm provision
+          # Exercise the installed service stack, never a test-only HTTP server.
+          "${compose[@]}" build api web
+          "${compose[@]}" up -d --wait api web
+          python deploy/smoke_https.py --env deploy/.env --origin https://localhost --local-insecure-tls
           "${compose[@]}" exec -T database psql -X -v ON_ERROR_STOP=1 -U postgres -d crm <<'SQL'
           DO $
           BEGIN
