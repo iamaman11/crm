@@ -284,6 +284,9 @@ jobs:
           "${compose[@]}" build api web
           "${compose[@]}" up -d --wait api web
           python deploy/smoke_https.py --env deploy/.env --origin https://localhost --local-insecure-tls
+          "${compose[@]}" cp web:/data/caddy/pki/authorities/local/root.crt "$RUNNER_TEMP/g3-local-ca.crt"
+          python deploy/smoke_https.py --env deploy/.env --origin https://localhost \
+            --ca-bundle "$RUNNER_TEMP/g3-local-ca.crt"
           # Use the exact definitions compiled into this production application.
           "${compose[@]}" run --rm --no-deps --entrypoint cat provision \
             /published-contracts.json > "$RUNNER_TEMP/g3-contracts.json"
@@ -304,6 +307,14 @@ jobs:
             G2_RUN_ID="g3-${{ github.run_id }}" \
             pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
             --reporter=list --retries=0
+          # CI-only additive schema upgrade, pinned-image recreate, real UI readback.
+          python deploy/release_evidence.py --output "$RUNNER_TEMP/g3-installed.json"
+          bash deploy/upgrade_drill.sh
+          G2_E2E=1 G2_E2E_BASE_URL=https://localhost G2_TEST_PHASE=after \
+            G2_RUN_ID="g3-${{ github.run_id }}" \
+            pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
+            --reporter=list --retries=0
+          python deploy/release_evidence.py --output "$RUNNER_TEMP/g3-upgraded.json"
           # Quiesce writers for a stable independent database archive.
           "${compose[@]}" stop web api
           # Query the authoritative PostgreSQL rows, without fragile heredoc SQL quoting.
@@ -367,6 +378,9 @@ jobs:
           # readback through the independently restored installed HTTPS stack.
           "${restored[@]}" up -d --wait api web
           python deploy/smoke_https.py --env deploy/.env --origin https://localhost --local-insecure-tls
+          "${restored[@]}" cp web:/data/caddy/pki/authorities/local/root.crt "$RUNNER_TEMP/g3-restored-ca.crt"
+          python deploy/smoke_https.py --env deploy/.env --origin https://localhost \
+            --ca-bundle "$RUNNER_TEMP/g3-restored-ca.crt"
           G2_E2E=1 G2_E2E_BASE_URL=https://localhost G2_TEST_PHASE=after \
             G2_RUN_ID="g3-${{ github.run_id }}" \
             pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
