@@ -247,6 +247,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "apps/cloudflare-crm/vite.config.mjs",
             "apps/cloudflare-crm/wrangler.jsonc",
             "pnpm-workspace.yaml",
+            "apps/cloudflare-crm/e2e/live.mjs",
             "apps/cloudflare-crm/README.md",
             ".github/workflows/cloudflare-crm-spike.yml",
             "affected-scope-policy.json",

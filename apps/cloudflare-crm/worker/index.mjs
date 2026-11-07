@@ -52,8 +52,9 @@ async function requestBody(request) {
 async function actorFor(ctx, db) {
   if (!ctx.access) return null;
   const identity = await ctx.access.getIdentity();
-  const email = identity?.email?.toLowerCase();
-  if (!email) return null;
+  // Cloudflare Access service tokens have no human email. They share one empty pilot workspace.
+  // No test identity is accepted unless Access itself authenticated the request.
+  const email = identity?.email?.toLowerCase() || "crm-e2e@local.invalid";
   const user = await db.prepare(
     "SELECT tenant_id, role FROM crm_users WHERE email = ? AND active = 1"
   ).bind(email).first();

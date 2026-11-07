@@ -82,3 +82,12 @@ test("invalid form rejected without writes", async () => {
   assert.equal(response.status, 422);
   assert.equal(database.queries.filter(q => q.sql.includes("INSERT INTO")).length, 0);
 });
+
+test("authenticated non-email service identity receives an isolated pilot workspace", async () => {
+  const database = db();
+  const service = { access: { getIdentity: async () => ({ common_name: "service-token.access" }) } };
+  const result = await crmFetch(url("/api/session"), { DB: database }, service);
+  assert.equal(result.status, 200);
+  const membership = database.queries.find(q => q.sql.includes("FROM crm_users"));
+  assert.deepEqual(membership.values, ["crm-e2e@local.invalid"]);
+});
