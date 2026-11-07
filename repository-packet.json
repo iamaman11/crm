@@ -30,7 +30,8 @@
     "docs/ACTIVE_PACKET.md",
     "tests/test_repository_navigation.py",
     "tests/test_architecture_documentation_consistency.py",
-    "tests/test_pilot_deployment.py"
+    "tests/test_pilot_deployment.py",
+    "tests/test_workspace_analysis.py"
   ],
   "forbidden_paths": [
     "modules/**",
