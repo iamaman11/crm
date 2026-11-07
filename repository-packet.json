@@ -40,7 +40,9 @@
     "services/crm-api/tests/seed_e2e_fixture.rs",
     "packages/client/src/gateway.ts",
     "packages/client/src/gateway.test.ts",
-    "apps/web/e2e/customer-privacy.spec.ts"
+    "apps/web/e2e/customer-privacy.spec.ts",
+    "apps/web/src/CustomerPrivacyPage.tsx",
+    "scripts/run_customer_privacy_operations.sh"
   ],
   "forbidden_paths": [
     "modules/**",

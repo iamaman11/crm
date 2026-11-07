@@ -41,6 +41,8 @@ class RepositoryNavigationTests(unittest.TestCase):
             "services/crm-api/tests/seed_e2e_fixture.rs",
             "packages/client/src/gateway.ts", "packages/client/src/gateway.test.ts",
             "apps/web/e2e/customer-privacy.spec.ts",
+            "apps/web/src/CustomerPrivacyPage.tsx",
+            "scripts/run_customer_privacy_operations.sh",
             ".github/workflows/product-plane.yml",
             "apps/web/src/CustomersPage.tsx", "apps/web/src/DealsPage.tsx", "apps/web/src/TasksPage.tsx",
             "packages/client/src/crm.ts", "packages/client/src/crm.test.ts",

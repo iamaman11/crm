@@ -36,7 +36,6 @@ test.describe("G2 production-built CRM workflow", () => {
     test.skip(phase !== "before");
     await signIn(page, "alice");
 
-    const add = page.getByRole("form", { name: /Add customer/i });
     // Native label and button selectors intentionally mirror the normal user flow.
     await page.getByLabel("Type").selectOption({ label: "Organization" });
     await page.getByLabel("Name", { exact: true }).fill(organization);
@@ -51,7 +50,7 @@ test.describe("G2 production-built CRM workflow", () => {
     await expect(page.getByText("Email: " + email)).toBeVisible();
     await page.getByRole("button", { name: "Edit", exact: true }).click();
     await page.getByLabel("Contact detail").fill("updated." + email);
-    await page.getByRole("button", { name: "Save contact" }).click();
+    await page.getByRole("form").filter({ has: page.getByLabel("Contact detail") }).getByRole("button", { name: "Save contact" }).click();
     await expect(page.getByText("Email: updated." + email)).toBeVisible();
 
     await page.getByLabel("Customer name").fill(renamedOrganization);
@@ -66,7 +65,7 @@ test.describe("G2 production-built CRM workflow", () => {
     await page.goto("/deals");
     await expect(page.getByRole("heading", { name: "Deals", exact: true })).toBeVisible();
     await page.getByLabel("Deal name").first().fill(deal);
-    await page.getByLabel("Customer").selectOption({ label: organization });
+    await page.getByLabel("Customer").selectOption({ label: renamedOrganization });
     await page.getByRole("button", { name: "Save deal" }).click();
     await expect(page.getByRole("heading", { name: deal })).toBeVisible();
     await page.getByLabel("Deal name").last().fill(updatedDeal);

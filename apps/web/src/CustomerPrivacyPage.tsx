@@ -50,12 +50,12 @@ export function CustomerPrivacyPage({
           ? "No privacy cases were found for this Party reference."
           : `${response.privacyCases.length} privacy case${response.privacyCases.length === 1 ? "" : "s"} loaded.`,
       );
-      queueMicrotask(() => resultsHeadingRef.current?.focus());
+      requestAnimationFrame(() => requestAnimationFrame(() => resultsHeadingRef.current?.focus()));
     } catch (caught) {
       setCases([]);
       setError(customerPrivacyMessageForError(caught));
       setAnnouncement("Privacy cases could not be loaded.");
-      queueMicrotask(() => errorHeadingRef.current?.focus());
+      requestAnimationFrame(() => requestAnimationFrame(() => errorHeadingRef.current?.focus()));
     } finally {
       setLoading(false);
     }
@@ -82,12 +82,12 @@ export function CustomerPrivacyPage({
       }
       setSelectedCase(response.privacyCase);
       setAnnouncement("Privacy case details loaded.");
-      queueMicrotask(() => detailHeadingRef.current?.focus());
+      requestAnimationFrame(() => requestAnimationFrame(() => detailHeadingRef.current?.focus()));
     } catch (caught) {
       setSelectedCase(null);
       setError(customerPrivacyMessageForError(caught));
       setAnnouncement("Privacy case details could not be loaded.");
-      queueMicrotask(() => errorHeadingRef.current?.focus());
+      requestAnimationFrame(() => requestAnimationFrame(() => errorHeadingRef.current?.focus()));
     } finally {
       setLoadingDetail(false);
     }
