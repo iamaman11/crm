@@ -91,3 +91,12 @@ test("authenticated non-email service identity receives an isolated pilot worksp
   const membership = database.queries.find(q => q.sql.includes("FROM crm_users"));
   assert.deepEqual(membership.values, ["crm-e2e@local.invalid"]);
 });
+
+test("missing or malformed Access JWT is rejected with Static Assets routing", async () => {
+  const database = db();
+  const missing = await crmFetch(url("/api/session"), { DB: database }, {});
+  assert.equal(missing.status, 401);
+  const malformed = await crmFetch(url("/api/session", { headers: { "Cf-Access-Jwt-Assertion": "not.a.jwt" } }), { DB: database }, {});
+  assert.equal(malformed.status, 401);
+  assert.equal(database.queries.length, 0);
+});

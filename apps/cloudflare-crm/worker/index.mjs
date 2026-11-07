@@ -1,4 +1,11 @@
 // Small Cloudflare CRM pilot. The only data store is D1.
+import { createRemoteJWKSet, jwtVerify } from "jose";
+
+// Static Assets route through an internal Worker, so ctx.access is unavailable there.
+// Read the signed Access JWT instead; no second login system is needed.
+const ACCESS_ISSUER = "https://royal-limit-ea43.cloudflareaccess.com";
+const ACCESS_AUDIENCE = "e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
+const ACCESS_KEYS = createRemoteJWKSet(new URL(ACCESS_ISSUER + "/cdn-cgi/access/certs"));
 export const BUILD_SHA = "development";
 
 const models = {
@@ -49,12 +56,25 @@ async function requestBody(request) {
   try { return JSON.parse(text); } catch { return null; }
 }
 
-async function actorFor(ctx, db) {
-  if (!ctx.access) return null;
-  const identity = await ctx.access.getIdentity();
-  // Cloudflare Access service tokens have no human email. They share one empty pilot workspace.
-  // No test identity is accepted unless Access itself authenticated the request.
-  const email = identity?.email?.toLowerCase() || "crm-e2e@local.invalid";
+async function actorFor(ctx, db, request) {
+  let email;
+  if (ctx.access) {
+    const identity = await ctx.access.getIdentity();
+    email = identity?.email?.toLowerCase();
+  } else {
+    const token = request.headers.get("cf-access-jwt-assertion");
+    if (!token) return null;
+    try {
+      const { payload } = await jwtVerify(token, ACCESS_KEYS, {
+        issuer: ACCESS_ISSUER, audience: ACCESS_AUDIENCE,
+      });
+      email = typeof payload.email === "string" ? payload.email.toLowerCase() : null;
+    } catch {
+      return null;
+    }
+  }
+  // The two existing Access service tokens use one dedicated test workspace.
+  email ||= "crm-e2e@local.invalid";
   const user = await db.prepare(
     "SELECT tenant_id, role FROM crm_users WHERE email = ? AND active = 1"
   ).bind(email).first();
@@ -141,7 +161,7 @@ export async function crmFetch(request, env, ctx) {
     } else if (!env.DB) {
       response = reply({ error: "Database unavailable" }, 503);
     } else {
-      const actor = await actorFor(ctx, env.DB);
+      const actor = await actorFor(ctx, env.DB, request);
       if (!actor) response = reply({ error: "Authentication required" }, ctx.access ? 403 : 401);
       else if (url.pathname === "/api/session" && request.method === "GET")
         response = reply({ authenticated: true, role: actor.role });
