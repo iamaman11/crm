@@ -223,6 +223,42 @@ jobs:
           python -m unittest -v tests.test_pilot_deployment
           bash -n deploy/{migrate,backup,restore}.sh
           docker compose --env-file deploy/.env.example -f deploy/compose.yaml config --quiet
+      - name: G3 live PostgreSQL migration and isolated recovery drill
+        env:
+          COMPOSE_PROJECT_NAME: crm-g3-ci-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from secrets import token_hex
+          source = Path("deploy/.env.example").read_text()
+          source = source.replace("REPLACE_WITH_RANDOM_64_HEX", token_hex(32))
+          Path("deploy/.env").write_text(source)
+          Path("deploy/.env").chmod(0o600)
+          PY
+          restored_project="crm-restore-${{ github.run_id }}"
+          compose=(docker compose --env-file deploy/.env -f deploy/compose.yaml)
+          cleanup() {
+            docker compose --project-name "$restored_project" --env-file deploy/.env -f deploy/compose.yaml down -v || true
+            "${compose[@]}" down -v || true
+            rm -f deploy/.env
+            rm -rf "$RUNNER_TEMP/g3-recovery"
+          }
+          trap cleanup EXIT
+          "${compose[@]}" up -d --wait database
+          "${compose[@]}" run --rm migrate
+          "${compose[@]}" run --rm migrate
+          # A unique CI-only sentinel proves data persistence; no demo fixtures are installed.
+          "${compose[@]}" exec -T database psql -X -v ON_ERROR_STOP=1 -U postgres -d crm -c             "INSERT INTO crm.tenants (tenant_id, status, data_region) VALUES ('g3-recovery-sentinel', 'active', 'eu-central')"
+          bash deploy/backup.sh "$RUNNER_TEMP/g3-recovery"
+          archives=("$RUNNER_TEMP/g3-recovery"/crm-*.dump)
+          test "${#archives[@]}" -eq 1
+          bash deploy/restore.sh "${archives[0]}" "$restored_project"
+          restored=(docker compose --project-name "$restored_project" --env-file deploy/.env -f deploy/compose.yaml)
+          restored_rows="$("${restored[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c             "SELECT count(*) FROM crm.tenants WHERE tenant_id = 'g3-recovery-sentinel'")"
+          test "$restored_rows" = "1"
+          restored_migrations="$("${restored[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c             "SELECT count(*) FROM public.crm_schema_migrations")"
+          test "$restored_migrations" -ge 20
       - name: Enforce immutable module publication compatibility
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}

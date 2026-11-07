@@ -41,6 +41,14 @@ class PilotDeploymentSourceTests(unittest.TestCase):
             self.assertIn(item, script)
         self.assertNotIn("DROP SCHEMA", script)
 
+    def test_governance_runs_real_isolated_postgres_restore(self) -> None:
+        governance = (ROOT / ".github/workflows/governance.yml").read_text()
+        for item in ("G3 live PostgreSQL migration and isolated recovery drill",
+                     "run --rm migrate", "bash deploy/backup.sh",
+                     "bash deploy/restore.sh", "g3-recovery-sentinel",
+                     "crm_schema_migrations", "down -v"):
+            self.assertIn(item, governance)
+
     def test_recovery_never_targets_existing_live_state(self) -> None:
         restore = (DEPLOY / "restore.sh").read_text()
         for item in ("crm-restore-", "Refusing to restore", "sha256sum -c",
