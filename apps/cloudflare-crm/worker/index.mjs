@@ -179,7 +179,7 @@ export async function crmFetch(request, env, ctx) {
       if (!actor) response = problem("AUTH_REQUIRED", ctx.access ? 403 : 401);
       else if (url.pathname === "/api/session" && request.method === "GET")
         response = reply({ authenticated: true, role: actor.role });
-      else if (request.method === "GET" && /^\\/api\\/customer360\\/[a-f0-9-]{36}$/.test(url.pathname)) {
+      else if (request.method === "GET" && url.pathname.startsWith("/api/customer360/")) {
         const customerId = url.pathname.slice("/api/customer360/".length);
         if (!uuid.test(customerId)) response = problem("NOT_FOUND", 404);
         else {
