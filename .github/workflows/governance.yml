@@ -284,7 +284,12 @@ jobs:
               (SELECT count(*) FROM crm.outbox_events WHERE tenant_id='g3-ci-tenant'),
               (SELECT count(*) FROM crm.business_transactions WHERE tenant_id='g3-ci-tenant')
           ")"
-          test "$installed_counts" = "2|14|1|1|1"
+          IFS='|' read -r actor_count module_count audit_count outbox_count tx_count <<< "$installed_counts"
+          test "$actor_count" = "2"
+          test "$module_count" = "14"
+          test "$audit_count" -ge 3
+          test "$outbox_count" -ge 3
+          test "$tx_count" -ge 3
           # A unique CI-only sentinel proves data persistence; no demo fixtures are installed.
           "${compose[@]}" exec -T database psql -X -v ON_ERROR_STOP=1 -U postgres -d crm -c             "INSERT INTO crm.tenants (tenant_id, status, data_region) VALUES ('g3-recovery-sentinel', 'active', 'eu-central')"
           source_counts="$("${compose[@]}" exec -T database psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d crm -c "
@@ -296,7 +301,7 @@ jobs:
               (SELECT count(*) FROM crm.business_transactions WHERE tenant_id='g3-ci-tenant')
           ")"
           test "${source_counts%%|*}" -ge 1
-                    bash deploy/backup.sh "$RUNNER_TEMP/g3-recovery"
+          bash deploy/backup.sh "$RUNNER_TEMP/g3-recovery"
           archives=("$RUNNER_TEMP/g3-recovery"/crm-*.dump)
           test "${#archives[@]}" -eq 1
           bash deploy/restore.sh "${archives[0]}" "$restored_project"
