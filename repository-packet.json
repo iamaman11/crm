@@ -42,7 +42,8 @@
     "packages/client/src/gateway.test.ts",
     "apps/web/e2e/customer-privacy.spec.ts",
     "apps/web/src/CustomerPrivacyPage.tsx",
-    "scripts/run_customer_privacy_operations.sh"
+    "scripts/run_customer_privacy_operations.sh",
+    "tests/test_customer_privacy_operations.py"
   ],
   "forbidden_paths": [
     "modules/**",

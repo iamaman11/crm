@@ -65,7 +65,7 @@ test.describe("G2 production-built CRM workflow", () => {
     await page.goto("/deals");
     await expect(page.getByRole("heading", { name: "Deals", exact: true })).toBeVisible();
     await page.getByLabel("Deal name").first().fill(deal);
-    await page.getByLabel("Customer").selectOption({ label: renamedOrganization });
+    await page.getByLabel("Customer").selectOption({ label: organization });
     await page.getByRole("button", { name: "Save deal" }).click();
     await expect(page.getByRole("heading", { name: deal })).toBeVisible();
     await page.getByLabel("Deal name").last().fill(updatedDeal);
