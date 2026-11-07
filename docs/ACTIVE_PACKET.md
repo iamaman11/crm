@@ -35,9 +35,9 @@ Isolated experiment for #321/#322: validate an understandable native Cloudflare 
 - `affected-scope-policy.json`
 - `.github/workflows/product-plane.yml`
 - `tests/test_workspace_analysis.py`
-- `tests/test_architecture_documentation_consistency.py`
 - `tests/test_repository_navigation.py`
 - `apps/cloudflare-crm/scripts/deploy.mjs`
+- `tests/test_architecture_documentation_consistency.py`
 
 ## Forbidden paths
 
