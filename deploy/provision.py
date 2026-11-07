@@ -139,7 +139,7 @@ def publish_catalog(modules: dict[str, dict]) -> set[str]:
             f"{sql_hex(sha256(raw).digest())}, {quoted(raw.decode())}::jsonb, "
             "clock_timestamp(), 'crm-pilot-manifest-compiler') ON CONFLICT DO NOTHING;"
         )
-    installed_contracts: set[tuple[str, str]] = set()
+    installed_contracts: dict[tuple[str, str], str] = {}
     for definition in definitions:
         owner = definition["owner_module_id"]
         if owner not in modules:
@@ -162,7 +162,7 @@ def publish_catalog(modules: dict[str, dict]) -> set[str]:
         unique = (cap_id, version)
         if unique in installed_contracts:
             raise ValueError("Duplicate production capability")
-        installed_contracts.add(unique)
+        installed_contracts[unique] = "|".join((owner, manifest["version"], inp.hex(), out.hex(), service, method))
         def as_boolean(value: bool) -> str:
             return "true" if value else "false"
         result.append(
@@ -219,13 +219,15 @@ def publish_catalog(modules: dict[str, dict]) -> set[str]:
         )
         if actual != digest_bytes(canonical(manifest)):
             raise ValueError(f"Published module identity mismatch: {module_id}")
-    for cap_id, version in installed_contracts:
+    for (cap_id, version), expected in installed_contracts.items():
         actual = run_sql(
-            "SELECT count(*) FROM crm.capability_registry WHERE "
+            "SELECT owner_module_id || '|' || owner_module_version || '|' || "
+            "encode(input_descriptor_hash, 'hex') || '|' || encode(output_descriptor_hash, 'hex') || '|' || "
+            "service_name || '|' || method_name FROM crm.capability_registry WHERE "
             f"capability_id={quoted(cap_id)} AND capability_version={quoted(version)};"
         )
-        if actual != "1":
-            raise ValueError(f"Published capability missing: {cap_id}")
+        if actual != expected:
+            raise ValueError(f"Published capability identity mismatch: {cap_id}")
     if run_sql(
         "SELECT count(*) FROM crm.capability_registry WHERE "
         f"capability_id={quoted(BOOTSTRAP_CAPABILITY)};"
@@ -274,6 +276,15 @@ def create_tenant(tenant: str, actor: str, operators: list[dict],
             )
             if observed != f"active:{manifest['version']}":
                 raise ValueError(f"Installed module differs from authoritative manifest: {module_id}")
+        for cap_id in {cap for user in operators for cap in user["capabilities"]}:
+            for _, version in registered_versions(cap_id):
+                found = run_sql(
+                    "SELECT enabled FROM crm.tenant_capability_grants "
+                    f"WHERE tenant_id={quoted(tenant)} AND capability_id={quoted(cap_id)} "
+                    f"AND capability_version={quoted(version)};"
+                )
+                if found != "t":
+                    raise ValueError("Persisted pilot capability grant is missing or disabled")
         print(f"Existing tenant {tenant}: verified, no data changed")
         return
 
@@ -369,15 +380,15 @@ def create_tenant(tenant: str, actor: str, operators: list[dict],
             f"{quoted(version)}, 'active', 1, {sql_hex(install_digest)}, {quoted(tx)});"
         )
     for cap_id in sorted({cap for operator in operators for cap in operator["capabilities"]}):
-        version = next(version for capability, version in registered_versions(cap_id))
-        grant_digest = sha256(canonical({"tenant": tenant, "capability": cap_id, "version": version})).digest()
-        statements.append(
-            "INSERT INTO crm.tenant_capability_grants "
-            "(tenant_id, capability_id, capability_version, grant_digest, enabled, "
-            "last_business_transaction_id) VALUES "
-            f"({quoted(tenant)}, {quoted(cap_id)}, {quoted(version)}, "
-            f"{sql_hex(grant_digest)}, true, {quoted(tx)});"
-        )
+        for _, version in registered_versions(cap_id):
+            grant_digest = sha256(canonical({"tenant": tenant, "capability": cap_id, "version": version})).digest()
+            statements.append(
+                "INSERT INTO crm.tenant_capability_grants "
+                "(tenant_id, capability_id, capability_version, grant_digest, enabled, "
+                "last_business_transaction_id) VALUES "
+                f"({quoted(tenant)}, {quoted(cap_id)}, {quoted(version)}, "
+                f"{sql_hex(grant_digest)}, true, {quoted(tx)});"
+            )
     statements.append("COMMIT;")
     run_sql("\n".join(statements))
     print(f"New tenant {tenant}: provisioned active actors and {len(modules)} published modules")

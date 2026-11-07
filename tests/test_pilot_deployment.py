@@ -30,7 +30,9 @@ class PilotDeploymentSourceTests(unittest.TestCase):
         for marker in ("published-contracts.json", "/manifests",
                        "crm.business_transactions", "crm.audit_records",
                        "crm.outbox_events", "crm.actors", "crm.module_versions",
-                       "crm.module_installations", "crm.tenant_capability_grants"):
+                       "crm.module_installations", "crm.tenant_capability_grants",
+                       "Published capability identity mismatch",
+                       "Persisted pilot capability grant is missing or disabled"):
             self.assertIn(marker, provision)
         for forbidden in ("database/tests/", "seed-demo", "crm_app_test"):
             self.assertNotIn(forbidden, provision)
