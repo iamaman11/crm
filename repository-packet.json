@@ -14,9 +14,10 @@
   ],
   "allowed_paths": [
     ".dockerignore",
+    ".github/workflows/governance.yml",
     ".gitignore",
     "affected-scope-policy.json",
-    ".github/workflows/governance.yml",
+    "crates/crm-application-runtime/src/lib.rs",
     "deploy/.env.example",
     "deploy/Caddyfile",
     "deploy/Dockerfile.api",
@@ -25,12 +26,14 @@
     "deploy/backup.sh",
     "deploy/compose.yaml",
     "deploy/migrate.sh",
+    "deploy/provision.py",
     "deploy/restore.sh",
-    "repository-packet.json",
     "docs/ACTIVE_PACKET.md",
-    "tests/test_repository_navigation.py",
+    "repository-packet.json",
+    "services/crm-api/src/main.rs",
     "tests/test_architecture_documentation_consistency.py",
     "tests/test_pilot_deployment.py",
+    "tests/test_repository_navigation.py",
     "tests/test_workspace_analysis.py"
   ],
   "forbidden_paths": [
@@ -46,7 +49,7 @@
   "deliverables": [
     "built web served via Caddy HTTPS with existing /auth, /v1 and gRPC-web proxy on one origin",
     "one Docker Compose package with private crm-api and persistent PostgreSQL plus one-shot schema migration",
-    "first tenant, active user actor and correct module installation without importing test fixture (NOT IMPLEMENTED YET)",
+    "one-shot first tenant, active operator actors, published production capability and module installation (IMPLEMENTED, PHYSICAL ACCEPTANCE PENDING)",
     "idempotent checksum-verified migrations and non-superuser runtime PostgreSQL role",
     "operator environment, backup and separate fresh-environment restore commands",
     "exact-SHA installation, browser and recovery evidence (PENDING)"

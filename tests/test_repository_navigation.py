@@ -31,7 +31,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"], {"ref": "main", "sha": "4ec3b416d77857347f797f185ad3981a95219b04"})
         self.assertEqual(packet["tracking_issues"], [313, 310])
-        self.assertTrue({"deploy/compose.yaml", "deploy/migrate.sh", "deploy/backup.sh",
+        self.assertTrue({"deploy/compose.yaml", "deploy/migrate.sh", "deploy/backup.sh", "deploy/provision.py",
                          "deploy/restore.sh", "docs/ACTIVE_PACKET.md"}.issubset(
                              set(packet["allowed_paths"])))
         for path in (".github/actions/**", "modules/**", "contracts/**", "proto/**"):
