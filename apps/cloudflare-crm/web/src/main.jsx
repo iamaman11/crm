@@ -14,6 +14,8 @@ const features = {
   ["customer_id","Клиент","customer"],["title","Что сделать","text"],["due_date","Срок","date"],
   ["status","Статус","select",["open","done"]]]},
 };
+const dealStages=["new","qualified","proposal","won","lost"];
+const number=value=>new Intl.NumberFormat("ru-RU",{maximumFractionDigits:2}).format(Number(value)||0);
 const names={person:"Частное лицо",organization:"Компания",new:"Новая",qualified:"В работе",
  proposal:"Предложение",won:"Выиграна",lost:"Закрыта",open:"В работе",done:"Готово"};
 async function api(url, options={}) {
@@ -23,6 +25,7 @@ async function api(url, options={}) {
 }
 function App(){
  const [tab,setTab]=useState("customers");
+ const [dealView,setDealView]=useState("table");
  const [items,setItems]=useState({customers:[],contacts:[],deals:[],tasks:[]});
  const [search,setSearch]=useState("");
  const [form,setForm]=useState(null);
@@ -48,6 +51,17 @@ function App(){
   try{
    await api(tab+(editing?"/"+editing:""),{method:editing?"PATCH":"POST",body:JSON.stringify(form)});
    setForm(null);await reload();setMessage("Сохранено");setError(false);
+  }catch(e){setMessage(e.message);setError(true);}
+  finally{setBusy(false);}
+ }
+ async function changeDealStage(item,stage){
+  if(stage===item.stage)return;
+  setBusy(true);
+  try{
+   await api("deals/"+item.id,{method:"PATCH",body:JSON.stringify({
+    customer_id:item.customer_id,title:item.title,stage,amount:item.amount
+   })});
+   await reload();setMessage("Этап обновлён");setError(false);
   }catch(e){setMessage(e.message);setError(true);}
   finally{setBusy(false);}
  }
@@ -77,8 +91,31 @@ function App(){
    {message&&<div role="status" className={error?"notice error":"notice"}>{message}</div>}
    <section className="panel"><div className="toolbar"><input aria-label="Поиск" placeholder="Поиск" value={search} onChange={e=>setSearch(e.target.value)}/>
     <button disabled={tab!=="customers"&&!items.customers.length} onClick={()=>open()}>+ Добавить {feature.one}</button></div>
+    {tab==="deals"&&<div className="view-switch" role="group" aria-label="Вид сделок">
+     <button className={dealView==="table"?"active":"ghost"} aria-pressed={dealView==="table"} onClick={()=>setDealView("table")}>Таблица</button>
+     <button className={dealView==="board"?"active":"ghost"} aria-pressed={dealView==="board"} onClick={()=>setDealView("board")}>Воронка</button>
+    </div>}
     {tab!=="customers"&&!items.customers.length&&<p>Сначала добавьте клиента.</p>}
     {loading?<p className="empty">Загрузка…</p>:!rows.length?<p className="empty">{search?"Ничего не найдено":"Пока записей нет"}</p>:
+     tab==="deals"&&dealView==="board"?<div className="deal-board" aria-label="Воронка продаж">
+      {dealStages.map(stage=>{
+       const deals=rows.filter(row=>row.stage===stage);
+       return <section key={stage} className="deal-column" aria-label={names[stage]}>
+        <h3>{names[stage]} <small>{deals.length}</small></h3>
+        <p className="deal-total">Сумма: {number(deals.reduce((sum,deal)=>sum+Number(deal.amount),0))}</p>
+        {deals.map(deal=><article key={deal.id} className="deal-card">
+         <strong>{deal.title}</strong>
+         <p>{customerName(deal.customer_id)}</p>
+         <p className="deal-amount">{number(deal.amount)}</p>
+         <label>Этап сделки <select aria-label="Этап сделки" disabled={busy} value={deal.stage}
+          onChange={e=>changeDealStage(deal,e.target.value)}>
+          {dealStages.map(value=><option key={value} value={value}>{names[value]}</option>)}
+         </select></label>
+         {buttons(deal)}
+        </article>)}
+       </section>;
+      })}
+     </div>:
      <><div className="table-scroll"><table><thead><tr>{feature.fields.map(([key,label])=><th key={key}>{label}</th>)}<th>Действия</th></tr></thead>
       <tbody>{rows.map(row=><tr key={row.id}>{feature.fields.map(([key])=><td key={key}>{format(key,row[key])}</td>)}<td>{buttons(row)}</td></tr>)}</tbody></table></div>
       <div className="mobile">{rows.map(row=><article key={row.id}><b>{row[feature.primary]}</b>

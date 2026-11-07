@@ -118,6 +118,18 @@ try {
   await create("Контакты", "контакт", { "Клиент": { label: customer }, "Имя": contact, "Электронная почта": "demo@example.test" }, contact);
   await create("Сделки", "сделку", { "Клиент": { label: customer }, "Название сделки": deal, "Этап": "new", "Сумма": "120" }, deal);
   await create("Задачи", "задачу", { "Клиент": { label: customer }, "Что сделать": task, "Статус": "open" }, task);
+  await tab("Сделки").click();
+  await page.getByRole("button", { name: "Воронка" }).click();
+  const card = page.locator(".deal-card").filter({ hasText: deal });
+  await card.getByRole("combobox", { name: "Этап сделки" }).selectOption("qualified");
+  await page.getByRole("status").getByText("Этап обновлён").waitFor({ timeout: 12000 });
+  await page.reload();
+  await tab("Сделки").click();
+  await page.getByRole("button", { name: "Воронка" }).click();
+  const savedStage = await page.locator(".deal-card").filter({ hasText: deal })
+    .getByRole("combobox", { name: "Этап сделки" }).inputValue();
+  assert.equal(savedStage, "qualified", "pipeline stage survives browser reload");
+  await page.getByRole("button", { name: "Таблица" }).click();
   await edit("Сделки", deal, "Этап", "won", deal);
   await (await rowFor(deal)).getByText("Выиграна", { exact: true }).waitFor();
   await edit("Задачи", task, "Статус", "done", task);
