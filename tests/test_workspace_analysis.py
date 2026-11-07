@@ -466,9 +466,26 @@ jobs:
             fresh["runtime_fanin"]["counts"],
             {"all": 53, "production": 52, "test_only": 1, "build": 0},
         )
-        self.assertEqual(
-            fresh["permanent_gates"], committed["permanent_gates"]
+        # Preserve the immutable Step22 baseline. Allow only the explicitly
+        # governed addition of a G3 packaging check in the existing Governance
+        # workflow (no new permanent workflow or job and no other gate changes).
+        expected_gates = json.loads(json.dumps(committed["permanent_gates"]))
+        governance = next(
+            row for row in expected_gates["workflow_rows"]
+            if row[0] == ".github/workflows/governance.yml"
         )
+        governance[4] += 1  # one mandatory deployment validation step
+        governance[5] += 12  # 6 precise path filters for both PR and push
+        job = next(
+            row for row in expected_gates["job_rows"]
+            if row[0] == ".github/workflows/governance.yml#governance"
+        )
+        job[2] += 1
+        self.assertEqual(fresh["permanent_gates"], expected_gates)
+        governance_source = (ROOT / ".github/workflows/governance.yml").read_text()
+        self.assertIn("deploy/**", governance_source)
+        self.assertIn("python -m unittest -v tests.test_pilot_deployment", governance_source)
+        self.assertIn("docker compose --env-file deploy/.env.example", governance_source)
 
         current_runtime_ids = {
             row[0] for row in fresh["runtime_fanin"]["rows"]
