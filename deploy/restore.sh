@@ -28,8 +28,8 @@ existing="$("${c[@]}" exec -T database psql -U postgres -d crm -qAt -c \
 # Logical archives omit cluster roles. Reapply migration/role setup in the isolated copy.
 "${c[@]}" run --rm migrate
 runtime_role="$("${c[@]}" exec -T database psql -X -U postgres -d crm -qAt -v ON_ERROR_STOP=1 -c \
-  "SELECT rolname || ':' || rolcanlogin || ':' || rolbypassrls FROM pg_roles WHERE rolname = 'crm_runtime'")"
-[[ "$runtime_role" == "crm_runtime:t:f" ]] || {
+  "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'crm_runtime' AND rolcanlogin AND NOT rolbypassrls)")"
+[[ "$runtime_role" == "t" ]] || {
   echo "Restored runtime role is absent or violates LOGIN/NOBYPASSRLS" >&2
   exit 4
 }
