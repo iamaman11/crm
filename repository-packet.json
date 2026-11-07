@@ -24,6 +24,7 @@
     "deploy/Dockerfile.api",
     "deploy/Dockerfile.web",
     "deploy/README.md",
+    "deploy/release_evidence.py",
     "deploy/backup.sh",
     "deploy/compose.yaml",
     "deploy/migrate.sh",
@@ -31,6 +32,7 @@
     "deploy/restore.sh",
     "deploy/smoke_business.py",
     "deploy/smoke_https.py",
+    "deploy/upgrade_drill.sh",
     "docs/ACTIVE_PACKET.md",
     "repository-packet.json",
     "services/crm-api/src/main.rs",
@@ -57,7 +59,7 @@
     "one-shot first tenant, active operator actors, published production capability and module installation (IMPLEMENTED, PHYSICAL ACCEPTANCE PENDING)",
     "idempotent checksum-verified migrations and non-superuser runtime PostgreSQL role",
     "operator environment, backup and separate fresh-environment restore commands",
-    "exact-SHA installed browser customer/contact/deal/task workflow, second-tenant denial, API restart and independently restored-app readback (CI PENDING)"
+    "previous exact-head 24/24 CI: installed and independently restored browser CRM; new head: local-CA HTTPS verification, OCI source/image provenance and isolated additive migration/recreation drill (CI PENDING)"
   ],
   "required_checks": [
     "Affected Scope CI",
