@@ -8,12 +8,16 @@ import {
 import {
   GovernedClient,
   GovernedCustomerPrivacyClient,
+  GovernedCrmClient,
   GovernedMetadataClient,
   ProductClientError,
   type SearchHit,
   type SessionState,
 } from "@ultimate-crm/client";
 import { AppShell, FeedbackPanel, PageHeader } from "@ultimate-crm/ui";
+import { CustomersPage } from "./CustomersPage";
+import { DealsPage } from "./DealsPage";
+import { TasksPage } from "./TasksPage";
 import { AdminStudioPage } from "./AdminStudioPage";
 import { CustomerPrivacyPage } from "./CustomerPrivacyPage";
 import { createDevelopmentSessionStore } from "./developmentSession";
@@ -48,6 +52,10 @@ const DevelopmentRecordPage = import.meta.env.DEV
     })
   : null;
 const client = new GovernedClient({
+  baseUrl: window.location.origin,
+  sessionProvider: sessionStore,
+});
+const crmClient = new GovernedCrmClient({
   baseUrl: window.location.origin,
   sessionProvider: sessionStore,
 });
@@ -187,6 +195,15 @@ function RouteContent({
     );
   }
 
+  if (route.id === "customers") {
+    return <CustomersPage client={crmClient} capabilities={access.capabilities} />;
+  }
+  if (route.id === "deals") {
+    return <DealsPage client={crmClient} session={session} capabilities={access.capabilities} />;
+  }
+  if (route.id === "tasks") {
+    return <TasksPage client={crmClient} session={session} capabilities={access.capabilities} />;
+  }
   if (route.id === "search") {
     return <SearchPage />;
   }
@@ -215,8 +232,8 @@ function RouteContent({
     <>
       <PageHeader
         eyebrow="Phase 7"
-        title="Product shell foundation"
-        description="A typed product-plane boundary for Admin Studio, isolated UI extensions and expert CRM domain waves. Business invariants, authorization and authoritative state remain on the governed backend path."
+        title="Your CRM"
+        description="Choose Customers to manage people and organizations, Deals to track opportunities, or Tasks to complete everyday work."
       />
       <FeedbackPanel tone="success" title="Shell composition is active">
         Session state, permission-aware navigation, design-system primitives, governed typed clients and isolated UI-extension hosts are separate product-plane responsibilities.
@@ -252,6 +269,23 @@ function developmentAccessSnapshot(): NavigationAccessSnapshot {
   const capabilities = new Set<KnownProductCapability>();
   const knownCapabilities: readonly KnownProductCapability[] = [
     "search.global.query",
+    "parties.party.list",
+    "parties.party.get",
+    "parties.party.create",
+    "parties.party.update",
+    "accounts.account.list",
+    "accounts.account.create",
+    "contact-points.contact-point.list",
+    "contact-points.contact-point.create",
+    "contact-points.contact-point.update",
+    "sales.deal.list",
+    "sales.deal.create",
+    "sales.deal.update",
+    "sales.deal.advance_stage",
+    "activities.task.list",
+    "activities.task.create",
+    "activities.task.update",
+    "activities.task.complete",
     "customer_privacy.case.list",
     "customer_privacy.case.get",
     "metadata.activation.get",

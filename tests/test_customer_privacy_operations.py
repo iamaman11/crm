@@ -146,28 +146,26 @@ class CustomerPrivacyOperationsTests(unittest.TestCase):
         self.assertIn(
             'PRODUCT_PAGE_PATH="apps/web/src/CustomerPrivacyPage.tsx"', runner
         )
-        self.assertIn(
-            'EXPECTED_PRODUCT_PAGE_BLOB_SHA="aa0f2726eb5682eb97ea73a7a5136a99e6a01e50"',
-            runner,
-        )
+        page_source = (ROOT / "apps/web/src/CustomerPrivacyPage.tsx").read_bytes()
+        page_blob = hashlib.sha1(
+            f"blob {len(page_source)}\0".encode() + page_source
+        ).hexdigest()
+        self.assertIn(f'EXPECTED_PRODUCT_PAGE_BLOB_SHA="{page_blob}"', runner)
         self.assertIn('git hash-object "$PRODUCT_PAGE_PATH"', runner)
-        self.assertIn("unexpected accepted focus callback inventory", runner)
-        self.assertIn(
-            'source = path.read_text(encoding="utf-8")\npattern = re.compile',
-            runner,
-        )
-        self.assertIn(
-            "requestAnimationFrame(() => requestAnimationFrame", runner
-        )
         self.assertIn(
             'E2E_SPEC_PATH="apps/web/e2e/customer-privacy.spec.ts"', runner
         )
+        spec_source = (ROOT / "apps/web/e2e/customer-privacy.spec.ts").read_bytes()
+        spec_blob = hashlib.sha1(
+            f"blob {len(spec_source)}\0".encode() + spec_source
+        ).hexdigest()
+        self.assertIn(f'EXPECTED_E2E_SPEC_BLOB_SHA="{spec_blob}"', runner)
         self.assertIn('git hash-object "$E2E_SPEC_PATH"', runner)
-        self.assertIn(
-            "expected exactly one accepted ambiguous results-heading locator", runner
-        )
+        self.assertNotIn("requestAnimationFrame(() => requestAnimationFrame", runner)
+        self.assertNotIn("unexpected accepted focus callback inventory", runner)
+        self.assertNotIn("expected exactly one accepted ambiguous results-heading locator", runner)
         self.assertIn('playwright test e2e/customer-privacy.spec.ts', runner)
-        self.assertIn("restore_e2e_spec\nrestore_product_page", runner)
+        self.assertNotIn("restore_e2e_spec", runner)
         self.assertIn(
             'git diff --exit-code -- "$E2E_SPEC_PATH" "$PRODUCT_PAGE_PATH"',
             runner,

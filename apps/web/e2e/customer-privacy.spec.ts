@@ -20,7 +20,7 @@ test.describe("Customer Privacy product plane", () => {
       "1 privacy case loaded.",
     );
     await expect(
-      page.getByRole("heading", { name: "Privacy cases" }),
+      page.getByRole("heading", { name: "Privacy cases", exact: true }),
     ).toBeFocused();
 
     const caseButton = page.getByRole("button", {

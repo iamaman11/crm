@@ -7,6 +7,7 @@ export type SessionState =
       bearerToken: string;
       tenantId: string;
       actorLabel?: string;
+      actorId?: string;
       tenantLabel?: string;
       expiresAtUnixMillis?: number;
     }>
@@ -16,6 +17,7 @@ export type SessionState =
       csrfToken: string;
       tenantId: string;
       actorLabel?: string;
+      actorId?: string;
       tenantLabel?: string;
       expiresAtUnixMillis?: number;
     }>

@@ -8,7 +8,10 @@ export default defineConfig({
   workers: 1,
   reporter: [["html", { open: "never" }], ["list"]],
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: process.env.G2_E2E === "1"
+      ? "https://127.0.0.1:5174"
+      : "http://localhost:5173",
+    ignoreHTTPSErrors: process.env.G2_E2E === "1",
     trace: "on-first-retry",
   },
   projects: [

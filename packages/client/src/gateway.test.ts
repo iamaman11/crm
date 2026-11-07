@@ -188,7 +188,7 @@ describe("GovernedClient Governed Search API", () => {
       ownerModuleId: "crm.search",
       schemaId: "crm.search.v1.SearchResponse",
       schemaVersion: "1.0.0",
-      dataClass: "confidential",
+      dataClass: "personal",
       descriptorHash: responseHash,
       encoding: "protobuf",
       maximumSizeBytes: 1048576n,
@@ -361,7 +361,7 @@ describe("GovernedClient Governed Search API", () => {
 
     await expect(
       client.searchGlobal({ text: "", resourceTypes: [], pageSize: 10, cursor: "" })
-    ).rejects.toThrow('expected dataClass "confidential", got "public"');
+    ).rejects.toThrow('expected dataClass "personal", got "public"');
   });
 
   it("rejects response with wrong encoding", async () => {

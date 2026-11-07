@@ -2,12 +2,33 @@ import type { SessionState } from "@ultimate-crm/client";
 
 export type ProductRouteId =
   | "home"
+  | "customers"
+  | "deals"
+  | "tasks"
   | "search"
   | "customer-privacy"
   | "admin-studio"
   | "record-extension-proof";
 export type KnownProductCapability =
   | "search.global.query"
+  | "parties.party.list"
+  | "parties.party.create"
+  | "parties.party.update"
+  | "parties.party.get"
+  | "contact-points.contact-point.list"
+  | "contact-points.contact-point.get"
+  | "contact-points.contact-point.create"
+  | "contact-points.contact-point.update"
+  | "accounts.account.list"
+  | "accounts.account.create"
+  | "sales.deal.list"
+  | "sales.deal.create"
+  | "sales.deal.update"
+  | "sales.deal.advance_stage"
+  | "activities.task.list"
+  | "activities.task.create"
+  | "activities.task.update"
+  | "activities.task.complete"
   | "customer_privacy.case.list"
   | "customer_privacy.case.get"
   | "metadata.activation.get";
@@ -35,6 +56,15 @@ export const PRODUCT_ROUTES: readonly ProductRouteDefinition[] = [
     path: "/",
     label: "Home",
     authentication: "required",
+  },
+  {
+    id: "customers", path: "/customers", label: "Customers", authentication: "required", requiredCapability: "parties.party.list",
+  },
+  {
+    id: "deals", path: "/deals", label: "Deals", authentication: "required", requiredCapability: "sales.deal.list",
+  },
+  {
+    id: "tasks", path: "/tasks", label: "Tasks", authentication: "required", requiredCapability: "activities.task.list",
   },
   {
     id: "search",

@@ -15,6 +15,8 @@ docker run --rm --name "${CONTAINER_NAME}" -p "${E2E_DB_PORT}:5432" -e POSTGRES_
 
 API_PID=""
 VITE_PID=""
+PREVIEW_PID=""
+G2_TMP=""
 
 # Helper to recursively kill child processes of a target PID safely
 kill_descendants() {
@@ -33,11 +35,24 @@ kill_descendants() {
 
 # Ensure cleanup of background services and Docker container on exit
 cleanup() {
+  local exit_status=$?
+  if [ "$exit_status" -ne 0 ]; then
+    echo "E2E failed. Last PostgreSQL server errors:" >&2
+    docker logs --tail 160 "$CONTAINER_NAME" 2>&1 | tail -n 160 || true
+  fi
   echo "Cleaning up background services..."
   
   if [ -n "$API_PID" ]; then
     echo "Stopping crm-api process group recursively (PID: $API_PID)..."
     kill_descendants "$API_PID"
+  fi
+
+  if [ -n "$PREVIEW_PID" ]; then
+    kill_descendants "$PREVIEW_PID"
+  fi
+
+  if [ -n "$G2_TMP" ]; then
+    rm -rf "$G2_TMP"
   fi
 
   if [ -n "$VITE_PID" ]; then
@@ -62,7 +77,19 @@ until docker exec "${CONTAINER_NAME}" pg_isready -U "${E2E_DB_USER}" >/dev/null 
   echo "Waiting for ephemeral postgres to be ready..."
   sleep 0.5
 done
-echo "PostgreSQL is ready!"
+# postgres:16-alpine briefly starts an initdb-only server before restarting
+# the final TCP server. pg_isready during initdb is not reliable acceptance.
+until docker logs "${CONTAINER_NAME}" 2>&1 | grep -q 'PostgreSQL init process complete; ready for start up.'; do
+  if [ "$(docker inspect -f '{{.State.Running}}' "${CONTAINER_NAME}" 2>/dev/null)" != "true" ]; then
+    echo "PostgreSQL container exited during initialization." >&2
+    exit 1
+  fi
+  sleep 0.5
+done
+until docker exec "${CONTAINER_NAME}" pg_isready -U "${E2E_DB_USER}" >/dev/null 2>&1; do
+  sleep 0.5
+done
+echo "PostgreSQL final server is ready!"
 
 # Create test database
 docker exec -i "${CONTAINER_NAME}" psql -U "${E2E_DB_USER}" -c "CREATE DATABASE ${DB_NAME};"
@@ -98,19 +125,33 @@ DATABASE_URL="postgres://crm_app_test:crm_app_test@${E2E_DB_HOST}:${E2E_DB_PORT}
 ADMIN_DATABASE_URL="postgres://${E2E_DB_USER}:${E2E_DB_PASSWORD}@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
 cargo test -p crm-api --test seed_e2e_fixture
 
-# Start crm-api in background pointing to our ephemeral database
-echo "Starting crm-api service..."
-CRM_DATABASE_URL="postgres://crm_app_test:crm_app_test@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
-CRM_API_BEARER_TOKEN=phase6l-process-bearer-token-0123456789abcdef0123456789abcdef \
-CRM_API_ACTOR_ID=actor-a \
-CRM_API_TENANTS=tenant-a \
-CRM_BOOTSTRAP_ALLOW_PHASE6=true \
-CRM_CURSOR_SIGNING_KEY=phase6l-cursor-signing-key-0123456789abcdef0123456789abcdef \
-CRM_APPROVAL_SIGNING_KEY=phase6l-approval-signing-key-0123456789abcdef0123456789abcdef \
-CRM_GRPC_BIND=127.0.0.1:9090 \
-CRM_HTTP_BIND=127.0.0.1:8080 \
-./target/debug/crm-api &
-API_PID=$!
+# Start crm-api with the existing real owner modules, two isolated tenants
+# and the original pilot cookie identity mechanism. These credentials are
+# test-only and are never compiled into the browser.
+G2_PILOT_OPERATORS='[{"username":"alice","password":"01234567890123456789012345678901","actor_id":"actor-a","tenant_id":"tenant-a","capabilities":["parties.party.create","parties.party.get","parties.party.list","parties.party.update","accounts.account.create","accounts.account.list","contact-points.contact-point.create","contact-points.contact-point.get","contact-points.contact-point.list","contact-points.contact-point.update","sales.deal.create","sales.deal.get","sales.deal.list","sales.deal.update","sales.deal.advance_stage","activities.task.create","activities.task.get","activities.task.list","activities.task.update","activities.task.complete"]},{"username":"bob","password":"abcdefghijklmnopqrstuvwxyzABCDEF","actor_id":"actor-b","tenant_id":"tenant-b","capabilities":["parties.party.list","accounts.account.list","contact-points.contact-point.list","sales.deal.list","activities.task.list"]}]'
+start_api() {
+  local tenant_ids="tenant-a"
+  local pilot_operators=""
+  if [ "${1:-legacy}" = "g2" ]; then
+    tenant_ids="tenant-a,tenant-b"
+    pilot_operators="$G2_PILOT_OPERATORS"
+  fi
+  CRM_DATABASE_URL="postgres://crm_app_test:crm_app_test@${E2E_DB_HOST}:${E2E_DB_PORT}/${DB_NAME}" \
+  CRM_API_BEARER_TOKEN=phase6l-process-bearer-token-0123456789abcdef0123456789abcdef \
+  CRM_API_ACTOR_ID=actor-a \
+  CRM_API_TENANTS="$tenant_ids" \
+  CRM_BOOTSTRAP_ALLOW_PHASE6=true \
+  CRM_PUBLIC_ORIGIN=https://127.0.0.1:5174 \
+  CRM_PILOT_OPERATORS="$pilot_operators" \
+  CRM_CURSOR_SIGNING_KEY=phase6l-cursor-signing-key-0123456789abcdef0123456789abcdef \
+  CRM_APPROVAL_SIGNING_KEY=phase6l-approval-signing-key-0123456789abcdef0123456789abcdef \
+  CRM_GRPC_BIND=127.0.0.1:9090 \
+  CRM_HTTP_BIND=127.0.0.1:8080 \
+  ./target/debug/crm-api &
+  API_PID=$!
+}
+echo "Starting legacy single-tenant crm-api for existing negative tests..."
+start_api legacy
 
 # Wait for backend to be ready
 echo "Waiting for crm-api to be ready..."
@@ -166,4 +207,60 @@ echo "Running Playwright E2E tests..."
 pnpm --filter @ultimate-crm/web exec playwright install chromium
 pnpm --filter @ultimate-crm/web exec playwright test --config=playwright.config.ts
 
-echo "E2E tests passed successfully!"
+echo "Legacy E2E tests passed successfully!"
+
+# G2 must run the compiled browser with real cookies/CSRF, not the DEV session
+# used by older E2E tests. The self-signed HTTPS key exists only inside this
+# disposable CI workspace and is never stored in the repository.
+# The legacy negative test intentionally expects tenant-b to be forbidden.
+# Only after it passes, restart the same real API against the same DB with
+# two explicitly authorized pilot users to prove G2 tenant isolation.
+kill "$API_PID"
+wait "$API_PID" || true
+API_PID=""
+start_api g2
+for _ in $(seq 1 60); do
+  if curl --fail --silent http://127.0.0.1:8080/readyz >/dev/null 2>&1; then break; fi
+  if ! kill -0 "$API_PID" 2>/dev/null; then echo "G2 pilot crm-api did not start"; exit 1; fi
+  sleep 1
+done
+curl --fail --silent http://127.0.0.1:8080/readyz >/dev/null
+echo "Starting production-build G2 browser acceptance..."
+test -f apps/web/dist/index.html
+G2_TMP="$(mktemp -d)"
+openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+  -subj '/CN=127.0.0.1' -addext 'subjectAltName=IP:127.0.0.1' \
+  -keyout "$G2_TMP/key.pem" -out "$G2_TMP/cert.pem" >/dev/null 2>&1
+G2_RUN_ID="g2-$(date +%s)-${GITHUB_RUN_ID:-local}"
+export G2_E2E G2_RUN_ID
+G2_E2E=1
+G2_TEST_PHASE=before
+export G2_TEST_PHASE
+G2_TLS_KEY="$G2_TMP/key.pem" G2_TLS_CERT="$G2_TMP/cert.pem" \
+VITE_CRM_GRPC_WEB_TARGET=http://127.0.0.1:9090 \
+G2_E2E=1 pnpm --filter @ultimate-crm/web preview --host 127.0.0.1 --port 5174 --strictPort &
+PREVIEW_PID=$!
+
+for _ in $(seq 1 60); do
+  if curl --insecure --fail --silent https://127.0.0.1:5174/ >/dev/null 2>&1; then break; fi
+  if ! kill -0 "$PREVIEW_PID" 2>/dev/null; then echo "G2 preview exited"; exit 1; fi
+  sleep 1
+done
+curl --insecure --fail --silent https://127.0.0.1:5174/ >/dev/null
+pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts --reporter=list --retries=0
+
+echo "Restarting crm-api against the SAME PostgreSQL database..."
+kill "$API_PID"
+wait "$API_PID" || true
+API_PID=""
+start_api g2
+for _ in $(seq 1 60); do
+  if curl --fail --silent http://127.0.0.1:8080/readyz >/dev/null 2>&1; then break; fi
+  if ! kill -0 "$API_PID" 2>/dev/null; then echo "crm-api restart failed"; exit 1; fi
+  sleep 1
+done
+curl --fail --silent http://127.0.0.1:8080/readyz >/dev/null
+export G2_TEST_PHASE=after
+pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts --reporter=list --retries=0
+echo "G2 built-browser PostgreSQL, tenant and restart acceptance passed."
+

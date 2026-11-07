@@ -23,11 +23,9 @@ HTTP_PORT="${CRM_OPERATIONS_HTTP_PORT:-18080}"
 GRPC_PORT="${CRM_OPERATIONS_GRPC_PORT:-19090}"
 VITE_PORT=5173
 PRODUCT_PAGE_PATH="apps/web/src/CustomerPrivacyPage.tsx"
-EXPECTED_PRODUCT_PAGE_BLOB_SHA="aa0f2726eb5682eb97ea73a7a5136a99e6a01e50"
-PRODUCT_PAGE_BACKUP=""
+EXPECTED_PRODUCT_PAGE_BLOB_SHA="20d8258ae8f5b0a47a10177a4cece014e20a23a9"
 E2E_SPEC_PATH="apps/web/e2e/customer-privacy.spec.ts"
-EXPECTED_E2E_SPEC_BLOB_SHA="ca3981d978af9e5684349ae9ae203499c51d4fcb"
-E2E_SPEC_BACKUP=""
+EXPECTED_E2E_SPEC_BLOB_SHA="ce88badfc55604e121491235b672faff45ddbce7"
 API_PID=""
 VITE_PID=""
 
@@ -46,26 +44,8 @@ kill_tree() {
   kill -KILL "$target_pid" 2>/dev/null || true
 }
 
-restore_product_page() {
-  if [ -n "$PRODUCT_PAGE_BACKUP" ] && [ -f "$PRODUCT_PAGE_BACKUP" ]; then
-    cp "$PRODUCT_PAGE_BACKUP" "$PRODUCT_PAGE_PATH"
-    rm -f "$PRODUCT_PAGE_BACKUP"
-    PRODUCT_PAGE_BACKUP=""
-  fi
-}
-
-restore_e2e_spec() {
-  if [ -n "$E2E_SPEC_BACKUP" ] && [ -f "$E2E_SPEC_BACKUP" ]; then
-    cp "$E2E_SPEC_BACKUP" "$E2E_SPEC_PATH"
-    rm -f "$E2E_SPEC_BACKUP"
-    E2E_SPEC_BACKUP=""
-  fi
-}
-
 cleanup() {
   set +e
-  restore_e2e_spec
-  restore_product_page
   kill_tree "$VITE_PID"
   kill_tree "$API_PID"
   docker rm --force "$CONTAINER_NAME" >/dev/null 2>&1 || true
@@ -313,44 +293,13 @@ for _ in $(seq 1 "$OPS_PROBE_COUNT"); do
   fi
 done
 
-# The exact Step 20A page queues focus in the same microtask as React state
-# updates. The historical gate never reached Chromium because its seed failure
-# was masked by a pipeline without pipefail, so this timing was not previously
-# exercised. Verify the exact accepted source blob and normalize only the four
-# accessibility focus callbacks to run after the React commit. The source is
-# restored after the same permanent browser suite and a clean Git diff is
-# required; no product data, route, authorization, tenant or API behavior is
-# changed by this bounded operations-only preparation.
+# G2 permanently fixes focus after React commit. Verify that this is the
+# exact reviewed component and execute it unchanged (no temporary code patches).
 ACTUAL_PRODUCT_PAGE_BLOB_SHA="$(git hash-object "$PRODUCT_PAGE_PATH")"
 [ "$ACTUAL_PRODUCT_PAGE_BLOB_SHA" = "$EXPECTED_PRODUCT_PAGE_BLOB_SHA" ] || {
   echo "unexpected Customer Privacy page source blob: ${ACTUAL_PRODUCT_PAGE_BLOB_SHA}" >&2
   exit 1
 }
-PRODUCT_PAGE_BACKUP="$(mktemp "${RUNNER_TEMP:-/tmp}/customer-privacy-page.XXXXXX")"
-cp "$PRODUCT_PAGE_PATH" "$PRODUCT_PAGE_BACKUP"
-python - "$PRODUCT_PAGE_PATH" <<'PY'
-from pathlib import Path
-import re
-import sys
-
-path = Path(sys.argv[1])
-source = path.read_text(encoding="utf-8")
-pattern = re.compile(r"queueMicrotask\(\(\) => (\w+HeadingRef)\.current\?\.focus\(\)\);")
-matches = pattern.findall(source)
-expected = [
-    "resultsHeadingRef",
-    "errorHeadingRef",
-    "detailHeadingRef",
-    "errorHeadingRef",
-]
-if matches != expected:
-    raise SystemExit(f"unexpected accepted focus callback inventory: {matches!r}")
-source = pattern.sub(
-    r"requestAnimationFrame(() => requestAnimationFrame(() => \1.current?.focus()));",
-    source,
-)
-path.write_text(source, encoding="utf-8")
-PY
 
 echo "Starting product plane against the restored crm-api..."
 rm -rf apps/web/node_modules/.vite
@@ -366,34 +315,15 @@ for _ in $(seq 1 120); do
 done
 curl --fail --silent --show-error "http://127.0.0.1:${VITE_PORT}" >/dev/null
 
-# Step 20A committed this browser journey with one substring heading locator
-# that matches both the page H1 and the results H2 under current Playwright.
-# Verify the exact accepted source blob, disambiguate only that locator for the
-# bounded operations run, execute the same permanent spec path, then restore it
-# and prove both repository source files remained unchanged.
+# The accepted G2 spec permanently disambiguates its results heading.
+# Pin the exact source blob and execute it unchanged: no in-run code patches.
 ACTUAL_E2E_SPEC_BLOB_SHA="$(git hash-object "$E2E_SPEC_PATH")"
 [ "$ACTUAL_E2E_SPEC_BLOB_SHA" = "$EXPECTED_E2E_SPEC_BLOB_SHA" ] || {
   echo "unexpected Customer Privacy E2E source blob: ${ACTUAL_E2E_SPEC_BLOB_SHA}" >&2
   exit 1
 }
-E2E_SPEC_BACKUP="$(mktemp "${RUNNER_TEMP:-/tmp}/customer-privacy-spec.XXXXXX")"
-cp "$E2E_SPEC_PATH" "$E2E_SPEC_BACKUP"
-python - "$E2E_SPEC_PATH" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-source = path.read_text(encoding="utf-8")
-ambiguous = 'page.getByRole("heading", { name: "Privacy cases" }),' 
-exact = 'page.getByRole("heading", { name: "Privacy cases", exact: true }),' 
-if source.count(ambiguous) != 1:
-    raise SystemExit("expected exactly one accepted ambiguous results-heading locator")
-path.write_text(source.replace(ambiguous, exact), encoding="utf-8")
-PY
 pnpm --filter @ultimate-crm/web exec playwright test e2e/customer-privacy.spec.ts \
   --config=playwright.config.ts --timeout="$((OPS_BROWSER_TIMEOUT_SECONDS * 1000))"
-restore_e2e_spec
-restore_product_page
 git diff --exit-code -- "$E2E_SPEC_PATH" "$PRODUCT_PAGE_PATH"
 
 curl --fail --silent --show-error "http://127.0.0.1:${HTTP_PORT}/metrics" > "$METRICS_PATH"
