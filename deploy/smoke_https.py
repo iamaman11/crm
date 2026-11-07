@@ -44,6 +44,7 @@ def main() -> None:
     parser.add_argument("--env", type=Path, required=True)
     parser.add_argument("--origin", required=True)
     parser.add_argument("--local-insecure-tls", action="store_true")
+    parser.add_argument("--ca-bundle", type=Path, help="Explicit trusted local CA bundle")
     args = parser.parse_args()
     origin = args.origin.rstrip("/")
     if not origin.startswith("https://"):
@@ -51,6 +52,10 @@ def main() -> None:
     if args.local_insecure_tls and origin != "https://localhost":
         raise ValueError("Untrusted CI-only TLS is permitted solely on https://localhost")
     context = ssl.create_default_context()
+    if args.ca_bundle and args.local_insecure_tls:
+        raise ValueError("CA verification and insecure TLS modes are mutually exclusive")
+    if args.ca_bundle:
+        context.load_verify_locations(cafile=str(args.ca_bundle))
     if args.local_insecure_tls:
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
