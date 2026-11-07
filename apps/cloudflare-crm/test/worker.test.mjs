@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { crmFetch } from "../worker/index.mjs";
-import { modules, implementationOwners, ownerFiles } from "../shared/catalog.mjs";
+import { modules, readModels, implementationOwners, ownerFiles } from "../shared/catalog.mjs";
 const url = (path, init = {}) => new Request("https://crm.test" + path, init);
 const access = { access: { getIdentity: async () => ({ email: "user@example.test" }) } };
 function db() {
@@ -143,7 +143,7 @@ test("expected API failure has a stable code and request id", async () => {
 });
 
 test("all modules declare a discoverable owner; new features cannot silently reuse pilot-core", () => {
-  assert.deepEqual(Object.keys(implementationOwners).sort(), Object.keys(modules).sort());
+  assert.deepEqual(Object.keys(implementationOwners).sort(), [...Object.keys(modules),...Object.keys(readModels)].sort());
   for (const [name, owner] of Object.entries(implementationOwners)) {
     assert.ok(ownerFiles[owner], "missing source owner for "+name);
     if (!["customers","contacts","deals","tasks"].includes(name)) assert.notEqual(owner, "pilot-core");
