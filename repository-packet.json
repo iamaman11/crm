@@ -33,7 +33,8 @@
     "apps/cloudflare-crm/web/src/styles.css",
     "apps/cloudflare-crm/package.json",
     "apps/cloudflare-crm/vite.config.mjs",
-    "apps/cloudflare-crm/wrangler.jsonc"
+    "apps/cloudflare-crm/wrangler.jsonc",
+    "pnpm-workspace.yaml"
   ],
   "forbidden_paths": [
     "modules/**",
