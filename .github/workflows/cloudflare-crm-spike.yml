@@ -37,6 +37,11 @@ jobs:
       - name: Fast feature/schema contract doctor
         run: npm run doctor
         working-directory: apps/cloudflare-crm
+      - name: Locate module and error code without network
+        working-directory: apps/cloudflare-crm
+        run: |
+          npm run locate -- deals
+          npm run locate -- INVALID_INPUT
       - name: Run CRM API tests
         run: npm test
         working-directory: apps/cloudflare-crm
