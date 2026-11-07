@@ -231,8 +231,9 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           from secrets import token_hex
+          from re import sub
           source = Path("deploy/.env.example").read_text()
-          source = source.replace("REPLACE_WITH_RANDOM_64_HEX", token_hex(32))
+          source = sub("REPLACE_WITH_RANDOM_64_HEX", lambda _: token_hex(32), source)
           Path("deploy/.env").write_text(source)
           Path("deploy/.env").chmod(0o600)
           PY
