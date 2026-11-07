@@ -51,7 +51,7 @@ def main() -> None:
                       "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "crm",
                       "-c", "SELECT file_name || '|' || sha256 FROM public.crm_schema_migrations ORDER BY file_name")
     rows = records.splitlines()
-    if not rows or any(not re.fullmatch(r"[A-Za-z0-9_.-]+\\|[0-9a-f]{64}", row) for row in rows):
+    if not rows or any(not re.fullmatch(r"[A-Za-z0-9_.-]+\|[0-9a-f]{64}", row) for row in rows):
         raise ValueError("Invalid schema migration journal")
     data = {
         "schema": "crm.g3-installation-evidence/v1",
