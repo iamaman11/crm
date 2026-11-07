@@ -107,6 +107,12 @@ class PilotDeploymentSourceTests(unittest.TestCase):
             self.assertIn(marker, workflow)
         self.assertEqual(workflow.count("e2e/g2-crm.spec.ts"), 6)
 
+    def test_g3_builds_exact_pr_source_not_temporary_merge_commit(self) -> None:
+        workflow = (ROOT / ".github/workflows/governance.yml").read_text()
+        self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.sha }}", workflow)
+        self.assertIn('test "$(git rev-parse HEAD)" = "$expected_sha"', workflow)
+        self.assertIn('docker image rm "crm-pilot/$service:$source_sha"', workflow)
+
     def test_portable_image_bundle_and_recovered_no_build_stack(self) -> None:
         bundle = (DEPLOY / "image_bundle.py").read_text()
         ci = (ROOT / ".github/workflows/governance.yml").read_text()

@@ -197,6 +197,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          # Checkout the immutable PR source, not GitHub’s ephemeral merge SHA.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
@@ -263,6 +265,9 @@ jobs:
           Path("deploy/.env").write_text(source)
           Path("deploy/.env").chmod(0o600)
           PY
+          # Exact input SHA drives the built images and portability manifest.
+          expected_sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected_sha"
           restored_project="crm-restore-${{ github.run_id }}"
           compose=(docker compose --env-file deploy/.env -f deploy/compose.yaml)
           cleanup() {
@@ -337,6 +342,12 @@ jobs:
           python deploy/release_evidence.py --output "$RUNNER_TEMP/g3-after-two-versions.json"
           # Export and verify exact OCI image artifacts before independent recovery.
           python deploy/image_bundle.py export --directory "$RUNNER_TEMP/g3-images"
+          # Prove a real archive import: drop only the ephemeral export aliases,
+          # while keeping source containers and original image references alive.
+          source_sha="$(git rev-parse HEAD)"
+          for service in database migrate provision api web; do
+            docker image rm "crm-pilot/$service:$source_sha"
+          done
           python deploy/image_bundle.py verify --directory "$RUNNER_TEMP/g3-images"
           # Quiesce writers for a stable independent database archive.
           "${compose[@]}" stop web api
