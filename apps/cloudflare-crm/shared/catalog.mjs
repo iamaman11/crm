@@ -16,7 +16,10 @@ export const modules = {
 // Source ownership for fast, truthful developer navigation.
 // The original four small modules share pilot-core; each NEW expert module must
 // declare its own source owner and files before it can pass the doctor gate.
+// Read-only compositions do not own a database table; still require independent owners.
+export const readModels = { customer360: { title:"Карточка клиента", kind:"read", route:"customer360" } };
 export const implementationOwners = {
+ customer360:"customer360",
  customers:"pilot-core", contacts:"pilot-core", deals:"pilot-core", tasks:"pilot-core",
 };
 export const ownerFiles = {
@@ -24,6 +27,11 @@ export const ownerFiles = {
   ui:"web/src/main.jsx", api:"worker/index.mjs",
   validation:"worker/index.mjs:parseRecord", migration:"migrations",
   tests:"test/worker.test.mjs", browser:"e2e/live.mjs",
+ },
+ customer360:{
+  ui:"web/src/Customer360.jsx", api:"features/customer360/query.mjs",
+  validation:"features/customer360/query.mjs", migration:"migrations",
+  tests:"test/customer360.test.mjs", browser:"e2e/live.mjs",
  },
 };
 export const labels={person:"Частное лицо",organization:"Компания",new:"Новая",qualified:"В работе",

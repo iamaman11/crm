@@ -3,7 +3,7 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { modules, errors, implementationOwners, ownerFiles } from "../shared/catalog.mjs";
+import { modules, readModels, errors, implementationOwners, ownerFiles } from "../shared/catalog.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const started = performance.now();
 const read = name => readFileSync(resolve(root, name), "utf8");
@@ -17,9 +17,10 @@ const requested = process.argv.slice(2).join(" ").trim().toLowerCase();
 const alias = { client:"customers", customer:"customers", клиент:"customers",
   contact:"contacts", контакт:"contacts", deal:"deals", сделк:"deals",
   task:"tasks", задач:"tasks" };
-const moduleKey = Object.keys(modules).find(key =>
+const features = { ...modules, ...readModels };
+const moduleKey = Object.keys(features).find(key =>
   key === requested || key.includes(requested) && requested.length >= 2 ||
-  modules[key].title.toLowerCase().includes(requested) && requested.length >= 2) ||
+  features[key].title.toLowerCase().includes(requested) && requested.length >= 2) ||
   Object.entries(alias).find(([key]) => requested.startsWith(key))?.[1];
 if(requested) {
   const code = Object.keys(errors).find(key => key.toLowerCase() === requested || key.toLowerCase().includes(requested));
@@ -29,7 +30,7 @@ if(requested) {
     process.exitCode=2;
   } else {
     console.log(JSON.stringify({ event:"crm.locate", result:"FOUND", query:requested,
-      module:moduleKey||null, error:code||null, fields:moduleKey?modules[moduleKey].fields.map(([key])=>key):undefined,
+      module:moduleKey||null, error:code||null, fields:moduleKey?(features[moduleKey].fields||[]).map(([key])=>key):undefined,
       owner:moduleKey ? implementationOwners[moduleKey] : "pilot-core",
       files:moduleKey ? sourceFor(moduleKey) : { registry:"shared/catalog.mjs", ...rootOwner },
       duration_ms:+(performance.now()-started).toFixed(2) }));
@@ -54,7 +55,7 @@ if(requested) {
   checks.push({check:"test-present",result:test.includes('read-only diagnostics verify schema')?"PASS":"FAIL"});
   checks.push({check:"browser-present",result:existsSync(resolve(root,rootOwner.browser))?"PASS":"FAIL"});
   // A new feature cannot silently inherit the old pilot's shared files.
-  const keys=Object.keys(modules);
+  const keys=Object.keys(features);
   const ownershipCorrect=keys.length===Object.keys(implementationOwners).length &&
     keys.every(name => {
       const owner=implementationOwners[name], files=ownerFiles[owner];
@@ -64,20 +65,24 @@ if(requested) {
           sourceExists(files[part]));
     });
   checks.push({check:"explicit-feature-ownership",result:ownershipCorrect?"PASS":"FAIL"});
-  const validCatalog=keys.every(name => {
+  const validCatalog=Object.keys(modules).every(name => {
     const module=modules[name], fieldKeys=module.fields.map(([key])=>key);
     return /^[a-z][a-z0-9_]*$/.test(module.table) && fieldKeys.length>0 &&
       fieldKeys.length===new Set(fieldKeys).size &&
       fieldKeys.every(key=>/^[a-z][a-z0-9_]*$/.test(key));
   });
   checks.push({check:"valid-feature-contracts",result:validCatalog?"PASS":"FAIL"});
+  const readModelsValid=Object.entries(readModels).every(([name,feature])=>
+    feature.kind==="read" && feature.route===name && !modules[name] &&
+    implementationOwners[name]!== "pilot-core");
+  checks.push({check:"read-model-no-table",result:readModelsValid?"PASS":"FAIL"});
   const guide=read("AGENTS.md");
   const guideOk=["iamaman11/crm","implementationOwners","ownerFiles",
     "GitHub Actions","npm run doctor","npm run locate"].every(t=>guide.includes(t));
   checks.push({check:"durable-developer-contract",result:guideOk?"PASS":"FAIL"});
   const ok=checks.every(c=>(c.schema||c.result)==="PASS");
   console.log(JSON.stringify({event:"crm.doctor",result:ok?"PASS":"FAIL",
-    checks,modules:Object.keys(modules),error_codes:Object.keys(errors),
+    checks,modules:Object.keys(features),error_codes:Object.keys(errors),
     duration_ms:+(performance.now()-started).toFixed(2)}));
   if(!ok)process.exitCode=1;
 }

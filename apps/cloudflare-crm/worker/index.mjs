@@ -1,6 +1,7 @@
 // Small Cloudflare CRM pilot. The only data store is D1.
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { modules, errors } from "../shared/catalog.mjs";
+import { readCustomer360 } from "../features/customer360/query.mjs";
 
 // Static Assets route through an internal Worker, so ctx.access is unavailable there.
 // Read the signed Access JWT instead; no second login system is needed.
@@ -178,6 +179,14 @@ export async function crmFetch(request, env, ctx) {
       if (!actor) response = problem("AUTH_REQUIRED", ctx.access ? 403 : 401);
       else if (url.pathname === "/api/session" && request.method === "GET")
         response = reply({ authenticated: true, role: actor.role });
+      else if (request.method === "GET" && /^\\/api\\/customer360\\/[a-f0-9-]{36}$/.test(url.pathname)) {
+        const customerId = url.pathname.slice("/api/customer360/".length);
+        if (!uuid.test(customerId)) response = problem("NOT_FOUND", 404);
+        else {
+          const snapshot = await readCustomer360(env.DB, actor.tenant, customerId);
+          response = snapshot ? reply(snapshot) : problem("NOT_FOUND", 404);
+        }
+      }
       else if (url.pathname === "/api/version" && request.method === "GET")
         response = reply({ source: env.GIT_SHA || BUILD_SHA, database: "D1", api: "crm.dev/v1" });
       else if (url.pathname === "/api/doctor" && request.method === "GET") {

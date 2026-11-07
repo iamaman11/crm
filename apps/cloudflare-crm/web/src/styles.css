@@ -17,3 +17,19 @@
 .deal-card select{width:100%;font-size:13px;margin-top:4px;padding:7px;border-radius:7px;border:1px solid #cfd9e8;background:#fff;color:#263449}
 .deal-card .row-actions{flex-wrap:wrap}
 @media(max-width:720px){.deal-board{display:flex;flex-direction:column;overflow:visible}.deal-column{width:100%}}
+
+.customer360-header{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.customer360 h2{margin:0;font-size:26px;overflow-wrap:anywhere}
+.customer360-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:18px 0}
+.customer360-stats>div{background:#eef4fd;border-radius:10px;padding:13px;min-width:0}
+.customer360-stats strong{display:block;font-size:21px;overflow-wrap:anywhere}
+.customer360-stats span,.customer360-asof{font-size:12px;color:#64768e}
+.customer360-section{border-top:1px solid #e3eaf4;padding-top:14px;margin-top:17px}
+.customer360-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.customer360-section h3{margin:0 0 10px;font-size:17px}
+.customer360-section h3 small{font-size:13px;font-weight:400}
+.customer360-list article{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid #edf0f5}
+.customer360-list article strong,.customer360-list article p{overflow-wrap:anywhere}
+.customer360-list article p{font-size:13px;color:#64768e;margin:4px 0}
+@media(max-width:720px){.customer360-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+.customer360-list article{align-items:flex-start}.customer360-list article button{flex-shrink:0}}
