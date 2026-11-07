@@ -66,6 +66,7 @@ class PilotDeploymentSourceTests(unittest.TestCase):
                      "run --rm migrate", "bash deploy/backup.sh",
                      "bash deploy/restore.sh", "g3-recovery-sentinel", '"${compose[@]}" run --rm provision',
                      "crm.module_installations", "crm.audit_records",
+                     "DO $",
                      "crm_schema_migrations", "down -v"):
             self.assertIn(item, governance)
 
