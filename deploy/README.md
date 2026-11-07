@@ -69,3 +69,36 @@ project** with the original API/web stopped. This proves recovered application
 usability, not merely PostgreSQL row counts. Fixed G2 operator credentials
 are restricted to disposable CI; normal installation remains operator-configured.
 Trusted-host TLS and real upgrade/rollback remain G3 blockers.
+
+## Installation identity, safe schema upgrade, and HTTPS trust
+
+`python3 deploy/release_evidence.py --output /private/crm-install.json` writes
+a new **0600** evidence file with the exact clean Git revision, OCI image
+IDs of the running database/API/web, published registry digests (if any),
+and a checksum of the persisted SQL migration journal. The file contains
+no operators, passwords or tokens. **A local image ID is not a portable
+registry digest**. To deploy on another host, publish the images and pin
+the actual registry `@sha256:...` references.
+
+The CI-only `bash deploy/upgrade_drill.sh` copies existing schema
+migrations to a disposable directory, adds a temporary **additive** schema
+migration, verifies repeatability and rejection of tampered applied SQL,
+and recreates API/web from precisely pinned original image IDs. A real
+Chromium CRM browser readback then checks surviving business data.
+It neither modifies canonical migrations nor creates new permanent services.
+Do not run this CI-only script on real customer databases. A true
+rollback from a **different older binary** still requires a two-version
+physical rehearsal before G3 may be accepted.
+
+The HTTPS smoke supports `--ca-bundle` for verifying the actual
+Caddy **local** development CA; CI exercises it on both original and
+restored installation. For real public TLS, run
+`python3 deploy/smoke_https.py --env deploy/.env --origin https://YOUR_HOST`
+without `--ca-bundle` and without `--local-insecure-tls`, after public
+DNS/certificate provisioning. A local CA certificate is not evidence
+of publicly trusted HTTPS.
+
+**G3 acceptance boundary:** 24/24 CI on the previous exact head; new
+schema/recovery/CA slice requires its own successful CI. Trusted public
+TLS, image registry digest pinning, two-distinct-version upgrade/rollback,
+and a fresh isolated host are still external acceptance work.
