@@ -56,9 +56,10 @@ HTTPS origin and production capability catalogue: authenticated Party create,
 update, get and list, explicit tenant-header denial, and readback after API
 restart. After writes are quiesced, it creates a database archive and restores
 it to a separate PostgreSQL instance, comparing authoritative records,
-audit, outbox, idempotency and transaction counts. This is a test of the
-Party workflow only; contact, deal and task flows, external host TLS and
-upgrade/rollback remain explicit pending acceptance criteria.
+audit, outbox, idempotency and transaction counts. The narrow API-level smoke covers Party only. The installed Chromium suite
+below covers customer/contact/deal/task across two real provisioned tenants.
+Public trusted-host TLS and full two-version upgrade/rollback are still
+separate pending acceptance criteria.
 
 The Governance CI now reuses the **existing G2 production browser Playwright
 scenario** without copying business test logic. Against installed Caddy HTTPS,
