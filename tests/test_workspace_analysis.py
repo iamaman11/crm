@@ -477,12 +477,17 @@ jobs:
         governance[4] += 2  # packaging and isolated restore
         governance[5] += 12  # 6 precise path filters for both PR and push
         governance[6] = 105  # measured G3 image-build acceptance timeout
+        # G3 now runs the existing real Chromium UI suite in this SAME
+        # permanent workflow: record the new measured browser environment
+        # signal without altering immutable Step 22 inventory/gate counts.
+        governance[7] = ["browser", "docker", "process-runtime"]
         job = next(
             row for row in expected_gates["job_rows"]
             if row[0] == ".github/workflows/governance.yml#governance"
         )
         job[2] += 2
         job[3] = 105  # same existing job, no additional permanent gate
+        job[4] = ["browser", "docker"]
         self.assertEqual(fresh["permanent_gates"], expected_gates)
         governance_source = (ROOT / ".github/workflows/governance.yml").read_text()
         self.assertIn("deploy/**", governance_source)
