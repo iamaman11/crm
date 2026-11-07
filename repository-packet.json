@@ -16,7 +16,7 @@
     ".dockerignore",
     ".gitignore",
     "affected-scope-policy.json",
-    ".github/workflows/pilot-deployment.yml",
+    ".github/workflows/governance.yml",
     "deploy/.env.example",
     "deploy/Caddyfile",
     "deploy/Dockerfile.api",
@@ -54,8 +54,7 @@
     "Affected Scope CI",
     "Governance CI",
     "Rust CI",
-    "Rust Generated Sync",
-    "Pilot Deployment CI"
+    "Rust Generated Sync"
   ],
   "acceptance": [
     "fresh installation without demo/test fixtures and with correctly provisioned real tenant and operator",
