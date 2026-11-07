@@ -2,25 +2,18 @@ import React, {useEffect,useState} from "react";
 import {createRoot} from "react-dom/client";
 import "./styles.css";
 
-const features = {
- customers:{title:"Клиенты",one:"клиента",primary:"name",fields:[
-  ["name","Имя / название","text"],["kind","Тип","select",["person","organization"]]]},
- contacts:{title:"Контакты",one:"контакт",primary:"name",fields:[
-  ["customer_id","Клиент","customer"],["name","Имя","text"],["email","Электронная почта","email"],["phone","Телефон","tel"]]},
- deals:{title:"Сделки",one:"сделку",primary:"title",fields:[
-  ["customer_id","Клиент","customer"],["title","Название сделки","text"],
-  ["stage","Этап","select",["new","qualified","proposal","won","lost"]],["amount","Сумма","number"]]},
- tasks:{title:"Задачи",one:"задачу",primary:"title",fields:[
-  ["customer_id","Клиент","customer"],["title","Что сделать","text"],["due_date","Срок","date"],
-  ["status","Статус","select",["open","done"]]]},
-};
+import { modules as features, labels as names } from "../../shared/catalog.mjs";
+
 const dealStages=["new","qualified","proposal","won","lost"];
 const number=value=>new Intl.NumberFormat("ru-RU",{maximumFractionDigits:2}).format(Number(value)||0);
-const names={person:"Частное лицо",organization:"Компания",new:"Новая",qualified:"В работе",
- proposal:"Предложение",won:"Выиграна",lost:"Закрыта",open:"В работе",done:"Готово"};
+
 async function api(url, options={}) {
  const response=await fetch("/api/"+url,{...options,headers:{"content-type":"application/json"}});
- if(!response.ok){const body=await response.json().catch(()=>({}));throw Error(body.error||"Ошибка "+response.status);}
+ if(!response.ok){const body=await response.json().catch(()=>({}));
+  const code=response.headers.get("x-crm-error-code")||body.code||"HTTP_"+response.status;
+  const requestId=response.headers.get("x-request-id");
+  throw Error((body.error||"Ошибка "+response.status)+" ["+code+(requestId?"; запрос "+requestId:"")+"]");
+ }
  return response.status===204?null:response.json();
 }
 function App(){

@@ -106,6 +106,13 @@ async function checkIndependentWorkspaces(customerName) {
 
 let result = "FAIL";
 try {
+  const doctor = await context.request.get(url + "/api/doctor");
+  assert.equal(doctor.status(), 200, "published schema doctor");
+  const diagnosis = await doctor.json();
+  assert.equal(diagnosis.database, "ok");
+  assert.deepEqual(diagnosis.modules, ["customers", "contacts", "deals", "tasks"]);
+  assert.equal(diagnosis.tables.present, 4);
+  assert.ok(doctor.headers()["x-request-id"], "correlation id exists");
   const session = await context.request.get(url + "/api/session");
   if (session.status() !== 200) throw Error("Protected CRM API session HTTP " + session.status());
   const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });

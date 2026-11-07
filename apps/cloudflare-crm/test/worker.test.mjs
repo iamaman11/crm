@@ -13,6 +13,7 @@ function db() {
         return {
           async first() {
             if (sql.includes("FROM crm_users")) return { tenant_id: "tenant-a", role: "admin" };
+            if (sql.includes("sqlite_master")) return { present: 4 };
             if (sql.includes("FROM crm_customers")) return { id: values[0] };
             if (sql.includes("SELECT id FROM")) return { id: values[0] };
             return null;
@@ -116,4 +117,26 @@ test("Access without a user or service-token identity is not a CRM workspace", a
   });
   assert.equal(response.status, 403);
   assert.equal(database.queries.length, 0);
+});
+
+test("read-only diagnostics verify schema and emit a correlation id", async () => {
+  const database = db();
+  const response = await crmFetch(url("/api/doctor"), { DB: database, GIT_SHA: "abcdef" }, access);
+  assert.equal(response.status, 200);
+  assert.ok(response.headers.get("x-request-id"));
+  const info = await response.json();
+  assert.equal(info.source, "abcdef");
+  assert.equal(info.database, "ok");
+  assert.deepEqual(info.modules, ["customers", "contacts", "deals", "tasks"]);
+  assert.deepEqual(info.tables, { present: 4, expected: 4 });
+  assert.equal(database.queries.filter(q => q.sql.includes("sqlite_master")).length, 1);
+});
+test("expected API failure has a stable code and request id", async () => {
+  const response = await crmFetch(url("/api/deals", {
+    method: "POST", body: JSON.stringify({ title: "No customer" }),
+  }), { DB: db() }, access);
+  assert.equal(response.status, 422);
+  assert.equal(response.headers.get("x-crm-error-code"), "INVALID_INPUT");
+  assert.ok(response.headers.get("x-request-id"));
+  assert.equal((await response.json()).code, "INVALID_INPUT");
 });
