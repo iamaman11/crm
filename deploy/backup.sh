@@ -5,6 +5,7 @@ umask 077
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 destination="${1:-$here/backups}"
 mkdir -p "$destination"
+destination="$(cd "$destination" && pwd -P)"
 [[ -d "$destination" ]] || exit 2
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 file="$destination/crm-$stamp.dump"
@@ -12,6 +13,6 @@ file="$destination/crm-$stamp.dump"
 docker compose --env-file "$here/.env" -f "$here/compose.yaml" exec -T database \
     pg_dump -U postgres -d crm -Fc >"$file"
 test -s "$file" || { rm -f "$file"; echo "Empty database backup" >&2; exit 1; }
-sha256sum "$file" >"$file.sha256"
+(cd "$destination" && sha256sum "$(basename "$file")" >"$(basename "$file").sha256")
 echo "Backup created: $file"
 echo "Verify an independent restore before treating this as a recovery point."

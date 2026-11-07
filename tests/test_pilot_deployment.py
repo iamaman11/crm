@@ -43,10 +43,13 @@ class PilotDeploymentSourceTests(unittest.TestCase):
 
     def test_recovery_never_targets_existing_live_state(self) -> None:
         restore = (DEPLOY / "restore.sh").read_text()
-        for item in ("crm-restore-", "Refusing to restore", "sha256sum -c"):
+        for item in ("crm-restore-", "Refusing to restore", "sha256sum -c",
+                     "--exit-on-error --single-transaction",
+                     'run --rm migrate', "rolbypassrls"):
             self.assertIn(item, restore)
         backup = (DEPLOY / "backup.sh").read_text()
-        for item in ("pg_dump", "sha256sum", "umask 077"):
+        for item in ("pg_dump", "sha256sum", "umask 077",
+                     'cd "$destination"', 'basename "$file"'):
             self.assertIn(item, backup)
 
 

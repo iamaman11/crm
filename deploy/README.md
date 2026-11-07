@@ -20,8 +20,8 @@ The Compose file deliberately sets `CRM_BOOTSTRAP_ALLOW_PHASE6=false`: the legac
 
 ## Recovery prototype
 
-- `bash deploy/backup.sh /secure/private/directory` creates a custom-format PostgreSQL archive plus SHA-256 checksum with filesystem mode 0600. Keep archives off the public web host and apply access controls; this is not an offsite-backup solution.
-- `bash deploy/restore.sh /secure/private/directory/crm-YYYYMMDDTHHMMSSZ.dump crm-restore-drill` creates a **distinct** PostgreSQL volume under a separately named Compose project and refuses to overwrite any existing CRM schema.
+- `bash deploy/backup.sh /secure/private/directory` creates a custom-format PostgreSQL archive plus a portable basename-only SHA-256 checksum with filesystem mode 0600. Keep archives off the public web host and apply access controls; this is not an offsite-backup solution.
+- `bash deploy/restore.sh /secure/private/directory/crm-YYYYMMDDTHHMMSSZ.dump crm-restore-drill` creates a **distinct** PostgreSQL volume under a separately named Compose project and refuses to overwrite any existing CRM schema. It then replays the idempotent migration journal and provisions the separate database runtime login role (not included in `pg_dump`) with `NOBYPASSRLS`; it never starts the restored API by default.
 - Verify actual customer/contact/deal/task, tenant isolation, audit/outbox and independent startup after restoration. A successful `pg_restore` exit alone is NOT G3 recovery acceptance.
 
 ## Upgrade and rollback boundary
