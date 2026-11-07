@@ -48,6 +48,19 @@ class PilotDeploymentSourceTests(unittest.TestCase):
             self.assertIn(requirement, smoke)
         self.assertIn('origin != "https://localhost"', smoke)
 
+    def test_installed_business_mutations_and_independent_data_recovery(self) -> None:
+        workflow = (ROOT / ".github/workflows/governance.yml").read_text()
+        script = (DEPLOY / "smoke_business.py").read_text()
+        for expected in ("smoke_business.py --phase initial",
+                         "smoke_business.py --phase verify",
+                         "published-contracts.json",
+                         'stop web api', "source_counts", "recovered_counts"):
+            self.assertIn(expected, workflow)
+        for expected in ("parties.party.create", "parties.party.update",
+                         "parties.party.get", "parties.party.list",
+                         "g3-foreign-tenant", "accepted=(401, 403, 404)"):
+            self.assertIn(expected, script)
+
     def test_same_origin_gateway_and_no_dev_identity(self) -> None:
         caddy = (DEPLOY / "Caddyfile").read_text()
         for item in ("/crm.gateway.v1.ApplicationGatewayService/*",
