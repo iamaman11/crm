@@ -1,0 +1,26 @@
+{$CRM_SITE_HOST} {
+    encode gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-Frame-Options "DENY"
+    }
+
+    @grpc path /crm.gateway.v1.ApplicationGatewayService/*
+    handle @grpc {
+        reverse_proxy api:9090
+    }
+
+    @httpapi path /auth/* /v1/*
+    handle @httpapi {
+        reverse_proxy api:8080
+    }
+
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}

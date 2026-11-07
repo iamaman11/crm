@@ -1,0 +1,83 @@
+name: crm-pilot
+
+services:
+  database:
+    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: crm
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${CRM_POSTGRES_PASSWORD:?set CRM_POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d crm"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    restart: "no"
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      PGHOST: database
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGDATABASE: crm
+      PGPASSWORD: ${CRM_POSTGRES_PASSWORD:?set CRM_POSTGRES_PASSWORD}
+      CRM_APP_DB_PASSWORD: ${CRM_APP_DB_PASSWORD:?set CRM_APP_DB_PASSWORD}
+    volumes:
+      - ../database/migrations:/migrations:ro
+      - ./migrate.sh:/migrate.sh:ro
+    entrypoint: ["bash", "/migrate.sh"]
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      CRM_DATABASE_URL: postgres://crm_runtime:${CRM_APP_DB_PASSWORD:?set CRM_APP_DB_PASSWORD}@database:5432/crm
+      CRM_HTTP_BIND: 0.0.0.0:8080
+      CRM_GRPC_BIND: 0.0.0.0:9090
+      CRM_API_BEARER_TOKEN: ${CRM_API_BEARER_TOKEN:?set CRM_API_BEARER_TOKEN}
+      CRM_API_ACTOR_ID: ${CRM_API_ACTOR_ID:?set CRM_API_ACTOR_ID}
+      CRM_API_TENANTS: ${CRM_API_TENANTS:?set CRM_API_TENANTS}
+      CRM_CURSOR_SIGNING_KEY: ${CRM_CURSOR_SIGNING_KEY:?set CRM_CURSOR_SIGNING_KEY}
+      CRM_APPROVAL_SIGNING_KEY: ${CRM_APPROVAL_SIGNING_KEY:?set CRM_APPROVAL_SIGNING_KEY}
+      CRM_PUBLIC_ORIGIN: https://${CRM_SITE_HOST:?set CRM_SITE_HOST}
+      CRM_PILOT_OPERATORS: ${CRM_PILOT_OPERATORS:?set CRM_PILOT_OPERATORS}
+      CRM_BOOTSTRAP_ALLOW_PHASE6: "false"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      CRM_SITE_HOST: ${CRM_SITE_HOST:?set CRM_SITE_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
