@@ -64,7 +64,7 @@ class PilotDeploymentSourceTests(unittest.TestCase):
     def test_installed_and_restored_browser_workflow(self) -> None:
         governance = (ROOT / ".github/workflows/governance.yml").read_text()
         playwright = (ROOT / "apps/web/playwright.config.ts").read_text()
-        self.assertEqual(governance.count("e2e/g2-crm.spec.ts"), 3)
+        self.assertEqual(governance.count("e2e/g2-crm.spec.ts"), 4)
         for marker in ("G2_E2E_BASE_URL=https://localhost",
                        "G2_TEST_PHASE=before", "G2_TEST_PHASE=after",
                        "pnpm install --frozen-lockfile",
@@ -72,6 +72,26 @@ class PilotDeploymentSourceTests(unittest.TestCase):
                        'restored[@]}" up -d --wait api web'):
             self.assertIn(marker, governance)
         self.assertIn("process.env.G2_E2E_BASE_URL", playwright)
+
+    def test_additive_upgrade_provenance_and_trusted_local_ca(self) -> None:
+        upgrade = (DEPLOY / "upgrade_drill.sh").read_text()
+        evidence = (DEPLOY / "release_evidence.py").read_text()
+        tls = (DEPLOY / "smoke_https.py").read_text()
+        workflow = (ROOT / ".github/workflows/governance.yml").read_text()
+        for marker in ("zzzz_g3_additive_upgrade_probe.up.sql",
+                       "Migration was modified after applying:",
+                       "--no-build --no-deps --force-recreate --wait api web",
+                       "docker image tag"):
+            self.assertIn(marker, upgrade)
+        for marker in ("git_commit", "local_oci_image_id", "registry_repo_digests",
+                       "migration_journal_sha256", "O_EXCL", "0o600"):
+            self.assertIn(marker, evidence)
+        for marker in ("--ca-bundle", "load_verify_locations", "mutually exclusive"):
+            self.assertIn(marker, tls)
+        for marker in ("release_evidence.py", "upgrade_drill.sh",
+                       "g3-local-ca.crt", "g3-restored-ca.crt"):
+            self.assertIn(marker, workflow)
+        self.assertEqual(workflow.count("e2e/g2-crm.spec.ts"), 4)
 
     def test_same_origin_gateway_and_no_dev_identity(self) -> None:
         caddy = (DEPLOY / "Caddyfile").read_text()
