@@ -1,156 +1,165 @@
-// Minimal Cloudflare-native CRM API. One owner per feature; no bypass of Access.
+// Small Cloudflare CRM pilot. The only data store is D1.
 export const BUILD_SHA = "development";
 
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
-      "x-content-type-options": "nosniff",
-    },
-  });
+const models = {
+  customers: { table: "crm_customers", fields: ["name", "kind"] },
+  contacts: { table: "crm_contacts", fields: ["customer_id", "name", "email", "phone"] },
+  deals: { table: "crm_deals", fields: ["customer_id", "title", "stage", "amount"] },
+  tasks: { table: "crm_tasks", fields: ["customer_id", "title", "due_date", "status"] },
+};
+const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+
+function reply(value, status = 200) {
+  return Response.json(value, { status, headers: { "cache-control": "no-store" } });
 }
 
-async function signedInActor(ctx, db) {
-  // Identity only comes from Cloudflare Access, never an HTTP header.
+function parseRecord(type, body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const str = (key, max = 120) => typeof body[key] === "string" ? body[key].trim().slice(0, max) : "";
+  const customer_id = str("customer_id", 36);
+  if (type === "customers") {
+    const name = str("name"), kind = str("kind");
+    return name && ["person", "organization"].includes(kind) ? { name, kind } : null;
+  }
+  if (!uuid.test(customer_id)) return null;
+  if (type === "contacts") {
+    const name = str("name"), email = str("email", 180), phone = str("phone", 60);
+    return name && (!email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) ?
+      { customer_id, name, email, phone } : null;
+  }
+  if (type === "deals") {
+    const title = str("title"), stage = str("stage");
+    const amount = Number(body.amount);
+    return title && ["new", "qualified", "proposal", "won", "lost"].includes(stage) &&
+      Number.isFinite(amount) && amount >= 0 && amount <= 1000000000 ?
+      { customer_id, title, stage, amount } : null;
+  }
+  if (type === "tasks") {
+    const title = str("title"), status = str("status"), due_date = str("due_date", 10);
+    return title && ["open", "done"].includes(status) && (!due_date || /^\d{4}-\d{2}-\d{2}$/.test(due_date)) ?
+      { customer_id, title, status, due_date } : null;
+  }
+  return null;
+}
+
+async function requestBody(request) {
+  if (Number(request.headers.get("content-length") || 0) > 8192) return null;
+  const text = await request.text();
+  if (text.length > 8192) return null;
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+async function actorFor(ctx, db) {
   if (!ctx.access) return null;
   const identity = await ctx.access.getIdentity();
   const email = identity?.email?.toLowerCase();
   if (!email) return null;
-  const row = await db.prepare(
-    "SELECT tenant_id, role FROM crm_users WHERE email = ? AND active = 1",
+  const user = await db.prepare(
+    "SELECT tenant_id, role FROM crm_users WHERE email = ? AND active = 1"
   ).bind(email).first();
-  return row ? { tenant: row.tenant_id, role: row.role } : null;
+  if (user) return { tenant: user.tenant_id, role: user.role };
+  // Closed test pilot: a real Access-authenticated human gets an empty personal workspace.
+  const tenant = crypto.randomUUID();
+  await db.batch([
+    db.prepare("INSERT OR IGNORE INTO crm_tenants (id, name) VALUES (?, ?)").bind(tenant, "Test CRM"),
+    db.prepare("INSERT OR IGNORE INTO crm_users (email, tenant_id, role) VALUES (?, ?, ?)").bind(email, tenant, "admin"),
+  ]);
+  const enrolled = await db.prepare(
+    "SELECT tenant_id, role FROM crm_users WHERE email = ? AND active = 1"
+  ).bind(email).first();
+  return enrolled ? { tenant: enrolled.tenant_id, role: enrolled.role } : null;
 }
 
-function parseCustomer(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const name = typeof value.name === "string" ? value.name.trim() : "";
-  const kind = value.kind;
-  if (!name || name.length > 120 || !["person", "organization"].includes(kind)) return null;
-  return { name, kind };
+async function belongsToTenant(db, customer, tenant) {
+  return !!(await db.prepare(
+    "SELECT id FROM crm_customers WHERE id = ? AND tenant_id = ?"
+  ).bind(customer, tenant).first());
 }
 
-async function readJson(request) {
-  const size = Number(request.headers.get("content-length") ?? 0);
-  if (!Number.isFinite(size) || size > 8192) return null;
-  const body = await request.text();
-  if (body.length > 8192) return null;
-  try { return JSON.parse(body); } catch { return null; }
+async function handleRecords(request, env, actor, url) {
+  const match = /^\/api\/(customers|contacts|deals|tasks)(?:\/([a-f0-9-]{36}))?$/.exec(url.pathname);
+  if (!match || (match[2] && !uuid.test(match[2]))) return reply({ error: "Not found" }, 404);
+  const [, name, id] = match, model = models[name], db = env.DB, tenant = actor.tenant;
+  if (request.method === "GET") {
+    if (id) {
+      const row = await db.prepare(
+        "SELECT * FROM " + model.table + " WHERE id = ? AND tenant_id = ?"
+      ).bind(id, tenant).first();
+      return row ? reply({ item: row }) : reply({ error: "Not found" }, 404);
+    }
+    const rows = await db.prepare(
+      "SELECT * FROM " + model.table + " WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 300"
+    ).bind(tenant).all();
+    return reply({ items: rows.results || [] });
+  }
+  if (request.method === "POST" && !id || request.method === "PATCH" && id) {
+    const data = parseRecord(name, await requestBody(request));
+    if (!data) return reply({ error: "Проверьте поля формы" }, 422);
+    if (data.customer_id && !(await belongsToTenant(db, data.customer_id, tenant)))
+      return reply({ error: "Клиент не найден" }, 422);
+    if (id && !(await db.prepare(
+      "SELECT id FROM " + model.table + " WHERE id = ? AND tenant_id = ?"
+    ).bind(id, tenant).first())) return reply({ error: "Not found" }, 404);
+    const recordId = id || crypto.randomUUID(), stamp = new Date().toISOString();
+    const values = model.fields.map(key => data[key]);
+    const stmt = id
+      ? db.prepare("UPDATE " + model.table + " SET " + model.fields.map(key => key + " = ?").join(", ") +
+        ", updated_at = ? WHERE id = ? AND tenant_id = ?").bind(...values, stamp, id, tenant)
+      : db.prepare("INSERT INTO " + model.table + " (id, tenant_id, " + model.fields.join(", ") +
+        ", updated_at) VALUES (" + Array(model.fields.length + 3).fill("?").join(", ") + ")")
+        .bind(recordId, tenant, ...values, stamp);
+    await db.batch([
+      stmt,
+      db.prepare("INSERT INTO crm_audit (id, tenant_id, action, subject_id, created_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), tenant, name + (id ? ".update" : ".create"), recordId, stamp),
+    ]);
+    return reply({ item: { id: recordId, tenant_id: tenant, ...data, updated_at: stamp } }, id ? 200 : 201);
+  }
+  if (request.method === "DELETE" && id) {
+    const found = await db.prepare("SELECT id FROM " + model.table + " WHERE id = ? AND tenant_id = ?")
+      .bind(id, tenant).first();
+    if (!found) return reply({ error: "Not found" }, 404);
+    await db.batch([
+      db.prepare("DELETE FROM " + model.table + " WHERE id = ? AND tenant_id = ?").bind(id, tenant),
+      db.prepare("INSERT INTO crm_audit (id, tenant_id, action, subject_id, created_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), tenant, name + ".delete", id, new Date().toISOString()),
+    ]);
+    return new Response(null, { status: 204 });
+  }
+  return reply({ error: "Not found" }, 404);
 }
 
 export async function crmFetch(request, env, ctx) {
-  const started = Date.now();
-  const requestId = crypto.randomUUID();
-  const url = new URL(request.url);
-  let outcome = 500;
+  const started = Date.now(), requestId = crypto.randomUUID(), url = new URL(request.url);
+  let response;
   try {
-    // Do not allow a public debug/development identity in the deployed app.
     if (url.pathname === "/api/health" && request.method === "GET") {
-      const result = json({ service: "crm-dev", status: "ok" });
-      outcome = result.status;
-      return resultWithId(result, requestId);
+      response = reply({ service: "crm-dev", status: "ok" });
+    } else if (!url.pathname.startsWith("/api/")) {
+      response = reply({ error: "Not found" }, 404);
+    } else if (!env.DB) {
+      response = reply({ error: "Database unavailable" }, 503);
+    } else {
+      const actor = await actorFor(ctx, env.DB);
+      if (!actor) response = reply({ error: "Authentication required" }, ctx.access ? 403 : 401);
+      else if (url.pathname === "/api/session" && request.method === "GET")
+        response = reply({ authenticated: true, role: actor.role });
+      else if (url.pathname === "/api/version" && request.method === "GET")
+        response = reply({ source: env.GIT_SHA || BUILD_SHA, database: "D1", api: "crm.dev/v1" });
+      else response = await handleRecords(request, env, actor, url);
     }
-    if (!url.pathname.startsWith("/api/")) {
-      outcome = 404;
-      return resultWithId(json({ error: "Not found" }, 404), requestId);
-    }
-    if (!env.DB) {
-      outcome = 503;
-      return resultWithId(json({ error: "Database unavailable" }, 503), requestId);
-    }
-    const actor = await signedInActor(ctx, env.DB);
-    if (!actor) {
-      outcome = ctx.access ? 403 : 401;
-      return resultWithId(json({ error: "Authentication required" }, outcome), requestId);
-    }
-    if (url.pathname === "/api/session" && request.method === "GET") {
-      outcome = 200;
-      return resultWithId(json({ authenticated: true, role: actor.role }), requestId);
-    }
-    if (url.pathname === "/api/version" && request.method === "GET") {
-      outcome = 200;
-      return resultWithId(json({ source: env.GIT_SHA ?? BUILD_SHA, database: "D1", api: "crm.dev/v1" }), requestId);
-    }
-    if (url.pathname === "/api/customers" && request.method === "GET") {
-      const result = await env.DB.prepare(
-        "SELECT id, name, kind, updated_at FROM crm_customers WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 100",
-      ).bind(actor.tenant).all();
-      outcome = 200;
-      return resultWithId(json({ customers: result.results ?? [] }), requestId);
-    }
-    if (url.pathname === "/api/customers" && request.method === "POST") {
-      const input = parseCustomer(await readJson(request));
-      if (!input) {
-        outcome = 422;
-        return resultWithId(json({ error: "Customer name and type are required" }, 422), requestId);
-      }
-      const id = crypto.randomUUID();
-      const stamp = new Date().toISOString();
-      await env.DB.batch([
-        env.DB.prepare(
-          "INSERT INTO crm_customers (id, tenant_id, name, kind, updated_at) VALUES (?, ?, ?, ?, ?)",
-        ).bind(id, actor.tenant, input.name, input.kind, stamp),
-        env.DB.prepare(
-          "INSERT INTO crm_audit (id, tenant_id, action, subject_id, created_at) VALUES (?, ?, ?, ?, ?)",
-        ).bind(crypto.randomUUID(), actor.tenant, "customer.create", id, stamp),
-      ]);
-      outcome = 201;
-      return resultWithId(json({ customer: { id, ...input, updated_at: stamp } }, 201), requestId);
-    }
-    const match = /^\/api\/customers\/([a-f0-9-]{36})$/.exec(url.pathname);
-    if (match && request.method === "PATCH") {
-      const input = parseCustomer(await readJson(request));
-      if (!input) {
-        outcome = 422;
-        return resultWithId(json({ error: "Customer name and type are required" }, 422), requestId);
-      }
-      const existing = await env.DB.prepare(
-        "SELECT id FROM crm_customers WHERE id = ? AND tenant_id = ?",
-      ).bind(match[1], actor.tenant).first();
-      if (!existing) {
-        outcome = 404;
-        return resultWithId(json({ error: "Customer not found" }, 404), requestId);
-      }
-      const stamp = new Date().toISOString();
-      await env.DB.batch([
-        env.DB.prepare(
-          "UPDATE crm_customers SET name = ?, kind = ?, updated_at = ? WHERE id = ? AND tenant_id = ?",
-        ).bind(input.name, input.kind, stamp, match[1], actor.tenant),
-        env.DB.prepare(
-          "INSERT INTO crm_audit (id, tenant_id, action, subject_id, created_at) VALUES (?, ?, ?, ?, ?)",
-        ).bind(crypto.randomUUID(), actor.tenant, "customer.update", match[1], stamp),
-      ]);
-      outcome = 200;
-      return resultWithId(json({ customer: { id: match[1], ...input, updated_at: stamp } }), requestId);
-    }
-    outcome = 404;
-    return resultWithId(json({ error: "Not found" }, 404), requestId);
-  } catch {
-    // No stack, user email or SQL text in HTTP. Correlate through request_id.
-    outcome = 500;
-    return resultWithId(json({ error: "Unexpected error", request_id: requestId }, 500), requestId);
-  } finally {
-    console.log(JSON.stringify({
-      event: "crm.request",
-      request_id: requestId,
-      method: request.method,
-      path: url.pathname.replace(/[a-f0-9]{8}-[a-f0-9-]{27}/gi, ":id"),
-      status: outcome,
-      duration_ms: Date.now() - started,
-    }));
+  } catch (error) {
+    console.error(JSON.stringify({ event: "crm.error", request_id: requestId, message: String(error?.message || error) }));
+    response = reply({ error: "Ошибка приложения", request_id: requestId }, 500);
   }
-}
-
-function resultWithId(response, requestId) {
   const headers = new Headers(response.headers);
   headers.set("x-request-id", requestId);
+  console.log(JSON.stringify({
+    event: "crm.request", request_id: requestId, method: request.method,
+    path: url.pathname.replace(/[a-f0-9]{8}-[a-f0-9-]{27}/gi, ":id"),
+    status: response.status, duration_ms: Date.now() - started,
+  }));
   return new Response(response.body, { status: response.status, headers });
 }
 
-export default {
-  fetch(request, env, ctx) {
-    return crmFetch(request, env, ctx);
-  },
-};
+export default { fetch: crmFetch };
