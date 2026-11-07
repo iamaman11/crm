@@ -47,7 +47,7 @@ jobs:
   deploy-crm-dev:
     needs: cloudflare-crm-spike
     if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cloudflare-native-crm-20261107'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: crm-dev
     timeout-minutes: 15
     steps:
