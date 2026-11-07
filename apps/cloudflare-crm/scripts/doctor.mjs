@@ -42,7 +42,7 @@ if(requested) {
   for (const [name, model] of Object.entries(modules)) {
     const block = migration.match(new RegExp("CREATE TABLE IF NOT EXISTS "+model.table+" \\(([\\s\\S]*?)\\);"));
     const missing = model.fields.map(([key])=>key).filter(key=> !block ||
-      !new RegExp("(?:^|\\n)\\s*"+key+"\\s", "m").test(block[1]));
+      !new RegExp("(?:^|[,\\n])\\s*"+key+"\\s", "m").test(block[1]));
     checks.push({ module:name, schema:block && missing.length===0?"PASS":"FAIL", missing });
   }
   checks.push({check:"shared-ui-catalog",result:ui.includes('shared/catalog.mjs')?"PASS":"FAIL"});
