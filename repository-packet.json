@@ -23,6 +23,7 @@
     "deploy/Caddyfile",
     "deploy/Dockerfile.api",
     "deploy/Dockerfile.web",
+    "deploy/image_bundle.py",
     "deploy/README.md",
     "deploy/release_evidence.py",
     "deploy/backup.sh",
@@ -60,7 +61,7 @@
     "one-shot first tenant, active operator actors, published production capability and module installation (IMPLEMENTED, PHYSICAL ACCEPTANCE PENDING)",
     "idempotent checksum-verified migrations and non-superuser runtime PostgreSQL role",
     "operator environment, backup and separate fresh-environment restore commands",
-    "exact head G3 installed and restored CRM 24/24 PASS before two-version slice; real accepted historical G2 binary versus current G3 rollback and browser readback (new CI pending)"
+    "accepted prior 24/24 exact-head two-real-binary G2/G3 rollback; verified five-service offline OCI image bundle and no-build full restored app acceptance (new CI pending)"
   ],
   "required_checks": [
     "Affected Scope CI",
