@@ -4,18 +4,26 @@ Execution issue: https://github.com/iamaman11/crm/issues/313.
 
 This packet adds a normal Compose layout: **Caddy (HTTPS + built React + same-origin proxy), one crm-api process, PostgreSQL 17**, and one *exiting* migration job. No Kubernetes, new authorization service, or duplicated business storage.
 
-## Scope and current hard blocker
+## Scope and current acceptance boundary
 
-The infrastructure files are **not yet an accepted installation**. A fresh schema alone cannot authenticate a useful administrator: the existing G1 runtime needs durable active `crm.tenants`, `crm.actors` and published module/activation state. Current tests populate these through **test fixtures**, including mock manifest digests and synthetic bootstrap transactions. Those fixtures MUST NOT be copied to a real deployment. G3 must implement a small first-install operator/tenant/module provisioning mechanism that preserves the project's transactional audit/RLS requirements, then demonstrate it on a fresh database. Until that is proved: **NO-GO**.
+A first-install **provision** one-shot now creates the persistent tenant, service actor,
+configured active user actors, real published compiled module manifests and capabilities,
+module installations, and one audit/outbox/idempotency-backed installation transaction.
+It reads the exact compiled capability definitions from the real `crm-api` binary and
+uses the existing canonical manifest compiler. It never loads test fixtures,
+demo records or debug identities. Reruns verify the existing installation without
+rewriting user data. The API still runs with `CRM_BOOTSTRAP_ALLOW_PHASE6=false`.
 
-The Compose file deliberately sets `CRM_BOOTSTRAP_ALLOW_PHASE6=false`: the legacy test/bootstrap switch cannot become the production installation mechanism.
+**This implementation is NOT yet accepted:** prove a built installation against
+fresh PostgreSQL, browser HTTPS CRUD, cross-tenant denial, complete data recovery
+and rollback drills. Keep G3 NO-GO until that evidence exists.
 
 ## Infrastructure preview (not GO for user data)
 
 1. Use a fresh checkout and an isolated server with Docker Compose v2. Copy `deploy/.env.example` to `deploy/.env`; fill every placeholder with real values. Never commit or print the file. Set its mode to 0600.
 2. Ensure `CRM_SITE_HOST` resolves to this machine, with ports 80/443 permitted. Caddy handles public TLS and forwards both `/auth/*` and `/v1/*` to the existing HTTP listener; gRPC-web goes to its existing HTTP/1.1-compatible gRPC listener. API and PostgreSQL have **no published ports**.
 3. `docker compose --env-file deploy/.env -f deploy/compose.yaml config --quiet` checks configuration, not runtime readiness.
-4. `docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build` executes schema migrations once per digest, creates the non-superuser runtime role and starts the services. This **will not pass G3 acceptance** until the authoritative first-install provisioning action exists and passes live tests.
+4. `docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build` runs two exiting jobs: migrations/role creation and native first-install provisioning, then starts the API and web services. Reruns verify persisted identities and module installations without changing business records.
 5. Check `docker compose --env-file deploy/.env -f deploy/compose.yaml ps` and `docker compose --env-file deploy/.env -f deploy/compose.yaml logs api` for diagnostics. Never post secrets or logs containing passwords.
 
 ## Recovery prototype
@@ -30,4 +38,4 @@ Record the exact git commit + built image digest; take and independently restore
 
 ## Next required G3 code
 
-Implement the first-install operator/actor/tenant/module provisioning without demo/test fixtures; wire a release-equivalent fresh-host HTTPS browser test, restart and independent restore, and exact-head CI. Keep this PR draft/NO-GO until all are proven.
+Prove first-install provisioning against clean PostgreSQL, then production-built HTTPS browser CRUD, persistence after restart, cross-tenant denial, full business/audit/outbox recovery, and exact-head CI. Keep this PR draft/NO-GO until all are proven.

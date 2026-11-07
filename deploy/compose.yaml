@@ -34,13 +34,34 @@ services:
       - ./migrate.sh:/migrate.sh:ro
     entrypoint: ["bash", "/migrate.sh"]
 
+  provision:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+      target: provision
+    restart: "no"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PGHOST: database
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGDATABASE: crm
+      PGPASSWORD: ${CRM_POSTGRES_PASSWORD:?set CRM_POSTGRES_PASSWORD}
+      CRM_API_TENANTS: ${CRM_API_TENANTS:?set CRM_API_TENANTS}
+      CRM_API_ACTOR_ID: ${CRM_API_ACTOR_ID:?set CRM_API_ACTOR_ID}
+      CRM_PILOT_OPERATORS: ${CRM_PILOT_OPERATORS:?set CRM_PILOT_OPERATORS}
+      CRM_DATA_REGION: ${CRM_DATA_REGION:-eu-central}
+
   api:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.api
+      target: api
     restart: unless-stopped
     depends_on:
-      migrate:
+      provision:
         condition: service_completed_successfully
     environment:
       CRM_DATABASE_URL: postgres://crm_runtime:${CRM_APP_DB_PASSWORD:?set CRM_APP_DB_PASSWORD}@database:5432/crm

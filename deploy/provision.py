@@ -6,6 +6,7 @@ crm-api uses a separate NOBYPASSRLS login; this is never a runtime code path.
 """
 from __future__ import annotations
 
+from calendar import timegm
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
@@ -237,7 +238,7 @@ def audit_hash(tenant: str, audit_id: str, transaction: str, actor: str,
                envelope: bytes, moment: datetime) -> bytes:
     def sized(value: bytes) -> bytes:
         return len(value).to_bytes(8, "big") + value
-    timestamp_ns = int(moment.timestamp() * 1_000_000) * 1000
+    timestamp_ns = (timegm(moment.utctimetuple()) * 1_000_000 + moment.microsecond) * 1000
     h = sha256(b"crm.audit.record.sha256/v1")
     h.update(sized(tenant.encode()))
     h.update((1).to_bytes(8, "big"))

@@ -11,12 +11,29 @@ DEPLOY = ROOT / "deploy"
 class PilotDeploymentSourceTests(unittest.TestCase):
     def test_only_three_long_lived_services(self) -> None:
         data = YAML(typ="safe").load((DEPLOY / "compose.yaml").read_text())
-        self.assertEqual(set(data["services"]), {"database", "migrate", "api", "web"})
-        for private in ("database", "api", "migrate"):
+        self.assertEqual(set(data["services"]), {"database", "migrate", "provision", "api", "web"})
+        for private in ("database", "api", "migrate", "provision"):
             self.assertNotIn("ports", data["services"][private])
         self.assertEqual(data["services"]["web"]["ports"], ["80:80", "443:443"])
         self.assertEqual(data["services"]["api"]["environment"]["CRM_BOOTSTRAP_ALLOW_PHASE6"], "false")
         self.assertIn("postgres_data", data["volumes"])
+        self.assertEqual(data["services"]["api"]["depends_on"]["provision"]["condition"],
+                         "service_completed_successfully")
+        self.assertEqual(data["services"]["provision"]["restart"], "no")
+
+    def test_provisioning_uses_compiled_production_sources(self) -> None:
+        docker = (DEPLOY / "Dockerfile.api").read_text()
+        provision = (DEPLOY / "provision.py").read_text()
+        for marker in ("--published-contracts", "compile_module_manifest_ir.py",
+                       "module-contract-bindings.json", "AS provision"):
+            self.assertIn(marker, docker)
+        for marker in ("published-contracts.json", "/manifests",
+                       "crm.business_transactions", "crm.audit_records",
+                       "crm.outbox_events", "crm.actors", "crm.module_versions",
+                       "crm.module_installations", "crm.tenant_capability_grants"):
+            self.assertIn(marker, provision)
+        for forbidden in ("database/tests/", "seed-demo", "crm_app_test"):
+            self.assertNotIn(forbidden, provision)
 
     def test_same_origin_gateway_and_no_dev_identity(self) -> None:
         caddy = (DEPLOY / "Caddyfile").read_text()
