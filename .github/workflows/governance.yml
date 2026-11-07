@@ -221,8 +221,8 @@ jobs:
       - name: Verify G3 packaging and migration boundaries
         run: |
           python -m unittest -v tests.test_pilot_deployment
-          python -m py_compile deploy/provision.py deploy/smoke_https.py deploy/smoke_business.py
-          bash -n deploy/{migrate,backup,restore}.sh
+          python -m py_compile deploy/provision.py deploy/smoke_https.py deploy/smoke_business.py deploy/release_evidence.py
+          bash -n deploy/{migrate,backup,restore,upgrade_drill}.sh
           docker compose --env-file deploy/.env.example -f deploy/compose.yaml config --quiet
       - name: G3 live PostgreSQL migration and isolated recovery drill
         env:
