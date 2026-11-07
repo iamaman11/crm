@@ -479,10 +479,18 @@ jobs:
             {"workflows": legacy_gates["counts"]["workflows"] + 1,
              "jobs": legacy_gates["counts"]["jobs"] + 2},
         )
-        self.assertEqual(
-            [row for row in current_gates["workflow_rows"] if row[0] != new_workflow],
-            legacy_gates["workflow_rows"],
-        )
+        # Product Plane CI now explicitly owns the native CRM source tree:
+        # its push and PR filters each gained exactly one path.
+        # All other existing baseline metrics remain unchanged.
+        revised = []
+        for row in current_gates["workflow_rows"]:
+            if row[0] == new_workflow:
+                continue
+            if row[0] == ".github/workflows/product-plane.yml":
+                row = list(row)
+                row[5] -= 2
+            revised.append(row)
+        self.assertEqual(revised, legacy_gates["workflow_rows"])
         self.assertEqual(
             [row for row in current_gates["job_rows"] if not row[0].startswith(new_workflow + "#")],
             legacy_gates["job_rows"],

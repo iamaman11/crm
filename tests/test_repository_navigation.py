@@ -32,24 +32,19 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(packet["baseline"], {"ref": "main", "sha": "4ec3b416d77857347f797f185ad3981a95219b04"})
         self.assertEqual(packet["tracking_issues"], [321, 322, 310])
         self.assertEqual(set(packet["allowed_paths"]), {
-            "repository-packet.json", "docs/ACTIVE_PACKET.md",
-            "apps/web/src/App.tsx", "apps/web/src/routes.ts", "apps/web/src/routes.test.ts",
-            "apps/web/src/productionSession.ts", "apps/web/src/productionSession.test.ts",
-            "apps/web/src/CrmPageUtils.ts", "apps/web/src/CrmPageUtils.test.ts",
-            "apps/web/vite.config.ts", "apps/web/playwright.config.ts",
-            "apps/web/e2e/g2-crm.spec.ts", "scripts/run_e2e.sh",
-            "services/crm-api/tests/seed_e2e_fixture.rs",
-            "packages/client/src/gateway.ts", "packages/client/src/gateway.test.ts",
-            "apps/web/e2e/customer-privacy.spec.ts",
-            "apps/web/src/CustomerPrivacyPage.tsx",
-            "scripts/run_customer_privacy_operations.sh",
-            "tests/test_customer_privacy_operations.py",
+            "repository-packet.json",
+            "docs/ACTIVE_PACKET.md",
+            "apps/cloudflare-crm/worker/index.mjs",
+            "apps/cloudflare-crm/migrations/0001_initial.sql",
+            "apps/cloudflare-crm/test/worker.test.mjs",
+            "apps/cloudflare-crm/cloudflare.config.ts",
+            "apps/cloudflare-crm/README.md",
+            ".github/workflows/cloudflare-crm-spike.yml",
+            "affected-scope-policy.json",
             ".github/workflows/product-plane.yml",
-            "apps/web/src/CustomersPage.tsx", "apps/web/src/DealsPage.tsx", "apps/web/src/TasksPage.tsx",
-            "packages/client/src/crm.ts", "packages/client/src/crm.test.ts",
-            "packages/client/src/index.ts", "packages/client/src/session.ts",
-            "crates/crm-application-runtime/src/production_identity.rs",
-            "tests/test_repository_navigation.py", "tests/test_architecture_documentation_consistency.py",
+            "tests/test_workspace_analysis.py",
+            "tests/test_repository_navigation.py",
+            "apps/cloudflare-crm/scripts/deploy.mjs",
         })
         for path in (".github/actions/**", "modules/**", "contracts/**", "proto/**", "docs/generated/REPOSITORY_MAP.md"):
             self.assertIn(path, packet["forbidden_paths"])
