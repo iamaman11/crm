@@ -12,6 +12,20 @@ export const modules = {
   ["customer_id","Клиент","customer"],["title","Что сделать","text"],["due_date","Срок","date"],
   ["status","Статус","select",["open","done"]]]},
 };
+
+// Source ownership for fast, truthful developer navigation.
+// The original four small modules share pilot-core; each NEW expert module must
+// declare its own source owner and files before it can pass the doctor gate.
+export const implementationOwners = {
+ customers:"pilot-core", contacts:"pilot-core", deals:"pilot-core", tasks:"pilot-core",
+};
+export const ownerFiles = {
+ "pilot-core": {
+  ui:"web/src/main.jsx", api:"worker/index.mjs",
+  validation:"worker/index.mjs:parseRecord", migration:"migrations",
+  tests:"test/worker.test.mjs", browser:"e2e/live.mjs",
+ },
+};
 export const labels={person:"Частное лицо",organization:"Компания",new:"Новая",qualified:"В работе",
  proposal:"Предложение",won:"Выиграна",lost:"Закрыта",open:"В работе",done:"Готово"};
 export const errors = {

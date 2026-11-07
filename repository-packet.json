@@ -22,6 +22,7 @@
     "apps/cloudflare-crm/test/worker.test.mjs",
     "apps/cloudflare-crm/cloudflare.config.ts",
     "apps/cloudflare-crm/README.md",
+    "apps/cloudflare-crm/AGENTS.md",
     ".github/workflows/cloudflare-crm-spike.yml",
     "affected-scope-policy.json",
     ".github/workflows/product-plane.yml",

@@ -48,6 +48,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             "pnpm-workspace.yaml",
             "apps/cloudflare-crm/e2e/live.mjs",
             "apps/cloudflare-crm/README.md",
+            "apps/cloudflare-crm/AGENTS.md",
             ".github/workflows/cloudflare-crm-spike.yml",
             "affected-scope-policy.json",
             ".github/workflows/product-plane.yml",
