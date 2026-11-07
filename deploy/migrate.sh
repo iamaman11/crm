@@ -32,13 +32,14 @@ for file in /migrations/*.up.sql; do
     echo "Migration was modified after applying: $name" >&2
     exit 3
   fi
-  if [[ "$(head -n 1 "$file")" != "BEGIN;" || "$(tail -n 1 "$file")" != "COMMIT;" ]]; then
-    echo "Migration does not have expected BEGIN/COMMIT wrapper: $name" >&2
-    exit 3
-  fi
   {
     echo "BEGIN;"
-    sed '1d;$d' "$file"
+    if [[ "$(head -n 1 "$file")" == "BEGIN;" && "$(tail -n 1 "$file")" == "COMMIT;" ]]; then
+      # Historical migrations include both wrapped and unwrapped SQL files.
+      sed '1d;$d' "$file"
+    else
+      cat "$file"
+    fi
     printf "INSERT INTO public.crm_schema_migrations (file_name, sha256) VALUES ('%s', '%s');\n" "$name" "$sha"
     echo "COMMIT;"
   } | psql -X -q -v ON_ERROR_STOP=1

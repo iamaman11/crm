@@ -144,7 +144,10 @@
         "step13-suppression-baseline.json",
         "step22-architecture-inventory.json",
         "step22-runtime-fanin-decisions.json",
-        "tests/test_customer_privacy_operations.py"
+        "tests/test_customer_privacy_operations.py",
+        ".dockerignore",
+        ".gitignore",
+        "deploy/**"
       ],
       "required_workflows": [
         "Governance CI"
