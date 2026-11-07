@@ -64,7 +64,7 @@ class PilotDeploymentSourceTests(unittest.TestCase):
     def test_installed_and_restored_browser_workflow(self) -> None:
         governance = (ROOT / ".github/workflows/governance.yml").read_text()
         playwright = (ROOT / "apps/web/playwright.config.ts").read_text()
-        self.assertEqual(governance.count("e2e/g2-crm.spec.ts"), 4)
+        self.assertEqual(governance.count("e2e/g2-crm.spec.ts"), 6)
         for marker in ("G2_E2E_BASE_URL=https://localhost",
                        "G2_TEST_PHASE=before", "G2_TEST_PHASE=after",
                        "pnpm install --frozen-lockfile",
@@ -91,7 +91,21 @@ class PilotDeploymentSourceTests(unittest.TestCase):
         for marker in ("release_evidence.py", "upgrade_drill.sh",
                        "g3-local-ca.crt", "g3-restored-ca.crt"):
             self.assertIn(marker, workflow)
-        self.assertEqual(workflow.count("e2e/g2-crm.spec.ts"), 4)
+        self.assertEqual(workflow.count("e2e/g2-crm.spec.ts"), 6)
+
+    def test_two_real_historical_binaries_browser_rollback(self) -> None:
+        script = (DEPLOY / "two_version_drill.sh").read_text()
+        workflow = (ROOT / ".github/workflows/governance.yml").read_text()
+        self.assertIn("4ec3b416d77857347f797f185ad3981a95219b04", script)
+        for marker in ("worktree add --detach", "cargo build --release --locked -p crm-api",
+                       "sha256sum", "old_binary", "new_binary",
+                       "--no-build --no-deps --force-recreate --wait api"):
+            self.assertIn(marker, script)
+        for marker in ("bash deploy/two_version_drill.sh",
+                       "g3-new-api.yml", "g3-after-two-versions.json",
+                       "g3-current-api-image-id"):
+            self.assertIn(marker, workflow)
+        self.assertEqual(workflow.count("e2e/g2-crm.spec.ts"), 6)
 
     def test_same_origin_gateway_and_no_dev_identity(self) -> None:
         caddy = (DEPLOY / "Caddyfile").read_text()

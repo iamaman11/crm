@@ -315,6 +315,26 @@ jobs:
             pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
             --reporter=list --retries=0
           python deploy/release_evidence.py --output "$RUNNER_TEMP/g3-upgraded.json"
+          # Compile genuinely different accepted G2 api; G3 -> G2 -> G3 on ONE PostgreSQL.
+          bash deploy/two_version_drill.sh
+          python deploy/smoke_https.py --env deploy/.env --origin https://localhost \
+            --ca-bundle "$RUNNER_TEMP/g3-local-ca.crt"
+          G2_E2E=1 G2_E2E_BASE_URL=https://localhost G2_TEST_PHASE=after \
+            G2_RUN_ID="g3-${{ github.run_id }}" \
+            pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
+            --reporter=list --retries=0
+          current=(docker compose --env-file deploy/.env -f deploy/compose.yaml \
+            -f "$RUNNER_TEMP/g3-new-api.yml")
+          "${current[@]}" up -d --no-build --no-deps --force-recreate --wait api
+          test "$(docker inspect --format '{{.Image}}' "$("${compose[@]}" ps -q api)")" = \
+            "$(cat "$RUNNER_TEMP/g3-current-api-image-id")"
+          python deploy/smoke_https.py --env deploy/.env --origin https://localhost \
+            --ca-bundle "$RUNNER_TEMP/g3-local-ca.crt"
+          G2_E2E=1 G2_E2E_BASE_URL=https://localhost G2_TEST_PHASE=after \
+            G2_RUN_ID="g3-${{ github.run_id }}" \
+            pnpm --filter @ultimate-crm/web exec playwright test e2e/g2-crm.spec.ts \
+            --reporter=list --retries=0
+          python deploy/release_evidence.py --output "$RUNNER_TEMP/g3-after-two-versions.json"
           # Quiesce writers for a stable independent database archive.
           "${compose[@]}" stop web api
           # Query the authoritative PostgreSQL rows, without fragile heredoc SQL quoting.

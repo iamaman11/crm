@@ -103,3 +103,21 @@ of publicly trusted HTTPS.
 schema/recovery/CA slice requires its own successful CI. Trusted public
 TLS, image registry digest pinning, two-distinct-version upgrade/rollback,
 and a fresh isolated host are still external acceptance work.
+
+## Historical two-binary G2 ⇄ G3 rollback acceptance
+
+Governance CI now builds the **unaltered, accepted G2 historical commit**
+`4ec3b416d77857347f797f185ad3981a95219b04` into a separate API
+container. It rejects equal SHA-256 `crm-api` binary contents, avoiding
+a false two-version test from different container labels. With the already
+additively upgraded real G3 PostgreSQL database unchanged, it runs the G2
+binary, verifies real HTTPS authentication and Chromium customer/contact/deal/task
+readback, then switches back to the original pinned G3 image and repeats
+both checks. The independent backup/restore takes place after both switches.
+
+This test is confined to disposable GitHub Actions and **never** modifies
+the historical source or runs against customer data. It proves compatibility
+between these two exact binaries and the tested additive schema only.
+Schema-destructive upgrades and unknown versions remain out of scope.
+Independent host, publicly trusted HTTPS and portable registry image-digest
+distribution must still be verified for G3 acceptance.
