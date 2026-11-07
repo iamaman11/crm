@@ -69,3 +69,15 @@ pub fn declared_business_module_ids() -> std::collections::BTreeSet<String> {
     module_ids.insert("crm.customer-privacy".to_owned());
     module_ids
 }
+
+
+/// Exact production definitions for the installation bundle. This is the same
+/// module-owned inventory used by live dispatch, never a copy of test fixtures.
+pub fn published_contract_catalog_json() -> Result<String, String> {
+    let mut definitions =
+        native_composition::application_mutation_definitions().map_err(|e| e.to_string())?;
+    definitions.extend(
+        native_composition::application_query_definitions().map_err(|e| e.to_string())?,
+    );
+    serde_json::to_string(&definitions).map_err(|e| e.to_string())
+}
