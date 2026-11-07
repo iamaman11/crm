@@ -2,7 +2,7 @@
 
 Execution issue: https://github.com/iamaman11/crm/issues/313.
 
-This packet adds a normal Compose layout: **Caddy (HTTPS + built React + same-origin proxy), one crm-api process, PostgreSQL 17**, and one *exiting* migration job. No Kubernetes, new authorization service, or duplicated business storage.
+This packet adds a normal Compose layout: **Caddy (HTTPS + built React + same-origin proxy), one crm-api process, PostgreSQL 17**, and two *exiting* initialization jobs (migration and provisioning). No Kubernetes, new authorization service, or duplicated business storage.
 
 ## Scope and current acceptance boundary
 

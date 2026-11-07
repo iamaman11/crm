@@ -476,11 +476,13 @@ jobs:
         )
         governance[4] += 2  # packaging and isolated restore
         governance[5] += 12  # 6 precise path filters for both PR and push
+        governance[6] = 105  # measured G3 image-build acceptance timeout
         job = next(
             row for row in expected_gates["job_rows"]
             if row[0] == ".github/workflows/governance.yml#governance"
         )
         job[2] += 2
+        job[3] = 105  # same existing job, no additional permanent gate
         self.assertEqual(fresh["permanent_gates"], expected_gates)
         governance_source = (ROOT / ".github/workflows/governance.yml").read_text()
         self.assertIn("deploy/**", governance_source)
