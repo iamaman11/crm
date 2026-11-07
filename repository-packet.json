@@ -1,49 +1,36 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "repository-step-22p-g2-useful-crm",
-  "title": "G2 useful CRM: customers, contacts, deals and tasks",
+  "packet_id": "repository-step-22p-g3-deployable-crm",
+  "title": "G3 minimal reproducible closed-pilot CRM deployment",
   "status": "active",
-  "objective": "Build the first useful browser CRM on existing Party, Account, Contact Point, Sales and Activities owners, using the existing production identity and governed gateway. No new owners, generic CRUD backend, alternative storage or additional authorization service.",
+  "objective": "Package built React, the existing crm-api and durable PostgreSQL with one HTTPS origin; first operator and actor provisioning through the authoritative platform lifecycle; backup and independent restore, with no test fixtures or new services.",
   "baseline": {
     "ref": "main",
-    "sha": "ddd6e738d0e11d6ff214caea6eb42de378b9f1c9"
+    "sha": "4ec3b416d77857347f797f185ad3981a95219b04"
   },
   "tracking_issues": [
-    312,
+    313,
     310
   ],
   "allowed_paths": [
+    ".dockerignore",
+    ".gitignore",
+    "affected-scope-policy.json",
+    ".github/workflows/pilot-deployment.yml",
+    "deploy/.env.example",
+    "deploy/Caddyfile",
+    "deploy/Dockerfile.api",
+    "deploy/Dockerfile.web",
+    "deploy/README.md",
+    "deploy/backup.sh",
+    "deploy/compose.yaml",
+    "deploy/migrate.sh",
+    "deploy/restore.sh",
     "repository-packet.json",
     "docs/ACTIVE_PACKET.md",
-    "apps/web/src/App.tsx",
-    "apps/web/src/routes.ts",
-    "apps/web/src/routes.test.ts",
-    "apps/web/src/productionSession.ts",
-    "apps/web/src/productionSession.test.ts",
-    "apps/web/src/CrmPageUtils.ts",
-    "apps/web/src/CustomersPage.tsx",
-    "apps/web/src/DealsPage.tsx",
-    "apps/web/src/TasksPage.tsx",
-    "apps/web/src/CrmPageUtils.test.ts",
-    "packages/client/src/crm.ts",
-    "packages/client/src/crm.test.ts",
-    "packages/client/src/index.ts",
-    "packages/client/src/session.ts",
-    "crates/crm-application-runtime/src/production_identity.rs",
     "tests/test_repository_navigation.py",
     "tests/test_architecture_documentation_consistency.py",
-    "apps/web/vite.config.ts",
-    "apps/web/playwright.config.ts",
-    "apps/web/e2e/g2-crm.spec.ts",
-    "scripts/run_e2e.sh",
-    ".github/workflows/product-plane.yml",
-    "services/crm-api/tests/seed_e2e_fixture.rs",
-    "packages/client/src/gateway.ts",
-    "packages/client/src/gateway.test.ts",
-    "apps/web/e2e/customer-privacy.spec.ts",
-    "apps/web/src/CustomerPrivacyPage.tsx",
-    "scripts/run_customer_privacy_operations.sh",
-    "tests/test_customer_privacy_operations.py"
+    "tests/test_pilot_deployment.py"
   ],
   "forbidden_paths": [
     "modules/**",
@@ -56,34 +43,30 @@
     "docs/generated/REPOSITORY_MAP.md"
   ],
   "deliverables": [
-    "typed browser gateway client reusing published proto messages, descriptor hashes, exact owner capability versions and mutation idempotency",
-    "ordinary Customers, Deals and Tasks routes, forms, validation, loading/error/empty states, keyboard controls and permission-aware navigation",
-    "customer create/list/search/open/update, person and organization identities, contact create/list/update, optional governed account link",
-    "deal create/list/read/update/stage and task create/list/read/update/complete, with owner identity confirmed by the server session",
-    "single owner for each business entity and no frontend database, new business crates, duplicate auth or universal CRUD",
-    "tests including authenticated and unauthorized flows, invalid inputs and real PostgreSQL process persistence proof before acceptance",
-    "check exact GitHub SHA before and after CI; production-built browser and physical installation are separately evidenced"
+    "built web served via Caddy HTTPS with existing /auth, /v1 and gRPC-web proxy on one origin",
+    "one Docker Compose package with private crm-api and persistent PostgreSQL plus one-shot schema migration",
+    "first tenant, active user actor and correct module installation without importing test fixture (NOT IMPLEMENTED YET)",
+    "idempotent checksum-verified migrations and non-superuser runtime PostgreSQL role",
+    "operator environment, backup and separate fresh-environment restore commands",
+    "exact-SHA installation, browser and recovery evidence (PENDING)"
   ],
   "required_checks": [
-    "Governance CI",
     "Affected Scope CI",
-    "Rust Generated Sync",
+    "Governance CI",
     "Rust CI",
-    "Product Plane CI",
-    "Application Runtime CI",
-    "Database CI"
+    "Rust Generated Sync",
+    "Pilot Deployment CI"
   ],
   "acceptance": [
-    "all changed files remain within the G2 active packet; packet generation and repository navigation are in sync",
-    "customers, contact points, accounts, deals, tasks use existing governed owner contracts and exact published versions",
-    "browser sign-in, create/edit/link/stage/complete/reload workflow succeeds against live crm-api and real PostgreSQL",
-    "multi-tenant non-disclosure, denial and data persistence on service restart are demonstrated",
-    "user interface exposes neither opaque IDs nor bearer tokens, provides comprehensible error states and prevents double submissions",
-    "required exact-head CI is green before merge, main push checks pass after merge"
+    "fresh installation without demo/test fixtures and with correctly provisioned real tenant and operator",
+    "one HTTPS origin with private API and PostgreSQL; authenticated create/read/update CRM and tenant/RLS denial",
+    "PostgreSQL persistence after restarts and independent restored copy with audit/outbox/tenants",
+    "tested upgrade and schema-compatible rollback, exact image digests, deployment runbook and G3 issue evidence",
+    "all exact-head CI and relevant practical checks accepted before merge"
   ],
   "non_goals": [
-    "launch production, upgrade deployment or claims of physical pilot acceptance before G3/G5",
-    "create new CRUD engine or new domain crates, duplicate auth/storage, broad platform rearchitecture",
-    "advanced Kanban, forecasting, campaign automation, microservices or broad CI infrastructure rewrite"
+    "G3 is not accepted until authoritative first-install operator provisioning and independent restore pass",
+    "no Kubernetes, alternate auth engine, generic CRUD or architectural platform expansion",
+    "no production claims from build-only or CI-only tests"
   ]
 }
