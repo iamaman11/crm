@@ -88,6 +88,13 @@ async function checkIndependentWorkspaces(customerName) {
       assert.ok(rows.some(row => row.id === mine.id), "own record visible");
       assert.ok(!rows.some(row => row.id === foreign.id), "foreign record hidden");
       assert.equal((await viewer.request.get(url + "/api/customers/" + foreign.id)).status(), 404);
+      const foreign360 = await viewer.request.get(url + "/api/customer360/" + foreign.id);
+      assert.equal(foreign360.status(), 404, "foreign Customer 360 must not leak existence");
+      assert.equal(foreign360.headers()["x-crm-error-code"], "NOT_FOUND");
+      assert.ok(foreign360.headers()["x-request-id"]);
+      const own360 = await viewer.request.get(url + "/api/customer360/" + mine.id);
+      assert.equal(own360.status(), 200, "own Customer 360 must work");
+      assert.equal((await own360.json()).customer.id, mine.id);
       assert.equal((await viewer.request.patch(url + "/api/customers/" + foreign.id, {
         data: { name: customerName + " foreign edit", kind: "organization" },
       })).status(), 404);
@@ -124,7 +131,28 @@ try {
   await check(customer);
   await create("Контакты", "контакт", { "Клиент": { label: customer }, "Имя": contact, "Электронная почта": "demo@example.test" }, contact);
   await create("Сделки", "сделку", { "Клиент": { label: customer }, "Название сделки": deal, "Этап": "new", "Сумма": "120" }, deal);
-  await create("Задачи", "задачу", { "Клиент": { label: customer }, "Что сделать": task, "Статус": "open" }, task);
+  await create("Задачи", "задачу", { "Клиент": { label: customer }, "Что сделать": task,
+    "Срок": "2020-01-01", "Статус": "open" }, task);
+  const owned = await context.request.get(url + "/api/customers");
+  const customerRow = (await owned.json()).items.find(row => row.name === customer);
+  assert.ok(customerRow?.id);
+  const detail = await context.request.get(url + "/api/customer360/" + customerRow.id);
+  assert.equal(detail.status(), 200);
+  const original = await detail.json();
+  assert.equal(original.summary.contacts, 1);
+  assert.equal(original.summary.deals, 1);
+  assert.equal(original.summary.open_tasks, 1);
+  assert.equal(original.summary.overdue_tasks, 1);
+  assert.equal(original.summary.deal_amount, 120);
+  await tab("Клиенты").click();
+  await (await rowFor(customer)).getByRole("button", { name: "Карточка" }).click();
+  await page.getByRole("heading", { name: customer }).waitFor();
+  for(const [section,title] of [["Контакты клиента",contact],["Сделки клиента",deal],["Задачи клиента",task]])
+    await page.getByRole("region", { name: section }).getByText(title, { exact: true }).waitFor();
+  assert.equal(await page.getByText("Просрочено",{exact:true}).locator("..").locator("strong").textContent(),"1");
+  await page.getByRole("button", { name: "Обновить карточку" }).click();
+  await page.getByRole("heading", { name: customer }).waitFor();
+  await page.getByRole("button", { name: "← К списку клиентов" }).click();
   await tab("Сделки").click();
   await page.getByRole("button", { name: "Воронка" }).click();
   const card = page.locator(".deal-card").filter({ hasText: deal });
@@ -142,10 +170,30 @@ try {
   await edit("Задачи", task, "Статус", "done", task);
   await (await rowFor(task)).getByText("Готово", { exact: true }).waitFor();
   await tab("Клиенты").click();
+  await (await rowFor(customer)).getByRole("button", { name: "Карточка" }).click();
+  await page.getByRole("heading", { name: customer }).waitFor();
+  assert.equal(await page.getByText("Просрочено",{exact:true}).locator("..").locator("strong").textContent(),"0");
+  assert.equal(await page.getByText("Открытых задач",{exact:true}).locator("..").locator("strong").textContent(),"0");
+  await page.getByRole("region", { name: "Сделки клиента" }).getByText("Выиграна", { exact: false }).waitFor();
+  await page.getByRole("region", { name: "Задачи клиента" }).getByText("Готово", { exact: false }).waitFor();
+  await page.reload();
+  await (await rowFor(customer)).getByRole("button", { name: "Карточка" }).click();
+  await page.getByRole("heading", { name: customer }).waitFor();
+  await page.getByRole("region", { name: "Контакты клиента" }).getByText(contact, { exact: true }).waitFor();
+  // Linked edit uses the original CRUD owner without copying or mutating Customer 360 state.
+  await page.getByRole("region", { name: "Контакты клиента" }).getByRole("button", { name:"Изменить" }).click();
+  await page.getByRole("button", {name:"Отмена"}).click();
+  await tab("Клиенты").click();
+  await tab("Клиенты").click();
   await page.getByRole("textbox", { name: "Поиск" }).fill(customer);
   await check(customer);
   await page.getByRole("textbox", { name: "Поиск" }).fill("");
   await page.setViewportSize({ width: 390, height: 844 });
+  await tab("Клиенты").click();
+  await page.locator(".mobile article").filter({hasText:customer}).getByRole("button",{name:"Карточка"}).click();
+  await page.getByRole("heading", {name:customer}).waitFor();
+  await page.getByRole("region",{name:"Сделки клиента"}).getByText(deal,{exact:true}).waitFor();
+  await page.getByRole("button",{name:"← К списку клиентов"}).click();
   await tab("Задачи").click();
   await page.locator(".mobile").getByText(task, { exact: true }).waitFor({ timeout: 12000 });
   await page.screenshot({ path: "apps/cloudflare-crm/e2e-mobile.png" });
@@ -155,9 +203,11 @@ try {
   await remove("Сделки", deal);
   await remove("Контакты", contact);
   await remove("Клиенты", customer);
+  const removed360 = await context.request.get(url + "/api/customer360/" + customerRow.id);
+  assert.equal(removed360.status(), 404);
   if (errors.length) throw Error("Browser JavaScript error: " + errors.slice(0, 2).join("; "));
   result = "PASS";
-  console.log(JSON.stringify({ event: "crm.browser-e2e", result, tests: "real Chromium UI, 4 creates, persistence, search, edit, mobile, delete", sha: process.env.GITHUB_SHA }));
+  console.log(JSON.stringify({ event: "crm.browser-e2e", result, tests: "real Chromium Customer 360, scoped A/B, derived metrics, reload, linked edit, mobile, delete", sha: process.env.GITHUB_SHA }));
 } catch (error) {
   await mkdir("apps/cloudflare-crm", { recursive: true });
   await page.screenshot({ path: "apps/cloudflare-crm/e2e-failure.png" }).catch(() => {});
