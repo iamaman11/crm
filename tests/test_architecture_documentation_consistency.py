@@ -237,6 +237,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "repository-packet.json",
             "docs/ACTIVE_PACKET.md",
             "apps/cloudflare-crm/worker/index.mjs",
+            "apps/cloudflare-crm/shared/catalog.mjs",
             "apps/cloudflare-crm/migrations/0001_initial.sql",
             "apps/cloudflare-crm/test/worker.test.mjs",
             "apps/cloudflare-crm/cloudflare.config.ts",
@@ -255,6 +256,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "tests/test_workspace_analysis.py",
             "tests/test_repository_navigation.py",
             "apps/cloudflare-crm/scripts/deploy.mjs",
+            "apps/cloudflare-crm/scripts/doctor.mjs",
             "tests/test_architecture_documentation_consistency.py",
         })
         self.assertIn("Cloudflare CRM Spike CI", self.packet["required_checks"])
