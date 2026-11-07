@@ -69,7 +69,7 @@ class PilotDeploymentSourceTests(unittest.TestCase):
                        "G2_TEST_PHASE=before", "G2_TEST_PHASE=after",
                        "pnpm install --frozen-lockfile",
                        "g3-ci-other", "other_actors",
-                       'restored[@]}" up -d --wait api web'):
+                       'restored[@]}" up -d --no-build --wait api web'):
             self.assertIn(marker, governance)
         self.assertIn("process.env.G2_E2E_BASE_URL", playwright)
 
