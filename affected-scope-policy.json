@@ -94,7 +94,8 @@
         "apps/web/**",
         "packages/client/**",
         "packages/ui/**",
-        "scripts/run_e2e.sh"
+        "scripts/run_e2e.sh",
+        "apps/cloudflare-crm/**"
       ],
       "required_workflows": [
         "Product Plane CI"
@@ -107,7 +108,8 @@
         "apps/web/**",
         "packages/client/**",
         "packages/ui/**",
-        "buf.gen.web.yaml"
+        "buf.gen.web.yaml",
+        "apps/cloudflare-crm/**"
       ],
       "required_workflows": [
         "Product Plane CI"

@@ -9,12 +9,17 @@ on:
       - "docs/ACTIVE_PACKET.md"
   push:
     branches:
+      - main
       - feature/cloudflare-native-crm-20261107
     paths:
       - "apps/cloudflare-crm/**"
       - ".github/workflows/cloudflare-crm-spike.yml"
       - "repository-packet.json"
       - "docs/ACTIVE_PACKET.md"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -38,3 +43,24 @@ jobs:
           grep -F 'accountId: "5bd5e1e1e813f061afc259e91334262d"' apps/cloudflare-crm/cloudflare.config.ts
           grep -F '35fc7ee9-9710-485f-8fb3-f5a398b229b4' apps/cloudflare-crm/cloudflare.config.ts
           grep -F 'if (!ctx.access) return null' apps/cloudflare-crm/worker/index.mjs
+
+  deploy-crm-dev:
+    name: Deploy protected crm-dev from trusted branch
+    needs: cloudflare-crm-spike
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cloudflare-native-crm-20261107'
+    runs-on: ubuntu-latest
+    environment: crm-dev
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Deploy exact source SHA to dedicated CRM account
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
+          CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
+        run: node apps/cloudflare-crm/scripts/deploy.mjs

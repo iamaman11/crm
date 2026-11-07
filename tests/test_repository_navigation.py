@@ -24,13 +24,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_g2_useful_crm_packet_is_exact_and_bounded(self) -> None:
+    def test_active_cloudflare_experiment_packet_is_exact_and_bounded(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(packet["packet_id"], "repository-step-22p-g2-useful-crm")
+        self.assertEqual(packet["packet_id"], "repository-step-23-cloudflare-native-experiment")
         self.assertEqual(packet["status"], "active")
-        self.assertEqual(packet["baseline"], {"ref": "main", "sha": "ddd6e738d0e11d6ff214caea6eb42de378b9f1c9"})
-        self.assertEqual(packet["tracking_issues"], [312, 310])
+        self.assertEqual(packet["baseline"], {"ref": "main", "sha": "4ec3b416d77857347f797f185ad3981a95219b04"})
+        self.assertEqual(packet["tracking_issues"], [321, 322, 310])
         self.assertEqual(set(packet["allowed_paths"]), {
             "repository-packet.json", "docs/ACTIVE_PACKET.md",
             "apps/web/src/App.tsx", "apps/web/src/routes.ts", "apps/web/src/routes.test.ts",
@@ -53,8 +53,8 @@ class RepositoryNavigationTests(unittest.TestCase):
         })
         for path in (".github/actions/**", "modules/**", "contracts/**", "proto/**", "docs/generated/REPOSITORY_MAP.md"):
             self.assertIn(path, packet["forbidden_paths"])
-        self.assertIn("typed browser gateway client", " ".join(packet["deliverables"]))
-        self.assertIn("production", " ".join(packet["non_goals"]))
+        self.assertIn("Access-verified identity", " ".join(packet["deliverables"]))
+        self.assertIn("deploy", " ".join(packet["non_goals"]))
         self.assertEqual(
             validate_decisions(ROOT),
             {"all": 63, "final": 27, "platform_generic": 16,
@@ -73,11 +73,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-22p-g2-useful-crm",
+            "repository-step-23-cloudflare-native-experiment",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "ddd6e738d0e11d6ff214caea6eb42de378b9f1c9",
+            "4ec3b416d77857347f797f185ad3981a95219b04",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -117,6 +117,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         packet = load_packet(ROOT)
         workflow_paths = {
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
+            "Cloudflare CRM Spike CI": ".github/workflows/cloudflare-crm-spike.yml",
             "Application Runtime CI": ".github/workflows/application-runtime.yml",
             "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
             "Governance CI": ".github/workflows/governance.yml",
@@ -143,7 +144,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="ddd6e738d0e11d6ff214caea6eb42de378b9f1c9",
+                return_value="4ec3b416d77857347f797f185ad3981a95219b04",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(

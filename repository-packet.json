@@ -21,7 +21,12 @@
     "apps/cloudflare-crm/test/worker.test.mjs",
     "apps/cloudflare-crm/cloudflare.config.ts",
     "apps/cloudflare-crm/README.md",
-    ".github/workflows/cloudflare-crm-spike.yml"
+    ".github/workflows/cloudflare-crm-spike.yml",
+    "affected-scope-policy.json",
+    ".github/workflows/product-plane.yml",
+    "tests/test_workspace_analysis.py",
+    "tests/test_repository_navigation.py",
+    "apps/cloudflare-crm/scripts/deploy.mjs"
   ],
   "forbidden_paths": [
     "modules/**",
@@ -43,7 +48,8 @@
   "required_checks": [
     "Cloudflare CRM Spike CI",
     "Affected Scope CI",
-    "Governance CI"
+    "Governance CI",
+    "Product Plane CI"
   ],
   "acceptance": [
     "all changed source files are documented in the active packet and the generated navigation digest matches",
