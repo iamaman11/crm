@@ -104,8 +104,8 @@ test("missing or malformed Access JWT is rejected with Static Assets routing", a
 test("two Access service credentials map to distinct workspace keys", async () => {
   const first = db(), second = db();
   const service = id => ({ access: { getIdentity: async () => ({ common_name: id + ".access" }) } });
-  assert.equal((await crmFetch(url("/api/session"), { DB: first }, service("e2e-a"))).status, 200);
-  assert.equal((await crmFetch(url("/api/session"), { DB: second }, service("e2e-b"))).status, 200);
+  assert.equal((await crmFetch(url("/api/session"), { DB: first }, service("service-test-a"))).status, 200);
+  assert.equal((await crmFetch(url("/api/session"), { DB: second }, service("service-test-b"))).status, 200);
   const getKey = database => database.queries.find(q => q.sql.includes("FROM crm_users")).values[0];
   assert.notEqual(getKey(first), getKey(second));
 });
