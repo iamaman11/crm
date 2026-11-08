@@ -11,6 +11,7 @@ const url = "http://127.0.0.1:18787";
 const env = { ...process.env, NO_COLOR: "1" };
 const run = (args) => execFileSync("npx", ["wrangler", ...args], {cwd, env, encoding:"utf8"});
 let child;
+let scenarioCompleted=false;
 function header(tenant,key) {
   return { "x-crm-ci-tenant": tenant, ...(key ? {"Idempotency-Key":key}:{}),
     "content-type":"application/json" };
@@ -91,6 +92,7 @@ try {
   assert.equal(b.length,1);
   assert.equal(a[0].name,"Native Rust Updated");
   assert.equal(b[0].name,"Separate Tenant B");
+  scenarioCompleted=true;
   console.log(JSON.stringify({event:"crm.native-rust-party-workerd",
     result:"PASS",runtime:"workerd",database:"isolated local D1",
     proven:["real original Rust Party create/update/serialize", "D1 persistent readback",
@@ -107,8 +109,11 @@ try {
   const a=run(["d1","execute","crm-rust-party-local","--local",
     "--command","SELECT tenant, COUNT(*) AS audited FROM crm_party_audit GROUP BY tenant ORDER BY tenant",
     "--persist-to",persist]);
-  assert.match(a,/tenant-a/);assert.match(a,/tenant-b/);
-  assert.match(a,/2/);console.log("native Party D1 audit readback PASS");
+  console.log("D1 audit readback:",a.slice(-2200));
+  if(scenarioCompleted){
+    assert.match(a,/tenant-a/);assert.match(a,/tenant-b/);
+    assert.match(a,/2/);console.log("native Party D1 audit readback PASS");
+  }
  } catch (e) {console.error("D1 audit readback failed",e.message);throw e;}
  rmSync(persist,{recursive:true,force:true});
 }
