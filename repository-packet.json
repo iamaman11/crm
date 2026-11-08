@@ -27,6 +27,7 @@
     "apps/cloudflare-crm/README.md",
     "apps/cloudflare-crm/AGENTS.md",
     ".github/workflows/cloudflare-crm-spike.yml",
+    ".github/workflows/governance.yml",
     "affected-scope-policy.json",
     ".github/workflows/product-plane.yml",
     "tests/test_workspace_analysis.py",

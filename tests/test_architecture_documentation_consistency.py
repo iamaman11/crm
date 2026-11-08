@@ -268,6 +268,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "apps/cloudflare-crm/rust-party/README.md",
             "apps/cloudflare-crm/rust-party/test/local.mjs",
             ".github/workflows/cloudflare-crm-spike.yml",
+            ".github/workflows/governance.yml",
             "affected-scope-policy.json",
             ".github/workflows/product-plane.yml",
             "tests/test_workspace_analysis.py",
