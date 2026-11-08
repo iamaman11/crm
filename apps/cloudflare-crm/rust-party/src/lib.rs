@@ -19,11 +19,13 @@ mod access;
 fn native_request_id() -> Result<String> {
     use js_sys::{Function, Reflect};
     use wasm_bindgen::JsCast;
-    let crypto = Reflect::get(&js_sys::global(), &JsValue::from_str("crypto"))?;
-    let func = Reflect::get(&crypto, &JsValue::from_str("randomUUID"))?
+    let crypto = Reflect::get(&js_sys::global(), &JsValue::from_str("crypto"))
+        .map_err(|_| worker::Error::RustError("crypto unavailable".into()))?;
+    let func = Reflect::get(&crypto, &JsValue::from_str("randomUUID"))
+        .map_err(|_| worker::Error::RustError("randomUUID unavailable".into()))?
         .dyn_into::<Function>()
         .map_err(|_| worker::Error::RustError("crypto.randomUUID unavailable".into()))?;
-    func.call0(&crypto)?.as_string()
+    func.call0(&crypto).map_err(|_| worker::Error::RustError("request_id generation failed".into()))?.as_string()
         .ok_or_else(|| worker::Error::RustError("invalid request_id".into()))
 }
 
