@@ -10,7 +10,8 @@
   "tracking_issues": [
     321,
     322,
-    310
+    310,
+    338
   ],
   "allowed_paths": [
     "repository-packet.json",
@@ -57,7 +58,8 @@
     "apps/cloudflare-crm/rust-party/wrangler.unified.jsonc",
     "apps/cloudflare-crm/rust-party/test/unified.mjs",
     "apps/cloudflare-crm/migrations/0002_rust_party.sql",
-    "apps/cloudflare-crm/web/src/Parties.jsx"
+    "apps/cloudflare-crm/web/src/Parties.jsx",
+    "apps/cloudflare-crm/rust-party/src/access.rs"
   ],
   "forbidden_paths": [
     "modules/**",
