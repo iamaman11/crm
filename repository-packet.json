@@ -6,7 +6,7 @@
   "objective": "Build a simple, usable test CRM on one Cloudflare Worker + D1 with React UI. Prioritize working functionality and speed. Defer optional hardening and infrastructure additions until after real production.",
   "baseline": {
     "ref": "feature/cloudflare-native-crm-20261107",
-    "sha": "5ca7994d6524e23f8a6b2fe17086122a6a811a28"
+    "sha": "d11903565b8a3ec9dfd233f1424aadd0dfc9593b"
   },
   "tracking_issues": [
     321,
@@ -28,6 +28,9 @@
     "apps/cloudflare-crm/AGENTS.md",
     ".github/workflows/cloudflare-crm-spike.yml",
     ".github/workflows/governance.yml",
+    ".github/workflows/customer-privacy-owner-execution.yml",
+    "scripts/affected_scope.py",
+    "tests/test_affected_scope.py",
     "affected-scope-policy.json",
     ".github/workflows/product-plane.yml",
     "tests/test_workspace_analysis.py",

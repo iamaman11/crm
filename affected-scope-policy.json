@@ -122,6 +122,8 @@
         ".github/pull_request_template.md",
         ".github/workflows/**",
         "AGENTS.md",
+        "repository-packet.json",
+        "docs/ACTIVE_PACKET.md",
         "customer-privacy-operations-policy.json",
         "docs/ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md",
         "docs/CI_TELEMETRY_BASELINE.md",

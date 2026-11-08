@@ -147,6 +147,39 @@ class AffectedScopeTests(unittest.TestCase):
                     head_sha="abc",
                 )
 
+    def test_packet_only_runs_governance_without_rust_or_unrelated_owners(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        empty = {"packages": [], "workspace_members": []}
+        for changed in (["repository-packet.json"], ["docs/ACTIVE_PACKET.md"],
+                        ["repository-packet.json", "docs/ACTIVE_PACKET.md"]):
+            with self.subTest(paths=changed):
+                report = build_report(root, "origin/main", paths=changed,
+                                      metadata=empty, head_sha="packet-only")
+                self.assertFalse(report["broadened"])
+                self.assertEqual(report["affected_packages"], [])
+                self.assertIn("operations", [s["id"] for s in report["selected_scopes"]])
+                names = [w["name"] for w in report["selected_workflows"]]
+                self.assertIn("Governance CI", names)
+                self.assertNotIn("Customer Privacy Owner Execution CI", names)
+                self.assertNotIn("Cloudflare CRM Spike CI", names)
+        from scripts.repo import affected_clippy_command, affected_test_command
+        report = build_report(root, "origin/main", paths=["repository-packet.json"],
+                              metadata=empty, head_sha="packet")
+        self.assertIsNone(affected_clippy_command(report))
+        self.assertIsNone(affected_test_command(report))
+
+    def test_real_source_changes_still_trigger_owner_workflows(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        empty = {"packages": [], "workspace_members": []}
+        for path, expected in (
+            ("crates/crm-customer-privacy-application/src/lib.rs", "Customer Privacy Owner Execution CI"),
+            ("apps/cloudflare-crm/worker/unified.mjs", "Cloudflare CRM Spike CI"),
+        ):
+            with self.subTest(path=path):
+                report = build_report(root, "origin/main", paths=[path],
+                                      metadata=empty, head_sha="source-change")
+                self.assertIn(expected, [w["name"] for w in report["selected_workflows"]])
+
     def test_docs_only_change_selects_no_rust_or_non_rust_scope(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

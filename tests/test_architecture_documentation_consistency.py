@@ -231,7 +231,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
     def test_active_cloudflare_crm_is_strict_and_preserves_step22(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(self.packet["packet_id"], "repository-step-23-cloudflare-native-experiment")
-        self.assertEqual(self.packet["baseline"], {"ref": "feature/cloudflare-native-crm-20261107", "sha": "5ca7994d6524e23f8a6b2fe17086122a6a811a28"})
+        self.assertEqual(self.packet["baseline"], {"ref": "feature/cloudflare-native-crm-20261107", "sha": "d11903565b8a3ec9dfd233f1424aadd0dfc9593b"})
         self.assertEqual(self.packet["promotion_baseline"], {"ref": "main", "sha": "4ec3b416d77857347f797f185ad3981a95219b04"})
         self.assertEqual(self.packet["tracking_issues"], [321, 322, 310])
         self.assertEqual(set(self.packet["allowed_paths"]), {
@@ -269,6 +269,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "apps/cloudflare-crm/rust-party/test/local.mjs",
             ".github/workflows/cloudflare-crm-spike.yml",
             ".github/workflows/governance.yml",
+            ".github/workflows/customer-privacy-owner-execution.yml",
+            "scripts/affected_scope.py",
+            "tests/test_affected_scope.py",
             "affected-scope-policy.json",
             ".github/workflows/product-plane.yml",
             "tests/test_workspace_analysis.py",
