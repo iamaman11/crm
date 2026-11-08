@@ -152,9 +152,6 @@ jobs:
         run: |
           cargo install --locked worker-build --version 0.8.7
           worker-build --release --features ci-local
-      - name: Test original Rust Party through workerd and isolated native D1
-        working-directory: apps/cloudflare-crm
-        run: node rust-party/test/local.mjs
       - name: Record native Party dependency lock for exact reproducibility
         working-directory: apps/cloudflare-crm/rust-party
         shell: bash
@@ -163,6 +160,9 @@ jobs:
           base64 -w 80 Cargo.lock
           echo
           echo 'NATIVE_PARTY_CARGO_LOCK_END'
+      - name: Test original Rust Party through workerd and isolated native D1
+        working-directory: apps/cloudflare-crm
+        run: node rust-party/test/local.mjs
       - name: Check CRM target
         run: |
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
