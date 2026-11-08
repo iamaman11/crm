@@ -53,9 +53,14 @@ jobs:
         with:
           toolchain: 1.97.1
           targets: wasm32-unknown-unknown
-      - name: Compile the existing Party owner crate for WebAssembly
+      - name: Verify all existing Rust business modules compile for WebAssembly
         run: |
-          cargo check --locked -p crm-parties --target wasm32-unknown-unknown
+          cargo check --locked --target wasm32-unknown-unknown \
+            -p crm-sales -p crm-activities -p crm-sales-activities-link \
+            -p crm-parties -p crm-customer-accounts -p crm-contact-points \
+            -p crm-party-relationships -p crm-consents -p crm-identity-resolution \
+            -p crm-customer-data-operations -p crm-data-quality \
+            -p crm-customer-enrichment -p crm-customer-privacy
       - name: Execute the original Rust domain rules from WASM in Node
         shell: bash
         run: |
