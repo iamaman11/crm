@@ -24,7 +24,7 @@ try {
   console.log(run(["d1","execute","crm-rust-party-local","--local",
     "--file","./migrations/0001_local.sql","--persist-to",persist]));
   child = spawn("npx", ["wrangler","dev","--local","--port","18787",
-    "--persist-to",persist], {cwd,env,stdio:["ignore","pipe","pipe"]});
+    "--persist-to",persist], {cwd,env,detached:true,stdio:["ignore","ignore","pipe"]});
   let stderr = "";
   child.stderr.on("data", bytes=>{stderr+=(bytes.toString()).slice(-4000);});
   let started=false;
@@ -100,10 +100,21 @@ try {
       "invalid input denied", "unauthenticated denied"]}));
 } finally {
  if(child){
-  child.kill("SIGTERM");
-  await Promise.race([new Promise(resolve=>child.once("exit",resolve)),
-    new Promise(resolve=>setTimeout(resolve,1500))]);
-  if(child.exitCode===null) child.kill("SIGKILL");
+  // npx launches Wrangler and workerd as descendants. Stop the entire isolated
+  // process group, otherwise a surviving descendant can keep Node's pipe open
+  // and prevent the GitHub Actions step from terminating after a successful E2E.
+  try { process.kill(-child.pid, "SIGTERM"); } catch (e) {
+    if(e.code!=="ESRCH") throw e;
+  }
+  if(child.exitCode===null) await Promise.race([
+    new Promise(resolve=>child.once("exit",resolve)),
+    new Promise(resolve=>setTimeout(resolve,1500)),
+  ]);
+  try { process.kill(-child.pid, "SIGKILL"); } catch (e) {
+    if(e.code!=="ESRCH") throw e;
+  }
+  child.stderr.destroy();
+  child.unref();
  }
  try {
   const a=run(["d1","execute","crm-rust-party-local","--local",
