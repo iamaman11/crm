@@ -141,6 +141,7 @@
         "scripts/local_lifecycle.py",
         "scripts/prepare_isolated_process_database.sh",
         "scripts/repo.py",
+        "scripts/repository_navigation.py",
         "scripts/run_customer_privacy_operations.sh",
         "step13-complexity-policy.json",
         "step13-suppression-baseline.json",

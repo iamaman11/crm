@@ -30,6 +30,7 @@
     "affected-scope-policy.json",
     ".github/workflows/product-plane.yml",
     "tests/test_workspace_analysis.py",
+    "scripts/repository_navigation.py",
     "tests/test_repository_navigation.py",
     "apps/cloudflare-crm/scripts/deploy.mjs",
     "apps/cloudflare-crm/scripts/doctor.mjs",
@@ -90,5 +91,9 @@
     "deploy CRM while Cloudflare Access is not enabled or without accepted authorization rules",
     "alter current main G2 architecture or delete currently accepted Rust/PostgreSQL sources",
     "introduce containers, VM, external database, queue, AI, or a parallel auth service before necessity is shown"
-  ]
+  ],
+  "promotion_baseline": {
+    "ref": "main",
+    "sha": "4ec3b416d77857347f797f185ad3981a95219b04"
+  }
 }
