@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-      - feature/cloudflare-native-crm-20261107
     paths:
       - "apps/cloudflare-crm/**"
       - ".github/workflows/cloudflare-crm-spike.yml"
@@ -197,7 +196,7 @@ jobs:
           sha256sum --check --strict .release/compiled-sha256.txt
           echo "CRM compiled bundle sealed for $CRM_BUILD_SHA"
       - name: Preserve exact compiled bundle for the protected deployment
-        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cloudflare-native-crm-20261107'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: crm-native-bundle-${{ github.sha }}
@@ -215,7 +214,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cloudflare-native-crm-20261107'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: crm-dev
     timeout-minutes: 30
