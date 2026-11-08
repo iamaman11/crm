@@ -1,5 +1,5 @@
 import { chromium } from "playwright";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 
 const url = "https://crm-dev.crm-5bd5e1e1.workers.dev";
@@ -13,6 +13,39 @@ const context = await browser.newContext({ viewport: { width: 1366, height: 900 
 const page = await context.newPage();
 const marker = "E2E-" + process.env.GITHUB_SHA.slice(0, 8) + "-" + Date.now().toString(36);
 const errors = [];
+const uiEvidenceDir = "apps/cloudflare-crm/e2e-evidence";
+const evidence = {
+  git_sha: process.env.GITHUB_SHA,
+  deployed_url: url,
+  browser: "Chromium",
+  viewport: "desktop + mobile",
+  status: "IN_PROGRESS",
+  screenshots: [],
+  api: [],
+  error: null,
+};
+async function captureUi(file, operation) {
+  await mkdir(uiEvidenceDir, { recursive: true });
+  await page.screenshot({
+    path: uiEvidenceDir + "/" + file + ".png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  evidence.screenshots.push({ file: file + ".png", operation, result: "PASS" });
+  console.log(JSON.stringify({ event: "crm.ui-evidence", operation, screenshot: file + ".png",
+    git_sha: process.env.GITHUB_SHA, result: "PASS" }));
+}
+async function verifyUiWriteInBackend(module, text) {
+  const response = await context.request.get(url + "/api/" + module);
+  assert.equal(response.status(), 200, "Backend list after UI write: " + module);
+  const data = await response.json();
+  const item = (data.items || []).find(row => row.name === text || row.title === text);
+  assert.ok(item?.id, "UI write must persist in D1-backed " + module + " API");
+  evidence.api.push({
+    module, action: "read-after-browser-create", status: response.status(),
+    persisted: true, request_id_present: Boolean(response.headers()["x-request-id"]),
+  });
+}
 page.on("pageerror", error => errors.push(error.message));
 const tab = title => page.getByRole("navigation", { name: "Разделы" }).getByRole("button", { name: new RegExp(title) });
 const check = async text => await page.getByText(text, { exact: true }).first().waitFor({ timeout: 12000 });
@@ -167,6 +200,13 @@ try {
   const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
   if (response.status() !== 200) throw Error("Protected CRM page HTTP " + response.status());
   await page.getByRole("heading", { name: "Моя CRM" }).waitFor({ timeout: 12000 });
+  const release = await context.request.get(url + "/api/version");
+  assert.equal(release.status(), 200, "Live Worker version endpoint");
+  assert.equal((await release.json()).source, process.env.GITHUB_SHA,
+    "Do not inspect UI from a different deployed source");
+  evidence.api.push({ module: "version", action: "live-readback", status: 200,
+    git_sha_matches_main: true });
+  await captureUi("01-home", "Open deployed CRM desktop home");
   // Real browser proof that the original Rust Party runs in this same CRM
   // Worker behind the same Cloudflare Access policy and persists in D1.
   const partyName = marker+" Native Rust";
@@ -188,6 +228,10 @@ try {
   const partyList=(await nativeRead.json()).items;
   const identity=partyList.find(x=>x.name===partyName+" Updated");
   assert.equal(identity?.version,2,"original Rust persisted versioned update");
+  evidence.api.push({ module: "parties", action: "read-after-browser-update",
+    status: nativeRead.status(), persisted_version: 2,
+    request_id_present: Boolean(nativeRead.headers()["x-request-id"]) });
+  await captureUi("02-rust-party", "Create, reload and update original Rust Party");
   const wrongVersion=await context.request.patch(url + "/api/parties/" + identity.id,{
     headers:{"idempotency-key":"stale-"+marker},
     data:{expected_version:1,name:partyName+" Rejected"}});
@@ -202,10 +246,18 @@ try {
   await create("Клиенты", "клиента", { "Имя / название": customer, "Тип": "organization" }, customer);
   await page.reload();
   await check(customer);
+  await verifyUiWriteInBackend("customers", customer);
+  await captureUi("03-customers", "Create and reload customer");
   await create("Контакты", "контакт", { "Клиент": { label: customer }, "Имя": contact, "Электронная почта": "demo@example.test" }, contact);
+  await verifyUiWriteInBackend("contacts", contact);
+  await captureUi("04-contacts", "Create contact linked to customer");
   await create("Сделки", "сделку", { "Клиент": { label: customer }, "Название сделки": deal, "Этап": "new", "Сумма": "120" }, deal);
+  await verifyUiWriteInBackend("deals", deal);
+  await captureUi("05-deals", "Create a linked sales deal");
   await create("Задачи", "задачу", { "Клиент": { label: customer }, "Что сделать": task,
     "Срок": "2020-01-01", "Статус": "open" }, task);
+  await verifyUiWriteInBackend("tasks", task);
+  await captureUi("06-tasks", "Create task linked to customer");
   const owned = await context.request.get(url + "/api/customers");
   const customerRow = (await owned.json()).items.find(row => row.name === customer);
   assert.ok(customerRow?.id);
@@ -217,9 +269,13 @@ try {
   assert.equal(original.summary.open_tasks, 1);
   assert.equal(original.summary.overdue_tasks, 1);
   assert.equal(original.summary.deal_amount, 120);
+  evidence.api.push({ module: "customer360", action: "read-aggregates",
+    status: detail.status(), contacts: 1, deals: 1, open_tasks: 1,
+    overdue_tasks: 1, deal_amount: 120 });
   await tab("Клиенты").click();
   await (await rowFor(customer)).getByRole("button", { name: "Карточка" }).click();
   await page.getByRole("heading", { name: customer }).waitFor();
+  await captureUi("07-customer360", "Open composed customer card after UI writes");
   for(const [section,title] of [["Контакты клиента",contact],["Сделки клиента",deal],["Задачи клиента",task]])
     await page.getByRole("region", { name: section }).getByText(title, { exact: true }).waitFor();
   assert.equal(await page.getByText("Просрочено",{exact:true}).locator("..").locator("strong").textContent(),"1");
@@ -231,6 +287,7 @@ try {
   const card = page.locator(".deal-card").filter({ hasText: deal });
   await card.getByRole("combobox", { name: "Этап сделки" }).selectOption("qualified");
   await page.getByRole("status").getByText("Этап обновлён").waitFor({ timeout: 12000 });
+  await captureUi("08-pipeline", "Click pipeline and update deal stage");
   await page.reload();
   await tab("Сделки").click();
   await page.getByRole("button", { name: "Воронка" }).click();
@@ -249,6 +306,7 @@ try {
   assert.equal(await page.getByText("Открытых задач",{exact:true}).locator("..").locator("strong").textContent(),"0");
   await page.getByRole("region", { name: "Сделки клиента" }).getByText("Выиграна", { exact: false }).waitFor();
   await page.getByRole("region", { name: "Задачи клиента" }).getByText("Готово", { exact: false }).waitFor();
+  await captureUi("09-updated-card", "Verify linked deal and task changes in customer card");
   await page.reload();
   await (await rowFor(customer)).getByRole("button", { name: "Карточка" }).click();
   await page.getByRole("heading", { name: customer }).waitFor();
@@ -270,6 +328,7 @@ try {
   await tab("Задачи").click();
   await page.locator(".mobile").getByText(task, { exact: true }).waitFor({ timeout: 12000 });
   await page.screenshot({ path: "apps/cloudflare-crm/e2e-mobile.png" });
+  await captureUi("10-mobile", "Use mobile layout and verify task after navigation");
   await page.setViewportSize({ width: 1366, height: 900 });
   await checkIndependentWorkspaces(customer);
   await remove("Задачи", task);
@@ -278,15 +337,23 @@ try {
   await remove("Клиенты", customer);
   const removed360 = await context.request.get(url + "/api/customer360/" + customerRow.id);
   assert.equal(removed360.status(), 404);
+  evidence.api.push({ module: "customer360", action: "read-after-browser-delete",
+    status: 404, foreign_data_absent: true });
   if (errors.length) throw Error("Browser JavaScript error: " + errors.slice(0, 2).join("; "));
   result = "PASS";
+  evidence.status = "PASS";
   console.log(JSON.stringify({ event: "crm.browser-e2e", result, tests: "real Chromium Customer 360, scoped A/B, derived metrics, reload, linked edit, mobile, delete", sha: process.env.GITHUB_SHA }));
 } catch (error) {
   await mkdir("apps/cloudflare-crm", { recursive: true });
   await page.screenshot({ path: "apps/cloudflare-crm/e2e-failure.png" }).catch(() => {});
+  evidence.status = "FAIL";
+  evidence.error = { message: String(error.message).slice(0, 300),
+    screenshots_completed: evidence.screenshots.length };
   console.error("CRM browser E2E FAIL:", error.message);
   throw error;
 } finally {
+  await mkdir(uiEvidenceDir, { recursive: true });
+  await writeFile(uiEvidenceDir + "/manifest.json", JSON.stringify(evidence, null, 2) + "\\n");
   await cleanup().catch(() => {});
   await browser.close();
 }
