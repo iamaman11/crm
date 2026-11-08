@@ -206,7 +206,12 @@ try {
     "Do not inspect UI from a different deployed source");
   evidence.api.push({ module: "version", action: "live-readback", status: 200,
     git_sha_matches_main: true });
-  await captureUi("01-home", "Open deployed CRM desktop home");
+  // The React shell renders before its first D1-backed list finishes.
+  // A visually complete screenshot must not contain the loading placeholder.
+  await page.getByRole("button", { name: "+ Добавить клиента" }).waitFor();
+  await page.getByText("Загрузка...", { exact: true })
+    .waitFor({ state: "hidden", timeout: 12000 });
+  await captureUi("01-home", "Open deployed CRM desktop home after data load");
   // Real browser proof that the original Rust Party runs in this same CRM
   // Worker behind the same Cloudflare Access policy and persists in D1.
   const partyName = marker+" Native Rust";
@@ -231,7 +236,9 @@ try {
   evidence.api.push({ module: "parties", action: "read-after-browser-update",
     status: nativeRead.status(), persisted_version: 2,
     request_id_present: Boolean(nativeRead.headers()["x-request-id"]) });
-  await captureUi("02-rust-party", "Create, reload and update original Rust Party");
+  await page.getByPlaceholder("Найти человека или компанию").fill(partyName + " Updated");
+  await page.getByText(partyName + " Updated", { exact: true }).waitFor();
+  await captureUi("02-rust-party", "Search and show just-updated original Rust Party");
   const wrongVersion=await context.request.patch(url + "/api/parties/" + identity.id,{
     headers:{"idempotency-key":"stale-"+marker},
     data:{expected_version:1,name:partyName+" Rejected"}});
