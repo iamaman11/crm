@@ -5,8 +5,7 @@
   "status": "active",
   "objective": "Build a simple, usable test CRM on one Cloudflare Worker + D1 with React UI. Prioritize working functionality and speed. Defer optional hardening and infrastructure additions until after real production.",
   "baseline": {
-    "ref": "feature/cloudflare-native-crm-20261107",
-    "sha": "d11903565b8a3ec9dfd233f1424aadd0dfc9593b"
+    "ref": "main"
   },
   "tracking_issues": [
     321,
@@ -95,9 +94,5 @@
     "deploy CRM while Cloudflare Access is not enabled or without accepted authorization rules",
     "alter current main G2 architecture or delete currently accepted Rust/PostgreSQL sources",
     "introduce containers, VM, external database, queue, AI, or a parallel auth service before necessity is shown"
-  ],
-  "promotion_baseline": {
-    "ref": "main",
-    "sha": "4ec3b416d77857347f797f185ad3981a95219b04"
-  }
+  ]
 }
