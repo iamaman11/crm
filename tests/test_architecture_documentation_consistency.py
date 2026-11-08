@@ -231,8 +231,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
     def test_active_cloudflare_crm_is_strict_and_preserves_step22(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(self.packet["packet_id"], "repository-step-23-cloudflare-native-experiment")
-        self.assertEqual(self.packet["baseline"], {"ref": "feature/cloudflare-native-crm-20261107", "sha": "d11903565b8a3ec9dfd233f1424aadd0dfc9593b"})
-        self.assertEqual(self.packet["promotion_baseline"], {"ref": "main", "sha": "4ec3b416d77857347f797f185ad3981a95219b04"})
+        self.assertEqual(self.packet["baseline"], {"ref": "main"})
         self.assertEqual(self.packet["tracking_issues"], [321, 322, 310])
         self.assertEqual(set(self.packet["allowed_paths"]), {
             "repository-packet.json",
@@ -284,7 +283,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("Cloudflare CRM Spike CI", self.packet["required_checks"])
         self.assertIn("Product Plane CI", self.packet["required_checks"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
-        self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
+        self.assertIn("- **Baseline:** `main` (live PR base)", self.active_packet)
         self.assertIn("ADR-033", self.plan)
         self.assertIn("ADR-033", self.roadmap)
         self.assertIn("ADR-033", self.status)
