@@ -21,6 +21,7 @@ and an idempotency receipt for create or versioned update. A duplicate
 idempotency key is enforced by SQLite unique constraint and rolls back.
 The original Rust owner applies version and input invariants.
 
+The pinned `Cargo.lock` is committed; CI must not regenerate the dependency graph.
 Build locally under GitHub CI with `worker-build --release --features ci-local`;
 test with `wrangler dev --local` and `wrangler d1 execute --local`.
 Nothing from this directory is pushed as a second production Worker.

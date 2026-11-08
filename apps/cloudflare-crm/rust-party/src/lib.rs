@@ -143,7 +143,10 @@ async fn update(mut req: Request, db: D1Database, tenant: &str, id: &str) -> Res
           JsValue::from_str(tenant), JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
     let Ok(result) = updated else { return error("PARTIES_PARTY_UPDATE_CONFLICT", 409); };
-    if result.meta()?.and_then(|m| m.changes) != Some(1) {
+    // D1's changes count may include the audit and receipt triggers. A versioned
+    // UPDATE is successful when it changed at least one row, not exactly one.
+    // A missed optimistic-version predicate changes zero rows and fires no triggers.
+    if result.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
         return error("PARTIES_PARTY_VERSION_CONFLICT", 409);
     }
     response(json!({"item":view(&party), "replayed":false}), 200)
