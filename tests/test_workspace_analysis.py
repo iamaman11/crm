@@ -489,7 +489,7 @@ jobs:
             if row[0] == ".github/workflows/product-plane.yml":
                 row[5] -= 2
             elif row[0] == ".github/workflows/governance.yml":
-                row[5] -= 4
+                row[5] -= 6
             elif row[0] == ".github/workflows/customer-privacy-owner-execution.yml":
                 row[5] += 4
             revised.append(row)
