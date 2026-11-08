@@ -231,6 +231,14 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertIn("sha256sum --check --strict", workflow)
         self.assertIn("Restore previous Worker if release acceptance failed", workflow)
         self.assertIn("Browser E2E on published CRM", workflow)
+        deploy_script = (
+            ROOT / "apps/cloudflare-crm/scripts/deploy.mjs"
+        ).read_text(encoding="utf-8")
+        self.assertIn('process.env.GITHUB_REF!=="refs/heads/main"', deploy_script)
+        self.assertIn('process.env.GITHUB_EVENT_NAME!=="push"', deploy_script)
+        self.assertIn('throw Error("Untrusted deployment")', deploy_script)
+        self.assertIn('throw Error("Wrong Cloudflare CRM target")', deploy_script)
+        self.assertNotIn("refs/heads/feature/cloudflare-native-crm-20261107", deploy_script)
 
     def test_customer_privacy_approval_uses_actual_change_base_for_packet_check(self) -> None:
         approval = (

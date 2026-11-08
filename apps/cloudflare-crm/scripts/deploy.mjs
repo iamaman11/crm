@@ -5,7 +5,7 @@ import {join,relative} from "node:path";
 import {spawnSync} from "node:child_process";
 const required=n=>{if(!process.env[n])throw Error("Missing "+n);return process.env[n];};
 const sha=required("GITHUB_SHA");
-if(!/^[0-9a-f]{40}$/.test(sha)||process.env.GITHUB_REF!=="refs/heads/feature/cloudflare-native-crm-20261107"||process.env.GITHUB_EVENT_NAME!=="push")throw Error("Untrusted deployment");
+if(!/^[0-9a-f]{40}$/.test(sha)||process.env.GITHUB_REF!=="refs/heads/main"||process.env.GITHUB_EVENT_NAME!=="push")throw Error("Untrusted deployment");
 const account="5bd5e1e1e813f061afc259e91334262d", database="35fc7ee9-9710-485f-8fb3-f5a398b229b4";
 if(required("CLOUDFLARE_ACCOUNT_ID")!==account||required("CRM_D1_DATABASE_ID")!==database)throw Error("Wrong Cloudflare CRM target");
 const token=required("CLOUDFLARE_API_TOKEN"),api="https://api.cloudflare.com/client/v4/accounts/"+account;
