@@ -70,6 +70,7 @@ Build a simple, usable test CRM on one Cloudflare Worker + D1 with React UI. Pri
 - `apps/cloudflare-crm/rust-party/test/unified.mjs`
 - `apps/cloudflare-crm/migrations/0002_rust_party.sql`
 - `apps/cloudflare-crm/web/src/Parties.jsx`
+
 - `apps/cloudflare-crm/rust-party/src/access.rs`
 - `apps/cloudflare-crm/rust-party/test/native.mjs`
 - `apps/cloudflare-crm/rust-party/src/proof.rs`
