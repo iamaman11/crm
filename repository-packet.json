@@ -6,7 +6,7 @@
   "objective": "Build a simple, usable test CRM on one Cloudflare Worker + D1 with React UI. Prioritize working functionality and speed. Defer optional hardening and infrastructure additions until after real production.",
   "baseline": {
     "ref": "feature/cloudflare-native-crm-20261107",
-    "sha": "7304f1e90cebcb3617eebd6ced643378f03c8711"
+    "sha": "5ca7994d6524e23f8a6b2fe17086122a6a811a28"
   },
   "tracking_issues": [
     321,
@@ -27,9 +27,11 @@
     "apps/cloudflare-crm/README.md",
     "apps/cloudflare-crm/AGENTS.md",
     ".github/workflows/cloudflare-crm-spike.yml",
+    ".github/workflows/governance.yml",
     "affected-scope-policy.json",
     ".github/workflows/product-plane.yml",
     "tests/test_workspace_analysis.py",
+    "scripts/repository_navigation.py",
     "tests/test_repository_navigation.py",
     "apps/cloudflare-crm/scripts/deploy.mjs",
     "apps/cloudflare-crm/scripts/doctor.mjs",
@@ -90,5 +92,9 @@
     "deploy CRM while Cloudflare Access is not enabled or without accepted authorization rules",
     "alter current main G2 architecture or delete currently accepted Rust/PostgreSQL sources",
     "introduce containers, VM, external database, queue, AI, or a parallel auth service before necessity is shown"
-  ]
+  ],
+  "promotion_baseline": {
+    "ref": "main",
+    "sha": "4ec3b416d77857347f797f185ad3981a95219b04"
+  }
 }

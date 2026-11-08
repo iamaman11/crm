@@ -83,6 +83,14 @@ def load_packet(root: Path) -> dict[str, Any]:
     sha = _text(baseline.get("sha"), "baseline.sha")
     if len(sha) != 40 or any(character not in "0123456789abcdef" for character in sha):
         raise NavigationError("baseline.sha must be a lowercase 40-character Git SHA")
+    promotion = packet.get("promotion_baseline")
+    if not isinstance(promotion, dict) or promotion.get("ref") != "main":
+        raise NavigationError("promotion_baseline.ref must be main")
+    promotion_sha = _text(promotion.get("sha"), "promotion_baseline.sha")
+    if len(promotion_sha) != 40 or any(character not in "0123456789abcdef" for character in promotion_sha):
+        raise NavigationError("promotion_baseline.sha must be a lowercase 40-character Git SHA")
+    if baseline["ref"] == promotion["ref"]:
+        raise NavigationError("development and promotion must target different refs")
     issues = packet.get("tracking_issues")
     if not isinstance(issues, list) or not issues or any(
         not isinstance(issue, int) or issue <= 0 for issue in issues
@@ -211,6 +219,7 @@ def render_active_packet(packet: dict[str, Any]) -> str:
         f"- **Status:** `{packet['status']}`",
         f"- **Tracking:** {', '.join(f'#{issue}' for issue in packet['tracking_issues'])}",
         f"- **Baseline:** `{baseline['ref']}` / `{baseline['sha']}`",
+        f"- **Promotion baseline:** `{packet['promotion_baseline']['ref']}` / `{packet['promotion_baseline']['sha']}`",
         f"- **Source digest:** `{source_digest}`", "",
         "## Objective", "", str(packet["objective"]), "",
     ]
@@ -546,11 +555,19 @@ def packet_check(root: Path, base_ref: str) -> dict[str, Any]:
         paths, packet["allowed_paths"], packet["forbidden_paths"]
     )
     stale = stale_generated_documents(root)
+    # Feature development and main promotion have separate exact baselines.
+    baselines = (("development", packet["baseline"]), ("promotion", packet["promotion_baseline"]))
+    matches = [
+        (mode, target) for mode, target in baselines
+        if base_ref in (target["ref"], f"origin/{target['ref']}",
+                        f"refs/heads/{target['ref']}", target["sha"])
+    ]
+    mode, selected = matches[0] if len(matches) == 1 else ("unrecognized", packet["baseline"])
     blockers = []
-    if base_sha != packet["baseline"]["sha"]:
-        blockers.append(
-            f"base {base_ref} resolves to {base_sha}; packet declares {packet['baseline']['sha']}"
-        )
+    if len(matches) != 1:
+        blockers.append(f"unrecognized packet base {base_ref}; expected pinned development or main promotion ref/SHA")
+    if base_sha != selected["sha"]:
+        blockers.append(f"base {base_ref} resolves to {base_sha}; {mode} packet declares {selected['sha']}")
     blockers.extend(f"forbidden path changed: {path}" for path in forbidden)
     blockers.extend(f"path outside packet: {path}" for path in disallowed)
     blockers.extend(f"generated navigation is stale: {path}" for path in stale)
@@ -558,9 +575,10 @@ def packet_check(root: Path, base_ref: str) -> dict[str, Any]:
         "schema_version": NAVIGATION_SCHEMA,
         "packet_id": packet["packet_id"],
         "packet_status": packet["status"],
+        "baseline_mode": mode,
         "base_ref": base_ref,
         "base_sha": base_sha,
-        "declared_baseline_sha": packet["baseline"]["sha"],
+        "declared_baseline_sha": selected["sha"],
         "head_sha": affected.get("head_sha"),
         "changed_paths": paths,
         "forbidden_changed_paths": forbidden,
@@ -581,6 +599,7 @@ def render_packet_check(report: dict[str, Any]) -> str:
         f"# Packet Check: `{report['packet_id']}`", "",
         f"- **Result:** {'PASS' if report['ok'] else 'FAIL'}",
         f"- **Base:** `{report['base_ref']}` / `{report['base_sha']}`",
+        f"- **Baseline mode:** `{report['baseline_mode']}`",
         f"- **Declared baseline:** `{report['declared_baseline_sha']}`",
         f"- **Head:** `{report['head_sha']}`",
         f"- **Changed paths:** {len(report['changed_paths'])}",
