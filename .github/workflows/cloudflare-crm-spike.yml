@@ -167,9 +167,20 @@ jobs:
       - name: Compile native Rust Access gate using isolated RSA test keys
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --features native-ci
+      - name: Install Chromium for physical React to native Rust Worker proof
+        working-directory: apps/cloudflare-crm
+        run: npx playwright install --with-deps chromium
       - name: Test native WebCrypto JWT and tenant isolation under workerd
         working-directory: apps/cloudflare-crm
         run: node rust-party/test/native.mjs
+      - name: Preserve single native Party browser proof and screenshot
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: crm-native-party-proof-${{ github.event.pull_request.head.sha || github.sha }}
+          path: apps/cloudflare-crm/e2e-evidence-native/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Build integrated Rust Party for one Cloudflare Worker
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --features integrated

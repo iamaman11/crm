@@ -6,6 +6,8 @@ import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
+import { chromium } from "playwright";
+import { mkdirSync, writeFileSync } from "node:fs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-jwt-"));
 const origin="http://127.0.0.1:18789";
@@ -84,6 +86,67 @@ try{
   const replay=await call("/api/parties/"+id,a,init);
   assert.equal(replay.status,200);
   assert.equal(replay.body.replayed,true);
+  // Browser proof: the EXISTING React Parties screen talks directly to this
+  // single native workers-rs Worker, no JS API handler or internal Worker RPC.
+  // The other pilot React tabs are intentionally not in scope for this gate.
+  const evidenceDir="e2e-evidence-native";
+  mkdirSync(join(cwd,"..",evidenceDir),{recursive:true});
+  const browser=await chromium.launch({headless:true});
+  const browserErrors=[];
+  const marker="NativeRust-"+randomUUID().slice(0,8);
+  const screenshot=join(cwd,"..",evidenceDir,"native-party-desktop.png");
+  const manifest=join(cwd,"..",evidenceDir,"manifest.json");
+  let uiSteps=[];
+  try{
+    const context=await browser.newContext({viewport:{width:1280,height:850},
+      extraHTTPHeaders:{"cf-access-jwt-assertion":a}});
+    const page=await context.newPage();
+    page.on("pageerror",error=>browserErrors.push(error.message));
+    const index=await page.goto(origin,{waitUntil:"domcontentloaded"});
+    assert.equal(index.status(),200,"the SAME native Rust Worker serves React Static Assets");
+    await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",
+      {name:/Лица и организации/}).click();
+    const area=page.locator('section[aria-label="Лица и организации (Rust)"]');
+    await area.waitFor();
+    uiSteps.push("React existing Parties screen rendered from native Worker assets");
+    await area.getByRole("button",{name:/Добавить лицо/}).click();
+    await page.getByLabel("Имя / название").fill(marker);
+    await page.getByRole("button",{name:"Сохранить",exact:true}).click();
+    await area.getByRole("status").getByText("Сохранено через Rust / D1").waitFor();
+    await area.getByRole("row").filter({hasText:marker}).waitFor();
+    uiSteps.push("React click -> original Rust Party create -> D1 persistence -> UI");
+    const persisted=await call("/api/parties",a);
+    assert.equal(persisted.status,200);
+    assert.ok(persisted.body.items.some(x=>x.name===marker),
+      "Native API must read the exact browser-created Party from D1");
+    const row=area.getByRole("row").filter({hasText:marker});
+    await row.getByRole("button",{name:"Изменить"}).click();
+    const updatedName=marker+"-updated";
+    await page.getByLabel("Имя / название").fill(updatedName);
+    await page.getByRole("button",{name:"Сохранить",exact:true}).click();
+    await area.getByRole("row").filter({hasText:updatedName}).waitFor();
+    uiSteps.push("Rust versioned update reflected in React UI");
+    await page.reload({waitUntil:"domcontentloaded"});
+    await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",
+      {name:/Лица и организации/}).click();
+    await page.locator('section[aria-label="Лица и организации (Rust)"]')
+      .getByRole("row").filter({hasText:updatedName}).waitFor();
+    uiSteps.push("Browser reload -> persisted D1 state available");
+    assert.deepEqual(browserErrors,[],"React browser has no uncaught JS errors");
+    await page.screenshot({path:screenshot,fullPage:true,animations:"disabled"});
+    const result={git_sha:process.env.GITHUB_SHA||"unknown",result:"PASS",
+      runtime:"one native workers-rs workerd + Cloudflare Static Assets + isolated D1",
+      auth:"real self-signed RS256 verified in Rust WebCrypto (CI-only JWKS)",
+      frontend:"existing React Parties.jsx",module:"crm.parties",
+      checks:uiSteps, screenshot:"native-party-desktop.png",
+      cloudflare_access_live:"NOT_TESTED",published_cloudflare_url:"NOT_TESTED",
+      other_crm_modules:"NOT_TESTED"};
+    writeFileSync(manifest,JSON.stringify(result,null,2)+"\n");
+    console.log(JSON.stringify({event:"crm.native-react-chromium",result:"PASS",checks:uiSteps}));
+    await context.close();
+  }finally{
+    await browser.close();
+  }
   console.log(JSON.stringify({event:"crm.native-jwt-workerd",result:"PASS",
     proven:["host WebCrypto RS256 verified","issuer/audience/expiry/alg/kid/forged denied",
       "A/B D1 tenant isolation","untrusted tenant headers denied",
