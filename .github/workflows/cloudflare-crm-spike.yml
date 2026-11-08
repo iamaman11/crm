@@ -199,7 +199,7 @@ jobs:
       - name: Install Chromium for browser test
         run: npx playwright install --with-deps chromium
         working-directory: apps/cloudflare-crm
-      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
         with:
           toolchain: 1.97.1
           targets: wasm32-unknown-unknown
