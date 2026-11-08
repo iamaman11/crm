@@ -29,7 +29,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(packet["packet_id"], "repository-step-23-cloudflare-native-experiment")
         self.assertEqual(packet["status"], "active")
-        self.assertEqual(packet["baseline"], {"ref": "feature/cloudflare-native-crm-20261107", "sha": "5ca7994d6524e23f8a6b2fe17086122a6a811a28"})
+        self.assertEqual(packet["baseline"], {"ref": "feature/cloudflare-native-crm-20261107", "sha": "d11903565b8a3ec9dfd233f1424aadd0dfc9593b"})
         self.assertEqual(packet["promotion_baseline"], {"ref": "main", "sha": "4ec3b416d77857347f797f185ad3981a95219b04"})
         self.assertEqual(packet["tracking_issues"], [321, 322, 310])
         self.assertEqual(set(packet["allowed_paths"]), {
@@ -67,6 +67,9 @@ class RepositoryNavigationTests(unittest.TestCase):
             "apps/cloudflare-crm/rust-party/test/local.mjs",
             ".github/workflows/cloudflare-crm-spike.yml",
             ".github/workflows/governance.yml",
+            ".github/workflows/customer-privacy-owner-execution.yml",
+            "scripts/affected_scope.py",
+            "tests/test_affected_scope.py",
             "affected-scope-policy.json",
             ".github/workflows/product-plane.yml",
             "tests/test_workspace_analysis.py",
@@ -102,7 +105,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "5ca7994d6524e23f8a6b2fe17086122a6a811a28",
+            "d11903565b8a3ec9dfd233f1424aadd0dfc9593b",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -169,7 +172,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="5ca7994d6524e23f8a6b2fe17086122a6a811a28",
+                return_value="d11903565b8a3ec9dfd233f1424aadd0dfc9593b",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(

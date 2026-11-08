@@ -479,19 +479,19 @@ jobs:
             {"workflows": legacy_gates["counts"]["workflows"] + 1,
              "jobs": legacy_gates["counts"]["jobs"] + 2},
         )
-        # The historical Step 22 snapshot remains immutable. The current
-        # product-plane CRM and governance verifier paths each add exactly
-        # one filter per push/PR event; normalize only those additive entries.
+        # Historical Step 22 rows stay immutable. Normalize only known,
+        # explicit path-filter changes; all other workflow differences fail.
         revised = []
         for row in current_gates["workflow_rows"]:
             if row[0] == new_workflow:
                 continue
-            if row[0] in (
-                ".github/workflows/product-plane.yml",
-                ".github/workflows/governance.yml",
-            ):
-                row = list(row)
+            row = list(row)
+            if row[0] == ".github/workflows/product-plane.yml":
                 row[5] -= 2
+            elif row[0] == ".github/workflows/governance.yml":
+                row[5] -= 6
+            elif row[0] == ".github/workflows/customer-privacy-owner-execution.yml":
+                row[5] += 4
             revised.append(row)
         self.assertEqual(revised, legacy_gates["workflow_rows"])
         self.assertEqual(
