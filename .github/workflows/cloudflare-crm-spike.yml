@@ -256,3 +256,4 @@ jobs:
             apps/cloudflare-crm/e2e-mobile.png
           if-no-files-found: warn
           retention-days: 7
+          include-hidden-files: true
