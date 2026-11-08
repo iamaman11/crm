@@ -15,6 +15,18 @@ use worker::*;
 #[cfg(feature = "native")]
 mod access;
 
+#[cfg(feature = "native")]
+fn native_request_id() -> Result<String> {
+    use js_sys::{Function, Reflect};
+    use wasm_bindgen::JsCast;
+    let crypto = Reflect::get(&js_sys::global(), &JsValue::from_str("crypto"))?;
+    let func = Reflect::get(&crypto, &JsValue::from_str("randomUUID"))?
+        .dyn_into::<Function>()
+        .map_err(|_| worker::Error::RustError("crypto.randomUUID unavailable".into()))?;
+    func.call0(&crypto)?.as_string()
+        .ok_or_else(|| worker::Error::RustError("invalid request_id".into()))
+}
+
 #[derive(Deserialize)]
 struct CreateInput {
     id: String,
@@ -45,7 +57,9 @@ fn response(body: Value, status: u16) -> Result<Response> {
     Ok(Response::from_json(&body)?.with_status(status))
 }
 fn error(code: &str, status: u16) -> Result<Response> {
-    response(json!({"code": code, "error": code}), status)
+    let mut reply = response(json!({"code": code, "error": code}), status)?;
+    reply.headers_mut().set("x-crm-error-code", code)?;
+    Ok(reply)
 }
 fn view(party: &Party) -> Value {
     json!({
@@ -232,10 +246,37 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 
     #[cfg(feature = "native")]
     {
-        let Some(tenant) = access::tenant(&req, &env).await? else {
-            return error("AUTH_REQUIRED", 401);
+        // One correlation boundary, shared by Access, native domain and D1.
+        // Never trust a caller-supplied request identifier or tenant header.
+        let request_id = native_request_id()?;
+        let started = Date::now().as_millis();
+        let path = req.path();
+        let method = req.method();
+        let operation = match (path.as_str(), method) {
+            ("/api/parties", Method::Get) => "parties.list",
+            ("/api/parties", Method::Post) => "parties.create",
+            (p, Method::Get) if p.starts_with("/api/parties/") => "parties.read",
+            (p, Method::Patch) if p.starts_with("/api/parties/") => "parties.update",
+            _ => "parties.unmatched",
         };
-        return dispatch(req, env, &tenant).await;
+        let (result, phase) = match access::tenant(&req, &env).await {
+            Ok(Some(tenant)) => (dispatch(req, env, &tenant).await, "domain_d1"),
+            Ok(None) => (error("AUTH_REQUIRED", 401), "access"),
+            Err(_) => (error("ACCESS_INTERNAL_ERROR", 503), "access"),
+        };
+        let mut reply = match result {
+            Ok(reply) => reply,
+            Err(_) => error("PARTIES_INTERNAL_ERROR", 500)?,
+        };
+        reply.headers_mut().set("x-request-id", &request_id)?;
+        reply.headers_mut().set("x-crm-module", "crm.parties")?;
+        let elapsed = Date::now().as_millis().saturating_sub(started);
+        console_log!("{}", json!({
+            "event":"crm.native.request", "request_id":request_id,
+            "module":"crm.parties", "operation":operation, "phase":phase,
+            "status":reply.status_code(), "duration_ms":elapsed
+        }));
+        return Ok(reply);
     }
 
     #[cfg(not(any(feature = "ci-local", feature = "integrated", feature = "native")))]

@@ -172,6 +172,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Test native WebCrypto JWT and tenant isolation under workerd
         working-directory: apps/cloudflare-crm
+        env:
+          CRM_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node rust-party/test/native.mjs
       - name: Preserve single native Party browser proof and screenshot
         if: always()

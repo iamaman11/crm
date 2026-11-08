@@ -28,7 +28,7 @@ const jwt=(claims={},header={})=>{
 const call=async(path,token,init={})=>{
   const response=await fetch(origin+path,{...init,headers:{
     ...(token?{"cf-access-jwt-assertion":token}:{}),...(init.headers||{})}});
-  return {status:response.status,body:await response.json()};
+  return {status:response.status,headers:Object.fromEntries(response.headers),body:await response.json()};
 };
 let child;
 try{
@@ -65,6 +65,12 @@ try{
   assert.equal((await call("/api/parties",parts.join("."))).status,401,
     "modified claims must fail signature");
   assert.equal((await call("/api/parties",a)).status,200,"signed A accepted");
+  const correlation=await call("/api/parties",a);
+  assert.match(correlation.headers["x-request-id"]||"",/^[0-9a-f-]{36}$/i);
+  assert.equal(correlation.headers["x-crm-module"],"crm.parties");
+  const forbidden=await call("/api/parties",null);
+  assert.match(forbidden.headers["x-request-id"]||"",/^[0-9a-f-]{36}$/i);
+  assert.equal(forbidden.headers["x-crm-error-code"],"AUTH_REQUIRED");
   assert.equal((await call("/api/parties",b)).status,200,"signed B accepted");
   const id="native-jwt-"+randomUUID();
   const created=await call("/api/parties",a,{method:"POST",headers:{
@@ -134,7 +140,7 @@ try{
     uiSteps.push("Browser reload -> persisted D1 state available");
     assert.deepEqual(browserErrors,[],"React browser has no uncaught JS errors");
     await page.screenshot({path:screenshot,fullPage:true,animations:"disabled"});
-    const result={git_sha:process.env.GITHUB_SHA||"unknown",result:"PASS",
+    const result={git_sha:process.env.CRM_SOURCE_SHA||"unknown",result:"PASS",
       runtime:"one native workers-rs workerd + Cloudflare Static Assets + isolated D1",
       auth:"real self-signed RS256 verified in Rust WebCrypto (CI-only JWKS)",
       frontend:"existing React Parties.jsx",module:"crm.parties",
