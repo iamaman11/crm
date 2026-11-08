@@ -32,35 +32,56 @@ async function version(){
   if(!d||d.length!==1||d[0].percentage!==100)throw Error("CRM must have one 100% Worker deployment");
   return d[0].version_id;
 }
-async function bindings(){
-  const b=(await cf(worker+"/settings")).bindings||[];
+async function bindings(deployedVersion){
+  // The script settings endpoint reports the latest uploaded version, not the active deployment.
+  const b=(await cf(worker+"/versions/"+deployedVersion)).resources?.bindings||[];
   return{sha:b.find(x=>x.name==="GIT_SHA")?.text,db:b.find(x=>x.name==="DB")?.id};
 }
 const auth=()=>({"CF-Access-Client-Id":required("CRM_E2E_A_CLIENT_ID"),"CF-Access-Client-Secret":required("CRM_E2E_A_CLIENT_SECRET")});
 async function publicSha(){
-  const r=await fetch(url+"/api/version",{headers:auth(),redirect:"manual"});
+  const r=await fetch(url+"/api/version?readback="+Date.now(),{headers:auth(),redirect:"manual",cache:"no-store"});
   if(r.status!==200)throw Error("CRM public version HTTP "+r.status);
   return (await r.json()).source;
 }
+
+async function waitForPublicSha(expected,stage){
+  const start=Date.now(),deadline=start+45000;
+  let last="NOT_CHECKED",attempts=0;
+  for(;;){
+    attempts++;
+    try{last=await publicSha();}catch(error){last="READBACK_ERROR:"+String(error.message).slice(0,140);}
+    if(last===expected){
+      console.log(JSON.stringify({event:"crm.public-readback",stage,sha:expected,
+        result:"PASS",attempts,elapsed_ms:Date.now()-start}));
+      return;
+    }
+    if(Date.now()>=deadline)throw Error("Public Worker SHA readback mismatch stage="+stage+
+      " expected="+expected+" last_observed="+last+" attempts="+attempts);
+    if(attempts===1)console.log(JSON.stringify({event:"crm.public-readback",stage,
+      expected,observed:last,result:"RETRY"}));
+    await new Promise(resolve=>setTimeout(resolve,Math.min(attempts*600,3500)));
+  }
+}
+
 async function deploy(){
-  const rust=builtRust(), before=await bindings();
+  const rust=builtRust(), oldVersion=await version(), before=await bindings(oldVersion);
   if(before.db!==database||!/^[a-f0-9]{40}$/.test(before.sha||""))throw Error("Previous CRM binding/SHA mismatch");
-  const oldVersion=await version(), bookmark=(await cf("/d1/database/"+database+"/time_travel/bookmark")).bookmark;
+  const bookmark=(await cf("/d1/database/"+database+"/time_travel/bookmark")).bookmark;
   if(!bookmark)throw Error("D1 Time Travel bookmark missing");
   record("checkpoint.json",{git_sha:sha,previous_sha:before.sha,previous_version:oldVersion,d1_database:database,pre_migration_bookmark:bookmark,rust});
   console.log(JSON.stringify({event:"crm.release.checkpoint",git_sha:sha,previous_sha:before.sha,previous_version:oldVersion,bookmark_present:true,rust}));
   cmd("vite","build");
   cmd("wrangler","d1","migrations","apply","crm-dev","--remote");
   cmd("wrangler","deploy","--var","GIT_SHA:"+sha);
-  const current=await bindings();
-  if(current.sha!==sha||current.db!==database)throw Error("Deployed CRM SHA/D1 binding mismatch");
   const newVersion=await version();
+  const current=await bindings(newVersion);
+  if(current.sha!==sha||current.db!==database)throw Error("Deployed CRM SHA/D1 binding mismatch");
   if(newVersion===oldVersion)throw Error("Worker version did not advance");
   const anonymous=await fetch(url+"/api/health",{redirect:"manual"});
   if(anonymous.status===200||anonymous.status>=500)throw Error("Cloudflare Access denied check failed");
   const authorized=await fetch(url+"/api/health",{headers:auth(),redirect:"manual"});
   if(authorized.status!==200)throw Error("Cloudflare Access authorized health failed");
-  if(await publicSha()!==sha)throw Error("Published API SHA mismatch");
+  await waitForPublicSha(sha,"deploy");
   record("deployed.json",{git_sha:sha,worker_version:newVersion,d1_database:database,rust,result:"E2E_PENDING"});
   console.log(JSON.stringify({event:"crm.deploy",sha,result:"E2E_PENDING",version:newVersion}));
 }
@@ -78,8 +99,7 @@ async function verifyData(){
   const v=await cf("/d1/database/"+database+"/query","POST",{sql:"SELECT id,version FROM crm_party_records WHERE id IN (?,?)",params:[a,b]});
   const values=v?.[0]?.results||[];
   if(values.length!==2||values.find(x=>x.id===a)?.version!==2||values.find(x=>x.id===b)?.version!==1)throw Error("Rust Party D1 persisted versions mismatch");
-  const published=await publicSha();
-  if(published!==sha)throw Error("Final published SHA changed during E2E");
+  await waitForPublicSha(sha,"final");
   record("accepted.json",{git_sha:sha,d1_database:database,records:2,receipts:3,audits:3,migration:1,versions:"A=2 B=1",result:"PASS"});
   console.log(JSON.stringify({event:"crm.native-party-live-d1",sha,result:"PASS",records:2,receipts:3,audits:3,migration:1}));
 }
@@ -88,10 +108,11 @@ async function rollback(){
   const p=load("checkpoint.json");
   if(p.git_sha!==sha||p.d1_database!==database)throw Error("Rollback checkpoint mismatch");
   if(await version()===p.previous_version){record("rollback.json",{result:"NO_WORKER_CHANGE",d1_restored:false});return;}
-  const now=await bindings();
+  const now=await bindings(await version());
   if(now.sha!==sha||now.db!==database)throw Error("Refusing rollback over unrelated deployment");
   await cf(worker+"/deployments","POST",{strategy:"percentage",versions:[{version_id:p.previous_version,percentage:100}],annotations:{"workers/message":"CRM failed-release rollback "+sha.slice(0,12)}});
-  if(await version()!==p.previous_version||await publicSha()!==p.previous_sha)throw Error("Rollback published version/SHA verification failed");
+  if(await version()!==p.previous_version)throw Error("Rollback version readback failed");
+  await waitForPublicSha(p.previous_sha,"rollback");
   record("rollback.json",{git_sha:sha,result:"WORKER_RESTORED",previous_sha:p.previous_sha,previous_version:p.previous_version,d1_restored:false});
   console.log(JSON.stringify({event:"crm.rollback",result:"WORKER_RESTORED",old_sha:p.previous_sha,d1_restored:false}));
 }
