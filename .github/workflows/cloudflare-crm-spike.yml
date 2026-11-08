@@ -23,7 +23,7 @@ permissions:
 jobs:
   cloudflare-crm-spike:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -147,6 +147,38 @@ jobs:
               cloudflare_worker_invocation:'NOT_TESTED', d1_adapter:'NOT_TESTED'}));
           })().catch(error => {console.error(error);process.exitCode=1;});
           NODE
+      - name: Build official Rust workers-rs Party Worker (isolated CI only)
+        working-directory: apps/cloudflare-crm/rust-party
+        run: |
+          cargo install --locked worker-build --version 0.8.7
+          worker-build --release --features ci-local
+      - name: Record native Party dependency lock for exact reproducibility
+        working-directory: apps/cloudflare-crm/rust-party
+        shell: bash
+        run: |
+          echo 'NATIVE_PARTY_CARGO_LOCK_BEGIN'
+          base64 -w 80 Cargo.lock
+          echo
+          echo 'NATIVE_PARTY_CARGO_LOCK_END'
+      - name: Test original Rust Party through workerd and isolated native D1
+        working-directory: apps/cloudflare-crm
+        run: node rust-party/test/local.mjs
+      - name: Test unified Worker JS+Rust WASM composition under workerd
+        working-directory: apps/cloudflare-crm
+        run: node rust-party/test/unified.mjs
+      - name: Build integrated Rust Party for one Cloudflare Worker
+        working-directory: apps/cloudflare-crm/rust-party
+        run: worker-build --release --features integrated
+      - name: Inspect exact unified deployment bundle without deploying
+        working-directory: apps/cloudflare-crm
+        run: |
+          test -f rust-party/build/index.js
+          npx wrangler deploy --dry-run --outdir /tmp/crm-rust-party-unified
+      - name: Validate release and E2E scripts
+        run: |
+          node --check apps/cloudflare-crm/scripts/deploy.mjs
+          node --check apps/cloudflare-crm/e2e/live.mjs
+          node --check apps/cloudflare-crm/worker/unified.mjs
       - name: Check CRM target
         run: |
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
@@ -158,7 +190,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cloudflare-native-crm-20261107'
     runs-on: ubuntu-24.04
     environment: crm-dev
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -172,6 +204,15 @@ jobs:
       - name: Install Chromium for browser test
         run: npx playwright install --with-deps chromium
         working-directory: apps/cloudflare-crm
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+      - name: Build original Rust Party for the single CRM Worker
+        working-directory: apps/cloudflare-crm/rust-party
+        run: |
+          cargo install --locked worker-build --version 0.8.7
+          worker-build --release --features integrated
       - name: Deploy React, D1 and Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -187,3 +228,31 @@ jobs:
           CRM_E2E_B_CLIENT_ID: ${{ secrets.CRM_E2E_B_CLIENT_ID }}
           CRM_E2E_B_CLIENT_SECRET: ${{ secrets.CRM_E2E_B_CLIENT_SECRET }}
         run: node apps/cloudflare-crm/e2e/live.mjs
+      - name: Verify native Rust Party persisted data and D1 audit
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CRM_E2E_A_CLIENT_ID: ${{ secrets.CRM_E2E_A_CLIENT_ID }}
+          CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
+          CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
+          CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
+        run: node apps/cloudflare-crm/scripts/deploy.mjs verify-data
+      - name: Restore previous Worker if release acceptance failed
+        if: ${{ failure() }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CRM_E2E_A_CLIENT_ID: ${{ secrets.CRM_E2E_A_CLIENT_ID }}
+          CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
+          CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
+          CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
+        run: node apps/cloudflare-crm/scripts/deploy.mjs rollback
+      - name: Save release evidence and browser failure screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: crm-dev-release-${{ github.sha }}
+          path: |
+            apps/cloudflare-crm/.release/*.json
+            apps/cloudflare-crm/e2e-failure.png
+            apps/cloudflare-crm/e2e-mobile.png
+          if-no-files-found: warn
+          retention-days: 7

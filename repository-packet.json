@@ -5,8 +5,8 @@
   "status": "active",
   "objective": "Build a simple, usable test CRM on one Cloudflare Worker + D1 with React UI. Prioritize working functionality and speed. Defer optional hardening and infrastructure additions until after real production.",
   "baseline": {
-    "ref": "main",
-    "sha": "4ec3b416d77857347f797f185ad3981a95219b04"
+    "ref": "feature/cloudflare-native-crm-20261107",
+    "sha": "2124dcad281c46ecb3d1cb7b34b44721ed9b28ea"
   },
   "tracking_issues": [
     321,
@@ -41,7 +41,19 @@
     "apps/cloudflare-crm/vite.config.mjs",
     "apps/cloudflare-crm/wrangler.jsonc",
     "pnpm-workspace.yaml",
-    "apps/cloudflare-crm/e2e/live.mjs"
+    "apps/cloudflare-crm/e2e/live.mjs",
+    "apps/cloudflare-crm/rust-party/Cargo.toml",
+    "apps/cloudflare-crm/rust-party/Cargo.lock",
+    "apps/cloudflare-crm/rust-party/src/lib.rs",
+    "apps/cloudflare-crm/rust-party/migrations/0001_local.sql",
+    "apps/cloudflare-crm/rust-party/wrangler.jsonc",
+    "apps/cloudflare-crm/rust-party/README.md",
+    "apps/cloudflare-crm/rust-party/test/local.mjs",
+    "apps/cloudflare-crm/worker/unified.mjs",
+    "apps/cloudflare-crm/rust-party/wrangler.unified.jsonc",
+    "apps/cloudflare-crm/rust-party/test/unified.mjs",
+    "apps/cloudflare-crm/migrations/0002_rust_party.sql",
+    "apps/cloudflare-crm/web/src/Parties.jsx"
   ],
   "forbidden_paths": [
     "modules/**",

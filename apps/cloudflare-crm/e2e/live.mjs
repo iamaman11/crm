@@ -111,6 +111,48 @@ async function checkIndependentWorkspaces(customerName) {
   }
 }
 
+// Browser E2E uses two real Cloudflare Access identities, never a CI tenant header.
+async function checkNativePartyWorkspaces(){
+  const other=await browser.newContext({extraHTTPHeaders:{
+    "CF-Access-Client-Id":process.env.CRM_E2E_B_CLIENT_ID,
+    "CF-Access-Client-Secret":process.env.CRM_E2E_B_CLIENT_SECRET
+  }});
+  const a=crypto.randomUUID(),b=crypto.randomUUID();
+  const createKey=crypto.randomUUID(),updateKey=crypto.randomUUID(),bKey=crypto.randomUUID();
+  const path="/api/parties/";
+  const payload={id:a,kind:"person",name:marker+" Native A"};
+  try{
+    const created=await context.request.post(url+"/api/parties",{headers:{"idempotency-key":createKey},data:payload});
+    assert.equal(created.status(),201,"Rust A create");
+    const replay=await context.request.post(url+"/api/parties",{headers:{"idempotency-key":createKey},data:payload});
+    assert.equal(replay.status(),200);assert.equal((await replay.json()).replayed,true);
+    assert.equal((await context.request.get(url+path+a)).status(),200);
+    assert.equal((await other.request.get(url+path+a)).status(),404,"B cannot read Party A");
+    assert.equal((await other.request.patch(url+path+a,{headers:{"idempotency-key":crypto.randomUUID()},data:{expected_version:1,name:"DENIED"}})).status(),404,"B cannot update Party A");
+    const ownB=await other.request.post(url+"/api/parties",{headers:{"idempotency-key":bKey},data:{id:b,kind:"organization",name:marker+" Native B"}});
+    assert.equal(ownB.status(),201);
+    assert.equal((await context.request.get(url+path+b)).status(),404,"A cannot read Party B");
+    assert.equal((await context.request.get(url+path+b,{headers:{"x-crm-native-tenant":"tenant-b"}})).status(),404,"Cannot forge native tenant");
+    assert.equal((await context.request.get(url+path+a,{headers:{"x-crm-native-tenant":"tenant-b","x-crm-ci-tenant":"tenant-b"}})).status(),200,"Verified Access tenant overrides forged header");
+    const updated=await context.request.patch(url+path+a,{headers:{"idempotency-key":updateKey},data:{expected_version:1,name:marker+" Native A Updated"}});
+    assert.equal(updated.status(),200);assert.equal((await updated.json()).item.version,2);
+    const replayUpdate=await context.request.patch(url+path+a,{headers:{"idempotency-key":updateKey},data:{expected_version:1,name:marker+" Native A Updated"}});
+    assert.equal(replayUpdate.status(),200);assert.equal((await replayUpdate.json()).replayed,true);
+    const stale=await context.request.patch(url+path+a,{headers:{"idempotency-key":crypto.randomUUID()},data:{expected_version:1,name:"DENIED STALE"}});
+    assert.equal(stale.status(),409);assert.ok(stale.headers()["x-request-id"]);
+    const invalid=await context.request.post(url+"/api/parties",{headers:{"idempotency-key":crypto.randomUUID()},data:{id:crypto.randomUUID(),kind:"person",name:" "}});
+    assert.equal(invalid.status(),422,"Rust validation rejects blank name");
+    const bList=await other.request.get(url+"/api/parties");assert.equal(bList.status(),200);
+    const bItems=(await bList.json()).items;assert.ok(bItems.some(x=>x.id===b));assert.ok(!bItems.some(x=>x.id===a));
+    const aList=await context.request.get(url+"/api/parties");assert.equal(aList.status(),200);
+    assert.ok(!(await aList.json()).items.some(x=>x.id===b));
+    await mkdir("apps/cloudflare-crm/.release",{recursive:true});
+    const {writeFile}=await import("node:fs/promises");
+    await writeFile("apps/cloudflare-crm/.release/parties-e2e.json",JSON.stringify({git_sha:process.env.GITHUB_SHA,parties:[a,b],keys:[createKey,updateKey,bKey]})+"\n");
+    console.log(JSON.stringify({event:"crm.native-party-access-e2e",result:"PASS",sha:process.env.GITHUB_SHA}));
+  }finally{await other.close();}
+}
+
 let result = "FAIL";
 try {
   const doctor = await context.request.get(url + "/api/doctor");
@@ -125,6 +167,37 @@ try {
   const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
   if (response.status() !== 200) throw Error("Protected CRM page HTTP " + response.status());
   await page.getByRole("heading", { name: "Моя CRM" }).waitFor({ timeout: 12000 });
+  // Real browser proof that the original Rust Party runs in this same CRM
+  // Worker behind the same Cloudflare Access policy and persists in D1.
+  const partyName = marker+" Native Rust";
+  await tab("Лица и организации").click();
+  await page.getByRole("button",{name:"+ Добавить лицо / организацию"}).click();
+  await page.getByLabel("Имя / название",{exact:true}).fill(partyName);
+  await page.getByRole("button",{name:"Сохранить"}).click();
+  await page.getByText(partyName,{exact:true}).waitFor({timeout:12000});
+  await page.reload();
+  await tab("Лица и организации").click();
+  const partyRow=page.getByRole("row").filter({hasText:partyName});
+  await partyRow.waitFor({timeout:12000});
+  await partyRow.getByRole("button",{name:"Изменить"}).click();
+  await page.getByLabel("Имя / название",{exact:true}).fill(partyName+" Updated");
+  await page.getByRole("button",{name:"Сохранить"}).click();
+  await page.getByText(partyName+" Updated",{exact:true}).waitFor({timeout:12000});
+  const nativeRead = await context.request.get(url + "/api/parties");
+  assert.equal(nativeRead.status(),200,"authorized Rust Party API");
+  const partyList=(await nativeRead.json()).items;
+  const identity=partyList.find(x=>x.name===partyName+" Updated");
+  assert.equal(identity?.version,2,"original Rust persisted versioned update");
+  const wrongVersion=await context.request.patch(url + "/api/parties/" + identity.id,{
+    headers:{"idempotency-key":"stale-"+marker},
+    data:{expected_version:1,name:partyName+" Rejected"}});
+  assert.equal(wrongVersion.status(),409,"Rust rejects stale versions");
+  const unauthorized=await context.request.get(url + "/api/parties/"+identity.id,{
+    headers:{"x-crm-native-tenant":"spoofed-id"}});
+  assert.equal(unauthorized.status(),200,"verified Access tenant overrides injected header");
+  // Party deletion is not part of the accepted original Rust domain contract.
+  // CI uses isolated dedicated test workspaces; this test identity is retained.
+  await checkNativePartyWorkspaces();
   const customer = marker + " Компания", contact = marker + " Контакт", deal = marker + " Сделка", task = marker + " Задача";
   await create("Клиенты", "клиента", { "Имя / название": customer, "Тип": "organization" }, customer);
   await page.reload();

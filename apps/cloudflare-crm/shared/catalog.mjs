@@ -17,12 +17,20 @@ export const modules = {
 // The original four small modules share pilot-core; each NEW expert module must
 // declare its own source owner and files before it can pass the doctor gate.
 // Read-only compositions do not own a database table; still require independent owners.
+export const nativeModels = {
+ parties: {title:"Лица и организации",kind:"owner",route:"parties"},
+};
 export const readModels = { customer360: { title:"Карточка клиента", kind:"read", route:"customer360" } };
 export const implementationOwners = {
- customer360:"customer360",
+ parties:"rust-party", customer360:"customer360",
  customers:"pilot-core", contacts:"pilot-core", deals:"pilot-core", tasks:"pilot-core",
 };
 export const ownerFiles = {
+ "rust-party":{
+  ui:"web/src/Parties.jsx",api:"worker/unified.mjs",
+  validation:"rust-party/src/lib.rs",migration:"migrations/0002_rust_party.sql",
+  tests:"rust-party/test/unified.mjs",browser:"e2e/live.mjs",
+ },
  "pilot-core": {
   ui:"web/src/main.jsx", api:"worker/index.mjs",
   validation:"worker/index.mjs:parseRecord", migration:"migrations",
