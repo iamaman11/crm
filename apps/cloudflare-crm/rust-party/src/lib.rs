@@ -272,6 +272,13 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         };
         reply.headers_mut().set("x-request-id", &request_id)?;
         reply.headers_mut().set("x-crm-module", "crm.parties")?;
+        reply.headers_mut().set("x-crm-runtime", "native-workers-rs")?;
+        if let Ok(sha) = env.var("GIT_SHA") {
+            let value = sha.to_string();
+            if value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                reply.headers_mut().set("x-crm-source-sha", &value)?;
+            }
+        }
         let elapsed = Date::now().as_millis().saturating_sub(started);
         console_log!("{}", json!({
             "event":"crm.native.request", "request_id":request_id,
