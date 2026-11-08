@@ -15,6 +15,7 @@ export async function unifiedFetch(request, env, ctx, native = rustParty) {
   headers.delete("x-crm-ci-tenant");
   headers.delete("x-crm-native-tenant");
   let tenant;
+  const requestId = crypto.randomUUID();
 
   // Explicit loopback-only test build. This flag is NEVER present in crm-dev.
   if (env.CRM_CI_LOCAL_ONLY === "yes" &&
@@ -29,9 +30,8 @@ export async function unifiedFetch(request, env, ctx, native = rustParty) {
     tenant = actor?.tenant;
     if (tenant) headers.set("x-crm-native-tenant", tenant);
   }
-  if (!tenant) return Response.json({code:"AUTH_REQUIRED",error:"Authentication required"},
-    {status:401,headers:{"cache-control":"no-store","x-crm-error-code":"AUTH_REQUIRED"}});
-  const requestId = crypto.randomUUID();
+  if (!tenant) return Response.json({code:"AUTH_REQUIRED",error:"Authentication required",request_id:requestId},
+    {status:401,headers:{"cache-control":"no-store","x-crm-error-code":"AUTH_REQUIRED","x-request-id":requestId}});
   const started = performance.now();
   try {
     // workers-rs exports a WorkerEntrypoint subclass, which is instantiated with
