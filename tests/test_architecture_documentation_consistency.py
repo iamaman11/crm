@@ -264,6 +264,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "apps/cloudflare-crm/rust-party/src/lib.rs",
             "apps/cloudflare-crm/rust-party/src/access.rs",
             "apps/cloudflare-crm/rust-party/test/native.mjs",
+            "apps/cloudflare-crm/scripts/native-cloud-proof.mjs",
             "apps/cloudflare-crm/rust-party/migrations/0001_local.sql",
             "apps/cloudflare-crm/rust-party/wrangler.jsonc",
             "apps/cloudflare-crm/rust-party/README.md",
