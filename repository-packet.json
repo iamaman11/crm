@@ -10,8 +10,7 @@
   "tracking_issues": [
     321,
     322,
-    310,
-    338
+    310
   ],
   "allowed_paths": [
     "repository-packet.json",
