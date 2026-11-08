@@ -54,6 +54,109 @@ jobs:
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
           grep -F '35fc7ee9-9710-485f-8fb3-f5a398b229b4' apps/cloudflare-crm/wrangler.jsonc
           grep -F 'jwtVerify(token, ACCESS_KEYS' apps/cloudflare-crm/worker/index.mjs
+
+  rust-domain-wasm-proof:
+    name: Verify existing Rust Party in WASM (non-deploying)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+      - name: Compile the existing Party owner crate for WebAssembly
+        run: |
+          cargo check --locked -p crm-parties --target wasm32-unknown-unknown
+      - name: Execute the original Rust domain rules from WASM in Node
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          mkdir -p "$probe/src"
+          cat > "$probe/Cargo.toml" <<EOF
+          [package]
+          name = "crm-wasm-probe"
+          version = "0.1.0"
+          edition = "2024"
+          [lib]
+          crate-type = ["cdylib"]
+          [dependencies]
+          crm-parties = { path = "$GITHUB_WORKSPACE/modules/crm-parties" }
+          EOF
+          cat > "$probe/src/lib.rs" <<'RUST'
+          use crm_parties::{
+              CreateParty, UpdateParty, Party, PartyId, PartyKind,
+              encode_party_state, decode_party_state,
+          };
+          // This is a diagnostic ABI only: all domain rules are from existing crm-parties.
+          #[unsafe(no_mangle)]
+          pub extern "C" fn crm_party_domain_probe() -> i32 {
+              let id = match PartyId::try_new("wasm-proof-01") {
+                  Ok(v) => v,
+                  Err(_) => return 1,
+              };
+              let mut party = match Party::create(CreateParty {
+                  party_id: id, kind: PartyKind::Organization,
+                  display_name: "  Example  Organization ".to_owned(),
+                  occurred_at_unix_nanos: 10,
+              }) {
+                  Ok(v) => v,
+                  Err(_) => return 2,
+              };
+              if party.display_name() != "Example Organization" || party.version() != 1 {
+                  return 3;
+              }
+              if party.apply_update(UpdateParty {
+                  expected_version: 1, display_name: "Example Corporation".to_owned(),
+                  occurred_at_unix_nanos: 20,
+              }).is_err() { return 4; }
+              if party.version() != 2 { return 5; }
+              if party.apply_update(UpdateParty {
+                  expected_version: 1, display_name: "Should Fail".to_owned(),
+                  occurred_at_unix_nanos: 30,
+              }).err().map(|e| e.code) != Some("PARTIES_PARTY_VERSION_CONFLICT") {
+                  return 6;
+              }
+              let saved = match encode_party_state(&party) {
+                  Ok(v) => v, Err(_) => return 7,
+              };
+              let loaded = match decode_party_state(&saved) {
+                  Ok(v) => v, Err(_) => return 8,
+              };
+              if loaded != party { return 9; }
+              let error = Party::create(CreateParty {
+                  party_id: PartyId::try_new("wasm-proof-02").unwrap(),
+                  kind: PartyKind::Person, display_name: " ".to_owned(),
+                  occurred_at_unix_nanos: 21,
+              }).err();
+              if error.map(|e| e.code) != Some("PARTIES_DISPLAY_NAME_INVALID") {
+                  return 10;
+              }
+              0
+          }
+          RUST
+          cargo build --manifest-path "$probe/Cargo.toml" --target wasm32-unknown-unknown
+          node - "$probe/target/wasm32-unknown-unknown/debug/crm_wasm_probe.wasm" <<'NODE'
+          const fs = require('node:fs');
+          const file = process.argv[2];
+          (async () => {
+            const { instance } = await WebAssembly.instantiate(fs.readFileSync(file), {});
+            if (typeof instance.exports.crm_party_domain_probe !== 'function') {
+              throw new Error('Rust Party WASM export missing');
+            }
+            const result = instance.exports.crm_party_domain_probe();
+            if (result !== 0) throw new Error('Existing Rust domain WASM rejected, code=' + result);
+            console.log(JSON.stringify({event:'crm.rust-domain-wasm', result:'PASS',
+              crate:'crm-parties', target:'wasm32-unknown-unknown',
+              runtime:'node WebAssembly', tests:['normalize','version',
+                'stale update denied','serialize/rehydrate','invalid name denied'],
+              cloudflare_worker_invocation:'NOT_TESTED', d1_adapter:'NOT_TESTED'}));
+          })().catch(error => {console.error(error);process.exitCode=1;});
+          NODE
+
   deploy-crm-dev:
     needs: cloudflare-crm-spike
     if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cloudflare-native-crm-20261107'
