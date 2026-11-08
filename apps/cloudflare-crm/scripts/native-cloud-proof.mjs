@@ -26,9 +26,9 @@ const log=(event,fields)=>console.log(JSON.stringify({event,...fields}));
 const fail=s=>{throw Error(s)};
 function guard(){
   assert.equal(process.env.GITHUB_REPOSITORY,"iamaman11/crm");
-  assert.equal(process.env.GITHUB_EVENT_NAME,"pull_request");
-  assert.equal(process.env.GITHUB_HEAD_REF,"feature/crm-native-rust-access-gate-20261109");
-  assert.equal(process.env.CRM_PR_NUMBER,"339");
+  assert.equal(process.env.GITHUB_EVENT_NAME,"push");
+  assert.equal(process.env.GITHUB_REF,"refs/heads/main");
+  assert.equal(process.env.GITHUB_SHA,sha);
   assert.match(sha,/^[0-9a-f]{40}$/);assert.match(oldSha,/^[0-9a-f]{40}$/);
   assert.equal(required("CLOUDFLARE_ACCOUNT_ID"),account);
   assert.equal(required("CRM_D1_DATABASE_ID"),db);
