@@ -49,20 +49,6 @@ jobs:
       - name: Build React CRM
         run: npm run build
         working-directory: apps/cloudflare-crm
-      - name: Check CRM target
-        run: |
-          grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
-          grep -F '35fc7ee9-9710-485f-8fb3-f5a398b229b4' apps/cloudflare-crm/wrangler.jsonc
-          grep -F 'jwtVerify(token, ACCESS_KEYS' apps/cloudflare-crm/worker/index.mjs
-
-  rust-domain-wasm-proof:
-    name: Verify existing Rust Party in WASM (non-deploying)
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
         with:
           toolchain: 1.97.1
@@ -156,6 +142,11 @@ jobs:
               cloudflare_worker_invocation:'NOT_TESTED', d1_adapter:'NOT_TESTED'}));
           })().catch(error => {console.error(error);process.exitCode=1;});
           NODE
+      - name: Check CRM target
+        run: |
+          grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
+          grep -F '35fc7ee9-9710-485f-8fb3-f5a398b229b4' apps/cloudflare-crm/wrangler.jsonc
+          grep -F 'jwtVerify(token, ACCESS_KEYS' apps/cloudflare-crm/worker/index.mjs
 
   deploy-crm-dev:
     needs: cloudflare-crm-spike
