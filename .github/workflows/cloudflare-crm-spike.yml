@@ -164,6 +164,22 @@ jobs:
       - name: Compile one native Rust Worker Access JWT candidate (not deployed)
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --features native
+      - name: Dry-run exact native entrypoint upload with original CRM Wrangler configuration
+        working-directory: apps/cloudflare-crm
+        shell: bash
+        env:
+          CRM_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          npx wrangler versions upload rust-party/build/index.js \
+            --name crm-dev --var "GIT_SHA:$CRM_HEAD_SHA" \
+            --dry-run --outdir /tmp/crm-native-party-version-proof
+          test -d /tmp/crm-native-party-version-proof
+          test -s rust-party/build/index_bg.wasm
+          test -s rust-party/build/index.js
+          grep -F '"main": "./worker/unified.mjs"' wrangler.jsonc
+          grep -F '"binding": "DB"' wrangler.jsonc
+          grep -F '"binding": "ASSETS"' wrangler.jsonc
       - name: Keep the exact native Rust candidate for the existing main-only protected release
         run: |
           set -euo pipefail

@@ -122,8 +122,11 @@ async function restore(){
   log("crm.native-cloud.restore",{result:"PASS",old_version:p.old_version,d1_rollback:false});
 }
 async function upload(){
+  // Explicit PATH is the documented Wrangler entrypoint override.
+  // Use the EXISTING crm-dev Wrangler config (D1 + Static Assets), not a
+  // second config/Worker; dry-run uses the identical CLI contract.
   const r=spawnSync("npx",["wrangler","versions","upload",
-    "rust-party/build/index.js",
+    "rust-party/build/index.js","--name",script,
     "--tag","party-native-"+sha.slice(0,12),
     "--message","CRM #338 native Party version proof "+sha,
     "--var","GIT_SHA:"+sha],{
