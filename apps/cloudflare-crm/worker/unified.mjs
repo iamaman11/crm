@@ -1,6 +1,7 @@
 // One public Worker entrypoint: existing CRM + the original Rust Party owner.
-// worker-build produces a generated ES module with {fetch}. It is imported,
-// never deployed separately. The caller's internal headers are always removed.
+// worker-build produces an EntryPoint class (not a fetch object). It is
+// instantiated inside this same public Worker, never deployed separately.
+// All user-supplied internal tenant headers are stripped before invocation.
 import { crmFetch, resolveActor } from "./index.mjs";
 import rustParty from "../rust-party/build/index.js";
 
@@ -33,7 +34,10 @@ export async function unifiedFetch(request, env, ctx, native = rustParty) {
   const requestId = crypto.randomUUID();
   const started = performance.now();
   try {
-    const response = await native.fetch(new Request(request, {headers}), env, ctx);
+    // workers-rs exports a WorkerEntrypoint subclass, which is instantiated with
+    // the current ExecutionContext and Environment inside the SAME Worker.
+    const rustHandler = new native(ctx, env);
+    const response = await rustHandler.fetch(new Request(request, {headers}));
     const outbound = new Headers(response.headers);
     outbound.set("x-request-id", requestId);
     outbound.set("cache-control","no-store");
