@@ -159,9 +159,14 @@ async function test(){
     save({...base,may_have_changed:false});
     // Set rollback marker before mutating the deployment (also handles API timeout).
     save({...base,may_have_changed:true});
-    await cf(path+"/deployments","POST",{strategy:"percentage",
-      versions:[{version_id:oldVersion,percentage:100},{version_id:version,percentage:0}],
-      annotations:{"workers/message":"CRM #338 native Rust 0% verification ONLY"}});
+    // Use the documented, non-interactive Wrangler 0% version deployment.
+    // Refuse any nonzero candidate percentage rather than expose Party-only API.
+    const deployed=spawnSync("npx",["wrangler","versions","deploy",
+      oldVersion+"@100%",version+"@0%","--yes",
+      "--message","CRM #338 native Rust 0% verification ONLY"],{
+      cwd:"apps/cloudflare-crm",stdio:"inherit",env:{...process.env}
+    });
+    if(deployed.status!==0)fail("Wrangler refused 0%-traffic native version deployment");
     const now=await active();
     assert.equal(now.versions.length,2);
     assert.ok(now.versions.some(x=>x.version_id===oldVersion&&x.percentage===100));
