@@ -164,6 +164,12 @@ jobs:
       - name: Compile one native Rust Worker Access JWT candidate (not deployed)
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --features native
+      - name: Compile native Rust Access gate using isolated RSA test keys
+        working-directory: apps/cloudflare-crm/rust-party
+        run: worker-build --release --features native-ci
+      - name: Test native WebCrypto JWT and tenant isolation under workerd
+        working-directory: apps/cloudflare-crm
+        run: node rust-party/test/native.mjs
       - name: Build integrated Rust Party for one Cloudflare Worker
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --features integrated

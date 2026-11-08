@@ -5,7 +5,9 @@ use js_sys::{Array, JSON, Object, Reflect};
 use serde_json::Value;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
-use worker::{Date, D1Database, Env, Fetch, Request, Result};
+use worker::{Date, D1Database, Env, Request, Result};
+#[cfg(not(feature = "native-ci"))]
+use worker::Fetch;
 use web_sys::{Crypto, CryptoKey};
 
 const ISSUER: &str = "https://royal-limit-ea43.cloudflareaccess.com";
@@ -99,7 +101,7 @@ fn valid_claims(claims: &Value) -> bool {
         && identity_key(claims).is_some()
 }
 
-async fn verify(req: &Request) -> Result<Option<String>> {
+async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
     let token = match req.headers().get("cf-access-jwt-assertion")? {
         Some(t) if t.len() <= 16_384 => t,
         _ => return Ok(None),
@@ -119,10 +121,26 @@ async fn verify(req: &Request) -> Result<Option<String>> {
     let Some(kid) = header.get("kid").and_then(Value::as_str)
         .filter(|s| !s.is_empty() && s.len() <= 256)
     else { return Ok(None); };
-    let url = format!("{ISSUER}/cdn-cgi/access/certs");
-    let mut response = Fetch::Url(url.parse()?).send().await?;
-    if response.status_code() != 200 { return Ok(None); }
-    let jwks: Value = response.json().await?;
+    #[cfg(feature = "native-ci")]
+    let jwks: Value = {
+        // Fail-closed: test public keys are accepted by a CI-only binary on loopback.
+        let host = req.url()?.host_str().unwrap_or_default().to_owned();
+        if host != "localhost" && host != "127.0.0.1" {
+            return Ok(None);
+        }
+        if env.var("CRM_CI_LOCAL_ONLY")?.to_string() != "yes" {
+            return Ok(None);
+        }
+        serde_json::from_str(&env.var("CRM_NATIVE_CI_JWKS")?.to_string())
+            .map_err(|_| invalid("invalid local JWKS fixture"))?
+    };
+    #[cfg(not(feature = "native-ci"))]
+    let jwks: Value = {
+        let url = format!("{ISSUER}/cdn-cgi/access/certs");
+        let mut response = Fetch::Url(url.parse()?).send().await?;
+        if response.status_code() != 200 { return Ok(None); }
+        response.json().await?
+    };
     let key = jwks.get("keys").and_then(Value::as_array)
         .and_then(|keys| keys.iter().find(|k| {
             k.get("kid").and_then(Value::as_str) == Some(kid)
@@ -152,6 +170,6 @@ async fn enrolled(db: &D1Database, identity: &str) -> Result<Option<String>> {
 // it cannot create a tenant based on a forged or incomplete claim. The native
 // release requires a validated enrollment implementation before cutover.
 pub async fn tenant(req: &Request, env: &Env) -> Result<Option<String>> {
-    let Some(identity) = verify(req).await? else { return Ok(None); };
+    let Some(identity) = verify(req, env).await? else { return Ok(None); };
     enrolled(&env.d1("DB")?, &identity).await
 }

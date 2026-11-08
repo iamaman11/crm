@@ -15,6 +15,8 @@ ci-local = []
 integrated = []
 # Native candidate: one public workers-rs fetch; no JS tenant delegation.
 native = []
+# CI-only signed JWT fixture, same Rust verifier and D1 actor path.
+native-ci = ["native"]
 
 [dependencies]
 worker = { version = "=0.8.7", features = ["d1"] }
