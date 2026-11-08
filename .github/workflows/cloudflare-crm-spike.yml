@@ -12,8 +12,7 @@ on:
       - ".github/workflows/cloudflare-crm-spike.yml"
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  # Native zero-traffic smoke must not be cancelled between deployment and restore.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.pull_request.number != 339 }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
 jobs:
