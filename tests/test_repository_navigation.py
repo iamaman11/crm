@@ -213,6 +213,25 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertIn("forbidden path changed: modules/crm-parties/src/lib.rs", blocked["blockers"])
         self.assertIn("path outside packet: unowned.txt", blocked["blockers"])
 
+    def test_cloudflare_release_is_single_main_source_with_verified_artifact(self) -> None:
+        workflow = (ROOT / ".github/workflows/cloudflare-crm-spike.yml").read_text(
+            encoding="utf-8"
+        )
+        trigger = workflow.split("concurrency:", 1)[0]
+        self.assertIn("  push:\n    branches:\n      - main\n", trigger)
+        self.assertNotIn("feature/cloudflare-native-crm-20261107", workflow)
+        main_only = (
+            "if: github.event_name == 'push' && "
+            "github.ref == 'refs/heads/main'"
+        )
+        self.assertEqual(workflow.count(main_only), 2)
+        self.assertIn("environment: crm-dev", workflow)
+        self.assertIn("gh run download \"$GITHUB_RUN_ID\"", workflow)
+        self.assertIn("crm-native-bundle-$GITHUB_SHA", workflow)
+        self.assertIn("sha256sum --check --strict", workflow)
+        self.assertIn("Restore previous Worker if release acceptance failed", workflow)
+        self.assertIn("Browser E2E on published CRM", workflow)
+
     def test_customer_privacy_approval_uses_actual_change_base_for_packet_check(self) -> None:
         approval = (
             ROOT / ".github/workflows/customer-privacy-approval.yml"
