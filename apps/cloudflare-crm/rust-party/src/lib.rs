@@ -169,38 +169,65 @@ async fn list(db: D1Database, tenant: &str) -> Result<Response> {
     }
     response(json!({"items":items}), 200)
 }
+async fn dispatch(req: Request, env: Env, tenant: &str) -> Result<Response> {
+    let path = req.path();
+    let method = req.method();
+    let db = env.d1("DB")?;
+    if path == "/api/parties" {
+        return match method {
+            Method::Post => create(req, db, tenant).await,
+            Method::Get => list(db, tenant).await,
+            _ => error("NOT_FOUND", 404),
+        };
+    }
+    if let Some(id) = path.strip_prefix("/api/parties/") {
+        if id.is_empty() || id.contains('/') {
+            return error("NOT_FOUND", 404);
+        }
+        return match method {
+            Method::Get => read(db, tenant, id).await,
+            Method::Patch => update(req, db, tenant, id).await,
+            _ => error("NOT_FOUND", 404),
+        };
+    }
+    error("NOT_FOUND", 404)
+}
+
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    // Fail closed outside the isolated, explicitly named CI-only build.
-    #[cfg(not(feature = "ci-local"))]
-    { let _ = (req, env); return error("AUTH_REQUIRED", 403); }
+    #[cfg(all(feature = "ci-local", feature = "integrated"))]
+    compile_error!("ci-local and integrated Rust features are mutually exclusive");
+
+    // Only the compiled-in test mode trusts a loopback CI-only header.
     #[cfg(feature = "ci-local")]
     {
-        if env.var("CRM_CI_LOCAL_ONLY").ok().map(|v| v.to_string()) != Some("yes".to_owned()) {
+        if env.var("CRM_CI_LOCAL_ONLY").ok().map(|v| v.to_string()) != Some("yes".into()) {
             return error("AUTH_REQUIRED", 403);
         }
         let Some(tenant) = req.headers().get("x-crm-ci-tenant")?
-            .filter(|v| v == "tenant-a" || v == "tenant-b") else {
+            .filter(|s| s == "tenant-a" || s == "tenant-b") else {
             return error("AUTH_REQUIRED", 403);
         };
-        let path = req.path();
-        let method = req.method();
-        let db = env.d1("DB")?;
-        if path == "/api/parties" {
-            return match method {
-                Method::Post => create(req, db, &tenant).await,
-                Method::Get => list(db, &tenant).await,
-                _ => error("NOT_FOUND", 404),
-            };
-        }
-        if let Some(id) = path.strip_prefix("/api/parties/") {
-            if id.is_empty() || id.contains('/') { return error("NOT_FOUND", 404); }
-            return match method {
-                Method::Get => read(db, &tenant, id).await,
-                Method::Patch => update(req, db, &tenant, id).await,
-                _ => error("NOT_FOUND", 404),
-            };
-        }
-        error("NOT_FOUND", 404)
+        return dispatch(req, env, &tenant).await;
+    }
+
+    // The `integrated` build is import-only, called inside the single trusted
+    // Worker module. The public JS entrypoint verifies Cloudflare Access,
+    // deletes user-supplied internal headers and assigns this tenant value.
+    // Never publish the generated Rust shim as an independent Worker.
+    #[cfg(feature = "integrated")]
+    {
+        let Some(tenant) = req.headers().get("x-crm-native-tenant")?
+            .filter(|s| !s.is_empty() && s.len() <= 120 &&
+                s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) else {
+            return error("AUTH_REQUIRED", 403);
+        };
+        return dispatch(req, env, &tenant).await;
+    }
+
+    #[cfg(not(any(feature = "ci-local", feature = "integrated")))]
+    {
+        let _ = (req, env);
+        error("AUTH_REQUIRED", 403)
     }
 }

@@ -164,6 +164,13 @@ async function handleRecords(request, env, actor, url) {
   return problem("NOT_FOUND", 404);
 }
 
+// Access resolution shared by the existing JS modules and the Rust Party
+// dispatcher. Tenant is never taken from an untrusted request header.
+export async function resolveActor(request, env, ctx) {
+  if (!env.DB) return null;
+  return actorFor(ctx, env.DB, request);
+}
+
 export async function crmFetch(request, env, ctx) {
   const started = performance.now(), requestId = crypto.randomUUID(), url = new URL(request.url);
   let response;

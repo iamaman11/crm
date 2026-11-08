@@ -11,6 +11,8 @@ crate-type = ["cdylib"]
 default = []
 # Only for loopback workerd CI. The production build cannot accept these headers.
 ci-local = []
+# Import-only Rust business handler inside the existing, Access-protected CRM Worker.
+integrated = []
 
 [dependencies]
 worker = { version = "=0.8.7", features = ["d1"] }
