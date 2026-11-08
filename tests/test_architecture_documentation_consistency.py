@@ -231,7 +231,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
     def test_active_cloudflare_crm_is_strict_and_preserves_step22(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(self.packet["packet_id"], "repository-step-23-cloudflare-native-experiment")
-        self.assertEqual(self.packet["baseline"], {"ref": "main", "sha": "4ec3b416d77857347f797f185ad3981a95219b04"})
+        self.assertEqual(self.packet["baseline"], {"ref": "feature/cloudflare-native-crm-20261107", "sha": "2124dcad281c46ecb3d1cb7b34b44721ed9b28ea"})
         self.assertEqual(self.packet["tracking_issues"], [321, 322, 310])
         self.assertEqual(set(self.packet["allowed_paths"]), {
             "repository-packet.json",

@@ -29,7 +29,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(packet["packet_id"], "repository-step-23-cloudflare-native-experiment")
         self.assertEqual(packet["status"], "active")
-        self.assertEqual(packet["baseline"], {"ref": "main", "sha": "4ec3b416d77857347f797f185ad3981a95219b04"})
+        self.assertEqual(packet["baseline"], {"ref": "feature/cloudflare-native-crm-20261107", "sha": "2124dcad281c46ecb3d1cb7b34b44721ed9b28ea"})
         self.assertEqual(packet["tracking_issues"], [321, 322, 310])
         self.assertEqual(set(packet["allowed_paths"]), {
             "repository-packet.json",
@@ -94,7 +94,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "4ec3b416d77857347f797f185ad3981a95219b04",
+            "2124dcad281c46ecb3d1cb7b34b44721ed9b28ea",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -161,7 +161,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="4ec3b416d77857347f797f185ad3981a95219b04",
+                return_value="2124dcad281c46ecb3d1cb7b34b44721ed9b28ea",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(
@@ -169,7 +169,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                 return_value=[],
             ),
         ):
-            report = packet_check(ROOT, "origin/main")
+            report = packet_check(ROOT, "origin/feature/cloudflare-native-crm-20261107")
         self.assertTrue(report["ok"])
         self.assertEqual(report["changed_paths"], packet["allowed_paths"])
         self.assertEqual(report["blockers"], [])
