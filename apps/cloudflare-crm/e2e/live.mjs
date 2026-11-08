@@ -209,7 +209,9 @@ try {
   // The React shell renders before its first D1-backed list finishes.
   // A visually complete screenshot must not contain the loading placeholder.
   await page.getByRole("button", { name: "+ Добавить клиента" }).waitFor();
-  await page.getByText("Загрузка...", { exact: true })
+  // Match the actual React loading text (single Unicode ellipsis), not three periods.
+  // The screenshot must never certify an unfinished API-backed screen.
+  await page.getByText("Загрузка…", { exact: true })
     .waitFor({ state: "hidden", timeout: 12000 });
   await captureUi("01-home", "Open deployed CRM desktop home after data load");
   // Real browser proof that the original Rust Party runs in this same CRM
