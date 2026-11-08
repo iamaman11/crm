@@ -29,8 +29,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(packet["packet_id"], "repository-step-23-cloudflare-native-experiment")
         self.assertEqual(packet["status"], "active")
-        self.assertEqual(packet["baseline"], {"ref": "feature/cloudflare-native-crm-20261107", "sha": "d11903565b8a3ec9dfd233f1424aadd0dfc9593b"})
-        self.assertEqual(packet["promotion_baseline"], {"ref": "main", "sha": "4ec3b416d77857347f797f185ad3981a95219b04"})
+        self.assertEqual(packet["baseline"], {"ref": "main"})
         self.assertEqual(packet["tracking_issues"], [321, 322, 310])
         self.assertEqual(set(packet["allowed_paths"]), {
             "repository-packet.json",
@@ -105,7 +104,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "d11903565b8a3ec9dfd233f1424aadd0dfc9593b",
+            "- **Baseline:** `main` (live PR base)",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -172,7 +171,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="d11903565b8a3ec9dfd233f1424aadd0dfc9593b",
+                return_value="c75acd9fd36cd87f48fe727171be949e1295c998",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(
@@ -180,54 +179,39 @@ class RepositoryNavigationTests(unittest.TestCase):
                 return_value=[],
             ),
         ):
-            report = packet_check(ROOT, "origin/feature/cloudflare-native-crm-20261107")
+            report = packet_check(ROOT, "origin/main")
         self.assertTrue(report["ok"])
         self.assertEqual(report["changed_paths"], packet["allowed_paths"])
         self.assertEqual(report["blockers"], [])
 
-    def test_promotion_baseline_accepts_only_pinned_main_and_enforces_scope(self) -> None:
-        packet = load_packet(ROOT)
-        promotion_sha = packet["promotion_baseline"]["sha"]
-        affected = {
-            "head_sha": "b" * 40,
-            "changed_paths": ["repository-packet.json", "scripts/repository_navigation.py"],
-            "affected_packages": [],
-            "selected_workflows": [],
-        }
+    def test_main_baseline_enforces_scope_and_unknown_base(self) -> None:
+        affected = {"head_sha": "b" * 40,
+                    "changed_paths": ["repository-packet.json", "scripts/repository_navigation.py"],
+                    "affected_packages": [], "selected_workflows": []}
         with (
-            patch("scripts.repository_navigation._git", return_value=promotion_sha),
+            patch("scripts.repository_navigation._git", return_value="c75acd9fd36cd87f48fe727171be949e1295c998"),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),
         ):
-            by_ref = packet_check(ROOT, "origin/main")
-            by_sha = packet_check(ROOT, promotion_sha)
-        for report in (by_ref, by_sha):
-            self.assertTrue(report["ok"])
-            self.assertEqual(report["baseline_mode"], "promotion")
-            self.assertEqual(report["declared_baseline_sha"], promotion_sha)
+            accepted = packet_check(ROOT, "origin/main")
+            rejected = packet_check(ROOT, "refs/tags/fake-main")
+            raw_sha = packet_check(ROOT, "c75acd9fd36cd87f48fe727171be949e1295c998")
+        self.assertTrue(accepted["ok"])
+        self.assertEqual(accepted["baseline_mode"], "main")
+        self.assertEqual(accepted["declared_baseline_sha"], "c75acd9fd36cd87f48fe727171be949e1295c998")
+        self.assertFalse(rejected["ok"])
+        self.assertEqual(rejected["baseline_mode"], "unrecognized")
+        self.assertFalse(raw_sha["ok"])
 
         affected["changed_paths"].extend(["modules/crm-parties/src/lib.rs", "unowned.txt"])
         with (
-            patch("scripts.repository_navigation._git", return_value=promotion_sha),
+            patch("scripts.repository_navigation._git", return_value="c75acd9fd36cd87f48fe727171be949e1295c998"),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),
         ):
             blocked = packet_check(ROOT, "origin/main")
-            unknown = packet_check(ROOT, "refs/tags/fake-main")
         self.assertIn("forbidden path changed: modules/crm-parties/src/lib.rs", blocked["blockers"])
         self.assertIn("path outside packet: unowned.txt", blocked["blockers"])
-        self.assertEqual(unknown["baseline_mode"], "unrecognized")
-        self.assertFalse(unknown["ok"])
-
-        affected["changed_paths"] = ["repository-packet.json"]
-        with (
-            patch("scripts.repository_navigation._git", return_value="a" * 40),
-            patch("scripts.repository_navigation.build_report", return_value=affected),
-            patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),
-        ):
-            drift = packet_check(ROOT, "origin/main")
-        self.assertFalse(drift["ok"])
-        self.assertIn("base origin/main resolves to", " ".join(drift["blockers"]))
 
     def test_customer_privacy_approval_uses_actual_change_base_for_packet_check(self) -> None:
         approval = (
