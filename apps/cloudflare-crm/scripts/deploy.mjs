@@ -70,7 +70,14 @@ async function deploy(){
   if(!bookmark)throw Error("D1 Time Travel bookmark missing");
   record("checkpoint.json",{git_sha:sha,previous_sha:before.sha,previous_version:oldVersion,d1_database:database,pre_migration_bookmark:bookmark,rust});
   console.log(JSON.stringify({event:"crm.release.checkpoint",git_sha:sha,previous_sha:before.sha,previous_version:oldVersion,bookmark_present:true,rust}));
-  cmd("vite","build");
+  // Fail closed before migrations: the deploy job must use exactly the CI-built files.
+  const source=readFileSync(join(out,"source-sha.txt"),"utf8").trim();
+  if(source!==sha)throw Error("Compiled CRM bundle source SHA mismatch");
+  const checked=spawnSync("sha256sum",["--check","--strict",".release/compiled-sha256.txt"],{
+    cwd:"apps/cloudflare-crm",stdio:"inherit"
+  });
+  if(checked.status!==0||!existsSync("apps/cloudflare-crm/dist/index.html"))
+    throw Error("Compiled CRM release artifact integrity failed");
   cmd("wrangler","d1","migrations","apply","crm-dev","--remote");
   cmd("wrangler","deploy","--var","GIT_SHA:"+sha);
   const newVersion=await version();
