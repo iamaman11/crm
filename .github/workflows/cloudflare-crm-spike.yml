@@ -117,7 +117,7 @@ jobs:
               if party.apply_update(UpdateParty {
                   expected_version: 1, display_name: "Should Fail".to_owned(),
                   occurred_at_unix_nanos: 30,
-              }).err().map(|e| e.code) != Some("PARTIES_PARTY_VERSION_CONFLICT") {
+              }).err().map(|e| e.code) != Some("PARTIES_PARTY_VERSION_CONFLICT".to_string()) {
                   return 6;
               }
               let saved = match encode_party_state(&party) {
@@ -132,7 +132,7 @@ jobs:
                   kind: PartyKind::Person, display_name: " ".to_owned(),
                   occurred_at_unix_nanos: 21,
               }).err();
-              if error.map(|e| e.code) != Some("PARTIES_DISPLAY_NAME_INVALID") {
+              if error.map(|e| e.code) != Some("PARTIES_DISPLAY_NAME_INVALID".to_string()) {
                   return 10;
               }
               0
