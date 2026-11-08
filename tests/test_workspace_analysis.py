@@ -479,14 +479,17 @@ jobs:
             {"workflows": legacy_gates["counts"]["workflows"] + 1,
              "jobs": legacy_gates["counts"]["jobs"] + 2},
         )
-        # Product Plane CI now explicitly owns the native CRM source tree:
-        # its push and PR filters each gained exactly one path.
-        # All other existing baseline metrics remain unchanged.
+        # The historical Step 22 snapshot remains immutable. The current
+        # product-plane CRM and governance verifier paths each add exactly
+        # one filter per push/PR event; normalize only those additive entries.
         revised = []
         for row in current_gates["workflow_rows"]:
             if row[0] == new_workflow:
                 continue
-            if row[0] == ".github/workflows/product-plane.yml":
+            if row[0] in (
+                ".github/workflows/product-plane.yml",
+                ".github/workflows/governance.yml",
+            ):
                 row = list(row)
                 row[5] -= 2
             revised.append(row)
