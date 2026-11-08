@@ -12,6 +12,9 @@ use sha2::{Digest, Sha256};
 use wasm_bindgen::JsValue;
 use worker::*;
 
+#[cfg(feature = "native")]
+mod access;
+
 #[derive(Deserialize)]
 struct CreateInput {
     id: String,
@@ -195,8 +198,10 @@ async fn dispatch(req: Request, env: Env, tenant: &str) -> Result<Response> {
 
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    #[cfg(all(feature = "ci-local", feature = "integrated"))]
-    compile_error!("ci-local and integrated Rust features are mutually exclusive");
+    #[cfg(any(all(feature = "ci-local", feature = "integrated"),
+              all(feature = "ci-local", feature = "native"),
+              all(feature = "integrated", feature = "native")))]
+    compile_error!("ci-local, integrated and native are mutually exclusive");
 
     // Only the compiled-in test mode trusts a loopback CI-only header.
     #[cfg(feature = "ci-local")]
@@ -225,7 +230,15 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         return dispatch(req, env, &tenant).await;
     }
 
-    #[cfg(not(any(feature = "ci-local", feature = "integrated")))]
+    #[cfg(feature = "native")]
+    {
+        let Some(tenant) = access::tenant(&req, &env).await? else {
+            return error("AUTH_REQUIRED", 401);
+        };
+        return dispatch(req, env, &tenant).await;
+    }
+
+    #[cfg(not(any(feature = "ci-local", feature = "integrated", feature = "native")))]
     {
         let _ = (req, env);
         error("AUTH_REQUIRED", 403)

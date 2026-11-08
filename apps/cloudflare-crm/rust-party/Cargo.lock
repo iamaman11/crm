@@ -82,10 +82,13 @@ name = "crm-native-party-worker"
 version = "0.1.0"
 dependencies = [
  "crm-parties",
+ "js-sys",
  "serde",
  "serde_json",
  "sha2",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
  "worker",
 ]
 

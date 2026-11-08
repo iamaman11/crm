@@ -161,6 +161,9 @@ jobs:
       - name: Test unified Worker JS+Rust WASM composition under workerd
         working-directory: apps/cloudflare-crm
         run: node rust-party/test/unified.mjs
+      - name: Compile one native Rust Worker Access JWT candidate (not deployed)
+        working-directory: apps/cloudflare-crm/rust-party
+        run: worker-build --release --features native
       - name: Build integrated Rust Party for one Cloudflare Worker
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --features integrated
