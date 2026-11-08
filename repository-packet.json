@@ -6,7 +6,7 @@
   "objective": "Build a simple, usable test CRM on one Cloudflare Worker + D1 with React UI. Prioritize working functionality and speed. Defer optional hardening and infrastructure additions until after real production.",
   "baseline": {
     "ref": "feature/cloudflare-native-crm-20261107",
-    "sha": "2124dcad281c46ecb3d1cb7b34b44721ed9b28ea"
+    "sha": "365079b95bc62e1140d45d29c0a7ad43975afcdd"
   },
   "tracking_issues": [
     321,
