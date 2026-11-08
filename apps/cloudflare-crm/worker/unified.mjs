@@ -49,6 +49,13 @@ export async function unifiedFetch(request, env, ctx, native = rustParty) {
   } catch (err) {
     console.error(JSON.stringify({event:"crm.rust_party.error",request_id:requestId,
       source:env.GIT_SHA||"local",code:"INTERNAL_ERROR",message:String(err?.message||err)}));
+    // In the isolated 127.0.0.1 CI build only, retain the actual cross-runtime
+    // exception. No internal details are ever returned by the public CRM Worker.
+    if(env.CRM_CI_LOCAL_ONLY==="yes" &&
+      ["localhost","127.0.0.1"].includes(url.hostname)) {
+      return Response.json({code:"INTERNAL_ERROR",request_id:requestId,
+        local_diagnostic:String(err?.stack||err)},{status:500});
+    }
     return Response.json({code:"INTERNAL_ERROR",error:"Internal CRM error",request_id:requestId},
       {status:500,headers:{"x-request-id":requestId,"cache-control":"no-store"}});
   }
