@@ -275,9 +275,9 @@ try {
   await tab("Клиенты").click();
   await (await rowFor(customer)).getByRole("button", { name: "Карточка" }).click();
   await page.getByRole("heading", { name: customer }).waitFor();
-  await captureUi("07-customer360", "Open composed customer card after UI writes");
   for(const [section,title] of [["Контакты клиента",contact],["Сделки клиента",deal],["Задачи клиента",task]])
     await page.getByRole("region", { name: section }).getByText(title, { exact: true }).waitFor();
+  await captureUi("07-customer360", "Open composed customer card after UI writes");
   assert.equal(await page.getByText("Просрочено",{exact:true}).locator("..").locator("strong").textContent(),"1");
   await page.getByRole("button", { name: "Обновить карточку" }).click();
   await page.getByRole("heading", { name: customer }).waitFor();
@@ -353,7 +353,7 @@ try {
   throw error;
 } finally {
   await mkdir(uiEvidenceDir, { recursive: true });
-  await writeFile(uiEvidenceDir + "/manifest.json", JSON.stringify(evidence, null, 2) + "\\n");
+  await writeFile(uiEvidenceDir + "/manifest.json", JSON.stringify(evidence, null, 2) + "\n");
   await cleanup().catch(() => {});
   await browser.close();
 }
