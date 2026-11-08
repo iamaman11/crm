@@ -254,6 +254,8 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         let started = Date::now().as_millis();
         let path = req.path();
         let method = req.method();
+        // Read version binding before dispatch takes ownership of Env.
+        let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
         let operation = match (path.as_str(), method) {
             ("/api/parties", Method::Get) => "parties.list",
             ("/api/parties", Method::Post) => "parties.create",
@@ -273,8 +275,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         reply.headers_mut().set("x-request-id", &request_id)?;
         reply.headers_mut().set("x-crm-module", "crm.parties")?;
         reply.headers_mut().set("x-crm-runtime", "native-workers-rs")?;
-        if let Ok(sha) = env.var("GIT_SHA") {
-            let value = sha.to_string();
+        if let Some(value) = source_sha {
             if value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
                 reply.headers_mut().set("x-crm-source-sha", &value)?;
             }
