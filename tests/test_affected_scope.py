@@ -172,7 +172,7 @@ class AffectedScopeTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         empty = {"packages": [], "workspace_members": []}
         for path, expected in (
-            ("crates/crm-customer-privacy-application/src/lib.rs", "Customer Privacy Owner Execution CI"),
+            ("crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs", "Customer Privacy Owner Execution CI"),
             ("apps/cloudflare-crm/worker/unified.mjs", "Cloudflare CRM Spike CI"),
         ):
             with self.subTest(path=path):
