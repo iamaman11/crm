@@ -13,6 +13,7 @@ const wrangler=(args)=>execFileSync("npx",["wrangler",...args],{
   cwd,env,encoding:"utf8"
 });
 let child;
+let stdout="";
 const json=async(path,init={})=>{
   const r=await fetch(origin+path,init);
   return {status:r.status,body:await r.json()};
@@ -27,7 +28,8 @@ try {
   wrangler(["d1","execute","crm-rust-party-local","--config",cfg,"--local",
     "--file","./migrations/0001_local.sql","--persist-to",persist]);
   child=spawn("npx",["wrangler","dev","--config",cfg,"--local","--port","18788",
-    "--persist-to",persist],{cwd,env,detached:true,stdio:["ignore","ignore","pipe"]});
+    "--persist-to",persist],{cwd,env,detached:true,stdio:["ignore","pipe","pipe"]});
+  child.stdout.on("data",b=>{stdout=(stdout+b.toString()).slice(-8000);});
   let stderr="";
   child.stderr.on("data",b=>{stderr=(stderr+b.toString()).slice(-5000);});
   let available=false;
@@ -45,6 +47,7 @@ try {
   const created=await json("/api/parties",{
     method:"POST",headers:headers("tenant-a","unified-create-a"),
     body:JSON.stringify({id,kind:"organization",name:"  Native  CRM "})});
+  if(created.status!==201) console.error("UNIFIED_WORKER_DIAGNOSTICS",JSON.stringify({stdout,stderr}));
   assert.equal(created.status,201,JSON.stringify(created));
   assert.equal(created.body.item.name,"Native CRM");
   const own=(await json("/api/parties/"+id,{headers:headers("tenant-a")}));
@@ -81,7 +84,7 @@ try {
   if(child.exitCode===null)await Promise.race([
     new Promise(r=>child.once("exit",r)),new Promise(r=>setTimeout(r,1500))]);
   try{process.kill(-child.pid,"SIGKILL");}catch(e){if(e.code!=="ESRCH")throw e;}
-  child.stderr.destroy();child.unref();
+  child.stdout.destroy();child.stderr.destroy();child.unref();
  }
  rmSync(persist,{recursive:true,force:true});
 }
