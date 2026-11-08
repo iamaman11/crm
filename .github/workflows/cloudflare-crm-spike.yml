@@ -287,6 +287,8 @@ jobs:
             apps/cloudflare-crm/.release/*.json
             apps/cloudflare-crm/e2e-failure.png
             apps/cloudflare-crm/e2e-mobile.png
+            apps/cloudflare-crm/e2e-evidence/*.png
+            apps/cloudflare-crm/e2e-evidence/manifest.json
           if-no-files-found: warn
           retention-days: 7
           include-hidden-files: true

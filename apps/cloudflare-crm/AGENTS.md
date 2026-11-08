@@ -83,3 +83,16 @@ hardening is deferred until **after real production**, not merely until launch.
 
 Do not assert full industrial readiness or human interactive login without
 physical proof. PR stays Draft until its stated acceptance criteria are met.
+
+### Visual evidence for every deployed release
+
+The **existing** protected `deploy-crm-dev` job runs real Chromium against the
+published URL. Its `crm-dev-release-<git-sha>` artifact contains
+`e2e-evidence/manifest.json` and screenshots of desktop home, Rust Party,
+customers, contacts, deals, tasks, Customer 360, pipeline, updated linked card,
+and mobile UI. The manifest records the exact live Worker SHA, actions, API
+readbacks and PASS/FAIL without tokens, cookies, tenant IDs or raw customer data.
+Failure screenshots and relevant Actions job logs remain available. This is
+**headless reproducible UI interaction**, not an always-open interactive browser
+that ChatGPT can directly control from this conversation. Keep this in the
+existing E2E and release artifact; do not create a second dashboard or service.
