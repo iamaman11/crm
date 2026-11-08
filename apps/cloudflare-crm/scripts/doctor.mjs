@@ -3,7 +3,7 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { modules, readModels, errors, implementationOwners, ownerFiles } from "../shared/catalog.mjs";
+import { modules, readModels, nativeModels, errors, implementationOwners, ownerFiles } from "../shared/catalog.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const started = performance.now();
 const read = name => readFileSync(resolve(root, name), "utf8");
@@ -17,7 +17,7 @@ const requested = process.argv.slice(2).join(" ").trim().toLowerCase();
 const alias = { client:"customers", customer:"customers", клиент:"customers",
   contact:"contacts", контакт:"contacts", deal:"deals", сделк:"deals",
   task:"tasks", задач:"tasks" };
-const features = { ...modules, ...readModels };
+const features = { ...modules, ...readModels, ...nativeModels };
 const moduleKey = Object.keys(features).find(key =>
   key === requested || key.includes(requested) && requested.length >= 2 ||
   features[key].title.toLowerCase().includes(requested) && requested.length >= 2) ||
@@ -72,6 +72,11 @@ if(requested) {
       fieldKeys.every(key=>/^[a-z][a-z0-9_]*$/.test(key));
   });
   checks.push({check:"valid-feature-contracts",result:validCatalog?"PASS":"FAIL"});
+  const nativeModelsValid=Object.entries(nativeModels).every(([name,model])=>
+    model.kind==="owner"&&model.route===name&&
+    implementationOwners[name]==="rust-party"&&
+    ownerFiles["rust-party"].validation==="rust-party/src/lib.rs");
+  checks.push({check:"native-rust-party-owner",result:nativeModelsValid?"PASS":"FAIL"});
   const readModelsValid=Object.entries(readModels).every(([name,feature])=>
     feature.kind==="read" && feature.route===name && !modules[name] &&
     implementationOwners[name]!== "pilot-core");

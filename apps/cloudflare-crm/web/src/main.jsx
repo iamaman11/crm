@@ -2,6 +2,7 @@ import React, {useEffect,useState} from "react";
 import {createRoot} from "react-dom/client";
 import "./styles.css";
 import Customer360 from "./Customer360.jsx";
+import Parties from "./Parties.jsx";
 
 import { modules as features, labels as names } from "../../shared/catalog.mjs";
 
@@ -9,7 +10,7 @@ const dealStages=["new","qualified","proposal","won","lost"];
 const number=value=>new Intl.NumberFormat("ru-RU",{maximumFractionDigits:2}).format(Number(value)||0);
 
 async function api(url, options={}) {
- const response=await fetch("/api/"+url,{...options,headers:{"content-type":"application/json"}});
+ const response=await fetch("/api/"+url,{...options,headers:{"content-type":"application/json",...(options.headers||{})}});
  if(!response.ok){const body=await response.json().catch(()=>({}));
   const code=response.headers.get("x-crm-error-code")||body.code||"HTTP_"+response.status;
   const requestId=response.headers.get("x-request-id");
@@ -29,7 +30,7 @@ function App(){
  const [loading,setLoading]=useState(true);
  const [message,setMessage]=useState("");
  const [error,setError]=useState(false);
- const feature=features[tab];
+ const feature=features[tab]||features.customers;
  async function reload(){
   const keys=Object.keys(features),results=await Promise.all(keys.map(k=>api(k)));
   setItems(Object.fromEntries(keys.map((k,i)=>[k,results[i].items])));
@@ -69,7 +70,7 @@ function App(){
  const customerName=id=>items.customers.find(c=>c.id===id)?.name||"—";
  const format=(key,value)=>key==="customer_id"?customerName(value):
   ["kind","stage","status"].includes(key)?names[value]||String(value??"—"):String(value??"—");
- const rows=items[tab].filter(row=>JSON.stringify(row).toLowerCase().includes(search.toLowerCase()));
+ const rows=(items[tab]||[]).filter(row=>JSON.stringify(row).toLowerCase().includes(search.toLowerCase()));
  const buttons=row=><span className="row-actions">{tab==="customers"&&
   <button className="ghost" onClick={()=>{setSelectedCustomer(row.id);setSearch("");}}>Карточка</button>}
   <button className="ghost" onClick={()=>open(row)}>Изменить</button>
@@ -86,9 +87,12 @@ function App(){
   <main><div className="heading"><div><h1>Моя CRM</h1><p>Клиенты, контакты, сделки и задачи — в одном месте</p></div>
    <button className="ghost" onClick={()=>reload().then(()=>{setMessage("Обновлено");setError(false)}).catch(e=>{setMessage(e.message);setError(true)})}>Обновить</button></div>
    <nav aria-label="Разделы">{Object.entries(features).map(([key,v])=>
-    <button key={key} className={tab===key?"active":"ghost"} onClick={()=>{setTab(key);setSelectedCustomer(null);setSearch("");setMessage("")}}>{v.title} <small>{items[key].length}</small></button>)}</nav>
+    <button key={key} className={tab===key?"active":"ghost"} onClick={()=>{setTab(key);setSelectedCustomer(null);setSearch("");setMessage("")}}>{v.title} <small>{items[key].length}</small></button>)}
+    <button className={tab==="parties"?"active":"ghost"} onClick={()=>{
+      setTab("parties");setSelectedCustomer(null);setSearch("");setMessage("");
+    }}>Лица и организации <small>Rust</small></button></nav>
    {message&&<div role="status" className={error?"notice error":"notice"}>{message}</div>}
-   <section className="panel">{selectedCustomer?
+   <section className="panel">{tab==="parties"?<Parties load={api}/>:selectedCustomer?
     <Customer360 customerId={selectedCustomer} load={api}
       onBack={()=>{setSelectedCustomer(null);setTab("customers");setSearch("");}}
       onNavigate={section=>{setTab(section);setSearch(selectedCustomer);setSelectedCustomer(null);}}

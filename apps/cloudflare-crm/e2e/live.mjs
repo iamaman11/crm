@@ -125,6 +125,36 @@ try {
   const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
   if (response.status() !== 200) throw Error("Protected CRM page HTTP " + response.status());
   await page.getByRole("heading", { name: "Моя CRM" }).waitFor({ timeout: 12000 });
+  // Real browser proof that the original Rust Party runs in this same CRM
+  // Worker behind the same Cloudflare Access policy and persists in D1.
+  const partyName = marker+" Native Rust";
+  await tab("Лица и организации").click();
+  await page.getByRole("button",{name:"+ Добавить лицо / организацию"}).click();
+  await page.getByLabel("Имя / название",{exact:true}).fill(partyName);
+  await page.getByRole("button",{name:"Сохранить"}).click();
+  await page.getByText(partyName,{exact:true}).waitFor({timeout:12000});
+  await page.reload();
+  await tab("Лица и организации").click();
+  const partyRow=page.getByRole("row").filter({hasText:partyName});
+  await partyRow.waitFor({timeout:12000});
+  await partyRow.getByRole("button",{name:"Изменить"}).click();
+  await page.getByLabel("Имя / название",{exact:true}).fill(partyName+" Updated");
+  await page.getByRole("button",{name:"Сохранить"}).click();
+  await page.getByText(partyName+" Updated",{exact:true}).waitFor({timeout:12000});
+  const nativeRead = await context.request.get(url + "/api/parties");
+  assert.equal(nativeRead.status(),200,"authorized Rust Party API");
+  const partyList=(await nativeRead.json()).items;
+  const identity=partyList.find(x=>x.name===partyName+" Updated");
+  assert.equal(identity?.version,2,"original Rust persisted versioned update");
+  const wrongVersion=await context.request.patch(url + "/api/parties/" + identity.id,{
+    headers:{"idempotency-key":"stale-"+marker},
+    data:{expected_version:1,name:partyName+" Rejected"}});
+  assert.equal(wrongVersion.status(),409,"Rust rejects stale versions");
+  const unauthorized=await context.request.get(url + "/api/parties/"+identity.id,{
+    headers:{"x-crm-native-tenant":"spoofed-id"}});
+  assert.equal(unauthorized.status(),200,"verified Access tenant overrides injected header");
+  // Party deletion is not part of the accepted original Rust domain contract.
+  // CI uses isolated dedicated test workspaces; this test identity is retained.
   const customer = marker + " Компания", contact = marker + " Контакт", deal = marker + " Сделка", task = marker + " Задача";
   await create("Клиенты", "клиента", { "Имя / название": customer, "Тип": "organization" }, customer);
   await page.reload();
