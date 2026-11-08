@@ -184,9 +184,41 @@ jobs:
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
           grep -F '35fc7ee9-9710-485f-8fb3-f5a398b229b4' apps/cloudflare-crm/wrangler.jsonc
           grep -F 'jwtVerify(token, ACCESS_KEYS' apps/cloudflare-crm/worker/index.mjs
+      - name: Seal compiled Rust and React outputs for this exact checkout
+        shell: bash
+        env:
+          CRM_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          cd apps/cloudflare-crm
+          test -s dist/index.html
+          test -s rust-party/build/index.js
+          test -s rust-party/build/index_bg.wasm
+          mkdir -p .release
+          printf '%s\n' "$CRM_BUILD_SHA" > .release/source-sha.txt
+          find dist rust-party/build -type f -print0 | LC_ALL=C sort -z |
+            xargs -0 sha256sum > .release/compiled-sha256.txt
+          sha256sum --check --strict .release/compiled-sha256.txt
+          echo "CRM compiled bundle sealed for $CRM_BUILD_SHA"
+      - name: Preserve exact compiled bundle for the protected deployment
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cloudflare-native-crm-20261107'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: crm-native-bundle-${{ github.sha }}
+          path: |
+            apps/cloudflare-crm/dist/
+            apps/cloudflare-crm/rust-party/build/
+            apps/cloudflare-crm/.release/source-sha.txt
+            apps/cloudflare-crm/.release/compiled-sha256.txt
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: true
 
   deploy-crm-dev:
     needs: cloudflare-crm-spike
+    permissions:
+      contents: read
+      actions: read
     if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cloudflare-native-crm-20261107'
     runs-on: ubuntu-24.04
     environment: crm-dev
@@ -204,15 +236,21 @@ jobs:
       - name: Install Chromium for browser test
         run: npx playwright install --with-deps chromium
         working-directory: apps/cloudflare-crm
-      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
-        with:
-          toolchain: 1.97.1
-          targets: wasm32-unknown-unknown
-      - name: Build original Rust Party for the single CRM Worker
-        working-directory: apps/cloudflare-crm/rust-party
+      - name: Restore CI-verified Rust WASM and React bundle without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          cargo install --locked worker-build --version 0.8.7
-          worker-build --release --features integrated
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "crm-native-bundle-$GITHUB_SHA" --dir apps/cloudflare-crm
+          cd apps/cloudflare-crm
+          test "$(cat .release/source-sha.txt)" = "$GITHUB_SHA"
+          sha256sum --check --strict .release/compiled-sha256.txt
+          test -s dist/index.html
+          test -s rust-party/build/index.js
+          test -s rust-party/build/index_bg.wasm
+          echo "CRM exact-source release artifact verified for $GITHUB_SHA"
       - name: Deploy React, D1 and Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
