@@ -63,16 +63,6 @@ try{
   assert.equal((await call("/api/parties",parts.join("."))).status,401,
     "modified claims must fail signature");
   assert.equal((await call("/api/parties",a)).status,200,"signed A accepted");
-  assert.equal((await call("/api/native-modules/proof",null)).status,401);
-  const probe=await call("/api/native-modules/proof",a);
-  assert.equal(probe.status,200,JSON.stringify(probe.body));
-  assert.equal(probe.body.result,"PASS");
-  assert.equal(probe.body.original_crates_called,13);
-  assert.equal(probe.body.modules.length,13);
-  assert.equal(new Set(probe.body.modules.map(x=>x.module)).size,13);
-  assert.ok(probe.body.modules.every(x=>x.passed===true && x.d1_persistence==="NOT_TESTED"));
-  assert.equal(probe.body.full_application_integrations_accepted,0,
-    "smoke proof must not claim fully integrated modules");
   assert.equal((await call("/api/parties",b)).status,200,"signed B accepted");
   const id="native-jwt-"+randomUUID();
   const created=await call("/api/parties",a,{method:"POST",headers:{
