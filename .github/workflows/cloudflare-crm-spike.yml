@@ -163,6 +163,9 @@ jobs:
       - name: Test original Rust Party through workerd and isolated native D1
         working-directory: apps/cloudflare-crm
         run: node rust-party/test/local.mjs
+      - name: Test unified Worker JS+Rust WASM composition under workerd
+        working-directory: apps/cloudflare-crm
+        run: node rust-party/test/unified.mjs
       - name: Check CRM target
         run: |
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
