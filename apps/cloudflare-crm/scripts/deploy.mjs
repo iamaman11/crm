@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 const required = n => { if(!process.env[n]) throw Error("Missing "+n); return process.env[n]; };
 const sha=required("GITHUB_SHA");
@@ -6,6 +7,7 @@ const account="5bd5e1e1e813f061afc259e91334262d",database="35fc7ee9-9710-485f-8f
 if(required("CLOUDFLARE_ACCOUNT_ID")!==account || required("CRM_D1_DATABASE_ID")!==database) throw Error("Wrong Cloudflare CRM target");
 const token=required("CLOUDFLARE_API_TOKEN");
 function cmd(...args){const r=spawnSync("npx",args,{cwd:"apps/cloudflare-crm",stdio:"inherit"});if(r.status!==0)throw Error("Failed npx "+args[0]);}
+if(!existsSync("apps/cloudflare-crm/rust-party/build/index.js")) throw Error("Native Rust Party Worker not built");
 cmd("vite","build");
 cmd("wrangler","d1","migrations","apply","crm-dev","--remote");
 cmd("wrangler","deploy","--var","GIT_SHA:"+sha);

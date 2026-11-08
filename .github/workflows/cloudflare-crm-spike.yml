@@ -166,6 +166,14 @@ jobs:
       - name: Test unified Worker JS+Rust WASM composition under workerd
         working-directory: apps/cloudflare-crm
         run: node rust-party/test/unified.mjs
+      - name: Build integrated Rust Party for one Cloudflare Worker
+        working-directory: apps/cloudflare-crm/rust-party
+        run: worker-build --release --features integrated
+      - name: Inspect exact unified deployment bundle without deploying
+        working-directory: apps/cloudflare-crm
+        run: |
+          test -f rust-party/build/index.js
+          npx wrangler deploy --dry-run --outdir /tmp/crm-rust-party-unified
       - name: Check CRM target
         run: |
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
@@ -177,7 +185,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cloudflare-native-crm-20261107'
     runs-on: ubuntu-24.04
     environment: crm-dev
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -191,6 +199,15 @@ jobs:
       - name: Install Chromium for browser test
         run: npx playwright install --with-deps chromium
         working-directory: apps/cloudflare-crm
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+      - name: Build original Rust Party for the single CRM Worker
+        working-directory: apps/cloudflare-crm/rust-party
+        run: |
+          cargo install --locked worker-build --version 0.8.7
+          worker-build --release --features integrated
       - name: Deploy React, D1 and Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
