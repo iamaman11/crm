@@ -14,6 +14,8 @@ use worker::*;
 
 #[cfg(feature = "native")]
 mod access;
+#[cfg(feature = "native-ci")]
+mod proof;
 
 #[derive(Deserialize)]
 struct CreateInput {
@@ -235,6 +237,10 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         let Some(tenant) = access::tenant(&req, &env).await? else {
             return error("AUTH_REQUIRED", 401);
         };
+        #[cfg(feature = "native-ci")]
+        if req.path() == "/api/native-modules/proof" && req.method() == Method::Get {
+            return proof::run();
+        }
         return dispatch(req, env, &tenant).await;
     }
 
