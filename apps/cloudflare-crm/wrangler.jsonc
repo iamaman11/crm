@@ -1,0 +1,25 @@
+{
+  "name": "crm-dev",
+  "main": "./worker/unified.mjs",
+  "account_id": "5bd5e1e1e813f061afc259e91334262d",
+  "compatibility_date": "2026-11-07",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "crm-dev",
+      "database_id": "35fc7ee9-9710-485f-8fb3-f5a398b229b4",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "observability": {
+    "enabled": true
+  }
+}

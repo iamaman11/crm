@@ -94,7 +94,8 @@
         "apps/web/**",
         "packages/client/**",
         "packages/ui/**",
-        "scripts/run_e2e.sh"
+        "scripts/run_e2e.sh",
+        "apps/cloudflare-crm/**"
       ],
       "required_workflows": [
         "Product Plane CI"
@@ -107,7 +108,8 @@
         "apps/web/**",
         "packages/client/**",
         "packages/ui/**",
-        "buf.gen.web.yaml"
+        "buf.gen.web.yaml",
+        "apps/cloudflare-crm/**"
       ],
       "required_workflows": [
         "Product Plane CI"
@@ -120,6 +122,8 @@
         ".github/pull_request_template.md",
         ".github/workflows/**",
         "AGENTS.md",
+        "repository-packet.json",
+        "docs/ACTIVE_PACKET.md",
         "customer-privacy-operations-policy.json",
         "docs/ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md",
         "docs/CI_TELEMETRY_BASELINE.md",
@@ -139,6 +143,7 @@
         "scripts/local_lifecycle.py",
         "scripts/prepare_isolated_process_database.sh",
         "scripts/repo.py",
+        "scripts/repository_navigation.py",
         "scripts/run_customer_privacy_operations.sh",
         "step13-complexity-policy.json",
         "step13-suppression-baseline.json",

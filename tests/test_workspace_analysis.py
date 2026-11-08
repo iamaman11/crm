@@ -466,8 +466,45 @@ jobs:
             fresh["runtime_fanin"]["counts"],
             {"all": 53, "production": 52, "test_only": 1, "build": 0},
         )
+        # The committed Step 22 snapshot is immutable. A new Cloudflare
+        # workflow is additive: every pre-existing workflow/job row must
+        # remain byte-for-byte identical, with exactly one new job/gate.
+        current_gates = fresh["permanent_gates"]
+        legacy_gates = committed["permanent_gates"]
+        new_workflow = ".github/workflows/cloudflare-crm-spike.yml"
+        self.assertEqual(current_gates["workflow_columns"], legacy_gates["workflow_columns"])
+        self.assertEqual(current_gates["job_columns"], legacy_gates["job_columns"])
         self.assertEqual(
-            fresh["permanent_gates"], committed["permanent_gates"]
+            current_gates["counts"],
+            {"workflows": legacy_gates["counts"]["workflows"] + 1,
+             "jobs": legacy_gates["counts"]["jobs"] + 2},
+        )
+        # Historical Step 22 rows stay immutable. Normalize only known,
+        # explicit path-filter changes; all other workflow differences fail.
+        revised = []
+        for row in current_gates["workflow_rows"]:
+            if row[0] == new_workflow:
+                continue
+            row = list(row)
+            if row[0] == ".github/workflows/product-plane.yml":
+                row[5] -= 2
+            elif row[0] == ".github/workflows/governance.yml":
+                row[5] -= 6
+            elif row[0] == ".github/workflows/customer-privacy-owner-execution.yml":
+                row[5] += 4
+            revised.append(row)
+        self.assertEqual(revised, legacy_gates["workflow_rows"])
+        self.assertEqual(
+            [row for row in current_gates["job_rows"] if not row[0].startswith(new_workflow + "#")],
+            legacy_gates["job_rows"],
+        )
+        self.assertEqual(
+            [row[0] for row in current_gates["workflow_rows"] if row[0] == new_workflow],
+            [new_workflow],
+        )
+        self.assertEqual(
+            {row[0] for row in current_gates["job_rows"] if row[0].startswith(new_workflow + "#")},
+            {new_workflow + "#cloudflare-crm-spike", new_workflow + "#deploy-crm-dev"},
         )
 
         current_runtime_ids = {

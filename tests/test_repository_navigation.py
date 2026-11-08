@@ -24,37 +24,65 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_g2_useful_crm_packet_is_exact_and_bounded(self) -> None:
+    def test_active_cloudflare_experiment_packet_is_exact_and_bounded(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(packet["packet_id"], "repository-step-22p-g2-useful-crm")
+        self.assertEqual(packet["packet_id"], "repository-step-23-cloudflare-native-experiment")
         self.assertEqual(packet["status"], "active")
-        self.assertEqual(packet["baseline"], {"ref": "main", "sha": "ddd6e738d0e11d6ff214caea6eb42de378b9f1c9"})
-        self.assertEqual(packet["tracking_issues"], [312, 310])
+        self.assertEqual(packet["baseline"], {"ref": "feature/cloudflare-native-crm-20261107", "sha": "d11903565b8a3ec9dfd233f1424aadd0dfc9593b"})
+        self.assertEqual(packet["promotion_baseline"], {"ref": "main", "sha": "4ec3b416d77857347f797f185ad3981a95219b04"})
+        self.assertEqual(packet["tracking_issues"], [321, 322, 310])
         self.assertEqual(set(packet["allowed_paths"]), {
-            "repository-packet.json", "docs/ACTIVE_PACKET.md",
-            "apps/web/src/App.tsx", "apps/web/src/routes.ts", "apps/web/src/routes.test.ts",
-            "apps/web/src/productionSession.ts", "apps/web/src/productionSession.test.ts",
-            "apps/web/src/CrmPageUtils.ts", "apps/web/src/CrmPageUtils.test.ts",
-            "apps/web/vite.config.ts", "apps/web/playwright.config.ts",
-            "apps/web/e2e/g2-crm.spec.ts", "scripts/run_e2e.sh",
-            "services/crm-api/tests/seed_e2e_fixture.rs",
-            "packages/client/src/gateway.ts", "packages/client/src/gateway.test.ts",
-            "apps/web/e2e/customer-privacy.spec.ts",
-            "apps/web/src/CustomerPrivacyPage.tsx",
-            "scripts/run_customer_privacy_operations.sh",
-            "tests/test_customer_privacy_operations.py",
+            "repository-packet.json",
+            "docs/ACTIVE_PACKET.md",
+            "apps/cloudflare-crm/worker/index.mjs",
+            "apps/cloudflare-crm/shared/catalog.mjs",
+            "apps/cloudflare-crm/migrations/0001_initial.sql",
+            "apps/cloudflare-crm/test/worker.test.mjs",
+            "apps/cloudflare-crm/cloudflare.config.ts",
+            "apps/cloudflare-crm/web/index.html",
+            "apps/cloudflare-crm/web/src/main.jsx",
+            "apps/cloudflare-crm/web/src/styles.css",
+            "apps/cloudflare-crm/package.json",
+            "apps/cloudflare-crm/vite.config.mjs",
+            "apps/cloudflare-crm/wrangler.jsonc",
+            "pnpm-workspace.yaml",
+            "apps/cloudflare-crm/e2e/live.mjs",
+            "apps/cloudflare-crm/features/customer360/query.mjs",
+            "apps/cloudflare-crm/web/src/Customer360.jsx",
+            "apps/cloudflare-crm/test/customer360.test.mjs",
+            "apps/cloudflare-crm/README.md",
+            "apps/cloudflare-crm/AGENTS.md",
+            "apps/cloudflare-crm/migrations/0002_rust_party.sql",
+            "apps/cloudflare-crm/web/src/Parties.jsx",
+            "apps/cloudflare-crm/worker/unified.mjs",
+            "apps/cloudflare-crm/rust-party/wrangler.unified.jsonc",
+            "apps/cloudflare-crm/rust-party/test/unified.mjs",
+            "apps/cloudflare-crm/rust-party/Cargo.toml",
+            "apps/cloudflare-crm/rust-party/Cargo.lock",
+            "apps/cloudflare-crm/rust-party/src/lib.rs",
+            "apps/cloudflare-crm/rust-party/migrations/0001_local.sql",
+            "apps/cloudflare-crm/rust-party/wrangler.jsonc",
+            "apps/cloudflare-crm/rust-party/README.md",
+            "apps/cloudflare-crm/rust-party/test/local.mjs",
+            ".github/workflows/cloudflare-crm-spike.yml",
+            ".github/workflows/governance.yml",
+            ".github/workflows/customer-privacy-owner-execution.yml",
+            "scripts/affected_scope.py",
+            "tests/test_affected_scope.py",
+            "affected-scope-policy.json",
             ".github/workflows/product-plane.yml",
-            "apps/web/src/CustomersPage.tsx", "apps/web/src/DealsPage.tsx", "apps/web/src/TasksPage.tsx",
-            "packages/client/src/crm.ts", "packages/client/src/crm.test.ts",
-            "packages/client/src/index.ts", "packages/client/src/session.ts",
-            "crates/crm-application-runtime/src/production_identity.rs",
-            "tests/test_repository_navigation.py", "tests/test_architecture_documentation_consistency.py",
+            "tests/test_workspace_analysis.py",
+            "tests/test_repository_navigation.py",
+            "scripts/repository_navigation.py",
+            "apps/cloudflare-crm/scripts/deploy.mjs",
+            "apps/cloudflare-crm/scripts/doctor.mjs",
+            "tests/test_architecture_documentation_consistency.py",
         })
         for path in (".github/actions/**", "modules/**", "contracts/**", "proto/**", "docs/generated/REPOSITORY_MAP.md"):
             self.assertIn(path, packet["forbidden_paths"])
-        self.assertIn("typed browser gateway client", " ".join(packet["deliverables"]))
-        self.assertIn("production", " ".join(packet["non_goals"]))
+        self.assertIn("Access-verified identity", " ".join(packet["deliverables"]))
+        self.assertIn("deploy", " ".join(packet["non_goals"]))
         self.assertEqual(
             validate_decisions(ROOT),
             {"all": 63, "final": 27, "platform_generic": 16,
@@ -73,11 +101,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-22p-g2-useful-crm",
+            "repository-step-23-cloudflare-native-experiment",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "ddd6e738d0e11d6ff214caea6eb42de378b9f1c9",
+            "d11903565b8a3ec9dfd233f1424aadd0dfc9593b",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -117,6 +145,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         packet = load_packet(ROOT)
         workflow_paths = {
             "Affected Scope CI": ".github/workflows/affected-scope.yml",
+            "Cloudflare CRM Spike CI": ".github/workflows/cloudflare-crm-spike.yml",
             "Application Runtime CI": ".github/workflows/application-runtime.yml",
             "Complexity Baseline CI": ".github/workflows/complexity-baseline.yml",
             "Governance CI": ".github/workflows/governance.yml",
@@ -143,7 +172,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         with (
             patch(
                 "scripts.repository_navigation._git",
-                return_value="ddd6e738d0e11d6ff214caea6eb42de378b9f1c9",
+                return_value="d11903565b8a3ec9dfd233f1424aadd0dfc9593b",
             ),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch(
@@ -151,10 +180,54 @@ class RepositoryNavigationTests(unittest.TestCase):
                 return_value=[],
             ),
         ):
-            report = packet_check(ROOT, "origin/main")
+            report = packet_check(ROOT, "origin/feature/cloudflare-native-crm-20261107")
         self.assertTrue(report["ok"])
         self.assertEqual(report["changed_paths"], packet["allowed_paths"])
         self.assertEqual(report["blockers"], [])
+
+    def test_promotion_baseline_accepts_only_pinned_main_and_enforces_scope(self) -> None:
+        packet = load_packet(ROOT)
+        promotion_sha = packet["promotion_baseline"]["sha"]
+        affected = {
+            "head_sha": "b" * 40,
+            "changed_paths": ["repository-packet.json", "scripts/repository_navigation.py"],
+            "affected_packages": [],
+            "selected_workflows": [],
+        }
+        with (
+            patch("scripts.repository_navigation._git", return_value=promotion_sha),
+            patch("scripts.repository_navigation.build_report", return_value=affected),
+            patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),
+        ):
+            by_ref = packet_check(ROOT, "origin/main")
+            by_sha = packet_check(ROOT, promotion_sha)
+        for report in (by_ref, by_sha):
+            self.assertTrue(report["ok"])
+            self.assertEqual(report["baseline_mode"], "promotion")
+            self.assertEqual(report["declared_baseline_sha"], promotion_sha)
+
+        affected["changed_paths"].extend(["modules/crm-parties/src/lib.rs", "unowned.txt"])
+        with (
+            patch("scripts.repository_navigation._git", return_value=promotion_sha),
+            patch("scripts.repository_navigation.build_report", return_value=affected),
+            patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),
+        ):
+            blocked = packet_check(ROOT, "origin/main")
+            unknown = packet_check(ROOT, "refs/tags/fake-main")
+        self.assertIn("forbidden path changed: modules/crm-parties/src/lib.rs", blocked["blockers"])
+        self.assertIn("path outside packet: unowned.txt", blocked["blockers"])
+        self.assertEqual(unknown["baseline_mode"], "unrecognized")
+        self.assertFalse(unknown["ok"])
+
+        affected["changed_paths"] = ["repository-packet.json"]
+        with (
+            patch("scripts.repository_navigation._git", return_value="a" * 40),
+            patch("scripts.repository_navigation.build_report", return_value=affected),
+            patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),
+        ):
+            drift = packet_check(ROOT, "origin/main")
+        self.assertFalse(drift["ok"])
+        self.assertIn("base origin/main resolves to", " ".join(drift["blockers"]))
 
     def test_customer_privacy_approval_uses_actual_change_base_for_packet_check(self) -> None:
         approval = (

@@ -1,0 +1,293 @@
+name: Cloudflare CRM Spike CI
+on:
+  pull_request:
+    paths:
+      - "apps/cloudflare-crm/**"
+      - ".github/workflows/cloudflare-crm-spike.yml"
+  push:
+    branches:
+      - main
+      - feature/cloudflare-native-crm-20261107
+    paths:
+      - "apps/cloudflare-crm/**"
+      - ".github/workflows/cloudflare-crm-spike.yml"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+permissions:
+  contents: read
+jobs:
+  cloudflare-crm-spike:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Install CRM dependencies
+        run: npm install --no-audit --no-fund
+        working-directory: apps/cloudflare-crm
+      - name: Fast feature/schema contract doctor
+        run: npm run doctor
+        working-directory: apps/cloudflare-crm
+      - name: Locate module and error code without network
+        working-directory: apps/cloudflare-crm
+        run: |
+          npm run locate -- deals
+          npm run locate -- INVALID_INPUT
+          npm run locate -- customer360
+      - name: Run CRM API tests
+        run: npm test
+        working-directory: apps/cloudflare-crm
+      - name: Build React CRM
+        run: npm run build
+        working-directory: apps/cloudflare-crm
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+      - name: Verify all existing Rust business modules compile for WebAssembly
+        run: |
+          cargo check --locked --target wasm32-unknown-unknown \
+            -p crm-sales -p crm-activities -p crm-sales-activities-link \
+            -p crm-parties -p crm-customer-accounts -p crm-contact-points \
+            -p crm-party-relationships -p crm-consents -p crm-identity-resolution \
+            -p crm-customer-data-operations -p crm-data-quality \
+            -p crm-customer-enrichment -p crm-customer-privacy
+      - name: Execute the original Rust domain rules from WASM in Node
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          mkdir -p "$probe/src"
+          cat > "$probe/Cargo.toml" <<EOF
+          [package]
+          name = "crm-wasm-probe"
+          version = "0.1.0"
+          edition = "2024"
+          [lib]
+          crate-type = ["cdylib"]
+          [dependencies]
+          crm-parties = { path = "$GITHUB_WORKSPACE/modules/crm-parties" }
+          EOF
+          cat > "$probe/src/lib.rs" <<'RUST'
+          use crm_parties::{
+              CreateParty, UpdateParty, Party, PartyId, PartyKind,
+              encode_party_state, decode_party_state,
+          };
+          // This is a diagnostic ABI only: all domain rules are from existing crm-parties.
+          #[unsafe(no_mangle)]
+          pub extern "C" fn crm_party_domain_probe() -> i32 {
+              let id = match PartyId::try_new("wasm-proof-01") {
+                  Ok(v) => v,
+                  Err(_) => return 1,
+              };
+              let mut party = match Party::create(CreateParty {
+                  party_id: id, kind: PartyKind::Organization,
+                  display_name: "  Example  Organization ".to_owned(),
+                  occurred_at_unix_nanos: 10,
+              }) {
+                  Ok(v) => v,
+                  Err(_) => return 2,
+              };
+              if party.display_name() != "Example Organization" || party.version() != 1 {
+                  return 3;
+              }
+              if party.apply_update(UpdateParty {
+                  expected_version: 1, display_name: "Example Corporation".to_owned(),
+                  occurred_at_unix_nanos: 20,
+              }).is_err() { return 4; }
+              if party.version() != 2 { return 5; }
+              if party.apply_update(UpdateParty {
+                  expected_version: 1, display_name: "Should Fail".to_owned(),
+                  occurred_at_unix_nanos: 30,
+              }).err().map(|e| e.code) != Some("PARTIES_PARTY_VERSION_CONFLICT".to_string()) {
+                  return 6;
+              }
+              let saved = match encode_party_state(&party) {
+                  Ok(v) => v, Err(_) => return 7,
+              };
+              let loaded = match decode_party_state(&saved) {
+                  Ok(v) => v, Err(_) => return 8,
+              };
+              if loaded != party { return 9; }
+              let error = Party::create(CreateParty {
+                  party_id: PartyId::try_new("wasm-proof-02").unwrap(),
+                  kind: PartyKind::Person, display_name: " ".to_owned(),
+                  occurred_at_unix_nanos: 21,
+              }).err();
+              if error.map(|e| e.code) != Some("PARTIES_DISPLAY_NAME_INVALID".to_string()) {
+                  return 10;
+              }
+              0
+          }
+          RUST
+          cargo build --manifest-path "$probe/Cargo.toml" --target wasm32-unknown-unknown
+          node - "$probe/target/wasm32-unknown-unknown/debug/crm_wasm_probe.wasm" <<'NODE'
+          const fs = require('node:fs');
+          const file = process.argv[2];
+          (async () => {
+            const { instance } = await WebAssembly.instantiate(fs.readFileSync(file), {});
+            if (typeof instance.exports.crm_party_domain_probe !== 'function') {
+              throw new Error('Rust Party WASM export missing');
+            }
+            const result = instance.exports.crm_party_domain_probe();
+            if (result !== 0) throw new Error('Existing Rust domain WASM rejected, code=' + result);
+            console.log(JSON.stringify({event:'crm.rust-domain-wasm', result:'PASS',
+              crate:'crm-parties', target:'wasm32-unknown-unknown',
+              runtime:'node WebAssembly', tests:['normalize','version',
+                'stale update denied','serialize/rehydrate','invalid name denied'],
+              cloudflare_worker_invocation:'NOT_TESTED', d1_adapter:'NOT_TESTED'}));
+          })().catch(error => {console.error(error);process.exitCode=1;});
+          NODE
+      - name: Build official Rust workers-rs Party Worker (isolated CI only)
+        working-directory: apps/cloudflare-crm/rust-party
+        run: |
+          cargo install --locked worker-build --version 0.8.7
+          worker-build --release --features ci-local
+      - name: Record native Party dependency lock for exact reproducibility
+        working-directory: apps/cloudflare-crm/rust-party
+        shell: bash
+        run: |
+          echo 'NATIVE_PARTY_CARGO_LOCK_BEGIN'
+          base64 -w 80 Cargo.lock
+          echo
+          echo 'NATIVE_PARTY_CARGO_LOCK_END'
+      - name: Test original Rust Party through workerd and isolated native D1
+        working-directory: apps/cloudflare-crm
+        run: node rust-party/test/local.mjs
+      - name: Test unified Worker JS+Rust WASM composition under workerd
+        working-directory: apps/cloudflare-crm
+        run: node rust-party/test/unified.mjs
+      - name: Build integrated Rust Party for one Cloudflare Worker
+        working-directory: apps/cloudflare-crm/rust-party
+        run: worker-build --release --features integrated
+      - name: Inspect exact unified deployment bundle without deploying
+        working-directory: apps/cloudflare-crm
+        run: |
+          test -f rust-party/build/index.js
+          npx wrangler deploy --dry-run --outdir /tmp/crm-rust-party-unified
+      - name: Validate release and E2E scripts
+        run: |
+          node --check apps/cloudflare-crm/scripts/deploy.mjs
+          node --check apps/cloudflare-crm/e2e/live.mjs
+          node --check apps/cloudflare-crm/worker/unified.mjs
+      - name: Check CRM target
+        run: |
+          grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
+          grep -F '35fc7ee9-9710-485f-8fb3-f5a398b229b4' apps/cloudflare-crm/wrangler.jsonc
+          grep -F 'jwtVerify(token, ACCESS_KEYS' apps/cloudflare-crm/worker/index.mjs
+      - name: Seal compiled Rust and React outputs for this exact checkout
+        shell: bash
+        env:
+          CRM_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          cd apps/cloudflare-crm
+          test -s dist/index.html
+          test -s rust-party/build/index.js
+          test -s rust-party/build/index_bg.wasm
+          mkdir -p .release
+          printf '%s\n' "$CRM_BUILD_SHA" > .release/source-sha.txt
+          find dist rust-party/build -type f -print0 | LC_ALL=C sort -z |
+            xargs -0 sha256sum > .release/compiled-sha256.txt
+          sha256sum --check --strict .release/compiled-sha256.txt
+          echo "CRM compiled bundle sealed for $CRM_BUILD_SHA"
+      - name: Preserve exact compiled bundle for the protected deployment
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cloudflare-native-crm-20261107'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: crm-native-bundle-${{ github.sha }}
+          path: |
+            apps/cloudflare-crm/dist/
+            apps/cloudflare-crm/rust-party/build/
+            apps/cloudflare-crm/.release/source-sha.txt
+            apps/cloudflare-crm/.release/compiled-sha256.txt
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: true
+
+  deploy-crm-dev:
+    needs: cloudflare-crm-spike
+    permissions:
+      contents: read
+      actions: read
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cloudflare-native-crm-20261107'
+    runs-on: ubuntu-24.04
+    environment: crm-dev
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Install CRM dependencies
+        run: npm install --no-audit --no-fund
+        working-directory: apps/cloudflare-crm
+      - name: Install Chromium for browser test
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/cloudflare-crm
+      - name: Restore CI-verified Rust WASM and React bundle without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "crm-native-bundle-$GITHUB_SHA" --dir apps/cloudflare-crm
+          cd apps/cloudflare-crm
+          test "$(cat .release/source-sha.txt)" = "$GITHUB_SHA"
+          sha256sum --check --strict .release/compiled-sha256.txt
+          test -s dist/index.html
+          test -s rust-party/build/index.js
+          test -s rust-party/build/index_bg.wasm
+          echo "CRM exact-source release artifact verified for $GITHUB_SHA"
+      - name: Deploy React, D1 and Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CRM_E2E_A_CLIENT_ID: ${{ secrets.CRM_E2E_A_CLIENT_ID }}
+          CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
+          CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
+          CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
+        run: node apps/cloudflare-crm/scripts/deploy.mjs
+      - name: Browser E2E on published CRM
+        env:
+          CRM_E2E_A_CLIENT_ID: ${{ secrets.CRM_E2E_A_CLIENT_ID }}
+          CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
+          CRM_E2E_B_CLIENT_ID: ${{ secrets.CRM_E2E_B_CLIENT_ID }}
+          CRM_E2E_B_CLIENT_SECRET: ${{ secrets.CRM_E2E_B_CLIENT_SECRET }}
+        run: node apps/cloudflare-crm/e2e/live.mjs
+      - name: Verify native Rust Party persisted data and D1 audit
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CRM_E2E_A_CLIENT_ID: ${{ secrets.CRM_E2E_A_CLIENT_ID }}
+          CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
+          CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
+          CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
+        run: node apps/cloudflare-crm/scripts/deploy.mjs verify-data
+      - name: Restore previous Worker if release acceptance failed
+        if: ${{ failure() }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CRM_E2E_A_CLIENT_ID: ${{ secrets.CRM_E2E_A_CLIENT_ID }}
+          CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
+          CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
+          CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
+        run: node apps/cloudflare-crm/scripts/deploy.mjs rollback
+      - name: Save release evidence and browser failure screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: crm-dev-release-${{ github.sha }}
+          path: |
+            apps/cloudflare-crm/.release/*.json
+            apps/cloudflare-crm/e2e-failure.png
+            apps/cloudflare-crm/e2e-mobile.png
+          if-no-files-found: warn
+          retention-days: 7
+          include-hidden-files: true

@@ -228,31 +228,61 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             )
             self.assertIn("*governed_request.metadata_mut() = metadata;", method)
 
-    def test_active_g2_useful_crm_is_strict_and_preserves_step22(self) -> None:
+    def test_active_cloudflare_crm_is_strict_and_preserves_step22(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-22p-g2-useful-crm")
-        self.assertEqual(self.packet["baseline"], {"ref": "main", "sha": "ddd6e738d0e11d6ff214caea6eb42de378b9f1c9"})
-        self.assertEqual(self.packet["tracking_issues"], [312, 310])
+        self.assertEqual(self.packet["packet_id"], "repository-step-23-cloudflare-native-experiment")
+        self.assertEqual(self.packet["baseline"], {"ref": "feature/cloudflare-native-crm-20261107", "sha": "d11903565b8a3ec9dfd233f1424aadd0dfc9593b"})
+        self.assertEqual(self.packet["promotion_baseline"], {"ref": "main", "sha": "4ec3b416d77857347f797f185ad3981a95219b04"})
+        self.assertEqual(self.packet["tracking_issues"], [321, 322, 310])
         self.assertEqual(set(self.packet["allowed_paths"]), {
-            "repository-packet.json", "docs/ACTIVE_PACKET.md",
-            "apps/web/src/App.tsx", "apps/web/src/routes.ts", "apps/web/src/routes.test.ts",
-            "apps/web/src/productionSession.ts", "apps/web/src/productionSession.test.ts",
-            "apps/web/src/CrmPageUtils.ts", "apps/web/src/CrmPageUtils.test.ts",
-            "apps/web/vite.config.ts", "apps/web/playwright.config.ts",
-            "apps/web/e2e/g2-crm.spec.ts", "scripts/run_e2e.sh",
-            "services/crm-api/tests/seed_e2e_fixture.rs",
-            "packages/client/src/gateway.ts", "packages/client/src/gateway.test.ts",
-            "apps/web/e2e/customer-privacy.spec.ts",
-            "apps/web/src/CustomerPrivacyPage.tsx",
-            "scripts/run_customer_privacy_operations.sh",
-            "tests/test_customer_privacy_operations.py",
+            "repository-packet.json",
+            "docs/ACTIVE_PACKET.md",
+            "apps/cloudflare-crm/worker/index.mjs",
+            "apps/cloudflare-crm/shared/catalog.mjs",
+            "apps/cloudflare-crm/migrations/0001_initial.sql",
+            "apps/cloudflare-crm/test/worker.test.mjs",
+            "apps/cloudflare-crm/cloudflare.config.ts",
+            "apps/cloudflare-crm/web/index.html",
+            "apps/cloudflare-crm/web/src/main.jsx",
+            "apps/cloudflare-crm/web/src/styles.css",
+            "apps/cloudflare-crm/package.json",
+            "apps/cloudflare-crm/vite.config.mjs",
+            "apps/cloudflare-crm/wrangler.jsonc",
+            "pnpm-workspace.yaml",
+            "apps/cloudflare-crm/e2e/live.mjs",
+            "apps/cloudflare-crm/features/customer360/query.mjs",
+            "apps/cloudflare-crm/web/src/Customer360.jsx",
+            "apps/cloudflare-crm/test/customer360.test.mjs",
+            "apps/cloudflare-crm/README.md",
+            "apps/cloudflare-crm/AGENTS.md",
+            "apps/cloudflare-crm/migrations/0002_rust_party.sql",
+            "apps/cloudflare-crm/web/src/Parties.jsx",
+            "apps/cloudflare-crm/worker/unified.mjs",
+            "apps/cloudflare-crm/rust-party/wrangler.unified.jsonc",
+            "apps/cloudflare-crm/rust-party/test/unified.mjs",
+            "apps/cloudflare-crm/rust-party/Cargo.toml",
+            "apps/cloudflare-crm/rust-party/Cargo.lock",
+            "apps/cloudflare-crm/rust-party/src/lib.rs",
+            "apps/cloudflare-crm/rust-party/migrations/0001_local.sql",
+            "apps/cloudflare-crm/rust-party/wrangler.jsonc",
+            "apps/cloudflare-crm/rust-party/README.md",
+            "apps/cloudflare-crm/rust-party/test/local.mjs",
+            ".github/workflows/cloudflare-crm-spike.yml",
+            ".github/workflows/governance.yml",
+            ".github/workflows/customer-privacy-owner-execution.yml",
+            "scripts/affected_scope.py",
+            "tests/test_affected_scope.py",
+            "affected-scope-policy.json",
             ".github/workflows/product-plane.yml",
-            "apps/web/src/CustomersPage.tsx", "apps/web/src/DealsPage.tsx", "apps/web/src/TasksPage.tsx",
-            "packages/client/src/crm.ts", "packages/client/src/crm.test.ts",
-            "packages/client/src/index.ts", "packages/client/src/session.ts",
-            "crates/crm-application-runtime/src/production_identity.rs",
-            "tests/test_repository_navigation.py", "tests/test_architecture_documentation_consistency.py",
+            "tests/test_workspace_analysis.py",
+            "tests/test_repository_navigation.py",
+            "scripts/repository_navigation.py",
+            "apps/cloudflare-crm/scripts/deploy.mjs",
+            "apps/cloudflare-crm/scripts/doctor.mjs",
+            "tests/test_architecture_documentation_consistency.py",
         })
+        self.assertIn("Cloudflare CRM Spike CI", self.packet["required_checks"])
+        self.assertIn("Product Plane CI", self.packet["required_checks"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
         self.assertIn(self.packet["baseline"]["sha"], self.active_packet)
         self.assertIn("ADR-033", self.plan)
@@ -260,7 +290,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("ADR-033", self.status)
         self.assertIn("Step 22R", self.plan)
         self.assertIn("36 unresolved", self.status)
-        self.assertIn("typed browser gateway client", " ".join(self.packet["deliverables"]))
+        self.assertIn("Access-verified identity", " ".join(self.packet["deliverables"]))
         self.assertIn("Step 22", self.adr32)
         self.assertEqual(validate_decisions(ROOT), {
             "all": 63, "final": 27, "platform_generic": 16,

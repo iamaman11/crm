@@ -1,5 +1,6 @@
 packages:
   - "apps/*"
+  - "!apps/cloudflare-crm"
   - "packages/*"
 allowBuilds:
   '@bufbuild/buf': true
