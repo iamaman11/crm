@@ -23,7 +23,7 @@ permissions:
 jobs:
   cloudflare-crm-spike:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -147,6 +147,22 @@ jobs:
               cloudflare_worker_invocation:'NOT_TESTED', d1_adapter:'NOT_TESTED'}));
           })().catch(error => {console.error(error);process.exitCode=1;});
           NODE
+      - name: Build official Rust workers-rs Party Worker (isolated CI only)
+        working-directory: apps/cloudflare-crm/rust-party
+        run: |
+          cargo install --locked worker-build --version 0.8.7
+          worker-build --release --features ci-local
+      - name: Test original Rust Party through workerd and isolated native D1
+        working-directory: apps/cloudflare-crm
+        run: node rust-party/test/local.mjs
+      - name: Record native Party dependency lock for exact reproducibility
+        working-directory: apps/cloudflare-crm/rust-party
+        shell: bash
+        run: |
+          echo 'NATIVE_PARTY_CARGO_LOCK_BEGIN'
+          base64 -w 80 Cargo.lock
+          echo
+          echo 'NATIVE_PARTY_CARGO_LOCK_END'
       - name: Check CRM target
         run: |
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
