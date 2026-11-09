@@ -219,11 +219,11 @@ jobs:
         working-directory: apps/cloudflare-crm
         run: |
           test -f rust-party/build/index.js
-          npx wrangler deploy --dry-run --outdir /tmp/crm-rust-party-unified
+          npx wrangler deploy --dry-run --outdir /tmp/crm-native-workers-rs
       - name: Validate release and E2E scripts
         run: |
           node --check apps/cloudflare-crm/scripts/deploy.mjs
-          node --check apps/cloudflare-crm/scripts/native-cloud-proof.mjs
+          node --check apps/cloudflare-crm/test/native-runtime.test.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
       - name: Check CRM target
         run: |
