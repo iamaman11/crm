@@ -31,12 +31,15 @@ export const backendModels = {
  "party-relationships": {title:"Оригинальные отношения лиц и организаций",kind:"backend",
    route:"party-relationships",ui:"NOT_CONNECTED",
    transport:"native-workers-rs",persistence:"D1"},
+ "activity-tasks":{title:"Оригинальные задачи CRM",kind:"backend",route:"activity-tasks",
+   ui:"NOT_CONNECTED",transport:"native-workers-rs",persistence:"D1"},
 };
 export const readModels = { customer360: { title:"Карточка клиента", kind:"read", route:"customer360" } };
 export const implementationOwners = {
  parties:"rust-party", accounts:"original-accounts",
  "contact-points":"original-contact-points",
- "party-relationships":"original-party-relationships", customer360:"customer360",
+ "party-relationships":"original-party-relationships",
+ "activity-tasks":"original-activities", customer360:"customer360",
  customers:"pilot-core", contacts:"pilot-core", deals:"pilot-core", tasks:"pilot-core",
 };
 export const ownerFiles = {
@@ -44,6 +47,13 @@ export const ownerFiles = {
   ui:"web/src/Parties.jsx",api:"rust-party/src/lib.rs",
   validation:"rust-party/src/lib.rs",migration:"migrations/0002_rust_party.sql",
   tests:"rust-party/test/native.mjs",browser:"e2e/live.mjs",
+ },
+ "original-activities":{
+  ui:null,api:"rust-party/src/activity_tasks.rs",
+  validation:"../../modules/crm-activities/src/domain.rs",
+  codec:"../../modules/crm-activities/src/persistence.rs",
+  migration:"migrations/0007_original_activity_tasks.sql",
+  tests:"rust-party/test/native.mjs",browser:null,
  },
  "original-party-relationships":{
   ui:null,api:"rust-party/src/party_relationships.rs",
