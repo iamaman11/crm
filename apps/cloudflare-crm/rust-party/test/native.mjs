@@ -152,6 +152,10 @@ try{
     body:JSON.stringify(accountData)});
   assert.equal(missing.status,422,"cross-tenant Party reference must fail");
   assert.equal(missing.body.code,"CUSTOMER_ACCOUNTS_PARTY_NOT_FOUND");
+  const accountExtra=await call("/api/accounts",a,{method:"POST",headers:{
+    ...accountHeaders,"idempotency-key":"account-unknown-field"},
+    body:JSON.stringify({...accountData,legacy_customer_id:"spoof"})});
+  assert.equal(accountExtra.status,422,"Account rejects old pilot fields, not silently ignore");
   const accountCreate=await call("/api/accounts",a,{method:"POST",headers:{
     ...accountHeaders,"x-crm-native-tenant":"tenant-b"},
     body:JSON.stringify(accountData)});
@@ -293,6 +297,10 @@ try{
     {method:"POST",headers:{...cpHeaders,"idempotency-key":"contact-point-invalid"},
       body:JSON.stringify({...pointData,value:"not-an-email"})});
   assert.equal(invalidPoint.status,422,"original domain rejects malformed email");
+  const pointConsentSpoof=await call("/api/contact-points",a,{method:"POST",
+    headers:{...cpHeaders,"idempotency-key":"contact-point-consent-spoof"},
+    body:JSON.stringify({...pointData,consent:true})});
+  assert.equal(pointConsentSpoof.status,422,"Contact Point cannot accept forged consent");
   const pointCreate=await call("/api/contact-points",a,
     {method:"POST",headers:cpHeaders,body:JSON.stringify(pointData)});
   assert.equal(pointCreate.status,201,JSON.stringify(pointCreate));
@@ -374,6 +382,11 @@ try{
       "idempotency-key":"signed-relationship-invalid"},
     body:JSON.stringify({...relationshipData,to_party_id:id})});
   assert.equal(invalidRelation.status,422,"original domain forbids self relationship");
+  const relSpoof=await call("/api/party-relationships",a,{
+    method:"POST",headers:{...relationshipHeader,
+      "idempotency-key":"relationship-unknown-field"},
+    body:JSON.stringify({...relationshipData,owner:"attacker"})});
+  assert.equal(relSpoof.status,422,"Relationship rejects unknown owner field");
   const relCreated=await call("/api/party-relationships",a,{
     method:"POST",headers:relationshipHeader,body:JSON.stringify(relationshipData)});
   assert.equal(relCreated.status,201,JSON.stringify(relCreated));
