@@ -528,9 +528,9 @@ try{
   assert.equal(edited.body.item.stage.stage_id,"lead");
   assert.equal(edited.headers["x-crm-module"],"crm.sales");
   assert.match(edited.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
-  const replay=await call(editPath,a,{method:"PATCH",headers,body:JSON.stringify(editBody)});
-  assert.equal(replay.status,200);assert.equal(replay.body.replayed,true);
-  assert.deepEqual(replay.body.item,edited.body.item);
+  const editReplay=await call(editPath,a,{method:"PATCH",headers,body:JSON.stringify(editBody)});
+  assert.equal(editReplay.status,200);assert.equal(editReplay.body.replayed,true);
+  assert.deepEqual(editReplay.body.item,edited.body.item);
   const reuse=await call(editPath,a,{method:"PATCH",headers,
     body:JSON.stringify({...editBody,name:"Wrong"})});
   assert.equal(reuse.status,409);assert.equal(reuse.body.code,"IDEMPOTENCY_CONFLICT");

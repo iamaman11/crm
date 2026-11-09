@@ -29,6 +29,9 @@ jobs:
       - name: Install CRM dependencies
         run: npm install --no-audit --no-fund
         working-directory: apps/cloudflare-crm
+      - name: Fast syntax check of native E2E before Rust/WASM build
+        working-directory: apps/cloudflare-crm
+        run: node --check rust-party/test/native.mjs
       - name: Fast feature/schema contract doctor
         run: npm run doctor
         working-directory: apps/cloudflare-crm
