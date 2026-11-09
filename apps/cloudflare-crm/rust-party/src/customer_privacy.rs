@@ -137,7 +137,7 @@ async fn transition(mut req:Request,db:&D1Database,tenant:&str,
           JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
     let Ok(updated)=result else{return error("PRIVACY_CASE_TRANSITION_CONFLICT",409)};
-    if updated.meta()?.and_then(|m|m.changes).unwrap_or(0)!=1{
+    if updated.meta()?.and_then(|m|m.changes).unwrap_or(0)==0{
         return error("PRIVACY_CASE_VERSION_CONFLICT",409);
     }
     response(json!({"item":view(&case),"replayed":false}),200)
