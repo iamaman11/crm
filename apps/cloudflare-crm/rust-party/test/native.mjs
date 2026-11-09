@@ -53,6 +53,8 @@ try{
     "--file","../migrations/0004_original_customer_accounts.sql","--persist-to",data]);
   run(["d1","execute","crm-rust-party-local","--local",
     "--file","../migrations/0005_original_contact_points.sql","--persist-to",data]);
+  run(["d1","execute","crm-rust-party-local","--local",
+    "--file","../migrations/0006_original_party_relationships.sql","--persist-to",data]);
   child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
     "--var","CRM_CI_LOCAL_ONLY:yes","--var","CRM_NATIVE_CI_JWKS:"+jwks],
     {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
@@ -272,6 +274,78 @@ try{
       "strict codec D1 roundtrip","tenant isolation","idempotency","version",
       "no self-attested verification","request correlation"],
     consent:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
+  // Two ORIGINAL Party records are the ONLY valid relationship endpoints.
+  assert.equal((await call("/api/party-relationships",null)).status,401);
+  const otherPartyId="native-rel-party-"+randomUUID();
+  const secondParty=await call("/api/parties",a,{method:"POST",headers:{
+    "content-type":"application/json","idempotency-key":"signed-second-party"},
+    body:JSON.stringify({id:otherPartyId,kind:"person",name:"Native Related Person"})});
+  assert.equal(secondParty.status,201,JSON.stringify(secondParty));
+  const relationshipId="native-relationship-"+randomUUID();
+  const relationshipData={id:relationshipId,from_party_id:id,to_party_id:otherPartyId,
+    code:"employment",directionality:"directional",from_role:"employer",to_role:"employee",
+    valid_from_unix_nanos:null,valid_until_unix_nanos:null};
+  const relationshipHeader={"content-type":"application/json",
+    "idempotency-key":"signed-relationship-create"};
+  const otherTenantRelationship=await call("/api/party-relationships",b,{
+    method:"POST",headers:relationshipHeader,body:JSON.stringify(relationshipData)});
+  assert.equal(otherTenantRelationship.status,422);
+  assert.equal(otherTenantRelationship.body.code,"PARTY_RELATIONSHIPS_PARTY_NOT_FOUND");
+  const invalidRelation=await call("/api/party-relationships",a,{
+    method:"POST",headers:{...relationshipHeader,
+      "idempotency-key":"signed-relationship-invalid"},
+    body:JSON.stringify({...relationshipData,to_party_id:id})});
+  assert.equal(invalidRelation.status,422,"original domain forbids self relationship");
+  const relCreated=await call("/api/party-relationships",a,{
+    method:"POST",headers:relationshipHeader,body:JSON.stringify(relationshipData)});
+  assert.equal(relCreated.status,201,JSON.stringify(relCreated));
+  assert.equal(relCreated.body.item.id,relationshipId);
+  assert.equal(relCreated.body.item.from_party_id,id);
+  assert.equal(relCreated.body.item.to_party_id,otherPartyId);
+  assert.equal(relCreated.body.item.type.code,"employment");
+  assert.equal(relCreated.body.item.version,1);
+  assert.equal(relCreated.headers["x-crm-module"],"crm.party-relationships");
+  assert.match(relCreated.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
+  const relRead=await call("/api/party-relationships/"+relationshipId,a);
+  assert.equal(relRead.status,200);
+  assert.deepEqual(relRead.body.item,relCreated.body.item,
+    "original relationship encode -> D1 -> decode must preserve type and roles");
+  assert.equal((await call("/api/party-relationships/"+relationshipId,b)).status,404);
+  assert.equal((await call("/api/party-relationships/"+relationshipId,serviceB)).status,404);
+  const relReplay=await call("/api/party-relationships",a,{
+    method:"POST",headers:relationshipHeader,body:JSON.stringify(relationshipData)});
+  assert.equal(relReplay.status,200);
+  assert.equal(relReplay.body.replayed,true);
+  const relKeyConflict=await call("/api/party-relationships",a,{
+    method:"POST",headers:relationshipHeader,
+    body:JSON.stringify({...relationshipData,code:"other-code"})});
+  assert.equal(relKeyConflict.status,409);
+  assert.equal(relKeyConflict.body.code,"IDEMPOTENCY_CONFLICT");
+  const relUpdate={expected_version:1,status:"inactive",
+    valid_from_unix_nanos:null,valid_until_unix_nanos:null};
+  const relInit={method:"PATCH",headers:{"content-type":"application/json",
+    "idempotency-key":"signed-relationship-update"},body:JSON.stringify(relUpdate)};
+  const relChanged=await call("/api/party-relationships/"+relationshipId,a,relInit);
+  assert.equal(relChanged.status,200,JSON.stringify(relChanged));
+  assert.equal(relChanged.body.item.version,2);
+  assert.equal(relChanged.body.item.status,"inactive");
+  const relUpdateReplay=await call("/api/party-relationships/"+relationshipId,a,relInit);
+  assert.equal(relUpdateReplay.status,200);
+  assert.equal(relUpdateReplay.body.replayed,true);
+  const relStale=await call("/api/party-relationships/"+relationshipId,a,{
+    ...relInit,headers:{...relInit.headers,
+      "idempotency-key":"signed-relationship-stale"}});
+  assert.equal(relStale.status,409);
+  assert.equal(relStale.body.code,"PARTY_RELATIONSHIPS_VERSION_CONFLICT");
+  assert.ok((await call("/api/party-relationships",a)).body.items
+    .some(x=>x.id===relationshipId&&x.version===2));
+  assert.deepEqual((await call("/api/party-relationships",b)).body.items,[]);
+  console.log(JSON.stringify({event:"crm.native-original-party-relationships-d1",
+    result:"PASS",owner:"crm.party-relationships",
+    proven:["two Party FK in one tenant","original domain lifecycle",
+      "strict codec/D1 roundtrip","Access A/B","idempotency receipts",
+      "stale version","no reflexive relationship","request correlation"],
+    published_live:"NOT_TESTED",ui:"NOT_CONNECTED"}));
   const init={method:"PATCH",headers:{"content-type":"application/json",
     "idempotency-key":"native-signed-update"},
     body:JSON.stringify({expected_version:1,name:"Native Updated"})};
