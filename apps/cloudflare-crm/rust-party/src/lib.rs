@@ -15,6 +15,8 @@ use worker::*;
 mod access;
 #[cfg(feature = "native")]
 mod pilot;
+#[cfg(feature = "native-ci")]
+mod original_domain_probe;
 
 fn native_request_id() -> Result<String> {
     use js_sys::{Function, Reflect};
@@ -300,6 +302,22 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     let path = req.path();
     let method = req.method();
     let db = env.d1("DB")?;
+    // Explicitly CI-only, signed-Access-gated native workerd proof. This gate
+    // performs no D1 writes and makes no claims about module persistence.
+    #[cfg(feature = "native-ci")]
+    if path == "/api/_ci/original-domain-check" && method == Method::Get {
+        let code = original_domain_probe::check();
+        return response(json!({
+            "result": if code == 0 { "PASS" } else { "FAIL" },
+            "code": code,
+            "scope": "in-memory original owner domain contracts",
+            "owners_executed": ["crm.customer-accounts", "crm.contact-points",
+                "crm.sales", "crm.activities"],
+            "original_modules_compiled": 13,
+            "d1_owner_persistence": "NOT_TESTED",
+            "remaining_owners": "NOT_TESTED"
+        }), if code == 0 { 200 } else { 503 });
+    }
     if path == "/api/parties" {
         return match method {
             Method::Post => create(req, db, tenant, &request_id).await,
