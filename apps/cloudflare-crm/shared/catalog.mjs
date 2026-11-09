@@ -39,6 +39,9 @@ export const backendModels = {
  consents:{title:"Оригинальные разрешения коммуникации",kind:"backend",route:"consents",
    ui:"NOT_CONNECTED",grant_evidence:"NOT_CONNECTED",
    operator_suppressions:"ENABLED",transport:"native-workers-rs",persistence:"D1"},
+ "sales-activities-link":{title:"Связь Sales и задач",kind:"backend",
+   route:"sales-deals",ui:"NOT_CONNECTED",
+   delivery:"SYNCHRONOUS_ATOMIC_D1",transport:"native-workers-rs",persistence:"D1"},
 };
 export const readModels = { customer360: { title:"Карточка клиента", kind:"read", route:"customer360" } };
 export const implementationOwners = {
@@ -46,7 +49,8 @@ export const implementationOwners = {
  "contact-points":"original-contact-points",
  "party-relationships":"original-party-relationships",
  "activity-tasks":"original-activities",
- "sales-deals":"original-sales", consents:"original-consents", customer360:"customer360",
+ "sales-deals":"original-sales", consents:"original-consents",
+ "sales-activities-link":"original-sales-activities-link", customer360:"customer360",
  customers:"pilot-core", contacts:"pilot-core", deals:"pilot-core", tasks:"pilot-core",
 };
 export const ownerFiles = {
@@ -54,6 +58,13 @@ export const ownerFiles = {
   ui:"web/src/Parties.jsx",api:"rust-party/src/lib.rs",
   validation:"rust-party/src/lib.rs",migration:"migrations/0002_rust_party.sql",
   tests:"rust-party/test/native.mjs",browser:"e2e/live.mjs",
+ },
+ "original-sales-activities-link":{
+  ui:null,api:"rust-party/src/sales_activities_link.rs",
+  validation:"../../modules/crm-sales-activities-link/src/lib.rs",
+  codec:"../../crates/crm-sales-activities-link-contract-adapter/src/lib.rs",
+  migration:"migrations/0010_original_sales_activities_link.sql",
+  tests:"rust-party/test/native.mjs",browser:null,
  },
  "original-consents":{
   ui:null,api:"rust-party/src/consents.rs",
