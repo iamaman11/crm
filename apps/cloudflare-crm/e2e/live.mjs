@@ -30,6 +30,7 @@ function operation(path,method){
   if(path.endsWith("/complete"))action="complete";
   if(path.endsWith("/suppress"))action="suppress";
   if(path.startsWith("/api/identity-resolution/compare/"))action="compare";
+  if(path==="/api/identity-resolution/candidates")action="candidates";
   if(path.endsWith("/evaluate"))action="evaluate";
   return owner+"."+action;
 }
@@ -216,6 +217,36 @@ try{
   await save();cover("contact-points.update");
   const point=await readOwner("contact-points",x=>x.value==="updated-"+contact);
   assert.equal(point.verified,false,"Self-attested verification is not trusted evidence");
+  // Create a second current email via the actual ContactPoint UI; the only
+  // matching rule belongs to the original Rust Identity Resolution domain.
+  await button("+ Добавить контакт").click();
+  await page.getByLabel("Лицо / организация",{exact:true})
+    .selectOption({label:marker+" Related"});
+  await page.getByLabel("Значение").fill("updated-"+contact);
+  await save();cover("contact-points.create.related");
+  await tab("Сравнение записей").click();
+  await button("Найти совпадения email").click();
+  await page.getByRole("heading",{name:/Возможные совпадения:/}).waitFor();
+  const observed=page.getByRole("region",{name:"Наблюдаемые совпадения"});
+  await observed.getByRole("row").filter({hasText:marker+" Related"}).waitFor();
+  cover("identity-resolution.candidates");
+  const candidates=await context.request.get(url+"/api/identity-resolution/candidates");
+  assert.equal(candidates.status(),200);
+  const candidateBody=await candidates.json();
+  assert.ok(candidateBody.items.some(x=>
+    [x.first.id,x.second.id].includes(party.id)&&
+    [x.first.id,x.second.id].includes(relatedParty.id)&&
+    !x.identity_confirmed&&!x.both_contacts_verified));
+  assert.equal(candidateBody.match_score,"NOT_COMPUTED");
+  const candidateTenantB=await browser.newContext({extraHTTPHeaders:access("B")});
+  try{
+    const other=await candidateTenantB.request.get(url+"/api/identity-resolution/candidates");
+    assert.equal(other.status(),200);
+    assert.deepEqual((await other.json()).items,[]);
+    cover("identity-resolution.candidates.tenant-isolation");
+  }finally{await candidateTenantB.close();}
+  await shot("04-identity-email","Recorded same-email observations, no identity verdict");
+  await tab("Контакты").click();
   await shot("04-contacts","Original ContactPoint normalization and update");
   // Browser -> Rust Consent evaluation (read-only), operator DENY -> real D1.
   await tab("Разрешения").click();

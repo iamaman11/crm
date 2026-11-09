@@ -1,6 +1,7 @@
 use crm_module_sdk::{ErrorCategory, FieldName, FieldViolation, RecordId, SdkError};
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
+use std::collections::BTreeMap;
 
 const MAX_SEMANTIC_CODE_BYTES: usize = 128;
 const MAX_EVIDENCE_REFERENCE_BYTES: usize = 512;
@@ -97,6 +98,117 @@ impl CanonicalPartyPair {
 
     pub fn contains(&self, party: &PartyReference) -> bool {
         &self.left == party || &self.right == party
+    }
+}
+
+/// Observed, tenant-scoped email from an authoritative crm-contact-points
+/// state. Its equality is an observable fact, NOT verified ownership, identity,
+/// consent, a scored MatchSignal, or a candidate-case decision. Consumers must
+/// obtain canonical normalized values from the original ContactPoint owner.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordedEmailContact {
+    pub party: PartyReference,
+    pub contact_id: String,
+    pub normalized_email: String,
+    pub verified: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SharedRecordedEmail {
+    pub pair: CanonicalPartyPair,
+    pub left_contact_id: String,
+    pub right_contact_id: String,
+    pub both_verified: bool,
+}
+
+/// Deterministic read-only observation discovery owned by Identity Resolution.
+/// The input is produced only by the trusted Worker composition from current
+/// ContactPoint aggregates; never expose it as caller-submitted evidence.
+pub fn discover_shared_recorded_emails(
+    contacts: &[RecordedEmailContact],
+) -> Result<Vec<SharedRecordedEmail>, SdkError> {
+    let mut by_email: BTreeMap<&str, Vec<&RecordedEmailContact>> = BTreeMap::new();
+    for record in contacts {
+        RecordId::try_new(record.contact_id.clone()).map_err(|_| invalid(
+            "IDENTITY_RESOLUTION_CONTACT_REFERENCE_INVALID",
+            "identity_resolution.contact_id",
+            "observed ContactPoint reference is invalid",
+        ))?;
+        if record.normalized_email.is_empty() || record.normalized_email.chars().any(char::is_control) {
+            return Err(invalid(
+                "IDENTITY_RESOLUTION_RECORDED_EMAIL_INVALID",
+                "identity_resolution.recorded_email",
+                "source email must be a nonempty canonical ContactPoint value",
+            ));
+        }
+        by_email.entry(&record.normalized_email).or_default().push(record);
+    }
+    let mut pairs: BTreeMap<CanonicalPartyPair, SharedRecordedEmail> = BTreeMap::new();
+    for records in by_email.values() {
+        for (i, first) in records.iter().enumerate() {
+            for second in records.iter().skip(i + 1) {
+                if first.party == second.party { continue; }
+                let pair = CanonicalPartyPair::try_new(first.party.clone(), second.party.clone())?;
+                let (left_contact_id, right_contact_id) = if pair.left() == &first.party {
+                    (first.contact_id.clone(), second.contact_id.clone())
+                } else {
+                    (second.contact_id.clone(), first.contact_id.clone())
+                };
+                let evidence = SharedRecordedEmail {
+                    pair: pair.clone(),
+                    left_contact_id, right_contact_id,
+                    both_verified: first.verified && second.verified,
+                };
+                match pairs.entry(pair) {
+                    std::collections::btree_map::Entry::Vacant(slot) => {slot.insert(evidence);}
+                    std::collections::btree_map::Entry::Occupied(mut slot) => {
+                        if evidence.both_verified && !slot.get().both_verified {
+                            slot.insert(evidence);
+                        }
+                    }
+                }
+                if pairs.len() > 100 {
+                    return Err(invalid(
+                        "IDENTITY_RESOLUTION_CANDIDATE_LIMIT_REACHED",
+                        "identity_resolution.candidates",
+                        "too many observed pairs to return a complete result",
+                    ));
+                }
+            }
+        }
+    }
+    Ok(pairs.into_values().collect())
+}
+
+#[cfg(test)]
+mod recorded_email_tests {
+    use super::*;
+
+    fn contact(party: &str, id: &str, email: &str, verified: bool) -> RecordedEmailContact {
+        RecordedEmailContact {
+            party: PartyReference::try_new(party).unwrap(),
+            contact_id: id.into(), normalized_email: email.into(), verified,
+        }
+    }
+    #[test]
+    fn only_cross_party_exact_recorded_emails_are_observations_not_identity_proof() {
+        let records = vec![
+            contact("party-a", "contact-a1", "same@example.test", false),
+            contact("party-a", "contact-a2", "same@example.test", false),
+            contact("party-b", "contact-b1", "same@example.test", false),
+            contact("party-c", "contact-c1", "different@example.test", true),
+        ];
+        let found = discover_shared_recorded_emails(&records).unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].pair.left().as_str(), "party-a");
+        assert_eq!(found[0].pair.right().as_str(), "party-b");
+        assert!(!found[0].both_verified);
+    }
+    #[test]
+    fn source_provenance_is_not_allowed_to_be_empty() {
+        assert!(discover_shared_recorded_emails(&[
+            contact("party-a", "", "same@example.test", false)
+        ]).is_err());
     }
 }
 

@@ -60,6 +60,12 @@ test("Identity Resolution comparison uses canonical Rust pair and no invented ma
   assert.ok(owner.includes('"candidate_cases": "NOT_CONNECTED"'));
   assert.ok(!owner.includes("MatchEvidenceSnapshot::try_new"));
   assert.ok(route.includes("identity_resolution::route"));
+  assert.ok(ui.includes('load("identity-resolution/candidates")'));
+  assert.ok(owner.includes("discover_shared_recorded_emails"));
+  assert.ok(owner.includes("contact_points::decode"));
+  assert.ok(owner.includes("point.is_valid_at(now)"));
+  assert.ok(owner.includes("LIMIT 301"));
+  assert.ok(!owner.includes("MatchEvidenceSnapshot::try_new"));
   assert.equal(ownerFiles["crm-identity-resolution"].api,
     "rust-party/src/identity_resolution.rs");
   assert.equal(ownerFiles["crm-identity-resolution"].browser,"e2e/live.mjs");

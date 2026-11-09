@@ -162,7 +162,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
             "crm.identity-resolution": {"read":read_checks.get("parties"),
                 "business_owner":"original-crm-identity-resolution",
                 "api":"READ_ONLY_PARTY_COMPARISON", "ui":"READ_ONLY_COMPARISON",
-                "candidate_search":"NOT_CONNECTED", "match_evidence":"NOT_CONNECTED",
+                "candidate_search":"READ_ONLY_EXACT_RECORDED_EMAIL", "match_evidence":"NOT_CONNECTED",
                 "merge":"NOT_CONNECTED"},
             "crm.sales-activities-link": {"read":read_checks.get("sales-activities-link"),
                 "business_owner":"original-crm-sales-activities-link",
@@ -335,6 +335,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
         let operation = match (path.as_str(), method.clone()) {
+            ("/api/identity-resolution/candidates", Method::Get) => "identity-resolution.candidates",
             (p, Method::Get) if p.starts_with("/api/identity-resolution/compare/") => "identity-resolution.compare",
             ("/api/consents", Method::Get) => "consents.list",
             ("/api/consents/evaluate", Method::Post) => "consents.evaluate",

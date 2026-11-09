@@ -21,7 +21,7 @@ export const backendModels={
     ui:"INTERNAL_LINK_NO_SCREEN",delivery:"SYNCHRONOUS_ATOMIC_D1"},
   "identity-resolution":{title:"Сравнение записей",kind:"backend",
     ui:"web/src/IdentityResolution.jsx",comparison:"READ_ONLY_ORIGINAL_RUST",
-    candidate_search:"NOT_CONNECTED",merge:"NOT_CONNECTED"},
+    candidate_search:"READ_ONLY_EXACT_RECORDED_EMAIL",merge:"NOT_CONNECTED"},
   "customer-data-operations":{title:"Импорт и экспорт",kind:"backend",ui:"NOT_CONNECTED"},
   "data-quality":{title:"Качество данных",kind:"backend",ui:"NOT_CONNECTED"},
   "customer-enrichment":{title:"Обогащение",kind:"backend",ui:"NOT_CONNECTED"},

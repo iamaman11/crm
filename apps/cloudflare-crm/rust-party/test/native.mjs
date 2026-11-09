@@ -725,6 +725,32 @@ try{
     "content-type":"application/json","idempotency-key":"signed-second-party"},
     body:JSON.stringify({id:otherPartyId,kind:"person",name:"Native Related Person"})});
   assert.equal(secondParty.status,201,JSON.stringify(secondParty));
+  // Original normalized ContactPoint states, not client-generated evidence,
+  // produce a single unverified shared-email observation.
+  const beforeCandidates=await call("/api/identity-resolution/candidates",a);
+  assert.equal(beforeCandidates.status,200);
+  assert.deepEqual(beforeCandidates.body.items,[]);
+  const sameEmail=await call("/api/contact-points",a,{method:"POST",
+    headers:{"content-type":"application/json","idempotency-key":"identity-shared-email"},
+    body:JSON.stringify({...pointData,id:"identity-email-"+randomUUID(),
+      party_id:otherPartyId,value:"new@example.org",preferred:false})});
+  assert.equal(sameEmail.status,201,JSON.stringify(sameEmail));
+  assert.equal(sameEmail.body.item.verified,false);
+  const found=await call("/api/identity-resolution/candidates",a);
+  assert.equal(found.status,200,JSON.stringify(found));
+  assert.equal(found.headers["x-crm-module"],"crm.identity-resolution");
+  assert.equal(found.body.match_score,"NOT_COMPUTED");
+  assert.equal(found.body.candidate_cases,"NOT_CONNECTED");
+  assert.equal(found.body.items.length,1);
+  assert.deepEqual([found.body.items[0].first.id,found.body.items[0].second.id].sort(),
+    [id,otherPartyId].sort());
+  assert.equal(found.body.items[0].both_contacts_verified,false);
+  assert.equal(found.body.items[0].identity_confirmed,false);
+  assert.equal((await call("/api/identity-resolution/candidates",viewer)).status,200);
+  assert.deepEqual((await call("/api/identity-resolution/candidates",b)).body.items,[]);
+  assert.equal((await call("/api/identity-resolution/candidates",null)).status,401);
+  assert.equal((await call("/api/identity-resolution/candidates",a,{method:"POST"}))
+    .status,404,"candidate discovery is read-only");
   // Safe original Identity Resolution pair validation and tenant-bound Party
   // readback. This does NOT claim matcher evidence or persisted duplicate cases.
   const comparePath="/api/identity-resolution/compare/"+id+"/"+otherPartyId;
