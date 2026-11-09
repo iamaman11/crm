@@ -305,3 +305,20 @@ test("original Customer Enrichment immutable definitions use one native Rust own
   assert.ok(!adapter.includes("fetch("));
   assert.ok(!adapter.includes("parties::update"));
 });
+
+test("new customer user journey composes original Party and Account without a second backend",()=>{
+  const app=read("web/src/main.jsx");
+  const parties=read("web/src/Parties.jsx");
+  const browser=read("e2e/live.mjs");
+  assert.match(app,/function createCustomerWithNewParty\(\)/);
+  assert.match(app,/function createAccountForParty\(party,created=false\)/);
+  assert.match(app,/relatedParty\?\.id/);
+  assert.match(app,/onCreateAccount=\{createAccountForParty\}/);
+  assert.match(parties,/createForCustomer\?newForm\(\):null/);
+  assert.match(parties,/onCreateAccount\(result\.item,true\)/);
+  assert.match(parties,/onCancelCustomer\(\)/);
+  assert.match(browser,/accounts\.create\.new-party-flow/);
+  assert.match(browser,/accounts\.create\.new-party-linked/);
+  assert.match(browser,/directCustomer\.parties\[0\]\.id/);
+  assert.doesNotMatch(parties,/\/api\/accounts|UPDATE crm_account|INSERT INTO crm_account/);
+});

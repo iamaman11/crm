@@ -130,3 +130,5 @@ NOT_TESTED до защищённой публикации из `dev`. Не пр�
 ## Нативная приёмка — единственная действующая модель
 
 Публикуемый `wrangler.jsonc.main` всегда `./rust-party/build/index.js`. JS API-router и дублированные JS домены запрещены. Единственный штатный `deploy-crm-dev` после публикации выполняет реальный Chromium E2E; `native-functional-cycle.json` содержит все UI-мутации и идентификаторы HTTP-запросов, `verify-data` сверяет каждую с D1 audit и Cloudflare Logs. Без полного PASS активный Worker откатывается и релиз не считается принятым. `GET /api/doctor` не подменяет эту приёмку статическим PASS. Результат обязательно фиксировать в Issue #338.
+
+- The user-facing new-customer path must reuse original Party and Account domain commands: Party creation then preselected Account creation. Never duplicate those rules in React, add a fake atomic browser transaction or claim Party was rolled back on a failed Account submission.

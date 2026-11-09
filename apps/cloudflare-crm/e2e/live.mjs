@@ -589,6 +589,27 @@ try{
   await page.locator(".mobile article").filter({hasText:"updated-"+contact}).waitFor();
   await shot("11-mobile-consents","Mobile original Consent Deny record");
   cover("mobile.consents");
+  // A new operator must be able to create a customer with a new Party without
+  // discovering and manually coordinating two separate CRM screens.
+  await page.setViewportSize({width:1366,height:900});
+  await tab("Клиенты").click();
+  await button("Новый клиент с новой организацией").click();
+  await page.getByText("Затем откроется форма клиента.").waitFor();
+  await button("Отмена").click();cover("accounts.create.new-party.cancel");
+  await tab("Клиенты").click();
+  await button("Новый клиент с новой организацией").click();
+  const newCustomerName=marker+" Customer Direct";
+  await page.getByLabel("Имя / название").fill(newCustomerName);
+  await button("Сохранить").click();
+  await page.getByLabel("Название",{exact:true}).waitFor();
+  const createdCustomerParty=await readOwner("parties",x=>x.name===newCustomerName);
+  assert.equal(await page.getByLabel("Лицо / организация").inputValue(),createdCustomerParty.id);
+  cover("accounts.create.new-party-flow");
+  await save();
+  const directCustomer=await readOwner("accounts",x=>x.name===newCustomerName);
+  assert.equal(directCustomer.parties[0].id,createdCustomerParty.id);
+  cover("accounts.create.new-party-linked");
+  await shot("12-customer-from-new-party","New customer from Party without manual navigation");
   await Promise.all(pending);
   const operations=["customer-enrichment.profile_publish","customer-enrichment.mapping_publish",
     "customer-privacy.create","customer-privacy.submit",

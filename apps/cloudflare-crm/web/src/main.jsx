@@ -53,6 +53,7 @@ function App(){
   const [card,setCard]=useState(null);
   const [search,setSearch]=useState("");
   const [view,setView]=useState("table");
+  const [createForCustomer,setCreateForCustomer]=useState(false);
   const [busy,setBusy]=useState(false);
   const [loading,setLoading]=useState(true);
   const [notice,setNotice]=useState("");
@@ -80,11 +81,12 @@ function App(){
   const contactsParty=account=>account?.parties?.find(p=>p.role==="primary")?.id;
   const itemName=(kind,row)=>kind==="contacts"?row.value:
     kind==="tasks"?row.subject:row.name;
-  function begin(kind,record=null,mode="edit"){
+  function begin(kind,record=null,mode="edit",relatedParty=null){
     setTab(kind);setCard(null);setNotice("");setError("");
     const f={kind,mode:record?mode:"create",id:record?.id||id(),key:id(),
       expected_version:record?.version||0};
-    if(kind==="accounts")Object.assign(f,{name:record?.name||"",party_id:contactsParty(record)||"",
+    if(kind==="accounts")Object.assign(f,{name:record?.name||relatedParty?.name||"",
+      party_id:contactsParty(record)||relatedParty?.id||"",
       status:record?.status||"active"});
     if(kind==="contacts")Object.assign(f,{party_id:record?.party_id||"",value:record?.value||"",
       contact_kind:record?.kind||"email",status:record?.status||"active",
@@ -157,7 +159,21 @@ function App(){
     finally{setBusy(false);}
   }
   function navigate(kind){
+    setCreateForCustomer(false);
     setTab(kind);setCard(null);setSearch("");setForm(null);setError("");setNotice("");
+  }
+  function createCustomerWithNewParty(){
+    navigate("parties");
+    setCreateForCustomer(true);
+  }
+  function createAccountForParty(party,created=false){
+    // Native Party already exists. Keep it selectable even when a list reload
+    // has failed; Account creation remains the original Rust owner command.
+    setItems(old=>({...old,parties:old.parties.some(p=>p.id===party.id)?
+      old.parties:[...old.parties,party]}));
+    setCreateForCustomer(false);
+    begin("accounts",null,"edit",party);
+    if(created)setNotice("Лицо или организация сохранены. Теперь сохраните клиента.");
   }
   const kind=sections[tab],rows=(items[tab]||[]).filter(row=>
     JSON.stringify(row).toLocaleLowerCase("ru").includes(search.toLocaleLowerCase("ru")));
@@ -272,7 +288,9 @@ function App(){
       {notice&&<div role="status" className="notice">{notice}</div>}
       {error&&<div role="alert" className="notice error">{error}</div>}
       <section className="panel">{tab==="parties"?
-        <Parties items={items.parties} load={api} writable={writable} loading={loading} onSaved={refreshAfterSave}/>:
+        <Parties items={items.parties} load={api} writable={writable} loading={loading}
+          onSaved={refreshAfterSave} createForCustomer={createForCustomer}
+          onCreateAccount={createAccountForParty} onCancelCustomer={()=>navigate("accounts")}/>:
         tab==="relationships"?<Relationships items={items.relationships}
           parties={items.parties} load={api} writable={writable} loading={loading}
           onSaved={refreshAfterSave}/>:
@@ -292,14 +310,20 @@ function App(){
           <div className="toolbar">
             <input aria-label="Поиск" placeholder="Поиск" value={search}
               onChange={e=>setSearch(e.target.value)}/>
-            {writable&&<button disabled={
-              tab==="accounts"?!items.parties.length:
+            {writable&&<button disabled={loading||(
               tab==="contacts"?!items.parties.length:
-              !items.accounts.length} onClick={()=>begin(tab)}>
+              ["deals","tasks"].includes(tab)?!items.accounts.length:false)}
+              onClick={()=>tab==="accounts"&&!items.parties.length?
+                createCustomerWithNewParty():begin(tab)}>
               + Добавить {kind.one}</button>}
+            {writable&&tab==="accounts"&&items.parties.length>0&&
+              <button className="ghost" disabled={loading}
+                onClick={createCustomerWithNewParty}>
+                Новый клиент с новой организацией</button>}
           </div>
           {writable&&tab==="accounts"&&!items.parties.length&&
-            <p>Сначала создайте лицо или организацию.</p>}
+            <p>Нажмите «Добавить клиента»: сначала создадим лицо или организацию,
+              затем откроем карточку клиента. Это две штатные операции Rust.</p>}
           {writable&&["deals","tasks"].includes(tab)&&!items.accounts.length&&
             <p>Сначала добавьте клиента.</p>}
           {tab==="deals"&&<div className="view-switch" role="group" aria-label="Вид сделок">

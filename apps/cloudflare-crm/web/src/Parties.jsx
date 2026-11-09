@@ -5,9 +5,10 @@ import React, {useState} from "react";
 const newForm=()=>({id:crypto.randomUUID(),key:crypto.randomUUID(),
   kind:"organization",name:"",expected_version:0});
 
-export default function Parties({items,load,writable=true,onSaved,loading=false}) {
+export default function Parties({items,load,writable=true,onSaved,loading=false,
+  createForCustomer=false,onCreateAccount=()=>{},onCancelCustomer=()=>{}}) {
   const [busy,setBusy]=useState(false);
-  const [form,setForm]=useState(null);
+  const [form,setForm]=useState(()=>createForCustomer?newForm():null);
   const [query,setQuery]=useState("");
   const [notice,setNotice]=useState("");
   const [error,setError]=useState("");
@@ -18,6 +19,10 @@ export default function Parties({items,load,writable=true,onSaved,loading=false}
     setError("");
     try {await onSaved();}
     catch(e) {setError(e.message);}
+  }
+  function cancelForm(){
+    if(createForCustomer&&form?.expected_version===0){onCancelCustomer();return;}
+    setForm(null);
   }
   function edit(item){
     setForm({id:item.id,key:crypto.randomUUID(),name:item.name,
@@ -35,9 +40,14 @@ export default function Parties({items,load,writable=true,onSaved,loading=false}
         {id:form.id,name:form.name,kind:form.kind};
       const result=await load(path,{method:updating?"PATCH":"POST",
         headers:{"idempotency-key":form.key},body:JSON.stringify(data)});
-      await onSaved();
-      setForm(null);
-      setNotice(result.replayed?"Повтор выполнен без дублирования":"Сохранено через Rust / D1");
+      if(!updating&&createForCustomer){
+        setForm(null);
+        onCreateAccount(result.item,true);
+      }else{
+        await onSaved();
+        setForm(null);
+        setNotice(result.replayed?"Повтор выполнен без дублирования":"Сохранено через Rust / D1");
+      }
     }catch(e){setError(e.message);}
     finally{setBusy(false);}
   }
@@ -62,12 +72,18 @@ export default function Parties({items,load,writable=true,onSaved,loading=false}
         <td>{item.name}</td>
         <td>{item.kind==="organization"?"Компания":"Частное лицо"}</td>
         <td>{item.version}</td>
-        <td>{writable&&<button className="ghost" onClick={()=>edit(item)}>Изменить</button>}</td>
+        <td>{writable&&<span className="row-actions">
+          <button className="ghost" onClick={()=>edit(item)}>Изменить</button>
+          <button className="ghost" onClick={()=>onCreateAccount(item,false)}>
+            Добавить клиента</button>
+        </span>}</td>
       </tr>)}</tbody></table></div>}
     {form&&<div className="shade" onClick={e=>{
-      if(e.currentTarget===e.target&&!busy)setForm(null);
+      if(e.currentTarget===e.target&&!busy)cancelForm();
     }}><form className="dialog" onSubmit={submit}>
       <h2>{form.expected_version?"Изменить":"Добавить"} лицо / организацию</h2>
+      {createForCustomer&&!form.expected_version&&
+        <p>Сначала создайте организацию или человека. Затем откроется форма клиента.</p>}
       {!form.expected_version&&<div className="field"><label htmlFor="rust-kind">Тип</label>
         <select id="rust-kind" value={form.kind}
           onChange={e=>setForm({...form,kind:e.target.value})}>
@@ -78,7 +94,7 @@ export default function Parties({items,load,writable=true,onSaved,loading=false}
         <input id="rust-name" required value={form.name}
           onChange={e=>setForm({...form,name:e.target.value})}/></div>
       <footer><button type="button" className="ghost" disabled={busy}
-          onClick={()=>setForm(null)}>Отмена</button>
+          onClick={cancelForm}>Отмена</button>
         <button disabled={busy}>{busy?"Сохранение…":"Сохранить"}</button>
       </footer>
     </form></div>}
