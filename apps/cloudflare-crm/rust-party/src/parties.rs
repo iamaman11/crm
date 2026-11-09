@@ -36,7 +36,7 @@ struct PartyRow {
 }
 
 
-fn view(party: &Party) -> Value {
+pub(super) fn view(party: &Party) -> Value {
     json!({
         "id": party.party_id().as_str(),
         "kind": match party.kind() { PartyKind::Person => "person", PartyKind::Organization => "organization" },
@@ -50,7 +50,7 @@ fn digest(kind: &str, id: &str, name: &str, version: i64) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-async fn stored(db: &D1Database, tenant: &str, id: &str) -> Result<Option<Party>> {
+pub(super) async fn stored(db: &D1Database, tenant: &str, id: &str) -> Result<Option<Party>> {
     let row = bind(db, "SELECT state FROM crm_party_records WHERE tenant = ? AND id = ?",
         &[JsValue::from_str(tenant), JsValue::from_str(id)])?
         .first::<Stored>(None).await?;
