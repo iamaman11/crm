@@ -12,6 +12,15 @@ const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-jwt-"));
 const origin="http://127.0.0.1:18789";
 const run=args=>execFileSync("npx",["wrangler",...args],{cwd,encoding:"utf8"});
+// Read the SAME isolated Wrangler D1 used by workerd. Never infer committed
+// audit events from HTTP status, source inspection or a mock repository.
+const d1Rows=(sql)=>{
+  const output=JSON.parse(run(["d1","execute","crm-rust-party-local",
+    "--local","--command",sql,"--persist-to",data,"--json"]));
+  assert.equal(output.length,1,"one D1 SQL statement expected");
+  assert.equal(output[0].success,true,"physical D1 read must succeed");
+  return output[0].results;
+};
 const {privateKey,publicKey}=generateKeyPairSync("rsa",{modulusLength:2048});
 const kid="local-signed-rsa-fixture";
 const jwks=JSON.stringify({keys:[{...publicKey.export({format:"jwk"}),kid,alg:"RS256",use:"sig"}]});
@@ -44,6 +53,7 @@ try{
     "CREATE TABLE crm_audit (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, action TEXT NOT NULL, subject_id TEXT NOT NULL, created_at TEXT NOT NULL, request_id TEXT);"+
     "INSERT INTO crm_users VALUES('native-a@example.test','tenant-a','admin',1);"+
     "INSERT INTO crm_users VALUES('native-b@example.test','tenant-b','admin',1);"+
+    "INSERT INTO crm_users VALUES('native-viewer@example.test','tenant-a','viewer',1);"+
     "INSERT INTO crm_users VALUES('service:ci-native-b-0001.access','tenant-b','admin',1);";
   run(["d1","execute","crm-rust-party-local","--local",
     "--command",sql,"--persist-to",data]);
@@ -85,6 +95,7 @@ try{
   assert.equal((await call("/api/parties",jwt({email:"not-enrolled@example.test"}))).status,200,
     "verified first entry creates tenant through native Rust");
   const a=jwt(),b=jwt({email:"native-b@example.test",sub:"native-test-b"});
+  const viewer=jwt({email:"native-viewer@example.test",sub:"native-test-viewer"});
   // Real Cloudflare Access service-token JWT has sub:"" and a signed
   // common_name. It must map to service:<client-id>, NOT to an email.
   const serviceB=jwt({sub:"",email:"",common_name:"ci-native-b-0001.access"});
@@ -108,6 +119,14 @@ try{
   assert.equal((await call("/api/parties",parts.join("."))).status,401,
     "modified claims must fail signature");
   assert.equal((await call("/api/parties",a)).status,200,"signed A accepted");
+  assert.equal((await call("/api/parties",viewer)).status,200,
+    "verified read-only principal can query records in its tenant");
+  const viewerCreate=await call("/api/parties",viewer,{method:"POST",headers:{
+    "content-type":"application/json","idempotency-key":"viewer-create-must-deny"},
+    body:JSON.stringify({id:"viewer-must-not-create",kind:"person",name:"Denied"})});
+  assert.equal(viewerCreate.status,403,"a non-admin cannot mutate original Parties");
+  assert.equal(viewerCreate.body.code,"FORBIDDEN");
+  assert.match(viewerCreate.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
   const correlation=await call("/api/parties",a);
   assert.match(correlation.headers["x-request-id"]||"",/^[0-9a-f-]{36}$/i);
   assert.equal(correlation.headers["x-crm-module"],"crm.parties");
@@ -498,10 +517,19 @@ try{
   // atomic D1 version/receipt/audit. No pilot Deal rules or extra service.
   const editDealId="native-edit-deal-"+randomUUID();
   const editPath="/api/sales-deals/"+editDealId;
+  const sqlLiteral=value=>"'"+value.replaceAll("'","''")+"'";
+  const editAudit=()=>d1Rows("SELECT action,request_id FROM crm_audit"+
+    " WHERE tenant_id='tenant-a' AND subject_id="+sqlLiteral(editDealId)+
+    " ORDER BY rowid");
   const editCreated=await call("/api/sales-deals",a,{method:"POST",
     headers:{"content-type":"application/json","idempotency-key":"signed-edit-deal-create"},
     body:JSON.stringify({...dealData,id:editDealId})});
   assert.equal(editCreated.status,201,JSON.stringify(editCreated));
+  assert.deepEqual(editAudit(),[{
+    action:"sales_deals.create",request_id:editCreated.headers["x-request-id"]
+  }],"create trigger must commit exactly one correlated D1 audit row");
+  assert.equal((await call(editPath,viewer)).status,200,
+    "viewer may read an original Deal in its own tenant");
   const editBody={expected_version:1,name:"Updated deal",
     amount_minor_units:98765,currency:"USD",probability_bps:6750};
   const headers={"content-type":"application/json","idempotency-key":"signed-edit-deal-update"};
@@ -516,6 +544,14 @@ try{
   assert.equal((await call(editPath,a,{method:"PATCH",headers:{
     ...headers,"idempotency-key":"sales-float-amount"},
     body:JSON.stringify({...editBody,amount_minor_units:12.5})})).status,422);
+  const viewerEdit=await call(editPath,viewer,{
+    method:"PATCH",headers:{...headers,"idempotency-key":"viewer-edit-must-deny"},
+    body:JSON.stringify(editBody)});
+  assert.equal(viewerEdit.status,403,"verified non-admin cannot update a Deal");
+  assert.equal(viewerEdit.body.code,"FORBIDDEN");
+  assert.deepEqual(editAudit(),[{
+    action:"sales_deals.create",request_id:editCreated.headers["x-request-id"]
+  }],"forbidden mutation must not create a D1 audit record");
   const edited=await call(editPath,a,{method:"PATCH",headers,body:JSON.stringify(editBody)});
   assert.equal(edited.status,200,JSON.stringify(edited));
   assert.equal(edited.body.item.version,2);
@@ -528,9 +564,18 @@ try{
   assert.equal(edited.body.item.stage.stage_id,"lead");
   assert.equal(edited.headers["x-crm-module"],"crm.sales");
   assert.match(edited.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
+  const expectedAudit=[{
+    action:"sales_deals.create",request_id:editCreated.headers["x-request-id"]
+  },{
+    action:"sales_deals.update",request_id:edited.headers["x-request-id"]
+  }];
+  assert.deepEqual(editAudit(),expectedAudit,
+    "UPDATE trigger must commit sales_deals.update using exact HTTP request_id");
   const editReplay=await call(editPath,a,{method:"PATCH",headers,body:JSON.stringify(editBody)});
   assert.equal(editReplay.status,200);assert.equal(editReplay.body.replayed,true);
   assert.deepEqual(editReplay.body.item,edited.body.item);
+  assert.deepEqual(editAudit(),expectedAudit,
+    "successful idempotent replay must not emit another business audit event");
   const reuse=await call(editPath,a,{method:"PATCH",headers,
     body:JSON.stringify({...editBody,name:"Wrong"})});
   assert.equal(reuse.status,409);assert.equal(reuse.body.code,"IDEMPOTENCY_CONFLICT");
@@ -539,6 +584,8 @@ try{
     body:JSON.stringify(editBody)});
   assert.equal(stale.status,409);
   assert.equal(stale.body.code,"SALES_DEAL_VERSION_CONFLICT");
+  assert.deepEqual(editAudit(),expectedAudit,
+    "conflicting and stale mutations must leave the D1 audit unchanged");
   const pair=await call(editPath,a,{method:"PATCH",headers:{
     ...headers,"idempotency-key":"sales-incomplete-money"},
     body:JSON.stringify({expected_version:2,amount_minor_units:42})});
@@ -557,11 +604,17 @@ try{
   assert.equal(cleared.status,200,JSON.stringify(cleared));
   assert.equal(cleared.body.item.amount,null);
   assert.equal(cleared.body.item.version,3);
+  assert.deepEqual(editAudit(),[...expectedAudit,{
+    action:"sales_deals.update",request_id:cleared.headers["x-request-id"]
+  }],"clear-amount must emit exactly one additional sales_deals.update event");
   assert.deepEqual((await call(editPath,a)).body.item,cleared.body.item,
     "original Deal codec must persist clear amount via one D1");
   assert.equal((await call(editPath,b)).status,404);
   console.log(JSON.stringify({event:"crm.native-original-sales-update-d1",
     result:"PASS",owner:"crm.sales",exact_money:true,
+    audit:"D1_TRIGGER_REQUEST_ID_PROVEN",
+    denied_role:"viewer_403_NO_D1_SIDE_EFFECT",
+    replay:"NO_EXTRA_AUDIT",failed_update:"NO_AUDIT",
     actor:"verified Access",ui:"NOT_CONNECTED",live:"NOT_TESTED"}));
 
   // Original Contact Point lifecycle under real JWT and production migration.
