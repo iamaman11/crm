@@ -275,6 +275,9 @@ async function test(){
     assert.equal(row?.update_trace,1,"React edit request ID must equal D1 audit request ID");
     report.audit_request_correlation="PASS";
     report.real_cloudflare_native_d1="PASS";
+    await assertObservedRequest(report.create_request_id,"parties.create",version);
+    await assertObservedRequest(report.update_request_id,"parties.update",version);
+    report.cloudflare_logs_correlation="PASS";
     report.d1_audits=row.audits;
     report.result="PASS";
     log("crm.native-cloud.e2e",{result:"PASS",sha,old_version:oldVersion,
