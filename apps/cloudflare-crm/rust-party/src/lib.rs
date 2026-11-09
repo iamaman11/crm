@@ -205,7 +205,9 @@ struct SchemaCount { present: i64 }
 
 #[cfg(feature = "native")]
 async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
-    // Read-only: a schema/tenant check is NOT proof that writes or UI tests passed.
+    // A truthful live, read-only diagnostic: this probes the active Rust
+    // runtime and current D1 tables. CI/browser/Logs proof remains a separate
+    // protected release artifact, never an invented live health result.
     const EXPECTED: [&str; 9] = [
         "crm_tenants", "crm_users", "crm_customers", "crm_contacts",
         "crm_deals", "crm_tasks", "crm_audit", "crm_party_records", "crm_party_receipts",
@@ -216,37 +218,81 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
         "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?)",
         &bindings)?.first::<SchemaCount>(None).await?;
     let present = row.map_or(0, |value| value.present);
-    // A tenant-scoped real D1 query, never a synthetic test record.
-    let party_rows = if present == EXPECTED.len() as i64 {
-        bind(&db, "SELECT COUNT(*) AS present FROM crm_party_records WHERE tenant = ?",
-            &[JsValue::from_str(tenant)])?.first::<SchemaCount>(None).await?
+    let schema_ok = present == EXPECTED.len() as i64;
+    let mut read_checks = serde_json::Map::new();
+    let mut reads_ok = schema_ok;
+    // Query each deployed UI owner's tenant scope directly, with real D1 reads.
+    // Zero records is a valid empty workspace, not a failed health check.
+    if schema_ok {
+        for (module, table, column) in [
+            ("customers", "crm_customers", "tenant_id"),
+            ("contacts", "crm_contacts", "tenant_id"),
+            ("deals", "crm_deals", "tenant_id"),
+            ("tasks", "crm_tasks", "tenant_id"),
+            ("parties", "crm_party_records", "tenant"),
+        ] {
+            // Table and column names are compiled-in constants, not user input.
+            let query = format!("SELECT COUNT(*) AS present FROM {table} WHERE {column} = ?");
+            let count = match bind(&db, &query, &[JsValue::from_str(tenant)]) {
+                Ok(statement) => statement.first::<SchemaCount>(None).await.ok().flatten().map(|x|x.present),
+                Err(_) => None,
+            };
+            if count.is_none() { reads_ok = false; }
+            read_checks.insert(module.into(), json!({
+                "status": if count.is_some() { "PASS" } else { "FAIL" },
+                "visible_records": count,
+                "scope": "verified_access_tenant"
+            }));
+        }
+    }
+    // Real audit-schema probe; if request_id is absent, the doctor must fail,
+    // even when all nine table names still exist.
+    let audit_trace = if schema_ok {
+        match bind(&db,
+            "SELECT COUNT(request_id) AS present FROM crm_audit WHERE tenant_id = ?",
+            &[JsValue::from_str(tenant)]) {
+            Ok(statement) => statement.first::<SchemaCount>(None).await.ok().flatten().map(|x|x.present),
+            Err(_) => None,
+        }
     } else { None };
-    let version = env.object_var::<Value>("CF_VERSION_METADATA").ok()
+    let trace_ready = audit_trace.is_some();
+    let worker_version = env.object_var::<Value>("CF_VERSION_METADATA").ok()
         .and_then(|metadata| metadata.get("id").and_then(Value::as_str).map(str::to_owned));
     let source = env.var("GIT_SHA").ok().map(|value| value.to_string());
-    let healthy = present == EXPECTED.len() as i64 && party_rows.is_some();
-    // A live schema proof is independent of the CI browser evidence.
-    // Do not claim a module's write path is healthy merely because its table exists.
+    let identity_ok = source.as_deref().is_some_and(|value| value.len()==40
+        && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        && worker_version.as_deref().is_some_and(|value| value.len()==36);
+    let healthy = schema_ok && reads_ok && trace_ready && identity_ok;
     response(json!({
         "application": "crm-dev",
         "runtime": "workers-rs",
         "entrypoint": "native-workers-rs",
         "source": source.unwrap_or_else(|| "NOT_AVAILABLE".into()),
-        "worker_version": version.unwrap_or_else(|| "NOT_AVAILABLE".into()),
-        "access": {"status": "PASS", "check": "signed JWT and enrolled tenant"},
-        "database": {"status": if healthy { "PASS" } else { "FAIL" },
+        "worker_version": worker_version.unwrap_or_else(|| "NOT_AVAILABLE".into()),
+        "release": { "source_version": if identity_ok {"PASS"} else {"FAIL"},
+            "traffic_percentage": "EXTERNAL_CLOUDFLARE_DEPLOYMENTS_CHECK_REQUIRED",
+            "native_only": true },
+        "access": {"status": "PASS", "check": "signed JWT and enrolled tenant",
+            "principal_scope": "verified_access_tenant"},
+        "database": {"status": if schema_ok && reads_ok && trace_ready { "PASS" } else { "FAIL" },
             "tables": {"present": present, "expected": EXPECTED.len()},
-            "party_records_visible": party_rows.map(|value| value.present)},
+            "tenant_reads": read_checks,
+            "audit": {"request_id_column": if trace_ready { "PASS" } else { "FAIL" },
+                "tenant_audit_rows_with_id": audit_trace }},
         "modules": {
-            "crm.parties": {"schema_read": if healthy {"PASS"} else {"FAIL"},
-                "business_owner": "original-crm-parties", "write":"NOT_TESTED", "audit_correlation":"NOT_TESTED"},
-            "crm.customers": {"schema_read": if healthy {"PASS"} else {"FAIL"}, "write":"NOT_TESTED"},
-            "crm.contacts": {"schema_read": if healthy {"PASS"} else {"FAIL"}, "write":"NOT_TESTED"},
-            "crm.deals": {"schema_read": if healthy {"PASS"} else {"FAIL"}, "write":"NOT_TESTED"},
-            "crm.tasks": {"schema_read": if healthy {"PASS"} else {"FAIL"}, "write":"NOT_TESTED"},
-            "crm.customer360": {"read": "NOT_TESTED"}
+            "crm.parties": {"read": read_checks.get("parties"), "business_owner": "original-crm-parties"},
+            "crm.customers": {"read": read_checks.get("customers"), "business_owner": "native-pilot"},
+            "crm.contacts": {"read": read_checks.get("contacts"), "business_owner": "native-pilot"},
+            "crm.deals": {"read": read_checks.get("deals"), "business_owner": "native-pilot"},
+            "crm.tasks": {"read": read_checks.get("tasks"), "business_owner": "native-pilot"},
+            "crm.customer360": {"read": "EXTERNAL_BROWSER_CHECK_REQUIRED"}
         },
-        "ui_e2e": "NOT_TESTED"
+        "functional_cycle": {
+            "browser_buttons": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED",
+            "crud_writes": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED",
+            "d1_request_id": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED",
+            "cloudflare_logs": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"
+        }
     }), if healthy {200} else {503})
 }
 
