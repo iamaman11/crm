@@ -35,6 +35,15 @@ function guard(){
   assert.equal(execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),sha);
   assert.ok(existsSync("apps/cloudflare-crm/dist/index.html"));
   assert.ok(existsSync("apps/cloudflare-crm/rust-party/build/index_bg.wasm"));
+  // Explicit cloud config prevents Wrangler discovering the nested CI-only
+  // rust-party/wrangler.jsonc, which binds the nonexistent 0000... test D1.
+  const config=JSON.parse(readFileSync("apps/cloudflare-crm/wrangler.jsonc","utf8"));
+  assert.equal(config.name,script);
+  assert.equal(config.main,"./worker/unified.mjs");
+  assert.equal(config.account_id,account);
+  assert.equal(config.d1_databases?.find(x=>x.binding==="DB")?.database_id,db);
+  assert.equal(config.assets?.binding,"ASSETS");
+  assert.ok(!config.vars?.CRM_CI_LOCAL_ONLY);
   const cargo=readFileSync("apps/cloudflare-crm/rust-party/Cargo.toml","utf8");
   assert.ok(cargo.includes('crm-parties = { path = "../../../modules/crm-parties" }'));
   assert.ok(!cargo.includes('crm-sales = {'),"only original Party crate permitted");
@@ -126,7 +135,7 @@ async function upload(){
   // Use the EXISTING crm-dev Wrangler config (D1 + Static Assets), not a
   // second config/Worker; dry-run uses the identical CLI contract.
   const r=spawnSync("npx",["wrangler","versions","upload",
-    "rust-party/build/index.js","--name",script,
+    "rust-party/build/index.js","--config","wrangler.jsonc","--name",script,
     "--tag","party-native-"+sha.slice(0,12),
     "--message","CRM #338 native Party version proof "+sha,
     "--var","GIT_SHA:"+sha],{

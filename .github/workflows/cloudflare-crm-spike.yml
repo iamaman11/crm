@@ -171,9 +171,18 @@ jobs:
           CRM_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
+          # Explicit root config is essential: without it Wrangler walks to
+          # rust-party/wrangler.jsonc and selects the nonexistent test D1.
           npx wrangler versions upload rust-party/build/index.js \
-            --name crm-dev --var "GIT_SHA:$CRM_HEAD_SHA" \
-            --dry-run --outdir /tmp/crm-native-party-version-proof
+            --config wrangler.jsonc --name crm-dev --var "GIT_SHA:$CRM_HEAD_SHA" \
+            --dry-run --outdir /tmp/crm-native-party-version-proof 2>&1 | \
+            tee /tmp/crm-native-party-wrangler-bindings.log
+          grep -F 'env.DB (crm-dev)' /tmp/crm-native-party-wrangler-bindings.log
+          grep -F 'env.ASSETS' /tmp/crm-native-party-wrangler-bindings.log
+          if grep -F 'CRM_CI_LOCAL_ONLY' /tmp/crm-native-party-wrangler-bindings.log; then
+            echo 'FAIL: CI-local auth flag must never be in Cloudflare native version' >&2
+            exit 1
+          fi
           test -d /tmp/crm-native-party-version-proof
           test -s rust-party/build/index_bg.wasm
           test -s rust-party/build/index.js
