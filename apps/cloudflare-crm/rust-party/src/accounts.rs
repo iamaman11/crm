@@ -52,7 +52,7 @@ fn decoded(bytes: &str) -> Result<Account> {
     decode_account_state(bytes.as_bytes())
         .map_err(|e| worker::Error::RustError(e.code))
 }
-fn view(account: &Account) -> Value {
+pub(super) fn view(account: &Account) -> Value {
     json!({
         "id": account.account_id().as_str(),
         "name": account.name(),
@@ -69,7 +69,7 @@ fn view(account: &Account) -> Value {
         })).collect::<Vec<_>>()
     })
 }
-async fn load(db: &D1Database, tenant: &str, id: &str) -> Result<Option<Account>> {
+pub(super) async fn load(db: &D1Database, tenant: &str, id: &str) -> Result<Option<Account>> {
     bind(db, "SELECT state FROM crm_account_records WHERE tenant = ? AND id = ?",
         &[JsValue::from_str(tenant), JsValue::from_str(id)])?
         .first::<Stored>(None).await?
@@ -183,70 +183,6 @@ async fn list(db: &D1Database, tenant: &str) -> Result<Response> {
     response(json!({"items":items}),200)
 }
 
-/*
- * Read-only original Account view. Existing original owners retain all
- * validation and persisted codecs; this is only a tenant-scoped D1 projection.
- * No second aggregate, no mirrored tables and no computed consent grants.
- */
-const OVERVIEW_LIMIT: usize = 100;
-async fn overview_states(db: &D1Database, sql: &str, bindings: &[JsValue])
-    -> Result<(Vec<String>, bool)> {
-    // Fetch one extra row so a truncated card cannot masquerade as complete.
-    let mut rows = bind(db, sql, bindings)?.all().await?.results::<Stored>()?;
-    let has_more = rows.len() > OVERVIEW_LIMIT;
-    rows.truncate(OVERVIEW_LIMIT);
-    Ok((rows.into_iter().map(|row| row.state).collect(), has_more))
-}
-async fn overview(db: &D1Database, tenant: &str, id: &str) -> Result<Response> {
-    let Some(account) = load(db, tenant, id).await? else {
-        return error("NOT_FOUND", 404);
-    };
-    let Some(primary) = account.party_associations().iter()
-        .find(|association| matches!(association.role(), AccountPartyRole::Primary)) else {
-        return error("CUSTOMER_ACCOUNTS_PRIMARY_PARTY_MISSING", 503);
-    };
-    let primary_id = primary.party().as_str();
-    let Some(party) = super::stored(db, tenant, primary_id).await? else {
-        return error("CUSTOMER_ACCOUNTS_PRIMARY_PARTY_MISSING", 503);
-    };
-    let (contact_states, contacts_truncated) = overview_states(db,
-        "SELECT state FROM crm_contact_point_records WHERE tenant=? AND party_id=? ORDER BY id LIMIT 101",
-        &[JsValue::from_str(tenant), JsValue::from_str(primary_id)]).await?;
-    let (relationship_states, relationships_truncated) = overview_states(db,
-        "SELECT state FROM crm_party_relationship_records WHERE tenant=? AND (from_party=? OR to_party=?) ORDER BY id LIMIT 101",
-        &[JsValue::from_str(tenant), JsValue::from_str(primary_id),
-            JsValue::from_str(primary_id)]).await?;
-    let (deal_states, deals_truncated) = overview_states(db,
-        "SELECT state FROM crm_sales_deal_records WHERE tenant=? AND account_id=? ORDER BY id LIMIT 101",
-        &[JsValue::from_str(tenant), JsValue::from_str(id)]).await?;
-    let (task_states, tasks_truncated) = overview_states(db,
-        "SELECT state FROM crm_activity_task_records WHERE tenant=? AND account_id=? ORDER BY id LIMIT 101",
-        &[JsValue::from_str(tenant), JsValue::from_str(id)]).await?;
-    let contact_points = contact_states.iter().map(|state|
-        super::contact_points::decode(state).map(|item|super::contact_points::view(&item)))
-        .collect::<Result<Vec<_>>>()?;
-    let relationships = relationship_states.iter().map(|state|
-        super::party_relationships::decoded(state).map(|item|super::party_relationships::view(&item)))
-        .collect::<Result<Vec<_>>>()?;
-    let deals = deal_states.iter().map(|state|
-        super::sales_deals::decode(state).map(|item|super::sales_deals::view(&item)))
-        .collect::<Result<Vec<_>>>()?;
-    let tasks = task_states.iter().map(|state|
-        super::activity_tasks::decode(state).map(|item|super::activity_tasks::view(&item)))
-        .collect::<Result<Vec<_>>>()?;
-    response(json!({
-        "account":view(&account), "primary_party":super::view(&party),
-        "contact_points":contact_points, "party_relationships":relationships,
-        "deals":deals, "tasks":tasks,
-        "scope":{"contact_points":"primary_party_only",
-                 "party_relationships":"primary_party_only",
-                 "limit_per_collection":OVERVIEW_LIMIT},
-        "truncated":{"contact_points":contacts_truncated,
-                     "party_relationships":relationships_truncated,
-                     "deals":deals_truncated,"tasks":tasks_truncated}
-    }), 200)
-}
-
 pub(super) async fn route(req: Request, db: D1Database, tenant: &str, trace: &str) -> Result<Response> {
     let path = req.path();
     let method = req.method();
@@ -258,12 +194,6 @@ pub(super) async fn route(req: Request, db: D1Database, tenant: &str, trace: &st
         };
     }
     let Some(id) = path.strip_prefix("/api/accounts/") else {return error("NOT_FOUND", 404)};
-    if let Some(id) = id.strip_suffix("/overview") {
-        if id.is_empty() || id.contains('/') || method != Method::Get {
-            return error("NOT_FOUND", 404);
-        }
-        return overview(&db, tenant, id).await;
-    }
     if id.is_empty() || id.contains('/') {return error("NOT_FOUND", 404);}
     match method {
         Method::Get => read(&db, tenant, id).await,
