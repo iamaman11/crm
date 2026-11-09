@@ -239,6 +239,17 @@ async function verifyData(){
       /^[0-9a-f-]{36}$/i.test(r.request_id||"")))
     throw Error("Native Party CSV import browser trace missing");
 
+  // Import-apply is a genuine D1 mutation with potentially many audit rows,
+  // never count it as a read-only operation. One-row Chromium fixture must
+  // have exactly one committed original Party create for the same request_id.
+  const importedRows=await cf("/d1/database/"+database+"/query","POST",{
+    sql:"SELECT action,subject_id FROM crm_audit WHERE request_id = ?",
+    params:[importApply.request_id]});
+  const importedAudit=importedRows?.[0]?.results||[];
+  if(!cycle.imported_party_id||importedAudit.filter(r=>
+    r.action==="parties.create"&&r.subject_id===cycle.imported_party_id).length!==1)
+    throw Error("Original Party import D1 audit missing for exact browser request");
+
   // D1's audit is transactionally written by the same native mutation and
   // uses the exact x-request-id the real Chromium click received.
   const ids=writes.map(w=>w.request_id);
@@ -295,13 +306,15 @@ async function verifyData(){
   record("native-functional-accepted.json",{git_sha:sha,runtime:"native-workers-rs",
     worker_version:liveVersion,database,ui_buttons:cycle.ui_coverage,
     mutations:writes.length,d1_correlated:writes.length,logs_correlated:writes.length,
-    request_ids:ids,read_only_log_correlated:7,
+    request_ids:ids,read_only_log_correlated:6,
     read_only_request_ids:[compareRead.request_id,candidateRead.request_id,
-      qualityRead.request_id,exportPreview.request_id,exportDownload.request_id,importPreview.request_id,importApply.request_id],result:"PASS"});
+      qualityRead.request_id,exportPreview.request_id,exportDownload.request_id,importPreview.request_id],
+    import_request_id:importApply.request_id,import_d1_correlated:1,import_log_correlated:1,
+    result:"PASS"});
   console.log(JSON.stringify({event:"crm.native-full-functional-cycle",result:"PASS",
     sha,worker_version:liveVersion,ui_buttons:cycle.ui_coverage.length,
     mutations:writes.length,d1_correlated:writes.length,
-    logs_correlated:writes.length,read_only_log_correlated:7}));
+    logs_correlated:writes.length,read_only_log_correlated:6,import_write_log_correlated:1}));
 
   const p=load("parties-e2e.json");
   if(p.git_sha!==sha||p.parties?.length!==2||p.keys?.length!==3)throw Error("Missing native Party A/B browser proof");

@@ -54,6 +54,7 @@ page.on("response",r=>{
       errors.push("Missing native trace "+method+" "+path);
     // Consents/evaluate is a read-only query carried over POST. Never claim a D1 mutation.
     if(["POST","PATCH"].includes(method)&&!path.endsWith("/evaluate")&&
+      !path.startsWith("/api/customer-data-operations/import-")&&
       [200,201].includes(r.status())){
       const body=await r.json().catch(()=>({}));
       record.subject_id=body.item?.id;
@@ -498,6 +499,7 @@ try{
   await writeFile("apps/cloudflare-crm/.release/native-functional-cycle.json",
     JSON.stringify({git_sha:sha,runtime:"native-workers-rs",
       ui_coverage:coverage,requests:nativeResponses,writes,
+      imported_party_id:importedId,
       result:"BROWSER_PASS_D1_LOGS_PENDING"},null,2)+"\n");
   evidence.ui_coverage=coverage;evidence.native_http_responses=nativeResponses.length;
   evidence.native_mutations=writes.length;

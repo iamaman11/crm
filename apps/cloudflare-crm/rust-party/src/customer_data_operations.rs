@@ -116,7 +116,7 @@ fn parse_import(bytes: &[u8]) -> std::result::Result<Vec<(String, PartyKind, Str
         .map_err(|_|"IMPORT_PARSER_PROFILE_INVALID")?;
     let parsed=parse_import_source(bytes,&profile)
         .map_err(|_|"IMPORT_CSV_INVALID")?;
-    if parsed.headers()!=IMPORT_FIELDS {return Err("IMPORT_HEADER_INVALID");}
+    if parsed.headers().iter().map(String::as_str).collect::<Vec<_>>()!=IMPORT_FIELDS {return Err("IMPORT_HEADER_INVALID");}
     if parsed.rows().len()>IMPORT_MAX_ROWS {return Err("IMPORT_ROW_LIMIT_REACHED");}
     let mut seen=BTreeSet::new();
     let mut rows=Vec::new();
