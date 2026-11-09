@@ -1,7 +1,6 @@
-//! Native workers-rs proof using the *original* crm-parties owner.
-//! Not a second deployed CRM: deliberately denies all requests unless built
-//! for the loopback-only CI test with the ci-local feature.
-//! No JS reproduction of Party::create, apply_update or encode/decode.
+//! Sole native workers-rs CRM entrypoint, linked to the original crm-parties owner.
+//! ci-local is a strictly isolated workerd acceptance fixture, never a public
+//! authentication mechanism. No JS router, duplicate Party rules or second Worker.
 use crm_parties::{
     CreateParty, Party, PartyId, PartyKind, UpdateParty,
     decode_party_state, encode_party_state,
@@ -331,10 +330,8 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
 
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    #[cfg(any(all(feature = "ci-local", feature = "integrated"),
-              all(feature = "ci-local", feature = "native"),
-              all(feature = "integrated", feature = "native")))]
-    compile_error!("ci-local, integrated and native are mutually exclusive");
+    #[cfg(all(feature = "ci-local", feature = "native"))]
+    compile_error!("ci-local and native are mutually exclusive");
 
     // Only the compiled-in test mode trusts a loopback CI-only header.
     #[cfg(feature = "ci-local")]
@@ -344,20 +341,6 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         }
         let Some(tenant) = req.headers().get("x-crm-ci-tenant")?
             .filter(|s| s == "tenant-a" || s == "tenant-b") else {
-            return error("AUTH_REQUIRED", 403);
-        };
-        return dispatch(req, env, &tenant, None, None).await;
-    }
-
-    // The `integrated` build is import-only, called inside the single trusted
-    // Worker module. The public JS entrypoint verifies Cloudflare Access,
-    // deletes user-supplied internal headers and assigns this tenant value.
-    // Never publish the generated Rust shim as an independent Worker.
-    #[cfg(feature = "integrated")]
-    {
-        let Some(tenant) = req.headers().get("x-crm-native-tenant")?
-            .filter(|s| !s.is_empty() && s.len() <= 120 &&
-                s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) else {
             return error("AUTH_REQUIRED", 403);
         };
         return dispatch(req, env, &tenant, None, None).await;
@@ -440,7 +423,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         return Ok(reply);
     }
 
-    #[cfg(not(any(feature = "ci-local", feature = "integrated", feature = "native")))]
+    #[cfg(not(any(feature = "ci-local", feature = "native")))]
     {
         let _ = (req, env);
         error("AUTH_REQUIRED", 403)
