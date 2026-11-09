@@ -221,7 +221,7 @@ try {
   assert.equal(await page.getByLabel("Имя / название",{exact:true}).evaluate(
     input=>input.validity.valueMissing),true,"required name cannot submit");
   await page.getByRole("button", {name:"Отмена"}).click();
-  await page.getByRole("dialog").waitFor({state:"hidden"}).catch(()=>{});
+  await page.locator(".shade").waitFor({state:"hidden"});
   await page.getByRole("button", {name:"Обновить",exact:true}).click();
   await page.getByRole("status").getByText("Обновлено").waitFor();
   evidence.api.push({module:"ui",action:"empty-form-validation-cancel-global-refresh",result:"PASS"});
