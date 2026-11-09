@@ -61,6 +61,8 @@ try{
     "--file","../migrations/0008_original_sales_deals.sql","--persist-to",data]);
   run(["d1","execute","crm-rust-party-local","--local",
     "--file","../migrations/0009_original_consents.sql","--persist-to",data]);
+  run(["d1","execute","crm-rust-party-local","--local",
+    "--file","../migrations/0010_original_sales_activities_link.sql","--persist-to",data]);
   child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
     "--var","CRM_CI_LOCAL_ONLY:yes","--var","CRM_NATIVE_CI_JWKS:"+jwks],
     {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
@@ -354,9 +356,32 @@ try{
   assert.equal(dealAdvanced.body.item.version,2);
   assert.equal(dealAdvanced.body.item.stage.stage_id,"qualified");
   assert.equal(dealAdvanced.body.item.status,"open");
+  // Original SalesActivitiesLink::handle, original Protobuf contract adapter,
+  // and original crm-activities Task::create in ONE atomic D1 transition.
+  assert.equal(dealAdvanced.body.link.disposition,"applied");
+  assert.match(dealAdvanced.body.link.delivery_id,/^delivery-[0-9a-f]{40}$/);
+  assert.equal(dealAdvanced.body.link.task_id,dealAdvanced.body.link.delivery_id);
+  const linkedId=dealAdvanced.body.link.task_id;
+  const linked=await call("/api/activity-tasks/"+linkedId,a);
+  assert.equal(linked.status,200,JSON.stringify(linked));
+  assert.equal(linked.body.item.subject,"Follow up deal after stage change");
+  assert.equal(linked.body.item.owner.actor,"native-a@example.test");
+  assert.deepEqual(linked.body.item.related_resources,[{
+    resource_type:"sales.deal",resource_id:dealId,version:2}]);
+  assert.equal(linked.body.item.status,"open");
+  assert.equal((await call("/api/activity-tasks/"+linkedId,b)).status,404);
+  assert.equal((await call("/api/activity-tasks/"+linkedId,serviceB)).status,404);
+
   const advanceReplay=await call("/api/sales-deals/"+dealId+"/advance",a,advanceInit);
   assert.equal(advanceReplay.status,200);
   assert.equal(advanceReplay.body.replayed,true);
+  const linkedAgain=await call("/api/activity-tasks/"+linkedId,a);
+  assert.deepEqual(linkedAgain.body.item,linked.body.item,
+    "Sales replay must not create a second task or mutate the original Task");
+  assert.equal((await call("/api/activity-tasks",a)).body.items
+    .filter(x=>x.id===linkedId).length,1,
+    "one linked task per original stage change");
+
   const stageRegression=await call("/api/sales-deals/"+dealId+"/advance",a,{
     method:"POST",headers:{...advanceHeaders,
       "idempotency-key":"signed-original-sales-regression"},
@@ -382,6 +407,13 @@ try{
   assert.equal(closed.body.item.status,"won");
   assert.equal(closed.body.item.close_outcome.reason_code,"contract-signed");
   assert.equal(closed.body.item.amount.minor_units,"12500");
+  assert.equal(closed.body.link.disposition,"ignored",
+    "original link ignores closed Sales events");
+  assert.equal(closed.body.link.task_id,null);
+  assert.notEqual(closed.body.link.delivery_id,dealAdvanced.body.link.delivery_id);
+  assert.deepEqual((await call("/api/activity-tasks/"+linkedId,a)).body.item,
+    linked.body.item,"close must not modify earlier original linked Task");
+
   const closeReplay=await call("/api/sales-deals/"+dealId+"/advance",a,{
     method:"POST",headers:closeHeaders,body:JSON.stringify(closeInput)});
   assert.equal(closeReplay.status,200);
@@ -405,6 +437,16 @@ try{
   assert.ok((await call("/api/sales-deals",a)).body.items
     .some(x=>x.id===dealId&&x.status==="won"));
   assert.deepEqual((await call("/api/sales-deals",b)).body.items,[]);
+  console.log(JSON.stringify({event:"crm.native-original-sales-activities-link-d1",
+    result:"PASS",owner:"crm.sales-activities-link",proven:[
+      "original SalesActivitiesLink::handle",
+      "original ProtobufSalesActivitiesLinkContractAdapter",
+      "original crm-activities Task::create",
+      "same D1 transaction Deal+Task+immutable delivery",
+      "exact account/tenant binding","closed stage ignored",
+      "replay does not duplicate Task","signed Access owner",
+      "A/B tenant Task denial","durable original Task codec"],
+    ui:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
   console.log(JSON.stringify({event:"crm.native-original-sales-d1",result:"PASS",
     owner:"crm.sales",proven:["verified Access actor","original Account FK",
       "domain stage transition and close reason","exact integer currency",
