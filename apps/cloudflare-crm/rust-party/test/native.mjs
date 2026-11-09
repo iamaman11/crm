@@ -1000,9 +1000,8 @@ try{
     const accounts=await call("/api/accounts",a);
     const saved=accounts.body.items.find(x=>x.name===customer);
     assert.ok(saved?.id,"React created a real original Account");
-    assert.deepEqual(saved.parties.map(x=>x.id),[persisted.body.items.find(x=>x.name===marker)?.id].filter(Boolean)
-      .concat(saved.parties.map(x=>x.id).filter(x=>x!==persisted.body.items.find(p=>p.name===marker)?.id)),
-      "original Account owns Party refs, never legacy customers");
+    assert.equal(saved.parties[0]?.id,persisted.body.items.find(x=>x.name===marker)?.id,
+      "original Account primary Party must be the exact browser-created identity");
     assert.equal((await call("/api/accounts/"+saved.id,b)).status,404);
     const customerRow=page.getByRole("row").filter({hasText:customer});
     await customerRow.getByRole("button",{name:"Изменить"}).click();
@@ -1076,7 +1075,7 @@ try{
     const session=await call("/api/session",a);
     assert.equal(session.status,200);
     assert.equal(session.body.role,"admin");
-    uiSteps.push("Native Rust-only customers/contacts/deals/tasks/Customer360 and Access A/B");
+    uiSteps.push("Original native Accounts/ContactPoints/Sales/Activities/Overview and Access A/B");
     assert.deepEqual(browserErrors,[],"React browser has no uncaught JS errors");
     await page.screenshot({path:screenshot,fullPage:true,animations:"disabled"});
     const result={git_sha:process.env.CRM_SOURCE_SHA||"unknown",result:"PASS",
