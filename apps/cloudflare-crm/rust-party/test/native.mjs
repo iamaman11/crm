@@ -59,6 +59,8 @@ try{
     "--file","../migrations/0007_original_activity_tasks.sql","--persist-to",data]);
   run(["d1","execute","crm-rust-party-local","--local",
     "--file","../migrations/0008_original_sales_deals.sql","--persist-to",data]);
+  run(["d1","execute","crm-rust-party-local","--local",
+    "--file","../migrations/0009_original_consents.sql","--persist-to",data]);
   child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
     "--var","CRM_CI_LOCAL_ONLY:yes","--var","CRM_NATIVE_CI_JWKS:"+jwks],
     {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
@@ -567,6 +569,90 @@ try{
       "strict codec/D1 roundtrip","Access A/B","idempotency receipts",
       "stale version","no reflexive relationship","request correlation"],
     published_live:"NOT_TESTED",ui:"NOT_CONNECTED"}));
+
+  // Original Consent authority: fail closed until trusted subject grant evidence
+  // exists. A signed operator can record a suppression, never a self-grant.
+  assert.equal((await call("/api/consents",null)).status,401);
+  assert.deepEqual((await call("/api/consents",b)).body.items,[]);
+  const evalScope={party_id:id,contact_point_id:contactPointId,
+    purpose:"marketing.newsletter",channel:"email"};
+  const evalInit={method:"POST",headers:{"content-type":"application/json"},
+    body:JSON.stringify(evalScope)};
+  const ungranted=await call("/api/consents/evaluate",a,evalInit);
+  assert.equal(ungranted.status,200,JSON.stringify(ungranted));
+  assert.equal(ungranted.body.allowed,false);
+  assert.equal(ungranted.body.reason,"no_applicable_grant");
+  assert.equal(ungranted.body.grant_ingress,"NOT_CONNECTED");
+  const noGrant=await call("/api/consents",a,{
+    method:"POST",headers:{"content-type":"application/json"},
+    body:JSON.stringify({effect:"grant",evidence_ref:"i-consent"})});
+  assert.equal(noGrant.status,404,"untrusted consent grant ingress absent");
+  const forgedGrant=await call("/api/consents/suppress",a,{
+    method:"POST",headers:{"content-type":"application/json",
+      "idempotency-key":"forged-consent-grant"},
+    body:JSON.stringify({id:"spoof",...evalScope,jurisdiction:"eu",
+      effect:"grant",evidence_ref:"unverified"})});
+  assert.equal(forgedGrant.status,422,"strict API denies forged Grant and evidence");
+  const suppressionId="native-consent-suppression-"+randomUUID();
+  const suppression={id:suppressionId,...evalScope,jurisdiction:"eu"};
+  const supHeaders={"content-type":"application/json",
+    "idempotency-key":"signed-original-consent-suppression"};
+  const crossTenantSuppression=await call("/api/consents/suppress",b,{
+    method:"POST",headers:supHeaders,body:JSON.stringify(suppression)});
+  assert.equal(crossTenantSuppression.status,422);
+  assert.equal(crossTenantSuppression.body.code,"CONSENTS_PARTY_NOT_FOUND");
+  const wrongPartySuppression=await call("/api/consents/suppress",a,{
+    method:"POST",headers:{...supHeaders,
+      "idempotency-key":"consent-wrong-contact-party"},
+    body:JSON.stringify({...suppression,party_id:otherPartyId})});
+  assert.equal(wrongPartySuppression.status,422);
+  assert.equal(wrongPartySuppression.body.code,"CONSENTS_CONTACT_POINT_PARTY_MISMATCH");
+  const suppressed=await call("/api/consents/suppress",a,{
+    method:"POST",headers:supHeaders,body:JSON.stringify(suppression)});
+  assert.equal(suppressed.status,201,JSON.stringify(suppressed));
+  assert.equal(suppressed.body.item.id,suppressionId);
+  assert.equal(suppressed.body.item.effect,"deny");
+  assert.equal(suppressed.body.item.status,"active");
+  assert.equal(suppressed.body.item.source,"crm.access.operator");
+  assert.match(suppressed.body.item.evidence_ref,/^operator-action:[0-9a-f-]{36}$/i);
+  assert.equal(suppressed.body.operator_action,true);
+  assert.equal(suppressed.body.subject_consent_evidence,false);
+  assert.equal(suppressed.body.item.version,1);
+  assert.equal(suppressed.headers["x-crm-module"],"crm.consents");
+  const suppressionReplay=await call("/api/consents/suppress",a,{
+    method:"POST",headers:supHeaders,body:JSON.stringify(suppression)});
+  assert.equal(suppressionReplay.status,200);
+  assert.equal(suppressionReplay.body.replayed,true);
+  const suppressionIdemConflict=await call("/api/consents/suppress",a,{
+    method:"POST",headers:supHeaders,
+    body:JSON.stringify({...suppression,purpose:"other"})});
+  assert.equal(suppressionIdemConflict.status,409);
+  assert.equal(suppressionIdemConflict.body.code,"IDEMPOTENCY_CONFLICT");
+  const denied=await call("/api/consents/evaluate",a,evalInit);
+  assert.equal(denied.status,200,JSON.stringify(denied));
+  assert.equal(denied.body.allowed,false);
+  assert.equal(denied.body.reason,"active_deny");
+  assert.deepEqual(denied.body.determining_authorization_ids,[suppressionId]);
+  const unscoped=await call("/api/consents/evaluate",a,{
+    ...evalInit,body:JSON.stringify({...evalScope,purpose:"nonmarketing"})});
+  assert.equal(unscoped.status,200);
+  assert.equal(unscoped.body.reason,"no_applicable_grant");
+  const afterDenied=await call("/api/consents",a);
+  assert.equal(afterDenied.status,200);
+  assert.ok(afterDenied.body.items.some(x=>x.id===suppressionId&&x.effect==="deny"));
+  assert.deepEqual((await call("/api/consents",b)).body.items,[]);
+  assert.equal((await call("/api/consents/"+suppressionId+"/withdraw",a,
+    {method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({expected_version:1})})).status,404,
+    "operator suppression cannot be reinterpreted as subject consent withdrawal");
+  console.log(JSON.stringify({event:"crm.native-original-consents-d1",result:"PASS",
+    owner:"crm.consents",proven:["original Consent Authorization deny aggregate",
+      "original evaluate_communication_authorization fail-closed",
+      "signed Access operator provenance","Party + ContactPoint tenant integrity",
+      "strict codec D1 roundtrip","no client-issued grant or forged evidence",
+      "A/B tenant isolation","idempotency","request correlation"],
+    grant_ingress:"NOT_CONNECTED",subject_consent_evidence:"NOT_CONNECTED",
+    ui:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
   const init={method:"PATCH",headers:{"content-type":"application/json",
     "idempotency-key":"native-signed-update"},
     body:JSON.stringify({expected_version:1,name:"Native Updated"})};
