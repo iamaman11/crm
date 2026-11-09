@@ -103,6 +103,7 @@ export const ownerFiles = {
  },
  "original-accounts":{
   ui:null,api:"rust-party/src/accounts.rs",
+  readProjection:"rust-party/src/account_overview.rs",
   validation:"../../modules/crm-customer-accounts/src/domain.rs",
   codec:"../../modules/crm-customer-accounts/src/persistence.rs",
   migration:"migrations/0004_original_customer_accounts.sql",
