@@ -1,4 +1,4 @@
-// Single registry shared by UI, Worker API and fast local developer navigation.
+// Public React fields and native Rust implementation ownership for developer navigation.
 // New functionality: registry + D1 migration + validation + a browser scenario.
 export const modules = {
  customers:{title:"Клиенты",one:"клиента",primary:"name",table:"crm_customers",fields:[
@@ -14,7 +14,7 @@ export const modules = {
 };
 
 // Source ownership for fast, truthful developer navigation.
-// The original four small modules share pilot-core; each NEW expert module must
+// The original four test screens use the native pilot adapter; each NEW expert module must
 // declare its own source owner and files before it can pass the doctor gate.
 // Read-only compositions do not own a database table; still require independent owners.
 export const nativeModels = {
@@ -27,19 +27,19 @@ export const implementationOwners = {
 };
 export const ownerFiles = {
  "rust-party":{
-  ui:"web/src/Parties.jsx",api:"worker/unified.mjs",
+  ui:"web/src/Parties.jsx",api:"rust-party/src/lib.rs",
   validation:"rust-party/src/lib.rs",migration:"migrations/0002_rust_party.sql",
   tests:"rust-party/test/unified.mjs",browser:"e2e/live.mjs",
  },
  "pilot-core": {
-  ui:"web/src/main.jsx", api:"worker/index.mjs",
-  validation:"worker/index.mjs:parseRecord", migration:"migrations",
-  tests:"test/worker.test.mjs", browser:"e2e/live.mjs",
+  ui:"web/src/main.jsx", api:"rust-party/src/pilot.rs",
+  validation:"rust-party/src/pilot.rs:validate", migration:"migrations",
+  tests:"rust-party/test/native.mjs", browser:"e2e/live.mjs",
  },
  customer360:{
-  ui:"web/src/Customer360.jsx", api:"features/customer360/query.mjs",
-  validation:"features/customer360/query.mjs", migration:"migrations",
-  tests:"test/customer360.test.mjs", browser:"e2e/live.mjs",
+  ui:"web/src/Customer360.jsx", api:"rust-party/src/pilot.rs",
+  validation:"rust-party/src/pilot.rs:customer360", migration:"migrations",
+  tests:"rust-party/test/native.mjs", browser:"e2e/live.mjs",
  },
 };
 export const labels={person:"Частное лицо",organization:"Компания",new:"Новая",qualified:"В работе",

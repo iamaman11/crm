@@ -165,19 +165,35 @@ async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
     Ok(identity_key(&claims))
 }
 
-async fn enrolled(db: &D1Database, identity: &str) -> Result<Option<String>> {
+// Signed Cloudflare Access identity, one tenant, no JS actor delegation.
+pub struct Actor {
+    pub tenant: String,
+    pub role: String,
+}
+async fn enrolled(db: &D1Database, identity: &str) -> Result<Option<Actor>> {
     #[derive(serde::Deserialize)]
-    struct Row { tenant_id: String }
-    let tenant = db.prepare("SELECT tenant_id FROM crm_users WHERE email = ? AND active = 1")
+    struct Row { tenant_id: String, role: String }
+    let user = db.prepare("SELECT tenant_id, role FROM crm_users WHERE email = ? AND active = 1")
         .bind(&[JsValue::from_str(identity)])?
         .first::<Row>(None).await?;
-    Ok(tenant.map(|row| row.tenant_id))
+    Ok(user.map(|row| Actor { tenant: row.tenant_id, role: row.role }))
 }
 
-// This candidate is deliberately read-only for identity enrollment:
-// it cannot create a tenant based on a forged or incomplete claim. The native
-// release requires a validated enrollment implementation before cutover.
-pub async fn tenant(req: &Request, env: &Env) -> Result<Option<String>> {
+pub async fn actor(req: &Request, env: &Env) -> Result<Option<Actor>> {
     let Some(identity) = verify(req, env).await? else { return Ok(None); };
-    enrolled(&env.d1("DB")?, &identity).await
+    let db = env.d1("DB")?;
+    if let Some(actor) = enrolled(&db, &identity).await? { return Ok(Some(actor)); }
+    // Preserve the existing CRM onboarding contract: a *verified* previously
+    // unknown Access principal receives one isolated test workspace.
+    // This is the only enrollment path; user-supplied identity/tenant headers
+    // never become trusted. INSERT OR IGNORE handles simultaneous first visits.
+    let tenant = super::native_request_id()?;
+    db.batch(vec![
+        db.prepare("INSERT OR IGNORE INTO crm_tenants (id, name) VALUES (?, ?)")
+            .bind(&[JsValue::from_str(&tenant), JsValue::from_str("Test CRM")])?,
+        db.prepare("INSERT OR IGNORE INTO crm_users (email, tenant_id, role) VALUES (?, ?, ?)")
+            .bind(&[JsValue::from_str(&identity), JsValue::from_str(&tenant),
+                JsValue::from_str("admin")])?,
+    ]).await?;
+    enrolled(&db, &identity).await
 }

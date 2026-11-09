@@ -64,6 +64,9 @@ async function waitForPublicSha(expected,stage){
 }
 
 async function deploy(){
+  const config=JSON.parse(readFileSync("apps/cloudflare-crm/wrangler.jsonc","utf8"));
+  if(config.main!=="./rust-party/build/index.js")
+    throw Error("Refusing release: public Worker is not native workers-rs");
   const rust=builtRust(), oldVersion=await version(), before=await bindings(oldVersion);
   if(before.db!==database||!/^[a-f0-9]{40}$/.test(before.sha||""))throw Error("Previous CRM binding/SHA mismatch");
   const bookmark=(await cf("/d1/database/"+database+"/time_travel/bookmark")).bookmark;
@@ -93,6 +96,41 @@ async function deploy(){
   console.log(JSON.stringify({event:"crm.deploy",sha,result:"E2E_PENDING",version:newVersion}));
 }
 async function verifyData(){
+  const main=await cf(worker+"/deployments");
+  const versions=main.deployments?.[0]?.versions||[];
+  if(versions.length!==1||versions[0].percentage!==100)
+    throw Error("Native release requires exactly 100% normal traffic");
+  const liveVersion=versions[0].version_id;
+  const nativeBindings=await bindings(liveVersion);
+  if(nativeBindings.sha!==sha||nativeBindings.db!==database)
+    throw Error("Live native version SHA/D1 mismatch");
+  const click=load("native-click.json");
+  if(click.git_sha!==sha||click.action!=="parties.create"||click.status!==201||
+    !/^[0-9a-f-]{36}$/i.test(click.request_id||""))
+    throw Error("Native browser click evidence missing");
+  const check=await cf("/d1/database/"+database+"/query","POST",{
+    sql:"SELECT action, request_id FROM crm_audit WHERE subject_id = ? AND action = 'parties.create' ORDER BY created_at DESC LIMIT 1",
+    params:[click.party_id]});
+  const saved=check?.[0]?.results?.[0];
+  if(saved?.request_id!==click.request_id)
+    throw Error("D1 Party create audit does not match the real browser response request_id");
+  const start=Date.now();
+  let observed=false;
+  for(let attempt=0;attempt<12&&!observed;attempt++){
+    const data=await cf("/workers/observability/telemetry/query","POST",{
+      queryId:"crm-338-native-main-cutover",
+      view:"events",timeframe:{from:start-10*60*1000,to:Date.now()+1000},limit:20,
+      parameters:{needle:{value:click.request_id},
+        filters:[{key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
+    });
+    observed=(data.events?.events||[]).some(e=>e.source?.event==="crm.native.request"&&
+      e.source?.request_id===click.request_id&&e.source?.operation==="parties.create"&&
+      e.source?.status===201&&e.$workers?.scriptVersion?.id===liveVersion);
+    if(!observed)await new Promise(resolve=>setTimeout(resolve,2500));
+  }
+  if(!observed)throw Error("Live native Chromium -> response -> D1 -> Cloudflare Logs correlation FAILED");
+  console.log(JSON.stringify({event:"crm.native-live-trace",result:"PASS",
+    source:sha,worker_version:liveVersion,request_id:click.request_id}));
   const p=load("parties-e2e.json");
   if(p.git_sha!==sha||p.parties?.length!==2||p.keys?.length!==3)throw Error("Missing native Party A/B browser proof");
   const [a,b]=p.parties,[ka,ku,kb]=p.keys;
@@ -107,7 +145,9 @@ async function verifyData(){
   const values=v?.[0]?.results||[];
   if(values.length!==2||values.find(x=>x.id===a)?.version!==2||values.find(x=>x.id===b)?.version!==1)throw Error("Rust Party D1 persisted versions mismatch");
   await waitForPublicSha(sha,"final");
-  record("accepted.json",{git_sha:sha,d1_database:database,records:2,receipts:3,audits:3,migration:1,versions:"A=2 B=1",result:"PASS"});
+  record("accepted.json",{git_sha:sha,d1_database:database,runtime:"native-workers-rs",
+    active_worker_version:liveVersion,trace_request_id:click.request_id,
+    records:2,receipts:3,audits:3,migration:1,versions:"A=2 B=1",result:"PASS"});
   console.log(JSON.stringify({event:"crm.native-party-live-d1",sha,result:"PASS",records:2,receipts:3,audits:3,migration:1}));
 }
 async function rollback(){

@@ -34,7 +34,14 @@ let child;
 try{
   run(["d1","execute","crm-rust-party-local","--local",
     "--file","./migrations/0001_local.sql","--persist-to",data]);
-  const sql="CREATE TABLE crm_users (email TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, role TEXT NOT NULL, active INTEGER NOT NULL);"+
+  const sql="CREATE TABLE crm_tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL);"+
+    "INSERT INTO crm_tenants VALUES('tenant-a','A'),('tenant-b','B');"+
+    "CREATE TABLE crm_users (email TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'admin', active INTEGER NOT NULL DEFAULT 1);"+
+    "CREATE TABLE crm_customers (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL, updated_at TEXT NOT NULL);"+
+    "CREATE TABLE crm_contacts (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, customer_id TEXT NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT NOT NULL, updated_at TEXT NOT NULL);"+
+    "CREATE TABLE crm_deals (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, customer_id TEXT NOT NULL, title TEXT NOT NULL, stage TEXT NOT NULL, amount REAL NOT NULL, updated_at TEXT NOT NULL);"+
+    "CREATE TABLE crm_tasks (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, customer_id TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, due_date TEXT NOT NULL, updated_at TEXT NOT NULL);"+
+    "CREATE TABLE crm_audit (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, action TEXT NOT NULL, subject_id TEXT NOT NULL, created_at TEXT NOT NULL, request_id TEXT);"+
     "INSERT INTO crm_users VALUES('native-a@example.test','tenant-a','admin',1);"+
     "INSERT INTO crm_users VALUES('native-b@example.test','tenant-b','admin',1);"+
     "INSERT INTO crm_users VALUES('service:ci-native-b-0001.access','tenant-b','admin',1);";
@@ -59,7 +66,8 @@ try{
   assert.equal((await call("/api/parties",jwt({aud:"wrong"}))).status,401);
   assert.equal((await call("/api/parties",jwt({}, {alg:"HS256"}))).status,401);
   assert.equal((await call("/api/parties",jwt({}, {kid:"missing"}))).status,401);
-  assert.equal((await call("/api/parties",jwt({email:"not-enrolled@example.test"}))).status,401);
+  assert.equal((await call("/api/parties",jwt({email:"not-enrolled@example.test"}))).status,200,
+    "verified first entry creates tenant through native Rust");
   const a=jwt(),b=jwt({email:"native-b@example.test",sub:"native-test-b"});
   // Real Cloudflare Access service-token JWT has sub:"" and a signed
   // common_name. It must map to service:<client-id>, NOT to an email.
@@ -70,8 +78,8 @@ try{
     "empty sub with only human email denied");
   assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"invalid"}))).status,401,
     "empty sub requires valid signed service common_name");
-  assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"unknown-service.access"}))).status,401,
-    "unenrolled service token denied");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"unknown-service.access"}))).status,200,
+    "signed new service token receives isolated native tenant");
   assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"ci-native-b-0001.access",aud:"wrong"}))).status,401,
     "service token still requires application audience");
   assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"ci-native-b-0001.access"},{kid:"wrong"}))).status,401,
@@ -163,6 +171,47 @@ try{
     await page.locator('section[aria-label="Лица и организации (Rust)"]')
       .getByRole("row").filter({hasText:updatedName}).waitFor();
     uiSteps.push("Browser reload -> persisted D1 state available");
+    // Native-only parity: the same React frontend must create and read every
+    // current screen using this one Rust fetch entrypoint. No JS fallback.
+    const customer="Native customer "+marker;
+    await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",{name:/Клиенты/}).click();
+    await page.getByRole("button",{name:"+ Добавить клиента"}).click();
+    await page.getByLabel("Имя / название").fill(customer);
+    await page.getByRole("button",{name:"Сохранить",exact:true}).click();
+    await page.getByText(customer,{exact:true}).first().waitFor();
+    const customers=await call("/api/customers",a);
+    assert.equal(customers.status,200);
+    const saved=customers.body.items.find(x=>x.name===customer);
+    assert.ok(saved?.id);
+    assert.equal((await call("/api/customers",b)).body.items.some(x=>x.id===saved.id),false);
+    await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",{name:/Контакты/}).click();
+    await page.getByRole("button",{name:"+ Добавить контакт"}).click();
+    await page.getByLabel("Клиент").selectOption({label:customer});
+    await page.getByLabel("Имя",{exact:true}).fill(marker+" Contact");
+    await page.getByRole("button",{name:"Сохранить",exact:true}).click();
+    await page.getByText(marker+" Contact",{exact:true}).first().waitFor();
+    await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",{name:/Сделки/}).click();
+    await page.getByRole("button",{name:"+ Добавить сделку"}).click();
+    await page.getByLabel("Клиент").selectOption({label:customer});
+    await page.getByLabel("Название сделки").fill(marker+" Deal");
+    await page.getByRole("button",{name:"Сохранить",exact:true}).click();
+    await page.getByText(marker+" Deal",{exact:true}).first().waitFor();
+    await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",{name:/Задачи/}).click();
+    await page.getByRole("button",{name:"+ Добавить задачу"}).click();
+    await page.getByLabel("Клиент").selectOption({label:customer});
+    await page.getByLabel("Что сделать").fill(marker+" Task");
+    await page.getByRole("button",{name:"Сохранить",exact:true}).click();
+    await page.getByText(marker+" Task",{exact:true}).first().waitFor();
+    const card=await call("/api/customer360/"+saved.id,a);
+    assert.equal(card.status,200);
+    assert.equal(card.body.summary.contacts,1);
+    assert.equal(card.body.summary.deals,1);
+    assert.equal(card.body.summary.open_tasks,1);
+    assert.equal((await call("/api/customer360/"+saved.id,b)).status,404);
+    const session=await call("/api/session",a);
+    assert.equal(session.status,200);
+    assert.equal(session.body.role,"admin");
+    uiSteps.push("Native Rust-only customers/contacts/deals/tasks/Customer360 and Access A/B");
     assert.deepEqual(browserErrors,[],"React browser has no uncaught JS errors");
     await page.screenshot({path:screenshot,fullPage:true,animations:"disabled"});
     const result={git_sha:process.env.CRM_SOURCE_SHA||"unknown",result:"PASS",
@@ -171,7 +220,7 @@ try{
       frontend:"existing React Parties.jsx",module:"crm.parties",
       checks:uiSteps, screenshot:"native-party-desktop.png",
       cloudflare_access_live:"NOT_TESTED",published_cloudflare_url:"NOT_TESTED",
-      other_crm_modules:"NOT_TESTED"};
+      other_crm_modules:"customers/contacts/deals/tasks/Customer360 tested on native"};
     writeFileSync(manifest,JSON.stringify(result,null,2)+"\n");
     console.log(JSON.stringify({event:"crm.native-react-chromium",result:"PASS",checks:uiSteps}));
     await context.close();

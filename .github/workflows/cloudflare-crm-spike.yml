@@ -38,7 +38,7 @@ jobs:
           npm run locate -- deals
           npm run locate -- INVALID_INPUT
           npm run locate -- customer360
-      - name: Run CRM API tests
+      - name: Run legacy pilot contract regression tests (not native acceptance)
         run: npm test
         working-directory: apps/cloudflare-crm
       - name: Build React CRM
@@ -142,7 +142,7 @@ jobs:
               cloudflare_worker_invocation:'NOT_TESTED', d1_adapter:'NOT_TESTED'}));
           })().catch(error => {console.error(error);process.exitCode=1;});
           NODE
-      - name: Build official Rust workers-rs Party Worker (isolated CI only)
+      - name: Build Rust workers-rs Party Worker for isolated workerd CI
         working-directory: apps/cloudflare-crm/rust-party
         run: |
           cargo install --locked worker-build --version 0.8.7
@@ -158,9 +158,6 @@ jobs:
       - name: Test original Rust Party through workerd and isolated native D1
         working-directory: apps/cloudflare-crm
         run: node rust-party/test/local.mjs
-      - name: Test unified Worker JS+Rust WASM composition under workerd
-        working-directory: apps/cloudflare-crm
-        run: node rust-party/test/unified.mjs
       - name: Compile one native Rust Worker Access JWT candidate (not deployed)
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --features native
@@ -186,7 +183,7 @@ jobs:
           test -d /tmp/crm-native-party-version-proof
           test -s rust-party/build/index_bg.wasm
           test -s rust-party/build/index.js
-          grep -F '"main": "./worker/unified.mjs"' wrangler.jsonc
+          grep -F '"main": "./rust-party/build/index.js"' wrangler.jsonc
           grep -F '"binding": "DB"' wrangler.jsonc
           grep -F '"binding": "ASSETS"' wrangler.jsonc
       - name: Keep the exact native Rust candidate for the existing main-only protected release
@@ -202,12 +199,12 @@ jobs:
       - name: Install Chromium for physical React to native Rust Worker proof
         working-directory: apps/cloudflare-crm
         run: npx playwright install --with-deps chromium
-      - name: Test native WebCrypto JWT and tenant isolation under workerd
+      - name: Test native WebCrypto JWT and all React CRM screens under workerd
         working-directory: apps/cloudflare-crm
         env:
           CRM_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node rust-party/test/native.mjs
-      - name: Preserve single native Party browser proof and screenshot
+      - name: Preserve native Rust browser proof and screenshot
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -215,10 +212,10 @@ jobs:
           path: apps/cloudflare-crm/e2e-evidence-native/
           if-no-files-found: warn
           retention-days: 7
-      - name: Build integrated Rust Party for one Cloudflare Worker
+      - name: Prepare only the native Rust entrypoint for deployment
         working-directory: apps/cloudflare-crm/rust-party
-        run: worker-build --release --features integrated
-      - name: Inspect exact unified deployment bundle without deploying
+        run: worker-build --release --features native
+      - name: Inspect native-only deployment bundle without deploying
         working-directory: apps/cloudflare-crm
         run: |
           test -f rust-party/build/index.js
@@ -228,12 +225,16 @@ jobs:
           node --check apps/cloudflare-crm/scripts/deploy.mjs
           node --check apps/cloudflare-crm/scripts/native-cloud-proof.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
-          node --check apps/cloudflare-crm/worker/unified.mjs
       - name: Check CRM target
         run: |
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
           grep -F '35fc7ee9-9710-485f-8fb3-f5a398b229b4' apps/cloudflare-crm/wrangler.jsonc
-          grep -F 'jwtVerify(token, ACCESS_KEYS' apps/cloudflare-crm/worker/index.mjs
+          grep -F 'mod pilot;' apps/cloudflare-crm/rust-party/src/lib.rs
+          grep -F 'mod access;' apps/cloudflare-crm/rust-party/src/lib.rs
+          if grep -F '"main": "./worker/unified.mjs"' apps/cloudflare-crm/wrangler.jsonc; then
+            echo 'FAIL: JS dispatcher must not be published' >&2
+            exit 1
+          fi
       - name: Seal compiled Rust and React outputs for this exact checkout
         shell: bash
         env:
@@ -337,45 +338,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
           CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
         run: node apps/cloudflare-crm/scripts/deploy.mjs rollback
-      - name: Verify CI-sealed native candidate and restore original Worker entrypoint after accepted main release
-        if: success()
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd apps/cloudflare-crm
-          sha256sum --check --strict .release/compiled-sha256.txt
-          cp .release/native-build/index.js rust-party/build/index.js
-          cp .release/native-build/index_bg.wasm rust-party/build/index_bg.wasm
-          cmp .release/native-build/index_bg.wasm rust-party/build/index_bg.wasm
-      - name: Cloudflare Access A/B and React -> Rust Party -> D1 smoke on same 0%-traffic Worker
-        if: success()
-        env:
-          CRM_SOURCE_SHA: ${{ github.sha }}
-          CRM_EXPECTED_ACTIVE_SHA: ${{ github.sha }}
-          CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
-          CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CRM_E2E_A_CLIENT_ID: ${{ secrets.CRM_E2E_A_CLIENT_ID }}
-          CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
-          CRM_E2E_B_CLIENT_ID: ${{ secrets.CRM_E2E_B_CLIENT_ID }}
-          CRM_E2E_B_CLIENT_SECRET: ${{ secrets.CRM_E2E_B_CLIENT_SECRET }}
-        run: node apps/cloudflare-crm/scripts/native-cloud-proof.mjs test
-      - name: Restore original 100%-traffic Worker if native smoke left a test deployment
-        if: always()
-        env:
-          CRM_SOURCE_SHA: ${{ github.sha }}
-          CRM_EXPECTED_ACTIVE_SHA: ${{ github.sha }}
-          CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
-          CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CRM_E2E_A_CLIENT_ID: ${{ secrets.CRM_E2E_A_CLIENT_ID }}
-          CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
-          CRM_E2E_B_CLIENT_ID: ${{ secrets.CRM_E2E_B_CLIENT_ID }}
-          CRM_E2E_B_CLIENT_SECRET: ${{ secrets.CRM_E2E_B_CLIENT_SECRET }}
-        run: |
-          if test -f apps/cloudflare-crm/.release/native-cloud-checkpoint.json; then
-            node apps/cloudflare-crm/scripts/native-cloud-proof.mjs restore
-          fi
       - name: Save release evidence and browser failure screenshots
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
