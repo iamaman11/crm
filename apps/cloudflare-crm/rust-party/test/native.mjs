@@ -99,6 +99,21 @@ try{
   assert.match(forbidden.headers["x-request-id"]||"",/^[0-9a-f-]{36}$/i);
   assert.equal(forbidden.headers["x-crm-error-code"],"AUTH_REQUIRED");
   assert.equal((await call("/api/parties",b)).status,200,"signed B accepted");
+  // Execute original Account, ContactPoint, Sales and Activities domain code
+  // INSIDE this same native workerd, after the signed Access identity boundary.
+  assert.equal((await call("/api/_ci/original-domain-check",null)).status,401,
+    "CI-only owner probe is not accessible without verified Access");
+  const ownerProof=await call("/api/_ci/original-domain-check",a);
+  assert.equal(ownerProof.status,200,JSON.stringify(ownerProof));
+  assert.equal(ownerProof.body.result,"PASS");
+  assert.equal(ownerProof.body.code,0);
+  assert.equal(ownerProof.body.owners_executed.length,4);
+  assert.equal(ownerProof.body.d1_owner_persistence,"NOT_TESTED");
+  assert.equal((await call("/api/_ci/original-domain-check",b)).status,200,
+    "CI-only in-memory proof is tenant-independent but still Access-gated");
+  console.log(JSON.stringify({event:"crm.native-original-owners-workerd",result:"PASS",
+    owners_executed:ownerProof.body.owners_executed,
+    cloudflare_live_d1:"NOT_TESTED",remaining_owners:"NOT_TESTED"}));
   const id="native-jwt-"+randomUUID();
   const created=await call("/api/parties",a,{method:"POST",headers:{
     "content-type":"application/json","idempotency-key":"native-signed-create",
