@@ -311,6 +311,8 @@ try{
   assert.equal((await call("/api/sales-deals",null)).status,401);
   assert.deepEqual((await call("/api/sales-deals",b)).body.items,[]);
   const dealId="native-sales-deal-"+randomUUID();
+  const stageAudit=()=>d1Rows("SELECT action,request_id FROM crm_audit"+
+    " WHERE tenant_id='tenant-a' AND subject_id='"+dealId+"' ORDER BY rowid");
   const dealData={id:dealId,name:"Enterprise renewal",account_id:accountId,
     pipeline_id:"pipeline.enterprise",stage_id:"lead",ordinal:1,
     probability_bps:2500,amount_minor_units:12500,currency:"USD"};
@@ -347,6 +349,9 @@ try{
   assert.equal(dealCreated.body.item.status,"open");
   assert.equal(dealCreated.body.item.probability_bps,2500);
   assert.equal(dealCreated.body.item.version,1);
+  assert.deepEqual(stageAudit(),[{action:"sales_deals.create",
+    request_id:dealCreated.headers["x-request-id"]}],
+    "deal create must create a correlated D1 audit row");
   assert.equal(dealCreated.headers["x-crm-module"],"crm.sales");
   assert.match(dealCreated.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
   assert.equal((await call("/api/sales-deals/"+dealId,b)).status,404);
@@ -375,6 +380,11 @@ try{
   assert.equal(dealAdvanced.body.item.version,2);
   assert.equal(dealAdvanced.body.item.stage.stage_id,"qualified");
   assert.equal(dealAdvanced.body.item.status,"open");
+  const stageAuditAfterAdvance=[{action:"sales_deals.create",
+    request_id:dealCreated.headers["x-request-id"]},
+    {action:"sales_deals.advance",request_id:dealAdvanced.headers["x-request-id"]}];
+  assert.deepEqual(stageAudit(),stageAuditAfterAdvance,
+    "stage transition must audit advance, not update");
   // Original SalesActivitiesLink::handle, original Protobuf contract adapter,
   // and original crm-activities Task::create in ONE atomic D1 transition.
   assert.equal(dealAdvanced.body.link.disposition,"applied");
@@ -394,6 +404,8 @@ try{
   const advanceReplay=await call("/api/sales-deals/"+dealId+"/advance",a,advanceInit);
   assert.equal(advanceReplay.status,200);
   assert.equal(advanceReplay.body.replayed,true);
+  assert.deepEqual(stageAudit(),stageAuditAfterAdvance,
+    "replayed stage transition must not duplicate advance audit");
   const linkedAgain=await call("/api/activity-tasks/"+linkedId,a);
   assert.deepEqual(linkedAgain.body.item,linked.body.item,
     "Sales replay must not create a second task or mutate the original Task");
@@ -426,6 +438,11 @@ try{
   assert.equal(closed.body.item.status,"won");
   assert.equal(closed.body.item.close_outcome.reason_code,"contract-signed");
   assert.equal(closed.body.item.amount.minor_units,"12500");
+  const stageAuditAfterClose=[...stageAuditAfterAdvance,{
+    action:"sales_deals.advance",request_id:closed.headers["x-request-id"]
+  }];
+  assert.deepEqual(stageAudit(),stageAuditAfterClose,
+    "closing a Deal also audits advance rather than update");
   assert.equal(closed.body.link.disposition,"ignored",
     "original link ignores closed Sales events");
   assert.equal(closed.body.link.task_id,null);
@@ -451,6 +468,8 @@ try{
       stage_id:"unknown"})});
   assert.equal(staleDeal.status,409);
   assert.equal(staleDeal.body.code,"SALES_DEAL_VERSION_CONFLICT");
+  assert.deepEqual(stageAudit(),stageAuditAfterClose,
+    "negative or replayed transitions must not emit another D1 audit");
   assert.deepEqual((await call("/api/sales-deals/"+dealId,a)).body.item,
     closed.body.item,"closed original deal persisted after all negative calls");
   assert.ok((await call("/api/sales-deals",a)).body.items
@@ -598,6 +617,8 @@ try{
   assert.equal((await call(editPath,a,{method:"PATCH",headers:{
     ...headers,"idempotency-key":"sales-empty-edit"},
     body:JSON.stringify({expected_version:2})})).status,422);
+  assert.deepEqual(editAudit(),expectedAudit,
+    "all invalid update requests must leave the actual D1 audit unchanged");
   const cleared=await call(editPath,a,{method:"PATCH",headers:{
     ...headers,"idempotency-key":"signed-edit-deal-clear"},
     body:JSON.stringify({expected_version:2,clear_amount:true})});
@@ -785,6 +806,8 @@ try{
     body:JSON.stringify(evalScope)};
   const ungranted=await call("/api/consents/evaluate",a,evalInit);
   assert.equal(ungranted.status,200,JSON.stringify(ungranted));
+  assert.equal((await call("/api/consents/evaluate",viewer,evalInit)).status,200,
+    "Consent evaluation is a read-only query even when transported via POST");
   assert.equal(ungranted.body.allowed,false);
   assert.equal(ungranted.body.reason,"no_applicable_grant");
   assert.equal(ungranted.body.grant_ingress,"NOT_CONNECTED");
@@ -812,6 +835,12 @@ try{
     body:JSON.stringify({...suppression,party_id:otherPartyId})});
   assert.equal(wrongPartySuppression.status,422);
   assert.equal(wrongPartySuppression.body.code,"CONSENTS_CONTACT_POINT_PARTY_MISMATCH");
+  const viewerSuppress=await call("/api/consents/suppress",viewer,{
+    method:"POST",headers:{...supHeaders,"idempotency-key":"viewer-denied-suppress"},
+    body:JSON.stringify(suppression)});
+  assert.equal(viewerSuppress.status,403,
+    "Consent operator suppression must reject a non-admin in the same tenant");
+  assert.equal(viewerSuppress.body.code,"FORBIDDEN");
   const suppressed=await call("/api/consents/suppress",a,{
     method:"POST",headers:supHeaders,body:JSON.stringify(suppression)});
   assert.equal(suppressed.status,201,JSON.stringify(suppressed));
