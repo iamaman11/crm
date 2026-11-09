@@ -51,6 +51,8 @@ try{
   // no duplicate CI SQL rules, no second datastore.
   run(["d1","execute","crm-rust-party-local","--local",
     "--file","../migrations/0004_original_customer_accounts.sql","--persist-to",data]);
+  run(["d1","execute","crm-rust-party-local","--local",
+    "--file","../migrations/0005_original_contact_points.sql","--persist-to",data]);
   child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
     "--var","CRM_CI_LOCAL_ONLY:yes","--var","CRM_NATIVE_CI_JWKS:"+jwks],
     {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
@@ -194,6 +196,82 @@ try{
       "strict codec roundtrip","D1 durable state","idempotent receipts",
       "optimistic version","tenant isolation","request correlation"],
     published_live:"NOT_TESTED"}));
+  // Original Contact Point lifecycle under real JWT and production migration.
+  assert.equal((await call("/api/contact-points",null)).status,401);
+  assert.deepEqual((await call("/api/contact-points",b)).body.items,[]);
+  const contactPointId="native-contact-point-"+randomUUID();
+  const pointData={id:contactPointId,party_id:id,kind:"email",
+    value:"contact@example.org",preferred:true,
+    valid_from_unix_nanos:null,valid_until_unix_nanos:null};
+  const cpHeaders={"content-type":"application/json",
+    "idempotency-key":"signed-contact-point-create"};
+  const cpNotOwned=await call("/api/contact-points",b,
+    {method:"POST",headers:cpHeaders,body:JSON.stringify(pointData)});
+  assert.equal(cpNotOwned.status,422,"cross-tenant Party reference denied");
+  assert.equal(cpNotOwned.body.code,"CONTACT_POINTS_PARTY_NOT_FOUND");
+  const invalidPoint=await call("/api/contact-points",a,
+    {method:"POST",headers:{...cpHeaders,"idempotency-key":"contact-point-invalid"},
+      body:JSON.stringify({...pointData,value:"not-an-email"})});
+  assert.equal(invalidPoint.status,422,"original domain rejects malformed email");
+  const pointCreate=await call("/api/contact-points",a,
+    {method:"POST",headers:cpHeaders,body:JSON.stringify(pointData)});
+  assert.equal(pointCreate.status,201,JSON.stringify(pointCreate));
+  assert.equal(pointCreate.body.item.party_id,id);
+  assert.equal(pointCreate.body.item.kind,"email");
+  assert.equal(pointCreate.body.item.normalized_value,"contact@example.org");
+  assert.equal(pointCreate.body.item.verified,false,
+    "record creation is not verification or communication consent");
+  assert.equal(pointCreate.body.item.version,1);
+  assert.equal(pointCreate.headers["x-crm-module"],"crm.contact-points");
+  assert.match(pointCreate.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
+  assert.equal((await call("/api/contact-points/"+contactPointId,b)).status,404);
+  assert.equal((await call("/api/contact-points/"+contactPointId,serviceB)).status,404);
+  const pointRead=await call("/api/contact-points/"+contactPointId,a);
+  assert.equal(pointRead.status,200);
+  assert.deepEqual(pointRead.body.item,pointCreate.body.item,
+    "original strict ContactPoint codec must survive D1 roundtrip");
+  const pointReplay=await call("/api/contact-points",a,
+    {method:"POST",headers:cpHeaders,body:JSON.stringify(pointData)});
+  assert.equal(pointReplay.status,200);
+  assert.equal(pointReplay.body.replayed,true);
+  const keyConflict=await call("/api/contact-points",a,
+    {method:"POST",headers:cpHeaders,
+      body:JSON.stringify({...pointData,value:"different@example.org"})});
+  assert.equal(keyConflict.status,409);
+  assert.equal(keyConflict.body.code,"IDEMPOTENCY_CONFLICT");
+  const pointUpdate={expected_version:1,value:"new@example.org",status:"active",
+    preferred:false,valid_from_unix_nanos:null,valid_until_unix_nanos:null};
+  const pointUpdateInit={method:"PATCH",headers:{"content-type":"application/json",
+    "idempotency-key":"signed-contact-point-update"},
+    body:JSON.stringify(pointUpdate)};
+  const changedPoint=await call("/api/contact-points/"+contactPointId,a,pointUpdateInit);
+  assert.equal(changedPoint.status,200,JSON.stringify(changedPoint));
+  assert.equal(changedPoint.body.item.version,2);
+  assert.equal(changedPoint.body.item.normalized_value,"new@example.org");
+  assert.equal(changedPoint.body.item.verified,false);
+  const changedReplay=await call("/api/contact-points/"+contactPointId,a,pointUpdateInit);
+  assert.equal(changedReplay.status,200);
+  assert.equal(changedReplay.body.replayed,true);
+  const pointStale=await call("/api/contact-points/"+contactPointId,a,
+    {...pointUpdateInit,headers:{...pointUpdateInit.headers,
+      "idempotency-key":"signed-contact-point-stale"}});
+  assert.equal(pointStale.status,409);
+  assert.equal(pointStale.body.code,"CONTACT_POINTS_VERSION_CONFLICT");
+  assert.equal((await call("/api/contact-points/"+contactPointId+"/verify",a,
+    {method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({evidence_ref:"user-claims-verified"})})).status,404,
+    "untrusted HTTP evidence must never create verified state");
+  assert.equal((await call("/api/contact-points/"+contactPointId,a)).body.item.verified,false);
+  const pointList=await call("/api/contact-points",a);
+  assert.equal(pointList.status,200);
+  assert.ok(pointList.body.items.some(x=>x.id===contactPointId&&x.version===2));
+  assert.deepEqual((await call("/api/contact-points",b)).body.items,[]);
+  console.log(JSON.stringify({event:"crm.native-original-contact-point-d1",result:"PASS",
+    owner:"crm.contact-points",
+    proven:["signed Access A/B","Party FK","domain email normalization and rejection",
+      "strict codec D1 roundtrip","tenant isolation","idempotency","version",
+      "no self-attested verification","request correlation"],
+    consent:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
   const init={method:"PATCH",headers:{"content-type":"application/json",
     "idempotency-key":"native-signed-update"},
     body:JSON.stringify({expected_version:1,name:"Native Updated"})};
