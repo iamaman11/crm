@@ -425,9 +425,9 @@ jobs:
           pr_head="$(jq -er '.head.sha' <<< "$merged_pr")"
           pr_number="$(jq -er '.number' <<< "$merged_pr")"
           pr_runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/cloudflare-crm-spike.yml/runs?event=pull_request&head_sha=$pr_head&per_page=100")"
-          source_run="$(jq -er --arg sha "$pr_head" \
+          source_run="$(jq -er --arg sha "$pr_head" --arg repo "$GITHUB_REPOSITORY" \
             '[.workflow_runs[] | select(.event == "pull_request" and .head_sha == $sha and
-              .conclusion == "success" and .head_repository.full_name != null)] |
+              .conclusion == "success" and .head_repository.full_name == $repo)] |
               sort_by(.run_started_at) | last | .id' <<< "$pr_runs")"
           echo "PR #$pr_number head=$pr_head; verified successful CI run $source_run"
           gh run download "$source_run" --repo "$GITHUB_REPOSITORY" \
