@@ -36,7 +36,8 @@ try{
     "--file","./migrations/0001_local.sql","--persist-to",data]);
   const sql="CREATE TABLE crm_users (email TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, role TEXT NOT NULL, active INTEGER NOT NULL);"+
     "INSERT INTO crm_users VALUES('native-a@example.test','tenant-a','admin',1);"+
-    "INSERT INTO crm_users VALUES('native-b@example.test','tenant-b','admin',1);";
+    "INSERT INTO crm_users VALUES('native-b@example.test','tenant-b','admin',1);"+
+    "INSERT INTO crm_users VALUES('service:local-test.access','tenant-a','admin',1);";
   run(["d1","execute","crm-rust-party-local","--local",
     "--command",sql,"--persist-to",data]);
   child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
@@ -72,6 +73,28 @@ try{
   assert.match(forbidden.headers["x-request-id"]||"",/^[0-9a-f-]{36}$/i);
   assert.equal(forbidden.headers["x-crm-error-code"],"AUTH_REQUIRED");
   assert.equal((await call("/api/parties",b)).status,200,"signed B accepted");
+  // Cloudflare Access officially signs an EMPTY sub for service tokens.
+  // Signature, iss, audience, temporal constraints and enrolled common_name
+  // MUST remain mandatory; this is not a bypass for anonymous/email JWTs.
+  const service=jwt({sub:"",email:"",common_name:"local-test.access"});
+  assert.equal((await call("/api/parties",service)).status,200,
+    "Access service JWT with empty sub and signed common_name must be accepted");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:""}))).status,401,
+    "empty subject without signed service identity denied");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:"native-a@example.test"}))).status,401,
+    "human email cannot bypass sub requirement");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:"native-a@example.test",
+    common_name:"local-test.access"}))).status,401,
+    "service identity cannot mask invalid human subject");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:"",
+    common_name:"wrong-service.access"}))).status,401,
+    "unenrolled service identity denied");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:"",
+    common_name:"local-test.access",aud:"wrong"}))).status,401,
+    "service JWT still needs application audience");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:"",
+    common_name:"local-test.access",exp:now-1}))).status,401,
+    "service JWT still needs valid expiration");
   const id="native-jwt-"+randomUUID();
   const created=await call("/api/parties",a,{method:"POST",headers:{
     "content-type":"application/json","idempotency-key":"native-signed-create",
@@ -80,6 +103,8 @@ try{
   assert.equal(created.status,201,JSON.stringify(created));
   assert.equal(created.body.item.name,"Original Native Rust");
   assert.equal((await call("/api/parties/"+id,a)).status,200);
+  assert.equal((await call("/api/parties/"+id,service)).status,200,
+    "service JWT sees same tenant A original Rust Party, not tenant B");
   assert.equal((await call("/api/parties/"+id,b)).status,404,"B cannot read A");
   assert.equal((await call("/api/parties/"+id,b,{headers:{
     "x-crm-native-tenant":"tenant-a","x-crm-ci-tenant":"tenant-a"}})).status,404);

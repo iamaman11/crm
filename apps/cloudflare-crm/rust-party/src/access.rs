@@ -97,7 +97,13 @@ fn valid_claims(claims: &Value) -> bool {
         && claims.get("exp").and_then(Value::as_i64).is_some_and(|exp| exp > now)
         && claims.get("nbf").and_then(Value::as_i64).is_none_or(|nbf| nbf <= now)
         && claims.get("iat").and_then(Value::as_i64).is_none_or(|iat| iat <= now + 60)
-        && claims.get("sub").and_then(Value::as_str).is_some_and(|sub| !sub.is_empty())
+        // Cloudflare Access service credentials intentionally use sub == "".
+        // Accept that only when the *signed* identity is a valid service
+        // common_name. User/email identities still require a nonempty sub.
+        && claims.get("sub").and_then(Value::as_str).is_some_and(|sub| {
+            !sub.is_empty()
+                || identity_key(claims).is_some_and(|key| key.starts_with("service:"))
+        })
         && identity_key(claims).is_some()
 }
 
