@@ -92,7 +92,7 @@ async fn account_exists(db:&D1Database,tenant:&str,id:&str)->Result<bool>{
 }
 async fn create(mut req:Request,db:&D1Database,tenant:&str,actor:&str,trace:&str)->Result<Response>{
     let Some(key)=idempotency_key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
-    let input=match req.json::<CreateInput>().await{
+    let input=match serde_json::from_str::<CreateInput>(&req.text().await?){
         Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422),
     };
     let digest=hash("create",&input.id,&input)?;
@@ -133,7 +133,7 @@ async fn create(mut req:Request,db:&D1Database,tenant:&str,actor:&str,trace:&str
 }
 async fn complete(mut req:Request,db:&D1Database,tenant:&str,id:&str,trace:&str)->Result<Response>{
     let Some(key)=idempotency_key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
-    let input=match req.json::<CompleteInput>().await{
+    let input=match serde_json::from_str::<CompleteInput>(&req.text().await?){
         Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422),
     };
     let digest=hash("complete",id,&input)?;
