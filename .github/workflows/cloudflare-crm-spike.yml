@@ -15,6 +15,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 jobs:
   cloudflare-crm-spike:
     runs-on: ubuntu-24.04
@@ -24,30 +26,38 @@ jobs:
         with:
           ref: ${{ github.sha }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: github.event_name == 'pull_request'
         with:
           node-version: '24'
       - name: Install CRM dependencies
+        if: github.event_name == 'pull_request'
         run: npm install --no-audit --no-fund
         working-directory: apps/cloudflare-crm
       - name: Fast syntax check of native E2E before Rust/WASM build
+        if: github.event_name == 'pull_request'
         working-directory: apps/cloudflare-crm
         run: node --check rust-party/test/native.mjs
       - name: Fast feature/schema contract doctor
+        if: github.event_name == 'pull_request'
         run: npm run doctor
         working-directory: apps/cloudflare-crm
       - name: Locate module and error code without network
+        if: github.event_name == 'pull_request'
         working-directory: apps/cloudflare-crm
         run: |
           npm run locate -- deals
           npm run locate -- INVALID_INPUT
           npm run locate -- customer360
       - name: Check native-only ownership and release diagnostic contracts
+        if: github.event_name == 'pull_request'
         run: npm test
         working-directory: apps/cloudflare-crm
       - name: Build React CRM
+        if: github.event_name == 'pull_request'
         run: npm run build
         working-directory: apps/cloudflare-crm
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
+        if: github.event_name == 'pull_request'
         with:
           toolchain: 1.97.1
           targets: wasm32-unknown-unknown
@@ -225,6 +235,7 @@ jobs:
       # Cache only the pinned installer binaries. No target/ or generated build
       # output crosses source revisions; main always builds its exact SHA.
       - name: Cache pinned native Rust tool CLIs
+        if: github.event_name == 'pull_request'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
@@ -232,6 +243,7 @@ jobs:
             ~/.cargo/bin/worker-build
           key: ${{ runner.os }}-crm-rust1971-wasm-bindgen-0.2.130-worker-build-0.8.7-v1
       - name: Install exact native wasm-bindgen CLI from Cargo registry
+        if: github.event_name == 'pull_request'
         # worker-build 0.8.7 officially supports WASM_BINDGEN_BIN. Fetching the
         # pinned CLI from crates.io avoids unstable GitHub Releases binary URLs.
         run: |
@@ -242,6 +254,7 @@ jobs:
           test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.130"
           echo "WASM_BINDGEN_BIN=$(command -v wasm-bindgen)" >> "$GITHUB_ENV"
       - name: Install pinned Binaryen optimizer through npm
+        if: github.event_name == 'pull_request'
         # worker-build 0.8.7 supports WASM_OPT_BIN; use the SAME upstream
         # Binaryen version 132, without relying on GitHub Releases downloads.
         run: |
@@ -251,6 +264,7 @@ jobs:
           "$WASM_OPT" --version | grep '132'
           echo "WASM_OPT_BIN=$WASM_OPT" >> "$GITHUB_ENV"
       - name: Install pinned workers-rs build CLI
+        if: github.event_name == 'pull_request'
         run: |
           if ! command -v worker-build >/dev/null ||
              ! worker-build --version 2>&1 | grep -Fq '0.8.7'; then
@@ -268,11 +282,14 @@ jobs:
       # Only one production-feature WASM build on main; this same binary is sealed
       # and published. PR also runs alternative test features for coverage.
       - name: Build exact native Rust Worker for review or release
+        if: github.event_name == 'pull_request'
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --features native
       - name: Enforce committed native Worker dependency lock
+        if: github.event_name == 'pull_request'
         run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
       - name: Dry-run exact native entrypoint upload with original CRM Wrangler configuration
+        if: github.event_name == 'pull_request'
         working-directory: apps/cloudflare-crm
         shell: bash
         env:
@@ -298,6 +315,7 @@ jobs:
           grep -F '"binding": "DB"' wrangler.jsonc
           grep -F '"binding": "ASSETS"' wrangler.jsonc
       - name: Keep the exact native Rust candidate for the existing main-only protected release
+        if: github.event_name == 'pull_request'
         run: |
           set -euo pipefail
           mkdir -p apps/cloudflare-crm/.release/native-build
@@ -334,11 +352,13 @@ jobs:
           cmp apps/cloudflare-crm/.release/native-build/index.js apps/cloudflare-crm/rust-party/build/index.js
           cmp apps/cloudflare-crm/.release/native-build/index_bg.wasm apps/cloudflare-crm/rust-party/build/index_bg.wasm
       - name: Validate release and E2E scripts
+        if: github.event_name == 'pull_request'
         run: |
           node --check apps/cloudflare-crm/scripts/deploy.mjs
           node --check apps/cloudflare-crm/test/native-runtime.test.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
       - name: Check CRM target
+        if: github.event_name == 'pull_request'
         run: |
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
           grep -F '35fc7ee9-9710-485f-8fb3-f5a398b229b4' apps/cloudflare-crm/wrangler.jsonc
@@ -353,8 +373,8 @@ jobs:
             echo 'FAIL: JS dispatcher must not be published' >&2
             exit 1
           fi
-      - name: Seal compiled Rust and React outputs for this exact checkout
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Seal PR-tested production bundle and checkout tree
+        if: github.event_name == 'pull_request'
         shell: bash
         env:
           CRM_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -366,12 +386,75 @@ jobs:
           test -s rust-party/build/index_bg.wasm
           mkdir -p .release
           printf '%s\n' "$CRM_BUILD_SHA" > .release/source-sha.txt
+          printf '%s\n' "$(git rev-parse HEAD^{tree})" > .release/source-tree.txt
           test -s .release/native-build/index.js
           test -s .release/native-build/index_bg.wasm
           find dist rust-party/build .release/native-build -type f -print0 | LC_ALL=C sort -z |
             xargs -0 sha256sum > .release/compiled-sha256.txt
           sha256sum --check --strict .release/compiled-sha256.txt
           echo "CRM compiled bundle sealed for $CRM_BUILD_SHA"
+      - name: Save tested PR bundle for content-identical main promotion
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: crm-native-pr-bundle-${{ github.event.pull_request.head.sha }}
+          path: |
+            apps/cloudflare-crm/dist/
+            apps/cloudflare-crm/rust-party/build/
+            apps/cloudflare-crm/.release/source-sha.txt
+            apps/cloudflare-crm/.release/source-tree.txt
+            apps/cloudflare-crm/.release/compiled-sha256.txt
+            apps/cloudflare-crm/.release/native-build/
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: true
+      - name: Promote successful PR artifact only when merge source tree is identical
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A squash merge changes SHA but not source tree. Confirm exactly
+          # one merged same-repository PR and successful PR CI.
+          merged_pr="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" |
+            jq -cer --arg sha "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" \
+              '[.[] | select(.merged_at != null and .merge_commit_sha == $sha and
+                .base.ref == "main" and .head.repo.full_name == $repo)] |
+                if length == 1 then .[0] else empty end')"
+          pr_head="$(jq -er '.head.sha' <<< "$merged_pr")"
+          pr_number="$(jq -er '.number' <<< "$merged_pr")"
+          pr_runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?event=pull_request&head_sha=$pr_head&per_page=100")"
+          source_run="$(jq -er --arg sha "$pr_head" --arg repo "$GITHUB_REPOSITORY" \
+            '[.workflow_runs[] | select(.name == "Cloudflare CRM Spike CI" and
+              .event == "pull_request" and .head_sha == $sha and
+              .conclusion == "success" and .head_repository.full_name == $repo)] |
+              sort_by(.run_started_at) | last | .id' <<< "$pr_runs")"
+          echo "PR #$pr_number head=$pr_head; verified successful CI run $source_run"
+          gh run download "$source_run" --repo "$GITHUB_REPOSITORY" \
+            --name "crm-native-pr-bundle-$pr_head" --dir apps/cloudflare-crm
+          cd apps/cloudflare-crm
+          test "$(cat .release/source-sha.txt)" = "$pr_head"
+          main_tree="$(git rev-parse HEAD^{tree})"
+          test "$(cat .release/source-tree.txt)" = "$main_tree" || {
+            echo 'FAIL: tested PR source tree differs from merged main' >&2
+            exit 1
+          }
+          sha256sum --check --strict .release/compiled-sha256.txt
+          test -s dist/index.html
+          test -s rust-party/build/index.js
+          test -s rust-party/build/index_bg.wasm
+          cmp rust-party/build/index.js .release/native-build/index.js
+          cmp rust-party/build/index_bg.wasm .release/native-build/index_bg.wasm
+          # Wrangler binds published GIT_SHA from the new main commit. This
+          # changes ONLY metadata, never the already-tested compiled bytes.
+          printf '%s\n' "$GITHUB_SHA" > .release/source-sha.txt
+          jq -n --arg main "$GITHUB_SHA" --arg pr "$pr_head" --arg tree "$main_tree" \
+            --argjson pr_number "$pr_number" --argjson run_id "$source_run" \
+            '{main_sha:$main,pr_head_sha:$pr,pr_number:$pr_number,
+              source_tree:$tree,pr_ci_run:$run_id,result:"TREE_IDENTICAL_BUNDLE_VERIFIED"}' \
+            > .release/promotion.json
+          echo "Exact-tree tested PR artifact promoted to main SHA $GITHUB_SHA without compilation"
       - name: Preserve exact compiled bundle for the protected deployment
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -381,6 +464,8 @@ jobs:
             apps/cloudflare-crm/dist/
             apps/cloudflare-crm/rust-party/build/
             apps/cloudflare-crm/.release/source-sha.txt
+            apps/cloudflare-crm/.release/source-tree.txt
+            apps/cloudflare-crm/.release/promotion.json
             apps/cloudflare-crm/.release/compiled-sha256.txt
             apps/cloudflare-crm/.release/native-build/
           if-no-files-found: error
@@ -420,6 +505,10 @@ jobs:
             --name "crm-native-bundle-$GITHUB_SHA" --dir apps/cloudflare-crm
           cd apps/cloudflare-crm
           test "$(cat .release/source-sha.txt)" = "$GITHUB_SHA"
+          test "$(cat .release/source-tree.txt)" = "$(git rev-parse HEAD^{tree})"
+          jq -e --arg sha "$GITHUB_SHA" --arg tree "$(git rev-parse HEAD^{tree})" \
+            '.result == "TREE_IDENTICAL_BUNDLE_VERIFIED" and .main_sha == $sha and .source_tree == $tree' \
+            .release/promotion.json >/dev/null
           sha256sum --check --strict .release/compiled-sha256.txt
           test -s dist/index.html
           test -s rust-party/build/index.js
