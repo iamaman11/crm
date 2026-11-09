@@ -47,6 +47,10 @@ try{
     "INSERT INTO crm_users VALUES('service:ci-native-b-0001.access','tenant-b','admin',1);";
   run(["d1","execute","crm-rust-party-local","--local",
     "--command",sql,"--persist-to",data]);
+  // Exactly the production original Account migration against isolated D1;
+  // no duplicate CI SQL rules, no second datastore.
+  run(["d1","execute","crm-rust-party-local","--local",
+    "--file","../migrations/0004_original_customer_accounts.sql","--persist-to",data]);
   child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
     "--var","CRM_CI_LOCAL_ONLY:yes","--var","CRM_NATIVE_CI_JWKS:"+jwks],
     {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
@@ -131,6 +135,65 @@ try{
 
   assert.equal((await call("/api/parties/"+id,b,{headers:{
     "x-crm-native-tenant":"tenant-a","x-crm-ci-tenant":"tenant-a"}})).status,404);
+
+  // Original Account owner real D1 lifecycle. Separate from legacy pilot customer.
+  assert.equal((await call("/api/accounts",null)).status,401);
+  assert.deepEqual((await call("/api/accounts",b)).body.items,[]);
+  const accountId="native-account-"+randomUUID();
+  const accountData={id:accountId,name:"  Original    Account  ",party_id:id};
+  const accountHeaders={"content-type":"application/json","idempotency-key":"signed-account-create"};
+  const missing=await call("/api/accounts",b,{method:"POST",headers:accountHeaders,
+    body:JSON.stringify(accountData)});
+  assert.equal(missing.status,422,"cross-tenant Party reference must fail");
+  assert.equal(missing.body.code,"CUSTOMER_ACCOUNTS_PARTY_NOT_FOUND");
+  const accountCreate=await call("/api/accounts",a,{method:"POST",headers:{
+    ...accountHeaders,"x-crm-native-tenant":"tenant-b"},
+    body:JSON.stringify(accountData)});
+  assert.equal(accountCreate.status,201,JSON.stringify(accountCreate));
+  assert.equal(accountCreate.body.item.name,"Original Account");
+  assert.equal(accountCreate.body.item.version,1);
+  assert.equal(accountCreate.body.item.parties[0].id,id);
+  assert.equal(accountCreate.headers["x-crm-module"],"crm.customer-accounts");
+  assert.match(accountCreate.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
+  assert.equal((await call("/api/accounts/"+accountId,b)).status,404);
+  assert.equal((await call("/api/accounts/"+accountId,serviceB)).status,404);
+  const accountRead=await call("/api/accounts/"+accountId,a);
+  assert.equal(accountRead.status,200);
+  assert.deepEqual(accountRead.body.item,accountCreate.body.item,
+    "original Account encode -> D1 -> decode preserves state");
+  const accountReplay=await call("/api/accounts",a,{method:"POST",headers:accountHeaders,
+    body:JSON.stringify(accountData)});
+  assert.equal(accountReplay.status,200);
+  assert.equal(accountReplay.body.replayed,true,"Account create replay cannot duplicate");
+  const reused=await call("/api/accounts",a,{method:"POST",headers:accountHeaders,
+    body:JSON.stringify({...accountData,name:"Other"})});
+  assert.equal(reused.status,409);
+  assert.equal(reused.body.code,"IDEMPOTENCY_CONFLICT");
+  const accountUpdate={name:"  Original Updated Account ",status:"inactive",expected_version:1};
+  const accountUpdateInit={method:"PATCH",headers:{"content-type":"application/json",
+    "idempotency-key":"signed-account-update"},body:JSON.stringify(accountUpdate)};
+  const savedAccount=await call("/api/accounts/"+accountId,a,accountUpdateInit);
+  assert.equal(savedAccount.status,200,JSON.stringify(savedAccount));
+  assert.equal(savedAccount.body.item.version,2);
+  assert.equal(savedAccount.body.item.status,"inactive");
+  assert.equal(savedAccount.body.item.name,"Original Updated Account");
+  const savedReplay=await call("/api/accounts/"+accountId,a,accountUpdateInit);
+  assert.equal(savedReplay.status,200);
+  assert.equal(savedReplay.body.replayed,true);
+  const staleAccount=await call("/api/accounts/"+accountId,a,{...accountUpdateInit,
+    headers:{...accountUpdateInit.headers,"idempotency-key":"stale-account-version"}});
+  assert.equal(staleAccount.status,409);
+  assert.equal(staleAccount.body.code,"CUSTOMER_ACCOUNTS_VERSION_CONFLICT");
+  const accountList=await call("/api/accounts",a);
+  assert.equal(accountList.status,200);
+  assert.ok(accountList.body.items.some(x=>x.id===accountId&&x.version===2));
+  assert.deepEqual((await call("/api/accounts",b)).body.items,[]);
+  console.log(JSON.stringify({event:"crm.native-original-account-d1",result:"PASS",
+    owner:"crm.customer-accounts",
+    proven:["signed Access A/B","Party foreign key","original domain create/update",
+      "strict codec roundtrip","D1 durable state","idempotent receipts",
+      "optimistic version","tenant isolation","request correlation"],
+    published_live:"NOT_TESTED"}));
   const init={method:"PATCH",headers:{"content-type":"application/json",
     "idempotency-key":"native-signed-update"},
     body:JSON.stringify({expected_version:1,name:"Native Updated"})};
