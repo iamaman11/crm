@@ -16,6 +16,8 @@ mod access;
 #[cfg(feature = "native")]
 mod accounts;
 #[cfg(feature = "native")]
+mod contact_points;
+#[cfg(feature = "native")]
 mod pilot;
 #[cfg(feature = "native-ci")]
 mod original_domain_probe;
@@ -211,15 +213,16 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     // A truthful live, read-only diagnostic: this probes the active Rust
     // runtime and current D1 tables. CI/browser/Logs proof remains a separate
     // protected release artifact, never an invented live health result.
-    const EXPECTED: [&str; 11] = [
+    const EXPECTED: [&str; 13] = [
         "crm_tenants", "crm_users", "crm_customers", "crm_contacts",
         "crm_deals", "crm_tasks", "crm_audit", "crm_party_records", "crm_party_receipts",
         "crm_account_records", "crm_account_receipts",
+        "crm_contact_point_records", "crm_contact_point_receipts",
     ];
     let db = env.d1("DB")?;
     let bindings: Vec<JsValue> = EXPECTED.iter().map(|name| JsValue::from_str(name)).collect();
     let row = bind(&db,
-        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?)",
+        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?,?,?)",
         &bindings)?.first::<SchemaCount>(None).await?;
     let present = row.map_or(0, |value| value.present);
     let schema_ok = present == EXPECTED.len() as i64;
@@ -235,6 +238,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
             ("tasks", "crm_tasks", "tenant_id"),
             ("parties", "crm_party_records", "tenant"),
             ("accounts", "crm_account_records", "tenant"),
+            ("contact-points", "crm_contact_point_records", "tenant"),
         ] {
             // Table and column names are compiled-in constants, not user input.
             let query = format!("SELECT COUNT(*) AS present FROM {table} WHERE {column} = ?");
@@ -286,6 +290,12 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "tenant_audit_rows_with_id": audit_trace }},
         "modules": {
             "crm.parties": {"read": read_checks.get("parties"), "business_owner": "original-crm-parties"},
+            "crm.contact-points": {"read":read_checks.get("contact-points"),
+                "business_owner":"original-crm-contact-points",
+                "api":"native-workers-rs", "ui":"NOT_CONNECTED",
+                "verification":"TRUSTED_EVIDENCE_NOT_CONNECTED",
+                "consent":"SEPARATE_DOMAIN_NOT_CONNECTED",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.customer-accounts": {"read":read_checks.get("accounts"),
                 "business_owner":"original-crm-customer-accounts",
                 "api":"native-workers-rs", "ui":"NOT_CONNECTED",
@@ -325,6 +335,10 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
             "d1_owner_persistence": "NOT_TESTED",
             "remaining_owners": "NOT_TESTED"
         }), if code == 0 { 200 } else { 503 });
+    }
+    #[cfg(feature = "native")]
+    if path == "/api/contact-points" || path.starts_with("/api/contact-points/") {
+        return contact_points::route(req, db, tenant, &request_id).await;
     }
     #[cfg(feature = "native")]
     if path == "/api/accounts" || path.starts_with("/api/accounts/") {
@@ -387,6 +401,10 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
         let operation = match (path.as_str(), method.clone()) {
+            ("/api/contact-points", Method::Get) => "contact-points.list",
+            ("/api/contact-points", Method::Post) => "contact-points.create",
+            (p, Method::Get) if p.starts_with("/api/contact-points/") => "contact-points.read",
+            (p, Method::Patch) if p.starts_with("/api/contact-points/") => "contact-points.update",
             ("/api/accounts", Method::Get) => "accounts.list",
             ("/api/accounts", Method::Post) => "accounts.create",
             (p, Method::Get) if p.starts_with("/api/accounts/") => "accounts.read",
@@ -434,6 +452,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         let module = if path == "/api/doctor" { "crm.diagnostics" }
             else if path.starts_with("/api/parties") { "crm.parties" }
             else if path.starts_with("/api/accounts") { "crm.customer-accounts" }
+            else if path.starts_with("/api/contact-points") { "crm.contact-points" }
             else if path.starts_with("/api/customer360") { "crm.customer360" }
             else if path.starts_with("/api/customers") { "crm.customers" }
             else if path.starts_with("/api/contacts") { "crm.contacts" }
