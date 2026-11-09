@@ -56,6 +56,15 @@ test("single release remains protected by D1, logs and browser evidence",()=>{
   assert.match(e2e,/nativeResponses/);
   assert.match(e2e,/native-functional-cycle\.json/);
 });
+test("protected release tolerates eventually consistent Cloudflare deployment readback",()=>{
+  const deploy=read("scripts/deploy.mjs");
+  assert.match(deploy,/async function waitForDeployment\(/);
+  assert.match(deploy,/const newVersion=await waitForDeployment\(null,sha,"deploy"\)/);
+  assert.match(deploy,/await waitForDeployment\(p\.previous_version,p\.previous_sha,"rollback"\)/);
+  assert.doesNotMatch(deploy,/if\(await version\(\)===p\.previous_version\)/,
+    "stale deployment readback must never skip rollback");
+  assert.match(deploy,/CRM deployment readback mismatch stage=/);
+});
 test("live doctor read-only and never invents CI acceptance",()=>{
   const rust=read("rust-party/src/lib.rs");
   assert.match(rust,/async fn native_doctor\(/);
