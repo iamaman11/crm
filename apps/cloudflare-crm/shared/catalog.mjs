@@ -38,7 +38,7 @@ export const implementationOwners={
 };
 const nativeTests="rust-party/test/native.mjs",live="e2e/live.mjs",ui="web/src/main.jsx";
 export const ownerFiles={
-  "rust-party":{ui:"web/src/Parties.jsx",api:"rust-party/src/lib.rs",
+  "rust-party":{ui:"web/src/Parties.jsx",api:"rust-party/src/parties.rs",
     validation:"../../modules/crm-parties/src/lib.rs",
     migration:"migrations/0002_rust_party.sql",tests:nativeTests,browser:live},
   "original-accounts":{ui,api:"rust-party/src/accounts.rs",
