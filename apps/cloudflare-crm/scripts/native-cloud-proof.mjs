@@ -189,6 +189,14 @@ async function test(){
     assert.notEqual(anon.status,200,"real Access must reject anonymous");
     native(await http("/api/parties",hA),200);
     native(await http("/api/parties",hB),200);
+    const diagnostic=await http("/api/doctor",hA);
+    native(diagnostic,200,"crm.diagnostics");
+    assert.equal(diagnostic.json?.runtime,"workers-rs");
+    assert.equal(diagnostic.json?.source,sha);
+    assert.equal(diagnostic.json?.worker_version,version);
+    assert.equal(diagnostic.json?.access?.status,"PASS");
+    assert.equal(diagnostic.json?.database?.status,"PASS");
+    report.native_doctor="PASS";
     report.real_access="PASS";
     const browser=await chromium.launch({headless:true});
     let id=null;const marker="CloudParty-"+randomUUID().slice(0,12);
