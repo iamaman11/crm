@@ -258,6 +258,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "apps/cloudflare-crm/rust-party/src/lib.rs",
             "apps/cloudflare-crm/rust-party/src/original_domain_probe.rs",
             "apps/cloudflare-crm/rust-party/src/accounts.rs",
+            "apps/cloudflare-crm/rust-party/src/account_overview.rs",
             "apps/cloudflare-crm/migrations/0004_original_customer_accounts.sql",
             "apps/cloudflare-crm/rust-party/src/contact_points.rs",
             "apps/cloudflare-crm/migrations/0005_original_contact_points.sql",
