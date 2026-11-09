@@ -93,6 +93,18 @@ if(requested) {
     read(originalAccountSource.tests).includes("crm.native-original-account-d1");
   checks.push({check:"original-account-backend-source",result:originalAccountConnected?"PASS":"FAIL",
     ui:"NOT_CONNECTED",runtime_proof:"EXTERNAL_CI_REQUIRED"});
+  const originalContactSource=sourceFor("contact-points");
+  const originalContactConnected=backendModels["contact-points"].ui==="NOT_CONNECTED" &&
+    backendModels["contact-points"].verification==="TRUSTED_EVIDENCE_NOT_CONNECTED" &&
+    migration.includes("CREATE TABLE IF NOT EXISTS crm_contact_point_records") &&
+    read(originalContactSource.api).includes("ContactPoint::create") &&
+    read(originalContactSource.api).includes("decode_contact_point_state") &&
+    read(originalContactSource.api).includes("untrusted HTTP evidence") &&
+    read(originalContactSource.tests).includes("crm.native-original-contact-point-d1");
+  checks.push({check:"original-contact-point-backend-source",
+    result:originalContactConnected?"PASS":"FAIL",ui:"NOT_CONNECTED",
+    verification:"TRUSTED_EVIDENCE_NOT_CONNECTED",consent:"NOT_CONNECTED",
+    runtime_proof:"EXTERNAL_CI_REQUIRED"});
   const validCatalog=Object.keys(modules).every(name => {
     const module=modules[name], fieldKeys=module.fields.map(([key])=>key);
     return /^[a-z][a-z0-9_]*$/.test(module.table) && fieldKeys.length>0 &&
