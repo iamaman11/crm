@@ -214,10 +214,23 @@ try {
   await page.getByText("Загрузка…", { exact: true })
     .waitFor({ state: "hidden", timeout: 12000 });
   await captureUi("01-home", "Open deployed CRM desktop home after data load");
+  // The same published UI must handle cancel, invalid input and refresh,
+  // not only happy-path creation.
+  await page.getByRole("button", {name:"+ Добавить клиента"}).click();
+  await page.getByRole("button", {name:"Сохранить",exact:true}).click();
+  assert.equal(await page.getByLabel("Имя / название",{exact:true}).evaluate(
+    input=>input.validity.valueMissing),true,"required name cannot submit");
+  await page.getByRole("button", {name:"Отмена"}).click();
+  await page.locator(".shade").waitFor({state:"hidden"});
+  await page.getByRole("button", {name:"Обновить",exact:true}).click();
+  await page.getByRole("status").getByText("Обновлено").waitFor();
+  evidence.api.push({module:"ui",action:"empty-form-validation-cancel-global-refresh",result:"PASS"});
   // Real browser proof that the original Rust Party runs in this same CRM
   // Worker behind the same Cloudflare Access policy and persists in D1.
   const partyName = marker+" Native Rust";
   await tab("Лица и организации").click();
+  await page.getByRole("button",{name:"+ Добавить лицо / организацию"}).click();
+  await page.getByRole("button",{name:"Отмена"}).click();
   await page.getByRole("button",{name:"+ Добавить лицо / организацию"}).click();
   await page.getByLabel("Имя / название",{exact:true}).fill(partyName);
   await page.getByRole("button",{name:"Сохранить"}).click();
@@ -226,6 +239,10 @@ try {
   await tab("Лица и организации").click();
   const partyRow=page.getByRole("row").filter({hasText:partyName});
   await partyRow.waitFor({timeout:12000});
+  await partyRow.getByRole("button",{name:"Изменить"}).click();
+  await page.getByLabel("Имя / название",{exact:true}).fill("Cancelled Party Change");
+  await page.getByRole("button",{name:"Отмена"}).click();
+  await partyRow.getByText(partyName,{exact:true}).waitFor();
   await partyRow.getByRole("button",{name:"Изменить"}).click();
   await page.getByLabel("Имя / название",{exact:true}).fill(partyName+" Updated");
   await page.getByRole("button",{name:"Сохранить"}).click();
@@ -253,6 +270,15 @@ try {
   await checkNativePartyWorkspaces();
   const customer = marker + " Компания", contact = marker + " Контакт", deal = marker + " Сделка", task = marker + " Задача";
   await create("Клиенты", "клиента", { "Имя / название": customer, "Тип": "organization" }, customer);
+  const cancelRow=await rowFor(customer);
+  await cancelRow.getByRole("button",{name:"Изменить"}).click();
+  await page.getByLabel("Имя / название",{exact:true}).fill(marker+" Cancelled");
+  await page.getByRole("button",{name:"Отмена"}).click();
+  await cancelRow.getByText(customer,{exact:true}).waitFor();
+  page.once("dialog", dialog=>dialog.dismiss());
+  await cancelRow.getByRole("button",{name:"Удалить"}).click();
+  await cancelRow.getByText(customer,{exact:true}).waitFor();
+  evidence.api.push({module:"customers",action:"cancel-edit-and-dismiss-delete",result:"PASS"});
   await page.reload();
   await check(customer);
   await verifyUiWriteInBackend("customers", customer);
@@ -287,6 +313,17 @@ try {
   for(const [section,title] of [["Контакты клиента",contact],["Сделки клиента",deal],["Задачи клиента",task]])
     await page.getByRole("region", { name: section }).getByText(title, { exact: true }).waitFor();
   await captureUi("07-customer360", "Open composed customer card after UI writes");
+  // Trigger a genuine browser transport failure only for the requested card;
+  // restore the normal network before exercising the Retry button.
+  const broken=route=>route.abort("failed");
+  await page.route("**/api/customer360/**",broken);
+  await page.getByRole("button",{name:"Обновить карточку"}).click();
+  await page.getByRole("button",{name:"Повторить"}).waitFor();
+  await captureUi("11-customer360-retry", "Network error and native Retry action");
+  await page.unroute("**/api/customer360/**",broken);
+  await page.getByRole("button",{name:"Повторить"}).click();
+  await page.getByRole("heading",{name:customer}).waitFor();
+  evidence.api.push({module:"customer360",action:"failed-refresh-then-retry",result:"PASS"});
   assert.equal(await page.getByText("Просрочено",{exact:true}).locator("..").locator("strong").textContent(),"1");
   await page.getByRole("button", { name: "Обновить карточку" }).click();
   await page.getByRole("heading", { name: customer }).waitFor();

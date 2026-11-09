@@ -14,8 +14,11 @@ export async function unifiedFetch(request, env, ctx, native = rustParty) {
   const headers = new Headers(request.headers);
   headers.delete("x-crm-ci-tenant");
   headers.delete("x-crm-native-tenant");
+  headers.delete("x-crm-internal-request-id");
   let tenant;
   const requestId = crypto.randomUUID();
+  // Only this trusted entrypoint may establish the Rust-to-D1 audit id.
+  headers.set("x-crm-internal-request-id", requestId);
 
   // Explicit loopback-only test build. This flag is NEVER present in crm-dev.
   if (env.CRM_CI_LOCAL_ONLY === "yes" &&

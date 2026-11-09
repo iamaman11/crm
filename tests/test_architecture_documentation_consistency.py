@@ -255,6 +255,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "apps/cloudflare-crm/README.md",
             "apps/cloudflare-crm/AGENTS.md",
             "apps/cloudflare-crm/migrations/0002_rust_party.sql",
+            "apps/cloudflare-crm/migrations/0003_party_request_trace.sql",
             "apps/cloudflare-crm/web/src/Parties.jsx",
             "apps/cloudflare-crm/worker/unified.mjs",
             "apps/cloudflare-crm/rust-party/wrangler.unified.jsonc",

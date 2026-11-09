@@ -87,14 +87,35 @@ async function http(endpoint,headers={},method="GET",body){
   let json;try{json=await r.json()}catch{json=null}
   return {status:r.status,headers:Object.fromEntries(r.headers),json};
 }
+// Cloudflare Workers Logs: query the existing Observability dataset by
+// the exact response request_id, not by a guessed Cloudflare ray id.
+async function assertObservedRequest(id,operation,version){
+  const start=Date.now();
+  for(let attempt=0;attempt<12;attempt++){
+    const result=await cf("/workers/observability/telemetry/query","POST",{
+      queryId:"crm-338-native-click-trace",view:"events",
+      timeframe:{from:start-10*60*1000,to:Date.now()+1000},limit:20,
+      parameters:{needle:{value:id},
+        filters:[{key:"$workers.scriptName",operation:"eq",type:"string",value:script}]}
+    });
+    const found=(result.events?.events||[]).some(entry=>
+      entry.source?.event==="crm.native.request"&&entry.source?.request_id===id&&
+      entry.source?.operation===operation&&entry.source?.status===
+        (operation==="parties.create"?201:200)&&
+      entry.$workers?.scriptVersion?.id===version);
+    if(found)return;
+    await new Promise(done=>setTimeout(done,2500));
+  }
+  fail("Cloudflare Logs missing exact native request trace "+operation);
+}
 const override=(headers,version)=>({
   ...headers,"Cloudflare-Workers-Version-Overrides":script+'="'+version+'"'
 });
-function native(r,status){
+function native(r,status,module="crm.parties"){
   assert.equal(r.status,status,JSON.stringify({expected:status,actual:r.status,body:r.json}));
   assert.equal(r.headers["x-crm-runtime"],"native-workers-rs","override didn't select native");
   assert.equal(r.headers["x-crm-source-sha"],sha,"wrong native version");
-  assert.equal(r.headers["x-crm-module"],"crm.parties");
+  assert.equal(r.headers["x-crm-module"],module);
   assert.match(r.headers["x-request-id"]||"",/^[0-9a-f-]{36}$/i);
 }
 async function ordinary(oldVersion){
@@ -189,6 +210,14 @@ async function test(){
     assert.notEqual(anon.status,200,"real Access must reject anonymous");
     native(await http("/api/parties",hA),200);
     native(await http("/api/parties",hB),200);
+    const diagnostic=await http("/api/doctor",hA);
+    native(diagnostic,200,"crm.diagnostics");
+    assert.equal(diagnostic.json?.runtime,"workers-rs");
+    assert.equal(diagnostic.json?.source,sha);
+    assert.equal(diagnostic.json?.worker_version,version);
+    assert.equal(diagnostic.json?.access?.status,"PASS");
+    assert.equal(diagnostic.json?.database?.status,"PASS");
+    report.native_doctor="PASS";
     report.real_access="PASS";
     const browser=await chromium.launch({headless:true});
     let id=null;const marker="CloudParty-"+randomUUID().slice(0,12);
@@ -204,7 +233,10 @@ async function test(){
       await parties.waitFor();
       await parties.getByRole("button",{name:/Добавить лицо/}).click();
       await page.getByLabel("Имя / название").fill(marker);
+      const creation=page.waitForResponse(r=>new URL(r.url()).pathname==="/api/parties"&&r.request().method()==="POST");
       await page.getByRole("button",{name:"Сохранить",exact:true}).click();
+      report.create_request_id=(await creation).headers()["x-request-id"];
+      assert.match(report.create_request_id||"",/^[0-9a-f-]{36}$/i);
       await parties.getByRole("row").filter({hasText:marker}).waitFor();
       const list=await http("/api/parties",hA);native(list,200);
       id=list.json?.items?.find(x=>x.name===marker)?.id;
@@ -213,7 +245,10 @@ async function test(){
       await parties.getByRole("row").filter({hasText:marker})
         .getByRole("button",{name:"Изменить"}).click();
       await page.getByLabel("Имя / название").fill(marker+"-v2");
+      const updating=page.waitForResponse(r=>r.url().includes("/api/parties/"+id)&&r.request().method()==="PATCH");
       await page.getByRole("button",{name:"Сохранить",exact:true}).click();
+      report.update_request_id=(await updating).headers()["x-request-id"];
+      assert.match(report.update_request_id||"",/^[0-9a-f-]{36}$/i);
       await parties.getByRole("row").filter({hasText:marker+"-v2"}).waitFor();
       await page.reload({waitUntil:"domcontentloaded"});
       await nav.getByRole("button",{name:/Лица и организации/}).click();
@@ -229,12 +264,20 @@ async function test(){
     } finally{await browser.close()}
     const result=await cf("/d1/database/"+db+"/query","POST",{
       sql:"SELECT (SELECT version FROM crm_party_records WHERE id=?) AS version,"+
-        "(SELECT COUNT(*) FROM crm_audit WHERE subject_id=? AND action LIKE 'parties.%') AS audits",
-      params:[id,id]});
+        "(SELECT COUNT(*) FROM crm_audit WHERE subject_id=? AND action LIKE 'parties.%') AS audits,"+
+        "(SELECT COUNT(*) FROM crm_audit WHERE subject_id=? AND action='parties.create' AND request_id=?) AS create_trace,"+
+        "(SELECT COUNT(*) FROM crm_audit WHERE subject_id=? AND action='parties.update' AND request_id=?) AS update_trace",
+      params:[id,id,id,report.create_request_id,id,report.update_request_id]});
     const row=result?.[0]?.results?.[0];
     assert.equal(row?.version,2);
     assert.equal(row?.audits,2);
+    assert.equal(row?.create_trace,1,"React create request ID must equal D1 audit request ID");
+    assert.equal(row?.update_trace,1,"React edit request ID must equal D1 audit request ID");
+    report.audit_request_correlation="PASS";
     report.real_cloudflare_native_d1="PASS";
+    await assertObservedRequest(report.create_request_id,"parties.create",version);
+    await assertObservedRequest(report.update_request_id,"parties.update",version);
+    report.cloudflare_logs_correlation="PASS";
     report.d1_audits=row.audits;
     report.result="PASS";
     log("crm.native-cloud.e2e",{result:"PASS",sha,old_version:oldVersion,

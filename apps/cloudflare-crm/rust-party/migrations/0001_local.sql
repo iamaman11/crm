@@ -3,6 +3,7 @@ CREATE TABLE crm_party_records(
   tenant TEXT NOT NULL, id TEXT NOT NULL, state TEXT NOT NULL,
   version INTEGER NOT NULL CHECK(version > 0),
   idem_key TEXT NOT NULL, idem_digest TEXT NOT NULL,
+  request_id TEXT,
   PRIMARY KEY(tenant,id)
 );
 CREATE TABLE crm_party_receipts(
