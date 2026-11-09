@@ -27,13 +27,13 @@ export default function IdentityResolution({parties,load,loading}){
     <form onSubmit={compare}>
       <div className="field"><label htmlFor="identity-first">Первая запись</label>
         <select id="identity-first" required value={first}
-          onChange={e=>{setFirst(e.target.value);setComparison(null);}}>
+          onChange={e=>{setFirst(e.target.value);setComparison(null);setError("");}}>
           <option value="">Выберите запись</option>
           {parties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select></div>
       <div className="field"><label htmlFor="identity-second">Вторая запись</label>
         <select id="identity-second" required value={second}
-          onChange={e=>{setSecond(e.target.value);setComparison(null);}}>
+          onChange={e=>{setSecond(e.target.value);setComparison(null);setError("");}}>
           <option value="">Выберите запись</option>
           {parties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select></div>
@@ -49,10 +49,10 @@ export default function IdentityResolution({parties,load,loading}){
         <th>Поле</th><th>Первая запись</th><th>Вторая запись</th>
       </tr></thead><tbody>
         {[
-          ["Имя",comparison.left.name,comparison.right.name],
-          ["Тип",comparison.left.kind,comparison.right.kind],
-          ["Версия",comparison.left.version,comparison.right.version],
-          ["ID",comparison.left.id,comparison.right.id]
+          ["Имя",comparison.first.name,comparison.second.name],
+          ["Тип",comparison.first.kind,comparison.second.kind],
+          ["Версия",comparison.first.version,comparison.second.version],
+          ["ID",comparison.first.id,comparison.second.id]
         ].map(([name,a,b])=><tr key={name}><th>{name}</th><td>{a}</td><td>{b}</td></tr>)}
       </tbody></table></div>
     </div>}

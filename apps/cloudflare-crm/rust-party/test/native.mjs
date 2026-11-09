@@ -734,8 +734,18 @@ try{
   assert.equal(compared.body.read_only,true);
   assert.equal(compared.body.candidate_cases,"NOT_CONNECTED");
   assert.equal(compared.body.match_evidence,"NOT_ASSESSED");
-  assert.deepEqual([compared.body.left.id,compared.body.right.id].sort(),
-    [id,otherPartyId].sort(),"original owner returns canonical Party pair");
+  assert.equal(compared.body.first.id,id,"first result follows first selection");
+  assert.equal(compared.body.second.id,otherPartyId,
+    "second result follows second selection");
+  assert.deepEqual([compared.body.canonical_pair.left_id,
+    compared.body.canonical_pair.right_id].sort(),[id,otherPartyId].sort(),
+    "original Rust domain establishes the canonical pair");
+  const reverse=await call("/api/identity-resolution/compare/"+otherPartyId+"/"+id,a);
+  assert.equal(reverse.status,200);
+  assert.equal(reverse.body.first.id,otherPartyId,
+    "swapping the selected order swaps the displayed rows");
+  assert.equal(reverse.body.second.id,id);
+  assert.deepEqual(reverse.body.canonical_pair,compared.body.canonical_pair);
   assert.equal((await call(comparePath,viewer)).status,200,
     "verified viewer may compare two records without mutation");
   assert.equal((await call(comparePath,b)).status,404,

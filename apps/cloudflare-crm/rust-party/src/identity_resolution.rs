@@ -42,10 +42,21 @@ pub(super) async fn route(req: Request, db: D1Database, tenant: &str) -> Result<
     let Some(right) = parties::stored(&db, tenant, pair.right().as_str()).await? else {
         return error("NOT_FOUND", 404);
     };
+    // Canonical storage/validation and caller selection order are distinct:
+    // do not display the lower Party ID as "first" when the user selected it second.
+    let (first, second) = if left_id == pair.left().as_str() {
+        (parties::view(&left), parties::view(&right))
+    } else {
+        (parties::view(&right), parties::view(&left))
+    };
     response(
         json!({
-            "left": parties::view(&left),
-            "right": parties::view(&right),
+            "first": first,
+            "second": second,
+            "canonical_pair": {
+                "left_id": pair.left().as_str(),
+                "right_id": pair.right().as_str()
+            },
             "source": "original_crm_parties_d1",
             "candidate_cases": "NOT_CONNECTED",
             "match_evidence": "NOT_ASSESSED",

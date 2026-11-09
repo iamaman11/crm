@@ -29,6 +29,7 @@ function operation(path,method){
   if(path.endsWith("/advance"))action="advance";
   if(path.endsWith("/complete"))action="complete";
   if(path.endsWith("/suppress"))action="suppress";
+  if(path.startsWith("/api/identity-resolution/compare/"))action="compare";
   if(path.endsWith("/evaluate"))action="evaluate";
   return owner+"."+action;
 }
@@ -143,8 +144,10 @@ try{
   const comparison=await compared.json();
   assert.equal(comparison.read_only,true);
   assert.equal(comparison.candidate_cases,"NOT_CONNECTED");
-  assert.deepEqual([comparison.left.id,comparison.right.id].sort(),
-    [party.id,relatedParty.id].sort());
+  assert.equal(comparison.first.id,party.id,"first UI-selected Party");
+  assert.equal(comparison.second.id,relatedParty.id,"second UI-selected Party");
+  assert.deepEqual([comparison.canonical_pair.left_id,
+    comparison.canonical_pair.right_id].sort(),[party.id,relatedParty.id].sort());
   await page.getByLabel("Вторая запись").selectOption(party.id);
   await button("Сравнить").click();
   await page.getByRole("alert").getByText(/IDENTITY_RESOLUTION_SELF_PAIR_INVALID/).waitFor();
