@@ -215,8 +215,10 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
         &bindings)?.first::<SchemaCount>(None).await?;
     let present = row.map_or(0, |value| value.present);
     // A tenant-scoped real D1 query, never a synthetic test record.
-    let party_rows = bind(&db, "SELECT COUNT(*) AS present FROM crm_party_records WHERE tenant = ?",
-        &[JsValue::from_str(tenant)])?.first::<SchemaCount>(None).await?;
+    let party_rows = if present == EXPECTED.len() as i64 {
+        bind(&db, "SELECT COUNT(*) AS present FROM crm_party_records WHERE tenant = ?",
+            &[JsValue::from_str(tenant)])?.first::<SchemaCount>(None).await?
+    } else { None };
     let version = env.object_var::<Value>("CF_VERSION_METADATA").ok()
         .and_then(|metadata| metadata.get("id").and_then(Value::as_str).map(str::to_owned));
     let source = env.var("GIT_SHA").ok().map(|value| value.to_string());
@@ -336,11 +338,12 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             }
         }
         let elapsed = Date::now().as_millis().saturating_sub(started);
+        let error_code = reply.headers().get("x-crm-error-code").ok().flatten();
         console_log!("{}", json!({
             "event":"crm.native.request", "request_id":request_id,
             "module":if path == "/api/doctor" { "crm.diagnostics" } else { "crm.parties" },
             "operation":operation, "phase":phase,
-            "status":reply.status_code(), "duration_ms":elapsed
+            "status":reply.status_code(), "error_code":error_code, "duration_ms":elapsed
         }));
         return Ok(reply);
     }
