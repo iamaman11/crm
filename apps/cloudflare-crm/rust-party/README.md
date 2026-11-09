@@ -1,27 +1,11 @@
-# Native Rust Party Worker — local integration gate
+# CRM: единственный нативный Cloudflare Worker
 
-This is a **non-deployed** first adapter proof. It links the existing
-`modules/crm-parties` crate directly, uses the first-party Cloudflare
-`worker` (workers-rs) SDK, and persists through a local D1 binding.
+Опубликованное приложение использует React Static Assets → один `workers-rs` Worker → D1. Никакого рукописного JS-маршрутизатора или отдельного JS-бэкенда нет.
 
-The `ci-local` feature deliberately accepts **only** `tenant-a` or
-`tenant-b` from an isolated GitHub Actions test, gated by
-`CRM_CI_LOCAL_ONLY=yes`. Without that feature, the Worker denies every request.
-**Never deploy this test harness to the public internet, and never use
-this fake CI tenant header as production authentication.**
+- `src/lib.rs` — единственная точка входа, исходный доменный модуль `crm-parties`, D1 и `GET /api/doctor`.
+- `src/access.rs` — штатная проверка подписанного Cloudflare Access JWT и привязка к tenant.
+- `src/pilot.rs` — минимальные нативные HTTP/D1-обработчики текущих тестовых экранов (клиенты, контакты, сделки, задачи, Customer360). Не подменяют остальные исходные экспертные Rust-модули.
 
-This harness neither edits the production JS CRM Worker nor adds a deployed
-Cloudflare service or a second user-visible customer master. Production
-integration must derive actor/tenant from verified Cloudflare Access identity
-and replace the JS customer authority only after full physical proof.
-Schema is intentionally separate from crm-dev D1.
+`--features ci-local` — только изолированный workerd-тест с локальной D1. `--features native-ci` — изолированный тест RS256 с тестовым JWKS. Обе проверки не разрешены как публичная production-аутентификация. Релиз публикуется только с `--features native`.
 
-A single D1 trigger atomically writes canonical state, an immutable audit row
-and an idempotency receipt for create or versioned update. A duplicate
-idempotency key is enforced by SQLite unique constraint and rolls back.
-The original Rust owner applies version and input invariants.
-
-The pinned `Cargo.lock` is committed; CI must not regenerate the dependency graph.
-Build locally under GitHub CI with `worker-build --release --features ci-local`;
-test with `wrangler dev --local` and `wrangler d1 execute --local`.
-Nothing from this directory is pushed as a second production Worker.
+Приёмка: `npm test` + `npm run doctor` + Rust WASM/workerd + реальный Chromium после публикации + точное совпадение `x-request-id` каждой операции браузера с `crm_audit` и структурированными Cloudflare Logs на той же версии Worker. Исходные данные и учётные данные в отчёт не включаются. Версии и доказательства фиксируются в GitHub Issue #338.
