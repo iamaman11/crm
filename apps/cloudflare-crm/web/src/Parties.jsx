@@ -40,10 +40,12 @@ export default function Parties({load,writable=true,onSaved}) {
         {id:form.id,name:form.name,kind:form.kind};
       const result=await load(path,{method:updating?"PATCH":"POST",
         headers:{"idempotency-key":form.key},body:JSON.stringify(data)});
-      setNotice(result.replayed?"Повтор выполнен без дублирования":"Сохранено через Rust / D1");
       setForm(null);
       await reload();
       if(onSaved)await onSaved();
+      // The success message is the UI consistency barrier: the parent
+      // Account/Contact selectors must already contain this Party revision.
+      setNotice(result.replayed?"Повтор выполнен без дублирования":"Сохранено через Rust / D1");
     }catch(e){setError(e.message);}
     finally{setBusy(false);}
   }
