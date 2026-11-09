@@ -57,6 +57,8 @@ try{
     "--file","../migrations/0006_original_party_relationships.sql","--persist-to",data]);
   run(["d1","execute","crm-rust-party-local","--local",
     "--file","../migrations/0007_original_activity_tasks.sql","--persist-to",data]);
+  run(["d1","execute","crm-rust-party-local","--local",
+    "--file","../migrations/0008_original_sales_deals.sql","--persist-to",data]);
   child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
     "--var","CRM_CI_LOCAL_ONLY:yes","--var","CRM_NATIVE_CI_JWKS:"+jwks],
     {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
@@ -280,6 +282,134 @@ try{
       "Access A/B isolation","idempotency receipts","version CAS",
       "forged owner rejected","request correlation"],
     ui:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
+
+  // Original Sales Deal: native exact money, Access actor, domain stage policy,
+  // Account FK and original state codec, never legacy pilot crm_deals.
+  assert.equal((await call("/api/sales-deals",null)).status,401);
+  assert.deepEqual((await call("/api/sales-deals",b)).body.items,[]);
+  const dealId="native-sales-deal-"+randomUUID();
+  const dealData={id:dealId,name:"Enterprise renewal",account_id:accountId,
+    pipeline_id:"pipeline.enterprise",stage_id:"lead",ordinal:1,
+    probability_bps:2500,amount_minor_units:12500,currency:"USD"};
+  const dealHeaders={"content-type":"application/json",
+    "idempotency-key":"signed-original-sales-deal-create"};
+  const dealWrongTenant=await call("/api/sales-deals",b,{
+    method:"POST",headers:dealHeaders,body:JSON.stringify(dealData)});
+  assert.equal(dealWrongTenant.status,422,"no foreign tenant Account reference");
+  assert.equal(dealWrongTenant.body.code,"SALES_ACCOUNT_NOT_FOUND");
+  const dealSpoof=await call("/api/sales-deals",a,{
+    method:"POST",headers:{...dealHeaders,"idempotency-key":"sales-owner-spoof"},
+    body:JSON.stringify({...dealData,owner:"attacker"})});
+  assert.equal(dealSpoof.status,422,"signed actor cannot be overwritten by request");
+  const dealNegative=await call("/api/sales-deals",a,{
+    method:"POST",headers:{...dealHeaders,"idempotency-key":"sales-negative-money"},
+    body:JSON.stringify({...dealData,amount_minor_units:-1})});
+  assert.equal(dealNegative.status,422);
+  assert.equal(dealNegative.body.code,"SALES_DEAL_AMOUNT_NEGATIVE");
+  const dealCurrency=await call("/api/sales-deals",a,{
+    method:"POST",headers:{...dealHeaders,"idempotency-key":"sales-invalid-currency"},
+    body:JSON.stringify({...dealData,currency:"usd"})});
+  assert.equal(dealCurrency.status,422);
+  assert.equal(dealCurrency.body.code,"CONTRACT_CURRENCY_INVALID");
+  const dealCreated=await call("/api/sales-deals",a,{
+    method:"POST",headers:dealHeaders,body:JSON.stringify(dealData)});
+  assert.equal(dealCreated.status,201,JSON.stringify(dealCreated));
+  assert.equal(dealCreated.body.item.id,dealId);
+  assert.equal(dealCreated.body.item.account_id,accountId);
+  assert.equal(dealCreated.body.item.owner.actor,"native-a@example.test");
+  assert.equal(dealCreated.body.item.stage.stage_id,"lead");
+  assert.equal(dealCreated.body.item.stage.ordinal,1);
+  assert.equal(dealCreated.body.item.amount.minor_units,"12500");
+  assert.equal(dealCreated.body.item.amount.currency,"USD");
+  assert.equal(dealCreated.body.item.status,"open");
+  assert.equal(dealCreated.body.item.probability_bps,2500);
+  assert.equal(dealCreated.body.item.version,1);
+  assert.equal(dealCreated.headers["x-crm-module"],"crm.sales");
+  assert.match(dealCreated.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
+  assert.equal((await call("/api/sales-deals/"+dealId,b)).status,404);
+  assert.equal((await call("/api/sales-deals/"+dealId,serviceB)).status,404);
+  const dealRead=await call("/api/sales-deals/"+dealId,a);
+  assert.equal(dealRead.status,200);
+  assert.deepEqual(dealRead.body.item,dealCreated.body.item,
+    "original strict Deal codec -> D1 -> decode preserves exact Money");
+  const dealReplay=await call("/api/sales-deals",a,{
+    method:"POST",headers:dealHeaders,body:JSON.stringify(dealData)});
+  assert.equal(dealReplay.status,200);
+  assert.equal(dealReplay.body.replayed,true);
+  const dealConflict=await call("/api/sales-deals",a,{
+    method:"POST",headers:dealHeaders,
+    body:JSON.stringify({...dealData,name:"Fake"})});
+  assert.equal(dealConflict.status,409);
+  assert.equal(dealConflict.body.code,"IDEMPOTENCY_CONFLICT");
+  const advanceData={expected_version:1,pipeline_id:"pipeline.enterprise",
+    stage_id:"qualified",ordinal:2,status:"open",close_reason_code:null};
+  const advanceHeaders={"content-type":"application/json",
+    "idempotency-key":"signed-original-sales-advance"};
+  const advanceInit={method:"POST",headers:advanceHeaders,
+    body:JSON.stringify(advanceData)};
+  const dealAdvanced=await call("/api/sales-deals/"+dealId+"/advance",a,advanceInit);
+  assert.equal(dealAdvanced.status,200,JSON.stringify(dealAdvanced));
+  assert.equal(dealAdvanced.body.item.version,2);
+  assert.equal(dealAdvanced.body.item.stage.stage_id,"qualified");
+  assert.equal(dealAdvanced.body.item.status,"open");
+  const advanceReplay=await call("/api/sales-deals/"+dealId+"/advance",a,advanceInit);
+  assert.equal(advanceReplay.status,200);
+  assert.equal(advanceReplay.body.replayed,true);
+  const stageRegression=await call("/api/sales-deals/"+dealId+"/advance",a,{
+    method:"POST",headers:{...advanceHeaders,
+      "idempotency-key":"signed-original-sales-regression"},
+    body:JSON.stringify({...advanceData,expected_version:2,
+      stage_id:"lead",ordinal:1})});
+  assert.equal(stageRegression.status,409,"original domain rejects stage regression");
+  assert.equal(stageRegression.body.code,"SALES_STAGE_REGRESSION_FORBIDDEN");
+  const missingReason=await call("/api/sales-deals/"+dealId+"/advance",a,{
+    method:"POST",headers:{...advanceHeaders,
+      "idempotency-key":"signed-original-sales-missing-reason"},
+    body:JSON.stringify({...advanceData,expected_version:2,
+      stage_id:"won",ordinal:3,status:"won"})});
+  assert.equal(missingReason.status,422,"original domain requires close reason");
+  assert.equal(missingReason.body.code,"SALES_CLOSE_REASON_REQUIRED");
+  const closeInput={...advanceData,expected_version:2,
+    stage_id:"won",ordinal:3,status:"won",close_reason_code:"contract-signed"};
+  const closeHeaders={...advanceHeaders,
+    "idempotency-key":"signed-original-sales-close"};
+  const closed=await call("/api/sales-deals/"+dealId+"/advance",a,{
+    method:"POST",headers:closeHeaders,body:JSON.stringify(closeInput)});
+  assert.equal(closed.status,200,JSON.stringify(closed));
+  assert.equal(closed.body.item.version,3);
+  assert.equal(closed.body.item.status,"won");
+  assert.equal(closed.body.item.close_outcome.reason_code,"contract-signed");
+  assert.equal(closed.body.item.amount.minor_units,"12500");
+  const closeReplay=await call("/api/sales-deals/"+dealId+"/advance",a,{
+    method:"POST",headers:closeHeaders,body:JSON.stringify(closeInput)});
+  assert.equal(closeReplay.status,200);
+  assert.equal(closeReplay.body.replayed,true);
+  const closedAgain=await call("/api/sales-deals/"+dealId+"/advance",a,{
+    method:"POST",headers:{...advanceHeaders,
+      "idempotency-key":"signed-original-sales-already-closed"},
+    body:JSON.stringify({...closeInput,expected_version:3,
+      stage_id:"after-won",ordinal:4})});
+  assert.equal(closedAgain.status,409);
+  assert.equal(closedAgain.body.code,"SALES_DEAL_ALREADY_CLOSED");
+  const staleDeal=await call("/api/sales-deals/"+dealId+"/advance",a,{
+    method:"POST",headers:{...advanceHeaders,
+      "idempotency-key":"signed-original-sales-stale"},
+    body:JSON.stringify({...advanceData,expected_version:1,ordinal:4,
+      stage_id:"unknown"})});
+  assert.equal(staleDeal.status,409);
+  assert.equal(staleDeal.body.code,"SALES_DEAL_VERSION_CONFLICT");
+  assert.deepEqual((await call("/api/sales-deals/"+dealId,a)).body.item,
+    closed.body.item,"closed original deal persisted after all negative calls");
+  assert.ok((await call("/api/sales-deals",a)).body.items
+    .some(x=>x.id===dealId&&x.status==="won"));
+  assert.deepEqual((await call("/api/sales-deals",b)).body.items,[]);
+  console.log(JSON.stringify({event:"crm.native-original-sales-d1",result:"PASS",
+    owner:"crm.sales",proven:["verified Access actor","original Account FK",
+      "domain stage transition and close reason","exact integer currency",
+      "strict codec D1 roundtrip","tenant isolation A/B",
+      "idempotency receipts","optimistic version","forged owner rejected",
+      "request correlation"],
+    primary_contact:"NOT_CONNECTED",ui:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
   // Original Contact Point lifecycle under real JWT and production migration.
   assert.equal((await call("/api/contact-points",null)).status,401);
   assert.deepEqual((await call("/api/contact-points",b)).body.items,[]);
