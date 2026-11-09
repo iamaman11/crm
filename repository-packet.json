@@ -59,6 +59,8 @@
     "apps/cloudflare-crm/migrations/0008_original_sales_deals.sql",
     "apps/cloudflare-crm/rust-party/src/consents.rs",
     "apps/cloudflare-crm/migrations/0009_original_consents.sql",
+    "apps/cloudflare-crm/rust-party/src/sales_activities_link.rs",
+    "apps/cloudflare-crm/migrations/0010_original_sales_activities_link.sql",
     "apps/cloudflare-crm/rust-party/migrations/0001_local.sql",
     "apps/cloudflare-crm/rust-party/wrangler.jsonc",
     "apps/cloudflare-crm/rust-party/README.md",
