@@ -212,7 +212,10 @@ async function test(){
       await parties.waitFor();
       await parties.getByRole("button",{name:/Добавить лицо/}).click();
       await page.getByLabel("Имя / название").fill(marker);
+      const creation=page.waitForResponse(r=>new URL(r.url()).pathname==="/api/parties"&&r.request().method()==="POST");
       await page.getByRole("button",{name:"Сохранить",exact:true}).click();
+      report.create_request_id=(await creation).headers()["x-request-id"];
+      assert.match(report.create_request_id||"",/^[0-9a-f-]{36}$/i);
       await parties.getByRole("row").filter({hasText:marker}).waitFor();
       const list=await http("/api/parties",hA);native(list,200);
       id=list.json?.items?.find(x=>x.name===marker)?.id;
