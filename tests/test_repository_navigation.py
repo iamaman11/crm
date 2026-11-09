@@ -61,6 +61,7 @@ class RepositoryNavigationTests(unittest.TestCase):
             "apps/cloudflare-crm/rust-party/Cargo.toml",
             "apps/cloudflare-crm/rust-party/Cargo.lock",
             "apps/cloudflare-crm/rust-party/src/lib.rs",
+            "apps/cloudflare-crm/rust-party/src/pilot.rs",
             "apps/cloudflare-crm/rust-party/src/access.rs",
             "apps/cloudflare-crm/rust-party/test/native.mjs",
             "apps/cloudflare-crm/scripts/native-cloud-proof.mjs",
