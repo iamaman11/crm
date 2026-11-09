@@ -3,7 +3,7 @@ import React,{useEffect,useState} from "react";
 // Read-only composition of ORIGINAL owner views, not a second Customer domain.
 // No shadow Customer360 table: one tenant-scoped Account overview from Rust/D1.
 const money=x=>x?x.minor_units+" "+x.currency:"—";
-export default function Customer360({accountId,load,onBack,onNavigate,onEdit}){
+export default function Customer360({accountId,load,writable,onBack,onNavigate,onEdit}){
   const [state,setState]=useState({loading:true});
   async function refresh(){
     setState({loading:true});
@@ -48,7 +48,7 @@ export default function Customer360({accountId,load,onBack,onNavigate,onEdit}){
             {!data[key].length?<p>Пока нет записей</p>:
               <div className="customer360-list">{data[key].map(row=><article key={row.id}>
                 <div><strong>{primary(row)}</strong><p>{secondary(row)}</p></div>
-                {route!=="parties"&&route!=="tasks"&&
+                {writable&&route!=="parties"&&route!=="tasks"&&
                   <button className="ghost" onClick={()=>onEdit(route,row)}>Изменить</button>}
               </article>)}</div>}
           </section>)}
