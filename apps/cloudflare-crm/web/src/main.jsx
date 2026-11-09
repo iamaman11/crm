@@ -59,7 +59,7 @@ function App(){
   useEffect(()=>{reload().catch(e=>setError(e.message)).finally(()=>setLoading(false));},[]);
   const partyName=value=>items.parties.find(p=>p.id===value)?.name||"—";
   const accountName=value=>items.accounts.find(a=>a.id===value)?.name||"—";
-  const contactsParty=account=>account.parties?.find(p=>p.role==="primary")?.id;
+  const contactsParty=account=>account?.parties?.find(p=>p.role==="primary")?.id;
   const itemName=(kind,row)=>kind==="contacts"?row.value:
     kind==="tasks"?row.subject:row.name;
   function begin(kind,record=null,mode="edit"){
@@ -72,7 +72,7 @@ function App(){
       contact_kind:record?.kind||"email",status:record?.status||"active",
       preferred:record?.preferred||false});
     if(kind==="deals")Object.assign(f,{name:record?.name||"",account_id:record?.account_id||"",
-      stage_id:record?.stage?.stage_id||"lead",
+      stage_id:mode==="advance"?stages.find(stage=>stage[2]===(record?.stage?.ordinal||0)+1)?.[0]||record?.stage?.stage_id:"lead",
       amount_minor_units:record?.amount?.minor_units||"",
       currency:record?.amount?.currency||"USD",
       probability_bps:record?.probability_bps??2500,
@@ -174,7 +174,7 @@ function App(){
     {choices?<select id={"native-"+name} required value={form[name]}
       onChange={e=>change(name,e.target.value)}>
       {choices.map(([key,title])=><option value={key} key={key}>{title}</option>)}
-    </select>:<input id={"native-"+name} type={type} required
+    </select>:<input id={"native-"+name} type={type} required={name!=="amount_minor_units"}
       value={form[name]} onChange={e=>change(name,e.target.value)}/>}
   </div>;
   const partyChoices=[["","Выберите лицо / организацию"],
