@@ -169,7 +169,7 @@ try{
   assert.equal(pre.status,200,JSON.stringify(pre));
   assert.equal(pre.headers["x-crm-module"],"crm.customer-data-operations");
   assert.equal(pre.body.count,1);
-  assert.equal(pre.body.import,"NOT_CONNECTED");
+  assert.equal(pre.body.import,"BOUNDED_CREATE_ONLY");
   assert.equal(pre.body.persisted_export_job,"NOT_CONNECTED");
   assert.equal(pre.body.fields.join(","),"party_id,kind,display_name,resource_version");
   assert.match(pre.body.csv_sha256,/^[a-f0-9]{64}$/);
