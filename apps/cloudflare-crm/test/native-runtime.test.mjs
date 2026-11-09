@@ -103,6 +103,11 @@ test("customer-data-operations bounded CSV export uses original domain and one D
   assert.ok(source.includes("EXPORT_SCOPE_LIMIT_REACHED"));
   assert.ok(runtime.includes("customer_data_operations::route"));
   assert.ok(!source.includes("INSERT INTO"));
+  assert.ok(source.includes("parse_import_source"));
+  assert.ok(source.includes("parties::import_batch"));
+  assert.ok(read("rust-party/src/parties.rs").includes("db.batch(statements)"));
+  assert.ok(ui.includes('sendImport("preview")'));
+  assert.ok(ui.includes('sendImport("apply")'));
   assert.equal(ownerFiles["crm-customer-data-operations"].api,
     "rust-party/src/customer_data_operations.rs");
 });

@@ -192,6 +192,12 @@ async function verifyData(){
     r.operation==="identity-resolution.compare"&&r.method==="GET"&&
     r.status===200&&r.module==="identity-resolution")||[];
   const compareRead=readOnly[0];
+  const importPreview=cycle.requests?.find(r=>
+    r.operation==="customer-data-operations.import-preview"&&r.method==="POST"&&
+    r.status===200&&r.module==="customer-data-operations");
+  const importApply=cycle.requests?.find(r=>
+    r.operation==="customer-data-operations.import-apply"&&r.method==="POST"&&
+    r.status===201&&r.module==="customer-data-operations");
   const exportPreview=cycle.requests?.find(r=>
     r.operation==="customer-data-operations.preview"&&r.method==="GET"&&
     r.status===200&&r.module==="customer-data-operations");
@@ -226,6 +232,13 @@ async function verifyData(){
       /^[0-9a-f-]{36}$/i.test(r.request_id||"")))
     throw Error("Original Rust Party CSV export physical Chromium trace missing");
 
+  if(!cycle.ui_coverage.includes("customer-data-operations.import-preview")||
+    !cycle.ui_coverage.includes("customer-data-operations.import-apply")||
+    !importPreview||!importApply||
+    ![importPreview,importApply].every(r=>r.source_sha===sha&&
+      /^[0-9a-f-]{36}$/i.test(r.request_id||"")))
+    throw Error("Native Party CSV import browser trace missing");
+
   // D1's audit is transactionally written by the same native mutation and
   // uses the exact x-request-id the real Chromium click received.
   const ids=writes.map(w=>w.request_id);
@@ -252,7 +265,7 @@ async function verifyData(){
   // Query existing native structured Cloudflare Logs; no new monitoring
   // infrastructure. Probe each exact original owner mutation,
   // and require the version serving 100% of ordinary traffic.
-  let pending=[...writes,compareRead,candidateRead,qualityRead,exportPreview,exportDownload];
+  let pending=[...writes,compareRead,candidateRead,qualityRead,exportPreview,exportDownload,importPreview,importApply];
   const from=Date.now()-15*60*1000;
   for(let attempt=0;attempt<12&&pending.length;attempt++){
     const missing=[];
@@ -282,13 +295,13 @@ async function verifyData(){
   record("native-functional-accepted.json",{git_sha:sha,runtime:"native-workers-rs",
     worker_version:liveVersion,database,ui_buttons:cycle.ui_coverage,
     mutations:writes.length,d1_correlated:writes.length,logs_correlated:writes.length,
-    request_ids:ids,read_only_log_correlated:5,
+    request_ids:ids,read_only_log_correlated:7,
     read_only_request_ids:[compareRead.request_id,candidateRead.request_id,
-      qualityRead.request_id,exportPreview.request_id,exportDownload.request_id],result:"PASS"});
+      qualityRead.request_id,exportPreview.request_id,exportDownload.request_id,importPreview.request_id,importApply.request_id],result:"PASS"});
   console.log(JSON.stringify({event:"crm.native-full-functional-cycle",result:"PASS",
     sha,worker_version:liveVersion,ui_buttons:cycle.ui_coverage.length,
     mutations:writes.length,d1_correlated:writes.length,
-    logs_correlated:writes.length,read_only_log_correlated:5}));
+    logs_correlated:writes.length,read_only_log_correlated:7}));
 
   const p=load("parties-e2e.json");
   if(p.git_sha!==sha||p.parties?.length!==2||p.keys?.length!==3)throw Error("Missing native Party A/B browser proof");

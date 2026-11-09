@@ -24,7 +24,7 @@ export const backendModels={
     candidate_search:"READ_ONLY_EXACT_RECORDED_EMAIL",merge:"NOT_CONNECTED"},
   "customer-data-operations":{title:"Экспорт данных",kind:"backend",
     ui:"web/src/DataExport.jsx",export:"BOUNDED_PARTY_CSV",
-    export_jobs:"NOT_CONNECTED",import:"NOT_CONNECTED"},
+    export_jobs:"NOT_CONNECTED",import:"BOUNDED_ATOMIC_CREATE_ONLY_CSV"},
   "data-quality":{title:"Качество данных",kind:"backend",
     ui:"web/src/DataQuality.jsx",evaluation:"READ_ONLY_PARTY_NAME_RULES",
     findings:"NOT_CONNECTED",completeness_score:"NOT_CONNECTED"},

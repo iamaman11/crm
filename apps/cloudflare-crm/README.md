@@ -45,3 +45,6 @@ React 19 / Vite (Cloudflare Static Assets)
 Результат публикации определяется проверкой **активной версии, exact SHA и полной live-приёмкой**, а не названием ветки, локальным PASS или компиляцией всех 13 модулей.
 
 Общие принципы оригинального модульного Rust-монолита изложены в `docs/APPLICATION_ARCHITECTURE.md`: описанные там `services/crm-api` / PostgreSQL относятся к другому историческому runtime репозитория, **не** к развёрнутому `apps/cloudflare-crm`. Для текущего Cloudflare-приложения руководствоваться этим README и `AGENTS.md`, не строить параллельный runtime.
+
+
+**CSV import create-only (первый срез):** исходный `parse_import_source` читает CSV UTF-8 с заголовком `party_id,kind,display_name,resource_version`, максимум 20 строк / 16 KiB. Бэкенд перепроверяет исходный файл при подтверждении и SHA-256, валидирует через оригинальный `crm-parties::Party::create`, запрещает существующие ID и дубли, выполняет атомарный D1 batch через оригинальный Party persistence owner. Источник не может менять существующие Party, UPDATE и настоящая persisted ImportJob модель пока NOT_CONNECTED. Повтор того же исходного файла в том же tenant определяется по receipt, а не повторным созданием. Только admin; новый Worker, DB или R2 не нужны.

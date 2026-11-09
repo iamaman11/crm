@@ -167,7 +167,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "business_owner":"original-crm-customer-data-operations",
                 "api":"ADMIN_BOUNDED_PARTY_CSV", "ui":"REACT_EXPORT",
                 "scope":"MAX_100_PARTIES_FAIL_CLOSED",
-                "export_job":"NOT_CONNECTED", "import":"NOT_CONNECTED"},
+                "export_job":"NOT_CONNECTED", "import":"BOUNDED_ATOMIC_CREATE_ONLY_CSV"},
             "crm.data-quality": {"read":read_checks.get("parties"),
                 "business_owner":"original-crm-data-quality",
                 "api":"READ_ONLY_PARTY_NAME_RULES", "ui":"READ_ONLY_NAME_REVIEW",
@@ -266,7 +266,7 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     }
     #[cfg(feature = "native")]
     if path.starts_with("/api/customer-data-operations/") {
-        return customer_data_operations::route(req, db, tenant, role).await;
+        return customer_data_operations::route(req, db, tenant, role, &request_id).await;
     }
     #[cfg(feature = "native")]
     if path.starts_with("/api/data-quality/") {
@@ -357,6 +357,8 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
         let operation = match (path.as_str(), method.clone()) {
+            ("/api/customer-data-operations/import-preview", Method::Post) => "customer-data-operations.import-preview",
+            ("/api/customer-data-operations/import-apply", Method::Post) => "customer-data-operations.import-apply",
             ("/api/customer-data-operations/preview", Method::Get) => "customer-data-operations.preview",
             ("/api/customer-data-operations/parties.csv", Method::Get) => "customer-data-operations.export",
             (p, Method::Get) if p.starts_with("/api/data-quality/parties/") && p.ends_with("/evaluate") => "data-quality.evaluate",

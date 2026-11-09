@@ -8,6 +8,8 @@ export default function DataExport({load,writable,loading}){
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
+  const [file,setFile]=useState(null);
+  const [importPreview,setImportPreview]=useState(null);
   const query="customer-data-operations/";
   async function run(action){
     if(busy||!writable)return;
@@ -26,6 +28,22 @@ export default function DataExport({load,writable,loading}){
         setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);
         setNotice("CSV подготовлен и отправлен на скачивание.");
       }
+    }catch(e){setError(e.message);}
+    finally{setBusy(false);}
+  }
+  async function sendImport(action){
+    if(!file||busy||!writable)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const content=await file.arrayBuffer();
+      const path=query+(action==="preview"?"import-preview":"import-apply");
+      const result=await load(path,{method:"POST",headers:{
+        "content-type":"text/csv",
+        ...(action==="apply"&&importPreview?{"x-crm-import-sha256":importPreview.file_sha256}:{})
+      },body:content});
+      if(action==="preview")setImportPreview(result);
+      else {setImportPreview(null);setNotice("Импорт выполнен. Создано: "+result.created+
+        (result.replayed?" · Повтор подтверждён: "+result.replayed:""));}
     }catch(e){setError(e.message);}
     finally{setBusy(false);}
   }
@@ -54,6 +72,25 @@ export default function DataExport({load,writable,loading}){
         <p>SHA-256 CSV: <code>{preview.csv_sha256}</code></p>
       </section>}
     </>}
+    {writable&&<section aria-label="Импорт данных">
+      <h2>Импорт новых лиц и организаций</h2>
+      <p>Только новые Party. CSV: party_id,kind,display_name,resource_version.
+        Версия должна быть 1. До 20 строк; создание атомарное.
+        Существующие Party не изменяются.</p>
+      <div className="field"><label htmlFor="import-csv">CSV-файл</label>
+        <input id="import-csv" type="file" accept=".csv,text/csv"
+          disabled={busy||loading} onChange={e=>{
+            setFile(e.target.files?.[0]||null);setImportPreview(null);setError("");setNotice("");
+          }}/></div>
+      <div className="row-actions">
+        <button disabled={!file||busy||loading}
+          onClick={()=>sendImport("preview")}>Проверить CSV</button>
+        <button disabled={!importPreview||busy||loading}
+          onClick={()=>sendImport("apply")}>Импортировать новые записи</button>
+      </div>
+      {importPreview&&<p role="status">Файл проверен. Строк: {importPreview.count}.
+        SHA-256: <code>{importPreview.file_sha256}</code></p>}
+    </section>}
     {error&&<p className="notice error" role="alert">{error}</p>}
     {notice&&<p className="notice" role="status">{notice}</p>}
     <p>Экспорт формируется непосредственно из действующих Rust Party.

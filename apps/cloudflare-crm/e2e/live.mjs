@@ -34,6 +34,8 @@ function operation(path,method){
   if(path.startsWith("/api/data-quality/parties/")&&path.endsWith("/evaluate"))action="evaluate";
   if(path==="/api/customer-data-operations/preview")action="preview";
   if(path==="/api/customer-data-operations/parties.csv")action="export";
+  if(path==="/api/customer-data-operations/import-preview")action="import-preview";
+  if(path==="/api/customer-data-operations/import-apply")action="import-apply";
   if(path.endsWith("/evaluate"))action="evaluate";
   return owner+"."+action;
 }
@@ -276,6 +278,29 @@ try{
     "/api/customer-data-operations/parties.csv")).status(),404);
   cover("customer-data-operations.no-mutation");
   await shot("03-export","Original Rust Party CSV preview and download");
+  // Real browser CSV upload: original parser -> preflight -> atomic Party
+  // create via its authoritative D1 owner, then idempotent replay.
+  const importedId="browser-import-"+randomUUID();
+  const csv="party_id,kind,display_name,resource_version\n"+
+    importedId+",person,"+marker+" Imported,1\n";
+  await page.getByLabel("CSV-файл").setInputFiles({
+    name:"test-parties.csv",mimeType:"text/csv",buffer:Buffer.from(csv)});
+  await button("Проверить CSV").click();
+  await page.getByRole("status").getByText(/Файл проверен. Строк: 1/).waitFor();
+  cover("customer-data-operations.import-preview");
+  await button("Импортировать новые записи").click();
+  await page.getByRole("status").getByText(/Импорт выполнен. Создано: 1/).waitFor();
+  cover("customer-data-operations.import-apply");
+  const imported=await context.request.get(url+"/api/parties/"+importedId);
+  assert.equal(imported.status(),200);
+  assert.equal((await imported.json()).item.name,marker+" Imported");
+  const otherImportContext=await browser.newContext({extraHTTPHeaders:access("B")});
+  try{
+    assert.equal((await otherImportContext.request.get(
+      url+"/api/parties/"+importedId)).status(),404);
+    cover("customer-data-operations.import-tenant-isolation");
+  }finally{await otherImportContext.close();}
+  await shot("03-import","Original Rust CSV preflight and atomic Party creation");
   await tab("Клиенты").click();
   // Live UI negative rule: new Party with a recorded placeholder name.
   await tab("Лица и организации").click();
