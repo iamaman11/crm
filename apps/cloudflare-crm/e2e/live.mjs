@@ -288,7 +288,7 @@ try {
   await page.getByRole("button",{name:"Сохранить"}).click();
   await page.getByText(partyName+" Updated",{exact:true}).waitFor({timeout:12000});
   covered("parties.edit.save");
-  await page.getByRole("button",{name:"Обновить",exact:true}).click();
+  await page.locator('section[aria-label="Лица и организации (Rust)"]').getByRole("button",{name:"Обновить",exact:true}).click();
   await page.getByText(partyName+" Updated",{exact:true}).waitFor();
   covered("parties.refresh");
   const nativeRead = await context.request.get(url + "/api/parties");
