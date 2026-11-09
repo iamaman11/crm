@@ -77,6 +77,15 @@ Build a simple, usable test CRM on one Cloudflare Worker + D1 with React UI. Pri
 - `apps/cloudflare-crm/rust-party/test/unified.mjs`
 - `apps/cloudflare-crm/scripts/native-cloud-proof.mjs`
 
+- `apps/cloudflare-crm/worker/index.mjs`
+- `apps/cloudflare-crm/worker/unified.mjs`
+- `apps/cloudflare-crm/features/customer360/query.mjs`
+- `apps/cloudflare-crm/test/worker.test.mjs`
+- `apps/cloudflare-crm/test/customer360.test.mjs`
+- `apps/cloudflare-crm/rust-party/wrangler.unified.jsonc`
+- `apps/cloudflare-crm/rust-party/test/unified.mjs`
+- `apps/cloudflare-crm/scripts/native-cloud-proof.mjs`
+
 ## Forbidden paths
 
 - `modules/**`
