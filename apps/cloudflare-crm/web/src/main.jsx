@@ -236,7 +236,7 @@ function App(){
       {error&&<div role="alert" className="notice error">{error}</div>}
       <section className="panel">{tab==="parties"?
         <Parties load={api} writable={writable} onSaved={reload}/>:
-        card?<Customer360 accountId={card} load={api} onBack={()=>setCard(null)}
+        card?<Customer360 accountId={card} load={api} writable={writable} onBack={()=>setCard(null)}
           onNavigate={navigate} onEdit={(kind,row)=>begin(kind,row)}/>:
         <>
           <div className="toolbar">
