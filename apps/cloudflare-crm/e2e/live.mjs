@@ -103,9 +103,28 @@ async function accessB(){
 }
 let outcome="FAIL";
 try{
-  const version=await context.request.get(url+"/api/version");
-  assert.equal(version.status(),200,"Protected native version");
-  assert.equal((await version.json()).source,sha,"Browser must use exact deployed source");
+  // Cloudflare edge propagation can briefly serve the prior deployed Worker
+  // even after control-plane and an independent public readback have passed.
+  // Require the actual browser's Access identity / API context to see the
+  // exact SHA on three consecutive uncached reads before touching user data.
+  // Never substitute the expected SHA or accept a mixed-version browser run.
+  let stable=0;
+  const observed=[];
+  for(let attempt=0;attempt<30&&stable<3;attempt++){
+    const version=await context.request.get(url+"/api/version?readback="+
+      Date.now()+"-"+attempt,{headers:{"cache-control":"no-cache"}});
+    if(version.status()===200){
+      const body=await version.json();
+      observed.push(body.source);
+      stable=body.source===sha?stable+1:0;
+    }else{
+      observed.push("HTTP_"+version.status());
+      stable=0;
+    }
+    if(stable<3)await new Promise(resolve=>setTimeout(resolve,1500));
+  }
+  assert.equal(stable,3,"Browser must see the exact deployed SHA consistently; "+
+    JSON.stringify(observed.slice(-8)));
   const diagnosis=await context.request.get(url+"/api/doctor");
   assert.equal(diagnosis.status(),200,"Live D1 and Access doctor");
   const doctor=await diagnosis.json();
