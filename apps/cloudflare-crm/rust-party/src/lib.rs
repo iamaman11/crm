@@ -286,7 +286,10 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "tenant_audit_rows_with_id": audit_trace }},
         "modules": {
             "crm.parties": {"read": read_checks.get("parties"), "business_owner": "original-crm-parties"},
-            "crm.customer-accounts": {"read":read_checks.get("accounts"), "business_owner":"original-crm-customer-accounts"},
+            "crm.customer-accounts": {"read":read_checks.get("accounts"),
+                "business_owner":"original-crm-customer-accounts",
+                "api":"native-workers-rs", "ui":"NOT_CONNECTED",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.customers": {"read": read_checks.get("customers"), "business_owner": "native-pilot"},
             "crm.contacts": {"read": read_checks.get("contacts"), "business_owner": "native-pilot"},
             "crm.deals": {"read": read_checks.get("deals"), "business_owner": "native-pilot"},
