@@ -1287,8 +1287,34 @@ try{
     const customerRow=page.getByRole("row").filter({hasText:customer});
     await customerRow.getByRole("button",{name:"Изменить"}).click();
     await page.getByLabel("Название",{exact:true}).fill(customer+" Updated");
+    // Simulate a readback failure AFTER the Worker has committed the update.
+    // The UI must report success and preserve old rows, never imply write failure.
+    let failReadOnce=true;
+    await page.route("**/api/accounts",async route=>{
+      if(failReadOnce&&route.request().method()==="GET"){
+        failReadOnce=false;
+        await route.fulfill({status:503,contentType:"application/json",
+          headers:{"x-crm-error-code":"TEST_READ_FAILURE"},
+          body:JSON.stringify({code:"TEST_READ_FAILURE",error:"Injected read-only failure"})});
+      }else await route.continue();
+    });
     await submitForm();
+    await page.getByRole("alert").getByText(/Изменение сохранено, но повторное чтение не удалось/).waitFor();
+    assert.equal(await page.getByRole("dialog").count(),0,
+      "saved Account form must close even when the next read fails");
+    const committed=await call("/api/accounts/"+saved.id,a);
+    assert.equal(committed.status,200);
+    assert.equal(committed.body.item.name,customer+" Updated",
+      "real Rust/D1 write must be visible despite failed UI readback");
+    assert.equal(await page.getByRole("row").filter({hasText:customer+" Updated"}).count(),0,
+      "failed readback must preserve previous list, not claim it is fresh");
+    await page.unroute("**/api/accounts");
+    await page.getByRole("button",{name:"Обновить",exact:true}).click();
     await page.getByRole("row").filter({hasText:customer+" Updated"}).waitFor();
+    await page.getByRole("status").getByText("Обновлено").waitFor();
+    assert.equal(await page.getByRole("alert").count(),0,
+      "successful retry must clear the stale-data warning");
+    uiSteps.push("Committed Account update + failed readback -> truthful UI + retry");
     uiSteps.push("React Account create/update -> original crm-customer-accounts -> tenant D1");
     const email="native-"+marker.toLowerCase()+"@example.test";
     await selectTab("Контакты");

@@ -55,8 +55,10 @@ GitHub Actions may run those commands. No new app or connector is a prerequisite
   `crm-sales` and `crm-activities` domain crates. The temporary `pilot.rs`
   backend and its duplicate business rules are removed in integration PR #345.
   New capabilities must reuse original crate owners, not invent a new pilot
-  master, registry or microservice. Five still-unconnected crates are declared
-  as NOT_CONNECTED rather than represented as working CRUD.
+  master, registry or microservice. The twelve original module workflows already
+  accepted in Issue #338 are not full module implementations; customer-enrichment
+  remains without an accepted UI/D1 scenario. Unconnected subfeatures are
+  explicitly marked NOT_CONNECTED.
 - The one Worker composes original module commands and existing typed contracts.
   Rust owner code alone decides transitions; the UI may display forms and
   transport IDs/versions, but must not duplicate domain validation.
@@ -81,7 +83,9 @@ GitHub Actions may run those commands. No new app or connector is a prerequisite
   promised in milliseconds.
 - At every feature slice, demonstrate a locator hit, targeted test and one
   real useful behavior, including relevant failure/rollback and tenant cases.
-  No documentation-only acceptance.
+  No documentation-only acceptance. When a write succeeds but the next UI read
+  fails, report the write as saved and the displayed data as potentially stale;
+  never present a readback failure as failure of the already committed mutation.
 
 ## Preserve simplicity as scope grows
 

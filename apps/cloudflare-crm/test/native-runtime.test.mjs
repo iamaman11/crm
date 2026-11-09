@@ -240,3 +240,20 @@ test("live doctor read-only and never invents CI acceptance",()=>{
   assert.match(rust,/EXTERNAL_PROTECTED_CI_CHECK_REQUIRED/);
   assert.match(rust,/EXTERNAL_CLOUDFLARE_DEPLOYMENTS_CHECK_REQUIRED/);
 });
+
+test("Privacy intake and readback failures cannot be mistaken for failed writes",()=>{
+  const privacy=read("web/src/PrivacyCases.jsx");
+  const react=read("web/src/main.jsx");
+  const native=read("rust-party/test/native.mjs");
+  const doctor=read("scripts/doctor.mjs");
+  assert.match(react,/async function refreshAfterSave\(\)/);
+  assert.match(react,/setNotice\(saved\.replayed/);
+  assert.match(react,/await refreshAfterSave\(\)/);
+  assert.doesNotMatch(react,/onSaved=\{reload\}/);
+  assert.match(privacy,/async function refreshAfterMutation\(/);
+  assert.match(privacy,/Заявка сохранена, но список не обновился/);
+  assert.match(native,/Committed Account update \+ failed readback/);
+  assert.match(doctor,/!sourceFor\(module\)\.api\?"NOT_CONNECTED"/);
+  assert.doesNotMatch(doctor,/module==="customer-privacy"\?/);
+  assert.doesNotMatch(read("AGENTS.md"),/Five still-unconnected crates|Five still-unconnected|five still-unconnected/i);
+});

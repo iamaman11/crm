@@ -8,6 +8,13 @@ export default function PrivacyCases({load,writable,loading}){
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   async function refresh(){setItems((await load("customer-privacy/cases")).items);}
+  // A successful write is definitive; a subsequent list-read failure is not a write failure.
+  async function refreshAfterMutation(message){
+    setNotice(message);
+    try {await refresh();}
+    catch(e){setError("Заявка сохранена, но список не обновился. "+
+      "Показанные данные могут быть устаревшими. Нажмите «Обновить заявки». "+e.message);}
+  }
   useEffect(()=>{refresh().catch(e=>setError(e.message));},[]);
   async function create(){
     if(busy||!writable)return;
@@ -16,7 +23,7 @@ export default function PrivacyCases({load,writable,loading}){
       await load("customer-privacy/cases",{method:"POST",
         headers:{"idempotency-key":crypto.randomUUID()},
         body:JSON.stringify({id:crypto.randomUUID(),kind})});
-      await refresh();setNotice("Черновик заявки зарегистрирован");
+      await refreshAfterMutation("Черновик заявки зарегистрирован");
     }catch(e){setError(e.message);}
     finally{setBusy(false);}
   }
@@ -27,7 +34,7 @@ export default function PrivacyCases({load,writable,loading}){
       await load("customer-privacy/cases/"+item.id+"/"+action,{
         method:"POST",headers:{"idempotency-key":crypto.randomUUID()},
         body:JSON.stringify({expected_version:item.version})});
-      await refresh();setNotice(action==="submit"?"Заявка отправлена":"Заявка отменена");
+      await refreshAfterMutation(action==="submit"?"Заявка отправлена":"Заявка отменена");
     }catch(e){setError(e.message);}
     finally{setBusy(false);}
   }
@@ -47,7 +54,9 @@ export default function PrivacyCases({load,writable,loading}){
       <button disabled={busy||loading} onClick={create}>Создать заявку</button>
     </div>}
     <button className="ghost" disabled={busy||loading}
-      onClick={()=>refresh().catch(e=>setError(e.message))}>Обновить заявки</button>
+      onClick={()=>{setError("");refresh().catch(e=>
+        setError("Не удалось обновить заявки. Показанные данные могут быть устаревшими. "+
+          e.message));}}>Обновить заявки</button>
     {error&&<p role="alert" className="notice error">{error}</p>}
     {notice&&<p role="status" className="notice">{notice}</p>}
     <div className="table-scroll"><table><thead><tr>

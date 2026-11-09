@@ -35,10 +35,12 @@ if(requested){
     console.log(JSON.stringify({event:"crm.locate",result:"FOUND",query:requested,
       module:module||null,error:code||null,
       owner:module?implementationOwners[module]:null,
-      runtime:module&&["accounts","contacts","deals","tasks","parties","party-relationships","consents"].includes(module)?
-        "ORIGINAL_NATIVE_RUST":["identity-resolution","data-quality"].includes(module)?"READ_ONLY_ORIGINAL_RUST":
-        module==="customer-data-operations"?"ORIGINAL_RUST_BOUNDED_IMPORT_EXPORT":
-        module==="customer-privacy"?"ORIGINAL_RUST_PRIVACY_INTAKE":"NOT_CONNECTED",
+      // Runtime is derived from the single owner locator, not a second hardcoded
+      // status list. "Connected" describes source wiring, never live acceptance.
+      runtime:module? !sourceFor(module).api?"NOT_CONNECTED":
+        readModels[module]?"NATIVE_READ_COMPOSITION":
+        backendModels[module]?.kind==="internal"?"INTERNAL_NATIVE_RUST":
+        "ORIGINAL_NATIVE_RUST":null,
       files:module?sourceFor(module):{registry:"shared/catalog.mjs"},
       duration_ms:+(performance.now()-started).toFixed(2)}));
   }

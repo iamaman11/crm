@@ -65,7 +65,15 @@ function App(){
       accounts:accounts.items,contacts:contacts.items,deals:deals.items,tasks:tasks.items});
     setRole(session.role);
   }
-  useEffect(()=>{reload().catch(e=>setError(e.message)).finally(()=>setLoading(false));},[]);
+  // A successful mutation is not a failed mutation just because its readback fails.
+  // Preserve the last successfully loaded lists and show an actionable warning.
+  async function refreshAfterSave(){
+    try {await reload();setError("");}
+    catch(e){setError("Изменение сохранено, но повторное чтение не удалось. "+
+      "Показанные данные могут быть устаревшими. Нажмите «Обновить». "+e.message);}
+  }
+  useEffect(()=>{reload().catch(e=>setError("Не удалось загрузить CRM. "+
+    "Проверьте подключение и нажмите «Обновить». "+e.message)).finally(()=>setLoading(false));},[]);
   const partyName=value=>items.parties.find(p=>p.id===value)?.name||"—";
   const accountName=value=>items.accounts.find(a=>a.id===value)?.name||"—";
   const contactsParty=account=>account?.parties?.find(p=>p.role==="primary")?.id;
@@ -141,9 +149,9 @@ function App(){
           reminder_at_unix_nanos:null};
       }
       const saved=await api(path,{method,headers:keyHeaders(form.key),body:JSON.stringify(data)});
-      await reload();
       setForm(null);
       setNotice(saved.replayed?"Повтор выполнен без дублирования":"Сохранено");
+      await refreshAfterSave();
     }catch(e){setError(e.message);}
     finally{setBusy(false);}
   }
@@ -233,9 +241,12 @@ function App(){
   return <><header><strong>CRM</strong><span>Один Rust Worker · одна D1</span></header>
     <main><div className="heading"><div><h1>Моя CRM</h1>
       <p>Клиенты, контакты, сделки и задачи — оригинальные модули Rust</p></div>
-      <button className="ghost" disabled={loading} onClick={()=>reload().then(()=>{
-        setNotice("Обновлено");setError("");
-      }).catch(e=>setError(e.message))}>Обновить</button></div>
+      <button className="ghost" disabled={loading} onClick={()=>{
+        setError("");setNotice("");
+        reload().then(()=>setNotice("Обновлено"))
+          .catch(e=>setError("Не удалось обновить CRM; показаны ранее загруженные данные. "+
+            "Повторите обновление. "+e.message));
+      }}>Обновить</button></div>
       <nav aria-label="Разделы">{Object.entries(sections).map(([key,section])=>
         <button key={key} className={tab===key?"active":"ghost"}
           onClick={()=>navigate(key)}>{section.title} <small>{items[key].length}</small></button>)}
@@ -258,19 +269,19 @@ function App(){
       {notice&&<div role="status" className="notice">{notice}</div>}
       {error&&<div role="alert" className="notice error">{error}</div>}
       <section className="panel">{tab==="parties"?
-        <Parties items={items.parties} load={api} writable={writable} loading={loading} onSaved={reload}/>:
+        <Parties items={items.parties} load={api} writable={writable} loading={loading} onSaved={refreshAfterSave}/>:
         tab==="relationships"?<Relationships items={items.relationships}
           parties={items.parties} load={api} writable={writable} loading={loading}
-          onSaved={reload}/>:
+          onSaved={refreshAfterSave}/>:
         tab==="identity-resolution"?<IdentityResolution parties={items.parties}
           load={api} loading={loading}/>:
         tab==="data-quality"?<DataQuality parties={items.parties}
           load={api} loading={loading}/>:
-        tab==="data-export"?<DataExport load={api} writable={writable} loading={loading} onSaved={reload}/>:
+        tab==="data-export"?<DataExport load={api} writable={writable} loading={loading} onSaved={refreshAfterSave}/>:
         tab==="privacy"?<PrivacyCases load={api} writable={writable} loading={loading}/>:
         tab==="consents"?<Consents items={items.consents}
           parties={items.parties} contacts={items.contacts}
-          load={api} writable={writable} loading={loading} onSaved={reload}/>:
+          load={api} writable={writable} loading={loading} onSaved={refreshAfterSave}/>:
         card?<Customer360 accountId={card} load={api} writable={writable} onBack={()=>setCard(null)}
           onNavigate={navigate} onEdit={(kind,row)=>begin(kind,row)}/>:
         <>
