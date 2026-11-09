@@ -982,43 +982,97 @@ try{
     await page.locator('section[aria-label="Лица и организации (Rust)"]')
       .getByRole("row").filter({hasText:updatedName}).waitFor();
     uiSteps.push("Browser reload -> persisted D1 state available");
-    // Native-only parity: the same React frontend must create and read every
-    // current screen using this one Rust fetch entrypoint. No JS fallback.
+    // The visible client/contact/deal/task React screens must use ORIGINAL
+    // owner APIs, not the retired /api/customers|contacts|deals|tasks pilot.
+    const navigation=page.getByRole("navigation",{name:"Разделы"});
+    const selectTab=async title=>navigation.getByRole("button",{name:new RegExp(title)}).click();
+    const submitForm=async()=>{
+      await page.getByRole("button",{name:"Сохранить",exact:true}).click();
+      await page.getByRole("status").getByText("Сохранено").waitFor();
+    };
     const customer="Native customer "+marker;
-    await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",{name:/Клиенты/}).click();
+    await selectTab("Клиенты");
     await page.getByRole("button",{name:"+ Добавить клиента"}).click();
-    await page.getByLabel("Имя / название").fill(customer);
-    await page.getByRole("button",{name:"Сохранить",exact:true}).click();
-    await page.getByText(customer,{exact:true}).first().waitFor();
-    const customers=await call("/api/customers",a);
-    assert.equal(customers.status,200);
-    const saved=customers.body.items.find(x=>x.name===customer);
-    assert.ok(saved?.id);
-    assert.equal((await call("/api/customers",b)).body.items.some(x=>x.id===saved.id),false);
-    await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",{name:/Контакты/}).click();
+    await page.getByLabel("Название",{exact:true}).fill(customer);
+    await page.getByLabel("Лицо / организация",{exact:true}).selectOption({label:updatedName});
+    await submitForm();
+    await page.getByRole("row").filter({hasText:customer}).waitFor();
+    const accounts=await call("/api/accounts",a);
+    const saved=accounts.body.items.find(x=>x.name===customer);
+    assert.ok(saved?.id,"React created a real original Account");
+    assert.deepEqual(saved.parties.map(x=>x.id),[persisted.body.items.find(x=>x.name===marker)?.id].filter(Boolean)
+      .concat(saved.parties.map(x=>x.id).filter(x=>x!==persisted.body.items.find(p=>p.name===marker)?.id)),
+      "original Account owns Party refs, never legacy customers");
+    assert.equal((await call("/api/accounts/"+saved.id,b)).status,404);
+    const customerRow=page.getByRole("row").filter({hasText:customer});
+    await customerRow.getByRole("button",{name:"Изменить"}).click();
+    await page.getByLabel("Название",{exact:true}).fill(customer+" Updated");
+    await submitForm();
+    await page.getByRole("row").filter({hasText:customer+" Updated"}).waitFor();
+    uiSteps.push("React Account create/update -> original crm-customer-accounts -> tenant D1");
+    const email="native-"+marker.toLowerCase()+"@example.test";
+    await selectTab("Контакты");
     await page.getByRole("button",{name:"+ Добавить контакт"}).click();
-    await page.getByLabel("Клиент").selectOption({label:customer});
-    await page.getByLabel("Имя",{exact:true}).fill(marker+" Contact");
-    await page.getByRole("button",{name:"Сохранить",exact:true}).click();
-    await page.getByText(marker+" Contact",{exact:true}).first().waitFor();
-    await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",{name:/Сделки/}).click();
+    await page.getByLabel("Лицо / организация",{exact:true}).selectOption({label:updatedName});
+    await page.getByLabel("Значение").fill(email);
+    await submitForm();
+    await page.getByRole("row").filter({hasText:email}).waitFor();
+    const points=await call("/api/contact-points",a);
+    assert.ok(points.body.items.some(x=>x.value===email&&x.verified===false));
+    uiSteps.push("React Contact create -> original ContactPoint + no forged verification");
+    const dealName=marker+" Deal";
+    await selectTab("Сделки");
     await page.getByRole("button",{name:"+ Добавить сделку"}).click();
-    await page.getByLabel("Клиент").selectOption({label:customer});
-    await page.getByLabel("Название сделки").fill(marker+" Deal");
-    await page.getByRole("button",{name:"Сохранить",exact:true}).click();
-    await page.getByText(marker+" Deal",{exact:true}).first().waitFor();
-    await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",{name:/Задачи/}).click();
+    await page.getByLabel("Название сделки").fill(dealName);
+    await page.getByLabel("Клиент",{exact:true}).selectOption({label:customer+" Updated"});
+    await page.getByLabel("Сумма (минимальные единицы)").fill("7500");
+    await submitForm();
+    await page.getByRole("row").filter({hasText:dealName}).waitFor();
+    const deals=await call("/api/sales-deals",a);
+    const actualDeal=deals.body.items.find(x=>x.name===dealName);
+    assert.equal(actualDeal?.amount.minor_units,"7500");
+    await page.getByRole("row").filter({hasText:dealName})
+      .getByRole("button",{name:"Этап сделки"}).click();
+    await page.getByLabel("Новый этап").selectOption("qualified");
+    await submitForm();
+    const promoted=await call("/api/sales-deals/"+actualDeal.id,a);
+    assert.equal(promoted.body.item.stage.stage_id,"qualified");
+    uiSteps.push("React Deal create/advance -> original Sales and atomic Activities link");
+    const taskName=marker+" Task";
+    await selectTab("Задачи");
     await page.getByRole("button",{name:"+ Добавить задачу"}).click();
-    await page.getByLabel("Клиент").selectOption({label:customer});
-    await page.getByLabel("Что сделать").fill(marker+" Task");
-    await page.getByRole("button",{name:"Сохранить",exact:true}).click();
-    await page.getByText(marker+" Task",{exact:true}).first().waitFor();
-    const card=await call("/api/customer360/"+saved.id,a);
-    assert.equal(card.status,200);
-    assert.equal(card.body.summary.contacts,1);
-    assert.equal(card.body.summary.deals,1);
-    assert.equal(card.body.summary.open_tasks,1);
-    assert.equal((await call("/api/customer360/"+saved.id,b)).status,404);
+    await page.getByLabel("Что сделать").fill(taskName);
+    await page.getByLabel("Клиент",{exact:true}).selectOption({label:customer+" Updated"});
+    await submitForm();
+    await page.getByRole("row").filter({hasText:taskName}).waitFor();
+    await page.getByRole("row").filter({hasText:taskName})
+      .getByRole("button",{name:"Выполнить"}).click();
+    await submitForm();
+    const tasks=await call("/api/activity-tasks",a);
+    assert.equal(tasks.body.items.find(x=>x.subject===taskName)?.status,"completed");
+    uiSteps.push("React Task create/complete -> original Activities");
+    await selectTab("Клиенты");
+    await page.getByRole("row").filter({hasText:customer+" Updated"})
+      .getByRole("button",{name:"Карточка"}).click();
+    await page.getByRole("heading",{name:customer+" Updated"}).waitFor();
+    await page.getByRole("region",{name:"Контакты клиента"}).getByText(email).waitFor();
+    await page.getByRole("region",{name:"Сделки клиента"}).getByText(dealName).waitFor();
+    await page.getByRole("region",{name:"Задачи клиента"}).getByText(taskName).waitFor();
+    await page.getByRole("button",{name:"← К списку клиентов"}).click();
+    uiSteps.push("React original Account Overview -> one tenant D1, no Customer360 pilot");
+    await page.reload({waitUntil:"domcontentloaded"});
+    await page.getByRole("row").filter({hasText:customer+" Updated"}).waitFor();
+    uiSteps.push("Native React reload preserves original Account/Deal/Contact/Task state");
+    const readonly=await browser.newContext({viewport:{width:1200,height:800},
+      extraHTTPHeaders:{"cf-access-jwt-assertion":viewer}});
+    try{
+      const readPage=await readonly.newPage();
+      await readPage.goto(origin,{waitUntil:"domcontentloaded"});
+      await readPage.getByRole("navigation",{name:"Разделы"}).waitFor();
+      assert.equal(await readPage.getByRole("button",{name:"+ Добавить клиента"}).count(),0,
+        "viewer must not see a mutating button");
+    }finally{await readonly.close();}
+    uiSteps.push("Read-only enrolled role cannot mutate through React");
     const session=await call("/api/session",a);
     assert.equal(session.status,200);
     assert.equal(session.body.role,"admin");
@@ -1028,10 +1082,10 @@ try{
     const result={git_sha:process.env.CRM_SOURCE_SHA||"unknown",result:"PASS",
       runtime:"one native workers-rs workerd + Cloudflare Static Assets + isolated D1",
       auth:"real self-signed RS256 verified in Rust WebCrypto (CI-only JWKS)",
-      frontend:"existing React Parties.jsx",module:"crm.parties",
+      frontend:"original React owners",module:"crm.customer-accounts",
       checks:uiSteps, screenshot:"native-party-desktop.png",
       cloudflare_access_live:"NOT_TESTED",published_cloudflare_url:"NOT_TESTED",
-      other_crm_modules:"customers/contacts/deals/tasks/Customer360 tested on native"};
+      other_crm_modules:"original Accounts/ContactPoints/Sales/Activities/Account Overview tested on native"};
     writeFileSync(manifest,JSON.stringify(result,null,2)+"\n");
     console.log(JSON.stringify({event:"crm.native-react-chromium",result:"PASS",checks:uiSteps}));
     await context.close();
