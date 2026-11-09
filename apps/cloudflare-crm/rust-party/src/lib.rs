@@ -27,6 +27,8 @@ mod consents;
 #[cfg(feature = "native")]
 mod identity_resolution;
 #[cfg(feature = "native")]
+mod data_quality;
+#[cfg(feature = "native")]
 mod sales_activities_link;
 #[cfg(feature = "native-ci")]
 mod original_domain_probe;
@@ -159,6 +161,11 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "tenant_audit_rows_with_id": audit_trace }},
         "modules": {
             "crm.parties": {"read": read_checks.get("parties"), "business_owner": "original-crm-parties"},
+            "crm.data-quality": {"read":read_checks.get("parties"),
+                "business_owner":"original-crm-data-quality",
+                "api":"READ_ONLY_PARTY_NAME_RULES", "ui":"READ_ONLY_NAME_REVIEW",
+                "rule_set":"BUILTIN_V1_NOT_TENANT_PERSISTED",
+                "findings":"NOT_CONNECTED", "completeness_score":"NOT_CONNECTED"},
             "crm.identity-resolution": {"read":read_checks.get("parties"),
                 "business_owner":"original-crm-identity-resolution",
                 "api":"READ_ONLY_PARTY_COMPARISON", "ui":"READ_ONLY_COMPARISON",
@@ -251,6 +258,10 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
         return consents::route(req,db,tenant,actor,role,&request_id).await;
     }
     #[cfg(feature = "native")]
+    if path.starts_with("/api/data-quality/") {
+        return data_quality::route(req, db, tenant).await;
+    }
+    #[cfg(feature = "native")]
     if path == "/api/identity-resolution" || path.starts_with("/api/identity-resolution/") {
         return identity_resolution::route(req, db, tenant).await;
     }
@@ -335,6 +346,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
         let operation = match (path.as_str(), method.clone()) {
+            (p, Method::Get) if p.starts_with("/api/data-quality/parties/") && p.ends_with("/evaluate") => "data-quality.evaluate",
             ("/api/identity-resolution/candidates", Method::Get) => "identity-resolution.candidates",
             (p, Method::Get) if p.starts_with("/api/identity-resolution/compare/") => "identity-resolution.compare",
             ("/api/consents", Method::Get) => "consents.list",
@@ -394,6 +406,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             else if path.starts_with("/api/sales-deals") { "crm.sales" }
             else if path.starts_with("/api/consents") { "crm.consents" }
             else if path.starts_with("/api/identity-resolution") { "crm.identity-resolution" }
+            else if path.starts_with("/api/data-quality") { "crm.data-quality" }
             else { "crm.platform" };
         reply.headers_mut().set("x-crm-module", module)?;
         reply.headers_mut().set("x-crm-runtime", "native-workers-rs")?;

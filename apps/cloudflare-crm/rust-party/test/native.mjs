@@ -157,6 +157,44 @@ try{
   assert.equal(created.status,201,JSON.stringify(created));
   assert.equal(created.body.item.name,"Original Native Rust");
   assert.equal((await call("/api/parties/"+id,a)).status,200);
+  // Original Data Quality: tenant-scoped read, immutable built-in rules,
+  // one actual Party state, no client-side or Worker scoring.
+  const qualityPath="/api/data-quality/parties/"+id+"/evaluate";
+  const quality=await call(qualityPath,a);
+  assert.equal(quality.status,200,JSON.stringify(quality));
+  assert.equal(quality.headers["x-crm-module"],"crm.data-quality");
+  assert.equal(quality.body.party.id,id);
+  assert.equal(quality.body.checked,2);
+  assert.equal(quality.body.failed,0);
+  assert.equal(quality.body.completeness_score,"NOT_COMPUTED");
+  assert.equal(quality.body.persisted_findings,"NOT_CONNECTED");
+  assert.equal(quality.body.checks.every(c=>c.passed),true);
+  assert.equal((await call(qualityPath,viewer)).status,200);
+  assert.equal((await call(qualityPath,b)).status,404);
+  assert.equal((await call(qualityPath,null)).status,401);
+  assert.equal((await call("/api/data-quality/parties/does-not-exist/evaluate",a)).status,404);
+  assert.equal((await call(qualityPath,a,{method:"POST"})).status,404);
+  const qualityShortId="native-quality-short-"+randomUUID();
+  const shortCreate=await call("/api/parties",a,{method:"POST",
+    headers:{"content-type":"application/json","idempotency-key":"native-quality-short"},
+    body:JSON.stringify({id:qualityShortId,kind:"person",name:"A"})});
+  assert.equal(shortCreate.status,201,JSON.stringify(shortCreate));
+  const shortResult=await call("/api/data-quality/parties/"+qualityShortId+"/evaluate",a);
+  assert.equal(shortResult.status,200);
+  assert.ok(shortResult.body.checks.some(c=>
+    !c.passed&&c.reason_code==="DATA_QUALITY_PARTY_DISPLAY_NAME_TOO_SHORT"));
+  const qualityPlaceholderId="native-quality-placeholder-"+randomUUID();
+  const placeholderCreate=await call("/api/parties",a,{method:"POST",
+    headers:{"content-type":"application/json","idempotency-key":"native-quality-placeholder"},
+    body:JSON.stringify({id:qualityPlaceholderId,kind:"person",name:"unknown"})});
+  assert.equal(placeholderCreate.status,201);
+  const placeholderResult=await call("/api/data-quality/parties/"+qualityPlaceholderId+"/evaluate",a);
+  assert.equal(placeholderResult.status,200);
+  assert.ok(placeholderResult.body.checks.some(c=>
+    !c.passed&&c.reason_code==="DATA_QUALITY_PARTY_DISPLAY_NAME_PLACEHOLDER"));
+  console.log(JSON.stringify({event:"crm.native-original-data-quality-party",
+    result:"PASS",read_only:true,checked:2,score:"NOT_COMPUTED",
+    tenant_isolation:"PASS",negative_rules:"PASS"}));
   assert.equal((await call("/api/parties/"+id,b)).status,404,"B cannot read A");
   assert.equal((await call("/api/parties/"+id,serviceB)).status,404,
     "Cloudflare service token B cannot read Party belonging to human A");

@@ -192,6 +192,9 @@ async function verifyData(){
     r.operation==="identity-resolution.compare"&&r.method==="GET"&&
     r.status===200&&r.module==="identity-resolution")||[];
   const compareRead=readOnly[0];
+  const qualityRead=cycle.requests?.find(r=>
+    r.operation==="data-quality.evaluate"&&r.method==="GET"&&
+    r.status===200&&r.module==="data-quality");
   const candidateRead=cycle.requests?.find(r=>
     r.operation==="identity-resolution.candidates"&&r.method==="GET"&&
     r.status===200&&r.module==="identity-resolution");
@@ -203,6 +206,12 @@ async function verifyData(){
     !candidateRead||candidateRead.source_sha!==sha||
     !/^[0-9a-f-]{36}$/i.test(candidateRead.request_id||""))
     throw Error("Identity Resolution candidates live Chromium trace missing");
+
+  if(!cycle.ui_coverage.includes("data-quality.evaluate.pass")||
+    !cycle.ui_coverage.includes("data-quality.evaluate.placeholder")||
+    !qualityRead||qualityRead.source_sha!==sha||
+    !/^[0-9a-f-]{36}$/i.test(qualityRead.request_id||""))
+    throw Error("Data Quality original Rust Chromium review trace missing");
 
   // D1's audit is transactionally written by the same native mutation and
   // uses the exact x-request-id the real Chromium click received.
@@ -230,7 +239,7 @@ async function verifyData(){
   // Query existing native structured Cloudflare Logs; no new monitoring
   // infrastructure. Probe each exact original owner mutation,
   // and require the version serving 100% of ordinary traffic.
-  let pending=[...writes,compareRead,candidateRead];
+  let pending=[...writes,compareRead,candidateRead,qualityRead];
   const from=Date.now()-15*60*1000;
   for(let attempt=0;attempt<12&&pending.length;attempt++){
     const missing=[];
@@ -260,12 +269,13 @@ async function verifyData(){
   record("native-functional-accepted.json",{git_sha:sha,runtime:"native-workers-rs",
     worker_version:liveVersion,database,ui_buttons:cycle.ui_coverage,
     mutations:writes.length,d1_correlated:writes.length,logs_correlated:writes.length,
-    request_ids:ids,read_only_log_correlated:2,
-    read_only_request_ids:[compareRead.request_id,candidateRead.request_id],result:"PASS"});
+    request_ids:ids,read_only_log_correlated:3,
+    read_only_request_ids:[compareRead.request_id,candidateRead.request_id,
+      qualityRead.request_id],result:"PASS"});
   console.log(JSON.stringify({event:"crm.native-full-functional-cycle",result:"PASS",
     sha,worker_version:liveVersion,ui_buttons:cycle.ui_coverage.length,
     mutations:writes.length,d1_correlated:writes.length,
-    logs_correlated:writes.length,read_only_log_correlated:2}));
+    logs_correlated:writes.length,read_only_log_correlated:3}));
 
   const p=load("parties-e2e.json");
   if(p.git_sha!==sha||p.parties?.length!==2||p.keys?.length!==3)throw Error("Missing native Party A/B browser proof");

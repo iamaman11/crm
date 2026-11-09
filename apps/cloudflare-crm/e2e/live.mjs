@@ -31,6 +31,7 @@ function operation(path,method){
   if(path.endsWith("/suppress"))action="suppress";
   if(path.startsWith("/api/identity-resolution/compare/"))action="compare";
   if(path==="/api/identity-resolution/candidates")action="candidates";
+  if(path.startsWith("/api/data-quality/parties/")&&path.endsWith("/evaluate"))action="evaluate";
   if(path.endsWith("/evaluate"))action="evaluate";
   return owner+"."+action;
 }
@@ -163,6 +164,33 @@ try{
     cover("identity-resolution.tenant-isolation");
   }finally{await identityContextB.close();}
   await shot("02-identity","Read-only original Identity Resolution Party comparison");
+  // A true live Party quality user cycle: current D1 Party, original Rust rules,
+  // error, tenant isolation and versioned policy. No invented completeness score.
+  await tab("Качество данных").click();
+  await page.getByLabel("Лицо или организация для проверки").selectOption(party.id);
+  await button("Проверить качество").click();
+  await page.getByRole("status").getByText(/Замечаний нет/).waitFor();
+  cover("data-quality.evaluate.pass");
+  const qualityGood=await context.request.get(url+"/api/data-quality/parties/"+party.id+"/evaluate");
+  assert.equal(qualityGood.status(),200);
+  const qualityGoodBody=await qualityGood.json();
+  assert.equal(qualityGoodBody.party.id,party.id);
+  assert.equal(qualityGoodBody.checked,2);
+  assert.equal(qualityGoodBody.failed,0);
+  assert.equal(qualityGoodBody.completeness_score,"NOT_COMPUTED");
+  const tenantBQuality=await browser.newContext({extraHTTPHeaders:access("B")});
+  try {
+    assert.equal((await tenantBQuality.request.get(url+
+      "/api/data-quality/parties/"+party.id+"/evaluate")).status(),404);
+    cover("data-quality.tenant-isolation");
+  }finally{await tenantBQuality.close();}
+  assert.equal((await context.request.post(url+
+    "/api/data-quality/parties/"+party.id+"/evaluate")).status(),404);
+  cover("data-quality.mutation-unavailable");
+  await button("Сбросить").click();
+  assert.equal(await page.getByLabel("Лицо или организация для проверки").inputValue(),"");
+  cover("data-quality.reset");
+  await shot("02-data-quality","Original Rust read-only Party name evaluation");
   await tab("Связи").click();
   await button("+ Добавить связь").click();
   await button("Отмена").click();cover("party-relationships.create.cancel");
@@ -206,6 +234,26 @@ try{
   await page.getByLabel("Название",{exact:true}).fill(marker+" Account Updated");
   await save();cover("accounts.update");
   await shot("03-accounts","Original Account linked to Party");
+  // Live UI negative rule: new Party with a recorded placeholder name.
+  await tab("Лица и организации").click();
+  await button("+ Добавить лицо / организацию").click();
+  await page.getByLabel("Имя / название").fill("unknown");
+  const qualityCreateResponse=page.waitForResponse(r=>
+    new URL(r.url()).pathname==="/api/parties"&&
+    r.request().method()==="POST"&&r.status()===201);
+  await save();cover("data-quality.fixture.party-create");
+  const qualityParty=(await (await qualityCreateResponse).json()).item;
+  await tab("Качество данных").click();
+  await page.getByLabel("Лицо или организация для проверки").selectOption(qualityParty.id);
+  await button("Проверить качество").click();
+  await page.getByRole("status").getByText(/Есть замечания: 1/).waitFor();
+  const qualityBad=await context.request.get(url+
+    "/api/data-quality/parties/"+qualityParty.id+"/evaluate");
+  assert.equal(qualityBad.status(),200);
+  assert.equal((await qualityBad.json()).checks.some(x=>
+    x.reason_code==="DATA_QUALITY_PARTY_DISPLAY_NAME_PLACEHOLDER"&&!x.passed),true);
+  cover("data-quality.evaluate.placeholder");
+  await shot("03-data-quality-finding","Original Rust placeholder rule, no persisted finding");
   const contact=marker.toLowerCase()+"@example.test";
   await tab("Контакты").click();
   await button("+ Добавить контакт").click();

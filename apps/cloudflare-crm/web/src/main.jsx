@@ -6,6 +6,7 @@ import Parties from "./Parties.jsx";
 import Relationships from "./Relationships.jsx";
 import Consents from "./Consents.jsx";
 import IdentityResolution from "./IdentityResolution.jsx";
+import DataQuality from "./DataQuality.jsx";
 
 // A single React UI for ORIGINAL Rust owners. No pilot CRUD, JS business rules,
 // shadow entities or client-side authorization. All commands are typed at the
@@ -242,7 +243,9 @@ function App(){
           onClick={()=>navigate("consents")}>
           Разрешения <small>{items.consents.length}</small></button>
         <button className={tab==="identity-resolution"?"active":"ghost"}
-          onClick={()=>navigate("identity-resolution")}>Сравнение записей</button></nav>
+          onClick={()=>navigate("identity-resolution")}>Сравнение записей</button>
+        <button className={tab==="data-quality"?"active":"ghost"}
+          onClick={()=>navigate("data-quality")}>Качество данных</button></nav>
       {notice&&<div role="status" className="notice">{notice}</div>}
       {error&&<div role="alert" className="notice error">{error}</div>}
       <section className="panel">{tab==="parties"?
@@ -251,6 +254,8 @@ function App(){
           parties={items.parties} load={api} writable={writable} loading={loading}
           onSaved={reload}/>:
         tab==="identity-resolution"?<IdentityResolution parties={items.parties}
+          load={api} loading={loading}/>:
+        tab==="data-quality"?<DataQuality parties={items.parties}
           load={api} loading={loading}/>:
         tab==="consents"?<Consents items={items.consents}
           parties={items.parties} contacts={items.contacts}

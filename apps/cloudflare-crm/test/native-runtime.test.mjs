@@ -70,6 +70,23 @@ test("Identity Resolution comparison uses canonical Rust pair and no invented ma
     "rust-party/src/identity_resolution.rs");
   assert.equal(ownerFiles["crm-identity-resolution"].browser,"e2e/live.mjs");
 });
+test("data quality uses original Rust name rules, one Party list and no shadow score",()=>{
+  const app=read("web/src/main.jsx");
+  const ui=read("web/src/DataQuality.jsx");
+  const adapter=read("rust-party/src/data_quality.rs");
+  const domain=read("../../modules/crm-data-quality/src/domain.rs");
+  const lib=read("rust-party/src/lib.rs");
+  assert.ok(app.includes("<DataQuality parties={items.parties}"));
+  assert.ok(ui.includes('load("data-quality/parties/"'));
+  assert.ok(!ui.includes("setItems("));
+  assert.ok(adapter.includes("builtin_party_name_review_rules_v1"));
+  assert.ok(adapter.includes("parties::stored"));
+  assert.ok(adapter.includes('"completeness_score": "NOT_COMPUTED"'));
+  assert.ok(domain.includes("PartyRuleSetVersion::publish"));
+  assert.ok(lib.includes("data_quality::route"));
+  assert.equal(ownerFiles["crm-data-quality"].api,"rust-party/src/data_quality.rs");
+  assert.equal(ownerFiles["crm-data-quality"].browser,"e2e/live.mjs");
+});
 test("Party relationships UI uses original Rust owner with one App list",()=>{
   const app=read("web/src/main.jsx"),ui=read("web/src/Relationships.jsx");
   const owner=read("rust-party/src/party_relationships.rs");

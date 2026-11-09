@@ -23,7 +23,9 @@ export const backendModels={
     ui:"web/src/IdentityResolution.jsx",comparison:"READ_ONLY_ORIGINAL_RUST",
     candidate_search:"READ_ONLY_EXACT_RECORDED_EMAIL",merge:"NOT_CONNECTED"},
   "customer-data-operations":{title:"Импорт и экспорт",kind:"backend",ui:"NOT_CONNECTED"},
-  "data-quality":{title:"Качество данных",kind:"backend",ui:"NOT_CONNECTED"},
+  "data-quality":{title:"Качество данных",kind:"backend",
+    ui:"web/src/DataQuality.jsx",evaluation:"READ_ONLY_PARTY_NAME_RULES",
+    findings:"NOT_CONNECTED",completeness_score:"NOT_CONNECTED"},
   "customer-enrichment":{title:"Обогащение",kind:"backend",ui:"NOT_CONNECTED"},
   "customer-privacy":{title:"Приватность",kind:"backend",ui:"NOT_CONNECTED"}
 };
@@ -79,8 +81,12 @@ export const ownerFiles={
     api:"rust-party/src/identity_resolution.rs",
     validation:"../../modules/crm-identity-resolution/src/domain.rs",
     migration:null,tests:nativeTests,browser:live},
+  "crm-data-quality":{ui:"web/src/DataQuality.jsx",
+    api:"rust-party/src/data_quality.rs",
+    validation:"../../modules/crm-data-quality/src/domain.rs",
+    migration:null,tests:nativeTests,browser:live},
   ...Object.fromEntries(["crm-customer-data-operations",
-    "crm-data-quality","crm-customer-enrichment","crm-customer-privacy"]
+    "crm-customer-enrichment","crm-customer-privacy"]
     .map(name=>[name,{ui:null,api:null,
       validation:"../../modules/"+name+"/Cargo.toml",
       migration:null,tests:null,browser:null}]))
