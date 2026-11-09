@@ -13,6 +13,18 @@ const context = await browser.newContext({ viewport: { width: 1366, height: 900 
 const page = await context.newPage();
 const marker = "E2E-" + process.env.GITHUB_SHA.slice(0, 8) + "-" + Date.now().toString(36);
 const errors = [];
+// Every real browser HTTP response is an immutable release-check input.
+// The CI verifier independently matches mutation request IDs with D1 and Logs.
+const nativeResponses = [];
+const uiCoverage = new Set();
+const covered = action => uiCoverage.add(action);
+const responseModule = path => {
+  const segment=path.split("/")[2];
+  return segment==="customer360"?"customer360":segment;
+};
+const responseOperation = (path,method) =>
+  responseModule(path)+"."+
+  (method==="POST"?"create":method==="PATCH"?"update":method==="DELETE"?"delete":"read");
 const uiEvidenceDir = "apps/cloudflare-crm/e2e-evidence";
 const evidence = {
   git_sha: process.env.GITHUB_SHA,
@@ -49,8 +61,15 @@ async function verifyUiWriteInBackend(module, text) {
 page.on("pageerror", error => errors.push(error.message));
 page.on("response", response => {
   const path=new URL(response.url()).pathname;
-  if(path.startsWith("/api/") && response.headers()["x-crm-runtime"]!=="native-workers-rs")
-    errors.push("Non-native CRM API response: "+path+" HTTP "+response.status());
+  if(!path.startsWith("/api/"))return;
+  const h=response.headers(),method=response.request().method();
+  const source=h["x-crm-source-sha"],id=h["x-request-id"];
+  if(h["x-crm-runtime"]!=="native-workers-rs" || source!==process.env.GITHUB_SHA ||
+    !/^[0-9a-f-]{36}$/i.test(id||""))
+    errors.push("Incomplete native trace: "+method+" "+path+" HTTP "+response.status());
+  nativeResponses.push({method,path,status:response.status(),source_sha:source,
+    module:responseModule(path),operation:responseOperation(path,method),
+    request_id:id, error_code:h["x-crm-error-code"]||null});
 });
 const tab = title => page.getByRole("navigation", { name: "Разделы" }).getByRole("button", { name: new RegExp(title) });
 const check = async text => await page.getByText(text, { exact: true }).first().waitFor({ timeout: 12000 });
@@ -64,6 +83,7 @@ async function create(section, button, fields, title) {
   }
   await page.getByRole("button", { name: "Сохранить" }).click();
   await check(title);
+  covered("create."+section);
 }
 async function rowFor(text) {
   const row = page.getByRole("row").filter({ hasText: text }).last();
@@ -79,12 +99,14 @@ async function edit(section, oldTitle, field, value, newTitle) {
   await page.getByRole("button", { name: "Сохранить" }).click();
   await page.getByRole("status").getByText("Сохранено").waitFor({ timeout: 12000 });
   await check(newTitle);
+  covered("edit."+section);
 }
 async function remove(section, title) {
   await tab(section).click();
   page.once("dialog", dialog => dialog.accept());
   await (await rowFor(title)).getByRole("button", { name: "Удалить" }).click();
   await page.getByRole("row").filter({ hasText: title }).waitFor({ state: "detached", timeout: 12000 });
+  covered("delete."+section);
 }
 async function cleanup() {
   for (const section of ["tasks", "deals", "contacts", "customers"]) {
@@ -234,12 +256,14 @@ try {
   await page.getByRole("button", {name:"Обновить",exact:true}).click();
   await page.getByRole("status").getByText("Обновлено").waitFor();
   evidence.api.push({module:"ui",action:"empty-form-validation-cancel-global-refresh",result:"PASS"});
+  covered("form.invalid-required");covered("form.cancel");covered("global.refresh");
   // Real browser proof that the original Rust Party runs in this same CRM
   // Worker behind the same Cloudflare Access policy and persists in D1.
   const partyName = marker+" Native Rust";
   await tab("Лица и организации").click();
   await page.getByRole("button",{name:"+ Добавить лицо / организацию"}).click();
   await page.getByRole("button",{name:"Отмена"}).click();
+  covered("parties.add.cancel");
   await page.getByRole("button",{name:"+ Добавить лицо / организацию"}).click();
   await page.getByLabel("Имя / название",{exact:true}).fill(partyName);
   const partyCreateHttp=page.waitForResponse(r=>new URL(r.url()).pathname==="/api/parties"&&r.request().method()==="POST");
@@ -249,6 +273,7 @@ try {
   const nativeClickRequestId=partyCreateResponse.headers()["x-request-id"];
   assert.match(nativeClickRequestId||"",/^[0-9a-f-]{36}$/i,"real React click needs native request ID");
   await page.getByText(partyName,{exact:true}).waitFor({timeout:12000});
+  covered("parties.create");
   await page.reload();
   await tab("Лица и организации").click();
   const partyRow=page.getByRole("row").filter({hasText:partyName});
@@ -257,10 +282,15 @@ try {
   await page.getByLabel("Имя / название",{exact:true}).fill("Cancelled Party Change");
   await page.getByRole("button",{name:"Отмена"}).click();
   await partyRow.getByText(partyName,{exact:true}).waitFor();
+  covered("parties.edit.cancel");
   await partyRow.getByRole("button",{name:"Изменить"}).click();
   await page.getByLabel("Имя / название",{exact:true}).fill(partyName+" Updated");
   await page.getByRole("button",{name:"Сохранить"}).click();
   await page.getByText(partyName+" Updated",{exact:true}).waitFor({timeout:12000});
+  covered("parties.edit.save");
+  await page.locator('section[aria-label="Лица и организации (Rust)"]').getByRole("button",{name:"Обновить",exact:true}).click();
+  await page.getByText(partyName+" Updated",{exact:true}).waitFor();
+  covered("parties.refresh");
   const nativeRead = await context.request.get(url + "/api/parties");
   assert.equal(nativeRead.status(),200,"authorized Rust Party API");
   const partyList=(await nativeRead.json()).items;
@@ -298,13 +328,20 @@ try {
   await cancelRow.getByRole("button",{name:"Удалить"}).click();
   await cancelRow.getByText(customer,{exact:true}).waitFor();
   evidence.api.push({module:"customers",action:"cancel-edit-and-dismiss-delete",result:"PASS"});
+  covered("customers.edit.cancel");covered("customers.delete.dismiss");
   await page.reload();
   await check(customer);
   await verifyUiWriteInBackend("customers", customer);
-  await captureUi("03-customers", "Create and reload customer");
+  const customerEdited=customer+" Проверено";
+  await edit("Клиенты",customer,"Имя / название",customerEdited,customerEdited);
+  await edit("Клиенты",customerEdited,"Имя / название",customer,customer);
+  await captureUi("03-customers", "Create, edit and reload customer");
   await create("Контакты", "контакт", { "Клиент": { label: customer }, "Имя": contact, "Электронная почта": "demo@example.test" }, contact);
   await verifyUiWriteInBackend("contacts", contact);
-  await captureUi("04-contacts", "Create contact linked to customer");
+  const contactEdited=contact+" Проверено";
+  await edit("Контакты",contact,"Имя",contactEdited,contactEdited);
+  await edit("Контакты",contactEdited,"Имя",contact,contact);
+  await captureUi("04-contacts", "Create and edit contact linked to customer");
   await create("Сделки", "сделку", { "Клиент": { label: customer }, "Название сделки": deal, "Этап": "new", "Сумма": "120" }, deal);
   await verifyUiWriteInBackend("deals", deal);
   await captureUi("05-deals", "Create a linked sales deal");
@@ -343,15 +380,27 @@ try {
   await page.getByRole("button",{name:"Повторить"}).click();
   await page.getByRole("heading",{name:customer}).waitFor();
   evidence.api.push({module:"customer360",action:"failed-refresh-then-retry",result:"PASS"});
+  covered("customer360.refresh");covered("customer360.retry");
   assert.equal(await page.getByText("Просрочено",{exact:true}).locator("..").locator("strong").textContent(),"1");
   await page.getByRole("button", { name: "Обновить карточку" }).click();
   await page.getByRole("heading", { name: customer }).waitFor();
+  // Exercise every Customer360 group navigation, not just the back button.
+  for(const [region,label] of [["Контакты клиента","Все контакты"],["Сделки клиента","Все сделки"],["Задачи клиента","Все задачи"]]){
+    await page.getByRole("region",{name:region}).getByRole("button",{name:label}).click();
+    await page.getByRole("textbox",{name:"Поиск"}).waitFor();
+    covered("customer360.navigate."+region);
+    await tab("Клиенты").click();
+    await (await rowFor(customer)).getByRole("button",{name:"Карточка"}).click();
+    await page.getByRole("heading",{name:customer}).waitFor();
+  }
   await page.getByRole("button", { name: "← К списку клиентов" }).click();
+  covered("customer360.back");
   await tab("Сделки").click();
   await page.getByRole("button", { name: "Воронка" }).click();
   const card = page.locator(".deal-card").filter({ hasText: deal });
   await card.getByRole("combobox", { name: "Этап сделки" }).selectOption("qualified");
   await page.getByRole("status").getByText("Этап обновлён").waitFor({ timeout: 12000 });
+  covered("deals.board");covered("deals.board.stage");
   await captureUi("08-pipeline", "Click pipeline and update deal stage");
   await page.reload();
   await tab("Сделки").click();
@@ -360,6 +409,7 @@ try {
     .getByRole("combobox", { name: "Этап сделки" }).inputValue();
   assert.equal(savedStage, "qualified", "pipeline stage survives browser reload");
   await page.getByRole("button", { name: "Таблица" }).click();
+  covered("deals.table");
   await edit("Сделки", deal, "Этап", "won", deal);
   await (await rowFor(deal)).getByText("Выиграна", { exact: true }).waitFor();
   await edit("Задачи", task, "Статус", "done", task);
@@ -379,11 +429,13 @@ try {
   // Linked edit uses the original CRUD owner without copying or mutating Customer 360 state.
   await page.getByRole("region", { name: "Контакты клиента" }).getByRole("button", { name:"Изменить" }).click();
   await page.getByRole("button", {name:"Отмена"}).click();
+  covered("customer360.linked.edit");
   await tab("Клиенты").click();
   await tab("Клиенты").click();
   await page.getByRole("textbox", { name: "Поиск" }).fill(customer);
   await check(customer);
   await page.getByRole("textbox", { name: "Поиск" }).fill("");
+  covered("customers.search");
   await page.setViewportSize({ width: 390, height: 844 });
   await tab("Клиенты").click();
   await page.locator(".mobile article").filter({hasText:customer}).getByRole("button",{name:"Карточка"}).click();
@@ -394,6 +446,7 @@ try {
   await page.locator(".mobile").getByText(task, { exact: true }).waitFor({ timeout: 12000 });
   await page.screenshot({ path: "apps/cloudflare-crm/e2e-mobile.png" });
   await captureUi("10-mobile", "Use mobile layout and verify task after navigation");
+  covered("mobile.customer.card");
   await page.setViewportSize({ width: 1366, height: 900 });
   await checkIndependentWorkspaces(customer);
   await remove("Задачи", task);
@@ -404,6 +457,42 @@ try {
   assert.equal(removed360.status(), 404);
   evidence.api.push({ module: "customer360", action: "read-after-browser-delete",
     status: 404, foreign_data_absent: true });
+  // Every published React action must reach the same native Worker, with a
+  // real HTTP response and a source-specific trace, not only a visible toast.
+  const requiredCoverage=[
+    "form.invalid-required","form.cancel","global.refresh",
+    "parties.add.cancel","parties.create","parties.edit.cancel","parties.edit.save","parties.refresh",
+    "customers.edit.cancel","customers.delete.dismiss","customers.search","mobile.customer.card",
+    "customer360.refresh","customer360.retry","customer360.back","customer360.linked.edit",
+    "customer360.navigate.Контакты клиента","customer360.navigate.Сделки клиента",
+    "customer360.navigate.Задачи клиента","deals.board","deals.board.stage","deals.table",
+    ...["Клиенты","Контакты","Сделки","Задачи"].flatMap(s=>["create."+s,"edit."+s,"delete."+s])
+  ];
+  assert.deepEqual(requiredCoverage.filter(s=>!uiCoverage.has(s)),[],
+    "UI button coverage missing");
+  for(const module of ["parties","customers","contacts","deals","tasks"]){
+    for(const op of ["create","update",...(module==="parties"?[]:["delete"])]){
+      assert.ok(nativeResponses.some(r=>r.operation===module+"."+op&&
+        (op==="create"?r.status===201:op==="delete"?r.status===204:r.status===200)),
+        "Native browser mutation not witnessed: "+module+"."+op);
+    }
+  }
+  for(const entry of nativeResponses)
+    if(!entry.request_id||entry.source_sha!==process.env.GITHUB_SHA)
+      throw Error("Incomplete native response evidence for "+entry.operation);
+  const mutations=nativeResponses.filter(r=>
+    ["POST","PATCH","DELETE"].includes(r.method)&&[200,201,204].includes(r.status));
+  const expectedMutations=3+3+3+3+2; // Party create/update, four models' C/U/D (minimum)
+  assert.ok(mutations.length>=expectedMutations,
+    "Missing native UI mutation receipts; got "+mutations.length);
+  await mkdir("apps/cloudflare-crm/.release",{recursive:true});
+  await writeFile("apps/cloudflare-crm/.release/native-functional-cycle.json",
+    JSON.stringify({git_sha:process.env.GITHUB_SHA,runtime:"native-workers-rs",
+      ui_coverage:requiredCoverage,requests:nativeResponses,
+      writes:mutations,result:"BROWSER_PASS_D1_LOGS_PENDING"},null,2)+"\n");
+  evidence.ui_coverage=requiredCoverage;
+  evidence.native_http_responses=nativeResponses.length;
+  evidence.native_mutations=mutations.length;
   if (errors.length) throw Error("Browser JavaScript error: " + errors.slice(0, 2).join("; "));
   result = "PASS";
   evidence.status = "PASS";

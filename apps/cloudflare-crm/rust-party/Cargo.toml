@@ -11,9 +11,7 @@ crate-type = ["cdylib"]
 default = []
 # Only for loopback workerd CI. The production build cannot accept these headers.
 ci-local = []
-# Import-only Rust business handler inside the existing, Access-protected CRM Worker.
-integrated = []
-# Native candidate: one public workers-rs fetch; no JS tenant delegation.
+# Sole deployed runtime: one native workers-rs fetch; no JS tenant delegation.
 native = []
 # CI-only signed JWT fixture, same Rust verifier and D1 actor path.
 native-ci = ["native"]

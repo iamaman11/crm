@@ -131,6 +131,83 @@ async function verifyData(){
   if(!observed)throw Error("Live native Chromium -> response -> D1 -> Cloudflare Logs correlation FAILED");
   console.log(JSON.stringify({event:"crm.native-live-trace",result:"PASS",
     source:sha,worker_version:liveVersion,request_id:click.request_id}));
+
+  // Real user click evidence across ALL current React modules, not just Party.
+  // A green infrastructure doctor alone must never approve this release.
+  const cycle=load("native-functional-cycle.json");
+  if(cycle.git_sha!==sha||cycle.runtime!=="native-workers-rs"||
+    cycle.result!=="BROWSER_PASS_D1_LOGS_PENDING"||!Array.isArray(cycle.writes)||
+    !Array.isArray(cycle.ui_coverage)||cycle.ui_coverage.length<30)
+    throw Error("Exact-source native UI functional-cycle evidence missing");
+  const writes=cycle.writes,expected=["parties","customers","contacts","deals","tasks"];
+  if(writes.length<14)throw Error("Native UI did not perform enough real mutations");
+  const seen=new Set();
+  for(const entry of writes){
+    if(entry.source_sha!==sha||!expected.includes(entry.module)||
+      !["create","update","delete"].includes(entry.operation.split(".")[1])||
+      !/^[0-9a-f-]{36}$/i.test(entry.request_id||"")||
+      seen.has(entry.request_id))throw Error("Invalid or duplicated native UI mutation evidence");
+    seen.add(entry.request_id);
+  }
+  for(const module of expected){
+    for(const op of ["create","update",...(module==="parties"?[]:["delete"])]){
+      if(!writes.some(w=>w.operation===module+"."+op))
+        throw Error("Native functional cycle did not exercise "+module+"."+op);
+    }
+  }
+  // D1's audit is transactionally written by the same native mutation and
+  // uses the exact x-request-id the real Chromium click received.
+  const ids=writes.map(w=>w.request_id);
+  const query=await cf("/d1/database/"+database+"/query","POST",{
+    sql:"SELECT request_id,action,subject_id FROM crm_audit WHERE request_id IN ("+
+      ids.map(()=>"?").join(",")+")",params:ids});
+  const audit=new Map((query?.[0]?.results||[]).map(row=>[row.request_id,row]));
+  for(const entry of writes){
+    const row=audit.get(entry.request_id);
+    if(!row||row.action!==entry.operation||!row.subject_id)
+      throw Error("Native D1 audit mismatch for "+entry.operation+" request "+entry.request_id);
+  }
+  record("native-functional-d1.json",{git_sha:sha,worker_version:liveVersion,
+    result:"PASS",writes:writes.length,audit_rows:audit.size,
+    ui_buttons:cycle.ui_coverage.length});
+  // Query existing native structured Cloudflare Logs; no new monitoring
+  // infrastructure. Probe each exact browser mutation, including deletes,
+  // and require the version serving 100% of ordinary traffic.
+  let pending=[...writes];
+  const from=Date.now()-15*60*1000;
+  for(let attempt=0;attempt<12&&pending.length;attempt++){
+    const missing=[];
+    for(let i=0;i<pending.length;i+=4){
+      const batch=pending.slice(i,i+4);
+      const results=await Promise.all(batch.map(async entry=>{
+        const data=await cf("/workers/observability/telemetry/query","POST",{
+          queryId:"crm-338-full-native-browser-cycle",view:"events",
+          timeframe:{from,to:Date.now()+1000},limit:20,
+          parameters:{needle:{value:entry.request_id},
+            filters:[{key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
+        });
+        return (data.events?.events||[]).some(event=>
+          event.source?.event==="crm.native.request"&&
+          event.source?.request_id===entry.request_id&&
+          event.source?.operation===entry.operation&&
+          event.source?.status===entry.status&&
+          event.$workers?.scriptVersion?.id===liveVersion);
+      }));
+      for(let n=0;n<batch.length;n++)if(!results[n])missing.push(batch[n]);
+    }
+    pending=missing;
+    if(pending.length)await new Promise(resolve=>setTimeout(resolve,2500));
+  }
+  if(pending.length)throw Error("Native Cloudflare Logs missing "+pending.length+
+    " exact browser request(s): "+pending.map(x=>x.operation).join(","));
+  record("native-functional-accepted.json",{git_sha:sha,runtime:"native-workers-rs",
+    worker_version:liveVersion,database,ui_buttons:cycle.ui_coverage,
+    mutations:writes.length,d1_correlated:audit.size,logs_correlated:writes.length,
+    request_ids:ids,result:"PASS"});
+  console.log(JSON.stringify({event:"crm.native-full-functional-cycle",result:"PASS",
+    sha,worker_version:liveVersion,ui_buttons:cycle.ui_coverage.length,
+    mutations:writes.length,d1_correlated:audit.size,logs_correlated:writes.length}));
+
   const p=load("parties-e2e.json");
   if(p.git_sha!==sha||p.parties?.length!==2||p.keys?.length!==3)throw Error("Missing native Party A/B browser proof");
   const [a,b]=p.parties,[ka,ku,kb]=p.keys;

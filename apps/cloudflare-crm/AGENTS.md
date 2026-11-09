@@ -1,7 +1,7 @@
 # Cloudflare CRM — operating contract for ChatGPT development
 
 This file applies to **apps/cloudflare-crm/**. The sole canonical source of truth is
-**iamaman11/crm**: issue #310 (product/acceptance), #321 (Cloudflare architecture),
+**iamaman11/crm**: issue #338 (единственный актуальный план Rust/Cloudflare и диагностики), #310 (product/acceptance), #321 (Cloudflare architecture),
 #322 (chat delivery), and the active PR/commit. Consult root AGENTS.md for
 repository-wide governance; this guide describes the native Cloudflare pilot.
 When instructions conflict, do not quietly weaken the repository gate: resolve
@@ -24,7 +24,7 @@ GitHub Actions may run those commands. No new app or connector is a prerequisite
 
 ## First five actions in every new chat or development slice
 
-1. Read the latest #310, current PR/branch HEAD, this scoped AGENTS.md, and the
+1. Read the latest #338 (and related #310), current PR/branch HEAD, this scoped AGENTS.md, and the
    affected code in iamaman11/crm (not another similarly named CRM repository).
 2. Use the existing registry, `npm run locate -- <module-or-error-code>`,
    and `npm run doctor` through GitHub Actions. Do not scan unrelated Rust code.
@@ -34,7 +34,7 @@ GitHub Actions may run those commands. No new app or connector is a prerequisite
    do not weaken security, tenant isolation, or existing CI to obtain green.
 5. Check fast targeted tests → complete CRM CI/build → protected Cloudflare
    deployment readback → real Chromium E2E → monorepo required checks.
-   Record exact SHA and honest PASS/FAIL/NOT_TESTED evidence in #310/PR.
+   Record exact SHA and honest PASS/FAIL/NOT_TESTED evidence in #338/PR.
 
 ## Feature ownership and growth
 
@@ -61,7 +61,7 @@ GitHub Actions may run those commands. No new app or connector is a prerequisite
 - Browser errors show a stable error code and x-request-id; the Worker logs
   code, request_id, HTTP status, and measured duration. Never log Access tokens,
   secrets, personal data or raw request bodies.
-- Protected GET /api/doctor is read-only and reports deployed SHA/schema state;
+- Protected GET /api/doctor is read-only and reports the actual native runtime, exact deployed SHA/version, Access, D1 schema, tenant-scoped reads and D1 request-ID audit capability. It never claims a CI/browser probe it did not execute;
   internal traces, SQL, credentials and user data stay out of responses.
 - `npm run doctor` verifies registry ↔ migration and source ownership;
   `npm run locate -- deals` and `-- INVALID_INPUT` print exact owner paths.
@@ -96,3 +96,7 @@ Failure screenshots and relevant Actions job logs remain available. This is
 **headless reproducible UI interaction**, not an always-open interactive browser
 that ChatGPT can directly control from this conversation. Keep this in the
 existing E2E and release artifact; do not create a second dashboard or service.
+
+## Нативная приёмка — единственная действующая модель
+
+Публикуемый `wrangler.jsonc.main` всегда `./rust-party/build/index.js`. JS API-router и дублированные JS домены запрещены. Единственный штатный `deploy-crm-dev` после публикации выполняет реальный Chromium E2E; `native-functional-cycle.json` содержит все UI-мутации и идентификаторы HTTP-запросов, `verify-data` сверяет каждую с D1 audit и Cloudflare Logs. Без полного PASS активный Worker откатывается и релиз не считается принятым. `GET /api/doctor` не подменяет эту приёмку статическим PASS. Результат обязательно фиксировать в Issue #338.

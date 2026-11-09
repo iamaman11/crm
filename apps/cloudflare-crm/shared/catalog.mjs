@@ -29,7 +29,7 @@ export const ownerFiles = {
  "rust-party":{
   ui:"web/src/Parties.jsx",api:"rust-party/src/lib.rs",
   validation:"rust-party/src/lib.rs",migration:"migrations/0002_rust_party.sql",
-  tests:"rust-party/test/unified.mjs",browser:"e2e/live.mjs",
+  tests:"rust-party/test/native.mjs",browser:"e2e/live.mjs",
  },
  "pilot-core": {
   ui:"web/src/main.jsx", api:"rust-party/src/pilot.rs",
