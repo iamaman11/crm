@@ -26,6 +26,8 @@ mod sales_deals;
 #[cfg(feature = "native")]
 mod consents;
 #[cfg(feature = "native")]
+mod sales_activities_link;
+#[cfg(feature = "native")]
 mod pilot;
 #[cfg(feature = "native-ci")]
 mod original_domain_probe;
@@ -221,7 +223,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     // A truthful live, read-only diagnostic: this probes the active Rust
     // runtime and current D1 tables. CI/browser/Logs proof remains a separate
     // protected release artifact, never an invented live health result.
-    const EXPECTED: [&str; 21] = [
+    const EXPECTED: [&str; 22] = [
         "crm_tenants", "crm_users", "crm_customers", "crm_contacts",
         "crm_deals", "crm_tasks", "crm_audit", "crm_party_records", "crm_party_receipts",
         "crm_account_records", "crm_account_receipts",
@@ -230,11 +232,12 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
         "crm_activity_task_records", "crm_activity_task_receipts",
         "crm_sales_deal_records", "crm_sales_deal_receipts",
         "crm_consent_records", "crm_consent_receipts",
+        "crm_sales_link_delivery_records",
     ];
     let db = env.d1("DB")?;
     let bindings: Vec<JsValue> = EXPECTED.iter().map(|name| JsValue::from_str(name)).collect();
     let row = bind(&db,
-        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         &bindings)?.first::<SchemaCount>(None).await?;
     let present = row.map_or(0, |value| value.present);
     let schema_ok = present == EXPECTED.len() as i64;
@@ -255,6 +258,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
             ("activity-tasks", "crm_activity_task_records", "tenant"),
             ("sales-deals", "crm_sales_deal_records", "tenant"),
             ("consents", "crm_consent_records", "tenant"),
+            ("sales-activities-link", "crm_sales_link_delivery_records", "tenant"),
         ] {
             // Table and column names are compiled-in constants, not user input.
             let query = format!("SELECT COUNT(*) AS present FROM {table} WHERE {column} = ?");
@@ -306,6 +310,11 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "tenant_audit_rows_with_id": audit_trace }},
         "modules": {
             "crm.parties": {"read": read_checks.get("parties"), "business_owner": "original-crm-parties"},
+            "crm.sales-activities-link": {"read":read_checks.get("sales-activities-link"),
+                "business_owner":"original-crm-sales-activities-link",
+                "api":"native-workers-rs","delivery":"SYNCHRONOUS_ATOMIC_D1",
+                "ui":"NOT_CONNECTED",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.consents": {"read":read_checks.get("consents"),
                 "business_owner":"original-crm-consents","api":"native-workers-rs",
                 "ui":"NOT_CONNECTED","grant_evidence":"NOT_CONNECTED",
