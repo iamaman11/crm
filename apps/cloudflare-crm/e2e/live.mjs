@@ -47,6 +47,11 @@ async function verifyUiWriteInBackend(module, text) {
   });
 }
 page.on("pageerror", error => errors.push(error.message));
+page.on("response", response => {
+  const path=new URL(response.url()).pathname;
+  if(path.startsWith("/api/") && response.headers()["x-crm-runtime"]!=="native-workers-rs")
+    errors.push("Non-native CRM API response: "+path+" HTTP "+response.status());
+});
 const tab = title => page.getByRole("navigation", { name: "Разделы" }).getByRole("button", { name: new RegExp(title) });
 const check = async text => await page.getByText(text, { exact: true }).first().waitFor({ timeout: 12000 });
 async function create(section, button, fields, title) {
@@ -191,9 +196,13 @@ try {
   const doctor = await context.request.get(url + "/api/doctor");
   assert.equal(doctor.status(), 200, "published schema doctor");
   const diagnosis = await doctor.json();
-  assert.equal(diagnosis.database, "ok");
-  assert.deepEqual(diagnosis.modules, ["customers", "contacts", "deals", "tasks"]);
-  assert.equal(diagnosis.tables.present, 4);
+  assert.equal(diagnosis.runtime, "workers-rs");
+  assert.equal(diagnosis.source, process.env.GITHUB_SHA);
+  assert.equal(diagnosis.database.status, "PASS");
+  assert.equal(diagnosis.database.tables.expected, 9);
+  assert.equal(diagnosis.database.tables.present, 9);
+  assert.equal(diagnosis.access.status, "PASS");
+  assert.equal(doctor.headers()["x-crm-runtime"], "native-workers-rs");
   assert.ok(doctor.headers()["x-request-id"], "correlation id exists");
   const session = await context.request.get(url + "/api/session");
   if (session.status() !== 200) throw Error("Protected CRM API session HTTP " + session.status());
@@ -233,7 +242,12 @@ try {
   await page.getByRole("button",{name:"Отмена"}).click();
   await page.getByRole("button",{name:"+ Добавить лицо / организацию"}).click();
   await page.getByLabel("Имя / название",{exact:true}).fill(partyName);
+  const partyCreateHttp=page.waitForResponse(r=>new URL(r.url()).pathname==="/api/parties"&&r.request().method()==="POST");
   await page.getByRole("button",{name:"Сохранить"}).click();
+  const partyCreateResponse=await partyCreateHttp;
+  assert.equal(partyCreateResponse.status(),201);
+  const nativeClickRequestId=partyCreateResponse.headers()["x-request-id"];
+  assert.match(nativeClickRequestId||"",/^[0-9a-f-]{36}$/i,"real React click needs native request ID");
   await page.getByText(partyName,{exact:true}).waitFor({timeout:12000});
   await page.reload();
   await tab("Лица и организации").click();
@@ -252,6 +266,11 @@ try {
   const partyList=(await nativeRead.json()).items;
   const identity=partyList.find(x=>x.name===partyName+" Updated");
   assert.equal(identity?.version,2,"original Rust persisted versioned update");
+  await mkdir("apps/cloudflare-crm/.release",{recursive:true});
+  await writeFile("apps/cloudflare-crm/.release/native-click.json",
+    JSON.stringify({git_sha:process.env.GITHUB_SHA,request_id:nativeClickRequestId,
+      action:"parties.create",party_id:identity.id,status:201})+"\n");
+  evidence.api.push({module:"parties",action:"native-click-trace",response_request_id_present:true});
   evidence.api.push({ module: "parties", action: "read-after-browser-update",
     status: nativeRead.status(), persisted_version: 2,
     request_id_present: Boolean(nativeRead.headers()["x-request-id"]) });
