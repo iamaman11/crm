@@ -93,7 +93,7 @@ async fn create(mut req: Request, db: &D1Database, tenant: &str, trace: &str) ->
     let Some(key) = required_key(&req)? else {
         return error("IDEMPOTENCY_KEY_REQUIRED", 422);
     };
-    let input = match req.json::<CreateInput>().await {
+    let input = match serde_json::from_str::<CreateInput>(&req.text().await?) {
         Ok(v) => v, Err(_) => return error("INVALID_INPUT", 422),
     };
     let digest = hash_input("create", &input.id, &input)?;
@@ -133,7 +133,7 @@ async fn update(mut req: Request, db: &D1Database, tenant: &str, id: &str, trace
     let Some(key) = required_key(&req)? else {
         return error("IDEMPOTENCY_KEY_REQUIRED", 422);
     };
-    let input = match req.json::<UpdateInput>().await {
+    let input = match serde_json::from_str::<UpdateInput>(&req.text().await?) {
         Ok(v) => v, Err(_) => return error("INVALID_INPUT", 422),
     };
     let digest = hash_input("update", id, &input)?;
