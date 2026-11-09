@@ -114,6 +114,16 @@ if(requested) {
   checks.push({check:"original-party-relationships-backend-source",
     result:relReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
     runtime_proof:"EXTERNAL_CI_REQUIRED"});
+  const taskSource=sourceFor("activity-tasks");
+  const tasksReady=backendModels["activity-tasks"].ui==="NOT_CONNECTED" &&
+    migration.includes("CREATE TABLE IF NOT EXISTS crm_activity_task_records") &&
+    read(taskSource.api).includes("Task::create") &&
+    read(taskSource.api).includes("task.complete(CompleteTask") &&
+    read(taskSource.api).includes("decode_task_state") &&
+    read(taskSource.tests).includes("crm.native-original-activities-d1");
+  checks.push({check:"original-activities-backend-source",
+    result:tasksReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
+    runtime_proof:"EXTERNAL_CI_REQUIRED"});
   const validCatalog=Object.keys(modules).every(name => {
     const module=modules[name], fieldKeys=module.fields.map(([key])=>key);
     return /^[a-z][a-z0-9_]*$/.test(module.table) && fieldKeys.length>0 &&
