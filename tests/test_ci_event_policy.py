@@ -57,6 +57,63 @@ jobs:
             ),
         )
 
+    def test_only_crm_release_workflow_may_push_dev(self) -> None:
+        temporary = TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        directory = Path(temporary.name) / ".github" / "workflows"
+        directory.mkdir(parents=True)
+        path = directory / "cloudflare-crm-spike.yml"
+        path.write_text(
+            """name: Cloudflare CRM Spike CI
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    branches:
+      - main
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+""",
+            encoding="utf-8",
+        )
+        self.assertEqual(check_workflow(path).errors, ())
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "      - dev", "      - main"
+            ),
+            encoding="utf-8",
+        )
+        self.assertEqual(
+            check_workflow(path).errors,
+            ("push must be restricted to branch dev",),
+        )
+
+    def test_other_workflows_cannot_push_dev(self) -> None:
+        path = self.write_workflow(
+            """name: Other Project
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+"""
+        )
+        self.assertEqual(
+            check_workflow(path).errors,
+            ("push must be restricted to branch main",),
+        )
+
     def test_ignores_non_pr_workflows(self) -> None:
         path = self.write_workflow(
             """name: Scheduled

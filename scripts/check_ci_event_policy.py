@@ -71,8 +71,21 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
         return WorkflowPolicyResult(path, ())
 
     push_section = _event_section(lines, event_start, event_end, "push")
-    if "    branches:" not in push_section or "      - main" not in push_section:
-        errors.append("push must be restricted to branch main")
+    # A single, explicit exception for the one CRM development release job.
+    # All unrelated workflows retain their main-only policy.
+    crm_dev_workflow = (
+        path.name == "cloudflare-crm-spike.yml"
+        and path.parent.name == "workflows"
+        and path.parent.parent.name == ".github"
+    )
+    expected = "dev" if crm_dev_workflow else "main"
+    forbidden = "main" if crm_dev_workflow else "dev"
+    if (
+        "    branches:" not in push_section
+        or f"      - {expected}" not in push_section
+        or f"      - {forbidden}" in push_section
+    ):
+        errors.append(f"push must be restricted to branch {expected}")
 
     concurrency = _top_level_block(lines, "concurrency")
     if concurrency is None:

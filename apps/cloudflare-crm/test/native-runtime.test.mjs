@@ -65,57 +65,33 @@ test("single release remains protected by D1, logs and browser evidence",()=>{
   assert.match(e2e,/nativeResponses/);
   assert.match(e2e,/native-functional-cycle\.json/);
 });
-test("CI tests and compiles once in PR; main promotes identical tree, never recompiles",()=>{
-  const workflow=read("../../.github/workflows/cloudflare-crm-spike.yml");
-  const step=name=>{
-    const start=workflow.indexOf("      - name: "+name+"\n");
-    assert.notEqual(start,-1,"missing CI step "+name);
-    const tail=workflow.slice(start);
-    const end=tail.indexOf("\n      - name: ",1);
-    return end===-1?tail:tail.slice(0,end);
-  };
+test("permanent dev branch builds once, publishes the same tested artifact",()=>{
+  const w=read("../../.github/workflows/cloudflare-crm-spike.yml");
+  const deploy=read("scripts/deploy.mjs");
+  assert.match(w,/push:\n    branches:\n      - dev\n/);
+  assert.match(w,/pull_request:\n    branches:\n      - main\n/);
+  assert.doesNotMatch(w,/push:\n    branches:\n      - main\n/);
+  assert.match(w,/if: github.event_name == 'push' && github.ref == 'refs\/heads\/dev'/);
+  assert.match(w,/environment: crm-dev/);
+  assert.doesNotMatch(w,/Promote successful PR artifact|crm-native-pr-bundle|source-tree\.txt|promotion\.json/);
+  assert.equal((w.match(/worker-build --release --features native\n/g)||[]).length,1);
   for(const name of [
-    "Verify all existing Rust business modules compile for WebAssembly",
-    "Execute the original Rust domain rules from WASM in Node",
-    "Build isolated native D1 test Worker (PR only)",
     "Test original Rust Party through workerd and isolated native D1",
-    "Build exact native Rust Worker for review or release",
-    "Compile native Rust Access gate using isolated RSA test keys",
-    "Install Chromium for physical React to native Rust Worker proof",
     "Test native WebCrypto JWT and all React CRM screens under workerd",
-    "Build React CRM",
-    "Install pinned workers-rs build CLI"
-  ]) {
-    assert.match(step(name),/if: github.event_name == 'pull_request'/,
-      "PR build/test step must not execute again on main: "+name);
-  }
-  assert.equal((workflow.match(/worker-build --release --features native\n/g)||[]).length,1);
-  const seal=step("Seal PR-tested production bundle and checkout tree");
-  assert.match(seal,/if: github.event_name == 'pull_request'/);
-  assert.match(seal,/git rev-parse HEAD\^\{tree\}/);
-  assert.match(seal,/sha256sum --check --strict/);
-  const saved=step("Save tested PR bundle for content-identical main promotion");
-  assert.match(saved,/if: github.event_name == 'pull_request'/);
-  assert.match(saved,/\.release\/source-tree\.txt/);
-  const promotion=step("Promote successful PR artifact only when merge source tree is identical");
-  assert.match(promotion,/if: github.event_name == 'push' && github.ref == 'refs\/heads\/main'/);
-  assert.match(promotion,/commits\/\$GITHUB_SHA\/pulls/);
-  assert.match(promotion,/\.merge_commit_sha == \$sha/);
-  assert.match(promotion,/\.head\.repo\.full_name == \$repo/);
-  assert.match(promotion,/\.conclusion == "success"/);
-  assert.match(promotion,/gh run download "\$source_run"/);
-  assert.match(promotion,/cat \.release\/source-tree\.txt/);
-  assert.match(promotion,/test "\$\(cat \.release\/source-tree\.txt\)" = "\$main_tree"/);
-  assert.match(promotion,/sha256sum --check --strict/);
-  assert.match(promotion,/cmp rust-party\/build\/index_bg\.wasm/);
-  assert.match(promotion,/printf '%s\\n' "\$GITHUB_SHA" > \.release\/source-sha\.txt/);
-  assert.match(step("Preserve exact compiled bundle for the protected deployment"),
-    /if: github.event_name == 'push' && github.ref == 'refs\/heads\/main'/);
-  assert.match(workflow,/gh run download "\$GITHUB_RUN_ID"/);
-  assert.match(workflow,/sha256sum --check --strict \.release\/compiled-sha256\.txt/);
-  assert.match(workflow,/node apps\/cloudflare-crm\/e2e\/live\.mjs/);
-  assert.match(workflow,/node apps\/cloudflare-crm\/scripts\/deploy\.mjs verify-data/);
-  assert.match(workflow,/node apps\/cloudflare-crm\/scripts\/deploy\.mjs rollback/);
+    "Restore compiled production Worker after JWT test",
+    "Seal exactly tested development bundle",
+    "Preserve exact compiled bundle for the protected deployment",
+    "Browser E2E on published CRM",
+    "Verify native Rust Party persisted data and D1 audit",
+    "Restore previous Worker if release acceptance failed"
+  ])assert.ok(w.includes(name),"missing gate: "+name);
+  assert.match(w,/gh run download "\$GITHUB_RUN_ID"/);
+  assert.match(w,/sha256sum --check --strict \.release\/compiled-sha256\.txt/);
+  assert.match(w,/node apps\/cloudflare-crm\/e2e\/live\.mjs/);
+  assert.match(w,/node apps\/cloudflare-crm\/scripts\/deploy\.mjs verify-data/);
+  assert.match(w,/node apps\/cloudflare-crm\/scripts\/deploy\.mjs rollback/);
+  assert.match(deploy,/process\.env\.GITHUB_REF!=="refs\/heads\/dev"/);
+  assert.doesNotMatch(deploy,/process\.env\.GITHUB_REF!=="refs\/heads\/main"/);
 });
 
 test("protected release tolerates eventually consistent Cloudflare deployment readback",()=>{

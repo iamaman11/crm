@@ -22,6 +22,14 @@ E2E.** ChatGPT owns diagnosis, implementation and acceptance; never delegate
 ordinary work to a local Windows agent or require users to run developer commands.
 GitHub Actions may run those commands. No new app or connector is a prerequisite.
 
+## Recovery after context loss
+
+1. Open canonical GitHub `iamaman11/crm`: Issue #338 and this `AGENTS.md`.
+2. Read `dev` HEAD and the latest `Cloudflare CRM Spike CI` run for that SHA.
+3. Read active Cloudflare `crm-dev` Worker version, its `GIT_SHA`, and the one D1 binding. Published SHA, not branch name, proves what is live.
+4. If CI or deploy failed, inspect the exact job and live Chromium/D1/Logs evidence. An unmatched SHA means NOT_DEPLOYED until the protected acceptance passes.
+5. Never create a new branch, Environment, Worker, D1 or shadow plan for an ordinary CRM fix. The working branch is always `dev`.
+
 ## First five actions in every new chat or development slice
 
 1. Read the latest #338 (and related #310), current PR/branch HEAD, this scoped AGENTS.md, and the
@@ -32,9 +40,10 @@ GitHub Actions may run those commands. No new app or connector is a prerequisite
    log, then verify reproducibility. Never label guesses as diagnosed causes.
 4. Change only owned files, necessary published contracts, migration and tests;
    do not weaken security, tenant isolation, or existing CI to obtain green.
-5. Check fast targeted tests → complete CRM CI/build → protected Cloudflare
-   deployment readback → real Chromium E2E → monorepo required checks.
-   Record exact SHA and honest PASS/FAIL/NOT_TESTED evidence in #338/PR.
+5. Work in the one permanent `dev` branch: commit → one CRM CI/build →
+   protected crm-dev deployment → real Chromium E2E → D1/Logs readback.
+   Record exact SHA and PASS/FAIL/NOT_TESTED in Issue #338. Do not merge
+   `main` merely to deploy; it receives accepted milestones.
 
 ## Feature ownership and growth
 
@@ -84,12 +93,13 @@ not mean adding infrastructure by default. Per owner decision, optional extra
 hardening is deferred until **after real production**, not merely until launch.
 
 Do not assert full industrial readiness or human interactive login without
-physical proof. PR stays Draft until its stated acceptance criteria are met.
+physical proof. Ordinary CRM fixes in `dev` need no PR; milestone `dev → main`
+PR must pass its stated acceptance criteria.
 
 ### Visual evidence for every deployed release
 
 The **existing** protected `deploy-crm-dev` job runs real Chromium against the
-published URL (only after main-only guarded release). Its `crm-dev-release-<git-sha>` artifact contains
+published URL (only after protected `push dev` release). Its `crm-dev-release-<git-sha>` artifact contains
 `e2e-evidence/manifest.json` and screenshots of desktop home, Rust Party,
 original Accounts, ContactPoints, Sales, Activities, Account Overview, pipeline, linked records,
 and mobile UI. The manifest records the exact live Worker SHA, actions, API
@@ -107,9 +117,9 @@ existing E2E and release artifact; do not create a second dashboard or service.
 Любая проверка должна вызывать именно оригинальный command/query,
 не маскировать несовместимость и не вводить JS-подстановки.
 
-В PR #345 отметка REACT_CONNECTED_NOT_LIVE означает только wiring в ветке:
+Любая отметка REACT_CONNECTED_NOT_LIVE означает только wiring в ветке:
 Cloudflare deploy, настоящий Access A/B, фактические D1 и Logs остаются
-NOT_TESTED до main-only защищённой публикации. Не превращать успешную
+NOT_TESTED до защищённой публикации из `dev`. Не превращать успешную
 локальную workerd/Chromium проверку в утверждение об опубликованном продукте.
 
 ## Нативная приёмка — единственная действующая модель

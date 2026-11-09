@@ -292,6 +292,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             ".github/workflows/cloudflare-crm-spike.yml",
             ".github/workflows/governance.yml",
             ".github/workflows/customer-privacy-owner-execution.yml",
+            "scripts/check_ci_event_policy.py",
+            "tests/test_ci_event_policy.py",
             "scripts/affected_scope.py",
             "tests/test_affected_scope.py",
             "affected-scope-policy.json",

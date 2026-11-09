@@ -236,36 +236,33 @@ class RepositoryNavigationTests(unittest.TestCase):
         self.assertIn("forbidden path changed: modules/crm-parties/src/lib.rs", blocked["blockers"])
         self.assertIn("path outside packet: unowned.txt", blocked["blockers"])
 
-    def test_cloudflare_release_is_single_main_source_with_verified_artifact(self) -> None:
+    def test_cloudflare_dev_release_is_single_source_with_verified_artifact(self) -> None:
         workflow = (ROOT / ".github/workflows/cloudflare-crm-spike.yml").read_text(
             encoding="utf-8"
         )
         trigger = workflow.split("concurrency:", 1)[0]
-        self.assertIn("  push:\n    branches:\n      - main\n", trigger)
-        self.assertNotIn("feature/cloudflare-native-crm-20261107", workflow)
-        main_only = (
+        self.assertIn("  push:\n    branches:\n      - dev\n", trigger)
+        self.assertIn("  pull_request:\n    branches:\n      - main\n", trigger)
+        self.assertNotIn("  push:\n    branches:\n      - main\n", trigger)
+        self.assertNotIn("Promote successful PR artifact", workflow)
+        dev_only = (
             "if: github.event_name == 'push' && "
-            "github.ref == 'refs/heads/main'"
+            "github.ref == 'refs/heads/dev'"
         )
-        # Release sealing, artifact upload and protected deploy are now all
-        # main-only; PR-only regressions must not publish or seal a release.
-        self.assertEqual(workflow.count(main_only), 3)
-        self.assertIn("Verify all existing Rust business modules compile for WebAssembly\n        if: github.event_name == 'pull_request'", workflow)
-        self.assertIn("Build exact native Rust Worker for review or release", workflow)
+        self.assertEqual(workflow.count(dev_only), 2)
         self.assertIn("environment: crm-dev", workflow)
-        self.assertIn("gh run download \"$GITHUB_RUN_ID\"", workflow)
+        self.assertIn('gh run download "$GITHUB_RUN_ID"', workflow)
         self.assertIn("crm-native-bundle-$GITHUB_SHA", workflow)
         self.assertIn("sha256sum --check --strict", workflow)
         self.assertIn("Restore previous Worker if release acceptance failed", workflow)
         self.assertIn("Browser E2E on published CRM", workflow)
-        deploy_script = (
-            ROOT / "apps/cloudflare-crm/scripts/deploy.mjs"
-        ).read_text(encoding="utf-8")
-        self.assertIn('process.env.GITHUB_REF!=="refs/heads/main"', deploy_script)
+        deploy_script = (ROOT / "apps/cloudflare-crm/scripts/deploy.mjs").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('process.env.GITHUB_REF!=="refs/heads/dev"', deploy_script)
         self.assertIn('process.env.GITHUB_EVENT_NAME!=="push"', deploy_script)
         self.assertIn('throw Error("Untrusted deployment")', deploy_script)
         self.assertIn('throw Error("Wrong Cloudflare CRM target")', deploy_script)
-        self.assertNotIn("refs/heads/feature/cloudflare-native-crm-20261107", deploy_script)
 
     def test_customer_privacy_approval_uses_actual_change_base_for_packet_check(self) -> None:
         approval = (
