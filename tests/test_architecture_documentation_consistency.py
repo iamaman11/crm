@@ -267,6 +267,8 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "apps/cloudflare-crm/migrations/0007_original_activity_tasks.sql",
             "apps/cloudflare-crm/rust-party/src/sales_deals.rs",
             "apps/cloudflare-crm/migrations/0008_original_sales_deals.sql",
+            "apps/cloudflare-crm/rust-party/src/consents.rs",
+            "apps/cloudflare-crm/migrations/0009_original_consents.sql",
             "apps/cloudflare-crm/rust-party/src/pilot.rs",
             "apps/cloudflare-crm/test/native-runtime.test.mjs",
             "apps/cloudflare-crm/worker/index.mjs",
