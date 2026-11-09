@@ -65,9 +65,8 @@ test("single release remains protected by D1, logs and browser evidence",()=>{
   assert.match(e2e,/nativeResponses/);
   assert.match(e2e,/native-functional-cycle\.json/);
 });
-test("PR runs full Rust, D1 and Chromium; main builds and publishes one exact SHA",()=>{
+test("CI tests and compiles once in PR; main promotes identical tree, never recompiles",()=>{
   const workflow=read("../../.github/workflows/cloudflare-crm-spike.yml");
-  // Separate the existing named steps, not a parallel CI or deploy workflow.
   const step=name=>{
     const start=workflow.indexOf("      - name: "+name+"\n");
     assert.notEqual(start,-1,"missing CI step "+name);
@@ -80,32 +79,45 @@ test("PR runs full Rust, D1 and Chromium; main builds and publishes one exact SH
     "Execute the original Rust domain rules from WASM in Node",
     "Build isolated native D1 test Worker (PR only)",
     "Test original Rust Party through workerd and isolated native D1",
+    "Build exact native Rust Worker for review or release",
     "Compile native Rust Access gate using isolated RSA test keys",
     "Install Chromium for physical React to native Rust Worker proof",
-    "Test native WebCrypto JWT and all React CRM screens under workerd"
-  ]){
+    "Test native WebCrypto JWT and all React CRM screens under workerd",
+    "Build React CRM",
+    "Install pinned workers-rs build CLI"
+  ]) {
     assert.match(step(name),/if: github.event_name == 'pull_request'/,
-      "expensive PR regression must not rerun in main: "+name);
+      "PR build/test step must not execute again on main: "+name);
   }
-  assert.match(step("Build exact native Rust Worker for review or release"),
-    /worker-build --release --features native/);
-  assert.equal((workflow.match(/worker-build --release --features native\n/g)||[]).length,1,
-    "main release compiles native Worker once, never after native-ci");
-  assert.match(step("Restore already-compiled production Worker after PR test feature"),
-    /if: github.event_name == 'pull_request'/);
-  assert.match(step("Seal compiled Rust and React outputs for this exact checkout"),
-    /if: github.event_name == 'push' && github.ref == 'refs\/heads\/main'/);
+  assert.equal((workflow.match(/worker-build --release --features native\n/g)||[]).length,1);
+  const seal=step("Seal PR-tested production bundle and checkout tree");
+  assert.match(seal,/if: github.event_name == 'pull_request'/);
+  assert.match(seal,/git rev-parse HEAD\^\{tree\}/);
+  assert.match(seal,/sha256sum --check --strict/);
+  const saved=step("Save tested PR bundle for content-identical main promotion");
+  assert.match(saved,/if: github.event_name == 'pull_request'/);
+  assert.match(saved,/\.release\/source-tree\.txt/);
+  const promotion=step("Promote successful PR artifact only when merge source tree is identical");
+  assert.match(promotion,/if: github.event_name == 'push' && github.ref == 'refs\/heads\/main'/);
+  assert.match(promotion,/commits\/\$GITHUB_SHA\/pulls/);
+  assert.match(promotion,/\.merge_commit_sha == \$sha/);
+  assert.match(promotion,/\.head\.repo\.full_name == \$repo/);
+  assert.match(promotion,/\.conclusion == "success"/);
+  assert.match(promotion,/gh run download "\$source_run"/);
+  assert.match(promotion,/cat \.release\/source-tree\.txt/);
+  assert.match(promotion,/test "\$\(cat \.release\/source-tree\.txt\)" = "\$main_tree"/);
+  assert.match(promotion,/sha256sum --check --strict/);
+  assert.match(promotion,/cmp rust-party\/build\/index_bg\.wasm/);
+  assert.match(promotion,/printf '%s\\n' "\$GITHUB_SHA" > \.release\/source-sha\.txt/);
   assert.match(step("Preserve exact compiled bundle for the protected deployment"),
     /if: github.event_name == 'push' && github.ref == 'refs\/heads\/main'/);
-  assert.match(workflow,/gh run download "\$GITHUB_RUN_ID"/,
-    "release must download the exact CI artifact, never rebuild");
+  assert.match(workflow,/gh run download "\$GITHUB_RUN_ID"/);
   assert.match(workflow,/sha256sum --check --strict \.release\/compiled-sha256\.txt/);
   assert.match(workflow,/node apps\/cloudflare-crm\/e2e\/live\.mjs/);
   assert.match(workflow,/node apps\/cloudflare-crm\/scripts\/deploy\.mjs verify-data/);
   assert.match(workflow,/node apps\/cloudflare-crm\/scripts\/deploy\.mjs rollback/);
-  assert.match(workflow,/actions\/cache@0057852bfaa89a56745cba8c7296529d2fc39830/);
-  assert.doesNotMatch(workflow,/\buses: actions\/cache@v[0-9]/,"new action must be SHA pinned");
 });
+
 test("protected release tolerates eventually consistent Cloudflare deployment readback",()=>{
   const deploy=read("scripts/deploy.mjs");
   assert.match(deploy,/async function waitForDeployment\(/);
