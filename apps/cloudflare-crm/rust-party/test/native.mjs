@@ -217,6 +217,11 @@ try{
   assert.equal(importPreview.status,200,JSON.stringify(importPreview));
   assert.equal(importPreview.body.count,1);
   assert.equal(importPreview.body.mode,"CREATE_ONLY");
+  assert.equal(importPreview.body.target_ids,"DERIVED_NOT_EXTERNAL");
+  assert.equal(importPreview.body.target_party_ids.length,1);
+  const sourceId=importRows.split("\n")[1].split(",")[0];
+  const targetId=importPreview.body.target_party_ids[0];
+  assert.notEqual(sourceId,targetId);
   assert.equal((await call("/api/customer-data-operations/import-preview",viewer,{
     method:"POST",headers:importHeaders,body:importRows})).status,403);
   const importApply=await call("/api/customer-data-operations/import-apply",a,{
@@ -224,17 +229,25 @@ try{
       "x-crm-import-sha256":importPreview.body.file_sha256},body:importRows});
   assert.equal(importApply.status,201,JSON.stringify(importApply));
   assert.equal(importApply.body.created,1);
+  assert.deepEqual(importApply.body.target_party_ids,[targetId]);
+  assert.equal((await call("/api/parties/"+targetId,a)).status,200);
+  assert.equal((await call("/api/parties/"+sourceId,a)).status,404);
   const importReplay=await call("/api/customer-data-operations/import-apply",a,{
     method:"POST",headers:{...importHeaders,
       "x-crm-import-sha256":importPreview.body.file_sha256},body:importRows});
   assert.equal(importReplay.status,200,JSON.stringify(importReplay));
   assert.equal(importReplay.body.replayed,1);
+  const replayPreview=await call("/api/customer-data-operations/import-preview",a,{
+    method:"POST",headers:importHeaders,body:importRows});
+  assert.equal(replayPreview.status,200);
+  assert.equal(replayPreview.body.previously_imported,1);
   assert.equal((await call("/api/customer-data-operations/import-apply",b,{
     method:"POST",headers:importHeaders,body:importRows})).status,409);
   assert.equal((await call("/api/customer-data-operations/import-preview",a,{
     method:"POST",headers:importHeaders,body:"party_id,kind,display_name,resource_version\nx,invalid,Name,1\n"})).status,422);
   assert.equal((await call("/api/customer-data-operations/import-preview",a,{
-    method:"POST",headers:importHeaders,body:"party_id,kind,display_name,resource_version\nx,person,Name,2\n"})).status,422);
+    method:"POST",headers:importHeaders,
+    body:"party_id,kind,display_name,resource_version\nx,person,Name,2\n"})).status,200);
   console.log(JSON.stringify({event:"crm.native-original-party-csv-import",
     result:"PASS",mode:"CREATE_ONLY",atomic:true,replay:true}));
   console.log(JSON.stringify({event:"crm.native-original-party-csv-export",

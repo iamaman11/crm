@@ -2,7 +2,7 @@ import React, {useState} from "react";
 
 // The server owns data selection, canonical CSV encoding and permissions.
 // This page does NOT build its own export, track shadow Party state or store files.
-export default function DataExport({load,writable,loading}){
+export default function DataExport({load,writable,loading,onSaved}){
   const [kind,setKind]=useState("all");
   const [preview,setPreview]=useState(null);
   const [busy,setBusy]=useState(false);
@@ -42,7 +42,7 @@ export default function DataExport({load,writable,loading}){
         ...(action==="apply"&&importPreview?{"x-crm-import-sha256":importPreview.file_sha256}:{})
       },body:content});
       if(action==="preview")setImportPreview(result);
-      else {setImportPreview(null);setNotice("Импорт выполнен. Создано: "+result.created+
+      else {await onSaved();setImportPreview(null);setNotice("Импорт выполнен. Создано: "+result.created+
         (result.replayed?" · Повтор подтверждён: "+result.replayed:""));}
     }catch(e){setError(e.message);}
     finally{setBusy(false);}
@@ -75,8 +75,9 @@ export default function DataExport({load,writable,loading}){
     {writable&&<section aria-label="Импорт данных">
       <h2>Импорт новых лиц и организаций</h2>
       <p>Только новые Party. CSV: party_id,kind,display_name,resource_version.
-        Версия должна быть 1. До 20 строк; создание атомарное.
-        Существующие Party не изменяются.</p>
+        До 20 строк; создание атомарное. Версия относится к источнику:
+        существующие Party не изменяются. Внешний party_id — только ID источника;
+        CRM создаёт собственный идентификатор. Повтор того же файла безопасен.</p>
       <div className="field"><label htmlFor="import-csv">CSV-файл</label>
         <input id="import-csv" type="file" accept=".csv,text/csv"
           disabled={busy||loading} onChange={e=>{
@@ -94,6 +95,6 @@ export default function DataExport({load,writable,loading}){
     {error&&<p className="notice error" role="alert">{error}</p>}
     {notice&&<p className="notice" role="status">{notice}</p>}
     <p>Экспорт формируется непосредственно из действующих Rust Party.
-      Задания долгого экспорта, история файлов и импорт ещё не подключены.</p>
+      Долгие задания экспорта и сохраняемые задания импорта ещё не подключены.</p>
   </section>;
 }

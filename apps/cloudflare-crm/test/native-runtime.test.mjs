@@ -103,6 +103,9 @@ test("customer-data-operations bounded CSV export uses original domain and one D
   assert.ok(source.includes("EXPORT_SCOPE_LIMIT_REACHED"));
   assert.ok(runtime.includes("customer_data_operations::route"));
   assert.ok(!source.includes("INSERT INTO"));
+  assert.ok(source.includes("ImportRow::create"));
+  assert.ok(source.includes("row.derived_target_party_id"));
+  assert.ok(source.includes("row.target_idempotency_key"));
   assert.ok(source.includes("parse_import_source"));
   assert.ok(source.includes("parties::import_batch"));
   assert.ok(read("rust-party/src/parties.rs").includes("db.batch(statements)"));

@@ -281,20 +281,36 @@ try{
   await shot("03-export","Original Rust Party CSV preview and download");
   // Real browser CSV upload: original parser -> preflight -> atomic Party
   // create via its authoritative D1 owner, then idempotent replay.
-  const importedId="browser-import-"+randomUUID();
+  const sourceImportId="browser-import-"+randomUUID();
   const csv="party_id,kind,display_name,resource_version\n"+
-    importedId+",person,"+marker+" Imported,1\n";
+    sourceImportId+",person,"+marker+" Imported,1\n";
+  const previewUpload=page.waitForResponse(r=>
+    new URL(r.url()).pathname==="/api/customer-data-operations/import-preview"&&r.status()===200);
   await page.getByLabel("CSV-файл").setInputFiles({
     name:"test-parties.csv",mimeType:"text/csv",buffer:Buffer.from(csv)});
   await button("Проверить CSV").click();
+  const importPlan=await (await previewUpload).json();
+  assert.equal(importPlan.target_ids,"DERIVED_NOT_EXTERNAL");
+  assert.equal(importPlan.target_party_ids.length,1);
+  const importedId=importPlan.target_party_ids[0];
+  assert.notEqual(importedId,sourceImportId);
   await page.getByRole("status").getByText(/Файл проверен. Строк: 1/).waitFor();
   cover("customer-data-operations.import-preview");
+  const importApplied=page.waitForResponse(r=>
+    new URL(r.url()).pathname==="/api/customer-data-operations/import-apply"&&r.status()===201);
   await button("Импортировать новые записи").click();
+  const importedResult=await (await importApplied).json();
+  assert.deepEqual(importedResult.target_party_ids,[importedId]);
   await page.getByRole("status").getByText(/Импорт выполнен. Создано: 1/).waitFor();
   cover("customer-data-operations.import-apply");
   const imported=await context.request.get(url+"/api/parties/"+importedId);
   assert.equal(imported.status(),200);
   assert.equal((await imported.json()).item.name,marker+" Imported");
+  assert.equal((await context.request.get(url+"/api/parties/"+sourceImportId)).status(),404);
+  await tab("Лица и организации").click();
+  await row(marker+" Imported").waitFor();
+  cover("customer-data-operations.import-same-page-readback");
+  await tab("Экспорт данных").click();
   const otherImportContext=await browser.newContext({extraHTTPHeaders:access("B")});
   try{
     assert.equal((await otherImportContext.request.get(

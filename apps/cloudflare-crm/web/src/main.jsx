@@ -263,7 +263,7 @@ function App(){
           load={api} loading={loading}/>:
         tab==="data-quality"?<DataQuality parties={items.parties}
           load={api} loading={loading}/>:
-        tab==="data-export"?<DataExport load={api} writable={writable} loading={loading}/>:
+        tab==="data-export"?<DataExport load={api} writable={writable} loading={loading} onSaved={reload}/>:
         tab==="consents"?<Consents items={items.consents}
           parties={items.parties} contacts={items.contacts}
           load={api} writable={writable} loading={loading} onSaved={reload}/>:

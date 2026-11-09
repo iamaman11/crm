@@ -59,51 +59,64 @@ pub(super) async fn stored(db: &D1Database, tenant: &str, id: &str) -> Result<Op
         .map_err(|e| worker::Error::RustError(e.code)))
         .transpose()
 }
-/// Only the original Party adapter writes Party records. This atomic D1
-/// transaction uses the exact same Party::create and receipt schema as normal
-/// creation. Any conflict aborts the entire batch without partial imports.
-pub(super) async fn import_batch(db: &D1Database, tenant: &str,
-    rows: Vec<(String, PartyKind, String)>, source_key: &str,
-    trace: &str) -> Result<Response> {
+/// Only this Party adapter persists Party creation, including CSV import.
+/// D1 batch is atomic: all Party states, receipts and audits or none.
+pub(super) async fn import_receipt_matches(
+    db:&D1Database,tenant:&str,key:&str,id:&str,name:&str
+)->Result<bool>{
+    let Some(old)=previous(db,tenant,key).await? else {return Ok(false);};
+    if old.digest!=digest("create",id,name,0){return Ok(false);}
+    let party=decode_party_state(old.state.as_bytes())
+        .map_err(|e|worker::Error::RustError(e.code))?;
+    Ok(party.party_id().as_str()==id)
+}
+pub(super) async fn import_batch(
+    db:&D1Database,tenant:&str,
+    rows:Vec<(String,PartyKind,String,String)>,trace:&str
+)->Result<Response>{
     let mut statements=Vec::with_capacity(rows.len());
     let mut ids=BTreeSet::new();
     let mut receipts=0;
-    for (index,(id,kind,name)) in rows.iter().enumerate() {
-        if !ids.insert(id.clone()) { return error("IMPORT_DUPLICATE_ID",422); }
-        let key=format!("cdo-{source_key}-{index}");
+    for (id,kind,name,key) in &rows{
+        if !ids.insert(id.clone()){return error("IMPORT_DUPLICATE_TARGET_ID",422);}
         let hash=digest("create",id,name,0);
-        if let Some(old)=previous(db,tenant,&key).await? {
-            if old.digest!=hash {return error("IDEMPOTENCY_CONFLICT",409);}
+        if let Some(old)=previous(db,tenant,key).await?{
+            if old.digest!=hash{return error("IDEMPOTENCY_CONFLICT",409);}
+            let party=decode_party_state(old.state.as_bytes())
+                .map_err(|e|worker::Error::RustError(e.code))?;
+            if party.party_id().as_str()!=id{return error("IMPORT_RECEIPT_ID_CONFLICT",409);}
             receipts+=1;
             continue;
         }
-        if stored(db,tenant,id).await?.is_some() {
-            return error("IMPORT_PARTY_ALREADY_EXISTS",409);
+        if stored(db,tenant,id).await?.is_some(){
+            return error("IMPORT_TARGET_PARTY_CONFLICT",409);
         }
-        let party=Party::create(CreateParty {
-            party_id: PartyId::try_new(id.clone())
-                .map_err(|e| worker::Error::RustError(e.code))?,
-            kind:*kind, display_name:name.clone(), occurred_at_unix_nanos:now_nanos(),
-        }).map_err(|e| worker::Error::RustError(e.code))?;
+        let party=Party::create(CreateParty{
+            party_id:PartyId::try_new(id.clone())
+                .map_err(|e|worker::Error::RustError(e.code))?,
+            kind:*kind,display_name:name.clone(),occurred_at_unix_nanos:now_nanos(),
+        }).map_err(|e|worker::Error::RustError(e.code))?;
         let state=String::from_utf8(encode_party_state(&party)
-            .map_err(|e| worker::Error::RustError(e.code))?)
-            .map_err(|e| worker::Error::RustError(e.to_string()))?;
+            .map_err(|e|worker::Error::RustError(e.code))?)
+            .map_err(|e|worker::Error::RustError(e.to_string()))?;
         statements.push(bind(db,
             "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?)",
             &[JsValue::from_str(tenant),JsValue::from_str(id),
               JsValue::from_str(&state),JsValue::from_f64(1.0),
-              JsValue::from_str(&key),JsValue::from_str(&hash),
+              JsValue::from_str(key),JsValue::from_str(&hash),
               JsValue::from_str(trace)])?);
     }
-    if receipts>0 {
-        return if receipts==rows.len() {
-            response(json!({"created":0,"replayed":rows.len(),"source":"original_crm_parties"}),200)
-        } else {error("IMPORT_PARTIAL_REPLAY_CONFLICT",409)};
+    if receipts>0{
+        return if receipts==rows.len(){
+            response(json!({"created":0,"replayed":rows.len(),
+                "target_party_ids":rows.iter().map(|r|r.0.as_str()).collect::<Vec<_>>(),
+                "source":"original_crm_parties"}),200)
+        }else{error("IMPORT_PARTIAL_REPLAY_CONFLICT",409)};
     }
-    if db.batch(statements).await.is_err() {
-        return error("IMPORT_ATOMIC_WRITE_CONFLICT",409);
-    }
-    response(json!({"created":rows.len(),"replayed":0,"source":"original_crm_parties"}),201)
+    if db.batch(statements).await.is_err(){return error("IMPORT_ATOMIC_WRITE_CONFLICT",409);}
+    response(json!({"created":rows.len(),"replayed":0,
+        "target_party_ids":rows.iter().map(|r|r.0.as_str()).collect::<Vec<_>>(),
+        "source":"original_crm_parties"}),201)
 }
 
 async fn previous(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receipt>> {
