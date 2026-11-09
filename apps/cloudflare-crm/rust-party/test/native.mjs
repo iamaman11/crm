@@ -1,6 +1,6 @@
 // Exact native workerd Access RS256 proof, isolated D1 and signed CI-only JWTs.
 import {spawn,execFileSync} from "node:child_process";
-import {generateKeyPairSync,createSign,randomUUID} from "node:crypto";
+import {generateKeyPairSync,createSign,createHash,randomUUID} from "node:crypto";
 import {mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
@@ -437,6 +437,44 @@ try{
   assert.ok((await call("/api/sales-deals",a)).body.items
     .some(x=>x.id===dealId&&x.status==="won"));
   assert.deepEqual((await call("/api/sales-deals",b)).body.items,[]);
+  // Physical D1 transaction rollback: a caller-created Task deliberately
+  // occupies the immutable ORIGINAL delivery ID before a Sales stage update.
+  // The linked Task INSERT must fail, rolling back Deal UPDATE, receipts
+  // and link delivery together; no half-updated Deal may escape.
+  const rollbackDealId="native-link-rollback-"+randomUUID();
+  const rollbackCreate=await call("/api/sales-deals",a,{method:"POST",
+    headers:{"content-type":"application/json",
+      "idempotency-key":"signed-link-rollback-create"},
+    body:JSON.stringify({...dealData,id:rollbackDealId})});
+  assert.equal(rollbackCreate.status,201,JSON.stringify(rollbackCreate));
+  const v2=Buffer.alloc(8);v2.writeBigInt64BE(2n);
+  const hash=createHash("sha256").update("tenant-a").update(Buffer.from([0]))
+    .update(rollbackDealId).update(Buffer.from([0])).update(v2)
+    .digest("hex").slice(0,40);
+  const blockedId="delivery-"+hash;
+  const occupied=await call("/api/activity-tasks",a,{method:"POST",
+    headers:{"content-type":"application/json",
+      "idempotency-key":"signed-link-rollback-occupied"},
+    body:JSON.stringify({...taskData,id:blockedId,subject:"Existing unrelated Task"})});
+  assert.equal(occupied.status,201,JSON.stringify(occupied));
+  const rollbackInit={method:"POST",headers:{"content-type":"application/json",
+    "idempotency-key":"signed-link-rollback-advance"},
+    body:JSON.stringify(advanceData)};
+  const rollback=await call("/api/sales-deals/"+rollbackDealId+"/advance",a,rollbackInit);
+  assert.equal(rollback.status,409,JSON.stringify(rollback));
+  assert.equal(rollback.body.code,"SALES_LINK_ATOMIC_COMMIT_CONFLICT");
+  const unchanged=await call("/api/sales-deals/"+rollbackDealId,a);
+  assert.equal(unchanged.status,200);
+  assert.deepEqual(unchanged.body.item,rollbackCreate.body.item,
+    "failed Task creation must roll back the original Deal stage/version");
+  assert.deepEqual((await call("/api/activity-tasks/"+blockedId,a)).body.item,
+    occupied.body.item,"rollback must not rewrite the colliding existing Task");
+  const secondRollback=await call("/api/sales-deals/"+rollbackDealId+"/advance",a,rollbackInit);
+  assert.equal(secondRollback.status,409,
+    "failed stage change must not have written an idempotency receipt");
+  assert.equal(secondRollback.body.code,"SALES_LINK_ATOMIC_COMMIT_CONFLICT");
+  assert.deepEqual((await call("/api/sales-deals/"+rollbackDealId,a)).body.item,
+    rollbackCreate.body.item,"retry after failure must still preserve original Deal");
   console.log(JSON.stringify({event:"crm.native-original-sales-activities-link-d1",
     result:"PASS",owner:"crm.sales-activities-link",proven:[
       "original SalesActivitiesLink::handle",
@@ -445,7 +483,8 @@ try{
       "same D1 transaction Deal+Task+immutable delivery",
       "exact account/tenant binding","closed stage ignored",
       "replay does not duplicate Task","signed Access owner",
-      "A/B tenant Task denial","durable original Task codec"],
+      "A/B tenant Task denial","durable original Task codec",
+      "D1 injected conflict rolls back Deal+Task+receipt atomically"],
     ui:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
   console.log(JSON.stringify({event:"crm.native-original-sales-d1",result:"PASS",
     owner:"crm.sales",proven:["verified Access actor","original Account FK",
