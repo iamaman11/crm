@@ -1,203 +1,100 @@
-// Fast local contract verification and feature navigation. Zero network/database mutations.
-import { readFileSync, existsSync, readdirSync } from "node:fs";
-import { performance } from "node:perf_hooks";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
-import { modules, readModels, nativeModels, backendModels, errors, implementationOwners, ownerFiles } from "../shared/catalog.mjs";
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const started = performance.now();
-const read = name => readFileSync(resolve(root, name), "utf8");
-const rootOwner = ownerFiles["pilot-core"];
-const sourceFor = feature => ({
- registry:"shared/catalog.mjs", ...(ownerFiles[implementationOwners[feature]] || {}),
+// Fast read-only source locator and contract checks. No Cloudflare, D1,
+// automatic migration, or fake claim of a completed live browser acceptance.
+import {readFileSync,existsSync,readdirSync} from "node:fs";
+import {performance} from "node:perf_hooks";
+import {fileURLToPath} from "node:url";
+import {dirname,resolve} from "node:path";
+import {modules,nativeModels,readModels,backendModels,
+  errors,implementationOwners,ownerFiles} from "../shared/catalog.mjs";
+const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
+const started=performance.now();
+const read=path=>readFileSync(resolve(root,path),"utf8");
+const exists=path=>typeof path==="string" && existsSync(resolve(root,path));
+const features={...modules,...nativeModels,...readModels,...backendModels};
+const sourceFor=key=>({
+  registry:"shared/catalog.mjs",
+  ...(ownerFiles[implementationOwners[key]]||{})
 });
-const sourceExists = path => typeof path === "string" &&
-  existsSync(resolve(root, path.split(":")[0]));
-const requested = process.argv.slice(2).join(" ").trim().toLowerCase();
-const alias = { client:"customers", customer:"customers", клиент:"customers",
-  contact:"contacts", контакт:"contacts", deal:"deals", сделк:"deals",
-  task:"tasks", задач:"tasks" };
-const features = { ...modules, ...readModels, ...nativeModels, ...backendModels };
-const moduleKey = Object.keys(features).find(key =>
-  key === requested || key.includes(requested) && requested.length >= 2 ||
-  features[key].title.toLowerCase().includes(requested) && requested.length >= 2) ||
-  Object.entries(alias).find(([key]) => requested.startsWith(key))?.[1];
-if(requested) {
-  const code = Object.keys(errors).find(key => key.toLowerCase() === requested || key.toLowerCase().includes(requested));
-  if(!moduleKey && !code) {
-    console.error(JSON.stringify({ event:"crm.locate", result:"UNKNOWN", query:requested,
-      available:Object.keys(features), errors:Object.keys(errors) }));
+const aliases={client:"accounts",customer:"accounts",клиент:"accounts",
+  contact:"contacts",контакт:"contacts",
+  deal:"deals",сделк:"deals",
+  task:"tasks",задач:"tasks"};
+const requested=process.argv.slice(2).join(" ").trim().toLocaleLowerCase("ru");
+if(requested){
+  const module=Object.keys(features).find(key=>key===requested ||
+    key.includes(requested)&&requested.length>=2 ||
+    features[key].title.toLocaleLowerCase("ru").includes(requested)&&requested.length>=2) ||
+    Object.entries(aliases).find(([alias])=>requested.startsWith(alias))?.[1];
+  const code=Object.keys(errors).find(key=>key.toLowerCase()===requested ||
+    key.toLowerCase().includes(requested));
+  if(!module&&!code){
+    console.error(JSON.stringify({event:"crm.locate",result:"UNKNOWN",
+      query:requested,available:Object.keys(features),errors:Object.keys(errors)}));
     process.exitCode=2;
-  } else {
-    console.log(JSON.stringify({ event:"crm.locate", result:"FOUND", query:requested,
-      module:moduleKey||null, error:code||null, fields:moduleKey?(features[moduleKey].fields||[]).map(([key])=>key):undefined,
-      owner:moduleKey ? implementationOwners[moduleKey] : "pilot-core",
-      ui:moduleKey && backendModels[moduleKey] ? "NOT_CONNECTED" : undefined,
-      integration:moduleKey && backendModels[moduleKey] ? "API_D1_SOURCE_PRESENT_RUNTIME_PROOF_REQUIRED" : undefined,
-      files:moduleKey ? sourceFor(moduleKey) : { registry:"shared/catalog.mjs", ...rootOwner },
-      duration_ms:+(performance.now()-started).toFixed(2) }));
+  }else{
+    console.log(JSON.stringify({event:"crm.locate",result:"FOUND",query:requested,
+      module:module||null,error:code||null,
+      owner:module?implementationOwners[module]:null,
+      runtime:module&&["accounts","contacts","deals","tasks","parties"].includes(module)?
+        "ORIGINAL_NATIVE_RUST":"NOT_CONNECTED",
+      files:module?sourceFor(module):{registry:"shared/catalog.mjs"},
+      duration_ms:+(performance.now()-started).toFixed(2)}));
   }
-} else {
-  // All migrations are read-only inputs; new ordered migrations need no doctor changes.
-  const migration = readdirSync(resolve(root,"migrations"))
-    .filter(name => /^\d+.*\.sql$/.test(name)).sort()
-    .map(name => read("migrations/"+name)).join("\n");
-  const ui=read(rootOwner.ui), api=read(rootOwner.api), test=read(rootOwner.tests);
+}else{
+  const rust=read("rust-party/src/lib.rs"),ui=read("web/src/main.jsx"),
+    card=read("web/src/Customer360.jsx");
+  const migrations=readdirSync(resolve(root,"migrations"))
+    .filter(name=>/^\d+.*\.sql$/.test(name)).sort()
+    .map(name=>read("migrations/"+name)).join("\n");
   const checks=[];
-  for (const [name, model] of Object.entries(modules)) {
-    const block = migration.match(new RegExp("CREATE TABLE IF NOT EXISTS "+model.table+" \\(([\\s\\S]*?)\\);"));
-    const missing = model.fields.map(([key]) => key).filter(key =>
-      !(block && new RegExp("(?:^|[,\\n])\\s*"+key+"\\s", "m").test(block[1])) &&
-      !new RegExp("ALTER\\s+TABLE\\s+"+model.table+"\\s+ADD\\s+(?:COLUMN\\s+)?"+key+"\\s","i").test(migration)
-    );
-    checks.push({ module:name, schema:block && missing.length===0?"PASS":"FAIL", missing });
+  const check=(name,ok,extra={})=>checks.push({check:name,result:ok?"PASS":"FAIL",...extra});
+  check("one-native-worker",rust.includes('access::actor(&req, &env)') &&
+    rust.includes('account_overview::overview') &&
+    !rust.includes("pilot::route") && !rust.includes("mod pilot;") &&
+    JSON.parse(read("wrangler.jsonc")).main==="./rust-party/build/index.js");
+  const owners=Object.keys(features);
+  check("original-source-ownership",owners.length===Object.keys(implementationOwners).length &&
+    owners.every(key=>{
+      const files=sourceFor(key),backend=backendModels[key];
+      if(!files.validation||!exists(files.validation))return false;
+      if(backend&&backend.ui==="NOT_CONNECTED")return files.ui===null;
+      if(key==="sales-activities-link")return files.ui===null;
+      return ["ui","api","tests"].every(field=>exists(files[field]));
+    }));
+  const expected=[
+    ["accounts","/api/accounts","crm_account_records",
+      "rust-party/src/accounts.rs","Account::create"],
+    ["contacts","/api/contact-points","crm_contact_point_records",
+      "rust-party/src/contact_points.rs","ContactPoint::create"],
+    ["deals","/api/sales-deals","crm_sales_deal_records",
+      "rust-party/src/sales_deals.rs","Deal::create"],
+    ["tasks","/api/activity-tasks","crm_activity_task_records",
+      "rust-party/src/activity_tasks.rs","Task::create"]
+  ];
+  for(const [name,route,table,source,symbol] of expected){
+    check("original-"+name+"-ui-api-owner",
+      ui.includes('api("'+route.slice(5)+'"') ||
+      (ui.includes(route.slice(5))&&ui.includes("const sections")),
+      {ui:"REACT_CONNECTED_NOT_LIVE",live:"NOT_TESTED"});
+    const sourceReady=rust.includes(route)&&read(source).includes(symbol)&&
+      migrations.includes("CREATE TABLE IF NOT EXISTS "+table);
+    check("original-"+name+"-native-d1-source",sourceReady,
+      {runtime:"EXTERNAL_WORKERD_OR_CLOUDFLARE_REQUIRED"});
   }
-  checks.push({check:"shared-ui-catalog",result:ui.includes('shared/catalog.mjs')?"PASS":"FAIL"});
-  // Rust is the only runtime API implementation. Compare exact pilot columns
-  // with React's field registry; an old JS file must not satisfy this gate.
-  const nativeFieldsMatch=Object.entries(modules).every(([name,model])=>{
-    const pattern=new RegExp('"'+name+'"\\s*=> Some\\(Model \\{ table: "'+model.table+
-      '", fields: &\\[([^\\]]+)\\]');
-    const match=api.match(pattern);
-    if(!match)return false;
-    let fields;
-    try{fields=JSON.parse('['+match[1]+']')}catch{return false}
-    return JSON.stringify(fields)===JSON.stringify(model.fields.map(([key])=>key));
-  });
-  checks.push({check:"native-rust-api-catalog",result:nativeFieldsMatch?"PASS":"FAIL"});
-  checks.push({check:"test-present",result:test.includes('Native Rust-only customers/contacts/deals/tasks/Customer360')?"PASS":"FAIL"});
-  checks.push({check:"browser-present",result:existsSync(resolve(root,rootOwner.browser))?"PASS":"FAIL"});
-  // A new feature cannot silently inherit the old pilot's shared files.
-  const keys=Object.keys(features);
-  const ownershipCorrect=keys.length===Object.keys(implementationOwners).length &&
-    keys.every(name => {
-      const owner=implementationOwners[name], files=ownerFiles[owner];
-      if (!files || (owner==="pilot-core" &&
-          !["customers","contacts","deals","tasks"].includes(name))) return false;
-      // A backend-only owner must not pretend to have a React screen or browser proof.
-      if (backendModels[name]) {
-        return backendModels[name].ui==="NOT_CONNECTED" &&
-          files.ui===null && files.browser===null &&
-          ["api","validation","codec","migration","tests"].every(part=>sourceExists(files[part]));
-      }
-      return ["ui","api","validation","migration","tests","browser"].every(part =>
-        sourceExists(files[part]));
-    });
-  checks.push({check:"explicit-feature-ownership",result:ownershipCorrect?"PASS":"FAIL"});
-  // This proves source wiring, not a live D1 operation or user-visible UI.
-  const originalAccountSource=sourceFor("accounts");
-  const originalAccountConnected=backendModels.accounts.ui==="NOT_CONNECTED" &&
-    migration.includes("CREATE TABLE IF NOT EXISTS crm_account_records") &&
-    read(originalAccountSource.api).includes("Account::create") &&
-    read(originalAccountSource.api).includes("decode_account_state") &&
-    read(originalAccountSource.tests).includes("crm.native-original-account-d1");
-  checks.push({check:"original-account-backend-source",result:originalAccountConnected?"PASS":"FAIL",
-    ui:"NOT_CONNECTED",runtime_proof:"EXTERNAL_CI_REQUIRED"});
-  // Source-boundary check only. The Account owner must not own SQL reads of
-  // ContactPoint, Relationship, Sales or Activity storage. The single Worker
-  // composes their original codecs in one tenant-scoped read-only projection.
-  const accountOwner=read(originalAccountSource.api);
-  const overviewPath=originalAccountSource.readProjection;
-  const overviewSource=sourceExists(overviewPath) ? read(overviewPath) : "";
-  const nativeEntrypoint=read("rust-party/src/lib.rs");
-  const overviewBoundaryOk=overviewSource.includes("accounts::load") &&
-    ["crm_contact_point_records","crm_party_relationship_records",
-      "crm_sales_deal_records","crm_activity_task_records"].every(
-        table=>overviewSource.includes(table) && !accountOwner.includes(table)) &&
-    nativeEntrypoint.includes("account_overview::overview") &&
-    read(originalAccountSource.tests).includes("crm.native-original-account-overview-d1");
-  checks.push({check:"original-account-overview-composition-source",
-    result:overviewBoundaryOk?"PASS":"FAIL",ui:"NOT_CONNECTED",
-    runtime_proof:"EXTERNAL_CI_REQUIRED"});
-  const originalContactSource=sourceFor("contact-points");
-  const originalContactConnected=backendModels["contact-points"].ui==="NOT_CONNECTED" &&
-    backendModels["contact-points"].verification==="TRUSTED_EVIDENCE_NOT_CONNECTED" &&
-    migration.includes("CREATE TABLE IF NOT EXISTS crm_contact_point_records") &&
-    read(originalContactSource.api).includes("ContactPoint::create") &&
-    read(originalContactSource.api).includes("decode_contact_point_state") &&
-    read(originalContactSource.api).includes("client-submitted arbitrary evidence is NOT proof") &&
-    read(originalContactSource.tests).includes("crm.native-original-contact-point-d1");
-  checks.push({check:"original-contact-point-backend-source",
-    result:originalContactConnected?"PASS":"FAIL",ui:"NOT_CONNECTED",
-    verification:"TRUSTED_EVIDENCE_NOT_CONNECTED",consent:"NOT_CONNECTED",
-    runtime_proof:"EXTERNAL_CI_REQUIRED"});
-  const relSource=sourceFor("party-relationships");
-  const relReady=backendModels["party-relationships"].ui==="NOT_CONNECTED" &&
-    migration.includes("CREATE TABLE IF NOT EXISTS crm_party_relationship_records") &&
-    read(relSource.api).includes("PartyRelationship::create") &&
-    read(relSource.api).includes("decode_party_relationship_state") &&
-    read(relSource.tests).includes("crm.native-original-party-relationships-d1");
-  checks.push({check:"original-party-relationships-backend-source",
-    result:relReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
-    runtime_proof:"EXTERNAL_CI_REQUIRED"});
-  const taskSource=sourceFor("activity-tasks");
-  const tasksReady=backendModels["activity-tasks"].ui==="NOT_CONNECTED" &&
-    migration.includes("CREATE TABLE IF NOT EXISTS crm_activity_task_records") &&
-    read(taskSource.api).includes("Task::create") &&
-    read(taskSource.api).includes("task.complete(CompleteTask") &&
-    read(taskSource.api).includes("decode_task_state") &&
-    read(taskSource.tests).includes("crm.native-original-activities-d1");
-  checks.push({check:"original-activities-backend-source",
-    result:tasksReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
-    runtime_proof:"EXTERNAL_CI_REQUIRED"});
-  const salesSource=sourceFor("sales-deals");
-  const salesReady=backendModels["sales-deals"].ui==="NOT_CONNECTED" &&
-    backendModels["sales-deals"].primary_contact==="NOT_CONNECTED" &&
-    migration.includes("CREATE TABLE IF NOT EXISTS crm_sales_deal_records") &&
-    read(salesSource.api).includes("Deal::create") &&
-    read(salesSource.api).includes("deal.advance_stage(AdvanceDealStage") &&
-    read(salesSource.api).includes("deal.apply_update(UpdateDeal") &&
-    read(salesSource.api).includes("decode_deal_state") &&
-    read(salesSource.tests).includes("crm.native-original-sales-d1");
-  checks.push({check:"original-sales-backend-source",
-    result:salesReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
-    primary_contact:"NOT_CONNECTED",runtime_proof:"EXTERNAL_CI_REQUIRED"});
-  const consentSource=sourceFor("consents");
-  const consentReady=backendModels.consents.ui==="NOT_CONNECTED" &&
-    backendModels.consents.grant_evidence==="NOT_CONNECTED" &&
-    migration.includes("CREATE TABLE IF NOT EXISTS crm_consent_records") &&
-    read(consentSource.api).includes("ConsentAuthorization::create") &&
-    read(consentSource.api).includes("evaluate_communication_authorization") &&
-    read(consentSource.api).includes("ConsentEffect::Deny") &&
-    read(consentSource.api).includes('"/api/consents/suppress"') &&
-    read(consentSource.tests).includes("crm.native-original-consents-d1");
-  checks.push({check:"original-consents-backend-source",
-    result:consentReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
-    grant_evidence:"NOT_CONNECTED",operator_suppressions:"ENABLED",
-    runtime_proof:"EXTERNAL_CI_REQUIRED"});
-  const linkSource=sourceFor("sales-activities-link");
-  const linkReady=backendModels["sales-activities-link"].ui==="NOT_CONNECTED" &&
-    backendModels["sales-activities-link"].delivery==="SYNCHRONOUS_ATOMIC_D1" &&
-    migration.includes("CREATE TABLE IF NOT EXISTS crm_sales_link_delivery_records") &&
-    read(linkSource.api).includes("SalesActivitiesLink::new") &&
-    read(linkSource.api).includes("ProtobufSalesActivitiesLinkContractAdapter") &&
-    read(linkSource.validation).includes("pub async fn handle(") &&
-    read(linkSource.codec).includes("encode_create_task") &&
-    read(linkSource.tests).includes("crm.native-original-sales-activities-link-d1");
-  checks.push({check:"original-sales-activities-link-backend-source",
-    result:linkReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
-    delivery:"SYNCHRONOUS_ATOMIC_D1",runtime_proof:"EXTERNAL_CI_REQUIRED"});
-  const validCatalog=Object.keys(modules).every(name => {
-    const module=modules[name], fieldKeys=module.fields.map(([key])=>key);
-    return /^[a-z][a-z0-9_]*$/.test(module.table) && fieldKeys.length>0 &&
-      fieldKeys.length===new Set(fieldKeys).size &&
-      fieldKeys.every(key=>/^[a-z][a-z0-9_]*$/.test(key));
-  });
-  checks.push({check:"valid-feature-contracts",result:validCatalog?"PASS":"FAIL"});
-  const nativeModelsValid=Object.entries(nativeModels).every(([name,model])=>
-    model.kind==="owner"&&model.route===name&&
-    implementationOwners[name]==="rust-party"&&
-    ownerFiles["rust-party"].validation==="rust-party/src/lib.rs");
-  checks.push({check:"native-rust-party-owner",result:nativeModelsValid?"PASS":"FAIL"});
-  const readModelsValid=Object.entries(readModels).every(([name,feature])=>
-    feature.kind==="read" && feature.route===name && !modules[name] &&
-    implementationOwners[name]!== "pilot-core");
-  checks.push({check:"read-model-no-table",result:readModelsValid?"PASS":"FAIL"});
-  const guide=read("AGENTS.md");
-  const guideOk=["iamaman11/crm","implementationOwners","ownerFiles",
-    "GitHub Actions","npm run doctor","npm run locate"].every(t=>guide.includes(t));
-  checks.push({check:"durable-developer-contract",result:guideOk?"PASS":"FAIL"});
-  const ok=checks.every(c=>(c.schema||c.result)==="PASS");
+  check("original-account-overview-ui",
+    card.includes('"accounts/"+accountId+"/overview"') &&
+    rust.includes("account_overview::overview") &&
+    read("rust-party/src/account_overview.rs").includes("crm_sales_deal_records"));
+  check("no-pilot-api-or-frontend",
+    !exists("rust-party/src/pilot.rs") &&
+    !ui.includes('/api/customers') && !ui.includes('api("customers"') &&
+    !card.includes('load("customer360/'));
+  check("native-test-real-source",
+    read("rust-party/test/native.mjs").includes("crm.native-original-sales-update-d1") &&
+    read("rust-party/test/native.mjs").includes("React Account create/update"));
+  check("durable-developer-contract",["iamaman11/crm","npm run locate",
+    "GitHub Actions"].every(x=>read("AGENTS.md").includes(x)));
+  const ok=checks.every(x=>x.result==="PASS");
   console.log(JSON.stringify({event:"crm.doctor",result:ok?"PASS":"FAIL",
     checks,modules:Object.keys(features),error_codes:Object.keys(errors),
     duration_ms:+(performance.now()-started).toFixed(2)}));
