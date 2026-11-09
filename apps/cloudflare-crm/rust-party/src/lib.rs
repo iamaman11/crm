@@ -363,6 +363,17 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     let request_id = correlation_id(&req, trusted_id)?;
     let path = req.path();
     let method = req.method();
+    // Minimal existing-role rule for the test CRM: an enrolled admin can write;
+    // other verified tenant members may only read. Consent evaluation is a
+    // non-mutating query despite its POST transport. Do not silently grant
+    // business mutation rights merely because Access verified a JWT.
+    #[cfg(feature = "native")]
+    if role != Some("admin")
+        && method != Method::Get
+        && !(path == "/api/consents/evaluate" && method == Method::Post)
+    {
+        return error("FORBIDDEN", 403);
+    }
     let db = env.d1("DB")?;
     // Explicitly CI-only, signed-Access-gated native workerd proof. This gate
     // performs no D1 writes and makes no claims about module persistence.
