@@ -1,7 +1,7 @@
-//! Executable integration gate for ORIGINAL Rust owner behavior in WASM.
-//! It runs in memory, without writes. It is deliberately NOT a D1 or
-//! published feature proof. Only the CI-native Worker enables this module.
-//! All business rules and codecs are those from the original owner crates.
+// Executable integration gate for ORIGINAL Rust owner behavior in WASM.
+// It runs in memory, without writes. It is deliberately NOT a D1 or
+// published feature proof. Only the CI-native Worker enables this module.
+// All business rules and codecs are those from the original owner crates.
 
 pub(crate) fn check() -> i32 {
     // crm.customer-accounts: a commercial account is NOT a Party.
