@@ -14,6 +14,8 @@ use worker::*;
 
 #[cfg(feature = "native")]
 mod access;
+#[cfg(feature = "native")]
+mod pilot;
 
 fn native_request_id() -> Result<String> {
     use js_sys::{Function, Reflect};
@@ -240,7 +242,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     }), if healthy {200} else {503})
 }
 
-async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>) -> Result<Response> {
+async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>, role: Option<&str>) -> Result<Response> {
     let request_id = correlation_id(&req, trusted_id)?;
     let path = req.path();
     let method = req.method();
@@ -262,7 +264,15 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
             _ => error("NOT_FOUND", 404),
         };
     }
-    error("NOT_FOUND", 404)
+    #[cfg(feature = "native")]
+    {
+        return pilot::route(req, &env, tenant, role.unwrap_or("admin"), &request_id).await;
+    }
+    #[cfg(not(feature = "native"))]
+    {
+        let _ = role;
+        error("NOT_FOUND", 404)
+    }
 }
 
 #[event(fetch)]
@@ -282,7 +292,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             .filter(|s| s == "tenant-a" || s == "tenant-b") else {
             return error("AUTH_REQUIRED", 403);
         };
-        return dispatch(req, env, &tenant, None).await;
+        return dispatch(req, env, &tenant, None, None).await;
     }
 
     // The `integrated` build is import-only, called inside the single trusted
@@ -315,12 +325,33 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             (p, Method::Get) if p.starts_with("/api/parties/") => "parties.read",
             (p, Method::Patch) if p.starts_with("/api/parties/") => "parties.update",
             ("/api/doctor", Method::Get) => "doctor.read",
-            _ => "parties.unmatched",
+            ("/api/health", Method::Get) => "health.read",
+            ("/api/session", Method::Get) => "session.read",
+            ("/api/version", Method::Get) => "version.read",
+            (p, Method::Get) if p.starts_with("/api/customer360/") => "customer360.read",
+            (p, Method::Get) if p.starts_with("/api/customers") => "customers.read",
+            (p, Method::Post) if p.starts_with("/api/customers") => "customers.create",
+            (p, Method::Patch) if p.starts_with("/api/customers/") => "customers.update",
+            (p, Method::Delete) if p.starts_with("/api/customers/") => "customers.delete",
+            (p, Method::Get) if p.starts_with("/api/contacts") => "contacts.read",
+            (p, Method::Post) if p.starts_with("/api/contacts") => "contacts.create",
+            (p, Method::Patch) if p.starts_with("/api/contacts/") => "contacts.update",
+            (p, Method::Delete) if p.starts_with("/api/contacts/") => "contacts.delete",
+            (p, Method::Get) if p.starts_with("/api/deals") => "deals.read",
+            (p, Method::Post) if p.starts_with("/api/deals") => "deals.create",
+            (p, Method::Patch) if p.starts_with("/api/deals/") => "deals.update",
+            (p, Method::Delete) if p.starts_with("/api/deals/") => "deals.delete",
+            (p, Method::Get) if p.starts_with("/api/tasks") => "tasks.read",
+            (p, Method::Post) if p.starts_with("/api/tasks") => "tasks.create",
+            (p, Method::Patch) if p.starts_with("/api/tasks/") => "tasks.update",
+            (p, Method::Delete) if p.starts_with("/api/tasks/") => "tasks.delete",
+            _ => "unmatched",
         };
-        let (result, phase) = match access::tenant(&req, &env).await {
-            Ok(Some(tenant)) if path == "/api/doctor" && method == Method::Get =>
-                (native_doctor(&env, &tenant).await, "diagnostics"),
-            Ok(Some(tenant)) => (dispatch(req, env, &tenant, Some(&request_id)).await, "domain_d1"),
+        let (result, phase) = match access::actor(&req, &env).await {
+            Ok(Some(actor)) if path == "/api/doctor" && method == Method::Get =>
+                (native_doctor(&env, &actor.tenant).await, "diagnostics"),
+            Ok(Some(actor)) =>
+                (dispatch(req, env, &actor.tenant, Some(&request_id), Some(&actor.role)).await, "domain_d1"),
             Ok(None) => (error("AUTH_REQUIRED", 401), "access"),
             Err(_) => (error("ACCESS_INTERNAL_ERROR", 503), "access"),
         };
@@ -329,8 +360,15 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             Err(_) => error("PARTIES_INTERNAL_ERROR", 500)?,
         };
         reply.headers_mut().set("x-request-id", &request_id)?;
-        reply.headers_mut().set("x-crm-module",
-            if path == "/api/doctor" { "crm.diagnostics" } else { "crm.parties" })?;
+        let module = if path == "/api/doctor" { "crm.diagnostics" }
+            else if path.starts_with("/api/parties") { "crm.parties" }
+            else if path.starts_with("/api/customer360") { "crm.customer360" }
+            else if path.starts_with("/api/customers") { "crm.customers" }
+            else if path.starts_with("/api/contacts") { "crm.contacts" }
+            else if path.starts_with("/api/deals") { "crm.deals" }
+            else if path.starts_with("/api/tasks") { "crm.tasks" }
+            else { "crm.platform" };
+        reply.headers_mut().set("x-crm-module", module)?;
         reply.headers_mut().set("x-crm-runtime", "native-workers-rs")?;
         if let Some(value) = source_sha {
             if value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
@@ -341,7 +379,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         let error_code = reply.headers().get("x-crm-error-code").ok().flatten();
         console_log!("{}", json!({
             "event":"crm.native.request", "request_id":request_id,
-            "module":if path == "/api/doctor" { "crm.diagnostics" } else { "crm.parties" },
+            "module":module,
             "operation":operation, "phase":phase,
             "status":reply.status_code(), "error_code":error_code, "duration_ms":elapsed
         }));
