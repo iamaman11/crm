@@ -16,6 +16,8 @@ mod access;
 #[cfg(feature = "native")]
 mod accounts;
 #[cfg(feature = "native")]
+mod account_overview;
+#[cfg(feature = "native")]
 mod contact_points;
 #[cfg(feature = "native")]
 mod party_relationships;
@@ -414,6 +416,15 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     #[cfg(feature = "native")]
     if path == "/api/contact-points" || path.starts_with("/api/contact-points/") {
         return contact_points::route(req, db, tenant, &request_id).await;
+    }
+    #[cfg(feature = "native")]
+    if let Some(id) = path.strip_prefix("/api/accounts/")
+        .and_then(|segment| segment.strip_suffix("/overview"))
+    {
+        if id.is_empty() || id.contains('/') || method != Method::Get {
+            return error("NOT_FOUND", 404);
+        }
+        return account_overview::overview(&db, tenant, id).await;
     }
     #[cfg(feature = "native")]
     if path == "/api/accounts" || path.starts_with("/api/accounts/") {
