@@ -55,6 +55,8 @@ try{
     "--file","../migrations/0005_original_contact_points.sql","--persist-to",data]);
   run(["d1","execute","crm-rust-party-local","--local",
     "--file","../migrations/0006_original_party_relationships.sql","--persist-to",data]);
+  run(["d1","execute","crm-rust-party-local","--local",
+    "--file","../migrations/0007_original_activity_tasks.sql","--persist-to",data]);
   child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
     "--var","CRM_CI_LOCAL_ONLY:yes","--var","CRM_NATIVE_CI_JWKS:"+jwks],
     {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
@@ -198,6 +200,82 @@ try{
       "strict codec roundtrip","D1 durable state","idempotent receipts",
       "optimistic version","tenant isolation","request correlation"],
     published_live:"NOT_TESTED"}));
+  // Original Activities Task: belongs to ORIGINAL Account; actor is verified
+  // Access identity, NEVER owner submitted by the client.
+  assert.equal((await call("/api/activity-tasks",null)).status,401);
+  assert.deepEqual((await call("/api/activity-tasks",b)).body.items,[]);
+  const taskId="native-activity-task-"+randomUUID();
+  const taskData={id:taskId,subject:"Call account owner",
+    description:"Follow up",account_id:accountId,priority:"normal",
+    due_at_unix_nanos:null,reminder_at_unix_nanos:null};
+  const taskHeaders={"content-type":"application/json",
+    "idempotency-key":"signed-original-activity-task-create"};
+  const taskWrongTenant=await call("/api/activity-tasks",b,{
+    method:"POST",headers:taskHeaders,body:JSON.stringify(taskData)});
+  assert.equal(taskWrongTenant.status,422,"Task cannot link to another tenant's Account");
+  assert.equal(taskWrongTenant.body.code,"ACTIVITIES_ACCOUNT_NOT_FOUND");
+  const taskInvalid=await call("/api/activity-tasks",a,{
+    method:"POST",headers:{...taskHeaders,"idempotency-key":"activity-invalid-subject"},
+    body:JSON.stringify({...taskData,subject:""})});
+  assert.equal(taskInvalid.status,422,"original Task domain rejects blank subject");
+  const taskOwnerForgery=await call("/api/activity-tasks",a,{
+    method:"POST",headers:{...taskHeaders,"idempotency-key":"activity-owner-forgery"},
+    body:JSON.stringify({...taskData,owner:"admin"})});
+  assert.equal(taskOwnerForgery.status,422,"caller must not supply trusted Task owner");
+  const taskCreated=await call("/api/activity-tasks",a,{
+    method:"POST",headers:taskHeaders,body:JSON.stringify(taskData)});
+  assert.equal(taskCreated.status,201,JSON.stringify(taskCreated));
+  assert.equal(taskCreated.body.item.id,taskId);
+  assert.equal(taskCreated.body.item.status,"open");
+  assert.equal(taskCreated.body.item.version,1);
+  assert.equal(taskCreated.body.item.owner.actor,"native-a@example.test");
+  assert.equal(taskCreated.body.item.related_resources[0].resource_id,accountId);
+  assert.equal(taskCreated.body.item.related_resources[0].resource_type,"crm.customer-accounts");
+  assert.equal(taskCreated.headers["x-crm-module"],"crm.activities");
+  assert.match(taskCreated.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
+  assert.equal((await call("/api/activity-tasks/"+taskId,b)).status,404);
+  assert.equal((await call("/api/activity-tasks/"+taskId,serviceB)).status,404);
+  const taskRead=await call("/api/activity-tasks/"+taskId,a);
+  assert.equal(taskRead.status,200);
+  assert.deepEqual(taskRead.body.item,taskCreated.body.item,
+    "original Task codec must survive D1 roundtrip");
+  const taskReplay=await call("/api/activity-tasks",a,{
+    method:"POST",headers:taskHeaders,body:JSON.stringify(taskData)});
+  assert.equal(taskReplay.status,200);
+  assert.equal(taskReplay.body.replayed,true);
+  const taskIdemConflict=await call("/api/activity-tasks",a,{
+    method:"POST",headers:taskHeaders,
+    body:JSON.stringify({...taskData,subject:"Change subject"})});
+  assert.equal(taskIdemConflict.status,409);
+  assert.equal(taskIdemConflict.body.code,"IDEMPOTENCY_CONFLICT");
+  const completeInit={method:"POST",headers:{"content-type":"application/json",
+    "idempotency-key":"signed-original-activity-task-complete"},
+    body:JSON.stringify({expected_version:1})};
+  const taskComplete=await call("/api/activity-tasks/"+taskId+"/complete",a,completeInit);
+  assert.equal(taskComplete.status,200,JSON.stringify(taskComplete));
+  assert.equal(taskComplete.body.item.status,"completed");
+  assert.equal(taskComplete.body.item.version,2);
+  assert.equal(taskComplete.body.item.reminder_at_unix_nanos,null);
+  assert.ok(taskComplete.body.item.completed_at_unix_nanos>0);
+  const completeReplay=await call("/api/activity-tasks/"+taskId+"/complete",a,completeInit);
+  assert.equal(completeReplay.status,200);
+  assert.equal(completeReplay.body.replayed,true);
+  const taskStale=await call("/api/activity-tasks/"+taskId+"/complete",a,{
+    ...completeInit,headers:{...completeInit.headers,
+      "idempotency-key":"original-activity-task-stale"}});
+  assert.equal(taskStale.status,409);
+  assert.equal(taskStale.body.code,"ACTIVITIES_TASK_VERSION_CONFLICT");
+  assert.deepEqual((await call("/api/activity-tasks/"+taskId,a)).body.item,
+    taskComplete.body.item,"completed original aggregate persisted in D1");
+  assert.ok((await call("/api/activity-tasks",a)).body.items
+    .some(x=>x.id===taskId&&x.status==="completed"));
+  assert.deepEqual((await call("/api/activity-tasks",b)).body.items,[]);
+  console.log(JSON.stringify({event:"crm.native-original-activities-d1",result:"PASS",
+    owner:"crm.activities",proven:["signed actor provenance","Account FK",
+      "original Task create/complete","strict codec D1 roundtrip",
+      "Access A/B isolation","idempotency receipts","version CAS",
+      "forged owner rejected","request correlation"],
+    ui:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
   // Original Contact Point lifecycle under real JWT and production migration.
   assert.equal((await call("/api/contact-points",null)).status,401);
   assert.deepEqual((await call("/api/contact-points",b)).body.items,[]);
