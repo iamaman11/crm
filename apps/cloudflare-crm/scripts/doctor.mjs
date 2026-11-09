@@ -3,7 +3,7 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { modules, readModels, nativeModels, errors, implementationOwners, ownerFiles } from "../shared/catalog.mjs";
+import { modules, readModels, nativeModels, backendModels, errors, implementationOwners, ownerFiles } from "../shared/catalog.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const started = performance.now();
 const read = name => readFileSync(resolve(root, name), "utf8");
@@ -17,7 +17,7 @@ const requested = process.argv.slice(2).join(" ").trim().toLowerCase();
 const alias = { client:"customers", customer:"customers", клиент:"customers",
   contact:"contacts", контакт:"contacts", deal:"deals", сделк:"deals",
   task:"tasks", задач:"tasks" };
-const features = { ...modules, ...readModels, ...nativeModels };
+const features = { ...modules, ...readModels, ...nativeModels, ...backendModels };
 const moduleKey = Object.keys(features).find(key =>
   key === requested || key.includes(requested) && requested.length >= 2 ||
   features[key].title.toLowerCase().includes(requested) && requested.length >= 2) ||
@@ -26,12 +26,14 @@ if(requested) {
   const code = Object.keys(errors).find(key => key.toLowerCase() === requested || key.toLowerCase().includes(requested));
   if(!moduleKey && !code) {
     console.error(JSON.stringify({ event:"crm.locate", result:"UNKNOWN", query:requested,
-      available:Object.keys(modules), errors:Object.keys(errors) }));
+      available:Object.keys(features), errors:Object.keys(errors) }));
     process.exitCode=2;
   } else {
     console.log(JSON.stringify({ event:"crm.locate", result:"FOUND", query:requested,
       module:moduleKey||null, error:code||null, fields:moduleKey?(features[moduleKey].fields||[]).map(([key])=>key):undefined,
       owner:moduleKey ? implementationOwners[moduleKey] : "pilot-core",
+      ui:moduleKey && backendModels[moduleKey] ? "NOT_CONNECTED" : undefined,
+      integration:moduleKey && backendModels[moduleKey] ? "API_D1_SOURCE_PRESENT_RUNTIME_PROOF_REQUIRED" : undefined,
       files:moduleKey ? sourceFor(moduleKey) : { registry:"shared/catalog.mjs", ...rootOwner },
       duration_ms:+(performance.now()-started).toFixed(2) }));
   }
@@ -70,12 +72,27 @@ if(requested) {
   const ownershipCorrect=keys.length===Object.keys(implementationOwners).length &&
     keys.every(name => {
       const owner=implementationOwners[name], files=ownerFiles[owner];
-      return !!files && (owner!=="pilot-core" ||
-        ["customers","contacts","deals","tasks"].includes(name)) &&
-        ["ui","api","validation","migration","tests","browser"].every(part =>
-          sourceExists(files[part]));
+      if (!files || (owner==="pilot-core" &&
+          !["customers","contacts","deals","tasks"].includes(name))) return false;
+      // A backend-only owner must not pretend to have a React screen or browser proof.
+      if (backendModels[name]) {
+        return backendModels[name].ui==="NOT_CONNECTED" &&
+          files.ui===null && files.browser===null &&
+          ["api","validation","codec","migration","tests"].every(part=>sourceExists(files[part]));
+      }
+      return ["ui","api","validation","migration","tests","browser"].every(part =>
+        sourceExists(files[part]));
     });
   checks.push({check:"explicit-feature-ownership",result:ownershipCorrect?"PASS":"FAIL"});
+  // This proves source wiring, not a live D1 operation or user-visible UI.
+  const originalAccountSource=sourceFor("accounts");
+  const originalAccountConnected=backendModels.accounts.ui==="NOT_CONNECTED" &&
+    migration.includes("CREATE TABLE IF NOT EXISTS crm_account_records") &&
+    read(originalAccountSource.api).includes("Account::create") &&
+    read(originalAccountSource.api).includes("decode_account_state") &&
+    read(originalAccountSource.tests).includes("crm.native-original-account-d1");
+  checks.push({check:"original-account-backend-source",result:originalAccountConnected?"PASS":"FAIL",
+    ui:"NOT_CONNECTED",runtime_proof:"EXTERNAL_CI_REQUIRED"});
   const validCatalog=Object.keys(modules).every(name => {
     const module=modules[name], fieldKeys=module.fields.map(([key])=>key);
     return /^[a-z][a-z0-9_]*$/.test(module.table) && fieldKeys.length>0 &&
