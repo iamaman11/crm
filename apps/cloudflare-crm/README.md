@@ -17,7 +17,7 @@ React 19 / Vite (Cloudflare Static Assets)
 ### Границы ответственности
 
 - **UI** — `web/src/main.jsx`, `Parties.jsx`, `Customer360.jsx`. `App` владеет списками Party/Account/ContactPoint/Deal/Task; дочерние экраны получают данные через props. Формы передают идентификаторы, версии и параметры API, но не выбирают конечный результат доменных переходов.
-- **HTTP, Access, диагностика** — `rust-party/src/lib.rs`, `access.rs`. Стабильные `x-request-id`, `x-crm-module`, `x-crm-error-code` и `x-crm-source-sha`; облачные структурированные Logs без токенов и пользовательских данных.
+- **HTTP, Access, диагностика** — `rust-party/src/lib.rs`, `access.rs`; **Party HTTP/D1** — `rust-party/src/parties.rs`. Стабильные `x-request-id`, `x-crm-module`, `x-crm-error-code` и `x-crm-source-sha`; облачные структурированные Logs без токенов и пользовательских данных.
 - **Адаптеры оригинальных модулей к D1** — `rust-party/src/accounts.rs`, `contact_points.rs`, `sales_deals.rs`, `activity_tasks.rs`, `party_relationships.rs`, `consents.rs`. Это **не второй бизнес-домен**: обработчики разбирают JSON в Rust-типы, вызывают исходные агрегаты и сохраняют их штатными D1-запросами.
 - **Оригинальные бизнес-правила** — `modules/crm-*`. Межмодульный `sales_activities_link.rs` использует исходный Rust link-модуль и типизированный Protobuf-адаптер, коммит Deal/Task/receipt выполняется одной атомарной операцией D1.
 - **Карточка клиента** — `account_overview.rs`, read-only композиция состояний владельцев; не отдельная клиентская таблица и не владелец изменений.
