@@ -306,7 +306,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) else {
             return error("AUTH_REQUIRED", 403);
         };
-        return dispatch(req, env, &tenant, None).await;
+        return dispatch(req, env, &tenant, None, None).await;
     }
 
     #[cfg(feature = "native")]
@@ -357,7 +357,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         };
         let mut reply = match result {
             Ok(reply) => reply,
-            Err(_) => error("PARTIES_INTERNAL_ERROR", 500)?,
+            Err(_) => error("INTERNAL_ERROR", 500)?,
         };
         reply.headers_mut().set("x-request-id", &request_id)?;
         let module = if path == "/api/doctor" { "crm.diagnostics" }
