@@ -90,11 +90,11 @@ async function http(endpoint,headers={},method="GET",body){
 const override=(headers,version)=>({
   ...headers,"Cloudflare-Workers-Version-Overrides":script+'="'+version+'"'
 });
-function native(r,status){
+function native(r,status,module="crm.parties"){
   assert.equal(r.status,status,JSON.stringify({expected:status,actual:r.status,body:r.json}));
   assert.equal(r.headers["x-crm-runtime"],"native-workers-rs","override didn't select native");
   assert.equal(r.headers["x-crm-source-sha"],sha,"wrong native version");
-  assert.equal(r.headers["x-crm-module"],"crm.parties");
+  assert.equal(r.headers["x-crm-module"],module);
   assert.match(r.headers["x-request-id"]||"",/^[0-9a-f-]{36}$/i);
 }
 async function ordinary(oldVersion){
