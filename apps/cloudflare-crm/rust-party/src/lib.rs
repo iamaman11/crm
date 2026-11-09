@@ -276,7 +276,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
             "principal_scope": "verified_access_tenant"},
         "database": {"status": if schema_ok && reads_ok && trace_ready { "PASS" } else { "FAIL" },
             "tables": {"present": present, "expected": EXPECTED.len()},
-            "tenant_reads": read_checks,
+            "tenant_reads": read_checks.clone(),
             "audit": {"request_id_column": if trace_ready { "PASS" } else { "FAIL" },
                 "tenant_audit_rows_with_id": audit_trace }},
         "modules": {
