@@ -326,7 +326,12 @@ jobs:
         run: |
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
           grep -F '35fc7ee9-9710-485f-8fb3-f5a398b229b4' apps/cloudflare-crm/wrangler.jsonc
-          grep -F 'mod pilot;' apps/cloudflare-crm/rust-party/src/lib.rs
+          grep -F 'mod account_overview;' apps/cloudflare-crm/rust-party/src/lib.rs
+          if grep -F 'mod pilot;' apps/cloudflare-crm/rust-party/src/lib.rs ||
+             test -f apps/cloudflare-crm/rust-party/src/pilot.rs; then
+            echo 'FAIL: duplicate pilot Rust domain cannot be published' >&2
+            exit 1
+          fi
           grep -F 'mod access;' apps/cloudflare-crm/rust-party/src/lib.rs
           if grep -F '"main": "./worker/unified.mjs"' apps/cloudflare-crm/wrangler.jsonc; then
             echo 'FAIL: JS dispatcher must not be published' >&2
