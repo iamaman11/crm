@@ -135,6 +135,19 @@ if(requested) {
   checks.push({check:"original-sales-backend-source",
     result:salesReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
     primary_contact:"NOT_CONNECTED",runtime_proof:"EXTERNAL_CI_REQUIRED"});
+  const consentSource=sourceFor("consents");
+  const consentReady=backendModels.consents.ui==="NOT_CONNECTED" &&
+    backendModels.consents.grant_evidence==="NOT_CONNECTED" &&
+    migration.includes("CREATE TABLE IF NOT EXISTS crm_consent_records") &&
+    read(consentSource.api).includes("ConsentAuthorization::create") &&
+    read(consentSource.api).includes("evaluate_communication_authorization") &&
+    read(consentSource.api).includes("ConsentEffect::Deny") &&
+    read(consentSource.api).includes('"/api/consents/suppress"') &&
+    read(consentSource.tests).includes("crm.native-original-consents-d1");
+  checks.push({check:"original-consents-backend-source",
+    result:consentReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
+    grant_evidence:"NOT_CONNECTED",operator_suppressions:"ENABLED",
+    runtime_proof:"EXTERNAL_CI_REQUIRED"});
   const validCatalog=Object.keys(modules).every(name => {
     const module=modules[name], fieldKeys=module.fields.map(([key])=>key);
     return /^[a-z][a-z0-9_]*$/.test(module.table) && fieldKeys.length>0 &&
