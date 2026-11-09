@@ -224,6 +224,15 @@ jobs:
           cargo install --locked wasm-bindgen-cli --version 0.2.130
           test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.130"
           echo "WASM_BINDGEN_BIN=$(command -v wasm-bindgen)" >> "$GITHUB_ENV"
+      - name: Install pinned Binaryen optimizer through npm
+        # worker-build 0.8.7 supports WASM_OPT_BIN; use the SAME upstream
+        # Binaryen version 132, without relying on GitHub Releases downloads.
+        run: |
+          npm install --prefix "$RUNNER_TEMP/crm-binaryen" --no-save --no-audit --no-fund binaryen@132.0.0
+          WASM_OPT="$RUNNER_TEMP/crm-binaryen/node_modules/binaryen/bin/wasm-opt"
+          test -x "$WASM_OPT"
+          "$WASM_OPT" --version | grep '132'
+          echo "WASM_OPT_BIN=$WASM_OPT" >> "$GITHUB_ENV"
       - name: Build Rust workers-rs Party Worker for isolated workerd CI
         working-directory: apps/cloudflare-crm/rust-party
         run: |
