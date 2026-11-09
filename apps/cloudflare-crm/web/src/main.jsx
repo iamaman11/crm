@@ -7,6 +7,7 @@ import Relationships from "./Relationships.jsx";
 import Consents from "./Consents.jsx";
 import IdentityResolution from "./IdentityResolution.jsx";
 import DataQuality from "./DataQuality.jsx";
+import DataExport from "./DataExport.jsx";
 
 // A single React UI for ORIGINAL Rust owners. No pilot CRUD, JS business rules,
 // shadow entities or client-side authorization. All commands are typed at the
@@ -30,13 +31,16 @@ const limitMoney=value=>{
   return Number(value);
 };
 async function api(path,options={}){
-  const response=await fetch("/api/"+path,{...options,headers:{"content-type":"application/json",...(options.headers||{})}});
+  const {responseType,...fetchOptions}=options;
+  const response=await fetch("/api/"+path,{...fetchOptions,headers:{
+    "content-type":"application/json",...(fetchOptions.headers||{})}});
   if(!response.ok){
     const body=await response.json().catch(()=>({}));
     const code=response.headers.get("x-crm-error-code")||body.code||"HTTP_"+response.status;
     const requestId=response.headers.get("x-request-id");
     throw Error((body.error||"Ошибка "+response.status)+" ["+code+(requestId?"; запрос "+requestId:"")+"]");
   }
+  if(responseType==="download")return {blob:await response.blob(),headers:response.headers};
   return response.status===204?null:response.json();
 }
 function App(){
@@ -245,7 +249,9 @@ function App(){
         <button className={tab==="identity-resolution"?"active":"ghost"}
           onClick={()=>navigate("identity-resolution")}>Сравнение записей</button>
         <button className={tab==="data-quality"?"active":"ghost"}
-          onClick={()=>navigate("data-quality")}>Качество данных</button></nav>
+          onClick={()=>navigate("data-quality")}>Качество данных</button>
+        <button className={tab==="data-export"?"active":"ghost"}
+          onClick={()=>navigate("data-export")}>Экспорт данных</button></nav>
       {notice&&<div role="status" className="notice">{notice}</div>}
       {error&&<div role="alert" className="notice error">{error}</div>}
       <section className="panel">{tab==="parties"?
@@ -257,6 +263,7 @@ function App(){
           load={api} loading={loading}/>:
         tab==="data-quality"?<DataQuality parties={items.parties}
           load={api} loading={loading}/>:
+        tab==="data-export"?<DataExport load={api} writable={writable} loading={loading}/>:
         tab==="consents"?<Consents items={items.consents}
           parties={items.parties} contacts={items.contacts}
           load={api} writable={writable} loading={loading} onSaved={reload}/>:

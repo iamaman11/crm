@@ -32,6 +32,8 @@ function operation(path,method){
   if(path.startsWith("/api/identity-resolution/compare/"))action="compare";
   if(path==="/api/identity-resolution/candidates")action="candidates";
   if(path.startsWith("/api/data-quality/parties/")&&path.endsWith("/evaluate"))action="evaluate";
+  if(path==="/api/customer-data-operations/preview")action="preview";
+  if(path==="/api/customer-data-operations/parties.csv")action="export";
   if(path.endsWith("/evaluate"))action="evaluate";
   return owner+"."+action;
 }
@@ -234,6 +236,47 @@ try{
   await page.getByLabel("Название",{exact:true}).fill(marker+" Account Updated");
   await save();cover("accounts.update");
   await shot("03-accounts","Original Account linked to Party");
+  // A physical operator download, not a mocked file or JS-generated CSV.
+  await tab("Экспорт данных").click();
+  await page.getByLabel("Тип записей").selectOption("organization");
+  await button("Проверить экспорт").click();
+  await page.getByRole("region",{name:"Предпросмотр экспорта"})
+    .getByText(/Подготовлено записей:/).waitFor();
+  cover("customer-data-operations.preview");
+  const previewResp=await context.request.get(url+
+    "/api/customer-data-operations/preview?kind=organization");
+  assert.equal(previewResp.status(),200);
+  const preview=(await previewResp.json());
+  assert.ok(preview.count>=1);
+  assert.equal(preview.fields.join(","),"party_id,kind,display_name,resource_version");
+  const downloadEvent=page.waitForEvent("download");
+  await button("Скачать CSV").click();
+  const download=await downloadEvent;
+  assert.match(download.suggestedFilename(),/^crm-parties-organization\.csv$/);
+  await page.getByRole("status").getByText(/CSV подготовлен/).waitFor();
+  cover("customer-data-operations.export.download");
+  const file=await context.request.get(url+
+    "/api/customer-data-operations/parties.csv?kind=organization");
+  assert.equal(file.status(),200);
+  const exportText=await file.text();
+  assert.ok(exportText.includes(party.id));
+  assert.ok(exportText.includes(marker+" Updated"));
+  assert.ok(!exportText.includes("Tenant B"),
+    "CSV cannot export another Access tenant");
+  assert.equal(file.headers()["x-crm-export-sha256"],preview.csv_sha256);
+  const contextB=await browser.newContext({extraHTTPHeaders:access("B")});
+  try{
+    const other=await contextB.request.get(url+
+      "/api/customer-data-operations/parties.csv?kind=all");
+    assert.equal(other.status(),200);
+    assert.ok(!(await other.text()).includes(party.id));
+    cover("customer-data-operations.tenant-isolation");
+  }finally{await contextB.close();}
+  assert.equal((await context.request.post(url+
+    "/api/customer-data-operations/parties.csv")).status(),404);
+  cover("customer-data-operations.no-mutation");
+  await shot("03-export","Original Rust Party CSV preview and download");
+  await tab("Клиенты").click();
   // Live UI negative rule: new Party with a recorded placeholder name.
   await tab("Лица и организации").click();
   await button("+ Добавить лицо / организацию").click();

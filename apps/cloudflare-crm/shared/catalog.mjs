@@ -22,7 +22,9 @@ export const backendModels={
   "identity-resolution":{title:"Сравнение записей",kind:"backend",
     ui:"web/src/IdentityResolution.jsx",comparison:"READ_ONLY_ORIGINAL_RUST",
     candidate_search:"READ_ONLY_EXACT_RECORDED_EMAIL",merge:"NOT_CONNECTED"},
-  "customer-data-operations":{title:"Импорт и экспорт",kind:"backend",ui:"NOT_CONNECTED"},
+  "customer-data-operations":{title:"Экспорт данных",kind:"backend",
+    ui:"web/src/DataExport.jsx",export:"BOUNDED_PARTY_CSV",
+    export_jobs:"NOT_CONNECTED",import:"NOT_CONNECTED"},
   "data-quality":{title:"Качество данных",kind:"backend",
     ui:"web/src/DataQuality.jsx",evaluation:"READ_ONLY_PARTY_NAME_RULES",
     findings:"NOT_CONNECTED",completeness_score:"NOT_CONNECTED"},
@@ -85,8 +87,11 @@ export const ownerFiles={
     api:"rust-party/src/data_quality.rs",
     validation:"../../modules/crm-data-quality/src/domain.rs",
     migration:null,tests:nativeTests,browser:live},
-  ...Object.fromEntries(["crm-customer-data-operations",
-    "crm-customer-enrichment","crm-customer-privacy"]
+  "crm-customer-data-operations":{ui:"web/src/DataExport.jsx",
+    api:"rust-party/src/customer_data_operations.rs",
+    validation:"../../modules/crm-customer-data-operations/src/export.rs",
+    migration:null,tests:nativeTests,browser:live},
+  ...Object.fromEntries(["crm-customer-enrichment","crm-customer-privacy"]
     .map(name=>[name,{ui:null,api:null,
       validation:"../../modules/"+name+"/Cargo.toml",
       migration:null,tests:null,browser:null}]))

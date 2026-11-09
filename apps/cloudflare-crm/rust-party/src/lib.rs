@@ -29,6 +29,8 @@ mod identity_resolution;
 #[cfg(feature = "native")]
 mod data_quality;
 #[cfg(feature = "native")]
+mod customer_data_operations;
+#[cfg(feature = "native")]
 mod sales_activities_link;
 #[cfg(feature = "native-ci")]
 mod original_domain_probe;
@@ -161,6 +163,11 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "tenant_audit_rows_with_id": audit_trace }},
         "modules": {
             "crm.parties": {"read": read_checks.get("parties"), "business_owner": "original-crm-parties"},
+            "crm.customer-data-operations": {"read":read_checks.get("parties"),
+                "business_owner":"original-crm-customer-data-operations",
+                "api":"ADMIN_BOUNDED_PARTY_CSV", "ui":"REACT_EXPORT",
+                "scope":"MAX_100_PARTIES_FAIL_CLOSED",
+                "export_job":"NOT_CONNECTED", "import":"NOT_CONNECTED"},
             "crm.data-quality": {"read":read_checks.get("parties"),
                 "business_owner":"original-crm-data-quality",
                 "api":"READ_ONLY_PARTY_NAME_RULES", "ui":"READ_ONLY_NAME_REVIEW",
@@ -258,6 +265,10 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
         return consents::route(req,db,tenant,actor,role,&request_id).await;
     }
     #[cfg(feature = "native")]
+    if path.starts_with("/api/customer-data-operations/") {
+        return customer_data_operations::route(req, db, tenant, role).await;
+    }
+    #[cfg(feature = "native")]
     if path.starts_with("/api/data-quality/") {
         return data_quality::route(req, db, tenant).await;
     }
@@ -346,6 +357,8 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
         let operation = match (path.as_str(), method.clone()) {
+            ("/api/customer-data-operations/preview", Method::Get) => "customer-data-operations.preview",
+            ("/api/customer-data-operations/parties.csv", Method::Get) => "customer-data-operations.export",
             (p, Method::Get) if p.starts_with("/api/data-quality/parties/") && p.ends_with("/evaluate") => "data-quality.evaluate",
             ("/api/identity-resolution/candidates", Method::Get) => "identity-resolution.candidates",
             (p, Method::Get) if p.starts_with("/api/identity-resolution/compare/") => "identity-resolution.compare",
@@ -407,6 +420,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             else if path.starts_with("/api/consents") { "crm.consents" }
             else if path.starts_with("/api/identity-resolution") { "crm.identity-resolution" }
             else if path.starts_with("/api/data-quality") { "crm.data-quality" }
+            else if path.starts_with("/api/customer-data-operations") { "crm.customer-data-operations" }
             else { "crm.platform" };
         reply.headers_mut().set("x-crm-module", module)?;
         reply.headers_mut().set("x-crm-runtime", "native-workers-rs")?;

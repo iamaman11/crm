@@ -157,6 +157,60 @@ try{
   assert.equal(created.status,201,JSON.stringify(created));
   assert.equal(created.body.item.name,"Original Native Rust");
   assert.equal((await call("/api/parties/"+id,a)).status,200);
+  // Full bounded original Rust Party CSV export via the existing D1.
+  // Not a persisted export job; no private Party names may escape tenant A.
+  const previewPath="/api/customer-data-operations/preview?kind=all";
+  const exportPath="/api/customer-data-operations/parties.csv?kind=all";
+  assert.equal((await call(previewPath,null)).status,401);
+  assert.equal((await call(previewPath,viewer)).status,403,
+    "bulk data export requires admin, even though it is HTTP GET");
+  assert.equal((await call(exportPath,viewer)).status,403);
+  const pre=await call(previewPath,a);
+  assert.equal(pre.status,200,JSON.stringify(pre));
+  assert.equal(pre.headers["x-crm-module"],"crm.customer-data-operations");
+  assert.equal(pre.body.count,1);
+  assert.equal(pre.body.import,"NOT_CONNECTED");
+  assert.equal(pre.body.persisted_export_job,"NOT_CONNECTED");
+  assert.equal(pre.body.fields.join(","),"party_id,kind,display_name,resource_version");
+  assert.match(pre.body.csv_sha256,/^[a-f0-9]{64}$/);
+  const fileResponse=await fetch(origin+exportPath,{headers:{
+    "cf-access-jwt-assertion":a
+  }});
+  assert.equal(fileResponse.status,200);
+  assert.match(fileResponse.headers.get("content-type"),/^text\/csv/);
+  assert.match(fileResponse.headers.get("content-disposition"),/attachment/);
+  assert.equal(fileResponse.headers.get("cache-control"),"private, no-store");
+  const fileBytes=Buffer.from(await fileResponse.arrayBuffer());
+  const exported=fileBytes.toString("utf8");
+  assert.equal(fileResponse.headers.get("x-crm-export-count"),"1");
+  assert.equal(createHash("sha256").update(fileBytes).digest("hex"),pre.body.csv_sha256);
+  assert.equal(fileResponse.headers.get("x-crm-export-sha256"),pre.body.csv_sha256);
+  assert.ok(exported.startsWith("party_id,kind,display_name,resource_version\n"));
+  assert.ok(exported.includes(id+",organization,Original Native Rust,1\n"));
+  assert.ok(!exported.includes("\r\n"));
+  const filtered=await call("/api/customer-data-operations/preview?kind=person",a);
+  assert.equal(filtered.status,200);
+  assert.equal(filtered.body.count,0);
+  assert.equal((await call("/api/customer-data-operations/preview?kind=bad",a)).status,422);
+  assert.equal((await call("/api/customer-data-operations/preview?kind=all&extra=1",a)).status,422);
+  assert.equal((await call(exportPath,a,{method:"POST"})).status,404);
+  const tenantBPreview=await call(previewPath,b);
+  assert.equal(tenantBPreview.status,200);
+  assert.equal(tenantBPreview.body.count,0);
+  assert.notEqual(tenantBPreview.body.csv_sha256,pre.body.csv_sha256);
+  const formulaId="native-formula-"+randomUUID();
+  const formulaCreate=await call("/api/parties",a,{method:"POST",
+    headers:{"content-type":"application/json","idempotency-key":"native-export-formula"},
+    body:JSON.stringify({id:formulaId,kind:"person",name:"=2+3"})});
+  assert.equal(formulaCreate.status,201,JSON.stringify(formulaCreate));
+  const formulaExport=await fetch(origin+exportPath,{headers:{"cf-access-jwt-assertion":a}});
+  assert.equal(formulaExport.status,200);
+  const formulaCsv=await formulaExport.text();
+  assert.ok(formulaCsv.includes(",'=2+3,"),
+    "original CSV canonicalization must neutralize spreadsheet formulas");
+  console.log(JSON.stringify({event:"crm.native-original-party-csv-export",
+    result:"PASS",role:"admin",scope:"verified_tenant",csv_sha256:true,
+    spreadsheet_formula:"neutralized",cross_tenant:"PASS",read_only:true}));
   // Original Data Quality: tenant-scoped read, immutable built-in rules,
   // one actual Party state, no client-side or Worker scoring.
   const qualityPath="/api/data-quality/parties/"+id+"/evaluate";

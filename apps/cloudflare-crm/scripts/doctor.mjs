@@ -36,7 +36,7 @@ if(requested){
       module:module||null,error:code||null,
       owner:module?implementationOwners[module]:null,
       runtime:module&&["accounts","contacts","deals","tasks","parties","party-relationships","consents"].includes(module)?
-        "ORIGINAL_NATIVE_RUST":["identity-resolution","data-quality"].includes(module)?"READ_ONLY_ORIGINAL_RUST":"NOT_CONNECTED",
+        "ORIGINAL_NATIVE_RUST":["identity-resolution","data-quality","customer-data-operations"].includes(module)?"READ_ONLY_ORIGINAL_RUST":"NOT_CONNECTED",
       files:module?sourceFor(module):{registry:"shared/catalog.mjs"},
       duration_ms:+(performance.now()-started).toFixed(2)}));
   }

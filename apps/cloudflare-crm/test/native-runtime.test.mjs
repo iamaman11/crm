@@ -87,6 +87,25 @@ test("data quality uses original Rust name rules, one Party list and no shadow s
   assert.equal(ownerFiles["crm-data-quality"].api,"rust-party/src/data_quality.rs");
   assert.equal(ownerFiles["crm-data-quality"].browser,"e2e/live.mjs");
 });
+test("customer-data-operations bounded CSV export uses original domain and one D1",()=>{
+  const ui=read("web/src/DataExport.jsx");
+  const app=read("web/src/main.jsx");
+  const source=read("rust-party/src/customer_data_operations.rs");
+  const runtime=read("rust-party/src/lib.rs");
+  assert.ok(ui.includes('run("preview")'));
+  assert.ok(ui.includes('run("download")'));
+  assert.ok(app.includes("<DataExport load={api} writable={writable}"));
+  assert.ok(source.includes("PartyExportSpecification::try_new"));
+  assert.ok(source.includes("canonical_party_export_csv_record"));
+  assert.ok(source.includes("party_export_sha256"));
+  assert.ok(source.includes("role != Some(\"admin\")"));
+  assert.ok(source.includes("LIMIT 101"));
+  assert.ok(source.includes("EXPORT_SCOPE_LIMIT_REACHED"));
+  assert.ok(runtime.includes("customer_data_operations::route"));
+  assert.ok(!source.includes("INSERT INTO"));
+  assert.equal(ownerFiles["crm-customer-data-operations"].api,
+    "rust-party/src/customer_data_operations.rs");
+});
 test("Party relationships UI uses original Rust owner with one App list",()=>{
   const app=read("web/src/main.jsx"),ui=read("web/src/Relationships.jsx");
   const owner=read("rust-party/src/party_relationships.rs");
