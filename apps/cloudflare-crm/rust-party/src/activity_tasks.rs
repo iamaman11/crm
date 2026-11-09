@@ -182,11 +182,13 @@ pub(super) async fn route(req:Request,db:D1Database,tenant:&str,actor:&str,trace
         };
     }
     let Some(id)=path.strip_prefix("/api/activity-tasks/") else{return error("NOT_FOUND",404)};
-    if id.is_empty()||id.contains('/'){return error("NOT_FOUND",404);}
+    // A named action is a two-component route: validate it BEFORE rejecting
+    // slashes in ordinary single-ID reads.
     if let Some(id)=id.strip_suffix("/complete"){
         if id.is_empty()||id.contains('/')||method!=Method::Post{return error("NOT_FOUND",404);}
         return complete(req,&db,tenant,id,trace).await;
     }
+    if id.is_empty()||id.contains('/'){return error("NOT_FOUND",404);}
     match method {
         Method::Get=>match stored(&db,tenant,id).await?{
             Some(item)=>response(json!({"item":view(&item)}),200),
