@@ -165,10 +165,11 @@ async function verifyData(){
     cycle.result!=="BROWSER_PASS_D1_LOGS_PENDING"||!Array.isArray(cycle.writes)||
     !Array.isArray(cycle.ui_coverage)||cycle.ui_coverage.length<18)
     throw Error("Exact-source native UI functional-cycle evidence missing");
-  const writes=cycle.writes,expected=["parties","accounts","contact-points",
-    "sales-deals","activity-tasks"];
-  const required=["parties.create","parties.update","accounts.create",
-    "accounts.update","contact-points.create","contact-points.update",
+  const writes=cycle.writes,expected=["parties","party-relationships",
+    "accounts","contact-points","sales-deals","activity-tasks"];
+  const required=["parties.create","parties.update",
+    "party-relationships.create","party-relationships.update",
+    "accounts.create","accounts.update","contact-points.create","contact-points.update",
     "sales-deals.create","sales-deals.update","sales-deals.advance",
     "activity-tasks.create","activity-tasks.complete"];
   if(writes.length<required.length)throw Error("Original native UI mutation proof incomplete");

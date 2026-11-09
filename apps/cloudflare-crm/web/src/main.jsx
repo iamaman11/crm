@@ -3,6 +3,7 @@ import {createRoot} from "react-dom/client";
 import "./styles.css";
 import Customer360 from "./Customer360.jsx";
 import Parties from "./Parties.jsx";
+import Relationships from "./Relationships.jsx";
 
 // A single React UI for ORIGINAL Rust owners. No pilot CRUD, JS business rules,
 // shadow entities or client-side authorization. All commands are typed at the
@@ -37,7 +38,7 @@ async function api(path,options={}){
 }
 function App(){
   const [tab,setTab]=useState("accounts");
-  const [items,setItems]=useState({parties:[],accounts:[],contacts:[],deals:[],tasks:[]});
+  const [items,setItems]=useState({parties:[],relationships:[],accounts:[],contacts:[],deals:[],tasks:[]});
   const [role,setRole]=useState(null);
   const [form,setForm]=useState(null);
   const [card,setCard]=useState(null);
@@ -49,11 +50,11 @@ function App(){
   const [error,setError]=useState("");
   const writable=role==="admin";
   async function reload(){
-    const [parties,accounts,contacts,deals,tasks,session]=await Promise.all([
-      api("parties"),api("accounts"),api("contact-points"),
+    const [parties,relationships,accounts,contacts,deals,tasks,session]=await Promise.all([
+      api("parties"),api("party-relationships"),api("accounts"),api("contact-points"),
       api("sales-deals"),api("activity-tasks"),api("session")]);
-    setItems({parties:parties.items,accounts:accounts.items,contacts:contacts.items,
-      deals:deals.items,tasks:tasks.items});
+    setItems({parties:parties.items,relationships:relationships.items,
+      accounts:accounts.items,contacts:contacts.items,deals:deals.items,tasks:tasks.items});
     setRole(session.role);
   }
   useEffect(()=>{reload().catch(e=>setError(e.message)).finally(()=>setLoading(false));},[]);
@@ -231,11 +232,17 @@ function App(){
         <button key={key} className={tab===key?"active":"ghost"}
           onClick={()=>navigate(key)}>{section.title} <small>{items[key].length}</small></button>)}
         <button className={tab==="parties"?"active":"ghost"} onClick={()=>navigate("parties")}>
-          Лица и организации <small>{items.parties.length}</small></button></nav>
+          Лица и организации <small>{items.parties.length}</small></button>
+        <button className={tab==="relationships"?"active":"ghost"}
+          onClick={()=>navigate("relationships")}>
+          Связи <small>{items.relationships.length}</small></button></nav>
       {notice&&<div role="status" className="notice">{notice}</div>}
       {error&&<div role="alert" className="notice error">{error}</div>}
       <section className="panel">{tab==="parties"?
         <Parties items={items.parties} load={api} writable={writable} loading={loading} onSaved={reload}/>:
+        tab==="relationships"?<Relationships items={items.relationships}
+          parties={items.parties} load={api} writable={writable} loading={loading}
+          onSaved={reload}/>:
         card?<Customer360 accountId={card} load={api} writable={writable} onBack={()=>setCard(null)}
           onNavigate={navigate} onEdit={(kind,row)=>begin(kind,row)}/>:
         <>

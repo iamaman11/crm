@@ -794,7 +794,7 @@ try{
     proven:["two Party FK in one tenant","original domain lifecycle",
       "strict codec/D1 roundtrip","Access A/B","idempotency receipts",
       "stale version","no reflexive relationship","request correlation"],
-    published_live:"NOT_TESTED",ui:"NOT_CONNECTED"}));
+    published_live:"NOT_TESTED",ui:"TESTED_IN_BROWSER_BELOW"}));
 
   // Original Consent authority: fail closed until trusted subject grant evidence
   // exists. A signed operator can record a suppression, never a self-grant.
@@ -999,6 +999,30 @@ try{
       await page.getByRole("button",{name:"Сохранить",exact:true}).click();
       await page.getByRole("status").getByText("Сохранено").waitFor();
     };
+    // The previously API-tested relationship owner is now physically reachable
+    // from React, using the same signed Access identity and D1.
+    await selectTab("Связи");
+    await page.getByRole("button",{name:"+ Добавить связь"}).click();
+    await page.getByRole("button",{name:"Отмена"}).click();
+    assert.equal(await page.getByLabel("От кого").count(),0);
+    await page.getByRole("button",{name:"+ Добавить связь"}).click();
+    await page.getByLabel("От кого").selectOption({label:updatedName});
+    await page.getByLabel("К кому").selectOption({label:"Native Related Person"});
+    await submitForm();
+    const related=await call("/api/party-relationships",a);
+    const relationshipUI=related.body.items.find(x=>
+      x.from_party_id===persisted.body.items.find(p=>p.name===marker)?.id&&
+      x.to_party_id===otherPartyId);
+    assert.equal(relationshipUI?.version,1,"UI relationship must persist through original Rust");
+    const relationRow=page.getByRole("row").filter({hasText:updatedName})
+      .filter({hasText:"Native Related Person"});
+    await relationRow.getByRole("button",{name:"Изменить"}).click();
+    await page.getByLabel("Статус связи").selectOption("inactive");
+    await submitForm();
+    const relationRead=await call("/api/party-relationships/"+relationshipUI.id,a);
+    assert.equal(relationRead.body.item.version,2);
+    assert.equal(relationRead.body.item.status,"inactive");
+    uiSteps.push("React PartyRelationships create/update -> original Rust D1");
     const customer="Native customer "+marker;
     await selectTab("Клиенты");
     await page.getByRole("button",{name:"+ Добавить клиента"}).click();
@@ -1082,6 +1106,14 @@ try{
       const readPage=await readonly.newPage();
       await readPage.goto(origin,{waitUntil:"domcontentloaded"});
       await readPage.getByRole("navigation",{name:"Разделы"}).waitFor();
+      await readPage.getByRole("navigation",{name:"Разделы"})
+        .getByRole("button",{name:/Связи/}).click();
+      assert.equal(await readPage.getByRole("button",{name:"+ Добавить связь"}).count(),0,
+        "viewer cannot create relationship from React");
+      assert.equal(await readPage.getByRole("button",{name:"Изменить"}).count(),0,
+        "viewer cannot update relationship from React");
+      await readPage.getByRole("navigation",{name:"Разделы"})
+        .getByRole("button",{name:/Клиенты/}).click();
       assert.equal(await readPage.getByRole("button",{name:"+ Добавить клиента"}).count(),0,
         "viewer must not see a mutating button");
       await readPage.getByRole("row").filter({hasText:customer+" Updated"})

@@ -117,6 +117,45 @@ try{
   assert.equal((await browser.newContext({extraHTTPHeaders:access("B")})
     .then(async ctx=>{try{return (await ctx.request.get(url+"/api/parties/"+party.id)).status();}
       finally{await ctx.close();}})),404);
+  // Physical browser proof of the original PartyRelationships owner.
+  // No JS duplicate domain, no fake persistence or manual SQL shortcut.
+  await tab("Лица и организации").click();
+  await button("+ Добавить лицо / организацию").click();
+  await page.getByLabel("Имя / название").fill(marker+" Related");
+  await save();cover("parties.create.related");
+  const relatedParty=await readOwner("parties",x=>x.name===marker+" Related");
+  await tab("Связи").click();
+  await button("+ Добавить связь").click();
+  await button("Отмена").click();cover("party-relationships.create.cancel");
+  await button("+ Добавить связь").click();
+  await page.getByLabel("От кого").selectOption({label:marker+" Updated"});
+  await page.getByLabel("К кому").selectOption({label:marker+" Updated"});
+  await button("Сохранить").click();
+  await page.getByRole("alert").waitFor();
+  cover("party-relationships.create.self-denied");
+  await button("Отмена").click();
+  await button("+ Добавить связь").click();
+  await page.getByLabel("От кого").selectOption({label:marker+" Updated"});
+  await page.getByLabel("К кому").selectOption({label:marker+" Related"});
+  await save();cover("party-relationships.create");
+  const rel=await readOwner("party-relationships",x=>
+    x.from_party_id===party.id&&x.to_party_id===relatedParty.id);
+  assert.equal(rel.type.code,"employment");
+  assert.equal(rel.type.from_role,"employer");
+  assert.equal(rel.type.to_role,"employee");
+  assert.equal(rel.version,1);
+  const otherContext=await browser.newContext({extraHTTPHeaders:access("B")});
+  try{
+    assert.equal((await otherContext.request.get(
+      url+"/api/party-relationships/"+rel.id)).status(),404);
+    cover("party-relationships.tenant-isolation");
+  }finally{await otherContext.close();}
+  await row(marker+" Related").getByRole("button",{name:"Изменить"}).click();
+  await page.getByLabel("Статус связи").selectOption("inactive");
+  await save();cover("party-relationships.update");
+  assert.equal((await readOwner("party-relationships",x=>x.id===rel.id)).version,2);
+  assert.equal((await readOwner("party-relationships",x=>x.id===rel.id)).status,"inactive");
+  await shot("02-relationships","Original PartyRelationship create/update and tenant isolation");
   await tab("Клиенты").click();
   await button("+ Добавить клиента").click();
   await page.getByLabel("Название",{exact:true}).fill(marker+" Account");
@@ -202,7 +241,9 @@ try{
   await page.getByRole("heading",{name:marker+" Account Updated"}).waitFor();
   await shot("10-mobile","Mobile native Account overview");
   await Promise.all(pending);
-  const operations=["parties.create","parties.update","accounts.create","accounts.update",
+  const operations=["parties.create","parties.update",
+    "party-relationships.create","party-relationships.update",
+    "accounts.create","accounts.update",
     "contact-points.create","contact-points.update","sales-deals.create","sales-deals.update",
     "sales-deals.advance","activity-tasks.create","activity-tasks.complete"];
   const writes=nativeResponses.filter(r=>["POST","PATCH"].includes(r.method)&&

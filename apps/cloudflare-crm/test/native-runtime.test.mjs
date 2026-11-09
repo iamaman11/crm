@@ -47,6 +47,25 @@ test("each visible CRM feature names its original owner",()=>{
   assert.ok(card.includes('load("accounts/"+accountId+"/overview")'));
   assert.doesNotMatch(card,/customer360\//);
 });
+test("Party relationships UI uses original Rust owner with one App list",()=>{
+  const app=read("web/src/main.jsx"),ui=read("web/src/Relationships.jsx");
+  const owner=read("rust-party/src/party_relationships.rs");
+  assert.match(app,/api\\("party-relationships"\\)/);
+  assert.match(app,/relationships:relationships\\.items/);
+  assert.match(app,/<Relationships items=\\{items\\.relationships\\}/);
+  assert.match(ui,/await onSaved\\(\\);\\s*setForm\\(null\\);\\s*setNotice/);
+  assert.doesNotMatch(ui,/useEffect|setItems\\(|load\\("party-relationships"\\)/);
+  assert.match(ui,/valid_from_unix_nanos/);
+  assert.match(ui,/expected_version/);
+  assert.match(ui,/idempotency-key/);
+  assert.match(owner,/PartyRelationship::create/);
+  assert.match(owner,/relation\\.apply_update/);
+  assert.match(owner,/PARTY_RELATIONSHIPS_PARTY_NOT_FOUND/);
+  assert.match(owner,/crm_party_relationship_records/);
+  assert.ok(existsSync(resolve(root,"web/src/Relationships.jsx")));
+  assert.equal(ownerFiles["original-relationships"].ui,"web/src/Relationships.jsx");
+  assert.equal(ownerFiles["original-relationships"].browser,"e2e/live.mjs");
+});
 test("React has one Party-list owner and no swallowed Party refresh failures",()=>{
   const app=read("web/src/main.jsx"),party=read("web/src/Parties.jsx");
   assert.match(app,/<Parties items=\{items\.parties\} load=\{api\}/);

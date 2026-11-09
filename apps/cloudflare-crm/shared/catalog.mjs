@@ -13,7 +13,7 @@ export const readModels={
   customer360:{title:"Карточка клиента",kind:"read",route:"accounts/:id/overview"}
 };
 export const backendModels={
-  "party-relationships":{title:"Отношения Party",kind:"backend",ui:"NOT_CONNECTED"},
+  "party-relationships":{title:"Связи лиц и организаций",kind:"owner",ui:"web/src/Relationships.jsx"},
   consents:{title:"Разрешения коммуникации",kind:"backend",
     ui:"NOT_CONNECTED",grant_evidence:"NOT_CONNECTED"},
   "sales-activities-link":{title:"Связь сделки с задачей",kind:"internal",
@@ -61,10 +61,10 @@ export const ownerFiles={
     api:"rust-party/src/account_overview.rs",validation:"rust-party/src/account_overview.rs",
     migration:"migrations/0004_original_customer_accounts.sql",
     tests:nativeTests,browser:live},
-  "original-relationships":{ui:null,api:"rust-party/src/party_relationships.rs",
+  "original-relationships":{ui:"web/src/Relationships.jsx",api:"rust-party/src/party_relationships.rs",
     validation:"../../modules/crm-party-relationships/src/domain.rs",
     migration:"migrations/0006_original_party_relationships.sql",
-    tests:nativeTests,browser:null},
+    tests:nativeTests,browser:live},
   "original-consents":{ui:null,api:"rust-party/src/consents.rs",
     validation:"../../modules/crm-consents/src/domain.rs",
     migration:"migrations/0009_original_consents.sql",tests:nativeTests,browser:null},

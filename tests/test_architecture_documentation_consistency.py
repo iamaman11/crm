@@ -253,6 +253,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "apps/cloudflare-crm/migrations/0002_rust_party.sql",
             "apps/cloudflare-crm/migrations/0003_party_request_trace.sql",
             "apps/cloudflare-crm/web/src/Parties.jsx",
+            "apps/cloudflare-crm/web/src/Relationships.jsx",
             "apps/cloudflare-crm/rust-party/Cargo.toml",
             "apps/cloudflare-crm/rust-party/Cargo.lock",
             "apps/cloudflare-crm/rust-party/src/lib.rs",
