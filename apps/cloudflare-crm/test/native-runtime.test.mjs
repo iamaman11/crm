@@ -44,7 +44,7 @@ test("each visible CRM feature names its original owner",()=>{
     assert.ok(existsSync(resolve(root,file)));
   }
   const card=read("web/src/Customer360.jsx");
-  assert.match(card,/accounts\/.*overview/);
+  assert.ok(card.includes('load("accounts/"+accountId+"/overview")'));
   assert.doesNotMatch(card,/customer360\//);
 });
 test("single release remains protected by D1, logs and browser evidence",()=>{
