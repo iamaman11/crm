@@ -93,6 +93,22 @@ if(requested) {
     read(originalAccountSource.tests).includes("crm.native-original-account-d1");
   checks.push({check:"original-account-backend-source",result:originalAccountConnected?"PASS":"FAIL",
     ui:"NOT_CONNECTED",runtime_proof:"EXTERNAL_CI_REQUIRED"});
+  // Source-boundary check only. The Account owner must not own SQL reads of
+  // ContactPoint, Relationship, Sales or Activity storage. The single Worker
+  // composes their original codecs in one tenant-scoped read-only projection.
+  const accountOwner=read(originalAccountSource.api);
+  const overviewPath=originalAccountSource.readProjection;
+  const overviewSource=sourceExists(overviewPath) ? read(overviewPath) : "";
+  const nativeEntrypoint=read("rust-party/src/lib.rs");
+  const overviewBoundaryOk=overviewSource.includes("accounts::load") &&
+    ["crm_contact_point_records","crm_party_relationship_records",
+      "crm_sales_deal_records","crm_activity_task_records"].every(
+        table=>overviewSource.includes(table) && !accountOwner.includes(table)) &&
+    nativeEntrypoint.includes("account_overview::overview") &&
+    read(originalAccountSource.tests).includes("crm.native-original-account-overview-d1");
+  checks.push({check:"original-account-overview-composition-source",
+    result:overviewBoundaryOk?"PASS":"FAIL",ui:"NOT_CONNECTED",
+    runtime_proof:"EXTERNAL_CI_REQUIRED"});
   const originalContactSource=sourceFor("contact-points");
   const originalContactConnected=backendModels["contact-points"].ui==="NOT_CONNECTED" &&
     backendModels["contact-points"].verification==="TRUSTED_EVIDENCE_NOT_CONNECTED" &&
