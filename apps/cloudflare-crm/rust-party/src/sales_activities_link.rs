@@ -39,7 +39,10 @@ fn invalid(code:&str)->SdkError{
 fn internal(code:&str)->SdkError{
     SdkError::new(code,ErrorCategory::Internal,false,"Internal linked transaction failed.")
 }
-fn ident<T>(v:Result<T,SdkError>)->Result<T,SdkError>{v}
+// SDK identifiers return IdentifierError, while link ports return SdkError.
+fn ident<T,E>(v:Result<T,E>)->Result<T,SdkError>{
+    v.map_err(|_|invalid("LINK_IDENTIFIER_INVALID"))
+}
 fn id_hash(tenant:&str,deal:&str,version:i64)->String {
     let mut hash=Sha256::new();
     hash.update(tenant.as_bytes());hash.update(b"\0");
@@ -82,46 +85,46 @@ fn make_delivery(before:&Deal,after:&Deal,tenant:&str,actor:&str,trace:&str,now:
         version:after.version(),
     };
     let delivery=EventDelivery{
-        delivery_id:DeliveryId::try_new(&delivery_id)?,
-        event_id:EventId::try_new(&event_id)?,
-        tenant_id:TenantId::try_new(tenant)?,
-        source_module_id:ModuleId::try_new(SOURCE_MODULE_ID)?,
-        consumer_module_id:ModuleId::try_new(MODULE_ID)?,
-        source_actor_id:ActorId::try_new(actor)?,
-        event_type:EventType::try_new(SOURCE_EVENT_TYPE)?,
-        event_version:EventVersion::try_new(SOURCE_EVENT_VERSION)?,
+        delivery_id:ident(DeliveryId::try_new(&delivery_id))?,
+        event_id:ident(EventId::try_new(&event_id))?,
+        tenant_id:ident(TenantId::try_new(tenant))?,
+        source_module_id:ident(ModuleId::try_new(SOURCE_MODULE_ID))?,
+        consumer_module_id:ident(ModuleId::try_new(MODULE_ID))?,
+        source_actor_id:ident(ActorId::try_new(actor))?,
+        event_type:ident(EventType::try_new(SOURCE_EVENT_TYPE))?,
+        event_version:ident(EventVersion::try_new(SOURCE_EVENT_VERSION))?,
         aggregate:RecordRef{
-            record_type:RecordType::try_new(SOURCE_RECORD_TYPE)?,
-            record_id:RecordId::try_new(after.deal_id().as_str())?,
+            record_type:ident(RecordType::try_new(SOURCE_RECORD_TYPE))?,
+            record_id:ident(RecordId::try_new(after.deal_id().as_str()))?,
         },
         aggregate_version:after.version(),occurred_at_unix_nanos:now,
-        correlation_id:CorrelationId::try_new(trace)?,
-        trace_id:TraceId::try_new(trace)?,
+        correlation_id:ident(CorrelationId::try_new(trace))?,
+        trace_id:ident(TraceId::try_new(trace))?,
         payload:TypedPayload{
-            owner:ModuleId::try_new(SOURCE_MODULE_ID)?,
-            schema_id:SchemaId::try_new(SOURCE_EVENT_SCHEMA_ID)?,
-            schema_version:SchemaVersion::try_new(SOURCE_EVENT_VERSION)?,
+            owner:ident(ModuleId::try_new(SOURCE_MODULE_ID))?,
+            schema_id:ident(SchemaId::try_new(SOURCE_EVENT_SCHEMA_ID))?,
+            schema_version:ident(SchemaVersion::try_new(SOURCE_EVENT_VERSION))?,
             descriptor_hash:message_descriptor_hash(SOURCE_EVENT_SCHEMA_ID),
             data_class:DataClass::Confidential,encoding:PayloadEncoding::Protobuf,
             maximum_size_bytes:MAX_PROTOBUF_BYTES,
-            retention_policy_id:RetentionPolicyId::try_new("standard")?,
+            retention_policy_id:ident(RetentionPolicyId::try_new("standard"))?,
             bytes:message.encode_to_vec(),
         },
     };
     let context=ModuleExecutionContext{
-        module_id:ModuleId::try_new(MODULE_ID)?,
+        module_id:ident(ModuleId::try_new(MODULE_ID))?,
         execution:ExecutionContext{
             tenant_id:delivery.tenant_id.clone(),
-            actor_id:ActorId::try_new(actor)?,
-            request_id:RequestId::try_new(trace)?,
+            actor_id:ident(ActorId::try_new(actor))?,
+            request_id:ident(RequestId::try_new(trace))?,
             correlation_id:delivery.correlation_id.clone(),
-            causation_id:CausationId::try_new(&event_id)?,
+            causation_id:ident(CausationId::try_new(&event_id))?,
             trace_id:delivery.trace_id.clone(),
-            capability_id:CapabilityId::try_new("link.sales.stage_changed.process")?,
-            capability_version:CapabilityVersion::try_new("1.0.0")?,
-            idempotency_key:IdempotencyKey::try_new(&delivery_id)?,
-            business_transaction_id:BusinessTransactionId::try_new(format!("txn-{marker}"))?,
-            schema_version:SchemaVersion::try_new("1.0.0")?,
+            capability_id:ident(CapabilityId::try_new("link.sales.stage_changed.process"))?,
+            capability_version:ident(CapabilityVersion::try_new("1.0.0"))?,
+            idempotency_key:ident(IdempotencyKey::try_new(&delivery_id))?,
+            business_transaction_id:ident(BusinessTransactionId::try_new(format!("txn-{marker}")))?,
+            schema_version:ident(SchemaVersion::try_new("1.0.0"))?,
             request_started_at_unix_nanos:now,
         },
     };
@@ -193,7 +196,7 @@ impl CapabilityClient for StagedActivities{
                 .map_err(|_|invalid("LINK_ACTIVITIES_PROTOBUF_INVALID"))?;
             let actor=match request.owner.as_ref().and_then(|x|x.owner.as_ref()){
                 Some(core::actor_or_team_owner::Owner::ActorId(id))
-                    if id==ctx.execution.actor_id.as_str()=>ActorId::try_new(id.clone())?,
+                    if id==ctx.execution.actor_id.as_str()=>ident(ActorId::try_new(id.clone()))?,
                 _=>return Err(invalid("LINK_ACTIVITIES_ACTOR_MISMATCH")),
             };
             if request.related_resources.len()!=1 ||
@@ -206,7 +209,7 @@ impl CapabilityClient for StagedActivities{
             }
             let related=&request.related_resources[0];
             let task=Task::create(CreateTask{
-                task_id:RecordId::try_new(request.task_id)?,
+                task_id:ident(RecordId::try_new(request.task_id))?,
                 subject:request.subject,description:request.description,
                 owner:TaskOwner::Actor(actor),
                 related_resources:vec![ResourceRef{
