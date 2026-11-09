@@ -178,7 +178,7 @@ try{
     await page.getByRole("button",{name:"+ Добавить клиента"}).click();
     await page.getByLabel("Имя / название").fill(customer);
     await page.getByRole("button",{name:"Сохранить",exact:true}).click();
-    await page.getByText(customer,{exact:true}).waitFor();
+    await page.getByText(customer,{exact:true}).first().waitFor();
     const customers=await call("/api/customers",a);
     assert.equal(customers.status,200);
     const saved=customers.body.items.find(x=>x.name===customer);
