@@ -975,7 +975,16 @@ try{
     await page.getByLabel("Имя / название").fill(updatedName);
     await page.getByRole("button",{name:"Сохранить",exact:true}).click();
     await area.getByRole("row").filter({hasText:updatedName}).waitFor();
-    uiSteps.push("Rust versioned update reflected in React UI");
+    await area.getByRole("status").getByText("Сохранено через Rust / D1").waitFor();
+    // Same-page cross-module readback: Party save is not accepted until the
+    // Account selector has the updated Party. No reload to hide stale UI state.
+    await page.getByRole("navigation",{name:"Разделы"})
+      .getByRole("button",{name:/Клиенты/}).click();
+    await page.getByRole("button",{name:"+ Добавить клиента"}).click();
+    await page.getByLabel("Лицо / организация",{exact:true})
+      .selectOption({label:updatedName},{timeout:5000});
+    await page.getByRole("button",{name:"Отмена"}).click();
+    uiSteps.push("Party update -> Account selector updated without browser reload");
     await page.reload({waitUntil:"domcontentloaded"});
     await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",
       {name:/Лица и организации/}).click();

@@ -47,6 +47,15 @@ test("each visible CRM feature names its original owner",()=>{
   assert.ok(card.includes('load("accounts/"+accountId+"/overview")'));
   assert.doesNotMatch(card,/customer360\//);
 });
+test("React has one Party-list owner and no swallowed Party refresh failures",()=>{
+  const app=read("web/src/main.jsx"),party=read("web/src/Parties.jsx");
+  assert.match(app,/<Parties items=\{items\.parties\} load=\{api\}/);
+  assert.match(app,/api\("parties"\)/);
+  assert.doesNotMatch(party,/useEffect|setItems\(|load\("parties"\)/);
+  assert.doesNotMatch(party,/const \[items,/);
+  assert.match(party,/await onSaved\(\);\s*setForm\(null\);\s*setNotice\(/);
+  assert.match(party,/catch\(e\) \{setError\(e\.message\);\}/);
+});
 test("single release remains protected by D1, logs and browser evidence",()=>{
   const deploy=read("scripts/deploy.mjs"),e2e=read("e2e/live.mjs");
   assert.match(deploy,/native-functional-cycle\.json/);

@@ -1,29 +1,24 @@
-import React, {useEffect,useState} from "react";
+import React, {useState} from "react";
 
 // Original crm-parties Rust module owns identity and all its business rules.
 // The React component handles only user input and HTTP transport.
 const newForm=()=>({id:crypto.randomUUID(),key:crypto.randomUUID(),
   kind:"organization",name:"",expected_version:0});
 
-export default function Parties({load,writable=true,onSaved}) {
-  const [items,setItems]=useState([]);
-  const [loading,setLoading]=useState(true);
+export default function Parties({items,load,writable=true,onSaved,loading=false}) {
   const [busy,setBusy]=useState(false);
   const [form,setForm]=useState(null);
   const [query,setQuery]=useState("");
   const [notice,setNotice]=useState("");
   const [error,setError]=useState("");
 
-  async function reload(){
-    setLoading(true);
-    try {
-      const result=await load("parties");
-      setItems(result.items);
-      setError("");
-    } catch(e) {setError(e.message);}
-    finally {setLoading(false);}
+  // App owns the only Parties list and the only reload operation.
+  // A failed refresh must reject so a saved command cannot report stale UI success.
+  async function refresh(){
+    setError("");
+    try {await onSaved();}
+    catch(e) {setError(e.message);}
   }
-  useEffect(()=>{reload();},[]);
   function edit(item){
     setForm({id:item.id,key:crypto.randomUUID(),name:item.name,
       kind:item.kind,expected_version:item.version});
@@ -40,10 +35,9 @@ export default function Parties({load,writable=true,onSaved}) {
         {id:form.id,name:form.name,kind:form.kind};
       const result=await load(path,{method:updating?"PATCH":"POST",
         headers:{"idempotency-key":form.key},body:JSON.stringify(data)});
-      setNotice(result.replayed?"Повтор выполнен без дублирования":"Сохранено через Rust / D1");
+      await onSaved();
       setForm(null);
-      await reload();
-      if(onSaved)await onSaved();
+      setNotice(result.replayed?"Повтор выполнен без дублирования":"Сохранено через Rust / D1");
     }catch(e){setError(e.message);}
     finally{setBusy(false);}
   }
@@ -56,7 +50,7 @@ export default function Parties({load,writable=true,onSaved}) {
       {writable&&<button onClick={()=>{setForm(newForm());setError("");}}>
         + Добавить лицо / организацию
       </button>}
-      <button className="ghost" onClick={reload} disabled={loading}>Обновить</button>
+      <button className="ghost" onClick={refresh} disabled={loading||busy}>Обновить</button>
     </div>
     <p>Лица и организации обрабатываются оригинальным Rust-модулем. Клиентские аккаунты связываются с ними в разделе «Клиенты».</p>
     {notice&&<div role="status" className="notice">{notice}</div>}
