@@ -217,6 +217,13 @@ jobs:
               cloudflare_worker_invocation:'NOT_TESTED', d1_adapter:'NOT_TESTED'}));
           })().catch(error => {console.error(error);process.exitCode=1;});
           NODE
+      - name: Install exact native wasm-bindgen CLI from Cargo registry
+        # worker-build 0.8.7 officially supports WASM_BINDGEN_BIN. Fetching the
+        # pinned CLI from crates.io avoids unstable GitHub Releases binary URLs.
+        run: |
+          cargo install --locked wasm-bindgen-cli --version 0.2.130
+          test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.130"
+          echo "WASM_BINDGEN_BIN=$(command -v wasm-bindgen)" >> "$GITHUB_ENV"
       - name: Build Rust workers-rs Party Worker for isolated workerd CI
         working-directory: apps/cloudflare-crm/rust-party
         run: |
