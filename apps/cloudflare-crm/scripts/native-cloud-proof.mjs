@@ -243,8 +243,10 @@ async function test(){
     } finally{await browser.close()}
     const result=await cf("/d1/database/"+db+"/query","POST",{
       sql:"SELECT (SELECT version FROM crm_party_records WHERE id=?) AS version,"+
-        "(SELECT COUNT(*) FROM crm_audit WHERE subject_id=? AND action LIKE 'parties.%') AS audits",
-      params:[id,id]});
+        "(SELECT COUNT(*) FROM crm_audit WHERE subject_id=? AND action LIKE 'parties.%') AS audits,"+
+        "(SELECT COUNT(*) FROM crm_audit WHERE subject_id=? AND action='parties.create' AND request_id=?) AS create_trace,"+
+        "(SELECT COUNT(*) FROM crm_audit WHERE subject_id=? AND action='parties.update' AND request_id=?) AS update_trace",
+      params:[id,id,id,report.create_request_id,id,report.update_request_id]});
     const row=result?.[0]?.results?.[0];
     assert.equal(row?.version,2);
     assert.equal(row?.audits,2);
