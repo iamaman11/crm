@@ -247,7 +247,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             "if: github.event_name == 'push' && "
             "github.ref == 'refs/heads/main'"
         )
-        self.assertEqual(workflow.count(main_only), 2)
+        # Release sealing, artifact upload and protected deploy are now all
+        # main-only; PR-only regressions must not publish or seal a release.
+        self.assertEqual(workflow.count(main_only), 3)
+        self.assertIn("Verify all existing Rust business modules compile for WebAssembly\\n        if: github.event_name == 'pull_request'", workflow)
+        self.assertIn("Build exact native Rust Worker for review or release", workflow)
         self.assertIn("environment: crm-dev", workflow)
         self.assertIn("gh run download \"$GITHUB_RUN_ID\"", workflow)
         self.assertIn("crm-native-bundle-$GITHUB_SHA", workflow)
