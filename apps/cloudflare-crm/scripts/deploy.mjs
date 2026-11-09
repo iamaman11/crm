@@ -37,6 +37,34 @@ async function bindings(deployedVersion){
   const b=(await cf(worker+"/versions/"+deployedVersion)).resources?.bindings||[];
   return{sha:b.find(x=>x.name==="GIT_SHA")?.text,db:b.find(x=>x.name==="DB")?.id};
 }
+// Cloudflare deployments, version metadata and the public edge can converge
+// separately after Wrangler deploy. Never treat the first old-version read
+// as a failed release or a reason to skip rollback.
+async function waitForDeployment(expectedVersion,expectedSha,stage){
+  const start=Date.now(),deadline=start+60000;
+  let observed={version:null,sha:null,db:null},attempts=0;
+  for(;;){
+    attempts++;
+    try{
+      const current=await version();
+      const b=await bindings(current);
+      observed={version:current,sha:b.sha||null,db:b.db||null};
+      if((expectedVersion===null||current===expectedVersion)&&
+          b.sha===expectedSha&&b.db===database){
+        console.log(JSON.stringify({event:"crm.deployment-readback",
+          stage,result:"PASS",worker_version:current,
+          source:expectedSha,attempts,elapsed_ms:Date.now()-start}));
+        return current;
+      }
+    }catch(error){observed={error:String(error.message).slice(0,160)};}
+    if(Date.now()>=deadline)throw Error("CRM deployment readback mismatch stage="+stage+
+      " expected_version="+(expectedVersion||"new")+" expected_sha="+expectedSha+
+      " observed="+JSON.stringify(observed));
+    if(attempts===1)console.log(JSON.stringify({event:"crm.deployment-readback",
+      stage,result:"RETRY",observed}));
+    await new Promise(resolve=>setTimeout(resolve,Math.min(attempts*500,2500)));
+  }
+}
 const auth=()=>({"CF-Access-Client-Id":required("CRM_E2E_A_CLIENT_ID"),"CF-Access-Client-Secret":required("CRM_E2E_A_CLIENT_SECRET")});
 async function publicSha(){
   const r=await fetch(url+"/api/version?readback="+Date.now(),{headers:auth(),redirect:"manual",cache:"no-store"});
@@ -83,9 +111,7 @@ async function deploy(){
     throw Error("Compiled CRM release artifact integrity failed");
   cmd("wrangler","d1","migrations","apply","crm-dev","--remote");
   cmd("wrangler","deploy","--var","GIT_SHA:"+sha);
-  const newVersion=await version();
-  const current=await bindings(newVersion);
-  if(current.sha!==sha||current.db!==database)throw Error("Deployed CRM SHA/D1 binding mismatch");
+  const newVersion=await waitForDeployment(null,sha,"deploy");
   if(newVersion===oldVersion)throw Error("Worker version did not advance");
   const anonymous=await fetch(url+"/api/health",{redirect:"manual"});
   if(anonymous.status===200||anonymous.status>=500)throw Error("Cloudflare Access denied check failed");
@@ -241,11 +267,18 @@ async function rollback(){
   if(!existsSync(join(out,"checkpoint.json"))){console.log(JSON.stringify({event:"crm.rollback",result:"SKIP_NO_CHECKPOINT"}));return;}
   const p=load("checkpoint.json");
   if(p.git_sha!==sha||p.d1_database!==database)throw Error("Rollback checkpoint mismatch");
-  if(await version()===p.previous_version){record("rollback.json",{result:"NO_WORKER_CHANGE",d1_restored:false});return;}
-  const now=await bindings(await version());
-  if(now.sha!==sha||now.db!==database)throw Error("Refusing rollback over unrelated deployment");
-  await cf(worker+"/deployments","POST",{strategy:"percentage",versions:[{version_id:p.previous_version,percentage:100}],annotations:{"workers/message":"CRM failed-release rollback "+sha.slice(0,12)}});
-  if(await version()!==p.previous_version)throw Error("Rollback version readback failed");
+  const live=await version();
+  const now=await bindings(live);
+  // After a failed readback the first deployment response may still be stale
+  // and report the *old* Worker even though the new upload is propagating.
+  // Explicitly redeploy the checkpointed old version in both cases.
+  if(now.db!==database||
+      !((live===p.previous_version&&now.sha===p.previous_sha)||now.sha===sha))
+    throw Error("Refusing rollback over unrelated deployment");
+  await cf(worker+"/deployments","POST",{strategy:"percentage",
+    versions:[{version_id:p.previous_version,percentage:100}],
+    annotations:{"workers/message":"CRM failed-release rollback "+sha.slice(0,12)}});
+  await waitForDeployment(p.previous_version,p.previous_sha,"rollback");
   await waitForPublicSha(p.previous_sha,"rollback");
   record("rollback.json",{git_sha:sha,result:"WORKER_RESTORED",previous_sha:p.previous_sha,previous_version:p.previous_version,d1_restored:false});
   console.log(JSON.stringify({event:"crm.rollback",result:"WORKER_RESTORED",old_sha:p.previous_sha,d1_restored:false}));
