@@ -74,7 +74,6 @@ Build a simple, usable test CRM on one Cloudflare Worker + D1 with React UI. Pri
 - `apps/cloudflare-crm/rust-party/test/native.mjs`
 - `apps/cloudflare-crm/scripts/native-cloud-proof.mjs`
 - `apps/cloudflare-crm/migrations/0003_party_request_trace.sql`
-
 - `apps/cloudflare-crm/rust-party/src/pilot.rs`
 
 ## Forbidden paths
