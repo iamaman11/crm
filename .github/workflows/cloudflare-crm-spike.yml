@@ -238,9 +238,6 @@ jobs:
         run: |
           cargo install --locked worker-build --version 0.8.7
           worker-build --release --features ci-local
-      - name: Enforce committed native Worker dependency lock
-        # Building with 13 original crates must not silently resolve a different graph.
-        run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
       - name: Record native Party dependency lock for exact reproducibility
         working-directory: apps/cloudflare-crm/rust-party
         shell: bash
@@ -249,6 +246,9 @@ jobs:
           base64 -w 80 Cargo.lock
           echo
           echo 'NATIVE_PARTY_CARGO_LOCK_END'
+      - name: Enforce committed native Worker dependency lock
+        # Building with 13 original crates must not silently resolve a different graph.
+        run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
       - name: Test original Rust Party through workerd and isolated native D1
         working-directory: apps/cloudflare-crm
         run: node rust-party/test/local.mjs
