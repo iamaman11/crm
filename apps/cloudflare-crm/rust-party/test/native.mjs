@@ -493,6 +493,77 @@ try{
       "idempotency receipts","optimistic version","forged owner rejected",
       "request correlation"],
     primary_contact:"NOT_CONNECTED",ui:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
+
+  // Original Sales editor: signed actor, typed Money, domain validation,
+  // atomic D1 version/receipt/audit. No pilot Deal rules or extra service.
+  const editDealId="native-edit-deal-"+randomUUID();
+  const editPath="/api/sales-deals/"+editDealId;
+  const editCreated=await call("/api/sales-deals",a,{method:"POST",
+    headers:{"content-type":"application/json","idempotency-key":"signed-edit-deal-create"},
+    body:JSON.stringify({...dealData,id:editDealId})});
+  assert.equal(editCreated.status,201,JSON.stringify(editCreated));
+  const editBody={expected_version:1,name:"Updated deal",
+    amount_minor_units:98765,currency:"USD",probability_bps:6750};
+  const headers={"content-type":"application/json","idempotency-key":"signed-edit-deal-update"};
+  assert.equal((await call(editPath,b,{method:"PATCH",headers,
+    body:JSON.stringify(editBody)})).status,404,"tenant B cannot edit A Deal");
+  assert.equal((await call(editPath,a,{method:"PATCH",headers:{
+    ...headers,"idempotency-key":"sales-forged-actor"},
+    body:JSON.stringify({...editBody,owner:"forged"})})).status,422);
+  assert.equal((await call(editPath,a,{method:"PATCH",headers:{
+    ...headers,"idempotency-key":"sales-forged-account"},
+    body:JSON.stringify({...editBody,account_id:"fake"})})).status,422);
+  assert.equal((await call(editPath,a,{method:"PATCH",headers:{
+    ...headers,"idempotency-key":"sales-float-amount"},
+    body:JSON.stringify({...editBody,amount_minor_units:12.5})})).status,422);
+  const edited=await call(editPath,a,{method:"PATCH",headers,body:JSON.stringify(editBody)});
+  assert.equal(edited.status,200,JSON.stringify(edited));
+  assert.equal(edited.body.item.version,2);
+  assert.equal(edited.body.item.name,"Updated deal");
+  assert.equal(edited.body.item.amount.minor_units,"98765");
+  assert.equal(edited.body.item.amount.currency,"USD");
+  assert.equal(edited.body.item.probability_bps,6750);
+  assert.equal(edited.body.item.owner.actor,"native-a@example.test");
+  assert.equal(edited.body.item.account_id,accountId);
+  assert.equal(edited.body.item.stage.stage_id,"lead");
+  assert.equal(edited.headers["x-crm-module"],"crm.sales");
+  assert.match(edited.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
+  const replay=await call(editPath,a,{method:"PATCH",headers,body:JSON.stringify(editBody)});
+  assert.equal(replay.status,200);assert.equal(replay.body.replayed,true);
+  assert.deepEqual(replay.body.item,edited.body.item);
+  const reuse=await call(editPath,a,{method:"PATCH",headers,
+    body:JSON.stringify({...editBody,name:"Wrong"})});
+  assert.equal(reuse.status,409);assert.equal(reuse.body.code,"IDEMPOTENCY_CONFLICT");
+  const stale=await call(editPath,a,{method:"PATCH",headers:{
+    ...headers,"idempotency-key":"sales-stale-version"},
+    body:JSON.stringify(editBody)});
+  assert.equal(stale.status,409);
+  assert.equal(stale.body.code,"SALES_DEAL_VERSION_CONFLICT");
+  const pair=await call(editPath,a,{method:"PATCH",headers:{
+    ...headers,"idempotency-key":"sales-incomplete-money"},
+    body:JSON.stringify({expected_version:2,amount_minor_units:42})});
+  assert.equal(pair.status,422);
+  assert.equal(pair.body.code,"SALES_AMOUNT_CURRENCY_PAIR_REQUIRED");
+  assert.equal((await call(editPath,a,{method:"PATCH",headers:{
+    ...headers,"idempotency-key":"sales-clear-set"},
+    body:JSON.stringify({expected_version:2,amount_minor_units:1,
+      currency:"USD",clear_amount:true})})).status,422);
+  assert.equal((await call(editPath,a,{method:"PATCH",headers:{
+    ...headers,"idempotency-key":"sales-empty-edit"},
+    body:JSON.stringify({expected_version:2})})).status,422);
+  const cleared=await call(editPath,a,{method:"PATCH",headers:{
+    ...headers,"idempotency-key":"signed-edit-deal-clear"},
+    body:JSON.stringify({expected_version:2,clear_amount:true})});
+  assert.equal(cleared.status,200,JSON.stringify(cleared));
+  assert.equal(cleared.body.item.amount,null);
+  assert.equal(cleared.body.item.version,3);
+  assert.deepEqual((await call(editPath,a)).body.item,cleared.body.item,
+    "original Deal codec must persist clear amount via one D1");
+  assert.equal((await call(editPath,b)).status,404);
+  console.log(JSON.stringify({event:"crm.native-original-sales-update-d1",
+    result:"PASS",owner:"crm.sales",exact_money:true,
+    actor:"verified Access",ui:"NOT_CONNECTED",live:"NOT_TESTED"}));
+
   // Original Contact Point lifecycle under real JWT and production migration.
   assert.equal((await call("/api/contact-points",null)).status,401);
   assert.deepEqual((await call("/api/contact-points",b)).body.items,[]);
