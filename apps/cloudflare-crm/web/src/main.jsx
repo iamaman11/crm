@@ -235,7 +235,7 @@ function App(){
       {notice&&<div role="status" className="notice">{notice}</div>}
       {error&&<div role="alert" className="notice error">{error}</div>}
       <section className="panel">{tab==="parties"?
-        <Parties load={api} writable={writable} onSaved={reload}/>:
+        <Parties items={items.parties} load={api} writable={writable} loading={loading} onSaved={reload}/>:
         card?<Customer360 accountId={card} load={api} writable={writable} onBack={()=>setCard(null)}
           onNavigate={navigate} onEdit={(kind,row)=>begin(kind,row)}/>:
         <>
