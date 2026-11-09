@@ -52,6 +52,7 @@ jobs:
           toolchain: 1.97.1
           targets: wasm32-unknown-unknown
       - name: Verify all existing Rust business modules compile for WebAssembly
+        if: github.event_name == 'pull_request'
         run: |
           cargo check --locked --target wasm32-unknown-unknown \
             -p crm-sales -p crm-activities -p crm-sales-activities-link \
@@ -60,6 +61,7 @@ jobs:
             -p crm-customer-data-operations -p crm-data-quality \
             -p crm-customer-enrichment -p crm-customer-privacy
       - name: Execute the original Rust domain rules from WASM in Node
+        if: github.event_name == 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
@@ -220,11 +222,23 @@ jobs:
               cloudflare_worker_invocation:'NOT_TESTED', d1_adapter:'NOT_TESTED'}));
           })().catch(error => {console.error(error);process.exitCode=1;});
           NODE
+      # Cache only the pinned installer binaries. No target/ or generated build
+      # output crosses source revisions; main always builds its exact SHA.
+      - name: Cache pinned native Rust tool CLIs
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/bin/wasm-bindgen
+            ~/.cargo/bin/worker-build
+          key: ${{ runner.os }}-crm-rust1971-wasm-bindgen-0.2.130-worker-build-0.8.7-v1
       - name: Install exact native wasm-bindgen CLI from Cargo registry
         # worker-build 0.8.7 officially supports WASM_BINDGEN_BIN. Fetching the
         # pinned CLI from crates.io avoids unstable GitHub Releases binary URLs.
         run: |
-          cargo install --locked wasm-bindgen-cli --version 0.2.130
+          if ! command -v wasm-bindgen >/dev/null ||
+             [ "$(wasm-bindgen --version)" != "wasm-bindgen 0.2.130" ]; then
+            cargo install --locked wasm-bindgen-cli --version 0.2.130
+          fi
           test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.130"
           echo "WASM_BINDGEN_BIN=$(command -v wasm-bindgen)" >> "$GITHUB_ENV"
       - name: Install pinned Binaryen optimizer through npm
@@ -236,28 +250,28 @@ jobs:
           test -x "$WASM_OPT"
           "$WASM_OPT" --version | grep '132'
           echo "WASM_OPT_BIN=$WASM_OPT" >> "$GITHUB_ENV"
-      - name: Build Rust workers-rs Party Worker for isolated workerd CI
-        working-directory: apps/cloudflare-crm/rust-party
+      - name: Install pinned workers-rs build CLI
         run: |
-          cargo install --locked worker-build --version 0.8.7
-          worker-build --release --features ci-local
-      - name: Record native Party dependency lock for exact reproducibility
+          if ! command -v worker-build >/dev/null ||
+             ! worker-build --version 2>&1 | grep -Fq '0.8.7'; then
+            cargo install --locked worker-build --version 0.8.7
+          fi
+          worker-build --version
+      - name: Build isolated native D1 test Worker (PR only)
+        if: github.event_name == 'pull_request'
         working-directory: apps/cloudflare-crm/rust-party
-        shell: bash
-        run: |
-          echo 'NATIVE_PARTY_CARGO_LOCK_BEGIN'
-          base64 -w 80 Cargo.lock
-          echo
-          echo 'NATIVE_PARTY_CARGO_LOCK_END'
-      - name: Enforce committed native Worker dependency lock
-        # Building with 13 original crates must not silently resolve a different graph.
-        run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
+        run: worker-build --release --features ci-local
       - name: Test original Rust Party through workerd and isolated native D1
+        if: github.event_name == 'pull_request'
         working-directory: apps/cloudflare-crm
         run: node rust-party/test/local.mjs
-      - name: Compile one native Rust Worker Access JWT candidate (not deployed)
+      # Only one production-feature WASM build on main; this same binary is sealed
+      # and published. PR also runs alternative test features for coverage.
+      - name: Build exact native Rust Worker for review or release
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --features native
+      - name: Enforce committed native Worker dependency lock
+        run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
       - name: Dry-run exact native entrypoint upload with original CRM Wrangler configuration
         working-directory: apps/cloudflare-crm
         shell: bash
@@ -291,32 +305,34 @@ jobs:
           cp apps/cloudflare-crm/rust-party/build/index_bg.wasm apps/cloudflare-crm/.release/native-build/index_bg.wasm
           test -s apps/cloudflare-crm/.release/native-build/index_bg.wasm
       - name: Compile native Rust Access gate using isolated RSA test keys
+        if: github.event_name == 'pull_request'
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --features native-ci
       - name: Install Chromium for physical React to native Rust Worker proof
+        if: github.event_name == 'pull_request'
         working-directory: apps/cloudflare-crm
         run: npx playwright install --with-deps chromium
       - name: Test native WebCrypto JWT and all React CRM screens under workerd
+        if: github.event_name == 'pull_request'
         working-directory: apps/cloudflare-crm
         env:
           CRM_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node rust-party/test/native.mjs
       - name: Preserve native Rust browser proof and screenshot
-        if: always()
+        if: ${{ always() && github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: crm-native-party-proof-${{ github.event.pull_request.head.sha || github.sha }}
           path: apps/cloudflare-crm/e2e-evidence-native/
           if-no-files-found: warn
           retention-days: 7
-      - name: Prepare only the native Rust entrypoint for deployment
-        working-directory: apps/cloudflare-crm/rust-party
-        run: worker-build --release --features native
-      - name: Inspect native-only deployment bundle without deploying
-        working-directory: apps/cloudflare-crm
+      - name: Restore already-compiled production Worker after PR test feature
+        if: github.event_name == 'pull_request'
         run: |
-          test -f rust-party/build/index.js
-          npx wrangler deploy --dry-run --outdir /tmp/crm-native-workers-rs
+          cp apps/cloudflare-crm/.release/native-build/index.js apps/cloudflare-crm/rust-party/build/index.js
+          cp apps/cloudflare-crm/.release/native-build/index_bg.wasm apps/cloudflare-crm/rust-party/build/index_bg.wasm
+          cmp apps/cloudflare-crm/.release/native-build/index.js apps/cloudflare-crm/rust-party/build/index.js
+          cmp apps/cloudflare-crm/.release/native-build/index_bg.wasm apps/cloudflare-crm/rust-party/build/index_bg.wasm
       - name: Validate release and E2E scripts
         run: |
           node --check apps/cloudflare-crm/scripts/deploy.mjs
@@ -338,6 +354,7 @@ jobs:
             exit 1
           fi
       - name: Seal compiled Rust and React outputs for this exact checkout
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         env:
           CRM_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
