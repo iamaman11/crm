@@ -35,7 +35,7 @@ pub(super) async fn overview(db: &D1Database, tenant: &str, id: &str) -> Result<
         return error("CUSTOMER_ACCOUNTS_PRIMARY_PARTY_MISSING", 503);
     };
     let primary_id = primary.party().as_str();
-    let Some(party) = super::stored(db, tenant, primary_id).await? else {
+    let Some(party) = super::parties::stored(db, tenant, primary_id).await? else {
         return error("CUSTOMER_ACCOUNTS_PRIMARY_PARTY_MISSING", 503);
     };
     let (contact_states, contacts_truncated) = overview_states(db,
@@ -64,7 +64,7 @@ pub(super) async fn overview(db: &D1Database, tenant: &str, id: &str) -> Result<
         super::activity_tasks::decode(state).map(|item|super::activity_tasks::view(&item)))
         .collect::<Result<Vec<_>>>()?;
     response(json!({
-        "account":accounts::view(&account), "primary_party":super::view(&party),
+        "account":accounts::view(&account), "primary_party":super::parties::view(&party),
         "contact_points":contact_points, "party_relationships":relationships,
         "deals":deals, "tasks":tasks,
         "scope":{"contact_points":"primary_party_only",
