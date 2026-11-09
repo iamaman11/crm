@@ -250,6 +250,9 @@ async function test(){
     const row=result?.[0]?.results?.[0];
     assert.equal(row?.version,2);
     assert.equal(row?.audits,2);
+    assert.equal(row?.create_trace,1,"React create request ID must equal D1 audit request ID");
+    assert.equal(row?.update_trace,1,"React edit request ID must equal D1 audit request ID");
+    report.audit_request_correlation="PASS";
     report.real_cloudflare_native_d1="PASS";
     report.d1_audits=row.audits;
     report.result="PASS";
