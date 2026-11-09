@@ -20,9 +20,15 @@ export const modules = {
 export const nativeModels = {
  parties: {title:"Лица и организации",kind:"owner",route:"parties"},
 };
+// Backend-only integrations are NOT React features until UI cutover.
+// This prevents the original Account from masquerading as the legacy pilot customer.
+export const backendModels = {
+ accounts: {title:"Оригинальные клиентские аккаунты",kind:"backend",route:"accounts",
+   ui:"NOT_CONNECTED",transport:"native-workers-rs",persistence:"D1"},
+};
 export const readModels = { customer360: { title:"Карточка клиента", kind:"read", route:"customer360" } };
 export const implementationOwners = {
- parties:"rust-party", customer360:"customer360",
+ parties:"rust-party", accounts:"original-accounts", customer360:"customer360",
  customers:"pilot-core", contacts:"pilot-core", deals:"pilot-core", tasks:"pilot-core",
 };
 export const ownerFiles = {
@@ -30,6 +36,13 @@ export const ownerFiles = {
   ui:"web/src/Parties.jsx",api:"rust-party/src/lib.rs",
   validation:"rust-party/src/lib.rs",migration:"migrations/0002_rust_party.sql",
   tests:"rust-party/test/native.mjs",browser:"e2e/live.mjs",
+ },
+ "original-accounts":{
+  ui:null,api:"rust-party/src/accounts.rs",
+  validation:"../../modules/crm-customer-accounts/src/domain.rs",
+  codec:"../../modules/crm-customer-accounts/src/persistence.rs",
+  migration:"migrations/0004_original_customer_accounts.sql",
+  tests:"rust-party/test/native.mjs",browser:null,
  },
  "pilot-core": {
   ui:"web/src/main.jsx", api:"rust-party/src/pilot.rs",
