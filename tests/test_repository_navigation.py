@@ -63,6 +63,8 @@ class RepositoryNavigationTests(unittest.TestCase):
             "apps/cloudflare-crm/migrations/0006_original_party_relationships.sql",
             "apps/cloudflare-crm/rust-party/src/activity_tasks.rs",
             "apps/cloudflare-crm/migrations/0007_original_activity_tasks.sql",
+            "apps/cloudflare-crm/rust-party/src/sales_deals.rs",
+            "apps/cloudflare-crm/migrations/0008_original_sales_deals.sql",
             "apps/cloudflare-crm/rust-party/src/pilot.rs",
             "apps/cloudflare-crm/test/native-runtime.test.mjs",
             "apps/cloudflare-crm/worker/index.mjs",
