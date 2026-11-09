@@ -93,7 +93,9 @@ async fn previous(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Rec
         &[JsValue::from_str(tenant), JsValue::from_str(key)])?
         .first::<Receipt>(None).await
 }
-fn correlation_id(req: &Request) -> Result<String> {
+fn correlation_id(req: &Request, trusted: Option<&str>) -> Result<String> {
+    // Native's independently generated id takes precedence over any client header.
+    if let Some(id) = trusted { return Ok(id.to_owned()); }
     // The public native and integrated entries overwrite this internal header.
     // The isolated CI build generates its own identifier if the header is absent.
     let id = req.headers().get("x-crm-internal-request-id")?
@@ -101,8 +103,7 @@ fn correlation_id(req: &Request) -> Result<String> {
             value.bytes().all(|byte| byte.is_ascii_hexdigit() || byte == b'-'));
     match id { Some(id) => Ok(id), None => native_request_id() }
 }
-async fn create(mut req: Request, db: D1Database, tenant: &str) -> Result<Response> {
-    let request_id = correlation_id(&req)?;
+async fn create(mut req: Request, db: D1Database, tenant: &str, request_id: &str) -> Result<Response> {
     let key = req.headers().get("idempotency-key")?.unwrap_or_default();
     if key.len() < 8 || key.len() > 120 { return error("IDEMPOTENCY_KEY_REQUIRED", 422); }
     let input = match req.json::<CreateInput>().await {
@@ -136,12 +137,11 @@ async fn create(mut req: Request, db: D1Database, tenant: &str) -> Result<Respon
     let r = bind(&db, "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant), JsValue::from_str(party.party_id().as_str()),
           JsValue::from_str(&state), JsValue::from_f64(1.0),
-          JsValue::from_str(&key), JsValue::from_str(&hash), JsValue::from_str(&request_id)])?.run().await;
+          JsValue::from_str(&key), JsValue::from_str(&hash), JsValue::from_str(request_id)])?.run().await;
     if r.is_err() { return error("PARTIES_PARTY_CREATE_CONFLICT", 409); }
     response(json!({"item":view(&party), "replayed":false}), 201)
 }
-async fn update(mut req: Request, db: D1Database, tenant: &str, id: &str) -> Result<Response> {
-    let request_id = correlation_id(&req)?;
+async fn update(mut req: Request, db: D1Database, tenant: &str, id: &str, request_id: &str) -> Result<Response> {
     let key = req.headers().get("idempotency-key")?.unwrap_or_default();
     if key.len() < 8 || key.len() > 120 { return error("IDEMPOTENCY_KEY_REQUIRED", 422); }
     let input = match req.json::<UpdateInput>().await {
@@ -167,7 +167,7 @@ async fn update(mut req: Request, db: D1Database, tenant: &str, id: &str) -> Res
         .map_err(|e| worker::Error::RustError(e.to_string()))?;
     let updated = bind(&db, "UPDATE crm_party_records SET state = ?, version = ?, idem_key = ?, idem_digest = ?, request_id = ? WHERE tenant = ? AND id = ? AND version = ?",
         &[JsValue::from_str(&state), JsValue::from_f64(party.version() as f64),
-          JsValue::from_str(&key), JsValue::from_str(&hash), JsValue::from_str(&request_id),
+          JsValue::from_str(&key), JsValue::from_str(&hash), JsValue::from_str(request_id),
           JsValue::from_str(tenant), JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
     let Ok(result) = updated else { return error("PARTIES_PARTY_UPDATE_CONFLICT", 409); };
@@ -238,13 +238,14 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     }), if healthy {200} else {503})
 }
 
-async fn dispatch(req: Request, env: Env, tenant: &str) -> Result<Response> {
+async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>) -> Result<Response> {
+    let request_id = correlation_id(&req, trusted_id)?;
     let path = req.path();
     let method = req.method();
     let db = env.d1("DB")?;
     if path == "/api/parties" {
         return match method {
-            Method::Post => create(req, db, tenant).await,
+            Method::Post => create(req, db, tenant, &request_id).await,
             Method::Get => list(db, tenant).await,
             _ => error("NOT_FOUND", 404),
         };
@@ -255,7 +256,7 @@ async fn dispatch(req: Request, env: Env, tenant: &str) -> Result<Response> {
         }
         return match method {
             Method::Get => read(db, tenant, id).await,
-            Method::Patch => update(req, db, tenant, id).await,
+            Method::Patch => update(req, db, tenant, id, &request_id).await,
             _ => error("NOT_FOUND", 404),
         };
     }
@@ -263,7 +264,7 @@ async fn dispatch(req: Request, env: Env, tenant: &str) -> Result<Response> {
 }
 
 #[event(fetch)]
-pub async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
+pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     #[cfg(any(all(feature = "ci-local", feature = "integrated"),
               all(feature = "ci-local", feature = "native"),
               all(feature = "integrated", feature = "native")))]
@@ -279,7 +280,7 @@ pub async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response>
             .filter(|s| s == "tenant-a" || s == "tenant-b") else {
             return error("AUTH_REQUIRED", 403);
         };
-        return dispatch(req, env, &tenant).await;
+        return dispatch(req, env, &tenant, None).await;
     }
 
     // The `integrated` build is import-only, called inside the single trusted
@@ -293,7 +294,7 @@ pub async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response>
                 s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) else {
             return error("AUTH_REQUIRED", 403);
         };
-        return dispatch(req, env, &tenant).await;
+        return dispatch(req, env, &tenant, None).await;
     }
 
     #[cfg(feature = "native")]
@@ -317,11 +318,7 @@ pub async fn main(mut req: Request, env: Env, _ctx: Context) -> Result<Response>
         let (result, phase) = match access::tenant(&req, &env).await {
             Ok(Some(tenant)) if path == "/api/doctor" && method == Method::Get =>
                 (native_doctor(&env, &tenant).await, "diagnostics"),
-            Ok(Some(tenant)) => {
-                // Never use an untrusted caller-supplied correlation id.
-                req.headers_mut().set("x-crm-internal-request-id", &request_id)?;
-                (dispatch(req, env, &tenant).await, "domain_d1")
-            },
+            Ok(Some(tenant)) => (dispatch(req, env, &tenant, Some(&request_id)).await, "domain_d1"),
             Ok(None) => (error("AUTH_REQUIRED", 401), "access"),
             Err(_) => (error("ACCESS_INTERNAL_ERROR", 503), "access"),
         };
