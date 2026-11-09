@@ -124,6 +124,17 @@ if(requested) {
   checks.push({check:"original-activities-backend-source",
     result:tasksReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
     runtime_proof:"EXTERNAL_CI_REQUIRED"});
+  const salesSource=sourceFor("sales-deals");
+  const salesReady=backendModels["sales-deals"].ui==="NOT_CONNECTED" &&
+    backendModels["sales-deals"].primary_contact==="NOT_CONNECTED" &&
+    migration.includes("CREATE TABLE IF NOT EXISTS crm_sales_deal_records") &&
+    read(salesSource.api).includes("Deal::create") &&
+    read(salesSource.api).includes("deal.advance_stage(AdvanceDealStage") &&
+    read(salesSource.api).includes("decode_deal_state") &&
+    read(salesSource.tests).includes("crm.native-original-sales-d1");
+  checks.push({check:"original-sales-backend-source",
+    result:salesReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
+    primary_contact:"NOT_CONNECTED",runtime_proof:"EXTERNAL_CI_REQUIRED"});
   const validCatalog=Object.keys(modules).every(name => {
     const module=modules[name], fieldKeys=module.fields.map(([key])=>key);
     return /^[a-z][a-z0-9_]*$/.test(module.table) && fieldKeys.length>0 &&
