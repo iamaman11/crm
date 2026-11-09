@@ -38,7 +38,8 @@ page.on("response",r=>{
     const method=r.request().method(),h=r.headers();
     const record={path,method,module:kindOf(path),operation:operation(path,method),
       status:r.status(),request_id:h["x-request-id"],
-      source_sha:h["x-crm-source-sha"],error_code:h["x-crm-error-code"]||null};
+      source_sha:h["x-crm-source-sha"],error_code:h["x-crm-error-code"]||null,
+      idempotency_key:r.request().headers()["idempotency-key"]||null};
     if(h["x-crm-runtime"]!=="native-workers-rs"||record.source_sha!==sha||
       !/^[0-9a-f-]{36}$/i.test(record.request_id||""))
       errors.push("Missing native trace "+method+" "+path);
@@ -75,12 +76,12 @@ async function readOwner(owner,match){
 async function accessB(){
   const other=await browser.newContext({extraHTTPHeaders:access("B")});
   try{
+    const key=randomUUID();
     const r=await other.request.post(url+"/api/parties",{headers:{
-      "idempotency-key":randomUUID()},
+      "idempotency-key":key},
       data:{id:randomUUID(),kind:"person",name:marker+" Tenant B"}});
     assert.equal(r.status(),201,"Real Access B Party creation");
     const created=(await r.json()).item;
-    const key=r.request().headers()["idempotency-key"];
     assert.equal((await context.request.get(url+"/api/parties/"+created.id)).status(),404);
     cover("access.tenant-A-B");
     return {id:created.id,key};
@@ -217,9 +218,8 @@ try{
     status:click.status,request_id:click.request_id})+"\n");
   await writeFile("apps/cloudflare-crm/.release/parties-e2e.json",JSON.stringify({
     git_sha:sha,parties:[party.id,tenantB.id],
-    keys:[writes.find(x=>x.operation==="parties.create")?.idempotency_key||
-      "E2E_KEY_NOT_CAPTURED",writes.find(x=>x.operation==="parties.update")?.idempotency_key||
-      "E2E_KEY_NOT_CAPTURED",tenantB.key]})+"\n");
+    keys:[writes.find(x=>x.operation==="parties.create").idempotency_key,
+      writes.find(x=>x.operation==="parties.update").idempotency_key,tenantB.key]})+"\n");
   const coverage=Array.from(uiCoverage);
   await writeFile("apps/cloudflare-crm/.release/native-functional-cycle.json",
     JSON.stringify({git_sha:sha,runtime:"native-workers-rs",
