@@ -28,11 +28,15 @@ export const backendModels = {
  "contact-points": {title:"Оригинальные контактные каналы",kind:"backend",route:"contact-points",
    ui:"NOT_CONNECTED",verification:"TRUSTED_EVIDENCE_NOT_CONNECTED",
    consent:"SEPARATE_MODULE_NOT_CONNECTED",transport:"native-workers-rs",persistence:"D1"},
+ "party-relationships": {title:"Оригинальные отношения лиц и организаций",kind:"backend",
+   route:"party-relationships",ui:"NOT_CONNECTED",
+   transport:"native-workers-rs",persistence:"D1"},
 };
 export const readModels = { customer360: { title:"Карточка клиента", kind:"read", route:"customer360" } };
 export const implementationOwners = {
  parties:"rust-party", accounts:"original-accounts",
- "contact-points":"original-contact-points", customer360:"customer360",
+ "contact-points":"original-contact-points",
+ "party-relationships":"original-party-relationships", customer360:"customer360",
  customers:"pilot-core", contacts:"pilot-core", deals:"pilot-core", tasks:"pilot-core",
 };
 export const ownerFiles = {
@@ -40,6 +44,13 @@ export const ownerFiles = {
   ui:"web/src/Parties.jsx",api:"rust-party/src/lib.rs",
   validation:"rust-party/src/lib.rs",migration:"migrations/0002_rust_party.sql",
   tests:"rust-party/test/native.mjs",browser:"e2e/live.mjs",
+ },
+ "original-party-relationships":{
+  ui:null,api:"rust-party/src/party_relationships.rs",
+  validation:"../../modules/crm-party-relationships/src/domain.rs",
+  codec:"../../modules/crm-party-relationships/src/persistence.rs",
+  migration:"migrations/0006_original_party_relationships.sql",
+  tests:"rust-party/test/native.mjs",browser:null,
  },
  "original-contact-points":{
   ui:null,api:"rust-party/src/contact_points.rs",
