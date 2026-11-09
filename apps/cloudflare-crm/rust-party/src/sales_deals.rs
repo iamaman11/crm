@@ -179,7 +179,7 @@ async fn create(mut req:Request,db:&D1Database,tenant:&str,actor:&str,trace:&str
     if r.is_err(){return error("SALES_DEAL_CREATE_CONFLICT",409);}
     response(json!({"item":view(&deal),"replayed":false}),201)
 }
-async fn advance(mut req:Request,db:&D1Database,tenant:&str,id:&str,trace:&str)->Result<Response>{
+async fn advance(mut req:Request,db:&D1Database,tenant:&str,id:&str,actor:&str,trace:&str)->Result<Response>{
     let Some(k)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
     let input=match serde_json::from_str::<StageInput>(&req.text().await?) {
         Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422),
@@ -190,6 +190,7 @@ async fn advance(mut req:Request,db:&D1Database,tenant:&str,id:&str,trace:&str)-
         return response(json!({"item":view(&decode(&p.state)?),"replayed":true}),200);
     }
     let Some(mut deal)=load(db,tenant,id).await? else{return error("NOT_FOUND",404)};
+    let before=deal.clone();
     let target=match stage(input.pipeline_id,input.stage_id,input.ordinal){
         Ok(x)=>x,Err(code)=>return error(&code,422),
     };
@@ -209,16 +210,52 @@ async fn advance(mut req:Request,db:&D1Database,tenant:&str,id:&str,trace:&str)-
         return error(&e.code,if e.category==ErrorCategory::Conflict{409}else{422});
     }
     let saved=encode(&deal)?;
-    let r=bind(db,"UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?",
+    // Exact existing original link + Protobuf adapter; the link decides whether
+    // Open creates a follow-up and Won/Lost is ignored. Only these staged
+    // original domain results are committed, in ONE atomic Cloudflare D1 batch.
+    let prepared=match super::sales_activities_link::prepare(
+        &before,&deal,tenant,actor,trace,now_nanos()).await {
+        Ok(x)=>x,Err(e)=>return error(&e.code,
+            if e.category==ErrorCategory::Conflict{409}else{422}),
+    };
+    let update=bind(db,"UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&saved),JsValue::from_f64(deal.version() as f64),
           JsValue::from_str(&k),JsValue::from_str(&digest),JsValue::from_str(trace),
           JsValue::from_str(tenant),JsValue::from_str(id),
-          JsValue::from_f64(input.expected_version as f64)])?.run().await;
-    let Ok(result)=r else{return error("SALES_DEAL_ADVANCE_CONFLICT",409)};
-    if result.meta()?.and_then(|m|m.changes).unwrap_or(0)==0{
-        return error("SALES_DEAL_VERSION_CONFLICT",409);
+          JsValue::from_f64(input.expected_version as f64)])?;
+    let mut writes=vec![update];
+    if let Some(task)=&prepared.task {
+        let account_id=match deal.account(){Some(x)=>&x.resource_id,
+            None=>return error("SALES_LINK_ACCOUNT_REQUIRED",422)};
+        let task_state=String::from_utf8(crm_activities::encode_task_state(task)
+            .map_err(|e|worker::Error::RustError(e.code))?)
+            .map_err(|e|worker::Error::RustError(e.to_string()))?;
+        let task_stmt=bind(db,"INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?,?)",
+            &[JsValue::from_str(tenant),JsValue::from_str(task.task_id().as_str()),
+              JsValue::from_str(account_id),JsValue::from_str(&task_state),
+              JsValue::from_f64(task.version() as f64),
+              JsValue::from_str(&prepared.delivery_id),
+              JsValue::from_str(&prepared.event_id),
+              JsValue::from_str(trace)])?;
+        writes.push(task_stmt);
     }
-    response(json!({"item":view(&deal),"replayed":false}),200)
+    let link_stmt=bind(db,"INSERT INTO crm_sales_link_delivery_records(tenant,delivery_id,event_id,deal_id,deal_version,task_id,disposition,state_json,request_id) VALUES(?,?,?,?,?,?,?,?,?)",
+        &[JsValue::from_str(tenant),
+          JsValue::from_str(&prepared.delivery_id),
+          JsValue::from_str(&prepared.event_id),
+          JsValue::from_str(id),JsValue::from_f64(deal.version() as f64),
+          prepared.task.as_ref().map_or(JsValue::NULL,|task|
+              JsValue::from_str(task.task_id().as_str())),
+          JsValue::from_str(if prepared.task.is_some(){"applied"}else{"ignored"}),
+          JsValue::from_str(&prepared.state_json),JsValue::from_str(trace)])?;
+    writes.push(link_stmt);
+    if db.batch(writes).await.is_err(){
+        return error("SALES_LINK_ATOMIC_COMMIT_CONFLICT",409);
+    }
+    response(json!({"item":view(&deal),"replayed":false,
+        "link":{"delivery_id":prepared.delivery_id,
+            "disposition":if prepared.task.is_some(){"applied"}else{"ignored"},
+            "task_id":prepared.task.as_ref().map(|x|x.task_id().as_str())}}),200)
 }
 async fn list(db:&D1Database,tenant:&str)->Result<Response>{
     let rows=bind(db,"SELECT state FROM crm_sales_deal_records WHERE tenant=? ORDER BY id LIMIT 300",
@@ -239,7 +276,7 @@ pub(super) async fn route(req:Request,db:D1Database,tenant:&str,actor:&str,trace
     let Some(id)=path.strip_prefix("/api/sales-deals/") else{return error("NOT_FOUND",404)};
     if let Some(id)=id.strip_suffix("/advance") {
         if id.is_empty()||id.contains('/')||method!=Method::Post{return error("NOT_FOUND",404);}
-        return advance(req,&db,tenant,id,trace).await;
+        return advance(req,&db,tenant,id,actor,trace).await;
     }
     if id.is_empty()||id.contains('/'){return error("NOT_FOUND",404);}
     match method {
