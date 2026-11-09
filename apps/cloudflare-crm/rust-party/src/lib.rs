@@ -225,19 +225,27 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
         .and_then(|metadata| metadata.get("id").and_then(Value::as_str).map(str::to_owned));
     let source = env.var("GIT_SHA").ok().map(|value| value.to_string());
     let healthy = present == EXPECTED.len() as i64 && party_rows.is_some();
+    // A live schema proof is independent of the CI browser evidence.
+    // Do not claim a module's write path is healthy merely because its table exists.
     response(json!({
         "application": "crm-dev",
         "runtime": "workers-rs",
+        "entrypoint": "native-workers-rs",
         "source": source.unwrap_or_else(|| "NOT_AVAILABLE".into()),
         "worker_version": version.unwrap_or_else(|| "NOT_AVAILABLE".into()),
         "access": {"status": "PASS", "check": "signed JWT and enrolled tenant"},
         "database": {"status": if healthy { "PASS" } else { "FAIL" },
             "tables": {"present": present, "expected": EXPECTED.len()},
             "party_records_visible": party_rows.map(|value| value.present)},
-        "modules": {"crm.parties": {
-            "schema_read": if healthy { "PASS" } else { "FAIL" },
-            "write": "NOT_TESTED", "audit_correlation": "NOT_TESTED"
-        }},
+        "modules": {
+            "crm.parties": {"schema_read": if healthy {"PASS"} else {"FAIL"},
+                "business_owner": "original-crm-parties", "write":"NOT_TESTED", "audit_correlation":"NOT_TESTED"},
+            "crm.customers": {"schema_read": if healthy {"PASS"} else {"FAIL"}, "write":"NOT_TESTED"},
+            "crm.contacts": {"schema_read": if healthy {"PASS"} else {"FAIL"}, "write":"NOT_TESTED"},
+            "crm.deals": {"schema_read": if healthy {"PASS"} else {"FAIL"}, "write":"NOT_TESTED"},
+            "crm.tasks": {"schema_read": if healthy {"PASS"} else {"FAIL"}, "write":"NOT_TESTED"},
+            "crm.customer360": {"read": "NOT_TESTED"}
+        },
         "ui_e2e": "NOT_TESTED"
     }), if healthy {200} else {503})
 }
