@@ -67,22 +67,29 @@ fn decoded(segment: &str) -> Option<Vec<u8>> {
     binary.chars().map(|c| u8::try_from(c as u32).ok()).collect()
 }
 
+// Cloudflare Access service-token JWTs carry an EMPTY sub but a signed
+// common_name (their Client ID). Human JWTs carry a nonempty sub and email.
+// Keep these separate so a service JWT cannot impersonate an email principal.
 fn identity_key(claims: &Value) -> Option<String> {
-    if let Some(email) = claims.get("email").and_then(Value::as_str) {
-        let email = email.trim().to_lowercase();
-        if !email.is_empty() && email.len() <= 254 && email.contains('@')
-            && !email.chars().any(char::is_whitespace)
+    let sub = claims.get("sub").and_then(Value::as_str)?;
+    if sub.is_empty() {
+        let name = claims.get("common_name").and_then(Value::as_str)?;
+        if (8..=120).contains(&name.len()) && name.ends_with(".access")
+            && name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'-')
         {
-            return Some(email);
+            return Some(format!("service:{}", name.to_ascii_lowercase()));
         }
+        return None;
     }
-    let name = claims.get("common_name").and_then(Value::as_str)?;
-    if (8..=120).contains(&name.len()) && name.ends_with(".access")
-        && name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'-')
+    let email = claims.get("email").and_then(Value::as_str)?;
+    let email = email.trim().to_lowercase();
+    if !email.is_empty() && email.len() <= 254 && email.contains('@')
+        && !email.chars().any(char::is_whitespace)
     {
-        return Some(format!("service:{}", name.to_ascii_lowercase()));
+        Some(email)
+    } else {
+        None
     }
-    None
 }
 
 fn valid_claims(claims: &Value) -> bool {
@@ -97,7 +104,8 @@ fn valid_claims(claims: &Value) -> bool {
         && claims.get("exp").and_then(Value::as_i64).is_some_and(|exp| exp > now)
         && claims.get("nbf").and_then(Value::as_i64).is_none_or(|nbf| nbf <= now)
         && claims.get("iat").and_then(Value::as_i64).is_none_or(|iat| iat <= now + 60)
-        && claims.get("sub").and_then(Value::as_str).is_some_and(|sub| !sub.is_empty())
+        // identity_key checks presence of sub and requires either a signed
+        // human email with nonempty sub, or a service common_name with empty sub.
         && identity_key(claims).is_some()
 }
 

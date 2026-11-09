@@ -36,7 +36,8 @@ try{
     "--file","./migrations/0001_local.sql","--persist-to",data]);
   const sql="CREATE TABLE crm_users (email TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, role TEXT NOT NULL, active INTEGER NOT NULL);"+
     "INSERT INTO crm_users VALUES('native-a@example.test','tenant-a','admin',1);"+
-    "INSERT INTO crm_users VALUES('native-b@example.test','tenant-b','admin',1);";
+    "INSERT INTO crm_users VALUES('native-b@example.test','tenant-b','admin',1);"+
+    "INSERT INTO crm_users VALUES('service:ci-native-b-0001.access','tenant-b','admin',1);";
   run(["d1","execute","crm-rust-party-local","--local",
     "--command",sql,"--persist-to",data]);
   child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
@@ -60,6 +61,24 @@ try{
   assert.equal((await call("/api/parties",jwt({}, {kid:"missing"}))).status,401);
   assert.equal((await call("/api/parties",jwt({email:"not-enrolled@example.test"}))).status,401);
   const a=jwt(),b=jwt({email:"native-b@example.test",sub:"native-test-b"});
+  // Real Cloudflare Access service-token JWT has sub:"" and a signed
+  // common_name. It must map to service:<client-id>, NOT to an email.
+  const serviceB=jwt({sub:"",email:"",common_name:"ci-native-b-0001.access"});
+  assert.equal((await call("/api/parties",serviceB)).status,200,
+    "signed Access service JWT with empty sub accepted");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:"native-a@example.test"}))).status,401,
+    "empty sub with only human email denied");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"invalid"}))).status,401,
+    "empty sub requires valid signed service common_name");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"unknown-service.access"}))).status,401,
+    "unenrolled service token denied");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"ci-native-b-0001.access",aud:"wrong"}))).status,401,
+    "service token still requires application audience");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"ci-native-b-0001.access"},{kid:"wrong"}))).status,401,
+    "service token still requires trusted signing key");
+  assert.equal((await call("/api/parties",jwt({sub:"",email:"native-a@example.test",common_name:"ci-native-b-0001.access"}))).status,200,
+    "service identity is selected from signed common_name even with an email field");
+
   const parts=a.split(".");
   parts[1]=Buffer.from(JSON.stringify({iss,aud,exp:now+3600,sub:"forged",email:"native-b@example.test"})).toString("base64url");
   assert.equal((await call("/api/parties",parts.join("."))).status,401,
@@ -81,6 +100,12 @@ try{
   assert.equal(created.body.item.name,"Original Native Rust");
   assert.equal((await call("/api/parties/"+id,a)).status,200);
   assert.equal((await call("/api/parties/"+id,b)).status,404,"B cannot read A");
+  assert.equal((await call("/api/parties/"+id,serviceB)).status,404,
+    "Cloudflare service token B cannot read Party belonging to human A");
+  assert.equal((await call("/api/parties/"+id,serviceB,{headers:{
+    "x-crm-native-tenant":"tenant-a","x-crm-ci-tenant":"tenant-a"}})).status,404,
+    "service-token identity cannot be overridden by forged tenant headers");
+
   assert.equal((await call("/api/parties/"+id,b,{headers:{
     "x-crm-native-tenant":"tenant-a","x-crm-ci-tenant":"tenant-a"}})).status,404);
   const init={method:"PATCH",headers:{"content-type":"application/json",
@@ -154,7 +179,8 @@ try{
     await browser.close();
   }
   console.log(JSON.stringify({event:"crm.native-jwt-workerd",result:"PASS",
-    proven:["host WebCrypto RS256 verified","issuer/audience/expiry/alg/kid/forged denied",
+    proven:["host WebCrypto RS256 verified","Access service-token empty-sub identity and forged-header negatives",
+      "issuer/audience/expiry/alg/kid/forged denied",
       "A/B D1 tenant isolation","untrusted tenant headers denied",
       "original Rust Party create/update/replay"]}));
 }finally{
