@@ -1075,6 +1075,11 @@ try{
       await readPage.getByRole("navigation",{name:"Разделы"}).waitFor();
       assert.equal(await readPage.getByRole("button",{name:"+ Добавить клиента"}).count(),0,
         "viewer must not see a mutating button");
+      await readPage.getByRole("row").filter({hasText:customer+" Updated"})
+        .getByRole("button",{name:"Карточка"}).click();
+      await readPage.getByRole("heading",{name:customer+" Updated"}).waitFor();
+      assert.equal(await readPage.getByRole("button",{name:"Изменить"}).count(),0,
+        "original Account read-only card must hide edit actions from viewer");
     }finally{await readonly.close();}
     uiSteps.push("Read-only enrolled role cannot mutate through React");
     const session=await call("/api/session",a);
