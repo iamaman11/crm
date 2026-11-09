@@ -87,6 +87,27 @@ async function http(endpoint,headers={},method="GET",body){
   let json;try{json=await r.json()}catch{json=null}
   return {status:r.status,headers:Object.fromEntries(r.headers),json};
 }
+// Cloudflare Workers Logs: query the existing Observability dataset by
+// the exact response request_id, not by a guessed Cloudflare ray id.
+async function assertObservedRequest(id,operation,version){
+  const start=Date.now();
+  for(let attempt=0;attempt<12;attempt++){
+    const result=await cf("/workers/observability/telemetry/query","POST",{
+      queryId:"crm-338-native-click-trace",view:"events",
+      timeframe:{from:start-10*60*1000,to:Date.now()+1000},limit:20,
+      parameters:{needle:{value:id},
+        filters:[{key:"$workers.scriptName",operation:"eq",type:"string",value:script}]}
+    });
+    const found=(result.events?.events||[]).some(entry=>
+      entry.source?.event==="crm.native.request"&&entry.source?.request_id===id&&
+      entry.source?.operation===operation&&entry.source?.status===
+        (operation==="parties.create"?201:200)&&
+      entry.$workers?.scriptVersion?.id===version);
+    if(found)return;
+    await new Promise(done=>setTimeout(done,2500));
+  }
+  fail("Cloudflare Logs missing exact native request trace "+operation);
+}
 const override=(headers,version)=>({
   ...headers,"Cloudflare-Workers-Version-Overrides":script+'="'+version+'"'
 });
