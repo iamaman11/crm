@@ -1040,6 +1040,11 @@ try{
     const taskName=marker+" Task";
     await selectTab("Задачи");
     await page.getByRole("button",{name:"+ Добавить задачу"}).click();
+    await page.getByLabel("Что сделать").waitFor();
+    await page.getByRole("button",{name:"Отмена"}).click();
+    assert.equal(await page.getByLabel("Что сделать").count(),0,
+      "cancel a new original Task must close its dialog without writing D1");
+    await page.getByRole("button",{name:"+ Добавить задачу"}).click();
     await page.getByLabel("Что сделать").fill(taskName);
     await page.getByLabel("Клиент",{exact:true}).selectOption({label:customer+" Updated"});
     await submitForm();
