@@ -307,7 +307,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         let method = req.method();
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
-        let operation = match (path.as_str(), method) {
+        let operation = match (path.as_str(), method.clone()) {
             ("/api/parties", Method::Get) => "parties.list",
             ("/api/parties", Method::Post) => "parties.create",
             (p, Method::Get) if p.starts_with("/api/parties/") => "parties.read",
