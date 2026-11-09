@@ -165,10 +165,10 @@ async function verifyData(){
     cycle.result!=="BROWSER_PASS_D1_LOGS_PENDING"||!Array.isArray(cycle.writes)||
     !Array.isArray(cycle.ui_coverage)||cycle.ui_coverage.length<18)
     throw Error("Exact-source native UI functional-cycle evidence missing");
-  const writes=cycle.writes,expected=["parties","party-relationships",
+  const writes=cycle.writes,expected=["parties","party-relationships","consents",
     "accounts","contact-points","sales-deals","activity-tasks"];
   const required=["parties.create","parties.update",
-    "party-relationships.create","party-relationships.update",
+    "party-relationships.create","party-relationships.update","consents.suppress",
     "accounts.create","accounts.update","contact-points.create","contact-points.update",
     "sales-deals.create","sales-deals.update","sales-deals.advance",
     "activity-tasks.create","activity-tasks.complete"];
@@ -180,7 +180,7 @@ async function verifyData(){
   const seen=new Set();
   for(const entry of writes){
     if(entry.source_sha!==sha||!expected.includes(entry.module)||
-      !["create","update","advance","complete"].includes(entry.operation.split(".")[1])||
+      !["create","update","advance","complete","suppress"].includes(entry.operation.split(".")[1])||
       !entry.subject_id||
       !/^[0-9a-f-]{36}$/i.test(entry.request_id||"")||
       seen.has(entry.request_id))throw Error("Invalid or duplicated native UI mutation evidence");
@@ -197,7 +197,9 @@ async function verifyData(){
     // An original Sales advance may atomically create a linked Activity and
     // thus more than one audit row for a single request_id. Match exact
     // owner/action/subject without hiding the additional original event.
-    const action=entry.operation.replaceAll("-","_");
+    // Rust Consent records audit "operator_suppress", not a fictitious Grant.
+    const action=entry.operation==="consents.suppress"?
+      "consents.operator_suppress":entry.operation.replaceAll("-","_");
     const matched=audit.filter(row=>row.request_id===entry.request_id&&
       row.action===action&&row.subject_id===entry.subject_id);
     if(matched.length!==1)

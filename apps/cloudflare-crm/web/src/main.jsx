@@ -4,6 +4,7 @@ import "./styles.css";
 import Customer360 from "./Customer360.jsx";
 import Parties from "./Parties.jsx";
 import Relationships from "./Relationships.jsx";
+import Consents from "./Consents.jsx";
 
 // A single React UI for ORIGINAL Rust owners. No pilot CRUD, JS business rules,
 // shadow entities or client-side authorization. All commands are typed at the
@@ -38,7 +39,7 @@ async function api(path,options={}){
 }
 function App(){
   const [tab,setTab]=useState("accounts");
-  const [items,setItems]=useState({parties:[],relationships:[],accounts:[],contacts:[],deals:[],tasks:[]});
+  const [items,setItems]=useState({parties:[],relationships:[],consents:[],accounts:[],contacts:[],deals:[],tasks:[]});
   const [role,setRole]=useState(null);
   const [form,setForm]=useState(null);
   const [card,setCard]=useState(null);
@@ -50,10 +51,10 @@ function App(){
   const [error,setError]=useState("");
   const writable=role==="admin";
   async function reload(){
-    const [parties,relationships,accounts,contacts,deals,tasks,session]=await Promise.all([
-      api("parties"),api("party-relationships"),api("accounts"),api("contact-points"),
-      api("sales-deals"),api("activity-tasks"),api("session")]);
-    setItems({parties:parties.items,relationships:relationships.items,
+    const [parties,relationships,consents,accounts,contacts,deals,tasks,session]=await Promise.all([
+      api("parties"),api("party-relationships"),api("consents"),api("accounts"),
+      api("contact-points"),api("sales-deals"),api("activity-tasks"),api("session")]);
+    setItems({parties:parties.items,relationships:relationships.items,consents:consents.items,
       accounts:accounts.items,contacts:contacts.items,deals:deals.items,tasks:tasks.items});
     setRole(session.role);
   }
@@ -235,7 +236,10 @@ function App(){
           Лица и организации <small>{items.parties.length}</small></button>
         <button className={tab==="relationships"?"active":"ghost"}
           onClick={()=>navigate("relationships")}>
-          Связи <small>{items.relationships.length}</small></button></nav>
+          Связи <small>{items.relationships.length}</small></button>
+        <button className={tab==="consents"?"active":"ghost"}
+          onClick={()=>navigate("consents")}>
+          Разрешения <small>{items.consents.length}</small></button></nav>
       {notice&&<div role="status" className="notice">{notice}</div>}
       {error&&<div role="alert" className="notice error">{error}</div>}
       <section className="panel">{tab==="parties"?
@@ -243,6 +247,9 @@ function App(){
         tab==="relationships"?<Relationships items={items.relationships}
           parties={items.parties} load={api} writable={writable} loading={loading}
           onSaved={reload}/>:
+        tab==="consents"?<Consents items={items.consents}
+          parties={items.parties} contacts={items.contacts}
+          load={api} writable={writable} loading={loading} onSaved={reload}/>:
         card?<Customer360 accountId={card} load={api} writable={writable} onBack={()=>setCard(null)}
           onNavigate={navigate} onEdit={(kind,row)=>begin(kind,row)}/>:
         <>

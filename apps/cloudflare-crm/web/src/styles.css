@@ -33,3 +33,12 @@
 .customer360-list article p{font-size:13px;color:#64768e;margin:4px 0}
 @media(max-width:720px){.customer360-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
 .customer360-list article{align-items:flex-start}.customer360-list article button{flex-shrink:0}}
+
+/* Original Consents UI: same adaptive layout and buttons as other owners. */
+.consent-scope{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:12px}
+.consent-scope .field{min-width:0}
+.consent-scope .field label{display:block;color:#5b6982;margin-bottom:5px}
+.consent-scope .field input,.consent-scope .field select{width:100%;padding:10px 12px;border:1px solid #ccd6e4;border-radius:9px;background:#fff;color:#263449}
+section[aria-label="Разрешения коммуникации"]>form{margin-bottom:18px}
+section[aria-label="Разрешения коммуникации"]>.notice{margin-top:15px}
+section[aria-label="Разрешения коммуникации"] .row-actions{flex-wrap:wrap}

@@ -304,7 +304,7 @@ try{
       "original Task create/complete","strict codec D1 roundtrip",
       "Access A/B isolation","idempotency receipts","version CAS",
       "forged owner rejected","request correlation"],
-    ui:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
+    ui:"TESTED_IN_BROWSER_BELOW",published_live:"NOT_TESTED"}));
 
   // Original Sales Deal: native exact money, Access actor, domain stage policy,
   // Account FK and original state codec, never legacy pilot crm_deals.
@@ -1052,6 +1052,33 @@ try{
     const points=await call("/api/contact-points",a);
     assert.ok(points.body.items.some(x=>x.value===email&&x.verified===false));
     uiSteps.push("React Contact create -> original ContactPoint + no forged verification");
+    // Consent UI: evaluation is read-only; operator can only record DENY.
+    await selectTab("Разрешения");
+    assert.equal(await page.getByRole("button",{name:/выдать согласие/i}).count(),0);
+    await page.getByLabel("Лицо / организация").selectOption({label:updatedName});
+    await page.getByLabel("Контакт (необязательно)").selectOption({label:email});
+    await page.getByRole("button",{name:"Проверить разрешение"}).click();
+    await page.getByRole("status").getByText(/Нет подтверждённого согласия/).waitFor();
+    await page.getByRole("button",{name:"Запретить коммуникацию"}).click();
+    await page.getByRole("button",{name:"Отмена"}).click();
+    assert.equal(await page.getByRole("button",{name:"Подтвердить запрет"}).count(),0);
+    await page.getByRole("button",{name:"Запретить коммуникацию"}).click();
+    await page.getByRole("button",{name:"Подтвердить запрет"}).click();
+    await page.getByRole("status").getByText("Запрет сохранён").waitFor();
+    await page.getByRole("status").getByText(/Есть действующий запрет/).waitFor();
+    const consentRows=(await call("/api/consents",a)).body.items;
+    const uiConsent=consentRows.find(x=>x.party_id===persisted.body.items
+      .find(p=>p.name===marker)?.id&&x.contact_point_id===points.body.items
+      .find(p=>p.value===email)?.id);
+    assert.equal(uiConsent?.effect,"deny");
+    assert.equal(uiConsent.status,"active");
+    assert.equal((await call("/api/consents",b)).body.items.some(x=>x.id===uiConsent.id),false);
+    const consentDecision=await call("/api/consents/evaluate",a,{method:"POST",
+      headers:{"content-type":"application/json"},
+      body:JSON.stringify({party_id:uiConsent.party_id,contact_point_id:uiConsent.contact_point_id,
+        purpose:"marketing.newsletter",channel:"email"})});
+    assert.equal(consentDecision.body.reason,"active_deny");
+    uiSteps.push("React Consents Evaluate -> Deny operator only -> original Rust D1");
     const dealName=marker+" Deal";
     await selectTab("Сделки");
     await page.getByRole("button",{name:"+ Добавить сделку"}).click();
@@ -1112,6 +1139,12 @@ try{
         "viewer cannot create relationship from React");
       assert.equal(await readPage.getByRole("button",{name:"Изменить"}).count(),0,
         "viewer cannot update relationship from React");
+      await readPage.getByRole("navigation",{name:"Разделы"})
+        .getByRole("button",{name:/Разрешения/}).click();
+      assert.equal(await readPage.getByRole("button",{name:"Запретить коммуникацию"}).count(),0,
+        "viewer cannot record Deny from React");
+      assert.equal(await readPage.getByRole("button",{name:"Проверить разрешение"}).count(),1,
+        "viewer can run a read-only Consent evaluation");
       await readPage.getByRole("navigation",{name:"Разделы"})
         .getByRole("button",{name:/Клиенты/}).click();
       assert.equal(await readPage.getByRole("button",{name:"+ Добавить клиента"}).count(),0,

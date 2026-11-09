@@ -28,6 +28,8 @@ function operation(path,method){
   let action=method==="PATCH"?"update":method==="POST"?"create":"read";
   if(path.endsWith("/advance"))action="advance";
   if(path.endsWith("/complete"))action="complete";
+  if(path.endsWith("/suppress"))action="suppress";
+  if(path.endsWith("/evaluate"))action="evaluate";
   return owner+"."+action;
 }
 page.on("pageerror",e=>errors.push(e.message));
@@ -43,7 +45,9 @@ page.on("response",r=>{
     if(h["x-crm-runtime"]!=="native-workers-rs"||record.source_sha!==sha||
       !/^[0-9a-f-]{36}$/i.test(record.request_id||""))
       errors.push("Missing native trace "+method+" "+path);
-    if(["POST","PATCH"].includes(method)&&[200,201].includes(r.status())){
+    // Consents/evaluate is a read-only query carried over POST. Never claim a D1 mutation.
+    if(["POST","PATCH"].includes(method)&&!path.endsWith("/evaluate")&&
+      [200,201].includes(r.status())){
       const body=await r.json().catch(()=>({}));
       record.subject_id=body.item?.id;
       if(!record.subject_id)errors.push("Mutation missing owner record id "+path);
@@ -179,6 +183,46 @@ try{
   const point=await readOwner("contact-points",x=>x.value==="updated-"+contact);
   assert.equal(point.verified,false,"Self-attested verification is not trusted evidence");
   await shot("04-contacts","Original ContactPoint normalization and update");
+  // Browser -> Rust Consent evaluation (read-only), operator DENY -> real D1.
+  await tab("Разрешения").click();
+  await page.getByLabel("Лицо / организация").selectOption({label:marker+" Updated"});
+  await page.getByLabel("Контакт (необязательно)")
+    .selectOption({label:"updated-"+contact});
+  await button("Проверить разрешение").click();
+  await page.getByRole("status").getByText(/Нет подтверждённого согласия/).waitFor();
+  cover("consents.evaluate.fail-closed");
+  await button("Запретить коммуникацию").click();
+  await button("Отмена").click();cover("consents.suppress.cancel");
+  const noGrant=await context.request.post(url+"/api/consents",{
+    data:{effect:"grant",evidence_ref:"unverified"}});
+  assert.equal(noGrant.status(),404,"No self-attested Grant endpoint is published");
+  cover("consents.grant-unavailable");
+  await button("Запретить коммуникацию").click();
+  await button("Подтвердить запрет").click();
+  await page.getByRole("status").getByText("Запрет сохранён").waitFor();
+  await page.getByRole("status").getByText(/Есть действующий запрет/).waitFor();
+  cover("consents.suppress");
+  cover("consents.evaluate.active-deny");
+  const deniedRecord=await readOwner("consents",x=>
+    x.party_id===party.id&&x.contact_point_id===point.id&&
+    x.purpose==="marketing.newsletter"&&x.effect==="deny");
+  assert.equal(deniedRecord.source,"crm.access.operator");
+  assert.equal(deniedRecord.status,"active");
+  const denied=await context.request.post(url+"/api/consents/evaluate",{
+    data:{party_id:party.id,contact_point_id:point.id,
+      purpose:"marketing.newsletter",channel:"email"}});
+  assert.equal(denied.status(),200);
+  const decision=await denied.json();
+  assert.equal(decision.allowed,false);
+  assert.equal(decision.reason,"active_deny");
+  const tenantBConsents=await browser.newContext({extraHTTPHeaders:access("B")});
+  try{
+    const other=await tenantBConsents.request.get(url+"/api/consents");
+    assert.equal(other.status(),200);
+    assert.equal((await other.json()).items.some(x=>x.id===deniedRecord.id),false);
+    cover("consents.tenant-isolation");
+  }finally{await tenantBConsents.close();}
+  await shot("04-consents","Original Consents fail-closed read and operator Deny");
   const dealName=marker+" Deal";
   await tab("Сделки").click();
   await button("+ Добавить сделку").click();
@@ -240,9 +284,14 @@ try{
     .getByRole("button",{name:"Карточка"}).click();cover("mobile.customer.card");
   await page.getByRole("heading",{name:marker+" Account Updated"}).waitFor();
   await shot("10-mobile","Mobile native Account overview");
+  await tab("Разрешения").click();
+  await page.locator(".mobile article").filter({hasText:"updated-"+contact}).waitFor();
+  await shot("11-mobile-consents","Mobile original Consent Deny record");
+  cover("mobile.consents");
   await Promise.all(pending);
   const operations=["parties.create","parties.update",
     "party-relationships.create","party-relationships.update",
+    "consents.suppress",
     "accounts.create","accounts.update",
     "contact-points.create","contact-points.update","sales-deals.create","sales-deals.update",
     "sales-deals.advance","activity-tasks.create","activity-tasks.complete"];

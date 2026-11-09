@@ -14,8 +14,9 @@ export const readModels={
 };
 export const backendModels={
   "party-relationships":{title:"Связи лиц и организаций",kind:"owner",ui:"web/src/Relationships.jsx"},
-  consents:{title:"Разрешения коммуникации",kind:"backend",
-    ui:"NOT_CONNECTED",grant_evidence:"NOT_CONNECTED"},
+  consents:{title:"Разрешения коммуникации",kind:"owner",
+    ui:"web/src/Consents.jsx",grant_evidence:"NOT_CONNECTED",
+    commands:["evaluate","operator_suppress"],grant_ingress:"NOT_CONNECTED"},
   "sales-activities-link":{title:"Связь сделки с задачей",kind:"internal",
     ui:"INTERNAL_LINK_NO_SCREEN",delivery:"SYNCHRONOUS_ATOMIC_D1"},
   "identity-resolution":{title:"Разрешение идентичности",kind:"backend",ui:"NOT_CONNECTED"},
@@ -65,9 +66,9 @@ export const ownerFiles={
     validation:"../../modules/crm-party-relationships/src/domain.rs",
     migration:"migrations/0006_original_party_relationships.sql",
     tests:nativeTests,browser:live},
-  "original-consents":{ui:null,api:"rust-party/src/consents.rs",
+  "original-consents":{ui:"web/src/Consents.jsx",api:"rust-party/src/consents.rs",
     validation:"../../modules/crm-consents/src/domain.rs",
-    migration:"migrations/0009_original_consents.sql",tests:nativeTests,browser:null},
+    migration:"migrations/0009_original_consents.sql",tests:nativeTests,browser:live},
   "original-link":{ui:null,api:"rust-party/src/sales_activities_link.rs",
     validation:"../../modules/crm-sales-activities-link/src/lib.rs",
     migration:"migrations/0010_original_sales_activities_link.sql",

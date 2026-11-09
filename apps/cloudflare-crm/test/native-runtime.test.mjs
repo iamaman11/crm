@@ -66,6 +66,27 @@ test("Party relationships UI uses original Rust owner with one App list",()=>{
   assert.equal(ownerFiles["original-relationships"].ui,"web/src/Relationships.jsx");
   assert.equal(ownerFiles["original-relationships"].browser,"e2e/live.mjs");
 });
+test("original Consent UI has a single App list, deny/evaluate only and no forged grant",()=>{
+  const app=read("web/src/main.jsx"),ui=read("web/src/Consents.jsx");
+  const owner=read("rust-party/src/consents.rs");
+  assert.ok(app.includes('api("consents")'));
+  assert.ok(app.includes("consents:consents.items"));
+  assert.ok(app.includes('<Consents items={items.consents}'));
+  assert.ok(ui.includes('load("consents/evaluate"'));
+  assert.ok(ui.includes('load("consents/suppress"'));
+  assert.ok(ui.includes('await onSaved();'));
+  assert.ok(ui.includes('idempotency-key'));
+  assert.ok(ui.includes('subject_consent_evidence'));
+  assert.ok(ui.includes('Подтвердить запрет'));
+  assert.ok(!ui.includes('load("consents/grant"'));
+  assert.ok(!ui.includes('setItems('));
+  assert.ok(owner.includes('ConsentEffect::Deny'));
+  assert.ok(owner.includes('evaluate_communication_authorization'));
+  assert.ok(owner.includes('CONSENTS_CONTACT_POINT_PARTY_MISMATCH'));
+  assert.ok(owner.includes('grant_ingress'));
+  assert.equal(ownerFiles["original-consents"].ui,"web/src/Consents.jsx");
+  assert.equal(ownerFiles["original-consents"].browser,"e2e/live.mjs");
+});
 test("React has one Party-list owner and no swallowed Party refresh failures",()=>{
   const app=read("web/src/main.jsx"),party=read("web/src/Parties.jsx");
   assert.match(app,/<Parties items=\{items\.parties\} load=\{api\}/);

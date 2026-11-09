@@ -35,7 +35,7 @@ if(requested){
     console.log(JSON.stringify({event:"crm.locate",result:"FOUND",query:requested,
       module:module||null,error:code||null,
       owner:module?implementationOwners[module]:null,
-      runtime:module&&["accounts","contacts","deals","tasks","parties","party-relationships"].includes(module)?
+      runtime:module&&["accounts","contacts","deals","tasks","parties","party-relationships","consents"].includes(module)?
         "ORIGINAL_NATIVE_RUST":"NOT_CONNECTED",
       files:module?sourceFor(module):{registry:"shared/catalog.mjs"},
       duration_ms:+(performance.now()-started).toFixed(2)}));
