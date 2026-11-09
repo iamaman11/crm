@@ -51,8 +51,19 @@ if(requested) {
     checks.push({ module:name, schema:block && missing.length===0?"PASS":"FAIL", missing });
   }
   checks.push({check:"shared-ui-catalog",result:ui.includes('shared/catalog.mjs')?"PASS":"FAIL"});
-  checks.push({check:"shared-api-catalog",result:api.includes('shared/catalog.mjs')?"PASS":"FAIL"});
-  checks.push({check:"test-present",result:test.includes('read-only diagnostics verify schema')?"PASS":"FAIL"});
+  // Rust is the only runtime API implementation. Compare exact pilot columns
+  // with React's field registry; an old JS file must not satisfy this gate.
+  const nativeFieldsMatch=Object.entries(modules).every(([name,model])=>{
+    const pattern=new RegExp('"'+name+'"\\s*=> Some\\(Model \\{ table: "'+model.table+
+      '", fields: &\\[([^\\]]+)\\]');
+    const match=api.match(pattern);
+    if(!match)return false;
+    let fields;
+    try{fields=JSON.parse('['+match[1]+']')}catch{return false}
+    return JSON.stringify(fields)===JSON.stringify(model.fields.map(([key])=>key));
+  });
+  checks.push({check:"native-rust-api-catalog",result:nativeFieldsMatch?"PASS":"FAIL"});
+  checks.push({check:"test-present",result:test.includes('Native Rust-only customers/contacts/deals/tasks/Customer360')?"PASS":"FAIL"});
   checks.push({check:"browser-present",result:existsSync(resolve(root,rootOwner.browser))?"PASS":"FAIL"});
   // A new feature cannot silently inherit the old pilot's shared files.
   const keys=Object.keys(features);
