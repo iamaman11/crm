@@ -36,7 +36,9 @@ if(requested){
       module:module||null,error:code||null,
       owner:module?implementationOwners[module]:null,
       runtime:module&&["accounts","contacts","deals","tasks","parties","party-relationships","consents"].includes(module)?
-        "ORIGINAL_NATIVE_RUST":["identity-resolution","data-quality","customer-data-operations"].includes(module)?"READ_ONLY_ORIGINAL_RUST":"NOT_CONNECTED",
+        "ORIGINAL_NATIVE_RUST":["identity-resolution","data-quality"].includes(module)?"READ_ONLY_ORIGINAL_RUST":
+        module==="customer-data-operations"?"ORIGINAL_RUST_BOUNDED_IMPORT_EXPORT":
+        module==="customer-privacy"?"ORIGINAL_RUST_PRIVACY_INTAKE":"NOT_CONNECTED",
       files:module?sourceFor(module):{registry:"shared/catalog.mjs"},
       duration_ms:+(performance.now()-started).toFixed(2)}));
   }
@@ -75,7 +77,7 @@ if(requested){
     check("original-"+name+"-ui-api-owner",
       ui.includes('api("'+route.slice(5)+'"') ||
       (ui.includes(route.slice(5))&&ui.includes("const sections")),
-      {ui:"REACT_CONNECTED_NOT_LIVE",live:"NOT_TESTED"});
+      {ui:"REACT_CONNECTED",live:"EXTERNAL_PROTECTED_CI_EVIDENCE_REQUIRED"});
     const sourceReady=rust.includes(route)&&read(source).includes(symbol)&&
       migrations.includes("CREATE TABLE IF NOT EXISTS "+table);
     check("original-"+name+"-native-d1-source",sourceReady,

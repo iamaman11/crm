@@ -29,7 +29,9 @@ export const backendModels={
     ui:"web/src/DataQuality.jsx",evaluation:"READ_ONLY_PARTY_NAME_RULES",
     findings:"NOT_CONNECTED",completeness_score:"NOT_CONNECTED"},
   "customer-enrichment":{title:"Обогащение",kind:"backend",ui:"NOT_CONNECTED"},
-  "customer-privacy":{title:"Приватность",kind:"backend",ui:"NOT_CONNECTED"}
+  "customer-privacy":{title:"Заявки на приватность",kind:"backend",
+    ui:"web/src/PrivacyCases.jsx",intake:"DRAFT_SUBMIT_CANCEL",
+    identity_verification:"NOT_CONNECTED",execution:"NOT_CONNECTED"}
 };
 export const implementationOwners={
   parties:"rust-party",accounts:"original-accounts",
@@ -91,7 +93,12 @@ export const ownerFiles={
     api:"rust-party/src/customer_data_operations.rs",
     validation:"../../modules/crm-customer-data-operations/src/export.rs",
     migration:null,tests:nativeTests,browser:live},
-  ...Object.fromEntries(["crm-customer-enrichment","crm-customer-privacy"]
+  "crm-customer-privacy":{ui:"web/src/PrivacyCases.jsx",
+    api:"rust-party/src/customer_privacy.rs",
+    validation:"../../modules/crm-customer-privacy/src/domain.rs",
+    migration:"migrations/0011_original_customer_privacy_intake.sql",
+    tests:nativeTests,browser:live},
+  ...Object.fromEntries(["crm-customer-enrichment"]
     .map(name=>[name,{ui:null,api:null,
       validation:"../../modules/"+name+"/Cargo.toml",
       migration:null,tests:null,browser:null}]))

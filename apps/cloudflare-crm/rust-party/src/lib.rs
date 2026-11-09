@@ -31,6 +31,8 @@ mod data_quality;
 #[cfg(feature = "native")]
 mod customer_data_operations;
 #[cfg(feature = "native")]
+mod customer_privacy;
+#[cfg(feature = "native")]
 mod sales_activities_link;
 #[cfg(feature = "native-ci")]
 mod original_domain_probe;
@@ -81,7 +83,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     // A truthful live, read-only diagnostic: this probes the active Rust
     // runtime and current D1 tables. CI/browser/Logs proof remains a separate
     // protected release artifact, never an invented live health result.
-    const EXPECTED: [&str; 18] = [
+    const EXPECTED: [&str; 20] = [
         "crm_tenants", "crm_users", "crm_audit", "crm_party_records", "crm_party_receipts",
         "crm_account_records", "crm_account_receipts",
         "crm_contact_point_records", "crm_contact_point_receipts",
@@ -90,11 +92,12 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
         "crm_sales_deal_records", "crm_sales_deal_receipts",
         "crm_consent_records", "crm_consent_receipts",
         "crm_sales_link_delivery_records",
+        "crm_privacy_case_records", "crm_privacy_case_receipts",
     ];
     let db = env.d1("DB")?;
     let bindings: Vec<JsValue> = EXPECTED.iter().map(|name| JsValue::from_str(name)).collect();
     let row = bind(&db,
-        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         &bindings)?.first::<SchemaCount>(None).await?;
     let present = row.map_or(0, |value| value.present);
     let schema_ok = present == EXPECTED.len() as i64;
@@ -112,6 +115,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
             ("sales-deals", "crm_sales_deal_records", "tenant"),
             ("consents", "crm_consent_records", "tenant"),
             ("sales-activities-link", "crm_sales_link_delivery_records", "tenant"),
+            ("customer-privacy", "crm_privacy_case_records", "tenant"),
         ] {
             // Table and column names are compiled-in constants, not user input.
             let query = format!("SELECT COUNT(*) AS present FROM {table} WHERE {column} = ?");
@@ -163,6 +167,14 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "tenant_audit_rows_with_id": audit_trace }},
         "modules": {
             "crm.parties": {"read": read_checks.get("parties"), "business_owner": "original-crm-parties"},
+            "crm.customer-privacy": {"read":read_checks.get("customer-privacy"),
+                "business_owner":"original-crm-customer-privacy",
+                "ui":"REACT_INTAKE_CONNECTED",
+                "draft_submit_cancel":"ORIGINAL_DOMAIN_D1",
+                "subject_verification":"NOT_CONNECTED",
+                "restriction_enforcement":"NOT_CONNECTED",
+                "erasure_execution":"NOT_CONNECTED",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.customer-data-operations": {"read":read_checks.get("parties"),
                 "business_owner":"original-crm-customer-data-operations",
                 "api":"ADMIN_BOUNDED_PARTY_CSV", "ui":"REACT_EXPORT",
@@ -181,7 +193,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
             "crm.sales-activities-link": {"read":read_checks.get("sales-activities-link"),
                 "business_owner":"original-crm-sales-activities-link",
                 "api":"native-workers-rs","delivery":"SYNCHRONOUS_ATOMIC_D1",
-                "ui":"NOT_CONNECTED",
+                "ui":"REACT_CONNECTED",
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.consents": {"read":read_checks.get("consents"),
                 "business_owner":"original-crm-consents","api":"native-workers-rs",
@@ -190,30 +202,30 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.sales": {"read":read_checks.get("sales-deals"),
                 "business_owner":"original-crm-sales", "api":"native-workers-rs",
-                "ui":"REACT_CONNECTED_NOT_LIVE", "account":"ORIGINAL_DOMAIN_D1",
+                "ui":"REACT_CONNECTED", "account":"ORIGINAL_DOMAIN_D1",
                 "primary_contact":"NOT_CONNECTED",
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.activities": {"read":read_checks.get("activity-tasks"),
                 "business_owner":"original-crm-activities", "api":"native-workers-rs",
-                "ui":"REACT_CONNECTED_NOT_LIVE","completion":"ORIGINAL_DOMAIN",
+                "ui":"REACT_CONNECTED","completion":"ORIGINAL_DOMAIN",
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.party-relationships": {"read":read_checks.get("party-relationships"),
                 "business_owner":"original-crm-party-relationships",
-                "api":"native-workers-rs", "ui":"NOT_CONNECTED",
+                "api":"native-workers-rs", "ui":"REACT_CONNECTED",
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.contact-points": {"read":read_checks.get("contact-points"),
                 "business_owner":"original-crm-contact-points",
-                "api":"native-workers-rs", "ui":"REACT_CONNECTED_NOT_LIVE",
+                "api":"native-workers-rs", "ui":"REACT_CONNECTED",
                 "verification":"TRUSTED_EVIDENCE_NOT_CONNECTED",
                 "consent":"SEPARATE_DOMAIN_NOT_CONNECTED",
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.customer-accounts": {"read":read_checks.get("accounts"),
                 "business_owner":"original-crm-customer-accounts",
-                "api":"native-workers-rs", "ui":"REACT_CONNECTED_NOT_LIVE",
+                "api":"native-workers-rs", "ui":"REACT_CONNECTED",
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.account-overview": {"read": "owner_composition_on_one_d1",
                 "business_owner":"native-worker-read-projection",
-                "ui":"REACT_CONNECTED_NOT_LIVE",
+                "ui":"REACT_CONNECTED",
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"}
         },
         "functional_cycle": {
@@ -263,6 +275,13 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
         let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
         let Some(role)=role else{return error("AUTH_REQUIRED",401)};
         return consents::route(req,db,tenant,actor,role,&request_id).await;
+    }
+    #[cfg(feature = "native")]
+    if path == "/api/customer-privacy/cases" ||
+       path.starts_with("/api/customer-privacy/cases/") {
+        let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
+        let Some(role)=role else{return error("AUTH_REQUIRED",401)};
+        return customer_privacy::route(req,db,tenant,actor,role,&request_id).await;
     }
     #[cfg(feature = "native")]
     if path.starts_with("/api/customer-data-operations/") {
@@ -357,6 +376,11 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
         let operation = match (path.as_str(), method.clone()) {
+            ("/api/customer-privacy/cases", Method::Get) => "customer-privacy.list",
+            ("/api/customer-privacy/cases", Method::Post) => "customer-privacy.create",
+            (p, Method::Get) if p.starts_with("/api/customer-privacy/cases/") => "customer-privacy.read",
+            (p, Method::Post) if p.starts_with("/api/customer-privacy/cases/") && p.ends_with("/submit") => "customer-privacy.submit",
+            (p, Method::Post) if p.starts_with("/api/customer-privacy/cases/") && p.ends_with("/cancel") => "customer-privacy.cancel",
             ("/api/customer-data-operations/import-preview", Method::Post) => "customer-data-operations.import-preview",
             ("/api/customer-data-operations/import-apply", Method::Post) => "customer-data-operations.import-apply",
             ("/api/customer-data-operations/preview", Method::Get) => "customer-data-operations.preview",
@@ -423,6 +447,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             else if path.starts_with("/api/identity-resolution") { "crm.identity-resolution" }
             else if path.starts_with("/api/data-quality") { "crm.data-quality" }
             else if path.starts_with("/api/customer-data-operations") { "crm.customer-data-operations" }
+            else if path.starts_with("/api/customer-privacy") { "crm.customer-privacy" }
             else { "crm.platform" };
         reply.headers_mut().set("x-crm-module", module)?;
         reply.headers_mut().set("x-crm-runtime", "native-workers-rs")?;
