@@ -46,10 +46,10 @@ fn state(item:&Task)->Result<String>{
         .map_err(|e|worker::Error::RustError(e.code))?)
         .map_err(|e|worker::Error::RustError(e.to_string()))
 }
-fn decode(input:&str)->Result<Task>{
+pub(super) fn decode(input:&str)->Result<Task>{
     decode_task_state(input.as_bytes()).map_err(|e|worker::Error::RustError(e.code))
 }
-fn view(task:&Task)->Value{
+pub(super) fn view(task:&Task)->Value{
     json!({
         "id":task.task_id().as_str(),"subject":task.subject(),
         "description":task.description(),

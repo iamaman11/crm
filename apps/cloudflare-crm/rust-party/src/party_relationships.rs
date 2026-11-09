@@ -70,11 +70,11 @@ fn encoded(item:&PartyRelationship)->Result<String>{
         .map_err(|e|worker::Error::RustError(e.code))?)
         .map_err(|e|worker::Error::RustError(e.to_string()))
 }
-fn decoded(state:&str)->Result<PartyRelationship>{
+pub(super) fn decoded(state:&str)->Result<PartyRelationship>{
     decode_party_relationship_state(state.as_bytes())
         .map_err(|e|worker::Error::RustError(e.code))
 }
-fn view(item:&PartyRelationship)->Value {
+pub(super) fn view(item:&PartyRelationship)->Value {
     let typ=item.relationship_type();
     json!({
         "id":item.party_relationship_id().as_str(),

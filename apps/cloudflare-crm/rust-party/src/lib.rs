@@ -486,6 +486,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             (p, Method::Patch) if p.starts_with("/api/contact-points/") => "contact-points.update",
             ("/api/accounts", Method::Get) => "accounts.list",
             ("/api/accounts", Method::Post) => "accounts.create",
+            (p, Method::Get) if p.starts_with("/api/accounts/") && p.ends_with("/overview") => "accounts.overview",
             (p, Method::Get) if p.starts_with("/api/accounts/") => "accounts.read",
             (p, Method::Patch) if p.starts_with("/api/accounts/") => "accounts.update",
             ("/api/parties", Method::Get) => "parties.list",

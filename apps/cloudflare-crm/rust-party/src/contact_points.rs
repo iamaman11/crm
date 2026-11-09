@@ -72,11 +72,11 @@ fn encode(point: &ContactPoint) -> Result<String> {
         .map_err(|e| worker::Error::RustError(e.code))?)
         .map_err(|e| worker::Error::RustError(e.to_string()))
 }
-fn decode(value: &str) -> Result<ContactPoint> {
+pub(super) fn decode(value: &str) -> Result<ContactPoint> {
     decode_contact_point_state(value.as_bytes())
         .map_err(|e| worker::Error::RustError(e.code))
 }
-fn view(point: &ContactPoint) -> Value {
+pub(super) fn view(point: &ContactPoint) -> Value {
     json!({
         "id": point.contact_point_id().as_str(),
         "party_id": point.party_ref().as_str(),

@@ -734,6 +734,46 @@ try{
       "A/B tenant isolation","idempotency","request correlation"],
     grant_ingress:"NOT_CONNECTED",subject_consent_evidence:"NOT_CONNECTED",
     ui:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
+
+  // One native read-only Account card: reuse the ORIGINAL owner codecs and
+  // existing D1, never legacy crm_customers/customer360 pilot tables.
+  const overviewPath="/api/accounts/"+accountId+"/overview";
+  assert.equal((await call(overviewPath,null)).status,401);
+  assert.equal((await call(overviewPath,b)).status,404,
+    "foreign Access tenant cannot see an original Account card");
+  assert.equal((await call(overviewPath,serviceB)).status,404);
+  assert.equal((await call("/api/accounts/does-not-exist/overview",a)).status,404);
+  assert.equal((await call(overviewPath,a,{method:"POST"})).status,404,
+    "native original Account card must remain read-only");
+  const overview=await call(overviewPath,a);
+  assert.equal(overview.status,200,JSON.stringify(overview));
+  assert.equal(overview.headers["x-crm-module"],"crm.customer-accounts");
+  assert.match(overview.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
+  assert.deepEqual(overview.body.account,savedAccount.body.item,
+    "projection must reuse original Account state and view");
+  assert.equal(overview.body.primary_party.id,id);
+  assert.ok(overview.body.contact_points.some(x=>x.id===contactPointId &&
+    x.normalized_value==="new@example.org" && x.verified===false));
+  assert.ok(overview.body.party_relationships.some(x=>x.id===relationshipId &&
+    x.status==="inactive"));
+  assert.ok(overview.body.deals.some(x=>x.id===dealId &&
+    x.status==="won" && x.amount.minor_units==="12500"));
+  assert.ok(overview.body.tasks.some(x=>x.id===taskId &&
+    x.status==="completed"));
+  assert.ok(overview.body.tasks.some(x=>x.id===linkedId &&
+    x.related_resources[0].resource_id===dealId));
+  assert.equal(overview.body.scope.contact_points,"primary_party_only");
+  assert.equal(overview.body.scope.limit_per_collection,100);
+  assert.deepEqual(overview.body.truncated,{
+    contact_points:false,party_relationships:false,deals:false,tasks:false});
+  const overviewAgain=await call(overviewPath,a);
+  assert.deepEqual(overviewAgain.body,overview.body,"read-only D1 projection is stable");
+  console.log(JSON.stringify({event:"crm.native-original-account-overview-d1",
+    result:"PASS",original_owners:["crm.customer-accounts","crm.parties",
+      "crm.contact-points","crm.party-relationships","crm.sales","crm.activities"],
+    persistence:"one native D1",writes:"none",ui:"NOT_CONNECTED",
+    cloudflare_live:"NOT_TESTED"}));
+
   const init={method:"PATCH",headers:{"content-type":"application/json",
     "idempotency-key":"native-signed-update"},
     body:JSON.stringify({expected_version:1,name:"Native Updated"})};

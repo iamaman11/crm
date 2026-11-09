@@ -63,10 +63,10 @@ fn encode(deal:&Deal)->Result<String>{
         .map_err(|e|worker::Error::RustError(e.code))?)
         .map_err(|e|worker::Error::RustError(e.to_string()))
 }
-fn decode(data:&str)->Result<Deal>{
+pub(super) fn decode(data:&str)->Result<Deal>{
     decode_deal_state(data.as_bytes()).map_err(|e|worker::Error::RustError(e.code))
 }
-fn view(deal:&Deal)->Value{
+pub(super) fn view(deal:&Deal)->Value{
     let stage=deal.stage();
     json!({
         "id":deal.deal_id().as_str(),
