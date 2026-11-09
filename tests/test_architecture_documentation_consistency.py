@@ -232,14 +232,12 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(self.packet["packet_id"], "repository-step-23-cloudflare-native-experiment")
         self.assertEqual(self.packet["baseline"], {"ref": "main"})
-        self.assertEqual(self.packet["tracking_issues"], [321, 322, 310])
+        self.assertEqual(self.packet["tracking_issues"], [321, 322, 310, 338])
         self.assertEqual(set(self.packet["allowed_paths"]), {
             "repository-packet.json",
             "docs/ACTIVE_PACKET.md",
-            "apps/cloudflare-crm/worker/index.mjs",
             "apps/cloudflare-crm/shared/catalog.mjs",
             "apps/cloudflare-crm/migrations/0001_initial.sql",
-            "apps/cloudflare-crm/test/worker.test.mjs",
             "apps/cloudflare-crm/cloudflare.config.ts",
             "apps/cloudflare-crm/web/index.html",
             "apps/cloudflare-crm/web/src/main.jsx",
@@ -249,24 +247,19 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
             "apps/cloudflare-crm/wrangler.jsonc",
             "pnpm-workspace.yaml",
             "apps/cloudflare-crm/e2e/live.mjs",
-            "apps/cloudflare-crm/features/customer360/query.mjs",
             "apps/cloudflare-crm/web/src/Customer360.jsx",
-            "apps/cloudflare-crm/test/customer360.test.mjs",
             "apps/cloudflare-crm/README.md",
             "apps/cloudflare-crm/AGENTS.md",
             "apps/cloudflare-crm/migrations/0002_rust_party.sql",
             "apps/cloudflare-crm/migrations/0003_party_request_trace.sql",
             "apps/cloudflare-crm/web/src/Parties.jsx",
-            "apps/cloudflare-crm/worker/unified.mjs",
-            "apps/cloudflare-crm/rust-party/wrangler.unified.jsonc",
-            "apps/cloudflare-crm/rust-party/test/unified.mjs",
             "apps/cloudflare-crm/rust-party/Cargo.toml",
             "apps/cloudflare-crm/rust-party/Cargo.lock",
             "apps/cloudflare-crm/rust-party/src/lib.rs",
             "apps/cloudflare-crm/rust-party/src/pilot.rs",
+            "apps/cloudflare-crm/test/native-runtime.test.mjs",
             "apps/cloudflare-crm/rust-party/src/access.rs",
             "apps/cloudflare-crm/rust-party/test/native.mjs",
-            "apps/cloudflare-crm/scripts/native-cloud-proof.mjs",
             "apps/cloudflare-crm/rust-party/migrations/0001_local.sql",
             "apps/cloudflare-crm/rust-party/wrangler.jsonc",
             "apps/cloudflare-crm/rust-party/README.md",
