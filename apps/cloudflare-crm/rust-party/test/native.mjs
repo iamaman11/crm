@@ -73,6 +73,8 @@ try{
     "--file","../migrations/0009_original_consents.sql","--persist-to",data]);
   run(["d1","execute","crm-rust-party-local","--local",
     "--file","../migrations/0010_original_sales_activities_link.sql","--persist-to",data]);
+  run(["d1","execute","crm-rust-party-local","--local",
+    "--file","../migrations/0011_original_customer_privacy_intake.sql","--persist-to",data]);
   child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
     "--var","CRM_CI_LOCAL_ONLY:yes","--var","CRM_NATIVE_CI_JWKS:"+jwks],
     {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
@@ -157,6 +159,57 @@ try{
   assert.equal(created.status,201,JSON.stringify(created));
   assert.equal(created.body.item.name,"Original Native Rust");
   assert.equal((await call("/api/parties/"+id,a)).status,200);
+  // Original Customer Privacy: only intake lifecycle, no subject verification.
+  const privacyPath="/api/customer-privacy/cases";
+  const privacyId="native-privacy-"+randomUUID();
+  const privacyInput={id:privacyId,kind:"erasure"};
+  assert.equal((await call(privacyPath,null)).status,401);
+  assert.equal((await call(privacyPath,viewer)).status,200);
+  assert.equal((await call(privacyPath,viewer,{method:"POST",
+    headers:{"content-type":"application/json","idempotency-key":"viewer-privacy-denied"},
+    body:JSON.stringify(privacyInput)})).status,403);
+  const privacyCreate=await call(privacyPath,a,{method:"POST",
+    headers:{"content-type":"application/json","idempotency-key":"native-privacy-create"},
+    body:JSON.stringify(privacyInput)});
+  assert.equal(privacyCreate.status,201,JSON.stringify(privacyCreate));
+  assert.equal(privacyCreate.headers["x-crm-module"],"crm.customer-privacy");
+  assert.equal(privacyCreate.body.item.status,"draft");
+  assert.equal(privacyCreate.body.item.subject_verified,false);
+  assert.equal(privacyCreate.body.item.execution,"NOT_CONNECTED");
+  assert.equal((await call(privacyPath+"/"+privacyId,b)).status,404);
+  assert.equal((await call(privacyPath+"/"+privacyId,a)).body.item.status,"draft");
+  const replayPrivacy=await call(privacyPath,a,{method:"POST",
+    headers:{"content-type":"application/json","idempotency-key":"native-privacy-create"},
+    body:JSON.stringify(privacyInput)});
+  assert.equal(replayPrivacy.status,200);
+  assert.equal(replayPrivacy.body.replayed,true);
+  assert.equal((await call(privacyPath+"/"+privacyId+"/submit",a,{method:"POST",
+    headers:{"content-type":"application/json","idempotency-key":"native-privacy-stale"},
+    body:JSON.stringify({expected_version:50})})).status,409);
+  const privacySubmit=await call(privacyPath+"/"+privacyId+"/submit",a,{
+    method:"POST",headers:{"content-type":"application/json",
+      "idempotency-key":"native-privacy-submit"},
+    body:JSON.stringify({expected_version:1})});
+  assert.equal(privacySubmit.status,200,JSON.stringify(privacySubmit));
+  assert.equal(privacySubmit.body.item.status,"submitted");
+  assert.equal(privacySubmit.body.item.subject_verified,false);
+  assert.equal((await call(privacyPath+"/"+privacyId+"/submit",a,{
+    method:"POST",headers:{"content-type":"application/json",
+      "idempotency-key":"native-privacy-double-submit"},
+    body:JSON.stringify({expected_version:2})})).status,409);
+  const privacyCancel=await call(privacyPath+"/"+privacyId+"/cancel",a,{
+    method:"POST",headers:{"content-type":"application/json",
+      "idempotency-key":"native-privacy-cancel"},
+    body:JSON.stringify({expected_version:2})});
+  assert.equal(privacyCancel.status,200,JSON.stringify(privacyCancel));
+  assert.equal(privacyCancel.body.item.status,"cancelled");
+  assert.equal((await call(privacyPath+"/"+privacyId,a)).body.item.version,3);
+  assert.equal((await call(privacyPath,b)).body.items.some(x=>x.id===privacyId),false);
+  const audit=d1Rows("SELECT action FROM crm_audit WHERE subject_id='"+privacyId+"'");
+  assert.deepEqual(audit.map(x=>x.action).sort(),
+    ["customer_privacy.cancel","customer_privacy.create","customer_privacy.submit"]);
+  console.log(JSON.stringify({event:"crm.original-privacy-case-intake",
+    result:"PASS",mutations:3,identity_verified:false,execution:false}));
   // Full bounded original Rust Party CSV export via the existing D1.
   // Not a persisted export job; no private Party names may escape tenant A.
   const previewPath="/api/customer-data-operations/preview?kind=all";

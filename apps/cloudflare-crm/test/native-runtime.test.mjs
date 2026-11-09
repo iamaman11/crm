@@ -114,6 +114,28 @@ test("customer-data-operations bounded CSV export uses original domain and one D
   assert.equal(ownerFiles["crm-customer-data-operations"].api,
     "rust-party/src/customer_data_operations.rs");
 });
+test("privacy request intake uses only original PrivacyCase and one D1",()=>{
+  const ui=read("web/src/PrivacyCases.jsx");
+  const api=read("rust-party/src/customer_privacy.rs");
+  const runtime=read("rust-party/src/lib.rs");
+  const migration=read("migrations/0011_original_customer_privacy_intake.sql");
+  assert.ok(ui.includes("customer-privacy/cases"));
+  assert.ok(ui.includes("Отправить заявку"));
+  assert.ok(ui.includes("Отменить заявку"));
+  assert.ok(api.includes("PrivacyCase::new"));
+  assert.ok(api.includes("case.submit"));
+  assert.ok(api.includes("case.cancel"));
+  assert.ok(api.includes("encode_privacy_case_state"));
+  assert.ok(api.includes("decode_privacy_case_state"));
+  assert.ok(runtime.includes("customer_privacy::route"));
+  assert.ok(migration.includes("crm_privacy_case_receipts"));
+  assert.ok(migration.includes("crm_audit"));
+  assert.equal(ownerFiles["crm-customer-privacy"].api,
+    "rust-party/src/customer_privacy.rs");
+  assert.equal(ownerFiles["crm-customer-privacy"].browser,"e2e/live.mjs");
+  assert.ok(!api.includes("verify_subject("));
+  assert.ok(!api.includes("erase("));
+});
 test("Party relationships UI uses original Rust owner with one App list",()=>{
   const app=read("web/src/main.jsx"),ui=read("web/src/Relationships.jsx");
   const owner=read("rust-party/src/party_relationships.rs");

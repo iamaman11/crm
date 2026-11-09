@@ -29,6 +29,8 @@ function operation(path,method){
   if(path.endsWith("/advance"))action="advance";
   if(path.endsWith("/complete"))action="complete";
   if(path.endsWith("/suppress"))action="suppress";
+  if(path.startsWith("/api/customer-privacy/cases/")&&path.endsWith("/submit"))action="submit";
+  if(path.startsWith("/api/customer-privacy/cases/")&&path.endsWith("/cancel"))action="cancel";
   if(path.startsWith("/api/identity-resolution/compare/"))action="compare";
   if(path==="/api/identity-resolution/candidates")action="candidates";
   if(path.startsWith("/api/data-quality/parties/")&&path.endsWith("/evaluate"))action="evaluate";
@@ -108,7 +110,7 @@ try{
   assert.equal(diagnosis.status(),200,"Live D1 and Access doctor");
   const doctor=await diagnosis.json();
   assert.equal(doctor.runtime,"workers-rs");
-  assert.equal(doctor.database.tables.expected,18);
+  assert.equal(doctor.database.tables.expected,20);
   await page.goto(url,{waitUntil:"domcontentloaded"});
   await page.getByRole("heading",{name:"Моя CRM"}).waitFor();
   await shot("01-home","Home original Rust owners");
@@ -129,6 +131,39 @@ try{
   assert.equal((await browser.newContext({extraHTTPHeaders:access("B")})
     .then(async ctx=>{try{return (await ctx.request.get(url+"/api/parties/"+party.id)).status();}
       finally{await ctx.close();}})),404);
+  // Live UI -> original PrivacyCase -> native D1 -> audit -> Logs.
+  // Every case stays unverified; status does not authorize erasure.
+  await tab("Заявки на приватность").click();
+  await page.getByLabel("Тип заявки").selectOption("erasure");
+  const privacyCreateResponse=page.waitForResponse(r=>
+    new URL(r.url()).pathname==="/api/customer-privacy/cases"&&
+    r.request().method()==="POST"&&r.status()===201);
+  await button("Создать заявку").click();
+  const createdPrivacy=(await (await privacyCreateResponse).json()).item;
+  assert.ok(createdPrivacy?.id);
+  assert.equal(createdPrivacy.status,"draft");
+  assert.equal(createdPrivacy.subject_verified,false);
+  assert.equal(createdPrivacy.execution,"NOT_CONNECTED");
+  await page.getByRole("status").getByText("Черновик заявки зарегистрирован").waitFor();
+  cover("customer-privacy.create");
+  const privacyB=await browser.newContext({extraHTTPHeaders:access("B")});
+  try{
+    assert.equal((await privacyB.request.get(url+"/api/customer-privacy/cases/"+
+      createdPrivacy.id)).status(),404);
+    cover("customer-privacy.tenant-isolation");
+  }finally{await privacyB.close();}
+  const privacyRow=page.getByRole("row").filter({hasText:createdPrivacy.id});
+  await privacyRow.getByRole("button",{name:"Отправить заявку"}).click();
+  await page.getByRole("status").getByText("Заявка отправлена").waitFor();
+  await privacyRow.getByText("submitted").waitFor();
+  cover("customer-privacy.submit");
+  await privacyRow.getByRole("button",{name:"Отменить заявку"}).click();
+  await page.getByRole("status").getByText("Заявка отменена").waitFor();
+  await privacyRow.getByText("cancelled").waitFor();
+  cover("customer-privacy.cancel");
+  assert.equal((await (await context.request.get(url+
+    "/api/customer-privacy/cases/"+createdPrivacy.id)).json()).item.subject_verified,false);
+  await shot("02-privacy-intake","Original Rust PrivacyCase draft submit cancel");
   // Physical browser proof of the original PartyRelationships owner.
   // No JS duplicate domain, no fake persistence or manual SQL shortcut.
   await tab("Лица и организации").click();
@@ -490,7 +525,8 @@ try{
   await shot("11-mobile-consents","Mobile original Consent Deny record");
   cover("mobile.consents");
   await Promise.all(pending);
-  const operations=["parties.create","parties.update",
+  const operations=["customer-privacy.create","customer-privacy.submit",
+    "customer-privacy.cancel","parties.create","parties.update",
     "party-relationships.create","party-relationships.update",
     "consents.suppress",
     "accounts.create","accounts.update",

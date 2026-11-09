@@ -165,9 +165,10 @@ async function verifyData(){
     cycle.result!=="BROWSER_PASS_D1_LOGS_PENDING"||!Array.isArray(cycle.writes)||
     !Array.isArray(cycle.ui_coverage)||cycle.ui_coverage.length<18)
     throw Error("Exact-source native UI functional-cycle evidence missing");
-  const writes=cycle.writes,expected=["parties","party-relationships","consents",
+  const writes=cycle.writes,expected=["customer-privacy","parties","party-relationships","consents",
     "accounts","contact-points","sales-deals","activity-tasks"];
-  const required=["parties.create","parties.update",
+  const required=["customer-privacy.create","customer-privacy.submit",
+    "customer-privacy.cancel","parties.create","parties.update",
     "party-relationships.create","party-relationships.update","consents.suppress",
     "accounts.create","accounts.update","contact-points.create","contact-points.update",
     "sales-deals.create","sales-deals.update","sales-deals.advance",
@@ -180,7 +181,7 @@ async function verifyData(){
   const seen=new Set();
   for(const entry of writes){
     if(entry.source_sha!==sha||!expected.includes(entry.module)||
-      !["create","update","advance","complete","suppress"].includes(entry.operation.split(".")[1])||
+      !["create","update","advance","complete","suppress","submit","cancel"].includes(entry.operation.split(".")[1])||
       !entry.subject_id||
       !/^[0-9a-f-]{36}$/i.test(entry.request_id||"")||
       seen.has(entry.request_id))throw Error("Invalid or duplicated native UI mutation evidence");
