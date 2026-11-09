@@ -35,7 +35,7 @@ export default function IdentityResolution({parties,load,loading}){
       люди или организации одинаковы; email не считается подтверждённым
       без независимого подтверждения.</p>
     <button disabled={loading||busy} onClick={discover}>Найти совпадения email</button>
-    {candidates&&<div aria-label="Наблюдаемые совпадения">
+    {candidates&&<section aria-label="Наблюдаемые совпадения">
       <h3>Возможные совпадения: {candidates.length}</h3>
       {candidates.length===0?<p>Совпадающих email не найдено.</p>:
         <div className="table-scroll"><table><thead><tr>
@@ -46,7 +46,7 @@ export default function IdentityResolution({parties,load,loading}){
             <td>{c.both_contacts_verified?"Оба контакта подтверждены":"Контакты не подтверждены с обеих сторон"}</td>
           </tr>)}
         </tbody></table></div>}
-    </div>}
+    </section>}
     <p>Выберите два существующих лица или организации. Сравнение показывает
       данные и версии оригинальных Rust-записей, но не устанавливает дубликат.</p>
     <form onSubmit={compare}>

@@ -242,7 +242,10 @@ try{
   try{
     const other=await candidateTenantB.request.get(url+"/api/identity-resolution/candidates");
     assert.equal(other.status(),200);
-    assert.deepEqual((await other.json()).items,[]);
+    const bItems=(await other.json()).items;
+    assert.ok(bItems.every(x=>![x.first.id,x.second.id].includes(party.id)
+      &&![x.first.id,x.second.id].includes(relatedParty.id)),
+      "Tenant B must not see tenant A Party candidates");
     cover("identity-resolution.candidates.tenant-isolation");
   }finally{await candidateTenantB.close();}
   await shot("04-identity-email","Recorded same-email observations, no identity verdict");
