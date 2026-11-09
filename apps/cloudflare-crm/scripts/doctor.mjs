@@ -148,6 +148,18 @@ if(requested) {
     result:consentReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
     grant_evidence:"NOT_CONNECTED",operator_suppressions:"ENABLED",
     runtime_proof:"EXTERNAL_CI_REQUIRED"});
+  const linkSource=sourceFor("sales-activities-link");
+  const linkReady=backendModels["sales-activities-link"].ui==="NOT_CONNECTED" &&
+    backendModels["sales-activities-link"].delivery==="SYNCHRONOUS_ATOMIC_D1" &&
+    migration.includes("CREATE TABLE IF NOT EXISTS crm_sales_link_delivery_records") &&
+    read(linkSource.api).includes("SalesActivitiesLink::new") &&
+    read(linkSource.api).includes("ProtobufSalesActivitiesLinkContractAdapter") &&
+    read(linkSource.validation).includes("pub async fn handle(") &&
+    read(linkSource.codec).includes("encode_create_task") &&
+    read(linkSource.tests).includes("crm.native-original-sales-activities-link-d1");
+  checks.push({check:"original-sales-activities-link-backend-source",
+    result:linkReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
+    delivery:"SYNCHRONOUS_ATOMIC_D1",runtime_proof:"EXTERNAL_CI_REQUIRED"});
   const validCatalog=Object.keys(modules).every(name => {
     const module=modules[name], fieldKeys=module.fields.map(([key])=>key);
     return /^[a-z][a-z0-9_]*$/.test(module.table) && fieldKeys.length>0 &&
