@@ -36,6 +36,9 @@ export const backendModels = {
  "sales-deals":{title:"Оригинальные сделки CRM",kind:"backend",route:"sales-deals",
    ui:"NOT_CONNECTED",primary_contact:"NOT_CONNECTED",
    transport:"native-workers-rs",persistence:"D1"},
+ consents:{title:"Оригинальные разрешения коммуникации",kind:"backend",route:"consents",
+   ui:"NOT_CONNECTED",grant_evidence:"NOT_CONNECTED",
+   operator_suppressions:"ENABLED",transport:"native-workers-rs",persistence:"D1"},
 };
 export const readModels = { customer360: { title:"Карточка клиента", kind:"read", route:"customer360" } };
 export const implementationOwners = {
@@ -43,7 +46,7 @@ export const implementationOwners = {
  "contact-points":"original-contact-points",
  "party-relationships":"original-party-relationships",
  "activity-tasks":"original-activities",
- "sales-deals":"original-sales", customer360:"customer360",
+ "sales-deals":"original-sales", consents:"original-consents", customer360:"customer360",
  customers:"pilot-core", contacts:"pilot-core", deals:"pilot-core", tasks:"pilot-core",
 };
 export const ownerFiles = {
@@ -51,6 +54,13 @@ export const ownerFiles = {
   ui:"web/src/Parties.jsx",api:"rust-party/src/lib.rs",
   validation:"rust-party/src/lib.rs",migration:"migrations/0002_rust_party.sql",
   tests:"rust-party/test/native.mjs",browser:"e2e/live.mjs",
+ },
+ "original-consents":{
+  ui:null,api:"rust-party/src/consents.rs",
+  validation:"../../modules/crm-consents/src/domain.rs",
+  codec:"../../modules/crm-consents/src/persistence.rs",
+  migration:"migrations/0009_original_consents.sql",
+  tests:"rust-party/test/native.mjs",browser:null,
  },
  "original-sales":{
   ui:null,api:"rust-party/src/sales_deals.rs",
