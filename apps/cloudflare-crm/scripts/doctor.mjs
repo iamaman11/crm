@@ -105,6 +105,15 @@ if(requested) {
     result:originalContactConnected?"PASS":"FAIL",ui:"NOT_CONNECTED",
     verification:"TRUSTED_EVIDENCE_NOT_CONNECTED",consent:"NOT_CONNECTED",
     runtime_proof:"EXTERNAL_CI_REQUIRED"});
+  const relSource=sourceFor("party-relationships");
+  const relReady=backendModels["party-relationships"].ui==="NOT_CONNECTED" &&
+    migration.includes("CREATE TABLE IF NOT EXISTS crm_party_relationship_records") &&
+    read(relSource.api).includes("PartyRelationship::create") &&
+    read(relSource.api).includes("decode_party_relationship_state") &&
+    read(relSource.tests).includes("crm.native-original-party-relationships-d1");
+  checks.push({check:"original-party-relationships-backend-source",
+    result:relReady?"PASS":"FAIL",ui:"NOT_CONNECTED",
+    runtime_proof:"EXTERNAL_CI_REQUIRED"});
   const validCatalog=Object.keys(modules).every(name => {
     const module=modules[name], fieldKeys=module.fields.map(([key])=>key);
     return /^[a-z][a-z0-9_]*$/.test(module.table) && fieldKeys.length>0 &&
