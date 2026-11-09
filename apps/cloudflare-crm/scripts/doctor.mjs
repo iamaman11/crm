@@ -99,7 +99,7 @@ if(requested) {
     migration.includes("CREATE TABLE IF NOT EXISTS crm_contact_point_records") &&
     read(originalContactSource.api).includes("ContactPoint::create") &&
     read(originalContactSource.api).includes("decode_contact_point_state") &&
-    read(originalContactSource.api).includes("untrusted HTTP evidence") &&
+    read(originalContactSource.api).includes("client-submitted arbitrary evidence is NOT proof") &&
     read(originalContactSource.tests).includes("crm.native-original-contact-point-d1");
   checks.push({check:"original-contact-point-backend-source",
     result:originalContactConnected?"PASS":"FAIL",ui:"NOT_CONNECTED",
