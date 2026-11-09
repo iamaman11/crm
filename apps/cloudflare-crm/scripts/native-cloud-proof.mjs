@@ -224,7 +224,10 @@ async function test(){
       await parties.getByRole("row").filter({hasText:marker})
         .getByRole("button",{name:"Изменить"}).click();
       await page.getByLabel("Имя / название").fill(marker+"-v2");
+      const updating=page.waitForResponse(r=>r.url().includes("/api/parties/"+id)&&r.request().method()==="PATCH");
       await page.getByRole("button",{name:"Сохранить",exact:true}).click();
+      report.update_request_id=(await updating).headers()["x-request-id"];
+      assert.match(report.update_request_id||"",/^[0-9a-f-]{36}$/i);
       await parties.getByRole("row").filter({hasText:marker+"-v2"}).waitFor();
       await page.reload({waitUntil:"domcontentloaded"});
       await nav.getByRole("button",{name:/Лица и организации/}).click();
