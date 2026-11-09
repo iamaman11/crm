@@ -130,6 +130,7 @@ if(requested) {
     migration.includes("CREATE TABLE IF NOT EXISTS crm_sales_deal_records") &&
     read(salesSource.api).includes("Deal::create") &&
     read(salesSource.api).includes("deal.advance_stage(AdvanceDealStage") &&
+    read(salesSource.api).includes("deal.apply_update(UpdateDeal") &&
     read(salesSource.api).includes("decode_deal_state") &&
     read(salesSource.tests).includes("crm.native-original-sales-d1");
   checks.push({check:"original-sales-backend-source",

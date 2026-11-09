@@ -471,6 +471,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             ("/api/sales-deals", Method::Get) => "sales-deals.list",
             ("/api/sales-deals", Method::Post) => "sales-deals.create",
             (p, Method::Get) if p.starts_with("/api/sales-deals/") => "sales-deals.read",
+            (p, Method::Patch) if p.starts_with("/api/sales-deals/") => "sales-deals.update",
             (p, Method::Post) if p.starts_with("/api/sales-deals/") && p.ends_with("/advance") => "sales-deals.advance",
             ("/api/activity-tasks", Method::Get) => "activity-tasks.list",
             ("/api/activity-tasks", Method::Post) => "activity-tasks.create",

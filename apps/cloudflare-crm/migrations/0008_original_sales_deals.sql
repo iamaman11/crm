@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS crm_sales_deal_records (
  idem_key TEXT NOT NULL,
  idem_digest TEXT NOT NULL,
  request_id TEXT NOT NULL,
+ last_action TEXT NOT NULL DEFAULT 'sales_deals.create'
+   CHECK(last_action IN ('sales_deals.create','sales_deals.update','sales_deals.advance')),
  PRIMARY KEY(tenant,id),
  FOREIGN KEY(tenant,account_id) REFERENCES crm_account_records(tenant,id)
 );
@@ -33,5 +35,5 @@ AFTER UPDATE ON crm_sales_deal_records BEGIN
  INSERT INTO crm_sales_deal_receipts(tenant,key,digest,state)
   VALUES(NEW.tenant,NEW.idem_key,NEW.idem_digest,NEW.state);
  INSERT INTO crm_audit(id,tenant_id,action,subject_id,created_at,request_id)
-  VALUES(lower(hex(randomblob(16))),NEW.tenant,'sales_deals.advance',NEW.id,datetime('now'),NEW.request_id);
+  VALUES(lower(hex(randomblob(16))),NEW.tenant,NEW.last_action,NEW.id,datetime('now'),NEW.request_id);
 END;

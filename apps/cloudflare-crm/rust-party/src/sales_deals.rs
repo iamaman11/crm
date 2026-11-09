@@ -2,12 +2,12 @@
 //! Stage progression, closing rules, money and version invariants belong to
 //! crm-sales and crm-core-contracts, never the test pilot's crm_deals model.
 use crm_sales::{
-    Deal, DealOwner, DealStage, DealStatus, CreateDeal, AdvanceDealStage,
+    Deal, DealOwner, DealStage, DealStatus, CreateDeal, UpdateDeal, AdvanceDealStage,
     StageTransitionPolicy, PipelineId, StageId, ReasonCode,
     encode_deal_state, decode_deal_state,
 };
 use crm_module_sdk::{ActorId, RecordId, ResourceRef, ErrorCategory};
-use crm_core_contracts::{BasisPoints, CurrencyCode, Money};
+use crm_core_contracts::{BasisPoints, CurrencyCode, Money, Patch};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest,Sha256};
@@ -47,6 +47,17 @@ struct StageInput {
     ordinal: u16,
     status: StatusInput,
     close_reason_code: Option<String>,
+}
+// HTTP only edits the original Deal's business fields, never trusted ownership.
+#[derive(Serialize,Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UpdateInput {
+    expected_version:i64,
+    name:Option<String>,
+    amount_minor_units:Option<i64>,
+    currency:Option<String>,
+    clear_amount:Option<bool>,
+    probability_bps:Option<u16>,
 }
 #[derive(Deserialize)]
 struct Row { state: String }
@@ -179,6 +190,62 @@ async fn create(mut req:Request,db:&D1Database,tenant:&str,actor:&str,trace:&str
     if r.is_err(){return error("SALES_DEAL_CREATE_CONFLICT",409);}
     response(json!({"item":view(&deal),"replayed":false}),201)
 }
+async fn update(mut req:Request,db:&D1Database,tenant:&str,id:&str,trace:&str)->Result<Response>{
+    let Some(k)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
+    let input=match serde_json::from_str::<UpdateInput>(&req.text().await?){
+        Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422),
+    };
+    let digest=hash("update",id,&input)?;
+    if let Some(prior)=prior(db,tenant,&k).await?{
+        if prior.digest!=digest{return error("IDEMPOTENCY_CONFLICT",409);}
+        return response(json!({"item":view(&decode(&prior.state)?),"replayed":true}),200);
+    }
+    let Some(mut deal)=load(db,tenant,id).await? else{return error("NOT_FOUND",404)};
+    if input.clear_amount==Some(true) &&
+        (input.amount_minor_units.is_some()||input.currency.is_some()){
+        return error("SALES_AMOUNT_UPDATE_CONFLICT",422);
+    }
+    let amount=if input.clear_amount==Some(true){Patch::Clear}else{
+        match (input.amount_minor_units,input.currency){
+            (None,None)=>Patch::Keep,
+            (Some(units),Some(currency))=>{
+                let currency=match CurrencyCode::try_new(currency){
+                    Ok(x)=>x,Err(e)=>return error(&e.code,422),
+                };
+                Patch::Set(Money::new(i128::from(units),currency))
+            },
+            _=>return error("SALES_AMOUNT_CURRENCY_PAIR_REQUIRED",422),
+        }
+    };
+    let probability=match input.probability_bps{
+        Some(v)=>match BasisPoints::try_new(v){
+            Ok(x)=>Patch::Set(x),Err(e)=>return error(&e.code,422),
+        },
+        None=>Patch::Keep,
+    };
+    if input.name.is_none() && matches!(amount,Patch::Keep) &&
+        matches!(probability,Patch::Keep){return error("SALES_EMPTY_UPDATE",422);}
+    if let Err(e)=deal.apply_update(UpdateDeal{
+        expected_version:input.expected_version,
+        name:input.name.map_or(Patch::Keep,Patch::Set),
+        owner:Patch::Keep,account:Patch::Keep,primary_contact:Patch::Keep,
+        amount,expected_close_date:Patch::Keep,probability,
+        occurred_at_unix_nanos:now_nanos(),
+    }){
+        return error(&e.code,if e.category==ErrorCategory::Conflict{409}else{422});
+    }
+    let saved=encode(&deal)?;
+    let result=bind(db,"UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,last_action='sales_deals.update' WHERE tenant=? AND id=? AND version=?",
+        &[JsValue::from_str(&saved),JsValue::from_f64(deal.version() as f64),
+          JsValue::from_str(&k),JsValue::from_str(&digest),JsValue::from_str(trace),
+          JsValue::from_str(tenant),JsValue::from_str(id),
+          JsValue::from_f64(input.expected_version as f64)])?.run().await;
+    let Ok(result)=result else{return error("SALES_DEAL_UPDATE_CONFLICT",409)};
+    if result.meta()?.and_then(|m|m.changes).unwrap_or(0)==0{
+        return error("SALES_DEAL_VERSION_CONFLICT",409);
+    }
+    response(json!({"item":view(&deal),"replayed":false}),200)
+}
 async fn advance(mut req:Request,db:&D1Database,tenant:&str,id:&str,actor:&str,trace:&str)->Result<Response>{
     let Some(k)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
     let input=match serde_json::from_str::<StageInput>(&req.text().await?) {
@@ -218,7 +285,7 @@ async fn advance(mut req:Request,db:&D1Database,tenant:&str,id:&str,actor:&str,t
         Ok(x)=>x,Err(e)=>return error(&e.code,
             if e.category==ErrorCategory::Conflict{409}else{422}),
     };
-    let update=bind(db,"UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?",
+    let update=bind(db,"UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,last_action='sales_deals.advance' WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&saved),JsValue::from_f64(deal.version() as f64),
           JsValue::from_str(&k),JsValue::from_str(&digest),JsValue::from_str(trace),
           JsValue::from_str(tenant),JsValue::from_str(id),
@@ -284,6 +351,7 @@ pub(super) async fn route(req:Request,db:D1Database,tenant:&str,actor:&str,trace
             Some(item)=>response(json!({"item":view(&item)}),200),
             None=>error("NOT_FOUND",404),
         },
+        Method::Patch=>update(req,&db,tenant,id,trace).await,
         _=>error("NOT_FOUND",404),
     }
 }
