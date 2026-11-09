@@ -5,7 +5,7 @@ import React, {useEffect,useState} from "react";
 const newForm=()=>({id:crypto.randomUUID(),key:crypto.randomUUID(),
   kind:"organization",name:"",expected_version:0});
 
-export default function Parties({load}) {
+export default function Parties({load,writable=true,onSaved}) {
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
@@ -43,6 +43,7 @@ export default function Parties({load}) {
       setNotice(result.replayed?"Повтор выполнен без дублирования":"Сохранено через Rust / D1");
       setForm(null);
       await reload();
+      if(onSaved)await onSaved();
     }catch(e){setError(e.message);}
     finally{setBusy(false);}
   }
@@ -52,13 +53,12 @@ export default function Parties({load}) {
     <div className="toolbar"><input aria-label="Поиск лиц и организаций"
       placeholder="Найти человека или компанию" value={query}
       onChange={e=>setQuery(e.target.value)}/>
-      <button onClick={()=>{setForm(newForm());setError("");}}>
+      {writable&&<button onClick={()=>{setForm(newForm());setError("");}}>
         + Добавить лицо / организацию
-      </button>
+      </button>}
       <button className="ghost" onClick={reload} disabled={loading}>Обновить</button>
     </div>
-    <p>Идентификаторы лиц и организаций обрабатываются исходным модулем Rust.
-      Коммерческие аккаунты пока находятся в разделе «Клиенты».</p>
+    <p>Лица и организации обрабатываются оригинальным Rust-модулем. Клиентские аккаунты связываются с ними в разделе «Клиенты».</p>
     {notice&&<div role="status" className="notice">{notice}</div>}
     {error&&<div role="alert" className="notice error">{error}</div>}
     {loading?<p>Загрузка…</p>:filtered.length===0?<p className="empty">Записей нет</p>:
@@ -68,7 +68,7 @@ export default function Parties({load}) {
         <td>{item.name}</td>
         <td>{item.kind==="organization"?"Компания":"Частное лицо"}</td>
         <td>{item.version}</td>
-        <td><button className="ghost" onClick={()=>edit(item)}>Изменить</button></td>
+        <td>{writable&&<button className="ghost" onClick={()=>edit(item)}>Изменить</button>}</td>
       </tr>)}</tbody></table></div>}
     {form&&<div className="shade" onClick={e=>{
       if(e.currentTarget===e.target&&!busy)setForm(null);

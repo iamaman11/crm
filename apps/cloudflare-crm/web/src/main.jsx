@@ -1,139 +1,291 @@
-import React, {useEffect,useState} from "react";
+import React, {useEffect, useState} from "react";
 import {createRoot} from "react-dom/client";
 import "./styles.css";
 import Customer360 from "./Customer360.jsx";
 import Parties from "./Parties.jsx";
 
-import { modules as features, labels as names } from "../../shared/catalog.mjs";
-
-const dealStages=["new","qualified","proposal","won","lost"];
-const number=value=>new Intl.NumberFormat("ru-RU",{maximumFractionDigits:2}).format(Number(value)||0);
-
-async function api(url, options={}) {
- const response=await fetch("/api/"+url,{...options,headers:{"content-type":"application/json",...(options.headers||{})}});
- if(!response.ok){const body=await response.json().catch(()=>({}));
-  const code=response.headers.get("x-crm-error-code")||body.code||"HTTP_"+response.status;
-  const requestId=response.headers.get("x-request-id");
-  throw Error((body.error||"Ошибка "+response.status)+" ["+code+(requestId?"; запрос "+requestId:"")+"]");
- }
- return response.status===204?null:response.json();
+// A single React UI for ORIGINAL Rust owners. No pilot CRUD, JS business rules,
+// shadow entities or client-side authorization. All commands are typed at the
+// native Worker boundary, and all state survives via the single Cloudflare D1.
+const sections = {
+ accounts: {title:"Клиенты",one:"клиента",route:"accounts"},
+ contacts: {title:"Контакты",one:"контакт",route:"contact-points"},
+ deals: {title:"Сделки",one:"сделку",route:"sales-deals"},
+ tasks: {title:"Задачи",one:"задачу",route:"activity-tasks"}
+};
+const stages=[["lead","Новая",1],["qualified","В работе",2],
+  ["proposal","Предложение",3],["won","Выиграна",4],["lost","Проиграна",4]];
+const stageTitle=id=>stages.find(s=>s[0]===id)?.[1]||id;
+const id=()=>crypto.randomUUID();
+const money=x=>x?x.minor_units+" "+x.currency:"—";
+const taskAccount=task=>task?.related_resources?.find(x=>x.resource_type==="crm.customer-accounts")?.resource_id;
+const keyHeaders=key=>({"idempotency-key":key});
+const limitMoney=value=>{
+  if(!/^(0|[1-9][0-9]*)$/.test(value)||!Number.isSafeInteger(Number(value)))
+    throw Error("Сумма должна быть целым количеством минимальных денежных единиц");
+  return Number(value);
+};
+async function api(path,options={}){
+  const response=await fetch("/api/"+path,{...options,headers:{"content-type":"application/json",...(options.headers||{})}});
+  if(!response.ok){
+    const body=await response.json().catch(()=>({}));
+    const code=response.headers.get("x-crm-error-code")||body.code||"HTTP_"+response.status;
+    const requestId=response.headers.get("x-request-id");
+    throw Error((body.error||"Ошибка "+response.status)+" ["+code+(requestId?"; запрос "+requestId:"")+"]");
+  }
+  return response.status===204?null:response.json();
 }
 function App(){
- const [tab,setTab]=useState("customers");
- const [dealView,setDealView]=useState("table");
- const [selectedCustomer,setSelectedCustomer]=useState(null);
- const [items,setItems]=useState({customers:[],contacts:[],deals:[],tasks:[]});
- const [search,setSearch]=useState("");
- const [form,setForm]=useState(null);
- const [editing,setEditing]=useState(null);
- const [busy,setBusy]=useState(false);
- const [loading,setLoading]=useState(true);
- const [message,setMessage]=useState("");
- const [error,setError]=useState(false);
- const feature=features[tab]||features.customers;
- async function reload(){
-  const keys=Object.keys(features),results=await Promise.all(keys.map(k=>api(k)));
-  setItems(Object.fromEntries(keys.map((k,i)=>[k,results[i].items])));
- }
- useEffect(()=>{reload().catch(e=>{setError(true);setMessage(e.message)}).finally(()=>setLoading(false));},[]);
- function open(item=null, forTab=tab){
-  const defaults={kind:"organization",stage:"new",status:"open",amount:0};
-  setTab(forTab);setSelectedCustomer(null);setSearch("");
-  setEditing(item?.id||null);
-  setForm(item?{...item}:Object.fromEntries(features[forTab].fields.map(([k])=>[k,defaults[k]??""])));
-  setMessage("");
- }
- async function submit(event){
-  event.preventDefault();setBusy(true);
-  try{
-   await api(tab+(editing?"/"+editing:""),{method:editing?"PATCH":"POST",body:JSON.stringify(form)});
-   setForm(null);await reload();setMessage("Сохранено");setError(false);
-  }catch(e){setMessage(e.message);setError(true);}
-  finally{setBusy(false);}
- }
- async function changeDealStage(item,stage){
-  if(stage===item.stage)return;
-  setBusy(true);
-  try{
-   await api("deals/"+item.id,{method:"PATCH",body:JSON.stringify({
-    customer_id:item.customer_id,title:item.title,stage,amount:item.amount
-   })});
-   await reload();setMessage("Этап обновлён");setError(false);
-  }catch(e){setMessage(e.message);setError(true);}
-  finally{setBusy(false);}
- }
- async function remove(item){
-  if(!confirm("Удалить «"+item[feature.primary]+"»?"))return;
-  try{await api(tab+"/"+item.id,{method:"DELETE"});await reload();setMessage("Удалено");setError(false);}
-  catch(e){setMessage(e.message);setError(true);}
- }
- const customerName=id=>items.customers.find(c=>c.id===id)?.name||"—";
- const format=(key,value)=>key==="customer_id"?customerName(value):
-  ["kind","stage","status"].includes(key)?names[value]||String(value??"—"):String(value??"—");
- const rows=(items[tab]||[]).filter(row=>JSON.stringify(row).toLowerCase().includes(search.toLowerCase()));
- const buttons=row=><span className="row-actions">{tab==="customers"&&
-  <button className="ghost" onClick={()=>{setSelectedCustomer(row.id);setSearch("");}}>Карточка</button>}
-  <button className="ghost" onClick={()=>open(row)}>Изменить</button>
-  <button className="delete" onClick={()=>remove(row)}>Удалить</button></span>;
- const field=([key,label,type,options])=><div className="field" key={key}><label htmlFor={"crm-"+key}>{label}</label>
-  {type==="customer"?<select id={"crm-"+key} required value={form[key]||""} onChange={e=>setForm({...form,[key]:e.target.value})}>
-   <option value="">Выберите клиента</option>{items.customers.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select>
-  :type==="select"?<select id={"crm-"+key} value={form[key]??""} onChange={e=>setForm({...form,[key]:e.target.value})}>
-   {options.map(v=><option value={v} key={v}>{names[v]||v}</option>)}</select>
-  :<input id={"crm-"+key} type={type} required={["name","title"].includes(key)} min={type==="number"?0:undefined}
-   step={type==="number"?"0.01":undefined} value={form[key]??""}
-   onChange={e=>setForm({...form,[key]:e.target.value})}/>}</div>;
- return <><header><strong>CRM</strong><span>Тестовое рабочее пространство</span></header>
-  <main><div className="heading"><div><h1>Моя CRM</h1><p>Клиенты, контакты, сделки и задачи — в одном месте</p></div>
-   <button className="ghost" onClick={()=>reload().then(()=>{setMessage("Обновлено");setError(false)}).catch(e=>{setMessage(e.message);setError(true)})}>Обновить</button></div>
-   <nav aria-label="Разделы">{Object.entries(features).map(([key,v])=>
-    <button key={key} className={tab===key?"active":"ghost"} onClick={()=>{setTab(key);setSelectedCustomer(null);setSearch("");setMessage("")}}>{v.title} <small>{items[key].length}</small></button>)}
-    <button className={tab==="parties"?"active":"ghost"} onClick={()=>{
-      setTab("parties");setSelectedCustomer(null);setSearch("");setMessage("");
-    }}>Лица и организации <small>Rust</small></button></nav>
-   {message&&<div role="status" className={error?"notice error":"notice"}>{message}</div>}
-   <section className="panel">{tab==="parties"?<Parties load={api}/>:selectedCustomer?
-    <Customer360 customerId={selectedCustomer} load={api}
-      onBack={()=>{setSelectedCustomer(null);setTab("customers");setSearch("");}}
-      onNavigate={section=>{setTab(section);setSearch(selectedCustomer);setSelectedCustomer(null);}}
-      onEdit={(section,item)=>open(item,section)}/>:
-    <><div className="toolbar"><input aria-label="Поиск" placeholder="Поиск" value={search} onChange={e=>setSearch(e.target.value)}/>
-    <button disabled={tab!=="customers"&&!items.customers.length} onClick={()=>open()}>+ Добавить {feature.one}</button></div>
-    {tab==="deals"&&<div className="view-switch" role="group" aria-label="Вид сделок">
-     <button className={dealView==="table"?"active":"ghost"} aria-pressed={dealView==="table"} onClick={()=>setDealView("table")}>Таблица</button>
-     <button className={dealView==="board"?"active":"ghost"} aria-pressed={dealView==="board"} onClick={()=>setDealView("board")}>Воронка</button>
-    </div>}
-    {tab!=="customers"&&!items.customers.length&&<p>Сначала добавьте клиента.</p>}
-    {loading?<p className="empty">Загрузка…</p>:!rows.length?<p className="empty">{search?"Ничего не найдено":"Пока записей нет"}</p>:
-     tab==="deals"&&dealView==="board"?<div className="deal-board" aria-label="Воронка продаж">
-      {dealStages.map(stage=>{
-       const deals=rows.filter(row=>row.stage===stage);
-       return <section key={stage} className="deal-column" aria-label={names[stage]}>
-        <h3>{names[stage]} <small>{deals.length}</small></h3>
-        <p className="deal-total">Сумма: {number(deals.reduce((sum,deal)=>sum+Number(deal.amount),0))}</p>
-        {deals.map(deal=><article key={deal.id} className="deal-card">
-         <strong>{deal.title}</strong>
-         <p>{customerName(deal.customer_id)}</p>
-         <p className="deal-amount">{number(deal.amount)}</p>
-         <label>Этап сделки <select aria-label="Этап сделки" disabled={busy} value={deal.stage}
-          onChange={e=>changeDealStage(deal,e.target.value)}>
-          {dealStages.map(value=><option key={value} value={value}>{names[value]}</option>)}
-         </select></label>
-         {buttons(deal)}
-        </article>)}
-       </section>;
-      })}
-     </div>:
-     <><div className="table-scroll"><table><thead><tr>{feature.fields.map(([key,label])=><th key={key}>{label}</th>)}<th>Действия</th></tr></thead>
-      <tbody>{rows.map(row=><tr key={row.id}>{feature.fields.map(([key])=><td key={key}>{format(key,row[key])}</td>)}<td>{buttons(row)}</td></tr>)}</tbody></table></div>
-      <div className="mobile">{rows.map(row=><article key={row.id}><b>{row[feature.primary]}</b>
-       {feature.fields.filter(([k])=>k!==feature.primary).map(([k,label])=><p key={k}>{label}: {format(k,row[k])}</p>)}{buttons(row)}</article>)}</div></>}
-   </>}
-   </section>
-  </main>
-  {form&&<div className="shade" onClick={e=>{if(e.target===e.currentTarget)setForm(null)}}><form className="dialog" onSubmit={submit}>
-   <h2>{editing?"Изменить":"Добавить"} {feature.one}</h2>{feature.fields.map(field)}
-   <footer><button type="button" className="ghost" onClick={()=>setForm(null)}>Отмена</button><button disabled={busy}>{busy?"Сохранение…":"Сохранить"}</button></footer>
-  </form></div>}</>;
+  const [tab,setTab]=useState("accounts");
+  const [items,setItems]=useState({parties:[],accounts:[],contacts:[],deals:[],tasks:[]});
+  const [role,setRole]=useState(null);
+  const [form,setForm]=useState(null);
+  const [card,setCard]=useState(null);
+  const [search,setSearch]=useState("");
+  const [view,setView]=useState("table");
+  const [busy,setBusy]=useState(false);
+  const [loading,setLoading]=useState(true);
+  const [notice,setNotice]=useState("");
+  const [error,setError]=useState("");
+  const writable=role==="admin";
+  async function reload(){
+    const [parties,accounts,contacts,deals,tasks,session]=await Promise.all([
+      api("parties"),api("accounts"),api("contact-points"),
+      api("sales-deals"),api("activity-tasks"),api("session")]);
+    setItems({parties:parties.items,accounts:accounts.items,contacts:contacts.items,
+      deals:deals.items,tasks:tasks.items});
+    setRole(session.role);
+  }
+  useEffect(()=>{reload().catch(e=>setError(e.message)).finally(()=>setLoading(false));},[]);
+  const partyName=value=>items.parties.find(p=>p.id===value)?.name||"—";
+  const accountName=value=>items.accounts.find(a=>a.id===value)?.name||"—";
+  const contactsParty=account=>account?.parties?.find(p=>p.role==="primary")?.id;
+  const itemName=(kind,row)=>kind==="contacts"?row.value:
+    kind==="tasks"?row.subject:row.name;
+  function begin(kind,record=null,mode="edit"){
+    setTab(kind);setCard(null);setNotice("");setError("");
+    const f={kind,mode:record?mode:"create",id:record?.id||id(),key:id(),
+      expected_version:record?.version||0};
+    if(kind==="accounts")Object.assign(f,{name:record?.name||"",party_id:contactsParty(record)||"",
+      status:record?.status||"active"});
+    if(kind==="contacts")Object.assign(f,{party_id:record?.party_id||"",value:record?.value||"",
+      contact_kind:record?.kind||"email",status:record?.status||"active",
+      preferred:record?.preferred||false});
+    if(kind==="deals")Object.assign(f,{name:record?.name||"",account_id:record?.account_id||"",
+      stage_id:mode==="advance"?stages.find(stage=>stage[2]===(record?.stage?.ordinal||0)+1)?.[0]||record?.stage?.stage_id:"lead",
+      amount_minor_units:record?.amount?.minor_units||"",
+      currency:record?.amount?.currency||"USD",
+      probability_bps:record?.probability_bps??2500,
+      close_reason_code:""});
+    if(kind==="tasks")Object.assign(f,{subject:record?.subject||"",
+      account_id:taskAccount(record)||"",priority:record?.priority||"normal",
+      due_at:record?.due_at_unix_nanos
+        ?new Date(Number(record.due_at_unix_nanos)/1e6).toISOString().slice(0,10):""});
+    setForm(f);
+  }
+  const change=(name,value)=>setForm(f=>({...f,[name]:value}));
+  async function submit(event){
+    event.preventDefault();if(!form||busy||!writable)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      let path=sections[form.kind].route,method="POST",data;
+      if(form.kind==="accounts"){
+        if(form.mode==="create")data={id:form.id,name:form.name,party_id:form.party_id};
+        else{path+="/"+form.id;method="PATCH";
+          data={name:form.name,status:form.status,expected_version:form.expected_version};}
+      }else if(form.kind==="contacts"){
+        if(form.mode==="create")data={id:form.id,party_id:form.party_id,
+          kind:form.contact_kind,value:form.value,preferred:form.preferred,
+          valid_from_unix_nanos:null,valid_until_unix_nanos:null};
+        else{path+="/"+form.id;method="PATCH";
+          data={expected_version:form.expected_version,value:form.value,
+            status:form.status,preferred:form.preferred,
+            valid_from_unix_nanos:null,valid_until_unix_nanos:null};}
+      }else if(form.kind==="deals"){
+        if(form.mode==="advance"){
+          const stage=stages.find(s=>s[0]===form.stage_id);
+          path+="/"+form.id+"/advance";
+          data={expected_version:form.expected_version,
+            pipeline_id:"pipeline.enterprise",stage_id:stage[0],ordinal:stage[2],
+            status:["won","lost"].includes(stage[0])?stage[0]:"open",
+            close_reason_code:["won","lost"].includes(stage[0])?form.close_reason_code:null};
+        }else if(form.mode==="create"){
+          data={id:form.id,name:form.name,account_id:form.account_id,
+            pipeline_id:"pipeline.enterprise",stage_id:"lead",ordinal:1,
+            amount_minor_units:form.amount_minor_units?limitMoney(form.amount_minor_units):null,
+            currency:form.amount_minor_units?form.currency:null,
+            probability_bps:Number(form.probability_bps)};
+        }else{
+          path+="/"+form.id;method="PATCH";
+          data={expected_version:form.expected_version,name:form.name,
+            probability_bps:Number(form.probability_bps),
+            ...(form.amount_minor_units?{
+              amount_minor_units:limitMoney(form.amount_minor_units),currency:form.currency
+            }:{clear_amount:true})};
+        }
+      }else{
+        if(form.mode==="complete"){path+="/"+form.id+"/complete";
+          data={expected_version:form.expected_version};}
+        else data={id:form.id,subject:form.subject,description:null,
+          account_id:form.account_id,priority:form.priority,
+          due_at_unix_nanos:form.due_at?Date.parse(form.due_at+"T00:00:00Z")*1e6:null,
+          reminder_at_unix_nanos:null};
+      }
+      const saved=await api(path,{method,headers:keyHeaders(form.key),body:JSON.stringify(data)});
+      await reload();
+      setForm(null);
+      setNotice(saved.replayed?"Повтор выполнен без дублирования":"Сохранено");
+    }catch(e){setError(e.message);}
+    finally{setBusy(false);}
+  }
+  function navigate(kind){
+    setTab(kind);setCard(null);setSearch("");setForm(null);setError("");setNotice("");
+  }
+  const kind=sections[tab],rows=(items[tab]||[]).filter(row=>
+    JSON.stringify(row).toLocaleLowerCase("ru").includes(search.toLocaleLowerCase("ru")));
+  function actions(row){
+    return <span className="row-actions">
+      {tab==="accounts"&&<button className="ghost" onClick={()=>setCard(row.id)}>Карточка</button>}
+      {writable&&tab!=="tasks"&&<button className="ghost" onClick={()=>begin(tab,row)}>Изменить</button>}
+      {writable&&tab==="deals"&&row.status==="open"&&
+        <button className="ghost" onClick={()=>begin(tab,row,"advance")}>Этап сделки</button>}
+      {writable&&tab==="tasks"&&row.status==="open"&&
+        <button className="ghost" onClick={()=>begin(tab,row,"complete")}>Выполнить</button>}
+    </span>;
+  }
+  const columns={
+    accounts:[["name","Название",row=>row.name],
+      ["party","Лицо / организация",row=>partyName(contactsParty(row))],
+      ["status","Статус",row=>row.status]],
+    contacts:[["value","Контакт",row=>row.value],
+      ["kind","Тип",row=>row.kind],["party","Лицо / организация",row=>partyName(row.party_id)],
+      ["verified","Подтверждён",row=>row.verified?"Да":"Нет"]],
+    deals:[["name","Сделка",row=>row.name],
+      ["account","Клиент",row=>accountName(row.account_id)],
+      ["stage","Этап",row=>stageTitle(row.stage.stage_id)],
+      ["amount","Сумма",row=>money(row.amount)]],
+    tasks:[["subject","Задача",row=>row.subject],
+      ["account","Клиент",row=>accountName(taskAccount(row))],
+      ["priority","Приоритет",row=>row.priority],
+      ["status","Статус",row=>row.status==="completed"?"Готово":"В работе"]]
+  };
+  const field=(label,name,type="text",choices)=> <div className="field" key={name}>
+    <label htmlFor={"native-"+name}>{label}</label>
+    {choices?<select id={"native-"+name} required value={form[name]}
+      onChange={e=>change(name,e.target.value)}>
+      {choices.map(([key,title])=><option value={key} key={key}>{title}</option>)}
+    </select>:<input id={"native-"+name} type={type} required={name!=="amount_minor_units"}
+      value={form[name]} onChange={e=>change(name,e.target.value)}/>}
+  </div>;
+  const partyChoices=[["","Выберите лицо / организацию"],
+    ...items.parties.map(p=>[p.id,p.name])];
+  const accountChoices=[["","Выберите клиента"],
+    ...items.accounts.map(a=>[a.id,a.name])];
+  function fields(){
+    if(form.kind==="accounts")return <>
+      {field("Название","name")}
+      {form.mode==="create"?field("Лицо / организация","party_id","text",partyChoices):
+        field("Статус","status","text",[["active","Активный"],["inactive","Неактивный"]])}
+    </>;
+    if(form.kind==="contacts")return <>
+      {form.mode==="create"&&field("Лицо / организация","party_id","text",partyChoices)}
+      {form.mode==="create"&&field("Тип контакта","contact_kind","text",
+        [["email","Электронная почта"],["phone","Телефон"],
+          ["web","Сайт"],["postal","Адрес"],["messaging","Мессенджер"]])}
+      {field("Значение","value")}
+      <label><input type="checkbox" checked={form.preferred}
+        onChange={e=>change("preferred",e.target.checked)}/> Предпочтительный</label>
+      {form.mode!=="create"&&field("Статус","status","text",
+        [["active","Активный"],["inactive","Неактивный"]])}
+    </>;
+    if(form.kind==="deals"){
+      if(form.mode==="advance")return <>
+        <p>Текущая стадия: {stageTitle(items.deals.find(d=>d.id===form.id)?.stage.stage_id)}</p>
+        {field("Новый этап","stage_id","text",stages.map(s=>[s[0],s[1]]))}
+        {["won","lost"].includes(form.stage_id)&&field("Причина закрытия (код)","close_reason_code")}
+      </>;
+      return <>{field("Название сделки","name")}
+        {form.mode==="create"&&field("Клиент","account_id","text",accountChoices)}
+        {field("Сумма (минимальные единицы)","amount_minor_units","text")}
+        {field("Валюта","currency","text",[["USD","USD"],["EUR","EUR"],["PLN","PLN"]])}
+        {field("Вероятность (0–10000)","probability_bps","number")}
+      </>;
+    }
+    if(form.mode==="complete")return <p>Отметить задачу выполненной?</p>;
+    return <>{field("Что сделать","subject")}
+      {field("Клиент","account_id","text",accountChoices)}
+      {field("Приоритет","priority","text",
+        [["low","Низкий"],["normal","Обычный"],["high","Высокий"],["urgent","Срочный"]])}
+      <div className="field"><label htmlFor="native-due">Срок (необязательно)</label>
+        <input id="native-due" type="date" value={form.due_at}
+          onChange={e=>change("due_at",e.target.value)}/></div>
+    </>;
+  }
+  return <><header><strong>CRM</strong><span>Один Rust Worker · одна D1</span></header>
+    <main><div className="heading"><div><h1>Моя CRM</h1>
+      <p>Клиенты, контакты, сделки и задачи — оригинальные модули Rust</p></div>
+      <button className="ghost" disabled={loading} onClick={()=>reload().then(()=>{
+        setNotice("Обновлено");setError("");
+      }).catch(e=>setError(e.message))}>Обновить</button></div>
+      <nav aria-label="Разделы">{Object.entries(sections).map(([key,section])=>
+        <button key={key} className={tab===key?"active":"ghost"}
+          onClick={()=>navigate(key)}>{section.title} <small>{items[key].length}</small></button>)}
+        <button className={tab==="parties"?"active":"ghost"} onClick={()=>navigate("parties")}>
+          Лица и организации <small>{items.parties.length}</small></button></nav>
+      {notice&&<div role="status" className="notice">{notice}</div>}
+      {error&&<div role="alert" className="notice error">{error}</div>}
+      <section className="panel">{tab==="parties"?
+        <Parties load={api} writable={writable} onSaved={reload}/>:
+        card?<Customer360 accountId={card} load={api} writable={writable} onBack={()=>setCard(null)}
+          onNavigate={navigate} onEdit={(kind,row)=>begin(kind,row)}/>:
+        <>
+          <div className="toolbar">
+            <input aria-label="Поиск" placeholder="Поиск" value={search}
+              onChange={e=>setSearch(e.target.value)}/>
+            {writable&&<button disabled={
+              tab==="accounts"?!items.parties.length:
+              tab==="contacts"?!items.parties.length:
+              !items.accounts.length} onClick={()=>begin(tab)}>
+              + Добавить {kind.one}</button>}
+          </div>
+          {writable&&tab==="accounts"&&!items.parties.length&&
+            <p>Сначала создайте лицо или организацию.</p>}
+          {writable&&["deals","tasks"].includes(tab)&&!items.accounts.length&&
+            <p>Сначала добавьте клиента.</p>}
+          {tab==="deals"&&<div className="view-switch" role="group" aria-label="Вид сделок">
+            <button className={view==="table"?"active":"ghost"} onClick={()=>setView("table")}>Таблица</button>
+            <button className={view==="board"?"active":"ghost"} onClick={()=>setView("board")}>Воронка</button>
+          </div>}
+          {loading?<p className="empty">Загрузка…</p>:rows.length===0?
+            <p className="empty">{search?"Ничего не найдено":"Пока записей нет"}</p>:
+            tab==="deals"&&view==="board"?
+              <div className="deal-board">{stages.map(stage=><section className="deal-column" key={stage[0]}>
+                <h3>{stage[1]}</h3>{rows.filter(row=>row.stage.stage_id===stage[0]).map(row=>
+                  <article className="deal-card" key={row.id}><strong>{row.name}</strong>
+                    <p>{accountName(row.account_id)}</p><p>{money(row.amount)}</p>{actions(row)}
+                  </article>)}</section>)}</div>:
+              <><div className="table-scroll"><table><thead><tr>
+                {columns[tab].map(([key,title])=><th key={key}>{title}</th>)}
+                <th>Действия</th></tr></thead><tbody>{rows.map(row=><tr key={row.id}>
+                  {columns[tab].map(([key,,render])=><td key={key}>{render(row)}</td>)}
+                  <td>{actions(row)}</td></tr>)}</tbody></table></div>
+                <div className="mobile">{rows.map(row=><article key={row.id}>
+                  <strong>{itemName(tab,row)}</strong>
+                  {columns[tab].map(([key,title,render])=><p key={key}>{title}: {render(row)}</p>)}
+                  {actions(row)}</article>)}</div></>}
+        </>}
+      </section>
+    </main>
+    {form&&<div className="shade" onClick={e=>{
+      if(e.target===e.currentTarget&&!busy)setForm(null);
+    }}><form className="dialog" onSubmit={submit}>
+      <h2>{form.mode==="create"?"Добавить":form.mode==="advance"?"Изменить этап":
+        form.mode==="complete"?"Выполнить":"Изменить"} {sections[form.kind].one}</h2>
+      {fields()}
+      <footer><button type="button" className="ghost" disabled={busy}
+        onClick={()=>setForm(null)}>Отмена</button>
+        <button disabled={busy}>{busy?"Сохранение…":"Сохранить"}</button></footer>
+    </form></div>}
+  </>;
 }
 createRoot(document.getElementById("root")).render(<App/>);

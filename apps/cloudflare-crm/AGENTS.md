@@ -3,7 +3,7 @@
 This file applies to **apps/cloudflare-crm/**. The sole canonical source of truth is
 **iamaman11/crm**: issue #338 (единственный актуальный план Rust/Cloudflare и диагностики), #310 (product/acceptance), #321 (Cloudflare architecture),
 #322 (chat delivery), and the active PR/commit. Consult root AGENTS.md for
-repository-wide governance; this guide describes the native Cloudflare pilot.
+repository-wide governance; this guide describes the native Cloudflare application.
 When instructions conflict, do not quietly weaken the repository gate: resolve
 the conflict transparently in the canonical issue and exact-source tests.
 
@@ -38,17 +38,19 @@ GitHub Actions may run those commands. No new app or connector is a prerequisite
 
 ## Feature ownership and growth
 
-- The single list of business features and fields is `shared/catalog.mjs:modules`.
+- The current visible owner-source list is `shared/catalog.mjs:modules`. Rust domain contracts, not this UI locator, determine business validity.
 - `implementationOwners` maps each feature to its *source-code location*;
   `ownerFiles` maps that location to UI, API, validation, migration, unit and E2E.
   `npm run locate` must use these maps, not a hardcoded universal file list.
-- The initial four modules intentionally share the tiny `pilot-core` files. **A
-  new expert module needs a distinct owner**, typically code under
-  `features/<feature>/`, plus registry and ownerFiles entries. Do not create
-  new microservices; these are source-code modules in the same Worker/React app.
-- As existing owners gain substantial independent business rules, extract their
-  real implementation into an owned folder in one behavior-preserving slice,
-  update ownerFiles, and prove parity. No speculative mass refactor.
+- Existing screens use the original `crm-customer-accounts`, `crm-contact-points`,
+  `crm-sales` and `crm-activities` domain crates. The temporary `pilot.rs`
+  backend and its duplicate business rules are removed in integration PR #345.
+  New capabilities must reuse original crate owners, not invent a new pilot
+  master, registry or microservice. Five still-unconnected crates are declared
+  as NOT_CONNECTED rather than represented as working CRUD.
+- The one Worker composes original module commands and existing typed contracts.
+  Rust owner code alone decides transitions; the UI may display forms and
+  transport IDs/versions, but must not duplicate domain validation.
 - The Worker/React entrypoints coordinate/auth/transport; domain-specific
   decisions belong to their feature. Feature A must not mutate B's D1 rows
   without an explicit reviewed cross-feature contract.
@@ -87,15 +89,28 @@ physical proof. PR stays Draft until its stated acceptance criteria are met.
 ### Visual evidence for every deployed release
 
 The **existing** protected `deploy-crm-dev` job runs real Chromium against the
-published URL. Its `crm-dev-release-<git-sha>` artifact contains
+published URL (only after main-only guarded release). Its `crm-dev-release-<git-sha>` artifact contains
 `e2e-evidence/manifest.json` and screenshots of desktop home, Rust Party,
-customers, contacts, deals, tasks, Customer 360, pipeline, updated linked card,
+original Accounts, ContactPoints, Sales, Activities, Account Overview, pipeline, linked records,
 and mobile UI. The manifest records the exact live Worker SHA, actions, API
 readbacks and PASS/FAIL without tokens, cookies, tenant IDs or raw customer data.
 Failure screenshots and relevant Actions job logs remain available. This is
 **headless reproducible UI interaction**, not an always-open interactive browser
 that ChatGPT can directly control from this conversation. Keep this in the
 existing E2E and release artifact; do not create a second dashboard or service.
+
+
+**Принцип функциональной приёмки:** исходные модули не обязаны повторять
+пилотные CRUD. У Party и Account нет фиктивного Delete; Task завершается
+оригинальной командой Complete, Deal продвигается через Advance с явной
+версией, а деньги представлены точным целым числом минимальных единиц.
+Любая проверка должна вызывать именно оригинальный command/query,
+не маскировать несовместимость и не вводить JS-подстановки.
+
+В PR #345 отметка REACT_CONNECTED_NOT_LIVE означает только wiring в ветке:
+Cloudflare deploy, настоящий Access A/B, фактические D1 и Logs остаются
+NOT_TESTED до main-only защищённой публикации. Не превращать успешную
+локальную workerd/Chromium проверку в утверждение об опубликованном продукте.
 
 ## Нативная приёмка — единственная действующая модель
 

@@ -29,6 +29,9 @@ jobs:
       - name: Install CRM dependencies
         run: npm install --no-audit --no-fund
         working-directory: apps/cloudflare-crm
+      - name: Fast syntax check of native E2E before Rust/WASM build
+        working-directory: apps/cloudflare-crm
+        run: node --check rust-party/test/native.mjs
       - name: Fast feature/schema contract doctor
         run: npm run doctor
         working-directory: apps/cloudflare-crm
@@ -71,6 +74,20 @@ jobs:
           crate-type = ["cdylib"]
           [dependencies]
           crm-parties = { path = "$GITHUB_WORKSPACE/modules/crm-parties" }
+          crm-sales = { path = "$GITHUB_WORKSPACE/modules/crm-sales" }
+          crm-activities = { path = "$GITHUB_WORKSPACE/modules/crm-activities" }
+          crm-sales-activities-link = { path = "$GITHUB_WORKSPACE/modules/crm-sales-activities-link" }
+          crm-customer-accounts = { path = "$GITHUB_WORKSPACE/modules/crm-customer-accounts" }
+          crm-contact-points = { path = "$GITHUB_WORKSPACE/modules/crm-contact-points" }
+          crm-party-relationships = { path = "$GITHUB_WORKSPACE/modules/crm-party-relationships" }
+          crm-consents = { path = "$GITHUB_WORKSPACE/modules/crm-consents" }
+          crm-identity-resolution = { path = "$GITHUB_WORKSPACE/modules/crm-identity-resolution" }
+          crm-customer-data-operations = { path = "$GITHUB_WORKSPACE/modules/crm-customer-data-operations" }
+          crm-data-quality = { path = "$GITHUB_WORKSPACE/modules/crm-data-quality" }
+          crm-customer-enrichment = { path = "$GITHUB_WORKSPACE/modules/crm-customer-enrichment" }
+          crm-customer-privacy = { path = "$GITHUB_WORKSPACE/modules/crm-customer-privacy" }
+          crm-module-sdk = { path = "$GITHUB_WORKSPACE/crates/crm-module-sdk" }
+          crm-core-contracts = { path = "$GITHUB_WORKSPACE/crates/crm-core-contracts" }
           EOF
           cat > "$probe/src/lib.rs" <<'RUST'
           use crm_parties::{
@@ -123,6 +140,50 @@ jobs:
               }
               0
           }
+          // Calls authoritative original owners: no separate validation rules.
+          // Include the SAME owner behavior code as the native Worker CI gate.
+          // No competing test-only domain logic in this workflow.
+          mod original_domain_probe {
+              include!(concat!(env!("GITHUB_WORKSPACE"),
+                  "/apps/cloudflare-crm/rust-party/src/original_domain_probe.rs"));
+          }
+          #[unsafe(no_mangle)]
+          pub extern "C" fn crm_owner_domain_probe() -> i32 {
+              original_domain_probe::check()
+          }
+
+          // One WASM executable invokes symbols from all 13 ORIGINAL domain/link crates.
+          // This is a *composition/link* gate, not a claim of D1 readiness or full
+          // Cloudflare execution of twelve not-yet-connected owner workflows.
+          #[unsafe(no_mangle)]
+          pub extern "C" fn crm_13_module_link_probe() -> i32 {
+              let modules = [
+                  crm_sales::CRATE_NAME,
+                  crm_activities::CRATE_NAME,
+                  crm_sales_activities_link::MODULE_ID,
+                  crm_parties::MODULE_ID,
+                  crm_customer_accounts::MODULE_ID,
+                  crm_contact_points::MODULE_ID,
+                  crm_party_relationships::MODULE_ID,
+                  crm_consents::MODULE_ID,
+                  crm_identity_resolution::MODULE_ID,
+                  crm_data_quality::MODULE_ID,
+                  crm_customer_enrichment::MODULE_ID,
+                  crm_customer_privacy::MODULE_ID,
+              ];
+              let expected = [
+                  "crm-sales", "crm-activities", "crm.sales-activities-link",
+                  "crm.parties", "crm.customer-accounts", "crm.contact-points",
+                  "crm.party-relationships", "crm.consents", "crm.identity-resolution",
+                  "crm.data-quality", "crm.customer-enrichment", "crm.customer-privacy",
+              ];
+              if modules != expected { return 1; }
+              let import_id = match crm_customer_data_operations::ImportJobId::try_new("wasm-import-01") {
+                  Ok(v) => v, Err(_) => return 2,
+              };
+              if import_id.as_str() != "wasm-import-01" { return 3; }
+              0
+          }
           RUST
           cargo build --manifest-path "$probe/Cargo.toml" --target wasm32-unknown-unknown
           node - "$probe/target/wasm32-unknown-unknown/debug/crm_wasm_probe.wasm" <<'NODE'
@@ -135,13 +196,46 @@ jobs:
             }
             const result = instance.exports.crm_party_domain_probe();
             if (result !== 0) throw new Error('Existing Rust domain WASM rejected, code=' + result);
+            if (typeof instance.exports.crm_13_module_link_probe !== 'function') {
+              throw new Error('Thirteen original modules did not export the same WASM probe');
+            }
+            const moduleLink = instance.exports.crm_13_module_link_probe();
+            if (moduleLink !== 0) throw new Error('Thirteen modules link probe rejected, code=' + moduleLink);
+            if (typeof instance.exports.crm_owner_domain_probe !== 'function') {
+              throw new Error('Original owner domain behavior ABI missing');
+            }
+            const ownerResult = instance.exports.crm_owner_domain_probe();
+            if (ownerResult !== 0) throw new Error('Original owner domain invariants failed, code=' + ownerResult);
             console.log(JSON.stringify({event:'crm.rust-domain-wasm', result:'PASS',
               crate:'crm-parties', target:'wasm32-unknown-unknown',
               runtime:'node WebAssembly', tests:['normalize','version',
                 'stale update denied','serialize/rehydrate','invalid name denied'],
+              module_link:{result:'PASS', original_crates:13, wasm_binary:'one',
+                domain_executed:['crm-parties','crm-customer-accounts','crm-contact-points',
+                  'crm-sales','crm-activities','crm-customer-data-operations identifier'],
+                remaining_domain_behaviors:'NOT_TESTED'},
+              owners:{result:'PASS',modules:['crm-customer-accounts','crm-contact-points',
+                'crm-sales','crm-activities'],operations:['create','roundtrip','negative','version'],
+                live_d1:'NOT_TESTED'},
               cloudflare_worker_invocation:'NOT_TESTED', d1_adapter:'NOT_TESTED'}));
           })().catch(error => {console.error(error);process.exitCode=1;});
           NODE
+      - name: Install exact native wasm-bindgen CLI from Cargo registry
+        # worker-build 0.8.7 officially supports WASM_BINDGEN_BIN. Fetching the
+        # pinned CLI from crates.io avoids unstable GitHub Releases binary URLs.
+        run: |
+          cargo install --locked wasm-bindgen-cli --version 0.2.130
+          test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.130"
+          echo "WASM_BINDGEN_BIN=$(command -v wasm-bindgen)" >> "$GITHUB_ENV"
+      - name: Install pinned Binaryen optimizer through npm
+        # worker-build 0.8.7 supports WASM_OPT_BIN; use the SAME upstream
+        # Binaryen version 132, without relying on GitHub Releases downloads.
+        run: |
+          npm install --prefix "$RUNNER_TEMP/crm-binaryen" --no-save --no-audit --no-fund binaryen@132.0.0
+          WASM_OPT="$RUNNER_TEMP/crm-binaryen/node_modules/binaryen/bin/wasm-opt"
+          test -x "$WASM_OPT"
+          "$WASM_OPT" --version | grep '132'
+          echo "WASM_OPT_BIN=$WASM_OPT" >> "$GITHUB_ENV"
       - name: Build Rust workers-rs Party Worker for isolated workerd CI
         working-directory: apps/cloudflare-crm/rust-party
         run: |
@@ -155,6 +249,9 @@ jobs:
           base64 -w 80 Cargo.lock
           echo
           echo 'NATIVE_PARTY_CARGO_LOCK_END'
+      - name: Enforce committed native Worker dependency lock
+        # Building with 13 original crates must not silently resolve a different graph.
+        run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
       - name: Test original Rust Party through workerd and isolated native D1
         working-directory: apps/cloudflare-crm
         run: node rust-party/test/local.mjs
@@ -229,7 +326,12 @@ jobs:
         run: |
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
           grep -F '35fc7ee9-9710-485f-8fb3-f5a398b229b4' apps/cloudflare-crm/wrangler.jsonc
-          grep -F 'mod pilot;' apps/cloudflare-crm/rust-party/src/lib.rs
+          grep -F 'mod account_overview;' apps/cloudflare-crm/rust-party/src/lib.rs
+          if grep -F 'mod pilot;' apps/cloudflare-crm/rust-party/src/lib.rs ||
+             test -f apps/cloudflare-crm/rust-party/src/pilot.rs; then
+            echo 'FAIL: duplicate pilot Rust domain cannot be published' >&2
+            exit 1
+          fi
           grep -F 'mod access;' apps/cloudflare-crm/rust-party/src/lib.rs
           if grep -F '"main": "./worker/unified.mjs"' apps/cloudflare-crm/wrangler.jsonc; then
             echo 'FAIL: JS dispatcher must not be published' >&2

@@ -169,6 +169,8 @@ async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
 pub struct Actor {
     pub tenant: String,
     pub role: String,
+    // Verified Access identity, never supplied by the HTTP request body.
+    pub identity: String,
 }
 async fn enrolled(db: &D1Database, identity: &str) -> Result<Option<Actor>> {
     #[derive(serde::Deserialize)]
@@ -176,7 +178,7 @@ async fn enrolled(db: &D1Database, identity: &str) -> Result<Option<Actor>> {
     let user = db.prepare("SELECT tenant_id, role FROM crm_users WHERE email = ? AND active = 1")
         .bind(&[JsValue::from_str(identity)])?
         .first::<Row>(None).await?;
-    Ok(user.map(|row| Actor { tenant: row.tenant_id, role: row.role }))
+    Ok(user.map(|row| Actor { tenant: row.tenant_id, role: row.role, identity: identity.to_owned() }))
 }
 
 pub async fn actor(req: &Request, env: &Env) -> Result<Option<Actor>> {

@@ -19,6 +19,23 @@ native-ci = ["native"]
 [dependencies]
 worker = { version = "=0.8.7", features = ["d1"] }
 crm-parties = { path = "../../../modules/crm-parties" }
+crm-sales = { path = "../../../modules/crm-sales" }
+crm-activities = { path = "../../../modules/crm-activities" }
+crm-sales-activities-link = { path = "../../../modules/crm-sales-activities-link" }
+crm-sales-activities-link-contract-adapter = { path = "../../../crates/crm-sales-activities-link-contract-adapter" }
+crm-proto-contracts = { path = "../../../crates/crm-proto-contracts" }
+prost = "0.14"
+crm-customer-accounts = { path = "../../../modules/crm-customer-accounts" }
+crm-contact-points = { path = "../../../modules/crm-contact-points" }
+crm-party-relationships = { path = "../../../modules/crm-party-relationships" }
+crm-consents = { path = "../../../modules/crm-consents" }
+crm-identity-resolution = { path = "../../../modules/crm-identity-resolution" }
+crm-customer-data-operations = { path = "../../../modules/crm-customer-data-operations" }
+crm-data-quality = { path = "../../../modules/crm-data-quality" }
+crm-customer-enrichment = { path = "../../../modules/crm-customer-enrichment" }
+crm-customer-privacy = { path = "../../../modules/crm-customer-privacy" }
+crm-module-sdk = { path = "../../../crates/crm-module-sdk" }
+crm-core-contracts = { path = "../../../crates/crm-core-contracts" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"

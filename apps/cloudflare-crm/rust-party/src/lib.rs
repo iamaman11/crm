@@ -14,7 +14,23 @@ use worker::*;
 #[cfg(feature = "native")]
 mod access;
 #[cfg(feature = "native")]
-mod pilot;
+mod accounts;
+#[cfg(feature = "native")]
+mod account_overview;
+#[cfg(feature = "native")]
+mod contact_points;
+#[cfg(feature = "native")]
+mod party_relationships;
+#[cfg(feature = "native")]
+mod activity_tasks;
+#[cfg(feature = "native")]
+mod sales_deals;
+#[cfg(feature = "native")]
+mod consents;
+#[cfg(feature = "native")]
+mod sales_activities_link;
+#[cfg(feature = "native-ci")]
+mod original_domain_probe;
 
 fn native_request_id() -> Result<String> {
     use js_sys::{Function, Reflect};
@@ -207,14 +223,20 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     // A truthful live, read-only diagnostic: this probes the active Rust
     // runtime and current D1 tables. CI/browser/Logs proof remains a separate
     // protected release artifact, never an invented live health result.
-    const EXPECTED: [&str; 9] = [
-        "crm_tenants", "crm_users", "crm_customers", "crm_contacts",
-        "crm_deals", "crm_tasks", "crm_audit", "crm_party_records", "crm_party_receipts",
+    const EXPECTED: [&str; 18] = [
+        "crm_tenants", "crm_users", "crm_audit", "crm_party_records", "crm_party_receipts",
+        "crm_account_records", "crm_account_receipts",
+        "crm_contact_point_records", "crm_contact_point_receipts",
+        "crm_party_relationship_records", "crm_party_relationship_receipts",
+        "crm_activity_task_records", "crm_activity_task_receipts",
+        "crm_sales_deal_records", "crm_sales_deal_receipts",
+        "crm_consent_records", "crm_consent_receipts",
+        "crm_sales_link_delivery_records",
     ];
     let db = env.d1("DB")?;
     let bindings: Vec<JsValue> = EXPECTED.iter().map(|name| JsValue::from_str(name)).collect();
     let row = bind(&db,
-        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?)",
+        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         &bindings)?.first::<SchemaCount>(None).await?;
     let present = row.map_or(0, |value| value.present);
     let schema_ok = present == EXPECTED.len() as i64;
@@ -224,11 +246,14 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     // Zero records is a valid empty workspace, not a failed health check.
     if schema_ok {
         for (module, table, column) in [
-            ("customers", "crm_customers", "tenant_id"),
-            ("contacts", "crm_contacts", "tenant_id"),
-            ("deals", "crm_deals", "tenant_id"),
-            ("tasks", "crm_tasks", "tenant_id"),
             ("parties", "crm_party_records", "tenant"),
+            ("accounts", "crm_account_records", "tenant"),
+            ("contact-points", "crm_contact_point_records", "tenant"),
+            ("party-relationships", "crm_party_relationship_records", "tenant"),
+            ("activity-tasks", "crm_activity_task_records", "tenant"),
+            ("sales-deals", "crm_sales_deal_records", "tenant"),
+            ("consents", "crm_consent_records", "tenant"),
+            ("sales-activities-link", "crm_sales_link_delivery_records", "tenant"),
         ] {
             // Table and column names are compiled-in constants, not user input.
             let query = format!("SELECT COUNT(*) AS present FROM {table} WHERE {column} = ?");
@@ -280,11 +305,43 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "tenant_audit_rows_with_id": audit_trace }},
         "modules": {
             "crm.parties": {"read": read_checks.get("parties"), "business_owner": "original-crm-parties"},
-            "crm.customers": {"read": read_checks.get("customers"), "business_owner": "native-pilot"},
-            "crm.contacts": {"read": read_checks.get("contacts"), "business_owner": "native-pilot"},
-            "crm.deals": {"read": read_checks.get("deals"), "business_owner": "native-pilot"},
-            "crm.tasks": {"read": read_checks.get("tasks"), "business_owner": "native-pilot"},
-            "crm.customer360": {"read": "EXTERNAL_BROWSER_CHECK_REQUIRED"}
+            "crm.sales-activities-link": {"read":read_checks.get("sales-activities-link"),
+                "business_owner":"original-crm-sales-activities-link",
+                "api":"native-workers-rs","delivery":"SYNCHRONOUS_ATOMIC_D1",
+                "ui":"NOT_CONNECTED",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+            "crm.consents": {"read":read_checks.get("consents"),
+                "business_owner":"original-crm-consents","api":"native-workers-rs",
+                "ui":"NOT_CONNECTED","grant_evidence":"NOT_CONNECTED",
+                "operator_suppressions":"ENABLED",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+            "crm.sales": {"read":read_checks.get("sales-deals"),
+                "business_owner":"original-crm-sales", "api":"native-workers-rs",
+                "ui":"REACT_CONNECTED_NOT_LIVE", "account":"ORIGINAL_DOMAIN_D1",
+                "primary_contact":"NOT_CONNECTED",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+            "crm.activities": {"read":read_checks.get("activity-tasks"),
+                "business_owner":"original-crm-activities", "api":"native-workers-rs",
+                "ui":"REACT_CONNECTED_NOT_LIVE","completion":"ORIGINAL_DOMAIN",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+            "crm.party-relationships": {"read":read_checks.get("party-relationships"),
+                "business_owner":"original-crm-party-relationships",
+                "api":"native-workers-rs", "ui":"NOT_CONNECTED",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+            "crm.contact-points": {"read":read_checks.get("contact-points"),
+                "business_owner":"original-crm-contact-points",
+                "api":"native-workers-rs", "ui":"REACT_CONNECTED_NOT_LIVE",
+                "verification":"TRUSTED_EVIDENCE_NOT_CONNECTED",
+                "consent":"SEPARATE_DOMAIN_NOT_CONNECTED",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+            "crm.customer-accounts": {"read":read_checks.get("accounts"),
+                "business_owner":"original-crm-customer-accounts",
+                "api":"native-workers-rs", "ui":"REACT_CONNECTED_NOT_LIVE",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
+            "crm.account-overview": {"read": "owner_composition_on_one_d1",
+                "business_owner":"native-worker-read-projection",
+                "ui":"REACT_CONNECTED_NOT_LIVE",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"}
         },
         "functional_cycle": {
             "browser_buttons": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED",
@@ -295,11 +352,76 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     }), if healthy {200} else {503})
 }
 
-async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>, role: Option<&str>) -> Result<Response> {
+async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>,
+    role: Option<&str>, verified_actor: Option<&str>) -> Result<Response> {
     let request_id = correlation_id(&req, trusted_id)?;
     let path = req.path();
     let method = req.method();
+    // Minimal existing-role rule for the test CRM: an enrolled admin can write;
+    // other verified tenant members may only read. Consent evaluation is a
+    // non-mutating query despite its POST transport. Do not silently grant
+    // business mutation rights merely because Access verified a JWT.
+    #[cfg(feature = "native")]
+    if role != Some("admin")
+        && method != Method::Get
+        && !(path == "/api/consents/evaluate" && method == Method::Post)
+    {
+        return error("FORBIDDEN", 403);
+    }
     let db = env.d1("DB")?;
+    // Explicitly CI-only, signed-Access-gated native workerd proof. This gate
+    // performs no D1 writes and makes no claims about module persistence.
+    #[cfg(feature = "native-ci")]
+    if path == "/api/_ci/original-domain-check" && method == Method::Get {
+        let code = original_domain_probe::check();
+        return response(json!({
+            "result": if code == 0 { "PASS" } else { "FAIL" },
+            "code": code,
+            "scope": "in-memory original owner domain contracts",
+            "owners_executed": ["crm.customer-accounts", "crm.contact-points",
+                "crm.sales", "crm.activities"],
+            "original_modules_compiled": 13,
+            "d1_owner_persistence": "NOT_TESTED",
+            "remaining_owners": "NOT_TESTED"
+        }), if code == 0 { 200 } else { 503 });
+    }
+    #[cfg(feature = "native")]
+    if path == "/api/consents" || path.starts_with("/api/consents/") {
+        let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
+        let Some(role)=role else{return error("AUTH_REQUIRED",401)};
+        return consents::route(req,db,tenant,actor,role,&request_id).await;
+    }
+    #[cfg(feature = "native")]
+    if path == "/api/sales-deals" || path.starts_with("/api/sales-deals/") {
+        let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
+        return sales_deals::route(req,db,tenant,actor,&request_id).await;
+    }
+    #[cfg(feature = "native")]
+    if path == "/api/activity-tasks" || path.starts_with("/api/activity-tasks/") {
+        let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
+        return activity_tasks::route(req,db,tenant,actor,&request_id).await;
+    }
+    #[cfg(feature = "native")]
+    if path == "/api/party-relationships" || path.starts_with("/api/party-relationships/") {
+        return party_relationships::route(req, db, tenant, &request_id).await;
+    }
+    #[cfg(feature = "native")]
+    if path == "/api/contact-points" || path.starts_with("/api/contact-points/") {
+        return contact_points::route(req, db, tenant, &request_id).await;
+    }
+    #[cfg(feature = "native")]
+    if let Some(id) = path.strip_prefix("/api/accounts/")
+        .and_then(|segment| segment.strip_suffix("/overview"))
+    {
+        if id.is_empty() || id.contains('/') || method != Method::Get {
+            return error("NOT_FOUND", 404);
+        }
+        return account_overview::overview(&db, tenant, id).await;
+    }
+    #[cfg(feature = "native")]
+    if path == "/api/accounts" || path.starts_with("/api/accounts/") {
+        return accounts::route(req, db, tenant, &request_id).await;
+    }
     if path == "/api/parties" {
         return match method {
             Method::Post => create(req, db, tenant, &request_id).await,
@@ -319,13 +441,20 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     }
     #[cfg(feature = "native")]
     {
-        return pilot::route(req, &env, tenant, role.unwrap_or("admin"), &request_id).await;
+        if path == "/api/health" && method == Method::Get {
+            return response(json!({"service":"crm-dev","status":"ok"}),200);
+        }
+        if path == "/api/session" && method == Method::Get {
+            return response(json!({"authenticated":true,"role":role}),200);
+        }
+        if path == "/api/version" && method == Method::Get {
+            return response(json!({"source":env.var("GIT_SHA")
+                .map(|x|x.to_string()).unwrap_or_default(),
+                "database":"D1","api":"crm.dev/v1"}),200);
+        }
     }
-    #[cfg(not(feature = "native"))]
-    {
-        let _ = role;
-        error("NOT_FOUND", 404)
-    }
+    let _ = (env, role);
+    error("NOT_FOUND",404)
 }
 
 #[event(fetch)]
@@ -343,7 +472,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             .filter(|s| s == "tenant-a" || s == "tenant-b") else {
             return error("AUTH_REQUIRED", 403);
         };
-        return dispatch(req, env, &tenant, None, None).await;
+        return dispatch(req, env, &tenant, None, None, None).await;
     }
 
     #[cfg(feature = "native")]
@@ -357,6 +486,31 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
         let operation = match (path.as_str(), method.clone()) {
+            ("/api/consents", Method::Get) => "consents.list",
+            ("/api/consents/evaluate", Method::Post) => "consents.evaluate",
+            ("/api/consents/suppress", Method::Post) => "consents.suppress",
+            ("/api/sales-deals", Method::Get) => "sales-deals.list",
+            ("/api/sales-deals", Method::Post) => "sales-deals.create",
+            (p, Method::Get) if p.starts_with("/api/sales-deals/") => "sales-deals.read",
+            (p, Method::Patch) if p.starts_with("/api/sales-deals/") => "sales-deals.update",
+            (p, Method::Post) if p.starts_with("/api/sales-deals/") && p.ends_with("/advance") => "sales-deals.advance",
+            ("/api/activity-tasks", Method::Get) => "activity-tasks.list",
+            ("/api/activity-tasks", Method::Post) => "activity-tasks.create",
+            (p, Method::Get) if p.starts_with("/api/activity-tasks/") => "activity-tasks.read",
+            (p, Method::Post) if p.starts_with("/api/activity-tasks/") && p.ends_with("/complete") => "activity-tasks.complete",
+            ("/api/party-relationships", Method::Get) => "party-relationships.list",
+            ("/api/party-relationships", Method::Post) => "party-relationships.create",
+            (p, Method::Get) if p.starts_with("/api/party-relationships/") => "party-relationships.read",
+            (p, Method::Patch) if p.starts_with("/api/party-relationships/") => "party-relationships.update",
+            ("/api/contact-points", Method::Get) => "contact-points.list",
+            ("/api/contact-points", Method::Post) => "contact-points.create",
+            (p, Method::Get) if p.starts_with("/api/contact-points/") => "contact-points.read",
+            (p, Method::Patch) if p.starts_with("/api/contact-points/") => "contact-points.update",
+            ("/api/accounts", Method::Get) => "accounts.list",
+            ("/api/accounts", Method::Post) => "accounts.create",
+            (p, Method::Get) if p.starts_with("/api/accounts/") && p.ends_with("/overview") => "accounts.overview",
+            (p, Method::Get) if p.starts_with("/api/accounts/") => "accounts.read",
+            (p, Method::Patch) if p.starts_with("/api/accounts/") => "accounts.update",
             ("/api/parties", Method::Get) => "parties.list",
             ("/api/parties", Method::Post) => "parties.create",
             (p, Method::Get) if p.starts_with("/api/parties/") => "parties.read",
@@ -365,30 +519,13 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             ("/api/health", Method::Get) => "health.read",
             ("/api/session", Method::Get) => "session.read",
             ("/api/version", Method::Get) => "version.read",
-            (p, Method::Get) if p.starts_with("/api/customer360/") => "customer360.read",
-            (p, Method::Get) if p.starts_with("/api/customers") => "customers.read",
-            (p, Method::Post) if p.starts_with("/api/customers") => "customers.create",
-            (p, Method::Patch) if p.starts_with("/api/customers/") => "customers.update",
-            (p, Method::Delete) if p.starts_with("/api/customers/") => "customers.delete",
-            (p, Method::Get) if p.starts_with("/api/contacts") => "contacts.read",
-            (p, Method::Post) if p.starts_with("/api/contacts") => "contacts.create",
-            (p, Method::Patch) if p.starts_with("/api/contacts/") => "contacts.update",
-            (p, Method::Delete) if p.starts_with("/api/contacts/") => "contacts.delete",
-            (p, Method::Get) if p.starts_with("/api/deals") => "deals.read",
-            (p, Method::Post) if p.starts_with("/api/deals") => "deals.create",
-            (p, Method::Patch) if p.starts_with("/api/deals/") => "deals.update",
-            (p, Method::Delete) if p.starts_with("/api/deals/") => "deals.delete",
-            (p, Method::Get) if p.starts_with("/api/tasks") => "tasks.read",
-            (p, Method::Post) if p.starts_with("/api/tasks") => "tasks.create",
-            (p, Method::Patch) if p.starts_with("/api/tasks/") => "tasks.update",
-            (p, Method::Delete) if p.starts_with("/api/tasks/") => "tasks.delete",
             _ => "unmatched",
         };
         let (result, phase) = match access::actor(&req, &env).await {
             Ok(Some(actor)) if path == "/api/doctor" && method == Method::Get =>
                 (native_doctor(&env, &actor.tenant).await, "diagnostics"),
             Ok(Some(actor)) =>
-                (dispatch(req, env, &actor.tenant, Some(&request_id), Some(&actor.role)).await, "domain_d1"),
+                (dispatch(req, env, &actor.tenant, Some(&request_id), Some(&actor.role), Some(&actor.identity)).await, "domain_d1"),
             Ok(None) => (error("AUTH_REQUIRED", 401), "access"),
             Err(_) => (error("ACCESS_INTERNAL_ERROR", 503), "access"),
         };
@@ -399,11 +536,12 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         reply.headers_mut().set("x-request-id", &request_id)?;
         let module = if path == "/api/doctor" { "crm.diagnostics" }
             else if path.starts_with("/api/parties") { "crm.parties" }
-            else if path.starts_with("/api/customer360") { "crm.customer360" }
-            else if path.starts_with("/api/customers") { "crm.customers" }
-            else if path.starts_with("/api/contacts") { "crm.contacts" }
-            else if path.starts_with("/api/deals") { "crm.deals" }
-            else if path.starts_with("/api/tasks") { "crm.tasks" }
+            else if path.starts_with("/api/accounts") { "crm.customer-accounts" }
+            else if path.starts_with("/api/contact-points") { "crm.contact-points" }
+            else if path.starts_with("/api/party-relationships") { "crm.party-relationships" }
+            else if path.starts_with("/api/activity-tasks") { "crm.activities" }
+            else if path.starts_with("/api/sales-deals") { "crm.sales" }
+            else if path.starts_with("/api/consents") { "crm.consents" }
             else { "crm.platform" };
         reply.headers_mut().set("x-crm-module", module)?;
         reply.headers_mut().set("x-crm-runtime", "native-workers-rs")?;
