@@ -504,6 +504,10 @@ jobs:
             --name "crm-native-bundle-$GITHUB_SHA" --dir apps/cloudflare-crm
           cd apps/cloudflare-crm
           test "$(cat .release/source-sha.txt)" = "$GITHUB_SHA"
+          test "$(cat .release/source-tree.txt)" = "$(git rev-parse HEAD^{tree})"
+          jq -e --arg sha "$GITHUB_SHA" --arg tree "$(git rev-parse HEAD^{tree})" \
+            '.result == "TREE_IDENTICAL_BUNDLE_VERIFIED" and .main_sha == $sha and .source_tree == $tree' \
+            .release/promotion.json >/dev/null
           sha256sum --check --strict .release/compiled-sha256.txt
           test -s dist/index.html
           test -s rust-party/build/index.js
