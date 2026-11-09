@@ -36,7 +36,7 @@ try{
     "--file","./migrations/0001_local.sql","--persist-to",data]);
   const sql="CREATE TABLE crm_tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL);"+
     "INSERT INTO crm_tenants VALUES('tenant-a','A'),('tenant-b','B');"+
-    "CREATE TABLE crm_users (email TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, role TEXT NOT NULL, active INTEGER NOT NULL);"+
+    "CREATE TABLE crm_users (email TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'admin', active INTEGER NOT NULL DEFAULT 1);"+
     "CREATE TABLE crm_customers (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL, updated_at TEXT NOT NULL);"+
     "CREATE TABLE crm_contacts (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, customer_id TEXT NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT NOT NULL, updated_at TEXT NOT NULL);"+
     "CREATE TABLE crm_deals (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, customer_id TEXT NOT NULL, title TEXT NOT NULL, stage TEXT NOT NULL, amount REAL NOT NULL, updated_at TEXT NOT NULL);"+
