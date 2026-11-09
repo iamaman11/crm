@@ -29,8 +29,6 @@ mod sales_deals;
 mod consents;
 #[cfg(feature = "native")]
 mod sales_activities_link;
-#[cfg(feature = "native")]
-mod pilot;
 #[cfg(feature = "native-ci")]
 mod original_domain_probe;
 
@@ -225,9 +223,8 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     // A truthful live, read-only diagnostic: this probes the active Rust
     // runtime and current D1 tables. CI/browser/Logs proof remains a separate
     // protected release artifact, never an invented live health result.
-    const EXPECTED: [&str; 22] = [
-        "crm_tenants", "crm_users", "crm_customers", "crm_contacts",
-        "crm_deals", "crm_tasks", "crm_audit", "crm_party_records", "crm_party_receipts",
+    const EXPECTED: [&str; 18] = [
+        "crm_tenants", "crm_users", "crm_audit", "crm_party_records", "crm_party_receipts",
         "crm_account_records", "crm_account_receipts",
         "crm_contact_point_records", "crm_contact_point_receipts",
         "crm_party_relationship_records", "crm_party_relationship_receipts",
@@ -239,7 +236,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     let db = env.d1("DB")?;
     let bindings: Vec<JsValue> = EXPECTED.iter().map(|name| JsValue::from_str(name)).collect();
     let row = bind(&db,
-        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         &bindings)?.first::<SchemaCount>(None).await?;
     let present = row.map_or(0, |value| value.present);
     let schema_ok = present == EXPECTED.len() as i64;
@@ -249,10 +246,6 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     // Zero records is a valid empty workspace, not a failed health check.
     if schema_ok {
         for (module, table, column) in [
-            ("customers", "crm_customers", "tenant_id"),
-            ("contacts", "crm_contacts", "tenant_id"),
-            ("deals", "crm_deals", "tenant_id"),
-            ("tasks", "crm_tasks", "tenant_id"),
             ("parties", "crm_party_records", "tenant"),
             ("accounts", "crm_account_records", "tenant"),
             ("contact-points", "crm_contact_point_records", "tenant"),
@@ -324,12 +317,12 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.sales": {"read":read_checks.get("sales-deals"),
                 "business_owner":"original-crm-sales", "api":"native-workers-rs",
-                "ui":"NOT_CONNECTED", "account":"ORIGINAL_DOMAIN_D1",
+                "ui":"REACT_CONNECTED_NOT_LIVE", "account":"ORIGINAL_DOMAIN_D1",
                 "primary_contact":"NOT_CONNECTED",
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.activities": {"read":read_checks.get("activity-tasks"),
                 "business_owner":"original-crm-activities", "api":"native-workers-rs",
-                "ui":"NOT_CONNECTED","completion":"ORIGINAL_DOMAIN",
+                "ui":"REACT_CONNECTED_NOT_LIVE","completion":"ORIGINAL_DOMAIN",
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.party-relationships": {"read":read_checks.get("party-relationships"),
                 "business_owner":"original-crm-party-relationships",
@@ -337,19 +330,18 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.contact-points": {"read":read_checks.get("contact-points"),
                 "business_owner":"original-crm-contact-points",
-                "api":"native-workers-rs", "ui":"NOT_CONNECTED",
+                "api":"native-workers-rs", "ui":"REACT_CONNECTED_NOT_LIVE",
                 "verification":"TRUSTED_EVIDENCE_NOT_CONNECTED",
                 "consent":"SEPARATE_DOMAIN_NOT_CONNECTED",
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.customer-accounts": {"read":read_checks.get("accounts"),
                 "business_owner":"original-crm-customer-accounts",
-                "api":"native-workers-rs", "ui":"NOT_CONNECTED",
+                "api":"native-workers-rs", "ui":"REACT_CONNECTED_NOT_LIVE",
                 "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
-            "crm.customers": {"read": read_checks.get("customers"), "business_owner": "native-pilot"},
-            "crm.contacts": {"read": read_checks.get("contacts"), "business_owner": "native-pilot"},
-            "crm.deals": {"read": read_checks.get("deals"), "business_owner": "native-pilot"},
-            "crm.tasks": {"read": read_checks.get("tasks"), "business_owner": "native-pilot"},
-            "crm.customer360": {"read": "EXTERNAL_BROWSER_CHECK_REQUIRED"}
+            "crm.account-overview": {"read": "owner_composition_on_one_d1",
+                "business_owner":"native-worker-read-projection",
+                "ui":"REACT_CONNECTED_NOT_LIVE",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"}
         },
         "functional_cycle": {
             "browser_buttons": "EXTERNAL_PROTECTED_CI_CHECK_REQUIRED",
@@ -449,13 +441,20 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     }
     #[cfg(feature = "native")]
     {
-        return pilot::route(req, &env, tenant, role.unwrap_or("admin"), &request_id).await;
+        if path == "/api/health" && method == Method::Get {
+            return response(json!({"service":"crm-dev","status":"ok"}),200);
+        }
+        if path == "/api/session" && method == Method::Get {
+            return response(json!({"authenticated":true,"role":role}),200);
+        }
+        if path == "/api/version" && method == Method::Get {
+            return response(json!({"source":env.var("GIT_SHA")
+                .map(|x|x.to_string()).unwrap_or_default(),
+                "database":"D1","api":"crm.dev/v1"}),200);
+        }
     }
-    #[cfg(not(feature = "native"))]
-    {
-        let _ = role;
-        error("NOT_FOUND", 404)
-    }
+    let _ = (env, role);
+    error("NOT_FOUND",404)
 }
 
 #[event(fetch)]
@@ -520,23 +519,6 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             ("/api/health", Method::Get) => "health.read",
             ("/api/session", Method::Get) => "session.read",
             ("/api/version", Method::Get) => "version.read",
-            (p, Method::Get) if p.starts_with("/api/customer360/") => "customer360.read",
-            (p, Method::Get) if p.starts_with("/api/customers") => "customers.read",
-            (p, Method::Post) if p.starts_with("/api/customers") => "customers.create",
-            (p, Method::Patch) if p.starts_with("/api/customers/") => "customers.update",
-            (p, Method::Delete) if p.starts_with("/api/customers/") => "customers.delete",
-            (p, Method::Get) if p.starts_with("/api/contacts") => "contacts.read",
-            (p, Method::Post) if p.starts_with("/api/contacts") => "contacts.create",
-            (p, Method::Patch) if p.starts_with("/api/contacts/") => "contacts.update",
-            (p, Method::Delete) if p.starts_with("/api/contacts/") => "contacts.delete",
-            (p, Method::Get) if p.starts_with("/api/deals") => "deals.read",
-            (p, Method::Post) if p.starts_with("/api/deals") => "deals.create",
-            (p, Method::Patch) if p.starts_with("/api/deals/") => "deals.update",
-            (p, Method::Delete) if p.starts_with("/api/deals/") => "deals.delete",
-            (p, Method::Get) if p.starts_with("/api/tasks") => "tasks.read",
-            (p, Method::Post) if p.starts_with("/api/tasks") => "tasks.create",
-            (p, Method::Patch) if p.starts_with("/api/tasks/") => "tasks.update",
-            (p, Method::Delete) if p.starts_with("/api/tasks/") => "tasks.delete",
             _ => "unmatched",
         };
         let (result, phase) = match access::actor(&req, &env).await {
@@ -560,11 +542,6 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             else if path.starts_with("/api/activity-tasks") { "crm.activities" }
             else if path.starts_with("/api/sales-deals") { "crm.sales" }
             else if path.starts_with("/api/consents") { "crm.consents" }
-            else if path.starts_with("/api/customer360") { "crm.customer360" }
-            else if path.starts_with("/api/customers") { "crm.customers" }
-            else if path.starts_with("/api/contacts") { "crm.contacts" }
-            else if path.starts_with("/api/deals") { "crm.deals" }
-            else if path.starts_with("/api/tasks") { "crm.tasks" }
             else { "crm.platform" };
         reply.headers_mut().set("x-crm-module", module)?;
         reply.headers_mut().set("x-crm-runtime", "native-workers-rs")?;
