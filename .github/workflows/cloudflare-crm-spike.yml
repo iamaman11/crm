@@ -38,7 +38,7 @@ jobs:
           npm run locate -- deals
           npm run locate -- INVALID_INPUT
           npm run locate -- customer360
-      - name: Run legacy pilot contract regression tests (not native acceptance)
+      - name: Check native-only ownership and release diagnostic contracts
         run: npm test
         working-directory: apps/cloudflare-crm
       - name: Build React CRM
