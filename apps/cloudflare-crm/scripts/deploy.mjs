@@ -67,26 +67,42 @@ async function waitForDeployment(expectedVersion,expectedSha,stage){
 }
 const auth=()=>({"CF-Access-Client-Id":required("CRM_E2E_A_CLIENT_ID"),"CF-Access-Client-Secret":required("CRM_E2E_A_CLIENT_SECRET")});
 async function publicSha(){
-  const r=await fetch(url+"/api/version?readback="+Date.now(),{headers:auth(),redirect:"manual",cache:"no-store"});
-  if(r.status!==200)throw Error("CRM public version HTTP "+r.status);
-  return (await r.json()).source;
+  // One isolated request per attempt. Read the active public Worker, not just
+  // Cloudflare's deployment metadata; preserve safe edge diagnostics on mismatch.
+  const requestUrl=url+"/api/version?readback="+Date.now()+"-"+Math.random().toString(36).slice(2);
+  const r=await fetch(requestUrl,{headers:{...auth(),"cache-control":"no-cache"},
+    redirect:"manual",cache:"no-store"});
+  const edge={http_status:r.status,ray:r.headers.get("cf-ray"),
+    cache_status:r.headers.get("cf-cache-status"),
+    runtime:r.headers.get("x-crm-runtime"),
+    header_sha:r.headers.get("x-crm-source-sha")};
+  if(r.status!==200)throw Error("CRM public version: "+JSON.stringify(edge));
+  const body=await r.json();
+  return {...edge,source:body.source||null};
 }
 
 async function waitForPublicSha(expected,stage){
-  const start=Date.now(),deadline=start+45000;
-  let last="NOT_CHECKED",attempts=0;
+  // Cloudflare control-plane convergence is separate from workers.dev edge
+  // routing. Two independent releases exposed stale edge SHA for >45 seconds.
+  // This remains a strict exact-SHA gate with a bounded, observable retry.
+  const start=Date.now(),deadline=start+120000;
+  let last={error:"NOT_CHECKED"},attempts=0;
   for(;;){
     attempts++;
-    try{last=await publicSha();}catch(error){last="READBACK_ERROR:"+String(error.message).slice(0,140);}
-    if(last===expected){
+    try{last=await publicSha();}
+    catch(error){last={error:String(error.message).slice(0,220)};}
+    if(last.source===expected){
       console.log(JSON.stringify({event:"crm.public-readback",stage,sha:expected,
-        result:"PASS",attempts,elapsed_ms:Date.now()-start}));
+        result:"PASS",attempts,elapsed_ms:Date.now()-start,
+        edge:{ray:last.ray,cache_status:last.cache_status,header_sha:last.header_sha}}));
       return;
     }
     if(Date.now()>=deadline)throw Error("Public Worker SHA readback mismatch stage="+stage+
-      " expected="+expected+" last_observed="+last+" attempts="+attempts);
-    if(attempts===1)console.log(JSON.stringify({event:"crm.public-readback",stage,
-      expected,observed:last,result:"RETRY"}));
+      " expected="+expected+" last_observed="+JSON.stringify(last)+
+      " attempts="+attempts);
+    if(attempts===1||attempts%5===0)console.log(JSON.stringify({
+      event:"crm.public-readback",stage,expected,observed:last,
+      result:"RETRY",attempts,elapsed_ms:Date.now()-start}));
     await new Promise(resolve=>setTimeout(resolve,Math.min(attempts*600,3500)));
   }
 }

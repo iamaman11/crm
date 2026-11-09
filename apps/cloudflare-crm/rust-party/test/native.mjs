@@ -1300,7 +1300,7 @@ try{
     });
     await submitForm();
     await page.getByRole("alert").getByText(/Изменение сохранено, но повторное чтение не удалось/).waitFor();
-    assert.equal(await page.getByRole("dialog").count(),0,
+    assert.equal(await page.locator("form.dialog").count(),0,
       "saved Account form must close even when the next read fails");
     const committed=await call("/api/accounts/"+saved.id,a);
     assert.equal(committed.status,200);

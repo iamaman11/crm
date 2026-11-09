@@ -257,3 +257,13 @@ test("Privacy intake and readback failures cannot be mistaken for failed writes"
   assert.doesNotMatch(doctor,/module==="customer-privacy"\?/);
   assert.doesNotMatch(read("AGENTS.md"),/Five still-unconnected crates|Five still-unconnected|five still-unconnected/i);
 });
+
+test("public edge readback remains strict, bounded and diagnoses stale routing",()=>{
+  const deploy=read("scripts/deploy.mjs");
+  assert.match(deploy,/deadline=start\+120000/);
+  assert.match(deploy,/last\.source===expected/);
+  assert.match(deploy,/cache_status:r\.headers\.get\("cf-cache-status"\)/);
+  assert.match(deploy,/header_sha:r\.headers\.get\("x-crm-source-sha"\)/);
+  assert.match(deploy,/Public Worker SHA readback mismatch stage=/);
+  assert.match(deploy,/node apps\/cloudflare-crm\/scripts\/deploy\.mjs rollback|async function rollback\(/);
+});
