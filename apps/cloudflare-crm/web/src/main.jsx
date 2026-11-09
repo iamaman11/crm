@@ -18,7 +18,7 @@ const stages=[["lead","Новая",1],["qualified","В работе",2],
 const stageTitle=id=>stages.find(s=>s[0]===id)?.[1]||id;
 const id=()=>crypto.randomUUID();
 const money=x=>x?x.minor_units+" "+x.currency:"—";
-const taskAccount=task=>task.related_resources?.find(x=>x.resource_type==="crm.customer-accounts")?.resource_id;
+const taskAccount=task=>task?.related_resources?.find(x=>x.resource_type==="crm.customer-accounts")?.resource_id;
 const keyHeaders=key=>({"idempotency-key":key});
 const limitMoney=value=>{
   if(!/^(0|[1-9][0-9]*)$/.test(value)||!Number.isSafeInteger(Number(value)))
