@@ -5,6 +5,7 @@ import Customer360 from "./Customer360.jsx";
 import Parties from "./Parties.jsx";
 import Relationships from "./Relationships.jsx";
 import Consents from "./Consents.jsx";
+import IdentityResolution from "./IdentityResolution.jsx";
 
 // A single React UI for ORIGINAL Rust owners. No pilot CRUD, JS business rules,
 // shadow entities or client-side authorization. All commands are typed at the
@@ -239,7 +240,9 @@ function App(){
           Связи <small>{items.relationships.length}</small></button>
         <button className={tab==="consents"?"active":"ghost"}
           onClick={()=>navigate("consents")}>
-          Разрешения <small>{items.consents.length}</small></button></nav>
+          Разрешения <small>{items.consents.length}</small></button>
+        <button className={tab==="identity-resolution"?"active":"ghost"}
+          onClick={()=>navigate("identity-resolution")}>Сравнение записей</button></nav>
       {notice&&<div role="status" className="notice">{notice}</div>}
       {error&&<div role="alert" className="notice error">{error}</div>}
       <section className="panel">{tab==="parties"?
@@ -247,6 +250,8 @@ function App(){
         tab==="relationships"?<Relationships items={items.relationships}
           parties={items.parties} load={api} writable={writable} loading={loading}
           onSaved={reload}/>:
+        tab==="identity-resolution"?<IdentityResolution parties={items.parties}
+          load={api} loading={loading}/>:
         tab==="consents"?<Consents items={items.consents}
           parties={items.parties} contacts={items.contacts}
           load={api} writable={writable} loading={loading} onSaved={reload}/>:

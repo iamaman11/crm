@@ -725,6 +725,31 @@ try{
     "content-type":"application/json","idempotency-key":"signed-second-party"},
     body:JSON.stringify({id:otherPartyId,kind:"person",name:"Native Related Person"})});
   assert.equal(secondParty.status,201,JSON.stringify(secondParty));
+  // Safe original Identity Resolution pair validation and tenant-bound Party
+  // readback. This does NOT claim matcher evidence or persisted duplicate cases.
+  const comparePath="/api/identity-resolution/compare/"+id+"/"+otherPartyId;
+  const compared=await call(comparePath,a);
+  assert.equal(compared.status,200,JSON.stringify(compared));
+  assert.equal(compared.headers["x-crm-module"],"crm.identity-resolution");
+  assert.equal(compared.body.read_only,true);
+  assert.equal(compared.body.candidate_cases,"NOT_CONNECTED");
+  assert.equal(compared.body.match_evidence,"NOT_ASSESSED");
+  assert.deepEqual([compared.body.left.id,compared.body.right.id].sort(),
+    [id,otherPartyId].sort(),"original owner returns canonical Party pair");
+  assert.equal((await call(comparePath,viewer)).status,200,
+    "verified viewer may compare two records without mutation");
+  assert.equal((await call(comparePath,b)).status,404,
+    "tenant B cannot compare tenant A records");
+  assert.equal((await call(comparePath,null)).status,401);
+  assert.equal((await call("/api/identity-resolution/compare/"+id+"/"+id,a))
+    .body.code,"IDENTITY_RESOLUTION_SELF_PAIR_INVALID");
+  assert.equal((await call("/api/identity-resolution/compare/"+id+"/missing-party",a))
+    .status,404);
+  assert.equal((await call(comparePath,a,{method:"POST"})).status,404,
+    "no mutation endpoint exists for unsupported evidence or merge");
+  console.log(JSON.stringify({event:"crm.native-original-identity-comparison",
+    result:"PASS",source:"crm.identity-resolution",read_only:true,
+    candidate_cases:"NOT_CONNECTED",merge:"NOT_CONNECTED"}));
   const relationshipId="native-relationship-"+randomUUID();
   const relationshipData={id:relationshipId,from_party_id:id,to_party_id:otherPartyId,
     code:"employment",directionality:"directional",from_role:"employer",to_role:"employee",

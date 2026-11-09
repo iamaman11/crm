@@ -47,6 +47,23 @@ test("each visible CRM feature names its original owner",()=>{
   assert.ok(card.includes('load("accounts/"+accountId+"/overview")'));
   assert.doesNotMatch(card,/customer360\//);
 });
+test("Identity Resolution comparison uses canonical Rust pair and no invented matcher",()=>{
+  const app=read("web/src/main.jsx");
+  const ui=read("web/src/IdentityResolution.jsx");
+  const owner=read("rust-party/src/identity_resolution.rs");
+  const route=read("rust-party/src/lib.rs");
+  assert.ok(app.includes("<IdentityResolution parties={items.parties}"));
+  assert.ok(!ui.includes("setItems("));
+  assert.ok(ui.includes('load("identity-resolution/compare/"'));
+  assert.ok(owner.includes("CanonicalPartyPair::try_new"));
+  assert.ok(owner.includes("parties::stored"));
+  assert.ok(owner.includes('"candidate_cases": "NOT_CONNECTED"'));
+  assert.ok(!owner.includes("MatchEvidenceSnapshot::try_new"));
+  assert.ok(route.includes("identity_resolution::route"));
+  assert.equal(ownerFiles["crm-identity-resolution"].api,
+    "rust-party/src/identity_resolution.rs");
+  assert.equal(ownerFiles["crm-identity-resolution"].browser,"e2e/live.mjs");
+});
 test("Party relationships UI uses original Rust owner with one App list",()=>{
   const app=read("web/src/main.jsx"),ui=read("web/src/Relationships.jsx");
   const owner=read("rust-party/src/party_relationships.rs");

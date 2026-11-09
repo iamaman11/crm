@@ -128,6 +128,37 @@ try{
   await page.getByLabel("Имя / название").fill(marker+" Related");
   await save();cover("parties.create.related");
   const relatedParty=await readOwner("parties",x=>x.name===marker+" Related");
+  // Physical UI -> original Rust canonical pair -> scoped D1 Party read.
+  // Read-only: no fictional match score and no D1 write/audit expected.
+  await tab("Сравнение записей").click();
+  await page.getByLabel("Первая запись").selectOption(party.id);
+  await page.getByLabel("Вторая запись").selectOption(relatedParty.id);
+  await button("Сравнить").click();
+  await page.getByRole("status").getByText(
+    "Сравнение выполнено без изменения записей.").waitFor();
+  cover("identity-resolution.compare");
+  const compared=await context.request.get(url+
+    "/api/identity-resolution/compare/"+party.id+"/"+relatedParty.id);
+  assert.equal(compared.status(),200);
+  const comparison=await compared.json();
+  assert.equal(comparison.read_only,true);
+  assert.equal(comparison.candidate_cases,"NOT_CONNECTED");
+  assert.deepEqual([comparison.left.id,comparison.right.id].sort(),
+    [party.id,relatedParty.id].sort());
+  await page.getByLabel("Вторая запись").selectOption(party.id);
+  await button("Сравнить").click();
+  await page.getByRole("alert").getByText(/IDENTITY_RESOLUTION_SELF_PAIR_INVALID/).waitFor();
+  cover("identity-resolution.self-pair-denied");
+  await button("Сбросить").click();
+  assert.equal(await page.getByRole("alert").count(),0);
+  cover("identity-resolution.reset");
+  const identityContextB=await browser.newContext({extraHTTPHeaders:access("B")});
+  try{
+    assert.equal((await identityContextB.request.get(url+
+      "/api/identity-resolution/compare/"+party.id+"/"+relatedParty.id)).status(),404);
+    cover("identity-resolution.tenant-isolation");
+  }finally{await identityContextB.close();}
+  await shot("02-identity","Read-only original Identity Resolution Party comparison");
   await tab("Связи").click();
   await button("+ Добавить связь").click();
   await button("Отмена").click();cover("party-relationships.create.cancel");

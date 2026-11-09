@@ -25,6 +25,8 @@ mod sales_deals;
 #[cfg(feature = "native")]
 mod consents;
 #[cfg(feature = "native")]
+mod identity_resolution;
+#[cfg(feature = "native")]
 mod sales_activities_link;
 #[cfg(feature = "native-ci")]
 mod original_domain_probe;
@@ -157,6 +159,11 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "tenant_audit_rows_with_id": audit_trace }},
         "modules": {
             "crm.parties": {"read": read_checks.get("parties"), "business_owner": "original-crm-parties"},
+            "crm.identity-resolution": {"read":read_checks.get("parties"),
+                "business_owner":"original-crm-identity-resolution",
+                "api":"READ_ONLY_PARTY_COMPARISON", "ui":"READ_ONLY_COMPARISON",
+                "candidate_search":"NOT_CONNECTED", "match_evidence":"NOT_CONNECTED",
+                "merge":"NOT_CONNECTED"},
             "crm.sales-activities-link": {"read":read_checks.get("sales-activities-link"),
                 "business_owner":"original-crm-sales-activities-link",
                 "api":"native-workers-rs","delivery":"SYNCHRONOUS_ATOMIC_D1",
@@ -244,6 +251,10 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
         return consents::route(req,db,tenant,actor,role,&request_id).await;
     }
     #[cfg(feature = "native")]
+    if path == "/api/identity-resolution" || path.starts_with("/api/identity-resolution/") {
+        return identity_resolution::route(req, db, tenant).await;
+    }
+    #[cfg(feature = "native")]
     if path == "/api/sales-deals" || path.starts_with("/api/sales-deals/") {
         let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
         return sales_deals::route(req,db,tenant,actor,&request_id).await;
@@ -324,6 +335,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
         let operation = match (path.as_str(), method.clone()) {
+            (p, Method::Get) if p.starts_with("/api/identity-resolution/compare/") => "identity-resolution.compare",
             ("/api/consents", Method::Get) => "consents.list",
             ("/api/consents/evaluate", Method::Post) => "consents.evaluate",
             ("/api/consents/suppress", Method::Post) => "consents.suppress",
@@ -380,6 +392,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             else if path.starts_with("/api/activity-tasks") { "crm.activities" }
             else if path.starts_with("/api/sales-deals") { "crm.sales" }
             else if path.starts_with("/api/consents") { "crm.consents" }
+            else if path.starts_with("/api/identity-resolution") { "crm.identity-resolution" }
             else { "crm.platform" };
         reply.headers_mut().set("x-crm-module", module)?;
         reply.headers_mut().set("x-crm-runtime", "native-workers-rs")?;
