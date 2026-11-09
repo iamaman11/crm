@@ -9,6 +9,7 @@ import IdentityResolution from "./IdentityResolution.jsx";
 import DataQuality from "./DataQuality.jsx";
 import DataExport from "./DataExport.jsx";
 import PrivacyCases from "./PrivacyCases.jsx";
+import Enrichment from "./Enrichment.jsx";
 
 // A single React UI for ORIGINAL Rust owners. No pilot CRUD, JS business rules,
 // shadow entities or client-side authorization. All commands are typed at the
@@ -265,7 +266,9 @@ function App(){
         <button className={tab==="data-export"?"active":"ghost"}
           onClick={()=>navigate("data-export")}>Экспорт данных</button>
         <button className={tab==="privacy"?"active":"ghost"}
-          onClick={()=>navigate("privacy")}>Заявки на приватность</button></nav>
+          onClick={()=>navigate("privacy")}>Заявки на приватность</button>
+        <button className={tab==="enrichment"?"active":"ghost"}
+          onClick={()=>navigate("enrichment")}>Обогащение</button></nav>
       {notice&&<div role="status" className="notice">{notice}</div>}
       {error&&<div role="alert" className="notice error">{error}</div>}
       <section className="panel">{tab==="parties"?
@@ -279,6 +282,7 @@ function App(){
           load={api} loading={loading}/>:
         tab==="data-export"?<DataExport load={api} writable={writable} loading={loading} onSaved={refreshAfterSave}/>:
         tab==="privacy"?<PrivacyCases load={api} writable={writable} loading={loading}/>:
+        tab==="enrichment"?<Enrichment load={api} writable={writable} loading={loading}/>:
         tab==="consents"?<Consents items={items.consents}
           parties={items.parties} contacts={items.contacts}
           load={api} writable={writable} loading={loading} onSaved={refreshAfterSave}/>:

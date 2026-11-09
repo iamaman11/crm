@@ -28,7 +28,9 @@ export const backendModels={
   "data-quality":{title:"Качество данных",kind:"backend",
     ui:"web/src/DataQuality.jsx",evaluation:"READ_ONLY_PARTY_NAME_RULES",
     findings:"NOT_CONNECTED",completeness_score:"NOT_CONNECTED"},
-  "customer-enrichment":{title:"Обогащение",kind:"backend",ui:"NOT_CONNECTED"},
+  "customer-enrichment":{title:"Обогащение",kind:"backend",
+    ui:"web/src/Enrichment.jsx",definitions:"PROFILES_AND_MAPPINGS_ONLY",
+    provider_dispatch:"NOT_CONNECTED",suggestions:"NOT_CONNECTED"},
   "customer-privacy":{title:"Заявки на приватность",kind:"backend",
     ui:"web/src/PrivacyCases.jsx",intake:"DRAFT_SUBMIT_CANCEL",
     identity_verification:"NOT_CONNECTED",execution:"NOT_CONNECTED"}
@@ -98,10 +100,11 @@ export const ownerFiles={
     validation:"../../modules/crm-customer-privacy/src/domain.rs",
     migration:"migrations/0011_original_customer_privacy_intake.sql",
     tests:nativeTests,browser:live},
-  ...Object.fromEntries(["crm-customer-enrichment"]
-    .map(name=>[name,{ui:null,api:null,
-      validation:"../../modules/"+name+"/Cargo.toml",
-      migration:null,tests:null,browser:null}]))
+  "crm-customer-enrichment":{ui:"web/src/Enrichment.jsx",
+    api:"rust-party/src/customer_enrichment.rs",
+    validation:"../../modules/crm-customer-enrichment/src/definitions.rs",
+    migration:"migrations/0012_original_customer_enrichment_definitions.sql",
+    tests:nativeTests,browser:live}
 };
 export const errors={
   INVALID_INPUT:"Проверьте поля формы",

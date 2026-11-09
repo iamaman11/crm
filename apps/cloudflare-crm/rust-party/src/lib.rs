@@ -33,6 +33,8 @@ mod customer_data_operations;
 #[cfg(feature = "native")]
 mod customer_privacy;
 #[cfg(feature = "native")]
+mod customer_enrichment;
+#[cfg(feature = "native")]
 mod sales_activities_link;
 #[cfg(feature = "native-ci")]
 mod original_domain_probe;
@@ -83,7 +85,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     // A truthful live, read-only diagnostic: this probes the active Rust
     // runtime and current D1 tables. CI/browser/Logs proof remains a separate
     // protected release artifact, never an invented live health result.
-    const EXPECTED: [&str; 20] = [
+    const EXPECTED: [&str; 23] = [
         "crm_tenants", "crm_users", "crm_audit", "crm_party_records", "crm_party_receipts",
         "crm_account_records", "crm_account_receipts",
         "crm_contact_point_records", "crm_contact_point_receipts",
@@ -93,11 +95,12 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
         "crm_consent_records", "crm_consent_receipts",
         "crm_sales_link_delivery_records",
         "crm_privacy_case_records", "crm_privacy_case_receipts",
+        "crm_enrichment_profiles", "crm_enrichment_mappings", "crm_enrichment_receipts",
     ];
     let db = env.d1("DB")?;
     let bindings: Vec<JsValue> = EXPECTED.iter().map(|name| JsValue::from_str(name)).collect();
     let row = bind(&db,
-        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         &bindings)?.first::<SchemaCount>(None).await?;
     let present = row.map_or(0, |value| value.present);
     let schema_ok = present == EXPECTED.len() as i64;
@@ -116,6 +119,8 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
             ("consents", "crm_consent_records", "tenant"),
             ("sales-activities-link", "crm_sales_link_delivery_records", "tenant"),
             ("customer-privacy", "crm_privacy_case_records", "tenant"),
+            ("customer-enrichment-profiles", "crm_enrichment_profiles", "tenant"),
+            ("customer-enrichment-mappings", "crm_enrichment_mappings", "tenant"),
         ] {
             // Table and column names are compiled-in constants, not user input.
             let query = format!("SELECT COUNT(*) AS present FROM {table} WHERE {column} = ?");
@@ -167,6 +172,15 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                 "tenant_audit_rows_with_id": audit_trace }},
         "modules": {
             "crm.parties": {"read": read_checks.get("parties"), "business_owner": "original-crm-parties"},
+            "crm.customer-enrichment": {
+                "provider_profiles":read_checks.get("customer-enrichment-profiles"),
+                "mapping_versions":read_checks.get("customer-enrichment-mappings"),
+                "business_owner":"original-crm-customer-enrichment",
+                "ui":"REACT_CONFIG_CONNECTED",
+                "profile_mapping_publication":"ORIGINAL_DOMAIN_D1",
+                "provider_dispatch":"NOT_CONNECTED",
+                "suggestion_application":"NOT_CONNECTED",
+                "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
             "crm.customer-privacy": {"read":read_checks.get("customer-privacy"),
                 "business_owner":"original-crm-customer-privacy",
                 "ui":"REACT_INTAKE_CONNECTED",
@@ -277,6 +291,12 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
         return consents::route(req,db,tenant,actor,role,&request_id).await;
     }
     #[cfg(feature = "native")]
+    if path.starts_with("/api/customer-enrichment/") {
+        let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
+        let Some(role)=role else{return error("AUTH_REQUIRED",401)};
+        return customer_enrichment::route(req,db,tenant,actor,role,&request_id).await;
+    }
+    #[cfg(feature = "native")]
     if path == "/api/customer-privacy/cases" ||
        path.starts_with("/api/customer-privacy/cases/") {
         let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
@@ -376,6 +396,12 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
         let operation = match (path.as_str(), method.clone()) {
+            ("/api/customer-enrichment/profiles", Method::Get) => "customer-enrichment.profiles_list",
+            ("/api/customer-enrichment/profiles", Method::Post) => "customer-enrichment.profile_publish",
+            ("/api/customer-enrichment/mappings", Method::Get) => "customer-enrichment.mappings_list",
+            ("/api/customer-enrichment/mappings", Method::Post) => "customer-enrichment.mapping_publish",
+            (p, Method::Get) if p.starts_with("/api/customer-enrichment/profiles/") => "customer-enrichment.profile_read",
+            (p, Method::Get) if p.starts_with("/api/customer-enrichment/mappings/") => "customer-enrichment.mapping_read",
             ("/api/customer-privacy/cases", Method::Get) => "customer-privacy.list",
             ("/api/customer-privacy/cases", Method::Post) => "customer-privacy.create",
             (p, Method::Get) if p.starts_with("/api/customer-privacy/cases/") => "customer-privacy.read",
@@ -448,6 +474,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             else if path.starts_with("/api/data-quality") { "crm.data-quality" }
             else if path.starts_with("/api/customer-data-operations") { "crm.customer-data-operations" }
             else if path.starts_with("/api/customer-privacy") { "crm.customer-privacy" }
+            else if path.starts_with("/api/customer-enrichment") { "crm.customer-enrichment" }
             else { "crm.platform" };
         reply.headers_mut().set("x-crm-module", module)?;
         reply.headers_mut().set("x-crm-runtime", "native-workers-rs")?;

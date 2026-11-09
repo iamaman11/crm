@@ -181,9 +181,10 @@ async function verifyData(){
     cycle.result!=="BROWSER_PASS_D1_LOGS_PENDING"||!Array.isArray(cycle.writes)||
     !Array.isArray(cycle.ui_coverage)||cycle.ui_coverage.length<18)
     throw Error("Exact-source native UI functional-cycle evidence missing");
-  const writes=cycle.writes,expected=["customer-privacy","parties","party-relationships","consents",
+  const writes=cycle.writes,expected=["customer-enrichment","customer-privacy","parties","party-relationships","consents",
     "accounts","contact-points","sales-deals","activity-tasks"];
-  const required=["customer-privacy.create","customer-privacy.submit",
+  const required=["customer-enrichment.profile_publish","customer-enrichment.mapping_publish",
+    "customer-privacy.create","customer-privacy.submit",
     "customer-privacy.cancel","parties.create","parties.update",
     "party-relationships.create","party-relationships.update","consents.suppress",
     "accounts.create","accounts.update","contact-points.create","contact-points.update",
@@ -197,7 +198,7 @@ async function verifyData(){
   const seen=new Set();
   for(const entry of writes){
     if(entry.source_sha!==sha||!expected.includes(entry.module)||
-      !["create","update","advance","complete","suppress","submit","cancel"].includes(entry.operation.split(".")[1])||
+      !["create","update","advance","complete","suppress","submit","cancel","profile_publish","mapping_publish"].includes(entry.operation.split(".")[1])||
       !entry.subject_id||
       !/^[0-9a-f-]{36}$/i.test(entry.request_id||"")||
       seen.has(entry.request_id))throw Error("Invalid or duplicated native UI mutation evidence");
@@ -205,6 +206,16 @@ async function verifyData(){
   }
   // The read-only Identity Resolution click must be traced in Cloudflare
   // Logs, but must NOT be fabricated as a D1 mutation/audit record.
+  const enrichProfileRead=cycle.requests?.find(r=>r.operation==="customer-enrichment.profiles_list"&&
+    r.method==="GET"&&r.status===200&&r.module==="customer-enrichment");
+  const enrichMappingRead=cycle.requests?.find(r=>r.operation==="customer-enrichment.mappings_list"&&
+    r.method==="GET"&&r.status===200&&r.module==="customer-enrichment");
+  if(!cycle.ui_coverage.includes("customer-enrichment.profile_publish")||
+    !cycle.ui_coverage.includes("customer-enrichment.mapping_publish")||
+    !enrichProfileRead||!enrichMappingRead||
+    ![enrichProfileRead,enrichMappingRead].every(r=>r.source_sha===sha&&
+      /^[0-9a-f-]{36}$/i.test(r.request_id||"")))
+    throw Error("Customer Enrichment provider/mapping readback missing");
   const readOnly=cycle.requests?.filter(r=>
     r.operation==="identity-resolution.compare"&&r.method==="GET"&&
     r.status===200&&r.module==="identity-resolution")||[];
@@ -293,7 +304,8 @@ async function verifyData(){
   // Query existing native structured Cloudflare Logs; no new monitoring
   // infrastructure. Probe each exact original owner mutation,
   // and require the version serving 100% of ordinary traffic.
-  let pending=[...writes,compareRead,candidateRead,qualityRead,exportPreview,exportDownload,importPreview,importApply];
+  let pending=[...writes,compareRead,candidateRead,qualityRead,exportPreview,exportDownload,
+    importPreview,enrichProfileRead,enrichMappingRead,importApply];
   const from=Date.now()-15*60*1000;
   for(let attempt=0;attempt<12&&pending.length;attempt++){
     const missing=[];
@@ -323,15 +335,16 @@ async function verifyData(){
   record("native-functional-accepted.json",{git_sha:sha,runtime:"native-workers-rs",
     worker_version:liveVersion,database,ui_buttons:cycle.ui_coverage,
     mutations:writes.length,d1_correlated:writes.length,logs_correlated:writes.length,
-    request_ids:ids,read_only_log_correlated:6,
+    request_ids:ids,read_only_log_correlated:8,
     read_only_request_ids:[compareRead.request_id,candidateRead.request_id,
-      qualityRead.request_id,exportPreview.request_id,exportDownload.request_id,importPreview.request_id],
+      qualityRead.request_id,exportPreview.request_id,exportDownload.request_id,
+      importPreview.request_id,enrichProfileRead.request_id,enrichMappingRead.request_id],
     import_request_id:importApply.request_id,import_d1_correlated:1,import_log_correlated:1,
     result:"PASS"});
   console.log(JSON.stringify({event:"crm.native-full-functional-cycle",result:"PASS",
     sha,worker_version:liveVersion,ui_buttons:cycle.ui_coverage.length,
     mutations:writes.length,d1_correlated:writes.length,
-    logs_correlated:writes.length,read_only_log_correlated:6,import_write_log_correlated:1}));
+    logs_correlated:writes.length,read_only_log_correlated:8,import_write_log_correlated:1}));
 
   const p=load("parties-e2e.json");
   if(p.git_sha!==sha||p.parties?.length!==2||p.keys?.length!==3)throw Error("Missing native Party A/B browser proof");

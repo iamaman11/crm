@@ -29,6 +29,10 @@ function operation(path,method){
   if(path.endsWith("/advance"))action="advance";
   if(path.endsWith("/complete"))action="complete";
   if(path.endsWith("/suppress"))action="suppress";
+  if(path==="/api/customer-enrichment/profiles"&&method==="POST")action="profile_publish";
+  if(path==="/api/customer-enrichment/mappings"&&method==="POST")action="mapping_publish";
+  if(path==="/api/customer-enrichment/profiles"&&method==="GET")action="profiles_list";
+  if(path==="/api/customer-enrichment/mappings"&&method==="GET")action="mappings_list";
   if(path.startsWith("/api/customer-privacy/cases/")&&path.endsWith("/submit"))action="submit";
   if(path.startsWith("/api/customer-privacy/cases/")&&path.endsWith("/cancel"))action="cancel";
   if(path.startsWith("/api/identity-resolution/compare/"))action="compare";
@@ -129,7 +133,7 @@ try{
   assert.equal(diagnosis.status(),200,"Live D1 and Access doctor");
   const doctor=await diagnosis.json();
   assert.equal(doctor.runtime,"workers-rs");
-  assert.equal(doctor.database.tables.expected,20);
+  assert.equal(doctor.database.tables.expected,23);
   await page.goto(url,{waitUntil:"domcontentloaded"});
   await page.getByRole("heading",{name:"Моя CRM"}).waitFor();
   await shot("01-home","Home original Rust owners");
@@ -183,6 +187,48 @@ try{
   assert.equal((await (await context.request.get(url+
     "/api/customer-privacy/cases/"+createdPrivacy.id)).json()).item.subject_verified,false);
   await shot("02-privacy-intake","Original Rust PrivacyCase draft submit cancel");
+  // Browser -> original Rust ProviderProfileVersion/MappingVersion -> tenant D1.
+  // A configuration is never treated as a live provider or applied suggestion.
+  const providerKey="test-"+sha.slice(0,8)+"-"+Date.now().toString(36);
+  const mappingKey="mapping-"+sha.slice(0,8)+"-"+Date.now().toString(36);
+  await tab("Обогащение").click();
+  await button("Добавить профиль провайдера").click();
+  await button("Отмена").click();cover("customer-enrichment.profile.cancel");
+  await button("Добавить профиль провайдера").click();
+  await page.getByLabel("Ключ провайдера").fill(providerKey);
+  await page.getByLabel("Тип адаптера").fill("manual");
+  await page.getByLabel("Цели использования (через запятую)").fill("research");
+  await page.getByLabel("Лицензия / основание").fill("synthetic test-only");
+  await page.getByLabel("Класс разрешённого использования").fill("test");
+  await page.getByLabel("Регион хранения").fill("eu");
+  await button("Сохранить профиль").click();
+  await page.getByRole("status").getByText("Профиль сохранён").waitFor();
+  cover("customer-enrichment.profile_publish");
+  const createdProvider=await readOwner("customer-enrichment/profiles",
+    x=>x.provider_key===providerKey);
+  assert.equal(createdProvider.execution,"NOT_CONNECTED");
+  assert.deepEqual(createdProvider.supported_target_fields,["party_display_name"]);
+  const otherEnrichment=await browser.newContext({extraHTTPHeaders:access("B")});
+  try{
+    assert.equal((await otherEnrichment.request.get(url+
+      "/api/customer-enrichment/profiles/"+createdProvider.id)).status(),404);
+    cover("customer-enrichment.tenant-isolation");
+  }finally{await otherEnrichment.close();}
+  await button("Добавить сопоставление").click();
+  await button("Отмена").click();cover("customer-enrichment.mapping.cancel");
+  await button("Добавить сопоставление").click();
+  await page.getByLabel("Профиль провайдера").selectOption(createdProvider.id);
+  await page.getByLabel("Ключ сопоставления").fill(mappingKey);
+  await page.getByLabel("Поле ответа провайдера").fill("company.name");
+  await button("Сохранить сопоставление").click();
+  await page.getByRole("status").getByText("Сопоставление сохранено").waitFor();
+  cover("customer-enrichment.mapping_publish");
+  const createdMapping=await readOwner("customer-enrichment/mappings",
+    x=>x.mapping_key===mappingKey);
+  assert.equal(createdMapping.provider_profile_version_id,createdProvider.id);
+  assert.equal(createdMapping.execution,"NOT_CONNECTED");
+  assert.equal(createdMapping.target_field,"party_display_name");
+  await shot("02-enrichment-definitions","Original provider-neutral Enrichment configuration");
   // Physical browser proof of the original PartyRelationships owner.
   // No JS duplicate domain, no fake persistence or manual SQL shortcut.
   await tab("Лица и организации").click();
@@ -544,7 +590,8 @@ try{
   await shot("11-mobile-consents","Mobile original Consent Deny record");
   cover("mobile.consents");
   await Promise.all(pending);
-  const operations=["customer-privacy.create","customer-privacy.submit",
+  const operations=["customer-enrichment.profile_publish","customer-enrichment.mapping_publish",
+    "customer-privacy.create","customer-privacy.submit",
     "customer-privacy.cancel","parties.create","parties.update",
     "party-relationships.create","party-relationships.update",
     "consents.suppress",

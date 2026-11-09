@@ -56,9 +56,10 @@ GitHub Actions may run those commands. No new app or connector is a prerequisite
   backend and its duplicate business rules are removed in integration PR #345.
   New capabilities must reuse original crate owners, not invent a new pilot
   master, registry or microservice. The twelve original module workflows already
-  accepted in Issue #338 are not full module implementations; customer-enrichment
-  remains without an accepted UI/D1 scenario. Unconnected subfeatures are
-  explicitly marked NOT_CONNECTED.
+  accepted in Issue #338 are not full module implementations. Customer Enrichment
+  has an original immutable provider/mapping *configuration-only* slice;
+  provider dispatch, response processing and Party application remain NOT_CONNECTED.
+  An accepted UI/D1 scenario must be proven by protected CI before claiming live.
 - The one Worker composes original module commands and existing typed contracts.
   Rust owner code alone decides transitions; the UI may display forms and
   transport IDs/versions, but must not duplicate domain validation.

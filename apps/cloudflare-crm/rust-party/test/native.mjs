@@ -75,6 +75,8 @@ try{
     "--file","../migrations/0010_original_sales_activities_link.sql","--persist-to",data]);
   run(["d1","execute","crm-rust-party-local","--local",
     "--file","../migrations/0011_original_customer_privacy_intake.sql","--persist-to",data]);
+  run(["d1","execute","crm-rust-party-local","--local",
+    "--file","../migrations/0012_original_customer_enrichment_definitions.sql","--persist-to",data]);
   child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
     "--var","CRM_CI_LOCAL_ONLY:yes","--var","CRM_NATIVE_CI_JWKS:"+jwks],
     {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
@@ -210,6 +212,73 @@ try{
     ["customer_privacy.cancel","customer_privacy.create","customer_privacy.submit"]);
   console.log(JSON.stringify({event:"crm.original-privacy-case-intake",
     result:"PASS",mutations:3,identity_verified:false,execution:false}));
+  // Original immutable Enrichment definitions: source-owned Rust publication,
+  // canonical strict persisted state and tenant-scoped D1, not provider execution.
+  const ep="/api/customer-enrichment/profiles",em="/api/customer-enrichment/mappings";
+  const edata={provider_key:"ci-native-provider",adapter_kind:"manual",
+    adapter_contract_version:"1.0.0",purpose_codes:["research"],
+    license_id:"synthetic test license not a provider authorization",
+    permitted_use_class:"test",residency_region:"eu",retention_days:0,
+    raw_payload_policy:"digest_only",credential_handle_aliases:[],
+    effective_at_unix_ms:0,expires_at_unix_ms:null};
+  const eh={"content-type":"application/json","idempotency-key":"native-enrich-profile-v1"};
+  assert.equal((await call(ep,null)).status,401);
+  assert.equal((await call(ep,viewer)).status,200);
+  assert.equal((await call(ep,viewer,{method:"POST",headers:eh,
+    body:JSON.stringify(edata)})).status,403);
+  const epublished=await call(ep,a,{method:"POST",headers:eh,body:JSON.stringify(edata)});
+  assert.equal(epublished.status,201,JSON.stringify(epublished));
+  assert.equal(epublished.headers["x-crm-module"],"crm.customer-enrichment");
+  const eid=epublished.body.item.id;
+  assert.match(eid,/^enrichment-provider-profile-[a-f0-9]{64}$/);
+  assert.equal(epublished.body.item.execution,"NOT_CONNECTED");
+  assert.deepEqual(epublished.body.item.supported_target_fields,["party_display_name"]);
+  assert.equal((await call(ep+"/"+eid,b)).status,404);
+  assert.equal((await call(ep+"/"+eid,a)).body.item.provider_key,edata.provider_key);
+  assert.equal((await call(ep,a,{method:"POST",headers:eh,body:JSON.stringify(edata)}))
+    .body.replayed,true);
+  assert.equal((await call(ep,a,{method:"POST",headers:eh,
+    body:JSON.stringify({...edata,residency_region:"us"})})).status,409);
+  assert.equal((await call(ep,a,{method:"POST",headers:{"content-type":"application/json",
+    "idempotency-key":"native-enrich-invalid-profile"},
+    body:JSON.stringify({...edata,purpose_codes:[]})})).status,422);
+  assert.equal((await call(ep,b)).body.items.some(x=>x.id===eid),false);
+  const mappingData={mapping_key:"ci-native-name-mapping",
+    provider_profile_version_id:eid,provider_response_field_path:"company.name",
+    maximum_suggestions_per_response:1,confidence_required:true};
+  const mh={"content-type":"application/json","idempotency-key":"native-enrich-mapping-v1"};
+  const mpublished=await call(em,a,{method:"POST",headers:mh,
+    body:JSON.stringify(mappingData)});
+  assert.equal(mpublished.status,201,JSON.stringify(mpublished));
+  const mid=mpublished.body.item.id;
+  assert.match(mid,/^enrichment-mapping-[a-f0-9]{64}$/);
+  assert.equal(mpublished.body.item.target_field,"party_display_name");
+  assert.equal(mpublished.body.item.execution,"NOT_CONNECTED");
+  assert.equal((await call(em+"/"+mid,a)).body.item.provider_profile_version_id,eid);
+  assert.equal((await call(em+"/"+mid,b)).status,404);
+  assert.equal((await call(em,b)).body.items.some(x=>x.id===mid),false);
+  assert.equal((await call(em,a,{method:"POST",headers:mh,
+    body:JSON.stringify(mappingData)})).body.replayed,true);
+  assert.equal((await call(em,viewer,{method:"POST",headers:mh,
+    body:JSON.stringify(mappingData)})).status,403);
+  assert.equal((await call(em,a,{method:"POST",
+    headers:{"content-type":"application/json","idempotency-key":"native-enrich-missing"},
+    body:JSON.stringify({...mappingData,provider_profile_version_id:"foreign"})})).status,404);
+  assert.equal((await call(em,a,{method:"POST",
+    headers:{"content-type":"application/json","idempotency-key":"native-enrich-invalid"},
+    body:JSON.stringify({...mappingData,provider_response_field_path:"bad path"})})).status,422);
+  assert.equal((await call(em,a,{method:"POST",
+    headers:{"content-type":"application/json","idempotency-key":"native-enrich-too-many"},
+    body:JSON.stringify({...mappingData,maximum_suggestions_per_response:33})})).status,422);
+  const eAudit=d1Rows("SELECT action,subject_id FROM crm_audit WHERE subject_id IN ('"+
+    eid+"','"+mid+"') ORDER BY action");
+  assert.deepEqual(eAudit.map(x=>x.action),
+    ["customer_enrichment.mapping_publish","customer_enrichment.profile_publish"]);
+  assert.equal(d1Rows("SELECT COUNT(*) AS count FROM crm_enrichment_receipts")[0].count,2);
+  console.log(JSON.stringify({event:"crm.original-enrichment-definitions",
+    result:"PASS",provider_calls:false,party_writes:false,
+    tested:["original-domain-publication","strict-codecs","D1-receipts-audit",
+      "tenant A/B","viewer","replay","invalid-input"]}));
   // Full bounded original Rust Party CSV export via the existing D1.
   // Not a persisted export job; no private Party names may escape tenant A.
   const previewPath="/api/customer-data-operations/preview?kind=all";
