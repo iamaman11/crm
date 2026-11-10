@@ -16,6 +16,9 @@ test("one published native Worker with one D1 and no competing backend",()=>{
   assert.equal(config.main,"./rust-party/build/index.js");
   assert.deepEqual(config.assets.run_worker_first,
     ["/api/*","/crm.sales.v1.DealService/*","/crm.parties.v2.PartyService/*"]);
+  assert.deepEqual(JSON.parse(read("rust-party/wrangler.jsonc")).assets.run_worker_first,
+    config.assets.run_worker_first,
+    "native workerd and deployed Worker must route the same typed RPC paths");
   assert.equal(config.d1_databases.length,1);
   assert.equal(config.d1_databases[0].binding,"DB");
   assert.equal(config.version_metadata.binding,"CF_VERSION_METADATA");
