@@ -5,6 +5,8 @@ import {readFileSync,existsSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {resolve,dirname} from "node:path";
 import {modules,implementationOwners,ownerFiles} from "../shared/catalog.mjs";
+import {amountToMinorUnits,amountFromMinorUnits,formatDealMoney,
+  percentToBasisPoints,percentFromBasisPoints} from "../web/src/deal-presentation.mjs";
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const read=p=>readFileSync(resolve(root,p),"utf8");
 const config=JSON.parse(read("wrangler.jsonc"));
@@ -321,4 +323,41 @@ test("new customer user journey composes original Party and Account without a se
   assert.match(browser,/accounts\.create\.new-party-linked/);
   assert.match(browser,/directCustomer\.parties\[0\]\.id/);
   assert.doesNotMatch(parties,/\/api\/accounts|UPDATE crm_account|INSERT INTO crm_account/);
+});
+
+test("Deal UI converts major amounts to exact Rust minor units without floating point",()=>{
+  assert.equal(amountToMinorUnits("127,50"),12750);
+  assert.equal(amountToMinorUnits("127.50"),12750);
+  assert.equal(amountToMinorUnits("0"),0);
+  assert.equal(amountToMinorUnits("0,05"),5);
+  assert.equal(amountToMinorUnits("90071992547409.91"),Number.MAX_SAFE_INTEGER);
+  for(const bad of ["","12.345","-1.00","1,2,3","1.2e3","01.10","90071992547409.92"]){
+    assert.throws(()=>amountToMinorUnits(bad),"must reject "+bad);
+  }
+  assert.equal(amountFromMinorUnits("12750"),"127.50");
+  assert.equal(amountFromMinorUnits("0"),"0.00");
+  assert.equal(amountFromMinorUnits("-5"),"-0.05");
+  assert.equal(formatDealMoney({minor_units:"12750",currency:"USD"}),"127,50 USD");
+  assert.equal(formatDealMoney({minor_units:"123456789",currency:"PLN"}),"1\u00a0234\u00a0567,89 PLN");
+  assert.equal(formatDealMoney(null),"—");
+});
+test("Deal UI shows percent, sends exact basis points and rejects invalid values",()=>{
+  assert.equal(percentToBasisPoints("37,5"),3750);
+  assert.equal(percentToBasisPoints("12.34"),1234);
+  assert.equal(percentToBasisPoints("100"),10000);
+  assert.equal(percentToBasisPoints("0.01"),1);
+  assert.equal(percentFromBasisPoints(2500),"25");
+  assert.equal(percentFromBasisPoints(1234),"12.34");
+  assert.equal(percentFromBasisPoints(1),"0.01");
+  for(const bad of ["","100,01","-1","12,345","101","1e2","25%"]){
+    assert.throws(()=>percentToBasisPoints(bad),"must reject "+bad);
+  }
+  const app=read("web/src/main.jsx"),browser=read("e2e/live.mjs");
+  assert.match(app,/amountToMinorUnits\(form\.amount_major\)/);
+  assert.match(app,/probability_bps:percentToBasisPoints\(form\.probability_percent\)/);
+  assert.match(app,/formatDealMoney\(row\.amount\)/);
+  assert.match(app,/Вероятность, %/);
+  assert.match(browser,/sales-deals\.invalid-amount/);
+  assert.match(browser,/sales-deals\.invalid-probability/);
+  assert.match(browser,/sales-deals\.edit-exact-conversion/);
 });

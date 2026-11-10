@@ -10,6 +10,8 @@ import DataQuality from "./DataQuality.jsx";
 import DataExport from "./DataExport.jsx";
 import PrivacyCases from "./PrivacyCases.jsx";
 import Enrichment from "./Enrichment.jsx";
+import {amountToMinorUnits,amountFromMinorUnits,formatDealMoney,
+  percentToBasisPoints,percentFromBasisPoints} from "./deal-presentation.mjs";
 
 // A single React UI for ORIGINAL Rust owners. No pilot CRUD, JS business rules,
 // shadow entities or client-side authorization. All commands are typed at the
@@ -24,14 +26,8 @@ const stages=[["lead","Новая",1],["qualified","В работе",2],
   ["proposal","Предложение",3],["won","Выиграна",4],["lost","Проиграна",4]];
 const stageTitle=id=>stages.find(s=>s[0]===id)?.[1]||id;
 const id=()=>crypto.randomUUID();
-const money=x=>x?x.minor_units+" "+x.currency:"—";
 const taskAccount=task=>task?.related_resources?.find(x=>x.resource_type==="crm.customer-accounts")?.resource_id;
 const keyHeaders=key=>({"idempotency-key":key});
-const limitMoney=value=>{
-  if(!/^(0|[1-9][0-9]*)$/.test(value)||!Number.isSafeInteger(Number(value)))
-    throw Error("Сумма должна быть целым количеством минимальных денежных единиц");
-  return Number(value);
-};
 async function api(path,options={}){
   const {responseType,...fetchOptions}=options;
   const response=await fetch("/api/"+path,{...fetchOptions,headers:{
@@ -93,9 +89,9 @@ function App(){
       preferred:record?.preferred||false});
     if(kind==="deals")Object.assign(f,{name:record?.name||"",account_id:record?.account_id||"",
       stage_id:mode==="advance"?stages.find(stage=>stage[2]===(record?.stage?.ordinal||0)+1)?.[0]||record?.stage?.stage_id:"lead",
-      amount_minor_units:record?.amount?.minor_units||"",
+      amount_major:record?.amount?amountFromMinorUnits(record.amount.minor_units):"",
       currency:record?.amount?.currency||"USD",
-      probability_bps:record?.probability_bps??2500,
+      probability_percent:percentFromBasisPoints(record?.probability_bps??2500),
       close_reason_code:""});
     if(kind==="tasks")Object.assign(f,{subject:record?.subject||"",
       account_id:taskAccount(record)||"",priority:record?.priority||"normal",
@@ -132,15 +128,15 @@ function App(){
         }else if(form.mode==="create"){
           data={id:form.id,name:form.name,account_id:form.account_id,
             pipeline_id:"pipeline.enterprise",stage_id:"lead",ordinal:1,
-            amount_minor_units:form.amount_minor_units?limitMoney(form.amount_minor_units):null,
-            currency:form.amount_minor_units?form.currency:null,
-            probability_bps:Number(form.probability_bps)};
+            amount_minor_units:form.amount_major.trim()?amountToMinorUnits(form.amount_major):null,
+            currency:form.amount_major.trim()?form.currency:null,
+            probability_bps:percentToBasisPoints(form.probability_percent)};
         }else{
           path+="/"+form.id;method="PATCH";
           data={expected_version:form.expected_version,name:form.name,
-            probability_bps:Number(form.probability_bps),
-            ...(form.amount_minor_units?{
-              amount_minor_units:limitMoney(form.amount_minor_units),currency:form.currency
+            probability_bps:percentToBasisPoints(form.probability_percent),
+            ...(form.amount_major.trim()?{
+              amount_minor_units:amountToMinorUnits(form.amount_major),currency:form.currency
             }:{clear_amount:true})};
         }
       }else{
@@ -197,7 +193,8 @@ function App(){
     deals:[["name","Сделка",row=>row.name],
       ["account","Клиент",row=>accountName(row.account_id)],
       ["stage","Этап",row=>stageTitle(row.stage.stage_id)],
-      ["amount","Сумма",row=>money(row.amount)]],
+      ["amount","Сумма",row=>formatDealMoney(row.amount)],
+      ["probability","Вероятность",row=>percentFromBasisPoints(row.probability_bps)+"%"]],
     tasks:[["subject","Задача",row=>row.subject],
       ["account","Клиент",row=>accountName(taskAccount(row))],
       ["priority","Приоритет",row=>row.priority],
@@ -208,7 +205,10 @@ function App(){
     {choices?<select id={"native-"+name} required value={form[name]}
       onChange={e=>change(name,e.target.value)}>
       {choices.map(([key,title])=><option value={key} key={key}>{title}</option>)}
-    </select>:<input id={"native-"+name} type={type} required={name!=="amount_minor_units"}
+    </select>:<input id={"native-"+name} type={type} required={name!=="amount_major"}
+      inputMode={["amount_major","probability_percent"].includes(name)?"decimal":undefined}
+      placeholder={name==="amount_major"?"Например, 127,50":
+        name==="probability_percent"?"Например, 37,5":undefined}
       value={form[name]} onChange={e=>change(name,e.target.value)}/>}
   </div>;
   const partyChoices=[["","Выберите лицо / организацию"],
@@ -240,9 +240,9 @@ function App(){
       </>;
       return <>{field("Название сделки","name")}
         {form.mode==="create"&&field("Клиент","account_id","text",accountChoices)}
-        {field("Сумма (минимальные единицы)","amount_minor_units","text")}
+        {field("Сумма","amount_major","text")}
         {field("Валюта","currency","text",[["USD","USD"],["EUR","EUR"],["PLN","PLN"]])}
-        {field("Вероятность (0–10000)","probability_bps","number")}
+        {field("Вероятность, %","probability_percent","text")}
       </>;
     }
     if(form.mode==="complete")return <p>Отметить задачу выполненной?</p>;
@@ -336,7 +336,8 @@ function App(){
               <div className="deal-board">{stages.map(stage=><section className="deal-column" key={stage[0]}>
                 <h3>{stage[1]}</h3>{rows.filter(row=>row.stage.stage_id===stage[0]).map(row=>
                   <article className="deal-card" key={row.id}><strong>{row.name}</strong>
-                    <p>{accountName(row.account_id)}</p><p>{money(row.amount)}</p>{actions(row)}
+                    <p>{accountName(row.account_id)}</p><p>{formatDealMoney(row.amount)}</p>
+                    <p>{percentFromBasisPoints(row.probability_bps)}%</p>{actions(row)}
                   </article>)}</section>)}</div>:
               <><div className="table-scroll"><table><thead><tr>
                 {columns[tab].map(([key,title])=><th key={key}>{title}</th>)}

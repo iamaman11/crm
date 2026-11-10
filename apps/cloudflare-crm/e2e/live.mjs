@@ -529,19 +529,45 @@ try{
   await button("+ Добавить сделку").click();
   await page.getByLabel("Название сделки").fill(dealName);
   await page.getByLabel("Клиент",{exact:true}).selectOption({label:marker+" Account Updated"});
-  await page.getByLabel("Сумма (минимальные единицы)").fill("12750");
+  // Local UI rejects precision/range mistakes before any Rust D1 mutation.
+  await page.getByLabel("Сумма").fill("12,345");
+  await button("Сохранить").click();
+  await page.getByRole("alert").getByText(/не более двух знаков после запятой/).waitFor();
+  assert.equal(await row(dealName).count(),0);
+  cover("sales-deals.invalid-amount");
+  await page.getByLabel("Сумма").fill("127,50");
+  await page.getByLabel("Вероятность, %").fill("100,01");
+  await button("Сохранить").click();
+  await page.getByRole("alert").getByText(/от 0 до 100%/).waitFor();
+  assert.equal(await row(dealName).count(),0);
+  cover("sales-deals.invalid-probability");
+  await page.getByLabel("Вероятность, %").fill("37,5");
   await save();cover("sales-deals.create");
   const deal=await readOwner("sales-deals",x=>x.name===dealName);
   assert.equal(deal.amount.minor_units,"12750");
+  assert.equal(deal.probability_bps,3750);
+  await row(dealName).getByText("127,50 USD").waitFor();
+  cover("sales-deals.display-major");
   await row(dealName).getByRole("button",{name:"Изменить"}).click();
+  assert.equal(await page.getByLabel("Сумма").inputValue(),"127.50");
+  assert.equal(await page.getByLabel("Вероятность, %").inputValue(),"37.5");
   await page.getByLabel("Название сделки").fill(dealName+" Updated");
+  await page.getByLabel("Сумма").fill("145.75");
+  await page.getByLabel("Вероятность, %").fill("12,34");
   await save();cover("sales-deals.update");
+  const updatedDeal=await readOwner("sales-deals",x=>x.id===deal.id);
+  assert.equal(updatedDeal.amount.minor_units,"14575");
+  assert.equal(updatedDeal.probability_bps,1234);
+  cover("sales-deals.edit-exact-conversion");
   await row(dealName+" Updated").getByRole("button",{name:"Этап сделки"}).click();
   await page.getByLabel("Новый этап").selectOption("qualified");
   await save();cover("sales-deals.advance");
   assert.equal((await readOwner("sales-deals",x=>x.id===deal.id)).stage.stage_id,"qualified");
   await shot("05-deals","Original Sales create/update/advance");
   await button("Воронка").click();cover("deals.board");
+  await page.getByText("145,75 USD").first().waitFor();
+  await page.getByText("12.34%").first().waitFor();
+  cover("sales-deals.board-major-percent");
   await shot("06-pipeline","Original Sales pipeline board");
   await button("Таблица").click();cover("deals.table");
   const subject=marker+" Task";
@@ -634,6 +660,21 @@ try{
     git_sha:sha,parties:[party.id,tenantB.id],
     keys:[writes.find(x=>x.operation==="parties.create").idempotency_key,
       writes.find(x=>x.operation==="parties.update").idempotency_key,tenantB.key]})+"\n");
+  // Explicit release-critical interaction inventory. Count alone is not proof
+  // of cancel/retry/invalid scenarios; absence of one is a release failure.
+  const requiredInteractionPaths=[
+    "parties.create.cancel","party-relationships.create.cancel",
+    "customer-enrichment.profile.cancel","customer-enrichment.mapping.cancel",
+    "consents.suppress.cancel","customer360.retry","customer360.refresh",
+    "accounts.create.new-party.cancel","accounts.create.new-party-flow",
+    "accounts.create.new-party-linked",
+    "sales-deals.invalid-amount","sales-deals.invalid-probability",
+    "sales-deals.display-major","sales-deals.edit-exact-conversion",
+    "sales-deals.board-major-percent","deals.board","deals.table",
+    "mobile.customer.card","browser.reload"
+  ];
+  assert.deepEqual(requiredInteractionPaths.filter(x=>!uiCoverage.has(x)),[],
+    "Missing mandatory live UI cancel/retry/negative/display paths");
   const coverage=Array.from(uiCoverage);
   await writeFile("apps/cloudflare-crm/.release/native-functional-cycle.json",
     JSON.stringify({git_sha:sha,runtime:"native-workers-rs",

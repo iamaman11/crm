@@ -2,7 +2,7 @@ import React,{useEffect,useState} from "react";
 
 // Read-only composition of ORIGINAL owner views, not a second Customer domain.
 // No shadow Customer360 table: one tenant-scoped Account overview from Rust/D1.
-const money=x=>x?x.minor_units+" "+x.currency:"—";
+import {formatDealMoney} from "./deal-presentation.mjs";
 export default function Customer360({accountId,load,writable,onBack,onNavigate,onEdit}){
   const [state,setState]=useState({loading:true});
   async function refresh(){
@@ -16,7 +16,7 @@ export default function Customer360({accountId,load,writable,onBack,onNavigate,o
   const sections=[
     ["contact_points","Контакты","contacts",p=>p.value,p=>p.kind+
       (p.verified?" · Подтверждён":" · Не подтверждён")],
-    ["deals","Сделки","deals",d=>d.name,d=>d.stage.stage_id+" · "+money(d.amount)],
+    ["deals","Сделки","deals",d=>d.name,d=>d.stage.stage_id+" · "+formatDealMoney(d.amount)],
     ["tasks","Задачи","tasks",t=>t.subject,t=>t.status==="completed"?"Готово":"В работе"],
     ["party_relationships","Связи","parties",r=>r.type?.code||r.id,r=>r.status]
   ];
