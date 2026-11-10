@@ -35,7 +35,9 @@
         "packages/client/src/contract_hashes.ts",
         "scripts/contract_bindings.py",
         "scripts/generate_contract_bindings.py",
-        "scripts/crm-rpc-descriptors.mjs"
+        "scripts/crm-rpc-descriptors.mjs",
+        "scripts/crm-module-coverage.py",
+        "tests/test_crm_module_coverage.py"
       ],
       "required_workflows": [
         "Contract CI",
@@ -99,7 +101,11 @@
         "apps/cloudflare-crm/**",
         "scripts/crm-architecture-ast.mjs",
         "scripts/crm-architecture-ast.test.mjs",
-        "scripts/crm-rpc-descriptors.mjs"
+        "scripts/crm-rpc-descriptors.mjs",
+        "scripts/crm-module-coverage.py",
+        "scripts/crm-active-rust-surface.py",
+        "tests/test_crm_module_coverage.py",
+        "tests/test_crm_active_rust_surface.py"
       ],
       "required_workflows": [
         "Product Plane CI"
@@ -160,7 +166,11 @@
         "affected-scope-policy.json",
         "scripts/crm-architecture-ast.mjs",
         "scripts/crm-architecture-ast.test.mjs",
-        "scripts/crm-rpc-descriptors.mjs"
+        "scripts/crm-rpc-descriptors.mjs",
+        "scripts/crm-module-coverage.py",
+        "scripts/crm-active-rust-surface.py",
+        "tests/test_crm_module_coverage.py",
+        "tests/test_crm_active_rust_surface.py"
       ],
       "required_workflows": [
         "Governance CI"
