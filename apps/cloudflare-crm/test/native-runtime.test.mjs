@@ -5,6 +5,7 @@ import {readFileSync,existsSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {resolve,dirname} from "node:path";
 import {modules,implementationOwners,ownerFiles} from "../shared/catalog.mjs";
+import {failNewRest,validateGeneratedBrowserBoundary,validateOneWorkerRouter} from "../scripts/architecture-gate.mjs";
 import {uiInventory,requiredUiActions} from "../e2e/ui-inventory.mjs";
 import {amountToMinorUnits,amountFromMinorUnits,formatDealMoney,
   percentToBasisPoints,percentFromBasisPoints} from "../web/src/deal-presentation.mjs";
@@ -485,4 +486,32 @@ test("protected deployment keeps exact Logs request-id correlation and bounded i
   assert.match(verify,/event\.source\?\.status===entry\.status/);
   assert.match(verify,/event\.\$workers\?\.scriptVersion\?\.id===liveVersion/);
   assert.match(verify,/if\(pending\.length\)throw Error\("Native Cloudflare Logs missing "/);
+});
+
+test("architecture gate rejects new REST, wrong binary setting and second D1/router",()=>{
+  const actual=read("../../packages/client/src/cloudflare.ts");
+  validateGeneratedBrowserBoundary(actual);
+  assert.throws(()=>failNewRest('const x="/api/unapproved-business";',
+    'const x="/api/parties";'),/new manual REST business path/);
+  assert.throws(()=>validateGeneratedBrowserBoundary(actual.replace(
+    "useBinaryFormat: true","useBinaryFormat: false")),/binary Protobuf/);
+  assert.throws(()=>validateGeneratedBrowserBoundary(actual.replace(
+    "createConnectTransport","createGrpcWebTransport")),/Cloudflare client must not use legacy gateway/);
+  assert.throws(()=>validateOneWorkerRouter("axum::serve()",config,
+    JSON.parse(read("rust-party/wrangler.jsonc"))),/second listening server/);
+  const bad={...config,d1_databases:[...config.d1_databases,...config.d1_databases]};
+  assert.throws(()=>validateOneWorkerRouter("native",bad,
+    JSON.parse(read("rust-party/wrangler.jsonc"))),/exactly one native D1/);
+  const local=JSON.parse(read("rust-party/wrangler.jsonc"));
+  local.assets.run_worker_first=["/api/*"];
+  assert.throws(()=>validateOneWorkerRouter("native",config,local),/RPC routing differ/);
+  const policy=JSON.parse(read("architecture-policy.json"));
+  const source=read("scripts/architecture-gate.mjs");
+  const workflow=read("../../.github/workflows/cloudflare-crm-spike.yml");
+  assert.equal(policy.phase,"migration-freeze");
+  assert.match(source,/legacy runtime modified before single cutover/);
+  assert.match(source,/coverage\.owners/);
+  assert.match(source,/exactly one embedded Connect router required/);
+  assert.match(workflow,/node apps\/cloudflare-crm\/scripts\/architecture-gate\.mjs/);
+  assert.match(workflow,/pnpm --filter cloudflare-crm typecheck/);
 });

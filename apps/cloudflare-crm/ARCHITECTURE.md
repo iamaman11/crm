@@ -94,7 +94,7 @@ Cloudflare fetch → workers-rs Worker (единственный entrypoint)
 
 `apps/cloudflare-crm/web/src/`: `*.tsx` + `*.ts`, `strict`, `allowJs:false`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`; без ручных запросов/ответов API, произвольного `any` и `as unknown as` как способа обходить проверку. UI строится на сгенерированном `packages/client` — один общий Connect transport, типизированные RPC и единый обработчик ошибок.
 
-`ui/` содержит общие Button/Input/Select/Dialog/Table и другие действительно повторяемые элементы; внешнее оформление — семантические tokens, CSS Modules для локальных стилей. Встроенные `system/light/dark` темы, ручной выбор в localStorage (не D1). Новый экран использует эти примитивы по умолчанию. React отвечает за формы/отображение и локальный UI state; все списки допустимых действий, права и бизнес-справочники — Rust.
+Существующая `packages/ui` содержит общие Button/Input/Select/Dialog/Table и другие действительно повторяемые элементы; внешнее оформление — семантические tokens, CSS Modules для локальных стилей. Встроенные `system/light/dark` темы, ручной выбор в localStorage (не D1). Новый экран использует эти примитивы по умолчанию. React отвечает за формы/отображение и локальный UI state; все списки допустимых действий, права и бизнес-справочники — Rust.
 
 ## 6. Один воспроизводимый build и обязательный CI
 
@@ -140,3 +140,41 @@ Cloudflare fetch → workers-rs Worker (единственный entrypoint)
 - **D1 на долгий срок:** проверить native limits/latency/indexes, транзакционную запись CAS+idempotency+audit; versioned additive migrations и реальную совместимость предыдущего Worker. Данные и D1 не откатываются автоматически с Worker. Ввести регулярную проверку восстанавливаемости из Cloudflare штатных backup/export возможностей перед production; не создавать резервную рабочую D1 и новую инфраструктуру ради тестовых сущностей.
 - **Рост:** один Worker и одна D1 — текущий контракт. Ограниченные списки/pagination, bounded CSV/import, нормализованные таблицы и SQL indexes. Не добавлять Queues, Durable Objects, R2 или внешнюю БД до конкретного функционального требования/измеренного ограничения; они не являются скрытыми обязательными компонентами стека.
 - **Надёжная диагностика:** `request_id` сквозь UI → Access → RPC owner → D1 audit → Logs, только серверный авторитет; structured error code, запросы без корректных прав запрещаются, стабильные retry semantics для writes. E2E проверяет не только typecheck, но реальную семантику, auth A/B, точные границы денег/дат/версий и отказные сценарии.
+
+## 10. Не растягивать миграцию: один полный cutover-кандидат
+
+Прекратить публикации по одному RPC. Проверенный `crm.parties.v2.GetParty` —
+доказательство совместимости, не стратегия поочерёдного выпуска сервисов.
+Все действующие API-команды, strict TSX, общие UI-компоненты и **удаление
+старого бизнес-REST** должны войти в **один** итоговый source SHA до
+его защищённой приёмки. Доменную реализацию использовать напрямую, без
+кодека Buffa→Prost на границе.
+
+**Архитектура как исполняемая политика:**
+[`architecture-policy.json`](architecture-policy.json) определяет режим,
+[`scripts/architecture-gate.mjs`](scripts/architecture-gate.mjs) проверяет его
+в том же обязательном CRM CI на каждом push dev и PR dev/main.
+
+- `migration-freeze` сейчас: принятые старые React/Rust runtime-файлы
+  неизменны относительно точного принятого Git SHA. Нельзя дописывать новый
+  JSX/REST или выпускать очередной частичный Connect API. Разрешена работа
+  над общим кандидатом в одном интеграционном изменении.
+- `cutover`: этот режим включается **в том же изменении, которое переносит
+  весь функционал**. CI запрещает любые `.jsx/.js/.mjs` в браузерном
+  `web/src`, требует strict TS config, единый pnpm workspace/lock и
+  общий `packages/ui` и `packages/client`, типизацию самого Cloudflare
+  React, отсутствие `/api` бизнес-обработчиков, `unimplemented` RPC,
+  Buffa→Prost decode/encode и ручных frontend fetch.
+- Обязательно предоставить `contract-coverage.json`: каждый существующий
+  owner из `shared/catalog.mjs` должен иметь подтверждённый Connect RPC,
+  или явное внутреннее (без отдельного публичного API) действие/HTTP download.
+  Методы проверяются против существующих `.proto`; сам generated handler
+  обязан пройти Rust build и физический E2E.
+- Это **два режима одного CI, не два backend, не два release train**.
+  Смену режима нельзя выдать за acceptance: нужен весь защищённый
+  Chromium→Rust→D1→Logs и публичный readback 100% на том же SHA.
+- Отдельно от кодового gate в GitHub нужно включить required CI status checks
+  и защиту веток `dev/main`. Сейчас в API GitHub обе ветки
+  `protected=false`: CI обнаруживает нарушения, но прямые push/merge без
+  status-policy не блокируются. Нельзя объявлять репозиторный governance
+  принудительно обеспеченным до включения этих штатных правил GitHub.

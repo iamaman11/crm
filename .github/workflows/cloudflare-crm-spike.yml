@@ -59,6 +59,15 @@ jobs:
           pnpm --filter @ultimate-crm/ui typecheck
           # A frozen checkout never changes the source lockfile.
           git diff --exit-code -- pnpm-lock.yaml
+      - name: Enforce canonical architecture and freeze obsolete runtime
+        shell: bash
+        run: node apps/cloudflare-crm/scripts/architecture-gate.mjs
+      - name: Typecheck entire Cloudflare CRM on full cutover
+        shell: bash
+        run: |
+          if [ "$(node -p 'require("./apps/cloudflare-crm/architecture-policy.json").phase')" = "cutover" ]; then
+            pnpm --filter cloudflare-crm typecheck
+          fi
       - name: Install CRM dependencies
         run: npm install --no-audit --no-fund
         working-directory: apps/cloudflare-crm
