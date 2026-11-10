@@ -1,0 +1,26 @@
+name: Temporary proof ConnectRPC plus native D1 via official workers-rs send
+on:
+  push:
+    branches: [dev]
+    paths:
+      - ".github/workflows/connect-native-d1-proof.yml"
+      - ".github/experiments/connect-d1-native-20261110/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  wasm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+      - name: Compile latest released worker 0.8.7 + Connect 0.9.1 + native D1 with official worker::send
+        working-directory: .github/experiments/connect-d1-native-20261110
+        run: |
+          set -euo pipefail
+          cargo check --target wasm32-unknown-unknown
+          echo "CONNECT_NATIVE_D1_OFFICIAL_SEND_COMPILE=PASS"
