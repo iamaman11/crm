@@ -63,6 +63,7 @@ if(policy.phase==="cutover"){
  const matrix=JSON.parse(rd(policy.cutover_coverage_file));
  const runtime=new Set(matrix.owners.flatMap(x=>x.rpc_methods||[]));
  for(const method of runtime)if(!available.has(method))fail("coverage RPC missing descriptor "+method);
+ for(const method of runtime)if(!allowed.has(method))fail("owner RPC is NOT registered active "+method);
  for(const route of allowed)if(!runtime.has(route))fail("active RPC lacks owner coverage "+route);
 }
 console.log(JSON.stringify({event:"crm.protobuf-descriptor-coverage",result:"PASS",
