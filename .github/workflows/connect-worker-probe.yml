@@ -18,9 +18,26 @@ jobs:
         with:
           toolchain: 1.97.1
           targets: wasm32-unknown-unknown
-      - name: Compile real Connect/Axum handler containing D1 read on Workers WASM
+      - name: Control — generated Connect server inside workers-rs WASM without D1
         working-directory: .github/experiments/connect-worker-probe
         run: |
           set -o pipefail
-          cargo check --target wasm32-unknown-unknown 2>&1 | tee "$RUNNER_TEMP/connect-wasm-build.log"
-          echo "CONNECT_WASM_D1_COMPILE=PASS"
+          cargo check --target wasm32-unknown-unknown 2>&1 | tee "$RUNNER_TEMP/connect-wasm-baseline.log"
+          echo "CONNECT_WASM_NO_D1=PASS"
+      - name: Negative control — exact same generated RPC, this time awaiting native D1
+        working-directory: .github/experiments/connect-worker-probe
+        run: |
+          set -o pipefail
+          set +e
+          cargo check --target wasm32-unknown-unknown --features with_d1 >"$RUNNER_TEMP/connect-wasm-d1.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/connect-wasm-d1.log"
+          if [ "$status" -eq 0 ]; then
+            echo "CONNECT_WASM_NATIVE_D1=COMPILED; full runtime proof still required"
+          elif grep -q 'cannot be sent between threads safely' "$RUNNER_TEMP/connect-wasm-d1.log" && grep -q 'required by.*Send' "$RUNNER_TEMP/connect-wasm-d1.log"; then
+            echo "CONNECT_WASM_NATIVE_D1=BLOCKED_BY_GENERATED_SEND_BOUND"
+          else
+            echo "Unexpected proof failure — not evidence of Send barrier" >&2
+            exit 1
+          fi

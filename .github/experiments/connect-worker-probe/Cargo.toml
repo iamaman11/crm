@@ -9,6 +9,10 @@ crate-type = ["cdylib"]
 
 [workspace]
 
+[features]
+default = []
+with_d1 = []
+
 [dependencies]
 worker = { version = "=0.8.7", features = ["http", "d1"] }
 connectrpc = { version = "=0.9.1", default-features = false, features = ["json", "axum"] }
