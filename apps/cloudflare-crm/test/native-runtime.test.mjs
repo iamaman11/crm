@@ -5,6 +5,7 @@ import {readFileSync,existsSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {resolve,dirname} from "node:path";
 import {modules,implementationOwners,ownerFiles} from "../shared/catalog.mjs";
+import {uiInventory,requiredUiActions} from "../e2e/ui-inventory.mjs";
 import {amountToMinorUnits,amountFromMinorUnits,formatDealMoney,
   percentToBasisPoints,percentFromBasisPoints} from "../web/src/deal-presentation.mjs";
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
@@ -370,4 +371,40 @@ test("local and live Chromium both exercise readable Deal amount and percent",()
   assert.match(native,/getByLabel\("Вероятность, %"\)/);
   assert.match(native,/probability_bps,6250/);
   assert.match(live,/sales-deals\.invalid-probability/);
+});
+
+test("every CRM JSX button family has an explicit reviewed live-browser proof",()=>{
+  const live=read("e2e/live.mjs");
+  const files=uiInventory.map(screen=>screen.file);
+  assert.equal(uiInventory.length,10);
+  assert.equal(new Set(files).size,10,"duplicate inventory component");
+  assert.equal(uiInventory.reduce((n,screen)=>n+screen.buttons,0),60);
+  assert.equal(requiredUiActions.length,91);
+  assert.equal(new Set(requiredUiActions).size,requiredUiActions.length,
+    "ambiguous coverage action identifiers");
+  for(const screen of uiInventory){
+    const source=read("web/src/"+screen.file);
+    for(const [tag,expected] of [
+      ["button",screen.buttons],["form",screen.forms],
+      ["input",screen.inputs],["select",screen.selects]
+    ]){
+      const observed=(source.match(new RegExp("<"+tag+"\\b","g"))||[]).length;
+      assert.equal(observed,expected,
+        "UI changed without corresponding inventory review: "+screen.file+" "+tag);
+    }
+    assert.ok(screen.actions.length>0,"screen has no tracked actions: "+screen.file);
+    for(const action of screen.actions){
+      assert.ok(source.includes(action.source),
+        "UI action is absent: "+screen.file+" "+action.id+" "+action.source);
+      assert.ok(live.includes('"'+action.id+'"'),
+        "real protected Chromium is missing action: "+action.id);
+    }
+  }
+  assert.match(live,/requiredUiActions\.filter\(x=>!uiCoverage\.has\(x\)\)/);
+  assert.match(live,/uiInventory\.reduce\(\(count,x\)=>count\+x\.buttons,0\)/);
+  const card=read("web/src/Customer360.jsx");
+  assert.ok(card.includes('["party_relationships","Связи","relationships"'));
+  assert.ok(card.includes('["contacts","deals"].includes(route)'));
+  assert.doesNotMatch(card,/\["party_relationships","Связи","parties"/);
+  assert.ok(live.includes('"customer360.navigate.relationships"'));
 });

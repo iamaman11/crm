@@ -4,6 +4,7 @@ import {chromium} from "playwright";
 import {mkdir,writeFile} from "node:fs/promises";
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
+import {uiInventory,requiredUiActions} from "./ui-inventory.mjs";
 
 const sha=process.env.GITHUB_SHA,url="https://crm-dev.crm-5bd5e1e1.workers.dev";
 assert.match(sha||"",/^[a-f0-9]{40}$/);
@@ -150,6 +151,19 @@ try{
   await shot("02-party","Original Party create and update");
   const partyA=await readOwner("parties",x=>x.id===party.id);
   assert.equal(partyA.version,2);
+  // Search, empty state and refresh are user actions, not just decorative controls.
+  const partySearch=page.getByRole("textbox",{name:"Поиск лиц и организаций"});
+  await partySearch.fill(marker+" Updated");
+  await row(marker+" Updated").waitFor();
+  await partySearch.fill("no-such-party-"+marker);
+  await page.getByText("Записей нет",{exact:true}).waitFor();
+  await partySearch.fill("");
+  await row(marker+" Updated").waitFor();
+  cover("parties.search");
+  await page.getByRole("region",{name:"Лица и организации (Rust)"})
+    .getByRole("button",{name:"Обновить"}).click();
+  await row(marker+" Updated").waitFor();
+  cover("parties.refresh");
   const tenantB=await accessB();
   assert.equal((await browser.newContext({extraHTTPHeaders:access("B")})
     .then(async ctx=>{try{return (await ctx.request.get(url+"/api/parties/"+party.id)).status();}
@@ -186,6 +200,18 @@ try{
   cover("customer-privacy.cancel");
   assert.equal((await (await context.request.get(url+
     "/api/customer-privacy/cases/"+createdPrivacy.id)).json()).item.subject_verified,false);
+  // Simulated transport failure: the UI must preserve the list and allow retry.
+  await page.route("**/api/customer-privacy/cases",route=>
+    route.request().method()==="GET"?route.abort():route.continue());
+  await button("Обновить заявки").click();
+  await page.getByRole("alert").getByText(/Не удалось обновить заявки/).waitFor();
+  await privacyRow.getByText("cancelled").waitFor();
+  cover("customer-privacy.refresh.failed");
+  await page.unroute("**/api/customer-privacy/cases");
+  await button("Обновить заявки").click();
+  await privacyRow.getByText("cancelled").waitFor();
+  assert.equal(await page.getByRole("alert").count(),0);
+  cover("customer-privacy.refresh.retry");
   await shot("02-privacy-intake","Original Rust PrivacyCase draft submit cancel");
   // Browser -> original Rust ProviderProfileVersion/MappingVersion -> tenant D1.
   // A configuration is never treated as a live provider or applied suggestion.
@@ -219,6 +245,13 @@ try{
   await button("Добавить сопоставление").click();
   await page.getByLabel("Профиль провайдера").selectOption(createdProvider.id);
   await page.getByLabel("Ключ сопоставления").fill(mappingKey);
+  await page.getByLabel("Поле ответа провайдера").fill("bad path");
+  await button("Сохранить сопоставление").click();
+  await page.getByRole("alert").waitFor();
+  const deniedMapping=await context.request.get(url+"/api/customer-enrichment/mappings");
+  assert.equal(deniedMapping.status(),200);
+  assert.equal((await deniedMapping.json()).items.some(x=>x.mapping_key===mappingKey),false);
+  cover("customer-enrichment.mapping.invalid");
   await page.getByLabel("Поле ответа провайдера").fill("company.name");
   await button("Сохранить сопоставление").click();
   await page.getByRole("status").getByText("Сопоставление сохранено").waitFor();
@@ -228,6 +261,16 @@ try{
   assert.equal(createdMapping.provider_profile_version_id,createdProvider.id);
   assert.equal(createdMapping.execution,"NOT_CONNECTED");
   assert.equal(createdMapping.target_field,"party_display_name");
+  await page.route("**/api/customer-enrichment/mappings",route=>
+    route.request().method()==="GET"?route.abort():route.continue());
+  await button("Обновить настройки").click();
+  await page.getByRole("alert").getByText(/Не удалось обновить настройки/).waitFor();
+  cover("customer-enrichment.refresh.failed");
+  await page.unroute("**/api/customer-enrichment/mappings");
+  await button("Обновить настройки").click();
+  await page.getByRole("status").getByText("Настройки обновлены").waitFor();
+  assert.equal(await page.getByRole("alert").count(),0);
+  cover("customer-enrichment.refresh.retry");
   await shot("02-enrichment-definitions","Original provider-neutral Enrichment configuration");
   // Physical browser proof of the original PartyRelationships owner.
   // No JS duplicate domain, no fake persistence or manual SQL shortcut.
@@ -326,6 +369,21 @@ try{
   await page.getByLabel("Статус связи").selectOption("inactive");
   await save();cover("party-relationships.update");
   assert.equal((await readOwner("party-relationships",x=>x.id===rel.id)).version,2);
+  const relationSearch=page.getByRole("textbox",{name:"Поиск связей"});
+  await relationSearch.fill(marker+" Related");
+  await row(marker+" Related").waitFor();
+  await relationSearch.fill("no-such-relationship-"+marker);
+  await page.getByText("Пока связей нет").waitFor();
+  await relationSearch.fill("");
+  cover("party-relationships.search");
+  await page.getByRole("region",{name:"Связи лиц и организаций"})
+    .getByRole("button",{name:"Обновить"}).click();
+  await row(marker+" Related").waitFor();
+  cover("party-relationships.refresh");
+  await row(marker+" Related").getByRole("button",{name:"Изменить"}).click();
+  await button("Отмена").click();
+  assert.equal(await page.locator("form.dialog").count(),0);
+  cover("party-relationships.update.cancel");
   assert.equal((await readOwner("party-relationships",x=>x.id===rel.id)).status,"inactive");
   await shot("02-relationships","Original PartyRelationship create/update and tenant isolation");
   await tab("Клиенты").click();
@@ -342,10 +400,18 @@ try{
   // A physical operator download, not a mocked file or JS-generated CSV.
   await tab("Экспорт данных").click();
   await page.getByLabel("Тип записей").selectOption("organization");
+  await page.route("**/api/customer-data-operations/preview**",route=>route.abort());
+  await button("Проверить экспорт").click();
+  await page.getByRole("alert").waitFor();
+  cover("customer-data-operations.preview.failed");
+  await page.unroute("**/api/customer-data-operations/preview**");
+  assert.equal(await button("Скачать CSV").isDisabled(),true);
   await button("Проверить экспорт").click();
   await page.getByRole("region",{name:"Предпросмотр экспорта"})
     .getByText(/Подготовлено записей:/).waitFor();
   cover("customer-data-operations.preview");
+  assert.equal(await page.getByRole("alert").count(),0);
+  cover("customer-data-operations.preview.retry");
   const previewResp=await context.request.get(url+
     "/api/customer-data-operations/preview?kind=organization");
   assert.equal(previewResp.status(),200);
@@ -384,6 +450,13 @@ try{
   const sourceImportId="browser-import-"+randomUUID();
   const csv="party_id,kind,display_name,resource_version\n"+
     sourceImportId+",person,"+marker+" Imported,1\n";
+  await page.getByLabel("CSV-файл").setInputFiles({
+    name:"invalid-parties.csv",mimeType:"text/csv",
+    buffer:Buffer.from("party_id,kind,display_name,resource_version\ninvalid,wrong,Name,1\n")});
+  await button("Проверить CSV").click();
+  await page.getByRole("alert").waitFor();
+  assert.equal(await button("Импортировать новые записи").isDisabled(),true);
+  cover("customer-data-operations.import.invalid");
   const previewUpload=page.waitForResponse(r=>
     new URL(r.url()).pathname==="/api/customer-data-operations/import-preview"&&r.status()===200);
   await page.getByLabel("CSV-файл").setInputFiles({
@@ -442,6 +515,10 @@ try{
   const contact=marker.toLowerCase()+"@example.test";
   await tab("Контакты").click();
   await button("+ Добавить контакт").click();
+  await button("Отмена").click();
+  assert.equal(await page.locator("form.dialog").count(),0);
+  cover("contact-points.create.cancel");
+  await button("+ Добавить контакт").click();
   await page.getByLabel("Лицо / организация",{exact:true}).selectOption({label:marker+" Updated"});
   await page.getByLabel("Значение").fill(contact);
   await save();cover("contact-points.create");
@@ -481,6 +558,15 @@ try{
       "Tenant B must not see tenant A Party candidates");
     cover("identity-resolution.candidates.tenant-isolation");
   }finally{await candidateTenantB.close();}
+  await page.route("**/api/identity-resolution/candidates",route=>route.abort());
+  await button("Найти совпадения email").click();
+  await page.getByRole("alert").waitFor();
+  cover("identity-resolution.candidates.failed");
+  await page.unroute("**/api/identity-resolution/candidates");
+  await button("Найти совпадения email").click();
+  await page.getByRole("region",{name:"Наблюдаемые совпадения"}).waitFor();
+  assert.equal(await page.getByRole("alert").count(),0);
+  cover("identity-resolution.candidates.retry");
   await shot("04-identity-email","Recorded same-email observations, no identity verdict");
   await tab("Контакты").click();
   await shot("04-contacts","Original ContactPoint normalization and update");
@@ -523,9 +609,24 @@ try{
     assert.equal((await other.json()).items.some(x=>x.id===deniedRecord.id),false);
     cover("consents.tenant-isolation");
   }finally{await tenantBConsents.close();}
+  const consentSearch=page.getByRole("textbox",{name:"Поиск запретов"});
+  await consentSearch.fill("updated-"+contact);
+  await page.getByRole("row").filter({hasText:"updated-"+contact}).waitFor();
+  await consentSearch.fill("no-such-consent-"+marker);
+  await page.getByText("Записей нет",{exact:true}).waitFor();
+  await consentSearch.fill("");
+  cover("consents.search");
+  await page.getByRole("region",{name:"Разрешения коммуникации"})
+    .getByRole("button",{name:"Обновить"}).click();
+  await page.getByRole("row").filter({hasText:"updated-"+contact}).waitFor();
+  cover("consents.refresh");
   await shot("04-consents","Original Consents fail-closed read and operator Deny");
   const dealName=marker+" Deal";
   await tab("Сделки").click();
+  await button("+ Добавить сделку").click();
+  await button("Отмена").click();
+  assert.equal(await page.locator("form.dialog").count(),0);
+  cover("sales-deals.create.cancel");
   await button("+ Добавить сделку").click();
   await page.getByLabel("Название сделки").fill(dealName);
   await page.getByLabel("Клиент",{exact:true}).selectOption({label:marker+" Account Updated"});
@@ -560,6 +661,10 @@ try{
   assert.equal(updatedDeal.probability_bps,1234);
   cover("sales-deals.edit-exact-conversion");
   await row(dealName+" Updated").getByRole("button",{name:"Этап сделки"}).click();
+  await button("Отмена").click();
+  assert.equal(await page.locator("form.dialog").count(),0);
+  cover("sales-deals.advance.cancel");
+  await row(dealName+" Updated").getByRole("button",{name:"Этап сделки"}).click();
   await page.getByLabel("Новый этап").selectOption("qualified");
   await save();cover("sales-deals.advance");
   assert.equal((await readOwner("sales-deals",x=>x.id===deal.id)).stage.stage_id,"qualified");
@@ -572,6 +677,10 @@ try{
   await button("Таблица").click();cover("deals.table");
   const subject=marker+" Task";
   await tab("Задачи").click();
+  await button("+ Добавить задачу").click();
+  await button("Отмена").click();
+  assert.equal(await page.locator("form.dialog").count(),0);
+  cover("activity-tasks.create.cancel");
   await button("+ Добавить задачу").click();
   await page.getByLabel("Что сделать").fill(subject);
   await page.getByLabel("Клиент",{exact:true}).selectOption({label:marker+" Account Updated"});
@@ -588,6 +697,37 @@ try{
   await page.getByRole("region",{name:"Сделки клиента"}).getByText(dealName+" Updated").waitFor();
   await page.getByRole("region",{name:"Задачи клиента"}).getByText(subject).waitFor();
   await shot("08-account-overview","Original multi-owner Account read projection");
+  // Every "Все ..." action must navigate to the semantically correct owner.
+  // "Все связи" used to lead to Parties, a real operator navigation defect.
+  for(const [label,section,action] of [
+    ["Все контакты","Контакты","customer360.navigate.contacts"],
+    ["Все сделки","Сделки","customer360.navigate.deals"],
+    ["Все задачи","Задачи","customer360.navigate.tasks"],
+    ["Все связи","Связи","customer360.navigate.relationships"]
+  ]){
+    await button(label).click();
+    assert.equal(await tab(section).evaluate(el=>el.classList.contains("active")),true,
+      label+" must navigate to "+section);
+    cover(action);
+    await tab("Клиенты").click();
+    await row(marker+" Account Updated").getByRole("button",{name:"Карточка"}).click();
+    await page.getByRole("heading",{name:marker+" Account Updated"}).waitFor();
+  }
+  // Card actions must use the existing Contact/Deal owners, not a second CRM.
+  await page.getByRole("region",{name:"Контакты клиента"})
+    .getByRole("button",{name:"Изменить"}).first().click();
+  await page.getByLabel("Значение").waitFor();
+  await button("Отмена").click();
+  cover("customer360.edit.contact.cancel");
+  await row(marker+" Account Updated").getByRole("button",{name:"Карточка"}).click();
+  await page.getByRole("heading",{name:marker+" Account Updated"}).waitFor();
+  await page.getByRole("region",{name:"Сделки клиента"})
+    .getByRole("button",{name:"Изменить"}).first().click();
+  await page.getByLabel("Сумма").waitFor();
+  await button("Отмена").click();
+  cover("customer360.edit.deal.cancel");
+  await row(marker+" Account Updated").getByRole("button",{name:"Карточка"}).click();
+  await page.getByRole("heading",{name:marker+" Account Updated"}).waitFor();
   await page.route("**/api/accounts/**/overview",route=>route.abort());
   await button("Обновить карточку").click();
   await button("Повторить").waitFor();
@@ -636,6 +776,28 @@ try{
   assert.equal(directCustomer.parties[0].id,createdCustomerParty.id);
   cover("accounts.create.new-party-linked");
   await shot("12-customer-from-new-party","New customer from Party without manual navigation");
+  await tab("Лица и организации").click();
+  await row(newCustomerName).getByRole("button",{name:"Добавить клиента"}).click();
+  assert.equal(await page.getByLabel("Лицо / организация").inputValue(),
+    createdCustomerParty.id);
+  await button("Отмена").click();
+  assert.equal(await page.locator("form.dialog").count(),0);
+  cover("parties.link-existing-account.cancel");
+  // Check every top-level navigation button; the full inventory below also
+  // includes their operation-specific paths and cancellations.
+  const navigation=[
+    ["Клиенты","navigation.accounts"],["Контакты","navigation.contacts"],
+    ["Сделки","navigation.deals"],["Задачи","navigation.tasks"],
+    ["Лица и организации","navigation.parties"],["Связи","navigation.relationships"],
+    ["Разрешения","navigation.consents"],["Сравнение записей","navigation.identity"],
+    ["Качество данных","navigation.quality"],["Экспорт данных","navigation.export"],
+    ["Заявки на приватность","navigation.privacy"],["Обогащение","navigation.enrichment"]
+  ];
+  for(const [title,action] of navigation){
+    await tab(title).click();
+    assert.equal(await tab(title).evaluate(el=>el.classList.contains("active")),true);
+    cover(action);
+  }
   await Promise.all(pending);
   const operations=["customer-enrichment.profile_publish","customer-enrichment.mapping_publish",
     "customer-privacy.create","customer-privacy.submit",
@@ -662,26 +824,19 @@ try{
       writes.find(x=>x.operation==="parties.update").idempotency_key,tenantB.key]})+"\n");
   // Explicit release-critical interaction inventory. Count alone is not proof
   // of cancel/retry/invalid scenarios; absence of one is a release failure.
-  const requiredInteractionPaths=[
-    "parties.create.cancel","party-relationships.create.cancel",
-    "customer-enrichment.profile.cancel","customer-enrichment.mapping.cancel",
-    "consents.suppress.cancel","customer360.retry","customer360.refresh",
-    "accounts.create.new-party.cancel","accounts.create.new-party-flow",
-    "accounts.create.new-party-linked",
-    "sales-deals.invalid-amount","sales-deals.invalid-probability",
-    "sales-deals.display-major","sales-deals.edit-exact-conversion",
-    "sales-deals.board-major-percent","deals.board","deals.table",
-    "mobile.customer.card","browser.reload"
-  ];
-  assert.deepEqual(requiredInteractionPaths.filter(x=>!uiCoverage.has(x)),[],
-    "Missing mandatory live UI cancel/retry/negative/display paths");
+  assert.deepEqual(requiredUiActions.filter(x=>!uiCoverage.has(x)),[],
+    "Missing mandatory live UI action from the reviewed 10-component inventory");
   const coverage=Array.from(uiCoverage);
   await writeFile("apps/cloudflare-crm/.release/native-functional-cycle.json",
     JSON.stringify({git_sha:sha,runtime:"native-workers-rs",
       ui_coverage:coverage,requests:nativeResponses,writes,
       imported_party_id:importedId,
       result:"BROWSER_PASS_D1_LOGS_PENDING"},null,2)+"\n");
-  evidence.ui_coverage=coverage;evidence.native_http_responses=nativeResponses.length;
+  evidence.ui_coverage=coverage;
+  evidence.ui_inventory={components:uiInventory.length,
+    button_tags:uiInventory.reduce((count,x)=>count+x.buttons,0),
+    required_actions:requiredUiActions.length};
+  evidence.native_http_responses=nativeResponses.length;
   evidence.native_mutations=writes.length;
   evidence.status=outcome="PASS";
   console.log(JSON.stringify({event:"crm.browser-e2e",result:"PASS",sha,

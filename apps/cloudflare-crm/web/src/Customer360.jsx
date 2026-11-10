@@ -18,7 +18,7 @@ export default function Customer360({accountId,load,writable,onBack,onNavigate,o
       (p.verified?" · Подтверждён":" · Не подтверждён")],
     ["deals","Сделки","deals",d=>d.name,d=>d.stage.stage_id+" · "+formatDealMoney(d.amount)],
     ["tasks","Задачи","tasks",t=>t.subject,t=>t.status==="completed"?"Готово":"В работе"],
-    ["party_relationships","Связи","parties",r=>r.type?.code||r.id,r=>r.status]
+    ["party_relationships","Связи","relationships",r=>r.type?.code||r.id,r=>r.status]
   ];
   return <div className="customer360" aria-label="Карточка клиента">
     <div className="customer360-header">
@@ -48,7 +48,7 @@ export default function Customer360({accountId,load,writable,onBack,onNavigate,o
             {!data[key].length?<p>Пока нет записей</p>:
               <div className="customer360-list">{data[key].map(row=><article key={row.id}>
                 <div><strong>{primary(row)}</strong><p>{secondary(row)}</p></div>
-                {writable&&route!=="parties"&&route!=="tasks"&&
+                {writable&&["contacts","deals"].includes(route)&&
                   <button className="ghost" onClick={()=>onEdit(route,row)}>Изменить</button>}
               </article>)}</div>}
           </section>)}
