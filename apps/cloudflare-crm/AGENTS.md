@@ -62,6 +62,19 @@ GitHub status checks are configured.
    Record exact SHA and PASS/FAIL/NOT_TESTED in Issue #338. Do not merge
    `main` merely to deploy; it receives accepted milestones.
 
+**Growth is open-ended, never 13 forever.** The canonical authored module
+inventory is `modules/*/module.yaml` (strict schema/typed manifest compiler).
+`scripts/crm-module-coverage.py` derives *temporary*, SHA-bound CI evidence
+from those manifests, actual Worker Cargo dependencies and active Connect
+proofs. Never recreate `contract-coverage.json` or a competing hand-written
+feature catalogue. A discovered manifest is not an enabled service; new
+capabilities require explicit statically linked Rust implementation, generated
+RPC contract, permissions, D1 migration where necessary and physical tests.
+Read-only compositions may have a Rust crate outside `modules/`. Module
+count, source-crate count, UI feature count and RPC count are independent.
+`shared/catalog.mjs` remains only a temporary legacy developer/UI locator
+until the same full TSX cutover; do not use it for API ownership acceptance.
+
 ## Feature ownership and growth
 
 - The current visible owner-source list is `shared/catalog.mjs:modules`. Rust domain contracts, not this UI locator, determine business validity.
