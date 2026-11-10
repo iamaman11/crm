@@ -54,6 +54,9 @@ jobs:
           git cat-file -e "${main_sha}^{commit}"
           pnpm exec buf breaking proto --against ".git#ref=${main_sha}"
           pnpm exec buf generate --template buf.gen.web.yaml
+          pnpm exec buf build proto --as-file-descriptor-set -o /tmp/crm-proto-descriptors.binpb
+          node scripts/crm-rpc-descriptors.mjs /tmp/crm-proto-descriptors.binpb
+          node scripts/crm-architecture-ast.mjs
           test -s packages/client/gen/crm/sales/v1/deal_pb.ts
           pnpm --filter @ultimate-crm/client typecheck
           pnpm --filter @ultimate-crm/ui typecheck

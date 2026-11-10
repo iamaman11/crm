@@ -515,3 +515,20 @@ test("architecture gate rejects new REST, wrong binary setting and second D1/rou
   assert.match(workflow,/node apps\/cloudflare-crm\/scripts\/architecture-gate\.mjs/);
   assert.match(workflow,/pnpm --filter cloudflare-crm typecheck/);
 });
+
+test("real TypeScript AST and compiled descriptor controls run in the same CI",()=>{
+  const workflow=read("../../.github/workflows/cloudflare-crm-spike.yml");
+  const ast=read("../../scripts/crm-architecture-ast.mjs");
+  const descriptor=read("../../scripts/crm-rpc-descriptors.mjs");
+  const proof=JSON.parse(read("active-connect.json"));
+  assert.match(workflow,/node scripts\/crm-architecture-ast\.mjs/);
+  assert.match(workflow,/buf build proto --as-file-descriptor-set -o \/tmp\/crm-proto-descriptors\.binpb/);
+  assert.match(workflow,/node scripts\/crm-rpc-descriptors\.mjs \/tmp\/crm-proto-descriptors\.binpb/);
+  assert.match(ast,/ts\.createSourceFile\(/);
+  assert.match(ast,/ts\.isImportDeclaration\(/);
+  assert.match(ast,/ts\.isCallExpression\(/);
+  assert.match(descriptor,/fromBinary\(FileDescriptorSetSchema/);
+  assert.match(descriptor,/async\\\\s\+fn/);
+  assert.equal(proof.methods.length,1);
+  assert.equal(proof.methods[0].path,"/crm.parties.v2.PartyService/GetParty");
+});
