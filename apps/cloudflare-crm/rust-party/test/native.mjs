@@ -163,21 +163,21 @@ try{
   assert.equal((await call("/api/parties/"+id,a)).status,200);
   // Generated v2 Connect -> same original Rust Party aggregate -> one D1.
   const rpcPath="/crm.parties.v2.PartyService/GetParty";
-  const rpcGet=(token,partyId)=>call(rpcPath,token,{method:"POST",
+  const rpcPartyGet=(token,partyId)=>call(rpcPath,token,{method:"POST",
     headers:{"content-type":"application/json"},
     body:JSON.stringify({partyId})});
-  const found=await rpcGet(a,id);
+  const found=await rpcPartyGet(a,id);
   assert.equal(found.status,200,JSON.stringify(found));
   assert.equal(found.headers["x-crm-module"],"crm.parties");
   assert.equal(found.body.party.partyId,id);
   assert.equal(found.body.party.kind,"PARTY_KIND_ORGANIZATION");
   assert.equal(found.body.party.displayName,"Original Native Rust");
   assert.equal(found.body.party.version,"1");
-  assert.equal((await rpcGet(viewer,id)).status,200);
-  assert.equal((await rpcGet(b,id)).status,404,"cross-tenant data must be invisible");
-  assert.equal((await rpcGet(a,"nonexistent-party")).status,404);
-  assert.equal((await rpcGet(a,"invalid/party")).status,400);
-  assert.equal((await rpcGet(null,id)).status,401);
+  assert.equal((await rpcPartyGet(viewer,id)).status,200);
+  assert.equal((await rpcPartyGet(b,id)).status,404,"cross-tenant data must be invisible");
+  assert.equal((await rpcPartyGet(a,"nonexistent-party")).status,404);
+  assert.equal((await rpcPartyGet(a,"invalid/party")).status,400);
+  assert.equal((await rpcPartyGet(null,id)).status,401);
   assert.equal((await call(rpcPath,a)).status,404);
   console.log(JSON.stringify({event:"crm.native-parties-v2-connect",
     result:"PASS",access:true,tenant_scope:true,owner:"crm.parties"}));
