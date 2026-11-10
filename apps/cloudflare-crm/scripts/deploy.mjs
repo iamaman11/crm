@@ -359,7 +359,12 @@ async function verifyData(){
   let pending=[...writes,compareRead,candidateRead,qualityRead,exportPreview,exportDownload,
     importPreview,enrichProfileRead,enrichMappingRead,importApply];
   const from=Date.now()-15*60*1000;
-  for(let attempt=0;attempt<12&&pending.length;attempt++){
+  // Workers Observability delivery is eventually consistent. Preserve the
+  // exact all-request_id gate; only allow bounded ingestion time after E2E.
+  // Previous 12 * 2.5s polls rejected a valid 24/24 D1 run when one
+  // accounts.create event arrived in Logs after the 30s window.
+  const telemetryAttempts=60;
+  for(let attempt=0;attempt<telemetryAttempts&&pending.length;attempt++){
     const missing=[];
     for(let i=0;i<pending.length;i+=4){
       const batch=pending.slice(i,i+4);
@@ -380,7 +385,8 @@ async function verifyData(){
       for(let n=0;n<batch.length;n++)if(!results[n])missing.push(batch[n]);
     }
     pending=missing;
-    if(pending.length)await new Promise(resolve=>setTimeout(resolve,2500));
+    if(pending.length && attempt+1<telemetryAttempts)
+      await new Promise(resolve=>setTimeout(resolve,2500));
   }
   if(pending.length)throw Error("Native Cloudflare Logs missing "+pending.length+
     " exact browser request(s): "+pending.map(x=>x.operation).join(","));

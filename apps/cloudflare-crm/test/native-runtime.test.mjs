@@ -475,3 +475,14 @@ test("canonical Party v2 is real Rust Connect and native + live proof",()=>{
   assert.match(native,/crm\.native-parties-v2-connect/);
   assert.match(browser,/crm\.live-parties-v2-connect/);
 });
+
+test("protected deployment keeps exact Logs request-id correlation and bounded ingestion retries",()=>{
+  const verify=read("scripts/deploy.mjs");
+  assert.match(verify,/const telemetryAttempts=60;/);
+  assert.match(verify,/attempt<telemetryAttempts&&pending\.length/);
+  assert.match(verify,/event\.source\?\.request_id===entry\.request_id/);
+  assert.match(verify,/event\.source\?\.operation===entry\.operation/);
+  assert.match(verify,/event\.source\?\.status===entry\.status/);
+  assert.match(verify,/event\.\$workers\?\.scriptVersion\?\.id===liveVersion/);
+  assert.match(verify,/if\(pending\.length\)throw Error\("Native Cloudflare Logs missing "/);
+});
