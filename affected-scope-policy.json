@@ -34,7 +34,8 @@
         "crates/crm-proto-contracts/**",
         "packages/client/src/contract_hashes.ts",
         "scripts/contract_bindings.py",
-        "scripts/generate_contract_bindings.py"
+        "scripts/generate_contract_bindings.py",
+        "scripts/crm-rpc-descriptors.mjs"
       ],
       "required_workflows": [
         "Contract CI",
@@ -95,7 +96,10 @@
         "packages/client/**",
         "packages/ui/**",
         "scripts/run_e2e.sh",
-        "apps/cloudflare-crm/**"
+        "apps/cloudflare-crm/**",
+        "scripts/crm-architecture-ast.mjs",
+        "scripts/crm-architecture-ast.test.mjs",
+        "scripts/crm-rpc-descriptors.mjs"
       ],
       "required_workflows": [
         "Product Plane CI"
@@ -109,7 +113,10 @@
         "packages/client/**",
         "packages/ui/**",
         "buf.gen.web.yaml",
-        "apps/cloudflare-crm/**"
+        "apps/cloudflare-crm/**",
+        "scripts/crm-architecture-ast.mjs",
+        "scripts/crm-architecture-ast.test.mjs",
+        "scripts/crm-rpc-descriptors.mjs"
       ],
       "required_workflows": [
         "Product Plane CI"
@@ -149,7 +156,11 @@
         "step13-suppression-baseline.json",
         "step22-architecture-inventory.json",
         "step22-runtime-fanin-decisions.json",
-        "tests/test_customer_privacy_operations.py"
+        "tests/test_customer_privacy_operations.py",
+        "affected-scope-policy.json",
+        "scripts/crm-architecture-ast.mjs",
+        "scripts/crm-architecture-ast.test.mjs",
+        "scripts/crm-rpc-descriptors.mjs"
       ],
       "required_workflows": [
         "Governance CI"
