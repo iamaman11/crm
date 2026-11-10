@@ -276,7 +276,8 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     #[cfg(feature = "native")]
     if path.starts_with("/crm.sales.v1.DealService/") {
         if method != Method::Post { return error("NOT_FOUND",404); }
-        return connect_sales::route(req,env,tenant).await;
+        let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
+        return connect_sales::route(req,env,tenant,actor,&request_id).await;
     }
     let db = env.d1("DB")?;
     // Explicitly CI-only, signed-Access-gated native workerd proof. This gate

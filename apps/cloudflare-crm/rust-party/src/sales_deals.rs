@@ -17,17 +17,17 @@ use super::{bind, error, now_nanos, response};
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct CreateInput {
-    id: String,
-    name: String,
-    account_id: String,
-    pipeline_id: String,
-    stage_id: String,
-    ordinal: u16,
-    probability_bps: u16,
+pub(super) struct CreateInput {
+    pub(super) id: String,
+    pub(super) name: String,
+    pub(super) account_id: String,
+    pub(super) pipeline_id: String,
+    pub(super) stage_id: String,
+    pub(super) ordinal: u16,
+    pub(super) probability_bps: u16,
     // Minor units are exact integers. Floating point money is never accepted.
-    amount_minor_units: Option<i64>,
-    currency: Option<String>,
+    pub(super) amount_minor_units: Option<i64>,
+    pub(super) currency: Option<String>,
 }
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all="snake_case")]
@@ -132,44 +132,58 @@ fn stage(pipeline_id:String,stage_id:String,ordinal:u16)
     let id=StageId::try_new(stage_id).map_err(|e|e.code)?;
     DealStage::try_new(pipeline,id,ordinal).map_err(|e|e.code)
 }
-async fn create(mut req:Request,db:&D1Database,tenant:&str,actor:&str,trace:&str)->Result<Response>{
-    let Some(k)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
-    // Request::json() does not enforce deny_unknown_fields in workerd.
-    let input=match serde_json::from_str::<CreateInput>(&req.text().await?) {
-        Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422),
-    };
+// One D1 + ORIGINAL crm-sales mutation shared by both native HTTP and Connect.
+// The caller handles transport-level decoding and error formatting only.
+pub(super) struct SalesSaved {
+    pub(super) deal: Deal,
+    pub(super) replayed: bool,
+}
+pub(super) struct SalesFailure {
+    pub(super) code: String,
+    pub(super) status: u16,
+}
+fn rejected(code: impl Into<String>, status: u16)
+    -> std::result::Result<SalesSaved, SalesFailure> {
+    Err(SalesFailure {code: code.into(), status})
+}
+pub(super) async fn create_typed(input:CreateInput,k:&str,db:&D1Database,
+    tenant:&str,actor:&str,trace:&str)
+    -> Result<std::result::Result<SalesSaved, SalesFailure>> {
+    if !(8..=120).contains(&k.len()) {
+        return Ok(rejected("IDEMPOTENCY_KEY_REQUIRED",422));
+    }
     let digest=hash("create",&input.id,&input)?;
-    if let Some(p)=prior(db,tenant,&k).await?{
-        if p.digest!=digest{return error("IDEMPOTENCY_CONFLICT",409);}
-        return response(json!({"item":view(&decode(&p.state)?),"replayed":true}),200);
+    if let Some(p)=prior(db,tenant,k).await? {
+        if p.digest!=digest{return Ok(rejected("IDEMPOTENCY_CONFLICT",409));}
+        return Ok(Ok(SalesSaved{deal:decode(&p.state)?,replayed:true}));
     }
     let id=match RecordId::try_new(&input.id){
-        Ok(x)=>x,Err(_)=>return error("SALES_DEAL_ID_INVALID",422),
+        Ok(x)=>x,Err(_)=>return Ok(rejected("SALES_DEAL_ID_INVALID",422)),
     };
     let account_id=match RecordId::try_new(&input.account_id){
-        Ok(x)=>x,Err(_)=>return error("SALES_ACCOUNT_ID_INVALID",422),
+        Ok(x)=>x,Err(_)=>return Ok(rejected("SALES_ACCOUNT_ID_INVALID",422)),
     };
-    if !account_exists(db,tenant,account_id.as_str()).await?{
-        return error("SALES_ACCOUNT_NOT_FOUND",422);
+    if !account_exists(db,tenant,account_id.as_str()).await? {
+        return Ok(rejected("SALES_ACCOUNT_NOT_FOUND",422));
     }
     let owner=match ActorId::try_new(actor){
-        Ok(x)=>DealOwner::Actor(x),Err(_)=>return error("SALES_OWNER_INVALID",422),
+        Ok(x)=>DealOwner::Actor(x),Err(_)=>return Ok(rejected("SALES_OWNER_INVALID",422)),
     };
     let stage=match stage(input.pipeline_id,input.stage_id,input.ordinal){
-        Ok(x)=>x,Err(code)=>return error(&code,422),
+        Ok(x)=>x,Err(code)=>return Ok(rejected(code,422)),
     };
     let probability=match BasisPoints::try_new(input.probability_bps){
-        Ok(x)=>x,Err(e)=>return error(&e.code,422),
+        Ok(x)=>x,Err(e)=>return Ok(rejected(e.code,422)),
     };
     let amount=match (input.amount_minor_units,input.currency) {
         (None,None)=>None,
         (Some(units),Some(currency))=>{
             let currency=match CurrencyCode::try_new(currency){
-                Ok(x)=>x,Err(e)=>return error(&e.code,422),
+                Ok(x)=>x,Err(e)=>return Ok(rejected(e.code,422)),
             };
             Some(Money::new(i128::from(units),currency))
         },
-        _=>return error("SALES_AMOUNT_CURRENCY_PAIR_REQUIRED",422),
+        _=>return Ok(rejected("SALES_AMOUNT_CURRENCY_PAIR_REQUIRED",422)),
     };
     let deal=match Deal::create(CreateDeal{
         deal_id:id,name:input.name,owner,
@@ -179,16 +193,29 @@ async fn create(mut req:Request,db:&D1Database,tenant:&str,actor:&str,trace:&str
         expected_close_date:None,probability,
         occurred_at_unix_nanos:now_nanos(),
     }){
-        Ok(x)=>x,Err(e)=>return error(&e.code,422),
+        Ok(x)=>x,Err(e)=>return Ok(rejected(e.code,422)),
     };
     let saved=encode(&deal)?;
     let r=bind(db,"INSERT INTO crm_sales_deal_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant),JsValue::from_str(deal.deal_id().as_str()),
           JsValue::from_str(account_id.as_str()),JsValue::from_str(&saved),
-          JsValue::from_f64(deal.version() as f64),JsValue::from_str(&k),
+          JsValue::from_f64(deal.version() as f64),JsValue::from_str(k),
           JsValue::from_str(&digest),JsValue::from_str(trace)])?.run().await;
-    if r.is_err(){return error("SALES_DEAL_CREATE_CONFLICT",409);}
-    response(json!({"item":view(&deal),"replayed":false}),201)
+    if r.is_err(){return Ok(rejected("SALES_DEAL_CREATE_CONFLICT",409));}
+    Ok(Ok(SalesSaved{deal,replayed:false}))
+}
+async fn create(mut req:Request,db:&D1Database,tenant:&str,actor:&str,trace:&str)
+    ->Result<Response>{
+    let Some(k)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
+    // Preserve the strict JSON REST boundary during the Connect migration.
+    let input=match serde_json::from_str::<CreateInput>(&req.text().await?){
+        Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422),
+    };
+    match create_typed(input,&k,db,tenant,actor,trace).await? {
+        Ok(saved)=>response(json!({"item":view(&saved.deal),
+            "replayed":saved.replayed}),if saved.replayed{200}else{201}),
+        Err(failure)=>error(&failure.code,failure.status),
+    }
 }
 async fn update(mut req:Request,db:&D1Database,tenant:&str,id:&str,trace:&str)->Result<Response>{
     let Some(k)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};

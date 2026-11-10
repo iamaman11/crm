@@ -651,6 +651,47 @@ try{
   console.log(JSON.stringify({event:"crm.native-original-sales-connect-read",
     result:"PASS",owner:"crm-sales",tenant_isolation:true,
     viewer_read:true,native_d1:true,protobuf:true}));
+  // Real Connect CreateDeal must use the SAME original Rust owner + D1 write,
+  // with signed Access actor, tenant isolation and cross-transport replay.
+  const connectDealId="native-connect-sales-"+randomUUID();
+  const connectDealData={dealId:connectDealId,name:"Native Connect deal",
+    account:{tenantId:"tenant-a",resourceType:"crm.customer-accounts",resourceId:accountId},
+    stage:{pipelineId:"pipeline.enterprise",stageId:"lead",ordinal:1},
+    amount:{minorUnits:"12500",currencyCode:"USD"},probabilityBasisPoints:2500};
+  const rpcCreate=async(token,body,keyName="native-connect-sales-create")=>
+    call("/crm.sales.v1.DealService/CreateDeal",token,{
+      method:"POST",headers:{"content-type":"application/json",
+        "connect-protocol-version":"1","idempotency-key":keyName},
+      body:JSON.stringify(body)});
+  assert.equal((await rpcCreate(null,connectDealData)).status,401);
+  assert.equal((await rpcCreate(viewer,connectDealData)).status,403);
+  assert.equal((await rpcCreate(a,{...connectDealData,
+    owner:{actorId:"attacker@example.test"}},"native-connect-owner-forgery")).status,403);
+  assert.equal((await rpcCreate(a,{...connectDealData,
+    account:{...connectDealData.account,tenantId:"tenant-b"}},
+    "native-connect-tenant-forgery")).status,400);
+  assert.equal((await rpcCreate(b,connectDealData,
+    "native-connect-tenant-b")).status,400);
+  const connectCreated=await rpcCreate(a,connectDealData);
+  assert.equal(connectCreated.status,200,JSON.stringify(connectCreated));
+  assert.equal(connectCreated.body.deal.dealId,connectDealId);
+  assert.equal(connectCreated.body.deal.amount.minorUnits,"12500");
+  assert.equal(connectCreated.body.deal.owner.actorId,"native-a@example.test");
+  assert.equal(connectCreated.body.deal.version,"1");
+  assert.match(connectCreated.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
+  const connectStored=await call("/api/sales-deals/"+connectDealId,a);
+  assert.equal(connectStored.status,200,JSON.stringify(connectStored));
+  assert.equal(connectStored.body.item.name,"Native Connect deal");
+  assert.equal(connectStored.body.item.version,1);
+  assert.equal((await rpcCreate(a,connectDealData)).status,200,
+    "Connect replay must not create a second Deal");
+  assert.equal((await rpcCreate(a,{...connectDealData,name:"Conflicting"},
+    "native-connect-sales-create")).status,409);
+  assert.equal((await call("/api/sales-deals/"+connectDealId,b)).status,404);
+  console.log(JSON.stringify({event:"crm.native-original-sales-connect-create",
+    result:"PASS",owner:"crm-sales",native_d1:true,actor_verified:true,
+    tenant_isolation:true,idempotent:true,original_rest_readback:true}));
+
   const dealReplay=await call("/api/sales-deals",a,{
     method:"POST",headers:dealHeaders,body:JSON.stringify(dealData)});
   assert.equal(dealReplay.status,200);

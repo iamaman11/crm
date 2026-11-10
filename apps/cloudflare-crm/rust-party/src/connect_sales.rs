@@ -14,6 +14,7 @@ use prost::Message as ProstMessage;
 use serde::Deserialize;
 use wasm_bindgen::JsValue;
 use super::{bind, sales_contract, sales_deals};
+use crm_proto_contracts::crm::{core::v1 as core_contract, sales::v1 as sales_contract_proto};
 
 // The published crm.core.v1 package shadows Rust's 'core' crate name.
 // Mount the UNMODIFIED generated Buffa package stitchers and expose the
@@ -48,6 +49,9 @@ struct Row { state: String }
 struct SalesService {
     env: Arc<Env>,
     tenant: String,
+    actor: String,
+    request_id: String,
+    idempotency_key: Option<String>,
 }
 
 impl SalesService {
@@ -66,6 +70,53 @@ impl SalesService {
         sales::Deal::decode_from_slice(&bytes)
             .map_err(|_|ConnectError::internal("generated Deal contract mismatch"))
     }
+    // Only the canonical existing request fields are supported. Do not silently
+    // discard extra RPC data until corresponding owner commands are exposed.
+    fn create_input(&self,wire:sales::CreateDealRequest)
+        -> std::result::Result<sales_deals::CreateInput, ConnectError> {
+        // A wire-compatible conversion between the two existing, version-pinned
+        // Rust protobuf generators. This does not create a JSON domain model.
+        let encoded=wire.encode_to_vec();
+        let request=sales_contract_proto::CreateDealRequest::decode(encoded.as_slice())
+            .map_err(|_|ConnectError::invalid_argument("invalid CreateDeal protobuf"))?;
+        if let Some(owner)=request.owner {
+            match owner.owner {
+                Some(core_contract::actor_or_team_owner::Owner::ActorId(id))
+                    if id==self.actor=>{},
+                _=>return Err(ConnectError::permission_denied("verified actor required")),
+            }
+        }
+        let account=request.account
+            .ok_or_else(||ConnectError::invalid_argument("account required"))?;
+        if account.tenant_id!=self.tenant ||
+            account.resource_type!="crm.customer-accounts" ||
+            account.version.is_some() {
+            return Err(ConnectError::invalid_argument("scoped Account reference required"));
+        }
+        if request.primary_contact.is_some()||request.expected_close_date.is_some() {
+            return Err(ConnectError::unimplemented("contact and close date not connected"));
+        }
+        let stage=request.stage
+            .ok_or_else(||ConnectError::invalid_argument("stage required"))?;
+        let ordinal=u16::try_from(stage.ordinal)
+            .map_err(|_|ConnectError::invalid_argument("stage ordinal out of range"))?;
+        let probability_bps=u16::try_from(request.probability_basis_points)
+            .map_err(|_|ConnectError::invalid_argument("probability out of range"))?;
+        let (amount_minor_units,currency)=match request.amount {
+            None=>(None,None),
+            Some(money)=>{
+                let units=money.minor_units.parse::<i64>()
+                    .map_err(|_|ConnectError::invalid_argument("money minor units out of range"))?;
+                (Some(units),Some(money.currency_code))
+            }
+        };
+        Ok(sales_deals::CreateInput {
+            id:request.deal_id,name:request.name,account_id:account.resource_id,
+            pipeline_id:stage.pipeline_id,stage_id:stage.stage_id,ordinal,
+            probability_bps,amount_minor_units,currency,
+        })
+    }
+
 }
 
 impl sales::DealService for SalesService {
@@ -120,9 +171,25 @@ impl sales::DealService for SalesService {
     }
     #[worker::send]
     async fn create_deal(
-        &self,_ctx:RequestContext,_req:ServiceRequest<'_,sales::CreateDealRequest>,
+        &self,_ctx:RequestContext,req:ServiceRequest<'_,sales::CreateDealRequest>,
     )->ServiceResult<sales::CreateDealResponse> {
-        Err(ConnectError::unimplemented("CreateDeal pending native typed mutation gate"))
+        let key=self.idempotency_key.as_deref()
+            .filter(|key|(8..=120).contains(&key.len()))
+            .ok_or_else(||ConnectError::invalid_argument("IDEMPOTENCY_KEY_REQUIRED"))?;
+        let input=self.create_input(req.to_owned_message())?;
+        let db=self.env.d1("DB")
+            .map_err(|_|ConnectError::internal("D1 binding unavailable"))?;
+        let saved=sales_deals::create_typed(input,key,&db,&self.tenant,&self.actor,
+            &self.request_id).await
+            .map_err(|_|ConnectError::internal("Sales create D1 unavailable"))?
+            .map_err(|failure|match failure.status {
+                409=>ConnectError::aborted(failure.code),
+                422=>ConnectError::invalid_argument(failure.code),
+                _=>ConnectError::internal(failure.code),
+            })?;
+        RpcResponse::ok(sales::CreateDealResponse{
+            deal:Some(self.protobuf(&saved.deal)?).into(),..Default::default()
+        })
     }
     #[worker::send]
     async fn update_deal(
@@ -141,11 +208,13 @@ impl sales::DealService for SalesService {
 // Called by existing native-only dispatch AFTER signed Access authentication
 // and role decision. No second fetch endpoint, tenant header, or JS route.
 pub(super) async fn route(
-    req:Request,env:Env,tenant:&str,
+    req:Request,env:Env,tenant:&str,actor:&str,request_id:&str,
 )->Result<Response> {
+    let idempotency_key=req.headers().get("idempotency-key")?;
     let mut app:Router=ConnectRouter::new()
         .add_service(Arc::new(SalesService {
             env:Arc::new(env),tenant:tenant.to_owned(),
+            actor:actor.to_owned(),request_id:request_id.to_owned(),idempotency_key,
         }))
         .into_axum_router();
     let http=HttpRequest::try_from(req)?;
