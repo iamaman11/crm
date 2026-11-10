@@ -172,19 +172,6 @@ jobs:
           [lib]
           crate-type = ["cdylib"]
           [dependencies]
-          crm-parties = { path = "$GITHUB_WORKSPACE/modules/crm-parties" }
-          crm-sales = { path = "$GITHUB_WORKSPACE/modules/crm-sales" }
-          crm-activities = { path = "$GITHUB_WORKSPACE/modules/crm-activities" }
-          crm-sales-activities-link = { path = "$GITHUB_WORKSPACE/modules/crm-sales-activities-link" }
-          crm-customer-accounts = { path = "$GITHUB_WORKSPACE/modules/crm-customer-accounts" }
-          crm-contact-points = { path = "$GITHUB_WORKSPACE/modules/crm-contact-points" }
-          crm-party-relationships = { path = "$GITHUB_WORKSPACE/modules/crm-party-relationships" }
-          crm-consents = { path = "$GITHUB_WORKSPACE/modules/crm-consents" }
-          crm-identity-resolution = { path = "$GITHUB_WORKSPACE/modules/crm-identity-resolution" }
-          crm-customer-data-operations = { path = "$GITHUB_WORKSPACE/modules/crm-customer-data-operations" }
-          crm-data-quality = { path = "$GITHUB_WORKSPACE/modules/crm-data-quality" }
-          crm-customer-enrichment = { path = "$GITHUB_WORKSPACE/modules/crm-customer-enrichment" }
-          crm-customer-privacy = { path = "$GITHUB_WORKSPACE/modules/crm-customer-privacy" }
           crm-module-sdk = { path = "$GITHUB_WORKSPACE/crates/crm-module-sdk" }
           crm-core-contracts = { path = "$GITHUB_WORKSPACE/crates/crm-core-contracts" }
           EOF
@@ -252,6 +239,20 @@ jobs:
           }
 
           RUST
+          # Reuse the same compiled canonical module report, not another
+          # manually maintained list of owner crates in the WASM fixture.
+          python - "$probe/Cargo.toml" <<'PY'
+          import json
+          import os
+          import sys
+          report = json.load(open(os.environ["CRM_MODULE_COVERAGE_REPORT"], encoding="utf-8"))
+          with open(sys.argv[1], "a", encoding="utf-8") as cargo:
+              for module in sorted(report["modules"], key=lambda m:m["crate_name"]):
+                  if not module["linked"]:
+                      continue
+                  crate, relative = module["crate_name"], module["crate_path"]
+                  cargo.write(f'{crate} = {{ path = "{os.environ["GITHUB_WORKSPACE"]}/{relative}" }}\\n')
+          PY
           cargo build --manifest-path "$probe/Cargo.toml" --target wasm32-unknown-unknown
           node - "$probe/target/wasm32-unknown-unknown/debug/crm_wasm_probe.wasm" <<'NODE'
           const fs = require('node:fs');
