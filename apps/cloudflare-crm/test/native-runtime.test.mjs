@@ -532,3 +532,29 @@ test("real TypeScript AST and compiled descriptor controls run in the same CI",(
   assert.equal(proof.methods.length,1);
   assert.equal(proof.methods[0].path,"/crm.parties.v2.PartyService/GetParty");
 });
+
+test("contract-only disables obsolete endpoints and requires negative browser, D1 and Logs acceptance",()=>{
+  const p=JSON.parse(read("architecture-policy.json"));
+  assert.equal(p.phase,"contract-only");
+  const runtime=read("rust-party/src/lib.rs");
+  const html=read("web/index.html");
+  const web=read("web/contract-only.tsx");
+  const gate=read("scripts/architecture-gate.mjs");
+  const ci=read("../../.github/workflows/cloudflare-crm-spike.yml");
+  const deploy=read("scripts/deploy.mjs");
+  assert.match(runtime,/fn legacy_transport_disabled/);
+  assert.match(runtime,/error\("LEGACY_TRANSPORT_DISABLED", 410\)/);
+  assert.match(runtime,/path != "\/crm\.parties\.v2\.PartyService\/GetParty"/);
+  assert.match(html,/src="\/contract-only\.tsx"/);
+  assert.doesNotMatch(html,/src="\/src\/main\.jsx"/);
+  assert.match(web,/CRM: переход на Connect/);
+  assert.match(gate,/phase==="contract-only"/);
+  assert.match(ci,/rust-party\/test\/contract-only-local\.mjs/);
+  assert.match(ci,/rust-party\/test\/contract-only-native\.mjs/);
+  assert.match(ci,/e2e\/contract-only\.mjs/);
+  assert.match(deploy,/async function verifyContractOnly/);
+  assert.match(deploy,/crm\.contract-only-live-acceptance/);
+  assert.match(deploy,/crm_audit WHERE tenant_id IN/);
+  assert.match(deploy,/x\.source\?\.request_id===item\.request_id/);
+  assert.match(deploy,/x\.\$workers\?\.scriptVersion\?\.id===liveVersion/);
+});

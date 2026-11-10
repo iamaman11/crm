@@ -305,7 +305,12 @@ jobs:
         run: worker-build --release --features ci-local
       - name: Test original Rust Party through workerd and isolated native D1
         working-directory: apps/cloudflare-crm
-        run: node rust-party/test/local.mjs
+        run: |
+          if [ "$(node -p 'require("./architecture-policy.json").phase')" = "contract-only" ]; then
+            node rust-party/test/contract-only-local.mjs
+          else
+            node rust-party/test/local.mjs
+          fi
       # Only one production-feature WASM build on main; this same binary is sealed
       # and published. PR also runs alternative test features for coverage.
       - name: Build exact native Rust Worker for review or release
@@ -355,7 +360,12 @@ jobs:
         working-directory: apps/cloudflare-crm
         env:
           CRM_SOURCE_SHA: ${{ github.sha }}
-        run: node rust-party/test/native.mjs
+        run: |
+          if [ "$(node -p 'require("./architecture-policy.json").phase')" = "contract-only" ]; then
+            node rust-party/test/contract-only-native.mjs
+          else
+            node rust-party/test/native.mjs
+          fi
       - name: Preserve native Rust browser proof and screenshot
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -375,6 +385,9 @@ jobs:
           node --check apps/cloudflare-crm/scripts/deploy.mjs
           node --check apps/cloudflare-crm/test/native-runtime.test.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
+          node --check apps/cloudflare-crm/e2e/contract-only.mjs
+          node --check apps/cloudflare-crm/rust-party/test/contract-only-local.mjs
+          node --check apps/cloudflare-crm/rust-party/test/contract-only-native.mjs
       - name: Check CRM target
         run: |
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
@@ -483,7 +496,12 @@ jobs:
           CRM_E2E_A_CLIENT_SECRET: ${{ secrets.CRM_E2E_A_CLIENT_SECRET }}
           CRM_E2E_B_CLIENT_ID: ${{ secrets.CRM_E2E_B_CLIENT_ID }}
           CRM_E2E_B_CLIENT_SECRET: ${{ secrets.CRM_E2E_B_CLIENT_SECRET }}
-        run: node apps/cloudflare-crm/e2e/live.mjs
+        run: |
+          if [ "$(node -p 'require("./apps/cloudflare-crm/architecture-policy.json").phase')" = "contract-only" ]; then
+            node apps/cloudflare-crm/e2e/contract-only.mjs
+          else
+            node apps/cloudflare-crm/e2e/live.mjs
+          fi
       - name: Verify native Rust Party persisted data and D1 audit
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -14,7 +14,7 @@ const check = (ok, message) => {if(!ok)throw Error("CRM_ARCHITECTURE_VIOLATION: 
 const git = (...args) => execFileSync("git", args, {cwd:repo,encoding:"utf8"});
 const policy = JSON.parse(read("apps/cloudflare-crm/architecture-policy.json"));
 check(policy.schema_version===1, "unknown policy schema");
-check(["migration-freeze","cutover"].includes(policy.phase), "unknown phase");
+check(["migration-freeze","contract-only","cutover"].includes(policy.phase), "unknown phase");
 check(/^[a-f0-9]{40}$/.test(policy.accepted_runtime_sha), "baseline must be an immutable SHA");
 check(policy.browser_wire_format==="Connect binary Protobuf", "binary Connect wire choice changed");
 check(Array.isArray(policy.allowed_non_rpc_http), "HTTP exceptions must be explicit");
@@ -95,15 +95,30 @@ const routerCount=rustSources.reduce((n,p)=>
   n+([...read(p).matchAll(/ConnectRouter::new\s*\(/g)].length),0);
 check(routerCount===1,"exactly one embedded Connect router required, found "+routerCount);
 
-if(policy.phase==="migration-freeze"){
+if(policy.phase!=="cutover"){
   const prev=new Set(baselineFiles("apps/cloudflare-crm"));
   prev.add("packages/client/src/cloudflare.ts");
   for(const path of frozenRuntimeFiles()){
     check(prev.has(path),"new runtime file before full cutover: "+path);
+    if(policy.phase==="contract-only"&&path==="apps/cloudflare-crm/rust-party/src/lib.rs")continue;
     requireUnchanged(path);
   }
   // No new REST endpoints are permitted, even in generated/future features.
   failNewRest(runtime,baselineContent("apps/cloudflare-crm/rust-party/src/lib.rs"));
+  if(policy.phase==="contract-only"){
+    const html=read("apps/cloudflare-crm/web/index.html");
+    check(html.includes('src="/contract-only.tsx"')&&!html.includes("main.jsx"),
+      "legacy React entrypoint must not load");
+    check(runtime.includes('fn legacy_transport_disabled('),
+      "missing fail-closed legacy runtime router");
+    check(runtime.includes('error("LEGACY_TRANSPORT_DISABLED", 410)'),
+      "legacy business endpoints must return HTTP 410");
+    check(JSON.stringify(policy.contract_only_rpc_methods)===
+      JSON.stringify(["/crm.parties.v2.PartyService/GetParty"]),
+      "only physically proven Party GetParty RPC may remain live");
+    check(read("apps/cloudflare-crm/web/contract-only.tsx").includes("CRM: переход на Connect"),
+      "read-only transition UI must be visible");
+  }
 }else{
   const webFiles=treeFiles("apps/cloudflare-crm/web/src");
   check(webFiles.some(x=>x.endsWith(".tsx")),"React must use TSX");
@@ -169,5 +184,5 @@ if(policy.phase==="migration-freeze"){
 console.log(JSON.stringify({event:"crm.architecture-gate",result:"PASS",
   phase:policy.phase,baseline,router_count:routerCount,
   d1:production.d1_databases[0].binding,
-  legacy_runtime_policy:policy.phase==="migration-freeze"?"FROZEN":"REMOVED"}));
+  legacy_runtime_policy:policy.phase==="migration-freeze"?"FROZEN":policy.phase==="contract-only"?"DISABLED":"REMOVED"}));
 export {failNewRest,validateGeneratedBrowserBoundary,validateOneWorkerRouter};

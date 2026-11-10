@@ -189,7 +189,69 @@ async function prepareE2e(){
   console.log(JSON.stringify({event:"crm.e2e-tenant-isolation",
     result:"PASS",database:"existing D1",actors:2,tenants:2,previous_data_deleted:false}));
 }
+
+async function verifyContractOnly(){
+  const liveVersion=await version();
+  const b=await bindings(liveVersion);
+  if(b.sha!==sha||b.db!==database)throw Error("Contract-only live SHA/D1 mismatch");
+  const e=load("contract-only-evidence.json");
+  if(e.git_sha!==sha||e.phase!=="contract-only"||
+    e.result!=="BROWSER_FAIL_CLOSED_PASS_LOGS_PENDING"||
+    !Array.isArray(e.requests)||e.requests.length<12||
+    e.requests.some(r=>r.status!==410||!/^[0-9a-f-]{36}$/i.test(r.request_id||""))||
+    e.rpc_read?.method!=="/crm.parties.v2.PartyService/GetParty"||
+    e.rpc_read?.status!==404)
+    throw Error("Contract-only physical browser/Access/Connect evidence invalid");
+  const run=required("GITHUB_RUN_ID"),attempt=required("GITHUB_RUN_ATTEMPT");
+  if(!/^\d+$/.test(run)||!/^\d+$/.test(attempt))throw Error("E2E tenant names unsafe");
+  const ta="crm-e2e-"+run+"-"+attempt+"-a";
+  const tb="crm-e2e-"+run+"-"+attempt+"-b";
+  const audited=await cf("/d1/database/"+database+"/query","POST",{
+    sql:"SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id IN (?,?)",
+    params:[ta,tb]
+  });
+  const persisted=await cf("/d1/database/"+database+"/query","POST",{
+    sql:"SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant IN (?,?)",
+    params:[ta,tb]
+  });
+  if(audited?.[0]?.results?.[0]?.n!==0||persisted?.[0]?.results?.[0]?.n!==0)
+    throw Error("DISABLED legacy API created real D1 mutation");
+  const samples=e.requests.filter(r=>r.operation).slice(0,2);
+  if(samples.length!==2)throw Error("no distinct verified operations for Logs");
+  const pending=[...samples];
+  const start=Date.now();
+  for(let attemptNo=0;attemptNo<60&&pending.length;attemptNo++){
+    const data=await cf("/workers/observability/telemetry/query","POST",{
+      queryId:"crm-350-contract-only-no-legacy",
+      view:"events",timeframe:{from:start-20*60*1000,to:Date.now()+1000},limit:100,
+      parameters:{needle:{value:"crm.native.request"},
+        filters:[{key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
+    });
+    const events=data.events?.events||[];
+    for(let i=pending.length-1;i>=0;i--){
+      const item=pending[i];
+      if(events.some(x=>x.source?.event==="crm.native.request"&&
+          x.source?.request_id===item.request_id&&
+          x.source?.operation===item.operation&&
+          x.source?.status===410&&x.$workers?.scriptVersion?.id===liveVersion))
+        pending.splice(i,1);
+    }
+    if(pending.length&&attemptNo<59)
+      await new Promise(resolve=>setTimeout(resolve,2500));
+  }
+  if(pending.length)throw Error("Contract-only Cloudflare Logs exact denied request IDs missing "+
+    JSON.stringify(pending));
+  await waitForPublicSha(sha,"final");
+  record("accepted.json",{git_sha:sha,result:"PASS",phase:"contract-only",
+    active_worker_version:liveVersion,legacy_writes:0,denied_calls:e.requests.length,
+    traces:2,d1_database:database});
+  console.log(JSON.stringify({event:"crm.contract-only-live-acceptance",result:"PASS",
+    source:sha,worker_version:liveVersion,legacy_writes:0,
+    blocked:e.requests.length,verified_d1:true,verified_cloudflare_logs:true}));
+}
+
 async function verifyData(){
+  if(JSON.parse(readFileSync("apps/cloudflare-crm/architecture-policy.json","utf8")).phase==="contract-only")return verifyContractOnly();
   const main=await cf(worker+"/deployments");
   const versions=main.deployments?.[0]?.versions||[];
   if(versions.length!==1||versions[0].percentage!==100)

@@ -255,11 +255,26 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     }), if healthy {200} else {503})
 }
 
+fn legacy_transport_disabled(path: &str) -> bool {
+    let diagnostic = matches!(path, "/api/health" | "/api/doctor" |
+        "/api/session" | "/api/version");
+    let ci_only = cfg!(feature = "native-ci") && path == "/api/_ci/original-domain-check";
+    (path.starts_with("/api/") && !diagnostic && !ci_only) ||
+        (path.starts_with("/crm.") &&
+            path != "/crm.parties.v2.PartyService/GetParty")
+}
+
 async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>,
     role: Option<&str>, verified_actor: Option<&str>) -> Result<Response> {
     let request_id = correlation_id(&req, trusted_id)?;
     let path = req.path();
     let method = req.method();
+    // Contract-only transition: legacy CRUD and partial Sales RPC are not
+    // callable even by authenticated admins. No secondary transport or fallback.
+    // This guard is compiled into the Worker; it is not a mutable browser flag.
+    if legacy_transport_disabled(&path) {
+        return error("LEGACY_TRANSPORT_DISABLED", 410);
+    }
     // Minimal existing-role rule for the test CRM: an enrolled admin can write;
     // other verified tenant members may only read. Consent evaluation is a
     // non-mutating query despite its POST transport. Do not silently grant
