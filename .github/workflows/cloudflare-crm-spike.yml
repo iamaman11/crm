@@ -251,7 +251,7 @@ jobs:
                   if not module["linked"]:
                       continue
                   crate, relative = module["crate_name"], module["crate_path"]
-                  cargo.write(f'{crate} = {{ path = "{os.environ["GITHUB_WORKSPACE"]}/{relative}" }}\\n')
+                  cargo.write(f'{crate} = {{ path = "{os.environ["GITHUB_WORKSPACE"]}/{relative}" }}\n')
           PY
           cargo build --manifest-path "$probe/Cargo.toml" --target wasm32-unknown-unknown
           node - "$probe/target/wasm32-unknown-unknown/debug/crm_wasm_probe.wasm" <<'NODE'
