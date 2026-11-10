@@ -616,6 +616,41 @@ try{
   assert.equal(dealRead.status,200);
   assert.deepEqual(dealRead.body.item,dealCreated.body.item,
     "original strict Deal codec -> D1 -> decode preserves exact Money");
+  // Real Connect JSON RPC through the SINGLE authenticated native Worker.
+  // The response is generated from the published crm.sales.v1 Deal schema
+  // and the SAME persisted original crm-sales aggregate.
+  const rpc=async(op,token,data)=>call("/crm.sales.v1.DealService/"+op,token,{
+    method:"POST",headers:{"content-type":"application/json",
+      "connect-protocol-version":"1"},
+    body:JSON.stringify(data)});
+  assert.equal((await rpc("GetDeal",null,{dealId})).status,401,
+    "Connect must not bypass signed Cloudflare Access");
+  const rpcGet=await rpc("GetDeal",a,{dealId});
+  assert.equal(rpcGet.status,200,JSON.stringify(rpcGet));
+  assert.equal(rpcGet.headers["x-crm-module"],"crm.sales");
+  assert.match(rpcGet.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
+  assert.equal(rpcGet.body.deal.dealId,dealId);
+  assert.equal(rpcGet.body.deal.tenantId,"tenant-a");
+  assert.equal(rpcGet.body.deal.name,"Enterprise renewal");
+  assert.equal(rpcGet.body.deal.stageDetails.stageId,"lead");
+  assert.equal(rpcGet.body.deal.amount.minorUnits,"12500");
+  assert.equal(rpcGet.body.deal.version,"1");
+  assert.equal((await rpc("GetDeal",b,{dealId})).status,404,
+    "real Access tenant B must not read tenant A Deal via Connect");
+  assert.equal((await rpc("GetDeal",viewer,{dealId})).status,200,
+    "read-only Connect RPC is available to enrolled tenant viewer");
+  const rpcList=await rpc("ListDeals",a,{});
+  assert.equal(rpcList.status,200,JSON.stringify(rpcList));
+  assert.ok(rpcList.body.deals.some(x=>x.dealId===dealId));
+  const rpcOther=await rpc("ListDeals",b,{});
+  assert.equal(rpcOther.status,200);
+  assert.deepEqual(rpcOther.body.deals||[],[]);
+  assert.deepEqual(stageAudit(),[{action:"sales_deals.create",
+    request_id:dealCreated.headers["x-request-id"]}],
+    "Connect reads must not create D1 mutation audit records");
+  console.log(JSON.stringify({event:"crm.native-original-sales-connect-read",
+    result:"PASS",owner:"crm-sales",tenant_isolation:true,
+    viewer_read:true,native_d1:true,protobuf:true}));
   const dealReplay=await call("/api/sales-deals",a,{
     method:"POST",headers:dealHeaders,body:JSON.stringify(dealData)});
   assert.equal(dealReplay.status,200);

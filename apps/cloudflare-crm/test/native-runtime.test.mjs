@@ -28,6 +28,9 @@ test("one published native Worker with one D1 and no competing backend",()=>{
   }
   const rust=read("rust-party/src/lib.rs");
   assert.match(rust,/mod access;/);
+  assert.match(rust,/mod connect_sales;/);
+  assert.ok(existsSync(resolve(root,"rust-party/src/connect_sales.rs")));
+  assert.match(read("rust-party/src/connect_sales.rs"),/impl sales::DealService for SalesService/);
   assert.match(rust,/mod account_overview;/);
   assert.match(rust,/access::actor\(&req, &env\)/);
   assert.doesNotMatch(rust,/pilot::route|mod pilot;/);

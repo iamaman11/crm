@@ -15,20 +15,27 @@ use serde::Deserialize;
 use wasm_bindgen::JsValue;
 use super::{bind, sales_contract, sales_deals};
 
-// Explicit module tree permits the proto package crm.core.v1 to coexist
-// with Rust's builtin ::core when generated JSON visitors use core::fmt.
-// The compiled message/service definitions remain fully generated from .proto.
+// The published crm.core.v1 package shadows Rust's 'core' crate name.
+// Mount the UNMODIFIED generated Buffa package stitchers and expose the
+// standard library fmt at the enclosing package. No runtime adapter/codegen
+// rewrite is required; all message and service code remains generated.
 pub mod proto {
+    #[allow(unused_imports)]
     pub mod crm {
+        use super::*;
         pub mod core {
+            use super::*;
             pub use ::core::fmt;
             pub mod v1 {
-                include!(concat!(env!("OUT_DIR"), "/crm.core.v1.common.rs"));
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.core.v1.mod.rs"));
             }
         }
         pub mod sales {
+            use super::*;
             pub mod v1 {
-                include!(concat!(env!("OUT_DIR"), "/crm.sales.v1.deal.rs"));
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.sales.v1.mod.rs"));
             }
         }
     }
