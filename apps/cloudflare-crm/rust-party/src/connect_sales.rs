@@ -116,7 +116,7 @@ impl sales::DealService for SalesService {
 pub(super) async fn route(
     req:Request,env:Env,tenant:&str,
 )->Result<Response> {
-    let app:Router=ConnectRouter::new()
+    let mut app:Router=ConnectRouter::new()
         .add_service(Arc::new(SalesService {
             env:Arc::new(env),tenant:tenant.to_owned(),
         }))
