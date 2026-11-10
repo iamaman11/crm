@@ -136,3 +136,67 @@ NOT_TESTED до защищённой публикации из `dev`. Не пр�
 - Deal display may show major currency units and percent, but only the UI boundary converts them to exact integer Rust `amount_minor_units`/`probability_bps`. Avoid floating-point currency math. Keep native crm-sales validation and live edit/reload/negative tests; never introduce a shadow domain owner.
 
 - Existing physical UI inventory: `e2e/ui-inventory.mjs` enumerates 10 JSX components, 60 button templates, and 93 mandatory user action cases. `test/native-runtime.test.mjs` verifies JSX button/form/input/select counts and per-action source markers; live Chromium `e2e/live.mjs` requires the corresponding actual `cover(id)` for every case. Update the inventory and browser actions together for every new control; passing the old count is NOT proof of 100% state/branch coverage. Do not make up an extra test service or source-of-truth plan.
+
+
+## Accepted target architecture and automated gates — 2026-11-10
+
+**Canonical decision:** [Issue #350](https://github.com/iamaman11/crm/issues/350)
+is the implementation checklist under the sole master plan #338.
+For this Cloudflare application the accepted deployment is:
+`React 19 + strict TypeScript → generated Buf Connect-Web → Cloudflare Access → ONE workers-rs Rust/WASM Worker (Connect; Axum routing only) → original Rust module owner → ONE native D1`.
+The web interface uses standard CSS custom properties, responsive CSS, and
+light/dark/system themes; none of this changes the backend.
+
+**Scoped precedence:** root `AGENTS.md` governs common domain invariants and
+repository practices. Its historical PostgreSQL/gateway deployment instructions
+do **not** prescribe the Cloudflare CRM runtime: this scoped guide and approved
+#338/#350 govern `apps/cloudflare-crm/`. Never add PostgreSQL, a second Worker,
+database, gateway, JS API backend, parallel workflow/Environment or per-change
+branch to reconcile legacy guidance. Resolve actual domain-invariant conflicts
+explicitly in the canonical Issue, not by weakening a gate.
+
+**One feature, one owner, one contract:**
+1. Identify the existing `modules/crm-*` owner and command/query. The domain
+   decides business rules, permissible actions, and versions. Do not mirror the
+   domain in React or in a transport handler.
+2. For CRM RPCs use the corresponding versioned `proto/` contract, generated
+   Buf client and the same Connect service in the deployed native Worker.
+   Keep native `prost` contracts where already required by original modules;
+   `connectrpc`/Buffa belongs at the transport edge. Typed conversion at a
+   real boundary is legitimate; additional gateway layers, duplicate DTO/domain
+   models and repeated JSON/Protobuf serialization are not.
+3. Access authenticates actor, role and tenant **once** before RPC dispatch.
+   Do not trust client-supplied tenant, request ID, or owner. Preserve server
+   `request_id` through response, D1 audit and Cloudflare Logs.
+4. One shared Rust operation and the same D1 for each transition. During
+   migration legacy REST may coexist *temporarily*, but must call the same
+   original command. Remove each replaced REST endpoint/client after the
+   matching Connect path passes physical acceptance. Keep non-RPC exceptions
+   (e.g. CSV streaming/download) explicitly listed in #350.
+5. New feature path: `Rust owner → .proto → generated Connect-Web → React TSX
+   → existing Cloudflare CRM Spike CI → real protected Chromium/D1/Logs`.
+   No separate CI, schema source, runtime service or adapter framework.
+
+**Fail-closed CI target (migration is currently IN PROGRESS):**
+extend only `.github/workflows/cloudflare-crm-spike.yml` with Buf
+lint/breaking/generation consistency, strict `tsc --noEmit`, pinned Rust
+WASM and existing workerd/Chromium/Access A/B/D1/Logs/rollback checks.
+Do not add `|| true` to an acceptance command. Temporary explicitly listed
+legacy paths are tolerated during migration, but no new manual JSON API
+clients, unknown second API router, additional D1/Worker or duplicate state.
+Mark a gate enforced only after the check actually exists and passes.
+Do not label issue #350 DONE from a compile-only/transport-only proof.
+
+**CSS and theme:** keep the current native `web/src/styles.css` approach,
+organize reusable semantic CSS custom properties, responsive Grid/Flex and
+accessible controls; no Tailwind, Sass or UI framework without a demonstrated
+need. Theme preference is `system` (default), `light`, or `dark`,
+stored only in browser `localStorage`; system mode follows
+`prefers-color-scheme`. Do not write a theme setting to D1. Existing
+screen/action inventory and protected Chromium acceptance must include theme
+switch, persistence on reload, modal, table, mobile, form and error states.
+A CSS/theme change is not accepted until it is physically verified.
+
+**Engineering simplicity:** one permanent `dev`, one GitHub Environment
+`crm-dev`, one existing CI, exact committed source and published SHA.
+Optional extra hardening remains deferred until *after real production*.
