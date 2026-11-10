@@ -145,6 +145,20 @@ try{
   await page.getByLabel("Имя / название").fill(marker);
   await save();cover("parties.create");
   const party=await readOwner("parties",x=>x.name===marker);
+  const typedParty=await context.request.post(
+    url+"/crm.parties.v2.PartyService/GetParty",{
+      data:{partyId:party.id},headers:{"content-type":"application/json"}
+    });
+  assert.equal(typedParty.status(),200,"published v2 Party Connect RPC");
+  const partyReply=await typedParty.json();
+  assert.equal(partyReply.party.partyId,party.id);
+  assert.equal(partyReply.party.displayName,party.name);
+  assert.equal(typedParty.headers()["x-crm-module"],"crm.parties");
+  assert.equal(typedParty.headers()["x-crm-source-sha"],sha);
+  assert.match(typedParty.headers()["x-request-id"]||"",/^[a-f0-9-]{36}$/i);
+  console.log(JSON.stringify({event:"crm.live-parties-v2-connect",
+    result:"PASS",sha,method:"GetParty"}));
+
   await row(marker).getByRole("button",{name:"Изменить"}).click();
   await page.getByLabel("Имя / название").fill(marker+" Updated");
   await save();cover("parties.update");

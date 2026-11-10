@@ -15,7 +15,7 @@ test("one published native Worker with one D1 and no competing backend",()=>{
   assert.equal(config.name,"crm-dev");
   assert.equal(config.main,"./rust-party/build/index.js");
   assert.deepEqual(config.assets.run_worker_first,
-    ["/api/*","/crm.sales.v1.DealService/*"]);
+    ["/api/*","/crm.sales.v1.DealService/*","/crm.parties.v2.PartyService/*"]);
   assert.equal(config.d1_databases.length,1);
   assert.equal(config.d1_databases[0].binding,"DB");
   assert.equal(config.version_metadata.binding,"CF_VERSION_METADATA");
@@ -450,4 +450,25 @@ test("single CRM CI enforces frozen Buf and existing typed shared packages",()=>
   assert.match(workflow,/pnpm --filter @ultimate-crm\/ui typecheck/);
   assert.match(workflow,/fetch-depth: 0/);
   assert.doesNotMatch(workflow,/pnpm exec buf[^\n]*\|\| true/);
+});
+
+test("canonical Party v2 is real Rust Connect and native + live proof",()=>{
+  const proto=read("../../proto/crm/parties/v2/party.proto");
+  const build=read("rust-party/build.rs");
+  const rpc=read("rust-party/src/connect_sales.rs");
+  const lib=read("rust-party/src/lib.rs");
+  const native=read("rust-party/test/native.mjs");
+  const browser=read("e2e/live.mjs");
+  const client=read("../../packages/client/src/cloudflare.ts");
+  assert.match(proto,/package crm\.parties\.v2;/);
+  assert.match(proto,/rpc GetParty\(GetPartyRequest\) returns \(GetPartyResponse\)/);
+  assert.match(build,/proto\/crm\/parties\/v2\/party\.proto/);
+  assert.match(rpc,/impl party_wire::PartyService for PartyService/);
+  assert.match(rpc,/parties::stored\(&db, &self\.tenant/);
+  assert.match(rpc,/\.add_service\(Arc::new\(PartyService/);
+  assert.match(lib,/crm\.parties\.v2\.PartyService\/GetParty/);
+  assert.match(client,/createConnectTransport\(/);
+  assert.match(client,/createClient\(PartyService, transport\)/);
+  assert.match(native,/crm\.native-parties-v2-connect/);
+  assert.match(browser,/crm\.live-parties-v2-connect/);
 });

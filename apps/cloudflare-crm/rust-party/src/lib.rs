@@ -268,13 +268,15 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     if role != Some("admin")
         && method != Method::Get
         && !(path == "/crm.sales.v1.DealService/GetDeal" ||
-             path == "/crm.sales.v1.DealService/ListDeals")
+             path == "/crm.sales.v1.DealService/ListDeals" ||
+             path == "/crm.parties.v2.PartyService/GetParty")
         && !(path == "/api/consents/evaluate" && method == Method::Post)
     {
         return error("FORBIDDEN", 403);
     }
     #[cfg(feature = "native")]
-    if path.starts_with("/crm.sales.v1.DealService/") {
+    if path.starts_with("/crm.sales.v1.DealService/") ||
+       path.starts_with("/crm.parties.v2.PartyService/") {
         if method != Method::Post { return error("NOT_FOUND",404); }
         let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
         return connect_sales::route(req,env,tenant,actor,&request_id).await;
@@ -429,6 +431,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             ("/api/consents", Method::Get) => "consents.list",
             ("/api/consents/evaluate", Method::Post) => "consents.evaluate",
             ("/api/consents/suppress", Method::Post) => "consents.suppress",
+            ("/crm.parties.v2.PartyService/GetParty", Method::Post) => "parties.rpc.get",
             ("/crm.sales.v1.DealService/GetDeal", Method::Post) => "sales-deals.rpc.get",
             ("/crm.sales.v1.DealService/ListDeals", Method::Post) => "sales-deals.rpc.list",
             ("/crm.sales.v1.DealService/CreateDeal", Method::Post) => "sales-deals.rpc.create",
@@ -480,7 +483,8 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         };
         reply.headers_mut().set("x-request-id", &request_id)?;
         let module = if path == "/api/doctor" { "crm.diagnostics" }
-            else if path.starts_with("/api/parties") { "crm.parties" }
+            else if path.starts_with("/api/parties") ||
+                path.starts_with("/crm.parties.v2.PartyService/") { "crm.parties" }
             else if path.starts_with("/api/accounts") { "crm.customer-accounts" }
             else if path.starts_with("/api/contact-points") { "crm.contact-points" }
             else if path.starts_with("/api/party-relationships") { "crm.party-relationships" }

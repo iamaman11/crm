@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package crm.parties.v2;
+
+// Authoritative Party state belongs to the original Rust crm-parties aggregate.
+// Tenant and actor are verified by Cloudflare Access, never caller supplied.
+enum PartyKind {
+  PARTY_KIND_UNSPECIFIED = 0;
+  PARTY_KIND_PERSON = 1;
+  PARTY_KIND_ORGANIZATION = 2;
+}
+
+message Party {
+  string party_id = 1;
+  PartyKind kind = 2;
+  string display_name = 3;
+  int64 version = 4;
+}
+
+message GetPartyRequest {
+  string party_id = 1;
+}
+
+message GetPartyResponse {
+  Party party = 1;
+}
+
+// No fake Create/Update/List stubs; add methods when real owner flow is tested.
+service PartyService {
+  rpc GetParty(GetPartyRequest) returns (GetPartyResponse);
+}

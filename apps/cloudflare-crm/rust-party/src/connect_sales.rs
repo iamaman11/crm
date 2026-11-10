@@ -13,7 +13,8 @@ use buffa::Message as BuffaMessage;
 use prost::Message as ProstMessage;
 use serde::Deserialize;
 use wasm_bindgen::JsValue;
-use super::{bind, sales_contract, sales_deals};
+use super::{bind, parties, sales_contract, sales_deals};
+use crm_parties::PartyKind as DomainPartyKind;
 use crm_proto_contracts::crm::{core::v1 as core_contract, sales::v1 as sales_contract_proto};
 
 // The published crm.core.v1 package shadows Rust's 'core' crate name.
@@ -39,9 +40,17 @@ pub mod proto {
                 include!(concat!(env!("OUT_DIR"), "/crm.sales.v1.mod.rs"));
             }
         }
+        pub mod parties {
+            use super::*;
+            pub mod v2 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.parties.v2.mod.rs"));
+            }
+        }
     }
 }
 use proto::crm::sales::v1 as sales;
+use proto::crm::parties::v2 as party_wire;
 
 #[derive(Deserialize)]
 struct Row { state: String }
@@ -205,15 +214,61 @@ impl sales::DealService for SalesService {
     }
 }
 
+
+struct PartyService {
+    env: Arc<Env>,
+    tenant: String,
+}
+
+// Generated Connect-Rust + Buffa response, original Party owner + one D1.
+impl party_wire::PartyService for PartyService {
+    #[worker::send]
+    async fn get_party(
+        &self, _ctx: RequestContext, req: ServiceRequest<'_, party_wire::GetPartyRequest>,
+    ) -> ServiceResult<party_wire::GetPartyResponse> {
+        let raw = req.party_id.trim();
+        if raw.is_empty() || raw.len() > 180 || raw != req.party_id || raw.contains('/') {
+            return Err(ConnectError::invalid_argument("PARTIES_PARTY_ID_INVALID"));
+        }
+        let id = crm_parties::PartyId::try_new(raw.to_owned())
+            .map_err(|_| ConnectError::invalid_argument("PARTIES_PARTY_ID_INVALID"))?;
+        let db = self.env.d1("DB")
+            .map_err(|_| ConnectError::internal("D1 binding unavailable"))?;
+        let party = parties::stored(&db, &self.tenant, id.as_str()).await
+            .map_err(|_| ConnectError::internal("Party D1 read failed"))?
+            .ok_or_else(|| ConnectError::not_found("PARTIES_NOT_FOUND"))?;
+        let version = i64::try_from(party.version())
+            .map_err(|_| ConnectError::internal("invalid Party version"))?;
+        let kind = match party.kind() {
+            DomainPartyKind::Person => party_wire::PartyKind::PARTY_KIND_PERSON,
+            DomainPartyKind::Organization => party_wire::PartyKind::PARTY_KIND_ORGANIZATION,
+        };
+        RpcResponse::ok(party_wire::GetPartyResponse {
+            party: Some(party_wire::Party {
+                party_id: party.party_id().as_str().to_owned(),
+                kind: kind.into(),
+                display_name: party.display_name().to_owned(),
+                version,
+                ..Default::default()
+            }).into(),
+            ..Default::default()
+        })
+    }
+}
+
 // Called by existing native-only dispatch AFTER signed Access authentication
 // and role decision. No second fetch endpoint, tenant header, or JS route.
 pub(super) async fn route(
     req:Request,env:Env,tenant:&str,actor:&str,request_id:&str,
 )->Result<Response> {
     let idempotency_key=req.headers().get("idempotency-key")?;
+    let env = Arc::new(env);
     let mut app:Router=ConnectRouter::new()
+        .add_service(Arc::new(PartyService {
+            env: Arc::clone(&env), tenant: tenant.to_owned(),
+        }))
         .add_service(Arc::new(SalesService {
-            env:Arc::new(env),tenant:tenant.to_owned(),
+            env,tenant:tenant.to_owned(),
             actor:actor.to_owned(),request_id:request_id.to_owned(),idempotency_key,
         }))
         .into_axum_router();
