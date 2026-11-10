@@ -550,7 +550,9 @@ test("architecture gate rejects new REST, wrong binary setting and second D1/rou
   const workflow=read("../../.github/workflows/cloudflare-crm-spike.yml");
   assert.ok(["migration-freeze","contract-only","cutover"].includes(policy.phase));
   assert.match(source,/legacy runtime modified before single cutover/);
-  assert.match(source,/coverage\.owners/);
+  assert.match(source,/report\.modules/);
+  assert.doesNotMatch(source,/contract-coverage\.json|coverageMatrix/);
+  assert.match(workflow,/python scripts\/crm-module-coverage\.py --output/);
   assert.match(source,/exactly one embedded Connect router required/);
   assert.match(workflow,/node apps\/cloudflare-crm\/scripts\/architecture-gate\.mjs/);
   assert.match(workflow,/pnpm --filter cloudflare-crm typecheck/);
