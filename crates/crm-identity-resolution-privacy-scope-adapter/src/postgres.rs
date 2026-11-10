@@ -2,7 +2,7 @@ use crate::contract::{
     MAX_PRIVACY_ACTIVE_REDIRECT_EDGES, MAX_PRIVACY_ALIAS_HOPS, MAX_PRIVACY_ALIAS_NODES,
     MAX_PRIVACY_CANDIDATE_RECORDS_REHYDRATED, MAX_PRIVACY_MERGE_RECORDS_REHYDRATED,
     MAX_PRIVACY_OWNER_RECORDS_SCANNED, MAX_PRIVACY_RELATIONSHIP_CANDIDATES,
-    validate_definition,
+    identity_resolution_privacy_scope_definition, validate_definition,
 };
 use crate::errors::{
     database_unavailable, limit_exceeded, map_canonical_party_claim_error, row_decode_error,
@@ -878,3 +878,7 @@ fn configured<T>(value: Result<T, crm_module_sdk::IdentifierError>) -> Result<T,
     crate::errors::configured(value)
 }
 
+#[allow(dead_code)]
+fn _definition_smoke() -> Result<CapabilityDefinition, SdkError> {
+    identity_resolution_privacy_scope_definition()
+}
