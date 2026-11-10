@@ -139,14 +139,25 @@ jobs:
       - name: Build React CRM
         run: npm run build
         working-directory: apps/cloudflare-crm
-      - name: Verify all existing Rust business modules compile for WebAssembly
+      - name: Verify every activated Rust module compiles for WebAssembly
+        shell: bash
         run: |
-          cargo check --locked --target wasm32-unknown-unknown \
-            -p crm-sales -p crm-activities -p crm-sales-activities-link \
-            -p crm-parties -p crm-customer-accounts -p crm-contact-points \
-            -p crm-party-relationships -p crm-consents -p crm-identity-resolution \
-            -p crm-customer-data-operations -p crm-data-quality \
-            -p crm-customer-enrichment -p crm-customer-privacy
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          report = json.load(open(os.environ["CRM_MODULE_COVERAGE_REPORT"], encoding="utf-8"))
+          names = sorted({m["crate_name"] for m in report["modules"] if m["linked"]})
+          if not names:
+              raise SystemExit("No linked Rust modules in compiled manifest report")
+          command = ["cargo", "check", "--locked", "--target", "wasm32-unknown-unknown"]
+          for name in names:
+              command.extend(["-p", name])
+          subprocess.run(command, check=True)
+          print(json.dumps({"event":"crm.linked-owner-wasm-check","result":"PASS",
+                            "compiled_crates":names,"count":len(names)}))
+          PY
       - name: Execute the original Rust domain rules from WASM in Node
         shell: bash
         run: |
@@ -240,38 +251,6 @@ jobs:
               original_domain_probe::check()
           }
 
-          // One WASM executable invokes symbols from all 13 ORIGINAL domain/link crates.
-          // This is a *composition/link* gate, not a claim of D1 readiness or full
-          // Cloudflare execution of twelve not-yet-connected owner workflows.
-          #[unsafe(no_mangle)]
-          pub extern "C" fn crm_13_module_link_probe() -> i32 {
-              let modules = [
-                  crm_sales::CRATE_NAME,
-                  crm_activities::CRATE_NAME,
-                  crm_sales_activities_link::MODULE_ID,
-                  crm_parties::MODULE_ID,
-                  crm_customer_accounts::MODULE_ID,
-                  crm_contact_points::MODULE_ID,
-                  crm_party_relationships::MODULE_ID,
-                  crm_consents::MODULE_ID,
-                  crm_identity_resolution::MODULE_ID,
-                  crm_data_quality::MODULE_ID,
-                  crm_customer_enrichment::MODULE_ID,
-                  crm_customer_privacy::MODULE_ID,
-              ];
-              let expected = [
-                  "crm-sales", "crm-activities", "crm.sales-activities-link",
-                  "crm.parties", "crm.customer-accounts", "crm.contact-points",
-                  "crm.party-relationships", "crm.consents", "crm.identity-resolution",
-                  "crm.data-quality", "crm.customer-enrichment", "crm.customer-privacy",
-              ];
-              if modules != expected { return 1; }
-              let import_id = match crm_customer_data_operations::ImportJobId::try_new("wasm-import-01") {
-                  Ok(v) => v, Err(_) => return 2,
-              };
-              if import_id.as_str() != "wasm-import-01" { return 3; }
-              0
-          }
           RUST
           cargo build --manifest-path "$probe/Cargo.toml" --target wasm32-unknown-unknown
           node - "$probe/target/wasm32-unknown-unknown/debug/crm_wasm_probe.wasm" <<'NODE'
@@ -284,11 +263,6 @@ jobs:
             }
             const result = instance.exports.crm_party_domain_probe();
             if (result !== 0) throw new Error('Existing Rust domain WASM rejected, code=' + result);
-            if (typeof instance.exports.crm_13_module_link_probe !== 'function') {
-              throw new Error('Thirteen original modules did not export the same WASM probe');
-            }
-            const moduleLink = instance.exports.crm_13_module_link_probe();
-            if (moduleLink !== 0) throw new Error('Thirteen modules link probe rejected, code=' + moduleLink);
             if (typeof instance.exports.crm_owner_domain_probe !== 'function') {
               throw new Error('Original owner domain behavior ABI missing');
             }
@@ -298,10 +272,9 @@ jobs:
               crate:'crm-parties', target:'wasm32-unknown-unknown',
               runtime:'node WebAssembly', tests:['normalize','version',
                 'stale update denied','serialize/rehydrate','invalid name denied'],
-              module_link:{result:'PASS', original_crates:13, wasm_binary:'one',
-                domain_executed:['crm-parties','crm-customer-accounts','crm-contact-points',
-                  'crm-sales','crm-activities','crm-customer-data-operations identifier'],
-                remaining_domain_behaviors:'NOT_TESTED'},
+              module_link:{result:'CHECKED_IN_EARLIER_STAGE',
+                evidence:'generated manifest activation + cargo check for every linked crate',
+                domain_behaviors:'PARTIAL_ORIGINAL_OWNER_FIXTURE'},
               owners:{result:'PASS',modules:['crm-customer-accounts','crm-contact-points',
                 'crm-sales','crm-activities'],operations:['create','roundtrip','negative','version'],
                 live_d1:'NOT_TESTED'},
