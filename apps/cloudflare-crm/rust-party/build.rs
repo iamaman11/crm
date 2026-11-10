@@ -6,7 +6,8 @@ fn main() {
     println!("cargo:rerun-if-changed=../../../proto/crm/sales/v1/deal.proto");
     println!("cargo:rerun-if-changed=../../../proto/crm/core/v1/common.proto");
     connectrpc_build::Config::new()
-        .files(&["../../../proto/crm/sales/v1/deal.proto"])
+        .files(&["../../../proto/crm/core/v1/common.proto",
+                 "../../../proto/crm/sales/v1/deal.proto"])
         .includes(&["../../../proto"])
         .include_file("_connectrpc.rs")
         .compile()
