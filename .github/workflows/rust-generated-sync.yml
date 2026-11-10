@@ -2,6 +2,8 @@ name: Rust Generated Sync
 
 on:
   pull_request:
+    branches:
+      - main
     types: [opened, synchronize, reopened]
     paths:
       - "Cargo.toml"

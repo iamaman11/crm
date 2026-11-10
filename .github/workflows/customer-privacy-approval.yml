@@ -35,6 +35,8 @@ on:
       - "database/tests/0045_customer_privacy_plan_reads.sql"
       - ".github/workflows/customer-privacy-approval.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

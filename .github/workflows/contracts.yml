@@ -36,6 +36,8 @@ on:
       - "modules/*/module.yaml"
       - ".github/workflows/contracts.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "proto/**"
       - "contracts/**"

@@ -8,7 +8,6 @@ on:
   pull_request:
     branches:
       - dev
-      - main
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -27,6 +26,40 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
+      # All CRM PR checks execute in THIS job. No other workflow targets PR to dev.
+      # Pure source checks must fail before npm, Cargo builds or Chromium.
+      - name: Fast repository CI topology, architecture, and source syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_ci_event_policy.py
+          python -m unittest tests.test_ci_event_policy tests.test_affected_scope
+          python scripts/check_action_pinning.py
+          node --check scripts/crm-architecture-ast.mjs
+          node --check scripts/crm-rpc-descriptors.mjs
+          node --check scripts/crm-architecture-ast.test.mjs
+          node --check apps/cloudflare-crm/rust-party/test/native.mjs
+          node --check apps/cloudflare-crm/e2e/live.mjs
+          node apps/cloudflare-crm/scripts/architecture-gate.mjs
+      - name: Fast historical Rust owner complexity and suppression budgets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_step13_exit_evidence.py --check \
+            --json-output /tmp/crm-step13-exit-evidence.json \
+            --markdown-output /tmp/crm-step13-exit-evidence.md
+          python scripts/check_step13_suppression_baseline.py --check \
+            --json-output /tmp/crm-step13-suppression.json \
+            --markdown-output /tmp/crm-step13-suppression.md
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - name: Verify Rust owner formatting before WASM compilation
+        run: |
+          cargo fmt --all -- --check
+          cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml -- --check
       # Fail before the expensive WASM pipeline if the shared contract breaks.
       # The repo's existing frozen workspace provides Buf, Protobuf-ES, and TS.
       - name: Install pinned shared contract toolchain
@@ -93,10 +126,6 @@ jobs:
       - name: Build React CRM
         run: npm run build
         working-directory: apps/cloudflare-crm
-      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
-        with:
-          toolchain: 1.97.1
-          targets: wasm32-unknown-unknown
       - name: Verify all existing Rust business modules compile for WebAssembly
         run: |
           cargo check --locked --target wasm32-unknown-unknown \

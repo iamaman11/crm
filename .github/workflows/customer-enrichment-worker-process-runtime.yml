@@ -29,6 +29,8 @@ on:
       - "scripts/verify_customer_enrichment_database_hardening.sh"
       - ".github/workflows/customer-enrichment-worker-process-runtime.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

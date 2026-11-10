@@ -90,6 +90,8 @@ on:
       - ".github/pull_request_template.md"
       - ".github/workflows/**"
   pull_request:
+    branches:
+      - main
     paths:
       - "AGENTS.md"
       - "Cargo.toml"

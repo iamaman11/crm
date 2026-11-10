@@ -30,6 +30,8 @@ on:
       - "database/tests/0023_customer_privacy_subject_verify_fixture.sql"
       - ".github/workflows/customer-privacy-persistence.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

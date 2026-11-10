@@ -34,6 +34,8 @@ on:
       - "tests/test_postgres_process_isolation.py"
       - ".github/workflows/postgres-process-isolation.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

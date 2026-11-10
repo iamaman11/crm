@@ -27,6 +27,8 @@ on:
       - "database/tests/0012_customer_data_operations_adapter.sql"
       - ".github/workflows/import-retryable-process-runtime.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

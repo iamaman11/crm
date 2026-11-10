@@ -29,6 +29,8 @@ on:
       - "tests/test_production_route_classifications.py"
       - ".github/workflows/customer-privacy-hold-retention.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.lock"
       - "contracts/production-route-classifications.json"

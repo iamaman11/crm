@@ -33,6 +33,8 @@ on:
       - "database/tests/0015_data_quality_completeness_profile_adapter.sql"
       - ".github/workflows/data-quality-privacy-scope.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

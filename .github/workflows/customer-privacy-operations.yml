@@ -21,6 +21,8 @@ on:
       - "services/crm-api/**"
       - "tests/test_customer_privacy_operations.py"
   pull_request:
+    branches:
+      - main
     paths:
       - "customer-privacy-operations-policy.json"
       - ".github/workflows/customer-privacy-operations.yml"

@@ -32,6 +32,8 @@ on:
       - "tests/test_workspace_dependency_policy.py"
       - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

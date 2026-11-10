@@ -30,6 +30,8 @@ on:
       - "scripts/run_customer_enrichment_review_process.sh"
       - ".github/workflows/customer-enrichment-review-process-runtime.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

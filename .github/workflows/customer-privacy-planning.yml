@@ -27,6 +27,8 @@ on:
       - "docs/CUSTOMER_PRIVACY_PLAN_READS_IMPLEMENTATION.md"
       - ".github/workflows/customer-privacy-planning.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

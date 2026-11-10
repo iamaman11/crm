@@ -2,6 +2,8 @@ name: Affected Scope CI
 
 on:
   pull_request:
+    branches:
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

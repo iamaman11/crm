@@ -30,6 +30,8 @@ on:
       - "services/crm-api/**"
       - "database/**"
   pull_request:
+    branches:
+      - main
     paths:
       - "package.json"
       - "requirements-dev.txt"

@@ -26,6 +26,8 @@ on:
       - "database/tests/0025_consents_privacy_scope_fixture.sql"
       - ".github/workflows/consents-privacy-scope.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

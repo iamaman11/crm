@@ -29,6 +29,8 @@ on:
       - "database/tests/0026_customer_accounts_privacy_scope_fixture.sql"
       - ".github/workflows/customer-accounts-privacy-scope.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
