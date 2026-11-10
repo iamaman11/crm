@@ -23,9 +23,37 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0 # immutable Protobuf baseline is a historical accepted commit
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
+      # Fail before the expensive WASM pipeline if the shared contract breaks.
+      # The repo's existing frozen workspace provides Buf, Protobuf-ES, and TS.
+      - name: Install pinned shared contract toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global pnpm@11.12.0
+          pnpm --version | grep -Fx '11.12.0'
+          pnpm install --frozen-lockfile
+      - name: Enforce canonical Protobuf compatibility and typed packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This SHA is the physically accepted Cloudflare release, NOT dev HEAD.
+          accepted=e1ac0cd341d6ffdea4986f37a96e11f50e4b5fff
+          git cat-file -e "${accepted}^{commit}"
+          pnpm exec buf build proto --output /tmp/crm-cloudflare-accepted-schema.binpb
+          pnpm exec buf format -d --exit-code proto
+          pnpm exec buf lint proto
+          pnpm exec buf breaking proto --against ".git#ref=${accepted}"
+          pnpm exec buf breaking proto --against ".git#branch=main"
+          pnpm exec buf generate --template buf.gen.web.yaml
+          test -s packages/client/gen/crm/sales/v1/deal_pb.ts
+          pnpm --filter @ultimate-crm/client typecheck
+          pnpm --filter @ultimate-crm/ui typecheck
+          # A frozen checkout never changes the source lockfile.
+          git diff --exit-code -- pnpm-lock.yaml
       - name: Install CRM dependencies
         run: npm install --no-audit --no-fund
         working-directory: apps/cloudflare-crm
