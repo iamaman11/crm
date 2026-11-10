@@ -229,7 +229,8 @@ test("permanent dev branch builds once, publishes the same tested artifact",()=>
   const w=read("../../.github/workflows/cloudflare-crm-spike.yml");
   const deploy=read("scripts/deploy.mjs");
   assert.match(w,/push:\n    branches:\n      - dev\n/);
-  assert.match(w,/pull_request:\n    branches:\n      - dev\n      - main\n/);
+  assert.match(w,/pull_request:\n    branches:\n      - dev\n/);
+  assert.doesNotMatch(w,/pull_request:\n    branches:\n      - dev\n      - main/);
   assert.doesNotMatch(w,/push:\n    branches:\n      - main\n/);
   assert.match(w,/if: github.event_name == 'push' && github.ref == 'refs\/heads\/dev'/);
   assert.match(w,/environment: crm-dev/);
@@ -437,11 +438,12 @@ test("every CRM JSX button family has an explicit reviewed live-browser proof",(
   assert.ok(live.includes('"customer360.navigate.relationships"'));
 });
 
-test("Cloudflare CRM CI triggers on every dev change and both PR bases",()=>{
+test("Cloudflare CRM CI exclusively handles dev pushes and dev PRs",()=>{
   const workflow=read("../../.github/workflows/cloudflare-crm-spike.yml");
   const triggers=workflow.split("jobs:")[0];
   assert.match(triggers,/push:\s*\n\s*branches:\s*\n\s*- dev/);
-  assert.match(triggers,/pull_request:\s*\n\s*branches:\s*\n\s*- dev\s*\n\s*- main/);
+  assert.match(triggers,/pull_request:\s*\n\s*branches:\s*\n\s*- dev/);
+  assert.doesNotMatch(triggers,/pull_request:\s*\n\s*branches:\s*\n\s*- dev\s*\n\s*- main/);
   assert.doesNotMatch(triggers,/^\s+paths:/m,
     "path filters would silently skip Protobuf or shared Rust owner changes");
 });
