@@ -60,11 +60,27 @@ if(policy.phase==="contract-only"){
    fail("contract-only must expose exactly the approved RPC list");
 }
 if(policy.phase==="cutover"){
- const matrix=JSON.parse(rd(policy.cutover_coverage_file));
- const runtime=new Set(matrix.owners.flatMap(x=>x.rpc_methods||[]));
- for(const method of runtime)if(!available.has(method))fail("coverage RPC missing descriptor "+method);
- for(const method of runtime)if(!allowed.has(method))fail("owner RPC is NOT registered active "+method);
- for(const route of allowed)if(!runtime.has(route))fail("active RPC lacks owner coverage "+route);
+ const reportFile=process.env.CRM_MODULE_COVERAGE_REPORT;
+ if(!reportFile||!existsSync(reportFile))fail("missing generated module coverage report");
+ const report=JSON.parse(readFileSync(reportFile,"utf8"));
+ const runtime=new Set(report.active_rpc_paths||[]);
+ if(report.phase!=="cutover"||report.schema_version!==1)
+   fail("module report phase/schema mismatch");
+ for(const method of runtime)if(!available.has(method))
+   fail("active module RPC missing compiled descriptor "+method);
+ for(const method of runtime)if(!allowed.has(method))
+   fail("module RPC is NOT registered active "+method);
+ for(const route of allowed)if(!runtime.has(route))
+   fail("active RPC lacks generated module ownership "+route);
+ const bound=new Map();
+ for(const module of report.modules){
+   for(const route of module.declared_rpc_paths){
+     if(bound.has(route))fail("duplicated declared RPC owner "+route);
+     bound.set(route,module.module_id);
+   }
+ }
+ for(const route of allowed)if(!bound.has(route))
+   fail("active RPC absent from canonical module.yaml binding "+route);
 }
 console.log(JSON.stringify({event:"crm.protobuf-descriptor-coverage",result:"PASS",
  active:proof.methods.map(x=>x.path),total_schema_methods:available.size,phase:policy.phase}));
