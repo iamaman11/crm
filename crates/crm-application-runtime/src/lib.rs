@@ -32,10 +32,10 @@ mod process;
 mod production_identity;
 mod runtime;
 
-use background::*;
-use bootstrap_visibility::*;
-use export_artifact_download_http::*;
-use export_selection_bootstrap::*;
+pub(crate) use background::*;
+pub(crate) use bootstrap_visibility::*;
+pub(crate) use export_artifact_download_http::*;
+pub(crate) use export_selection_bootstrap::*;
 pub use {
     config::*,
     crm_data_quality_source_composition::{
