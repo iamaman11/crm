@@ -205,7 +205,7 @@ test("permanent dev branch builds once, publishes the same tested artifact",()=>
   const w=read("../../.github/workflows/cloudflare-crm-spike.yml");
   const deploy=read("scripts/deploy.mjs");
   assert.match(w,/push:\n    branches:\n      - dev\n/);
-  assert.match(w,/pull_request:\n    branches:\n      - main\n/);
+  assert.match(w,/pull_request:\n    branches:\n      - dev\n      - main\n/);
   assert.doesNotMatch(w,/push:\n    branches:\n      - main\n/);
   assert.match(w,/if: github.event_name == 'push' && github.ref == 'refs\/heads\/dev'/);
   assert.match(w,/environment: crm-dev/);
