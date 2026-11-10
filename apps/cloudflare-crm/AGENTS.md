@@ -187,15 +187,37 @@ clients, unknown second API router, additional D1/Worker or duplicate state.
 Mark a gate enforced only after the check actually exists and passes.
 Do not label issue #350 DONE from a compile-only/transport-only proof.
 
-**CSS and theme:** keep the current native `web/src/styles.css` approach,
-organize reusable semantic CSS custom properties, responsive Grid/Flex and
-accessible controls; no Tailwind, Sass or UI framework without a demonstrated
-need. Theme preference is `system` (default), `light`, or `dark`,
-stored only in browser `localStorage`; system mode follows
-`prefers-color-scheme`. Do not write a theme setting to D1. Existing
-screen/action inventory and protected Chromium acceptance must include theme
-switch, persistence on reload, modal, table, mobile, form and error states.
-A CSS/theme change is not accepted until it is physically verified.
+**Global UI component ownership (approved):** design tokens and common
+components are the only authority for shared styling. Adopt native CSS
+Modules for scoped feature layouts, semantic CSS custom properties for colors,
+spacing, typography, radius, focus, and states, and a small set of shared React
+TSX primitives in `web/src/ui/` (Button, Input/Select, Dialog, Table, Card,
+Notice, etc.), extracted only as real repeated usage requires. One change to
+`ui/Button` or its shared tokens must propagate to buttons on *every* screen,
+not merely the current page. The same holds for other shared UI elements.
+Create new screens by composing these primitives; never reimplement global
+controls, inline hardcoded colors, copy component CSS per screen, or override
+common styles from feature modules. Feature `*.module.css` controls page layout
+and truly feature-specific presentation only; shared components own appearance,
+variants, interaction states, disabled/focus/hover behavior, and accessibility.
+Extend common primitives centrally with typed variants when justified, not a
+second button or design system. During migration, replace legacy raw controls
+incrementally, update source-based inventory tests, and reject **new** bypasses.
+Once migrated, enforce adoption in the same Cloudflare CRM CI; do not switch
+to snapshot-count-only validation.
+
+**Native CSS and theme:** keep Vite and standard CSS (no Tailwind, Bootstrap,
+Sass or large UI library without a measured need), but migrate the present
+monolithic `web/src/styles.css` to `web/src/styles/tokens.css`,
+`themes.css`, `global.css`, shared `ui/*.module.css`, and
+feature-scoped `*.module.css`. Theme preference is `system` (default),
+`light`, or `dark`, stored only in browser `localStorage`, never D1;
+system follows `prefers-color-scheme`. All shared components consume tokens
+so changing tokens or the shared component updates the entire application.
+Existing inventory and protected Chromium acceptance must include switch,
+persistence/reload, dialogs, tables, mobile, forms, hover/focus/disabled and
+error states in both themes. A styling change is ACCEPTED only after physical
+verification; no second CI or UI service.
 
 **Engineering simplicity:** one permanent `dev`, one GitHub Environment
 `crm-dev`, one existing CI, exact committed source and published SHA.
