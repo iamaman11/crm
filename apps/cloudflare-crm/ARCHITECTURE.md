@@ -165,11 +165,22 @@ Cloudflare fetch → workers-rs Worker (единственный entrypoint)
   общий `packages/ui` и `packages/client`, типизацию самого Cloudflare
   React, отсутствие `/api` бизнес-обработчиков, `unimplemented` RPC,
   Buffa→Prost decode/encode и ручных frontend fetch.
-- Обязательно предоставить `contract-coverage.json`: каждый существующий
-  owner из `shared/catalog.mjs` должен иметь подтверждённый Connect RPC,
-  или явное внутреннее (без отдельного публичного API) действие/HTTP download.
-  Методы проверяются против существующих `.proto`; сам generated handler
-  обязан пройти Rust build и физический E2E.
+- **Нет ручной матрицы coverage и нет фиксированного количества модулей.**
+  Единственный авторский источник состава/владельцев — существующие
+  `modules/*/module.yaml` и их строгая Schema. `scripts/crm-module-coverage.py`
+  в CI вычисляет одно временное доказательство из манифестов, фактически
+  подключённых crate paths в Worker Cargo.toml и `active-connect.json`
+  (реестр проверенных активных обработчиков, **не** каталог всех возможностей).
+  Отчёт не хранится в Git; в `contract-only` он явно показывает
+  несоответствие Party v1 manifest / v2 active RPC, а в `cutover` блокирует
+  неизвестный активный RPC, неактивный связанный модуль и неподтверждённый
+  handler. Публичные .proto, generated Rust/TS, права, D1 и реальный
+  E2E сохраняются отдельными строгими критериями.
+- Обнаружение нового `module.yaml` никогда не означает публикацию нового
+  модуля. Включение — это проверенная статическая компоновка в едином
+  Rust Worker, не динамический загрузчик, второй Worker или новая D1.
+  Read-only композиции (например, Customer 360) допустимы без отдельного
+  доменного состояния. Число модулей, UI-представлений и RPC не приравнивать.
 - Это **два режима одного CI, не два backend, не два release train**.
   Смену режима нельзя выдать за acceptance: нужен весь защищённый
   Chromium→Rust→D1→Logs и публичный readback 100% на том же SHA.
