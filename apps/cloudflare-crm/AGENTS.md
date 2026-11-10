@@ -1,6 +1,7 @@
 # Cloudflare CRM — operating contract for ChatGPT development
 
 **Целевая схема (утверждённая норма для нового кода):** [ARCHITECTURE.md](ARCHITECTURE.md), Issue #350. Исторический код мигрирует в неё, а не наоборот. Документ — спецификация, не доказательство завершённой миграции.
+**Маршрутизатор выбран окончательно:** один встроенный Axum 0.8 + штатный Connect-Rust/Buffa внутри единственного workers-rs Worker; никогда не запускать отдельный Axum/Hyper сервер или JS gateway. #350 — единственный детальный план миграции, #338 — верхний план.
 
 This file applies to **apps/cloudflare-crm/**. The sole canonical source of truth is
 **iamaman11/crm**: issue #338 (единственный актуальный план Rust/Cloudflare и диагностики), #310 (product/acceptance), #321 (Cloudflare architecture),

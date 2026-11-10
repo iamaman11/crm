@@ -421,3 +421,16 @@ test("Cloudflare CRM CI triggers on every dev change and both PR bases",()=>{
   assert.doesNotMatch(triggers,/^\s+paths:/m,
     "path filters would silently skip Protobuf or shared Rust owner changes");
 });
+
+
+test("Connect routing is embedded Axum and never a second server",()=>{
+  const cargo=read("rust-party/Cargo.toml");
+  const connect=read("rust-party/src/connect_sales.rs");
+  const architecture=read("ARCHITECTURE.md");
+  assert.match(cargo,/connectrpc\s*=\s*\{[^\n]*features\s*=\s*\[[^\n]*"axum"/);
+  assert.match(cargo,/axum\s*=\s*\{[^\n]*default-features\s*=\s*false/);
+  assert.match(connect,/ConnectRouter::new\(\)/);
+  assert.match(connect,/\.into_axum_router\(\)/);
+  assert.doesNotMatch(connect,/axum::serve|TcpListener|Server::new/);
+  assert.match(architecture,/Axum 0\.8 обязателен/);
+});

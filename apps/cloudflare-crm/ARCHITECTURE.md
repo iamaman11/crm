@@ -25,7 +25,27 @@ Browser / React 19 + TypeScript strict / shared UI + CSS Modules
        → typed Connect response + structured errors + audit
 ```
 
-**Не создавать:** JS backend/route gateway, отдельный Axum-сервер, второй Worker, вторую D1, PostgreSQL, Docker, другой Environment, скрытый ручной API, дубли бизнес-правил и собственный кодек протокола. Axum разрешён только как штатный минимальный HTTP/Tower router внутри того же Rust Worker. Сгенерированный `worker-build/wasm-bindgen` JS — техническая часть официальной Rust-сборки, не JS backend.
+**Не создавать:** JS backend/route gateway, отдельный Axum-сервер, второй Worker, вторую D1, PostgreSQL, Docker, другой Environment, скрытый ручной API, дубли бизнес-правил и собственный кодек протокола. **Axum 0.8 принят окончательно как единственный внутренний HTTP/Tower router того же Rust Worker**, не отдельный сервер. Сгенерированный `worker-build/wasm-bindgen` JS — техническая часть официальной Rust-сборки, не JS backend.
+
+## Зафиксированный выбор маршрутизатора и отсутствие параллельных стеков
+
+**ПРИНЯТО: Axum 0.8 обязателен в транспортном слое Cloudflare CRM.** Выбор закрыт: не «при необходимости» и не две альтернативы. Доказанный путь:
+```text
+Cloudflare fetch → workers-rs Worker (единственный entrypoint)
+→ verified Cloudflare Access, server request_id, authorization
+→ embedded axum::Router
+→ connectrpc::Router.into_axum_router() / generated Buffa Connect services
+→ original Rust owner → единственная native D1
+```
+
+- `axum` **только маршрутизирует** HTTP внутри запроса Worker; **не запускает** `axum::serve`, `TcpListener`, Hyper Server, Tokio daemon, порт или отдельный процесс. Внешний HTTP-владелец — только Cloudflare Worker. Проверка Access/tenant выполняется до вызова RPC-router; сами доменные handlers проверяют полномочия каждой команды.
+- Конкретная штатная интеграция уже присутствует: `rust-party/Cargo.toml` — `connectrpc = 0.9.1` с `features = ["json","axum"]`, `axum = 0.8` с отключёнными default features; `connect_sales.rs` использует `ConnectRouter::new().add_service(...).into_axum_router()`. Распространить тот же паттерн на активные сервисы, не создавать по второму backend/router на модуль.
+- Не выбирать дополнительную прямую `tower::Service`-маршрутизацию **вместо** Axum в рамках этого проекта без новой осознанной архитектурной ревизии. Connect-Rust и Axum — не два RPC-протокола: Connect описывает семантику RPC, Axum выполняет внутреннюю диспетчеризацию.
+- **CSS Modules** — изоляция областей обычного нативного CSS, **design tokens** — CSS custom properties, общие UI-компоненты — React/TSX. Никаких конкурирующих Tailwind/Bootstrap/Sass.
+- **Protobuf** — язык API-схемы, **Buf** — штатные lint/breaking/generate проверки, **Protobuf-ES** — генератор TS типов и descriptors, **Connect-Web** — клиентский transport, **Connect-Rust/Buffa** — серверный transport, **Axum** — единственный внутренний router. Ни один из них не дублирует бизнес-логику или второй source of truth.
+- **Статус решения:** технологический стек и границы компонентов окончательно утверждены. Реальные целевые RPC/сообщения **ещё проектируются и проверяются** по этому решению, перенос всего приложения **не принят**. Не путать архитектурное APPROVED с функциональным ACCEPTED.
+
+Официальная реализация: https://docs.rs/connectrpc/0.9.1/connectrpc/ , https://connectrpc.com/docs/web/getting-started/ .
 
 ## 2. Слой домена и слой транспорта
 
