@@ -35,7 +35,7 @@ jobs:
           cat "$RUNNER_TEMP/connect-wasm-d1.log"
           if [ "$status" -eq 0 ]; then
             echo "CONNECT_WASM_NATIVE_D1=COMPILED; full runtime proof still required"
-          elif grep -q 'cannot be sent between threads safely' "$RUNNER_TEMP/connect-wasm-d1.log" && grep -q 'required by.*Send' "$RUNNER_TEMP/connect-wasm-d1.log"; then
+          elif grep -q 'cannot be sent between threads safely' "$RUNNER_TEMP/connect-wasm-d1.log" && grep -q 'the trait `Send` is not implemented' "$RUNNER_TEMP/connect-wasm-d1.log"; then
             echo "CONNECT_WASM_NATIVE_D1=BLOCKED_BY_GENERATED_SEND_BOUND"
           else
             echo "Unexpected proof failure — not evidence of Send barrier" >&2
