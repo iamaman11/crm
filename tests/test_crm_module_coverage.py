@@ -73,15 +73,31 @@ lifecycle:
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
-    def test_unclaimed_active_rpc_blocks_cutover_not_contract_only(self) -> None:
+    def test_current_active_party_v2_is_declared_and_owned_by_linked_rust(self) -> None:
         current = coverage.build_report(phase="contract-only")
-        self.assertIn("/crm.parties.v2.PartyService/GetParty",
-                      current["active_rpc_paths"])
-        # Existing Party manifest still describes v1. This mismatch must not
-        # be hidden or accepted in the final cutover.
-        if current["unclaimed_active_rpc_paths"]:
-            with self.assertRaisesRegex(ValueError, "active RPC is not declared"):
-                coverage.build_report(phase="cutover")
+        route = "/crm.parties.v2.PartyService/GetParty"
+        self.assertIn(route, current["active_rpc_paths"])
+        self.assertNotIn(route, current["unclaimed_active_rpc_paths"])
+        party = next(row for row in current["modules"]
+                     if row["module_id"] == "crm.parties")
+        self.assertTrue(party["linked"])
+        self.assertEqual(party["active_rpc_paths"], [route])
+        binding = next(b for b in party["rpc_bindings"] if b["path"] == route)
+        self.assertEqual(binding["request"], "crm.parties.v2.GetPartyRequest")
+        self.assertEqual(binding["response"], "crm.parties.v2.GetPartyResponse")
+        self.assertEqual(binding["capability_version"], "2.0.0")
+        # The original v1 contract remains declared for its own consumers.
+        self.assertIn("/crm.parties.v1.PartyService/GetParty",
+                      party["declared_rpc_paths"])
+        self.assertNotIn("/crm.parties.v1.PartyService/GetParty",
+                         current["active_rpc_paths"])
+
+    def test_active_rpc_without_manifest_binding_is_not_accepted(self) -> None:
+        self.assertEqual(
+            coverage.rpc_path({"kind": "protobuf_rpc",
+                               "rpc": "crm.parties.v2.PartyService.GetParty"}),
+            "/crm.parties.v2.PartyService/GetParty")
+        self.assertIsNone(coverage.rpc_path({"kind": "internal"}))
 
 
 if __name__ == "__main__":

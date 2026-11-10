@@ -102,14 +102,22 @@ def build_report(root: Path = ROOT, *, phase: str | None = None) -> dict:
             if declared.get("package", link_name) != crate_name:
                 raise ValueError(f"linked Rust crate package mismatch: {module_id}")
         declared_rpc = []
+        binding_specs = []
         for capability in manifest["provides"]["capabilities"]:
-            route = rpc_path(capability.get("binding", {}))
+            binding = capability.get("binding", {})
+            route = rpc_path(binding)
             if route is None:
                 continue
             if route in providers:
                 raise ValueError(f"duplicate RPC owner {route}: {providers[route]} and {module_id}")
+            if not isinstance(binding.get("request"), str) or not isinstance(binding.get("response"), str):
+                raise ValueError(f"missing typed Protobuf request/response: {route}")
             providers[route] = module_id
             declared_rpc.append(route)
+            binding_specs.append({
+                "path": route, "request": binding["request"], "response": binding["response"],
+                "capability_id": capability["id"], "capability_version": capability["version"],
+            })
         modules.append({
             "module_id": module_id,
             "manifest": path.relative_to(ROOT).as_posix(),
@@ -118,6 +126,7 @@ def build_report(root: Path = ROOT, *, phase: str | None = None) -> dict:
             "kind": "composition" if entry.startswith("crates/") else "domain",
             "linked": link_name is not None,
             "declared_rpc_paths": sorted(declared_rpc),
+            "rpc_bindings": sorted(binding_specs, key=lambda item: item["path"]),
             "active_rpc_paths": sorted(route for route in active if providers.get(route) == module_id),
         })
 
@@ -128,6 +137,11 @@ def build_report(root: Path = ROOT, *, phase: str | None = None) -> dict:
             route for route in active if providers.get(route) == mod["module_id"]
         )
     unclaimed = sorted(set(active) - set(providers))
+    # An active method is never valid without a linked Rust owner. A manifest
+    # alone does not activate a module or authorize publishing a route.
+    for mod in modules:
+        if mod["active_rpc_paths"] and not mod["linked"]:
+            errors.append(f"active RPC belongs to unlinked Rust module: {mod['module_id']}")
     if phase == "cutover":
         if unclaimed:
             errors.append("active RPC is not declared in module.yaml: " + ", ".join(unclaimed))

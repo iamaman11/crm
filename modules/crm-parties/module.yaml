@@ -40,6 +40,15 @@ provides:
         rpc: crm.parties.v1.PartyService.GetParty
         request: crm.parties.v1.GetPartyRequest
         response: crm.parties.v1.GetPartyResponse
+    # The Cloudflare Worker publishes v2 GetParty. Preserve the original v1
+    # contract for historical monorepo consumers; versions are separate APIs.
+    - id: parties.party.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.parties.v2.PartyService.GetParty
+        request: crm.parties.v2.GetPartyRequest
+        response: crm.parties.v2.GetPartyResponse
     - id: parties.party.list
       version: 1.0.0
       binding:
