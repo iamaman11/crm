@@ -137,6 +137,58 @@ async function deploy(){
   record("deployed.json",{git_sha:sha,worker_version:newVersion,d1_database:database,rust,result:"E2E_PENDING"});
   console.log(JSON.stringify({event:"crm.deploy",sha,result:"E2E_PENDING",version:newVersion}));
 }
+// Each protected E2E deploy gets clean, isolated tenants IN THE SAME D1.
+// The two dedicated Access service identities alone are reassigned; nothing
+// belonging to another tenant is deleted or modified. Old test data is retained
+// for audit instead of being silently destroyed to make an E2E gate green.
+async function prepareE2e(){
+  const run=required("GITHUB_RUN_ID"),attempt=required("GITHUB_RUN_ATTEMPT");
+  if(!/^\d+$/.test(run)||!/^\d+$/.test(attempt))throw Error("Invalid E2E run identity");
+  const principal=n=>{
+    const id=required("CRM_E2E_"+n+"_CLIENT_ID").toLowerCase();
+    if(!/^[a-z0-9.-]{8,120}\.access$/.test(id))throw Error("Invalid E2E service identity");
+    return "service:"+id;
+  };
+  const a=principal("A"),b=principal("B");
+  if(a===b)throw Error("E2E identities must be distinct");
+  const endpoint="/d1/database/"+database+"/query";
+  const query=async(sql,params)=>{
+    const r=await cf(endpoint,"POST",{sql,params});
+    if(!Array.isArray(r)||r.length!==1||r[0].success!==true)
+      throw Error("E2E D1 query failed");
+    return r[0].results;
+  };
+  const current=await query(
+    "SELECT email,role,active FROM crm_users WHERE email IN (?,?)",[a,b]);
+  if(current.length!==2||current.some(r=>r.role!=="admin"||r.active!==1))
+    throw Error("Protected E2E service actors are not enrolled active administrators");
+  const ta="crm-e2e-"+run+"-"+attempt+"-a",tb="crm-e2e-"+run+"-"+attempt+"-b";
+  if(ta===tb)throw Error("E2E tenants must differ");
+  const batch=[
+    {sql:"INSERT OR IGNORE INTO crm_tenants(id,name) VALUES (?,?)",
+      params:[ta,"CRM protected E2E A"]},
+    {sql:"INSERT OR IGNORE INTO crm_tenants(id,name) VALUES (?,?)",
+      params:[tb,"CRM protected E2E B"]},
+    {sql:"UPDATE crm_users SET tenant_id=? WHERE email=? AND role='admin' AND active=1",
+      params:[ta,a]},
+    {sql:"UPDATE crm_users SET tenant_id=? WHERE email=? AND role='admin' AND active=1",
+      params:[tb,b]}
+  ];
+  const changed=await cf(endpoint,"POST",{batch});
+  if(!Array.isArray(changed)||changed.length!==4||
+      changed.some(x=>x.success!==true)||changed[2].meta?.changes!==1||
+      changed[3].meta?.changes!==1)
+    throw Error("E2E tenant assignment did not update exactly two service actors");
+  const readback=await query(
+    "SELECT COUNT(*) AS assigned FROM crm_users WHERE (email=? AND tenant_id=?) OR (email=? AND tenant_id=?)",
+    [a,ta,b,tb]);
+  const clean=await query(
+    "SELECT COUNT(*) AS existing FROM crm_party_records WHERE tenant IN (?,?)",[ta,tb]);
+  if(readback[0]?.assigned!==2||clean[0]?.existing!==0)
+    throw Error("E2E tenant assignment/readback failed or contains old Party data");
+  console.log(JSON.stringify({event:"crm.e2e-tenant-isolation",
+    result:"PASS",database:"existing D1",actors:2,tenants:2,previous_data_deleted:false}));
+}
 async function verifyData(){
   const main=await cf(worker+"/deployments");
   const versions=main.deployments?.[0]?.versions||[];
@@ -387,6 +439,7 @@ async function rollback(){
 }
 const mode=process.argv[2]||"deploy";
 if(mode==="deploy")await deploy();
+else if(mode==="prepare-e2e")await prepareE2e();
 else if(mode==="verify-data")await verifyData();
 else if(mode==="rollback")await rollback();
 else throw Error("Unknown CRM deploy operation "+mode);
