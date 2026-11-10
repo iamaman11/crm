@@ -5,32 +5,50 @@ import {readFileSync,existsSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {resolve,dirname} from "node:path";
 import {modules,implementationOwners,ownerFiles} from "../shared/catalog.mjs";
-import {failNewRest,validateGeneratedBrowserBoundary,validateOneWorkerRouter,validateCoverageMatrix} from "../scripts/architecture-gate.mjs";
+import {failNewRest,validateGeneratedBrowserBoundary,validateOneWorkerRouter,validateModuleReport} from "../scripts/architecture-gate.mjs";
 import {uiInventory,requiredUiActions} from "../e2e/ui-inventory.mjs";
 import {amountToMinorUnits,amountFromMinorUnits,formatDealMoney,
   percentToBasisPoints,percentFromBasisPoints} from "../web/src/deal-presentation.mjs";
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const read=p=>readFileSync(resolve(root,p),"utf8");
 const config=JSON.parse(read("wrangler.jsonc"));
-const coverage=JSON.parse(read("contract-coverage.json"));
-test("cutover registry enumerates all original owners without claiming unfinished functionality",()=>{
-  assert.equal(coverage.schema_version,1);
-  assert.equal(coverage.owners.length,Object.keys(implementationOwners).length);
-  assert.equal(coverage.owners.filter(x=>x.status==="CONNECTED").length,0);
-  assert.doesNotThrow(()=>validateCoverageMatrix(coverage,"contract-only"));
-  assert.throws(()=>validateCoverageMatrix(coverage,"cutover"),/CRM_ARCHITECTURE_VIOLATION/);
+const generatedReportPath=process.env.CRM_MODULE_COVERAGE_REPORT;
+const sampleReport={
+  schema_version:1,phase:"contract-only",source_sha:"a".repeat(40),
+  modules:[{module_id:"crm.fixture",manifest:"modules/crm-fixture/module.yaml",
+    kind:"domain",linked:false,declared_rpc_paths:[],active_rpc_paths:[]}],
+  active_rpc_paths:[],unclaimed_active_rpc_paths:[]
+};
+test("generated module ownership is validated without an arbitrary module count",()=>{
+  assert.doesNotThrow(()=>validateModuleReport(sampleReport,"contract-only"));
+  const additional=structuredClone(sampleReport);
+  additional.modules.push({module_id:"crm.second",manifest:"modules/crm-second/module.yaml",
+    kind:"composition",linked:false,declared_rpc_paths:[],active_rpc_paths:[]});
+  assert.doesNotThrow(()=>validateModuleReport(additional,"contract-only"));
 });
-test("owner coverage gate detects fabricated or omitted owners and methods",()=>{
-  const altered=structuredClone(coverage);
-  altered.owners=altered.owners.filter(x=>x.owner!=="consents");
-  assert.throws(()=>validateCoverageMatrix(altered,"contract-only"),/coverage must exactly match/);
-  const duplicate=structuredClone(coverage);
-  duplicate.owners.find(x=>x.owner==="accounts").rpc_methods=
-    ["/crm.parties.v2.PartyService/GetParty"];
-  assert.throws(()=>validateCoverageMatrix(duplicate,"contract-only"),/duplicate RPC ownership/);
-  const fake=structuredClone(coverage);
-  fake.owners.find(x=>x.owner==="accounts").accepted_operations=["CreateAccount"];
-  assert.throws(()=>validateCoverageMatrix(fake,"contract-only"),/NOT_CONNECTED owner cannot claim/);
+test("manifest coverage rejects duplicated owners and fabricated active RPC",()=>{
+  const duplicate=structuredClone(sampleReport);
+  duplicate.modules.push(structuredClone(sampleReport.modules[0]));
+  assert.throws(()=>validateModuleReport(duplicate,"contract-only"),/duplicate canonical module id/);
+  const invented=structuredClone(sampleReport);
+  invented.active_rpc_paths=["/crm.fixture.v1.FixtureService/Test"];
+  invented.unclaimed_active_rpc_paths=[];
+  assert.throws(()=>validateModuleReport(invented,"contract-only"),
+    /generated report omitted unresolved active RPCs/);
+  const cutover=structuredClone(invented);
+  cutover.phase="cutover";
+  cutover.unclaimed_active_rpc_paths=[cutover.active_rpc_paths[0]];
+  assert.throws(()=>validateModuleReport(cutover,"cutover"),
+    /active RPC lacks canonical module.yaml binding/);
+});
+test("CI module report reflects real canonical manifests and active Rust linkage",
+  {skip:!generatedReportPath},()=>{
+  const report=JSON.parse(readFileSync(generatedReportPath,"utf8"));
+  assert.doesNotThrow(()=>validateModuleReport(report,"contract-only"));
+  assert.equal(report.modules.length,
+    report.counts.discovered_modules);
+  assert.equal(report.modules.filter(m=>m.linked).length,
+    report.counts.linked_modules);
 });
 test("one published native Worker with one D1 and no competing backend",()=>{
   assert.equal(config.name,"crm-dev");
