@@ -3,7 +3,7 @@
 
 The historical ADR-031 Step 13 budget belongs to the unrelated 112-crate
 PostgreSQL process host. This guard scopes to the native Worker and the
-13 original Rust owner crates actually linked by its Cargo manifest.
+all currently linked original Rust owner crates derived from canonical manifests.
 It blocks new source-level lint suppressions and ignored tests relative to
 immutable accepted baselines. Rust compilation, Clippy and E2E are additional
 required gates, not replaced by this source inventory.
@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -21,7 +22,7 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "apps/cloudflare-crm/architecture-policy.json"
-COVERAGE_PATH = ROOT / "apps/cloudflare-crm/contract-coverage.json"
+REPORT_PATH = Path(os.environ.get("CRM_MODULE_COVERAGE_REPORT", "/tmp/crm-module-coverage.json"))
 WORKER = ROOT / "apps/cloudflare-crm/rust-party"
 ATTRIBUTE = re.compile(r"#\s*!?\s*\[\s*(?:allow|expect|ignore|cfg_attr)\b[^\]]*\]", re.S)
 SUPPRESSION_IN_CFG = re.compile(r"\b(?:allow|expect|ignore)\s*(?:\(|\])")
@@ -74,27 +75,51 @@ def growth(current: Counter[str], baseline: Counter[str]) -> dict[str, int]:
     return dict(current - baseline)
 
 
-def scope() -> tuple[list[str], list[str]]:
-    coverage = json.loads(COVERAGE_PATH.read_text(encoding="utf-8"))
+def scope(report: dict | None = None) -> tuple[list[str], list[str]]:
+    if report is None:
+        report = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+    if report.get("schema_version") != 1 or not isinstance(report.get("modules"), list):
+        raise RuntimeError("generated canonical module report is required")
+    head = git("rev-parse", "HEAD").stdout.strip()
+    if report.get("source_sha") != head:
+        raise RuntimeError("stale module report: source SHA does not match checkout")
     manifest = tomllib.loads((WORKER / "Cargo.toml").read_text(encoding="utf-8"))
-    owner_packages = {row["domain_module"] for row in coverage["owners"]}
-    if len(owner_packages) != 13:
-        raise RuntimeError(f"expected 13 original Rust owners, got {len(owner_packages)}")
     deps = manifest.get("dependencies", {})
     owner_paths = []
-    for name in sorted(owner_packages):
-        entry = deps.get(name)
-        if not isinstance(entry, dict) or not entry.get("path"):
-            raise RuntimeError(f"original owner is not linked by native Worker: {name}")
-        path = (WORKER / entry["path"]).resolve()
+    observed = set()
+    for row in report["modules"]:
+        if not row["linked"]:
+            continue
+        name, rel = row["crate_name"], row["crate_path"]
+        if name in observed:
+            raise RuntimeError(f"duplicate linked crate: {name}")
+        observed.add(name)
+        path = (ROOT / rel).resolve()
         try:
             path.relative_to(ROOT)
         except ValueError as error:
             raise RuntimeError(f"Rust owner escapes canonical repository: {name}") from error
         if not (path / "Cargo.toml").is_file() or not (path / "src").is_dir():
-            raise RuntimeError(f"native Worker owner Cargo crate missing: {name}")
-        owner_paths.append(path.relative_to(ROOT).as_posix())
-    roots = ["apps/cloudflare-crm/rust-party", *owner_paths]
+            raise RuntimeError(f"linked module Cargo crate missing: {name}")
+        matches = [
+            alias for alias, dep in deps.items()
+            if isinstance(dep, dict) and "path" in dep
+            and (WORKER / dep["path"]).resolve() == path
+        ]
+        if len(matches) != 1:
+            raise RuntimeError(f"module activation does not match Worker Cargo.toml: {name}")
+        owner_paths.append(rel)
+
+    # A direct Worker dependency on modules/crm-* without a manifest must not
+    # be silently ignored by the generated report.
+    for alias, dep in deps.items():
+        if not isinstance(dep, dict) or "path" not in dep:
+            continue
+        path = (WORKER / dep["path"]).resolve()
+        if path.parent == ROOT / "modules" and path.relative_to(ROOT).as_posix() not in owner_paths:
+            raise RuntimeError(f"Worker domain crate missing from module manifests: {alias}")
+
+    roots = ["apps/cloudflare-crm/rust-party", *sorted(owner_paths)]
     files = sorted({
         f.relative_to(ROOT).as_posix()
         for rel in roots
@@ -104,7 +129,6 @@ def scope() -> tuple[list[str], list[str]]:
     for rel in roots:
         files.append(rel + "/Cargo.toml")
     return roots, sorted(files)
-
 
 def evaluate() -> dict:
     policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
