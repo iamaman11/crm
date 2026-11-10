@@ -19,5 +19,5 @@ buffa-types = { version = "=0.9.1", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 
 [build-dependencies]
-connectrpc-build = "=0.9.1"
+connectrpc-build = "=0.9.0"
 protoc-bin-vendored = "3"
