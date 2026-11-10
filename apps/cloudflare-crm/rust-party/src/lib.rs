@@ -23,6 +23,8 @@ mod activity_tasks;
 #[cfg(feature = "native")]
 mod sales_deals;
 #[cfg(feature = "native")]
+mod sales_contract;
+#[cfg(feature = "native")]
 mod consents;
 #[cfg(feature = "native")]
 mod identity_resolution;

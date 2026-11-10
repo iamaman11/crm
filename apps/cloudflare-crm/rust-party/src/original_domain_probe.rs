@@ -73,6 +73,22 @@ pub(crate) fn check() -> i32 {
         Ok(x) => x, Err(_) => return 33,
     };
     if crm_sales::decode_deal_state(&bytes).ok() != Some(deal.clone()) { return 34; }
+    // This is the actual typed outbound wire contract for the original owner,
+    // not a JSON schema guessed from the React interface.
+    let wire = crate::sales_contract::deal_view(&deal, "tenant-a");
+    if wire.deal_id != "wasm-deal-01" || wire.tenant_id != "tenant-a"
+        || wire.name != "WASM Deal" || wire.version != 1
+        || wire.stage_details.as_ref().map(|s|s.stage_id.as_str()) != Some("new")
+        || wire.probability_basis_points != 1000
+        || wire.owner.is_none() || wire.account.is_some() {
+        return 36;
+    }
+    {
+        use prost::Message;
+        let encoded = wire.encode_to_vec();
+        if crm_proto_contracts::crm::sales::v1::Deal::decode(encoded.as_slice()).ok()
+            != Some(wire) { return 37; }
+    }
     if crm_sales::DealStage::try_new(
         crm_sales::PipelineId::try_new("main-pipeline").unwrap(),
         crm_sales::StageId::try_new("invalid").unwrap(), 0,
