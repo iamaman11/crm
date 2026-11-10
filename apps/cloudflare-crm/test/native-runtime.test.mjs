@@ -14,7 +14,8 @@ const config=JSON.parse(read("wrangler.jsonc"));
 test("one published native Worker with one D1 and no competing backend",()=>{
   assert.equal(config.name,"crm-dev");
   assert.equal(config.main,"./rust-party/build/index.js");
-  assert.deepEqual(config.assets.run_worker_first,["/api/*"]);
+  assert.deepEqual(config.assets.run_worker_first,
+    ["/api/*","/crm.sales.v1.DealService/*"]);
   assert.equal(config.d1_databases.length,1);
   assert.equal(config.d1_databases[0].binding,"DB");
   assert.equal(config.version_metadata.binding,"CF_VERSION_METADATA");

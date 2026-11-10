@@ -15,8 +15,23 @@ use serde::Deserialize;
 use wasm_bindgen::JsValue;
 use super::{bind, sales_contract, sales_deals};
 
+// Explicit module tree permits the proto package crm.core.v1 to coexist
+// with Rust's builtin ::core when generated JSON visitors use core::fmt.
+// The compiled message/service definitions remain fully generated from .proto.
 pub mod proto {
-    connectrpc::include_generated!();
+    pub mod crm {
+        pub mod core {
+            pub use ::core::fmt;
+            pub mod v1 {
+                include!(concat!(env!("OUT_DIR"), "/crm.core.v1.common.rs"));
+            }
+        }
+        pub mod sales {
+            pub mod v1 {
+                include!(concat!(env!("OUT_DIR"), "/crm.sales.v1.deal.rs"));
+            }
+        }
+    }
 }
 use proto::crm::sales::v1 as sales;
 
@@ -63,8 +78,13 @@ impl sales::DealService for SalesService {
     }
     #[worker::send]
     async fn list_deals(
-        &self,_ctx:RequestContext,_req:ServiceRequest<'_, sales::ListDealsRequest>,
+        &self,_ctx:RequestContext,req:ServiceRequest<'_, sales::ListDealsRequest>,
     )->ServiceResult<sales::ListDealsResponse> {
+        // An implementation of filters/pagination is required before accepting
+        // those arguments: never silently return an unfiltered result.
+        if req.to_owned_message()!=sales::ListDealsRequest::default() {
+            return Err(ConnectError::unimplemented("filtered or paged list is not connected"));
+        }
         // The existing native Sales list has a hard limit of 300, identical
         // tenant filter and ordering. Advanced filtering is not exposed yet.
         let db=self.env.d1("DB")
