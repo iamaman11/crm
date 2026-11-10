@@ -22,9 +22,7 @@ use crm_proto_contracts::crm::{core::v1 as core_contract, sales::v1 as sales_con
 // standard library fmt at the enclosing package. No runtime adapter/codegen
 // rewrite is required; all message and service code remains generated.
 pub mod proto {
-    #[allow(unused_imports)]
     pub mod crm {
-        use super::*;
         pub mod core {
             use super::*;
             pub use ::core::fmt;
