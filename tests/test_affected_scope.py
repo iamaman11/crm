@@ -147,7 +147,7 @@ class AffectedScopeTests(unittest.TestCase):
                     head_sha="abc",
                 )
 
-    def test_packet_only_runs_governance_without_rust_or_unrelated_owners(self) -> None:
+    def test_packet_only_still_selects_unconditional_crm_ci(self) -> None:
         root = Path(__file__).resolve().parents[1]
         empty = {"packages": [], "workspace_members": []}
         for changed in (["repository-packet.json"], ["docs/ACTIVE_PACKET.md"],
@@ -161,7 +161,8 @@ class AffectedScopeTests(unittest.TestCase):
                 names = [w["name"] for w in report["selected_workflows"]]
                 self.assertIn("Governance CI", names)
                 self.assertNotIn("Customer Privacy Owner Execution CI", names)
-                self.assertNotIn("Cloudflare CRM Spike CI", names)
+                # The CRM workflow intentionally has no paths filter: even docs-only PRs run it.
+                self.assertIn("Cloudflare CRM Spike CI", names)
         from scripts.repo import affected_clippy_command, affected_test_command
         report = build_report(root, "origin/main", paths=["repository-packet.json"],
                               metadata=empty, head_sha="packet")
