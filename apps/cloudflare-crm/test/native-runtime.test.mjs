@@ -5,13 +5,33 @@ import {readFileSync,existsSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 import {resolve,dirname} from "node:path";
 import {modules,implementationOwners,ownerFiles} from "../shared/catalog.mjs";
-import {failNewRest,validateGeneratedBrowserBoundary,validateOneWorkerRouter} from "../scripts/architecture-gate.mjs";
+import {failNewRest,validateGeneratedBrowserBoundary,validateOneWorkerRouter,validateCoverageMatrix} from "../scripts/architecture-gate.mjs";
 import {uiInventory,requiredUiActions} from "../e2e/ui-inventory.mjs";
 import {amountToMinorUnits,amountFromMinorUnits,formatDealMoney,
   percentToBasisPoints,percentFromBasisPoints} from "../web/src/deal-presentation.mjs";
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const read=p=>readFileSync(resolve(root,p),"utf8");
 const config=JSON.parse(read("wrangler.jsonc"));
+const coverage=JSON.parse(read("contract-coverage.json"));
+test("cutover registry enumerates all original owners without claiming unfinished functionality",()=>{
+  assert.equal(coverage.schema_version,1);
+  assert.equal(coverage.owners.length,Object.keys(implementationOwners).length);
+  assert.equal(coverage.owners.filter(x=>x.status==="CONNECTED").length,0);
+  assert.doesNotThrow(()=>validateCoverageMatrix(coverage,"contract-only"));
+  assert.throws(()=>validateCoverageMatrix(coverage,"cutover"),/CRM_ARCHITECTURE_VIOLATION/);
+});
+test("owner coverage gate detects fabricated or omitted owners and methods",()=>{
+  const altered=structuredClone(coverage);
+  altered.owners=altered.owners.filter(x=>x.owner!=="consents");
+  assert.throws(()=>validateCoverageMatrix(altered,"contract-only"),/coverage must exactly match/);
+  const duplicate=structuredClone(coverage);
+  duplicate.owners.find(x=>x.owner==="accounts").rpc_methods=
+    ["/crm.parties.v2.PartyService/GetParty"];
+  assert.throws(()=>validateCoverageMatrix(duplicate,"contract-only"),/duplicate RPC ownership/);
+  const fake=structuredClone(coverage);
+  fake.owners.find(x=>x.owner==="accounts").accepted_operations=["CreateAccount"];
+  assert.throws(()=>validateCoverageMatrix(fake,"contract-only"),/NOT_CONNECTED owner cannot claim/);
+});
 test("one published native Worker with one D1 and no competing backend",()=>{
   assert.equal(config.name,"crm-dev");
   assert.equal(config.main,"./rust-party/build/index.js");
