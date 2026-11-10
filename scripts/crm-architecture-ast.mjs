@@ -116,7 +116,7 @@ if(policy.phase==="contract-only")entries.push("apps/cloudflare-crm/web/contract
 if(activeTyped)entries.push(...collect("apps/cloudflare-crm/web/src"));
 const visited=new Set();
 function resolveInternal(spec,parent){
- if(/\\.(?:css|scss|sass|svg|png|jpe?g|webp|woff2?|ico)(?:\\?.*)?$/.test(spec))return null;
+ if(/\.(?:css|scss|sass|svg|png|jpe?g|webp|woff2?|ico)(?:\?.*)?$/.test(spec))return null;
  if(spec==="@ultimate-crm/client/cloudflare")return "packages/client/src/cloudflare.ts";
  if(spec==="@ultimate-crm/ui")return "packages/ui/src/index.ts";
  if(!spec.startsWith(".")){
