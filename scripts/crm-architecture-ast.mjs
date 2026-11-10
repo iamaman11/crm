@@ -116,11 +116,20 @@ if(policy.phase==="contract-only")entries.push("apps/cloudflare-crm/web/contract
 if(activeTyped)entries.push(...collect("apps/cloudflare-crm/web/src"));
 const visited=new Set();
 function resolveInternal(spec,parent){
+ if(/\\.(?:css|scss|sass|svg|png|jpe?g|webp|woff2?|ico)(?:\\?.*)?$/.test(spec))return null;
  if(spec==="@ultimate-crm/client/cloudflare")return "packages/client/src/cloudflare.ts";
  if(spec==="@ultimate-crm/ui")return "packages/ui/src/index.ts";
- if(!spec.startsWith("."))return null;
+ if(!spec.startsWith(".")){
+   if(parent.startsWith("apps/cloudflare-crm/web/") &&
+      spec.startsWith("@ultimate-crm/"))fail(parent,"unapproved workspace import "+spec);
+   return null;
+ }
+ const from=resolve(root,parent);
+ const settings={module:ts.ModuleKind.ESNext,moduleResolution:ts.ModuleResolutionKind.Bundler,
+                 allowJs:true,resolveJsonModule:true};
+ const resolved=ts.resolveModuleName(spec,from,settings,ts.sys).resolvedModule?.resolvedFileName;
  const abs=resolve(root,dirname(parent),spec);
- const result=exts.map(s=>abs+s).find(x=>existsSync(x));
+ const result=resolved || exts.map(s=>abs+s).find(x=>existsSync(x));
  if(!result)fail(parent,"unresolved internal import "+spec);
  const rel=insideRepo(result);
  if(!rel)fail(parent,"import escapes repository "+spec);
