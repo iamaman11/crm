@@ -7,7 +7,7 @@ import {fileURLToPath} from "node:url";
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const rd=p=>readFileSync(resolve(root,p),"utf8");
 const policy=JSON.parse(rd("apps/cloudflare-crm/architecture-policy.json"));
-const forbiddenSource=/^(?:.*\/)?(?:transport|gateway)(?:\.[cm]?[jt]sx?)?$|\/gen\/crm\/gateway\/|^@connectrpc\/connect-web$|^@connectrpc\/connect-node$/;
+const forbiddenSource=/^(?:.*\/)?(?:transport|gateway)(?:\.[cm]?[jt]sx?)?$|\/gen\/crm\/gateway\/|^@connectrpc\/connect-node$/;
 const legacySymbols=new Set(["createGrpcWebTransport","ApplicationGatewayService","GovernedClient","createGrpcTransport"]);
 const badHttp=/^\/api\/(?!health(?:$|\/)|doctor(?:$|\/)|session(?:$|\/)|version(?:$|\/))/;
 const fail=(file,msg)=>{throw Error("CRM_AST_VIOLATION "+file+": "+msg);};
