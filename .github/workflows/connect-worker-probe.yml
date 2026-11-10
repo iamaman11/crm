@@ -1,0 +1,26 @@
+name: One-time Connect/Workers WASM compatibility proof
+on:
+  push:
+    branches: [dev]
+    paths:
+      - ".github/workflows/connect-worker-probe.yml"
+      - ".github/experiments/connect-worker-probe/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+      - name: Compile real Connect/Axum handler containing D1 read on Workers WASM
+        working-directory: .github/experiments/connect-worker-probe
+        run: |
+          set -o pipefail
+          cargo check --target wasm32-unknown-unknown 2>&1 | tee "$RUNNER_TEMP/connect-wasm-build.log"
+          echo "CONNECT_WASM_D1_COMPILE=PASS"
