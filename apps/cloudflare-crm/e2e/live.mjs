@@ -719,6 +719,7 @@ try{
   await page.getByLabel("Значение").waitFor();
   await button("Отмена").click();
   cover("customer360.edit.contact.cancel");
+  await tab("Клиенты").click();
   await row(marker+" Account Updated").getByRole("button",{name:"Карточка"}).click();
   await page.getByRole("heading",{name:marker+" Account Updated"}).waitFor();
   await page.getByRole("region",{name:"Сделки клиента"})
@@ -726,6 +727,7 @@ try{
   await page.getByLabel("Сумма").waitFor();
   await button("Отмена").click();
   cover("customer360.edit.deal.cancel");
+  await tab("Клиенты").click();
   await row(marker+" Account Updated").getByRole("button",{name:"Карточка"}).click();
   await page.getByRole("heading",{name:marker+" Account Updated"}).waitFor();
   await page.route("**/api/accounts/**/overview",route=>route.abort());
