@@ -379,7 +379,7 @@ test("every CRM JSX button family has an explicit reviewed live-browser proof",(
   assert.equal(uiInventory.length,10);
   assert.equal(new Set(files).size,10,"duplicate inventory component");
   assert.equal(uiInventory.reduce((n,screen)=>n+screen.buttons,0),60);
-  assert.equal(requiredUiActions.length,91);
+  assert.equal(requiredUiActions.length,93);
   assert.equal(new Set(requiredUiActions).size,requiredUiActions.length,
     "ambiguous coverage action identifiers");
   for(const screen of uiInventory){
