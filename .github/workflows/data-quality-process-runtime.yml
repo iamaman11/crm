@@ -24,6 +24,8 @@ on:
       - "scripts/prepare_data_quality_process_database.sh"
       - ".github/workflows/data-quality-process-runtime.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
