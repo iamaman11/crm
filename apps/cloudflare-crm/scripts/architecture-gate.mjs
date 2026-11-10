@@ -5,7 +5,6 @@ import {readFileSync, readdirSync, existsSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {dirname, resolve, relative, sep} from "node:path";
 import {fileURLToPath} from "node:url";
-import {implementationOwners} from "../shared/catalog.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const pathInRepo = path => resolve(repo,path);
@@ -20,57 +19,62 @@ check(policy.browser_wire_format==="Connect binary Protobuf", "binary Connect wi
 check(Array.isArray(policy.allowed_non_rpc_http), "HTTP exceptions must be explicit");
 const baseline = policy.accepted_runtime_sha;
 
-function validateCoverageMatrix(matrix,phase){
-  check(matrix?.schema_version===1,"coverage matrix schema must be 1");
-  check(Array.isArray(matrix.owners),"owner coverage must be an array");
-  const declared=Object.keys(implementationOwners);
-  const actual=matrix.owners.map(row=>row?.owner);
-  check(new Set(actual).size===actual.length,"duplicate owner coverage");
-  check(declared.length===actual.length && declared.every(name=>actual.includes(name)),
-    "coverage must exactly match original ownership catalog");
-  const allRpc=new Set();
-  for(const row of matrix.owners){
-    check(row && row.domain_module && typeof row.domain_module==="string",
-      "coverage must identify original Rust domain "+row?.owner);
-    const isInternal=row.owner==="sales-activities-link";
-    check(row.transport===(isInternal?"internal":"connect"),
-      "only the existing Sales–Activities link is internal: "+row.owner);
-    check(["NOT_CONNECTED","PARTIAL","CONNECTED"].includes(row.status),
-      "invalid explicit connection status "+row.owner);
-    check(Array.isArray(row.required_operations)&&row.required_operations.length>0 &&
-      row.required_operations.every(x=>typeof x==="string"&&x.length>0)&&
-      new Set(row.required_operations).size===row.required_operations.length,
-      "missing/duplicate required operations "+row.owner);
-    check(Array.isArray(row.accepted_operations)&&
-      row.accepted_operations.every(x=>row.required_operations.includes(x))&&
-      new Set(row.accepted_operations).size===row.accepted_operations.length,
-      "nonexistent/duplicate accepted operation "+row.owner);
-    check(Array.isArray(row.rpc_methods),"missing method list "+row.owner);
-    check(isInternal?row.rpc_methods.length===0:row.rpc_methods.every(x=>
-      typeof x==="string"&&/^\/crm\.[A-Za-z0-9_.]+\/[A-Za-z0-9_]+$/.test(x)),
-      "invalid RPC route "+row.owner);
-    for(const rpc of row.rpc_methods){
-      check(!allRpc.has(rpc),"duplicate RPC ownership "+rpc);
-      allRpc.add(rpc);
+function validateModuleReport(report,phase){
+  check(report?.schema_version===1,"generated module report schema must be 1");
+  check(report?.phase===phase,"module report must match architecture phase");
+  check(/^[a-f0-9]{40}$/.test(report?.source_sha||""),
+    "module report must identify one immutable source SHA");
+  check(Array.isArray(report.modules)&&report.modules.length>0,
+    "canonical module manifests not discovered");
+  check(Array.isArray(report.active_rpc_paths),
+    "generated active RPC inventory missing");
+  check(Array.isArray(report.unclaimed_active_rpc_paths),
+    "generated unmatched active RPC inventory missing");
+  const names=report.modules.map(m=>m.module_id);
+  check(new Set(names).size===names.length,"duplicate canonical module id");
+  const paths=report.modules.map(m=>m.manifest);
+  check(new Set(paths).size===paths.length,"duplicate canonical module manifest");
+  const rpcOwner=new Map();
+  for(const m of report.modules){
+    check(/^crm\.[a-z0-9.-]+$/.test(m.module_id),
+      "invalid canonical module id "+m.module_id);
+    check(m.manifest.startsWith("modules/")&&m.manifest.endsWith("/module.yaml"),
+      "module must originate in modules/*/module.yaml: "+m.module_id);
+    check(["domain","composition"].includes(m.kind),"invalid module kind "+m.module_id);
+    check(typeof m.linked==="boolean","missing Worker activation status "+m.module_id);
+    check(Array.isArray(m.declared_rpc_paths)&&Array.isArray(m.active_rpc_paths),
+      "module RPCs must be compiler-derived "+m.module_id);
+    for(const rpc of m.declared_rpc_paths){
+      check(!rpcOwner.has(rpc),"duplicate declared RPC owner "+rpc);
+      rpcOwner.set(rpc,m.module_id);
     }
-    if(row.status==="NOT_CONNECTED")check(row.accepted_operations.length===0 &&
-      row.rpc_methods.length===0,"NOT_CONNECTED owner cannot claim RPC "+row.owner);
-    if(phase==="cutover"){
-      check(row.status==="CONNECTED","cutover cannot ship unconnected owner "+row.owner);
-      check(row.required_operations.length===row.accepted_operations.length &&
-        row.required_operations.every(x=>row.accepted_operations.includes(x)),
-        "cutover lacks owner operation "+row.owner);
-      check(isInternal||row.rpc_methods.length>0,
-        "public owner must have generated Connect RPC "+row.owner);
+    for(const rpc of m.active_rpc_paths){
+      check(m.declared_rpc_paths.includes(rpc),
+        "active RPC lacks canonical manifest binding "+rpc);
     }
   }
-  return allRpc;
+  check(new Set(report.active_rpc_paths).size===report.active_rpc_paths.length,
+    "duplicate active RPC path in compiled report");
+  const missing=report.active_rpc_paths.filter(rpc=>!rpcOwner.has(rpc)).sort();
+  check(JSON.stringify(missing)===JSON.stringify([...report.unclaimed_active_rpc_paths].sort()),
+    "generated report omitted unresolved active RPCs");
+  if(phase==="cutover"){
+    check(missing.length===0,"active RPC lacks canonical module.yaml binding: "+missing.join(","));
+    for(const m of report.modules){
+      if(m.linked&&m.declared_rpc_paths.length){
+        check(m.active_rpc_paths.length>0,
+          "linked module has no accepted Connect service: "+m.module_id);
+      }
+    }
+  }
 }
-const coveragePath=policy.cutover_coverage_file;
-const coverageMatrix=existsSync(pathInRepo(coveragePath))?
-  JSON.parse(read(coveragePath)):null;
-if(coverageMatrix)validateCoverageMatrix(coverageMatrix,policy.phase);
-else check(policy.phase!=="cutover","complete owner coverage matrix required");
+const moduleReportPath=process.env.CRM_MODULE_COVERAGE_REPORT;
+const moduleReport=moduleReportPath?JSON.parse(readFileSync(moduleReportPath,"utf8")):null;
+if(moduleReport){
+  validateModuleReport(moduleReport,policy.phase);
+  check(moduleReport.source_sha===git("rev-parse","HEAD").trim(),
+    "stale module inventory: source SHA mismatch");
+}else check(policy.phase!=="cutover","cutover requires generated module coverage report");
 
 git("cat-file","-e",baseline+"^{commit}");
 
@@ -206,34 +210,26 @@ if(policy.phase!=="cutover"){
     check(!/ConnectError::unimplemented|\.encode_to_vec\s*\(|::decode_from_slice\s*\(/.test(code),
       "unimplemented RPC / Buffa-Prost binary bridge remains: "+path);
   }
-  const coverage=coverageMatrix;
-  check(coverage!==null,"typed RPC coverage matrix missing");
-  const declared=Object.keys(implementationOwners);
-  check(coverage.owners.length===declared.length,"some original owners not covered");
-  check(declared.every(k=>coverage.owners.some(x=>x.owner===k)),
-    "coverage must include every original owner, including internal composition");
+  check(moduleReport!==null,"generated canonical module report required");
+  const activeProof=JSON.parse(read("apps/cloudflare-crm/active-connect.json"));
+  const reported=[...moduleReport.active_rpc_paths].sort();
+  const proven=activeProof.methods.map(x=>x.path).sort();
+  check(JSON.stringify(reported)===JSON.stringify(proven),
+    "generated module report differs from active compiled Connect RPC evidence");
   const protoFiles=treeFiles("proto/crm").filter(p=>p.endsWith(".proto"));
   const protoText=protoFiles.map(read).join("\n");
-  for(const row of coverage.owners){
-    check(row.owner && ["connect","internal","http-download"].includes(row.transport),
-      "invalid owner coverage entry");
-    if(row.transport==="connect"){
-      check(Array.isArray(row.rpc_methods) && row.rpc_methods.length,
-        "owner must have actual protobuf RPC methods: "+row.owner);
-      for(const method of row.rpc_methods){
-        const slash=method.lastIndexOf("/");
-        check(slash>0,"expected canonical Connect route: "+method);
-        const service=method.slice(0,slash).split(".").pop();
-        const rpc=method.slice(slash+1);
-        check(new RegExp("service\\s+"+service+"\\s*\\{").test(protoText) &&
-          new RegExp("rpc\\s+"+rpc+"\\s*\\(").test(protoText),
-          "RPC must exist in canonical proto: "+method);
-      }
-    }
+  for(const method of moduleReport.active_rpc_paths){
+    const slash=method.lastIndexOf("/");
+    check(slash>0,"expected canonical Connect route: "+method);
+    const service=method.slice(0,slash).split(".").pop();
+    const rpc=method.slice(slash+1);
+    check(new RegExp("service\\s+"+service+"\\s*\\{").test(protoText) &&
+      new RegExp("rpc\\s+"+rpc+"\\s*\\(").test(protoText),
+      "active RPC must exist in canonical Protobuf: "+method);
   }
 }
 console.log(JSON.stringify({event:"crm.architecture-gate",result:"PASS",
   phase:policy.phase,baseline,router_count:routerCount,
   d1:production.d1_databases[0].binding,
   legacy_runtime_policy:policy.phase==="migration-freeze"?"FROZEN":policy.phase==="contract-only"?"DISABLED":"REMOVED"}));
-export {failNewRest,validateGeneratedBrowserBoundary,validateOneWorkerRouter,validateCoverageMatrix};
+export {failNewRest,validateGeneratedBrowserBoundary,validateOneWorkerRouter,validateModuleReport};
