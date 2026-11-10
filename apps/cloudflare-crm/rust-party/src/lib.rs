@@ -25,6 +25,8 @@ mod sales_deals;
 #[cfg(feature = "native")]
 mod sales_contract;
 #[cfg(feature = "native")]
+mod connect_sales;
+#[cfg(feature = "native")]
 mod consents;
 #[cfg(feature = "native")]
 mod identity_resolution;
@@ -265,9 +267,16 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     #[cfg(feature = "native")]
     if role != Some("admin")
         && method != Method::Get
+        && !(path == "/crm.sales.v1.DealService/GetDeal" ||
+             path == "/crm.sales.v1.DealService/ListDeals")
         && !(path == "/api/consents/evaluate" && method == Method::Post)
     {
         return error("FORBIDDEN", 403);
+    }
+    #[cfg(feature = "native")]
+    if path.starts_with("/crm.sales.v1.DealService/") {
+        if method != Method::Post { return error("NOT_FOUND",404); }
+        return connect_sales::route(req,env,tenant).await;
     }
     let db = env.d1("DB")?;
     // Explicitly CI-only, signed-Access-gated native workerd proof. This gate
@@ -419,6 +428,11 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             ("/api/consents", Method::Get) => "consents.list",
             ("/api/consents/evaluate", Method::Post) => "consents.evaluate",
             ("/api/consents/suppress", Method::Post) => "consents.suppress",
+            ("/crm.sales.v1.DealService/GetDeal", Method::Post) => "sales-deals.rpc.get",
+            ("/crm.sales.v1.DealService/ListDeals", Method::Post) => "sales-deals.rpc.list",
+            ("/crm.sales.v1.DealService/CreateDeal", Method::Post) => "sales-deals.rpc.create",
+            ("/crm.sales.v1.DealService/UpdateDeal", Method::Post) => "sales-deals.rpc.update",
+            ("/crm.sales.v1.DealService/AdvanceStage", Method::Post) => "sales-deals.rpc.advance",
             ("/api/sales-deals", Method::Get) => "sales-deals.list",
             ("/api/sales-deals", Method::Post) => "sales-deals.create",
             (p, Method::Get) if p.starts_with("/api/sales-deals/") => "sales-deals.read",
@@ -470,7 +484,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             else if path.starts_with("/api/contact-points") { "crm.contact-points" }
             else if path.starts_with("/api/party-relationships") { "crm.party-relationships" }
             else if path.starts_with("/api/activity-tasks") { "crm.activities" }
-            else if path.starts_with("/api/sales-deals") { "crm.sales" }
+            else if path.starts_with("/api/sales-deals") || path.starts_with("/crm.sales.v1.DealService/") { "crm.sales" }
             else if path.starts_with("/api/consents") { "crm.consents" }
             else if path.starts_with("/api/identity-resolution") { "crm.identity-resolution" }
             else if path.starts_with("/api/data-quality") { "crm.data-quality" }
