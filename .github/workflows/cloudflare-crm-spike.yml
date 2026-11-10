@@ -1,17 +1,14 @@
 name: Cloudflare CRM Spike CI
+# Every source change may affect a shared Rust owner, Protobuf schema, generated
+# TypeScript client or deployment policy. Avoid paths filters: they bypass CRM CI.
 on:
   push:
     branches:
       - dev
-    paths:
-      - "apps/cloudflare-crm/**"
-      - ".github/workflows/cloudflare-crm-spike.yml"
   pull_request:
     branches:
+      - dev
       - main
-    paths:
-      - "apps/cloudflare-crm/**"
-      - ".github/workflows/cloudflare-crm-spike.yml"
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

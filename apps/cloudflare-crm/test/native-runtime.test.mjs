@@ -412,3 +412,12 @@ test("every CRM JSX button family has an explicit reviewed live-browser proof",(
   assert.doesNotMatch(card,/\["party_relationships","Связи","parties"/);
   assert.ok(live.includes('"customer360.navigate.relationships"'));
 });
+
+test("Cloudflare CRM CI triggers on every dev change and both PR bases",()=>{
+  const workflow=read("../../.github/workflows/cloudflare-crm-spike.yml");
+  const triggers=workflow.split("jobs:")[0];
+  assert.match(triggers,/push:\s*\n\s*branches:\s*\n\s*- dev/);
+  assert.match(triggers,/pull_request:\s*\n\s*branches:\s*\n\s*- dev\s*\n\s*- main/);
+  assert.doesNotMatch(triggers,/^\s+paths:/m,
+    "path filters would silently skip Protobuf or shared Rust owner changes");
+});

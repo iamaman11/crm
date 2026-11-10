@@ -1,5 +1,7 @@
 # Cloudflare CRM — operating contract for ChatGPT development
 
+**Целевая схема (утверждённая норма для нового кода):** [ARCHITECTURE.md](ARCHITECTURE.md), Issue #350. Исторический код мигрирует в неё, а не наоборот. Документ — спецификация, не доказательство завершённой миграции.
+
 This file applies to **apps/cloudflare-crm/**. The sole canonical source of truth is
 **iamaman11/crm**: issue #338 (единственный актуальный план Rust/Cloudflare и диагностики), #310 (product/acceptance), #321 (Cloudflare architecture),
 #322 (chat delivery), and the active PR/commit. Consult root AGENTS.md for
