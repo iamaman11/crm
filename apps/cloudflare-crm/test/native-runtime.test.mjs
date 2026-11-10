@@ -361,3 +361,13 @@ test("Deal UI shows percent, sends exact basis points and rejects invalid values
   assert.match(browser,/sales-deals\.invalid-probability/);
   assert.match(browser,/sales-deals\.edit-exact-conversion/);
 });
+
+test("local and live Chromium both exercise readable Deal amount and percent",()=>{
+  const native=read("rust-party/test/native.mjs");
+  const live=read("e2e/live.mjs");
+  assert.doesNotMatch(native,/Сумма \(минимальные единицы\)/);
+  assert.doesNotMatch(live,/Сумма \(минимальные единицы\)/);
+  assert.match(native,/getByLabel\("Вероятность, %"\)/);
+  assert.match(native,/probability_bps,6250/);
+  assert.match(live,/sales-deals\.invalid-probability/);
+});

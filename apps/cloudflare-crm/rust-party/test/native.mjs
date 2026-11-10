@@ -1427,12 +1427,15 @@ try{
     await page.getByRole("button",{name:"+ Добавить сделку"}).click();
     await page.getByLabel("Название сделки").fill(dealName);
     await page.getByLabel("Клиент",{exact:true}).selectOption({label:customer+" Updated"});
-    await page.getByLabel("Сумма (минимальные единицы)").fill("7500");
+    await page.getByLabel("Сумма").fill("75,00");
+    await page.getByLabel("Вероятность, %").fill("62,5");
     await submitForm();
     await page.getByRole("row").filter({hasText:dealName}).waitFor();
+    await page.getByRole("row").filter({hasText:dealName}).getByText("75,00 USD").waitFor();
     const deals=await call("/api/sales-deals",a);
     const actualDeal=deals.body.items.find(x=>x.name===dealName);
     assert.equal(actualDeal?.amount.minor_units,"7500");
+    assert.equal(actualDeal?.probability_bps,6250);
     await page.getByRole("row").filter({hasText:dealName})
       .getByRole("button",{name:"Этап сделки"}).click();
     await page.getByLabel("Новый этап").selectOption("qualified");
