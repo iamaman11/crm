@@ -9,7 +9,7 @@ import {join,resolve,dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
-const descriptor=process.argv[2];
+const descriptor=process.env.CRM_PROTO_DESCRIPTOR_FILE;
 const source=process.env.CRM_MODULE_COVERAGE_REPORT;
 if(!descriptor||!source)throw Error("compiled Buf descriptor and CI module report required");
 const accepted=JSON.parse(readFileSync(source,"utf8"));
