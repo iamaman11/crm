@@ -25,13 +25,16 @@ E2E.** ChatGPT owns diagnosis, implementation and acceptance; never delegate
 ordinary work to a local Windows agent or require users to run developer commands.
 GitHub Actions may run those commands. No new app or connector is a prerequisite.
 
+
+**User decision 10 November 2026:** Do NOT enable GitHub branch-protection rulesets, required CI checks, bypass restrictions, or direct-push prohibitions for `dev` and `main`. The existing CI/deploy/live acceptance remains part of the release workflow. This governance exception does not allow skipping or weakening tests for GO.
+
 ## Recovery after context loss
 
 1. Open canonical GitHub `iamaman11/crm`: Issue #338 and this `AGENTS.md`.
 2. Read `dev` HEAD and the latest `Cloudflare CRM Spike CI` run for that SHA.
 3. Read active Cloudflare `crm-dev` Worker version, its `GIT_SHA`, and the one D1 binding. Published SHA, not branch name, proves what is live.
 4. If CI or deploy failed, inspect the exact job and live Chromium/D1/Logs evidence. An unmatched SHA means NOT_DEPLOYED until the protected acceptance passes.
-5. Never create a new branch, Environment, Worker, D1 or shadow plan for an ordinary CRM fix. The working branch is always `dev`.
+5. Ordinary accepted fixes use `dev`. The ONE full architecture cutover is the explicit exception: work in temporary `cutover/complete-connect-tsx-20261110` and one PR to `dev`; no interim deploy. Never create another Environment, Worker, D1 or shadow plan.
 
 ## First five actions in every new chat or development slice
 
@@ -43,8 +46,7 @@ GitHub Actions may run those commands. No new app or connector is a prerequisite
    log, then verify reproducibility. Never label guesses as diagnosed causes.
 4. Change only owned files, necessary published contracts, migration and tests;
    do not weaken security, tenant isolation, or existing CI to obtain green.
-5. Work in the one permanent `dev` branch: commit → one CRM CI/build →
-   protected crm-dev deployment → real Chromium E2E → D1/Logs readback.
+5. Ordinary changes: `dev` → existing CRM CI/build → crm-dev deployment → real Chromium E2E → D1/Logs readback. Full architecture cutover: one temporary integration branch/PR to `dev`, same full tests, then one accepted merge/deployment. No partial deployment.
    Record exact SHA and PASS/FAIL/NOT_TESTED in Issue #338. Do not merge
    `main` merely to deploy; it receives accepted milestones.
 
