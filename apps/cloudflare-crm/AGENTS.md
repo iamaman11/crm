@@ -28,6 +28,18 @@ GitHub Actions may run those commands. No new app or connector is a prerequisite
 
 **User decision 10 November 2026:** Do NOT enable GitHub branch-protection rulesets, required CI checks, bypass restrictions, or direct-push prohibitions for `dev` and `main`. The existing CI/deploy/live acceptance remains part of the release workflow. This governance exception does not allow skipping or weakening tests for GO.
 
+**CI execution topology (11 November 2026):** PR targeting `dev` runs only
+`.github/workflows/cloudflare-crm-spike.yml`. Checks are sequential in cost:
+dependency-free repo topology/architecture/source checks, exact Rust complexity
+and formatting budgets, Buf/TS/generated contracts/unit checks, then expensive
+Rust/WASM/workerd/D1/Chromium. `deploy-crm-dev` runs only after this gate
+on a successful `push dev`; it uses the sealed SHA-matched artifact with
+automatic rollback on failed physical acceptance. Legacy PostgreSQL and
+historical monorepo workflows target PR to `main` only; their checks are not
+deleted. `scripts/check_ci_event_policy.py` + negative tests reject a
+second workflow PR trigger for `dev`. No branch protection / required
+GitHub status checks are configured.
+
 ## Recovery after context loss
 
 1. Open canonical GitHub `iamaman11/crm`: Issue #338 and this `AGENTS.md`.

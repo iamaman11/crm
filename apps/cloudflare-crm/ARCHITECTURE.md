@@ -153,9 +153,9 @@ Cloudflare fetch → workers-rs Worker (единственный entrypoint)
 **Архитектура как исполняемая политика:**
 [`architecture-policy.json`](architecture-policy.json) определяет режим,
 [`scripts/architecture-gate.mjs`](scripts/architecture-gate.mjs) проверяет его
-в том же обязательном CRM CI на каждом push dev и PR dev/main.
+в том же единственном CRM CI на каждом push в `dev` и PR в `dev` (без paths-фильтра); прочие workflow монорепозитория обслуживают PR в `main`.
 
-- `migration-freeze` сейчас: принятые старые React/Rust runtime-файлы
+- `contract-only` сейчас: принятые старые React/Rust runtime-файлы
   неизменны относительно точного принятого Git SHA. Нельзя дописывать новый
   JSX/REST или выпускать очередной частичный Connect API. Разрешена работа
   над общим кандидатом в одном интеграционном изменении.
@@ -173,8 +173,16 @@ Cloudflare fetch → workers-rs Worker (единственный entrypoint)
 - Это **два режима одного CI, не два backend, не два release train**.
   Смену режима нельзя выдать за acceptance: нужен весь защищённый
   Chromium→Rust→D1→Logs и публичный readback 100% на том же SHA.
-- Отдельно от кодового gate в GitHub нужно включить required CI status checks
-  и защиту веток `dev/main`. Сейчас в API GitHub обе ветки
-  `protected=false`: CI обнаруживает нарушения, но прямые push/merge без
-  status-policy не блокируются. Нельзя объявлять репозиторный governance
-  принудительно обеспеченным до включения этих штатных правил GitHub.
+- По прямому решению владельца НЕ включать required CI checks, branch
+  protection/rulesets и ограничения push для `dev/main`. Это осознанное
+  исключение governance; GitHub сам не блокирует прямые pushes. Реальный
+  приёмочный критерий — последовательный CI и защищённая публикация exact SHA.
+- Один CI означает **один workflow run на PR к `dev`**. Он выполняет
+  проверки строго по стоимости: CI event/architecture/syntax → Python
+  budgets и Rust formatting → Buf/TypeScript/контракты → Rust/WASM/
+  workerd/D1/Chromium → неизменный релизный артефакт. Deploy/rollback
+  разрешены только на `push dev` после полного PASS, а не на PR.
+- Прочие исторические workflow монорепозитория сохраняют свои `main`
+  triggers и проверки PostgreSQL/других сервисов. Нельзя незаметно вернуть
+  им `pull_request` в `dev`: один ранний CI event-policy gate должен
+  отвергать такую настройку. Не отключать проверки `main` ради CRM.
