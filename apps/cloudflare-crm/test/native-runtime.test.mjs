@@ -442,7 +442,9 @@ test("single CRM CI enforces frozen Buf and existing typed shared packages",()=>
   assert.match(workflow,/pnpm exec buf lint proto/);
   assert.match(workflow,/pnpm exec buf format -d --exit-code proto/);
   assert.match(workflow,/pnpm exec buf breaking proto --against "\.git#ref=/);
-  assert.match(workflow,/pnpm exec buf breaking proto --against "\.git#branch=main"/);
+  assert.match(workflow,/git fetch --no-tags origin \+refs\/heads\/main:refs\/remotes\/origin\/main/);
+  assert.match(workflow,/pnpm exec buf breaking proto --against "\.git#ref=\$\{main_sha\}"/);
+  assert.match(workflow,/npm install --global pnpm@11\.13\.1/);
   assert.match(workflow,/pnpm exec buf generate --template buf.gen.web.yaml/);
   assert.match(workflow,/pnpm --filter @ultimate-crm\/client typecheck/);
   assert.match(workflow,/pnpm --filter @ultimate-crm\/ui typecheck/);

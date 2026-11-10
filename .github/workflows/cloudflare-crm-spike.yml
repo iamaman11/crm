@@ -33,8 +33,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm install --global pnpm@11.12.0
-          pnpm --version | grep -Fx '11.12.0'
+          npm install --global pnpm@11.13.1
+          pnpm --version | grep -Fx '11.13.1'
           pnpm install --frozen-lockfile
       - name: Enforce canonical Protobuf compatibility and typed packages
         shell: bash
@@ -47,7 +47,12 @@ jobs:
           pnpm exec buf format -d --exit-code proto
           pnpm exec buf lint proto
           pnpm exec buf breaking proto --against ".git#ref=${accepted}"
-          pnpm exec buf breaking proto --against ".git#branch=main"
+          # checkout of dev need not contain a local main branch.
+          # Fetch the exact main commit, then compare by immutable SHA.
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse refs/remotes/origin/main)"
+          git cat-file -e "${main_sha}^{commit}"
+          pnpm exec buf breaking proto --against ".git#ref=${main_sha}"
           pnpm exec buf generate --template buf.gen.web.yaml
           test -s packages/client/gen/crm/sales/v1/deal_pb.ts
           pnpm --filter @ultimate-crm/client typecheck
