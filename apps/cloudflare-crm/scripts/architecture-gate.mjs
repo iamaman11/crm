@@ -19,6 +19,59 @@ check(/^[a-f0-9]{40}$/.test(policy.accepted_runtime_sha), "baseline must be an i
 check(policy.browser_wire_format==="Connect binary Protobuf", "binary Connect wire choice changed");
 check(Array.isArray(policy.allowed_non_rpc_http), "HTTP exceptions must be explicit");
 const baseline = policy.accepted_runtime_sha;
+
+function validateCoverageMatrix(matrix,phase){
+  check(matrix?.schema_version===1,"coverage matrix schema must be 1");
+  check(Array.isArray(matrix.owners),"owner coverage must be an array");
+  const declared=Object.keys(implementationOwners);
+  const actual=matrix.owners.map(row=>row?.owner);
+  check(new Set(actual).size===actual.length,"duplicate owner coverage");
+  check(declared.length===actual.length && declared.every(name=>actual.includes(name)),
+    "coverage must exactly match original ownership catalog");
+  const allRpc=new Set();
+  for(const row of matrix.owners){
+    check(row && row.domain_module && typeof row.domain_module==="string",
+      "coverage must identify original Rust domain "+row?.owner);
+    const isInternal=row.owner==="sales-activities-link";
+    check(row.transport===(isInternal?"internal":"connect"),
+      "only the existing Sales–Activities link is internal: "+row.owner);
+    check(["NOT_CONNECTED","PARTIAL","CONNECTED"].includes(row.status),
+      "invalid explicit connection status "+row.owner);
+    check(Array.isArray(row.required_operations)&&row.required_operations.length>0 &&
+      row.required_operations.every(x=>typeof x==="string"&&x.length>0)&&
+      new Set(row.required_operations).size===row.required_operations.length,
+      "missing/duplicate required operations "+row.owner);
+    check(Array.isArray(row.accepted_operations)&&
+      row.accepted_operations.every(x=>row.required_operations.includes(x))&&
+      new Set(row.accepted_operations).size===row.accepted_operations.length,
+      "nonexistent/duplicate accepted operation "+row.owner);
+    check(Array.isArray(row.rpc_methods),"missing method list "+row.owner);
+    check(isInternal?row.rpc_methods.length===0:row.rpc_methods.every(x=>
+      typeof x==="string"&&/^\/crm\.[A-Za-z0-9_.]+\/[A-Za-z0-9_]+$/.test(x)),
+      "invalid RPC route "+row.owner);
+    for(const rpc of row.rpc_methods){
+      check(!allRpc.has(rpc),"duplicate RPC ownership "+rpc);
+      allRpc.add(rpc);
+    }
+    if(row.status==="NOT_CONNECTED")check(row.accepted_operations.length===0 &&
+      row.rpc_methods.length===0,"NOT_CONNECTED owner cannot claim RPC "+row.owner);
+    if(phase==="cutover"){
+      check(row.status==="CONNECTED","cutover cannot ship unconnected owner "+row.owner);
+      check(row.required_operations.length===row.accepted_operations.length &&
+        row.required_operations.every(x=>row.accepted_operations.includes(x)),
+        "cutover lacks owner operation "+row.owner);
+      check(isInternal||row.rpc_methods.length>0,
+        "public owner must have generated Connect RPC "+row.owner);
+    }
+  }
+  return allRpc;
+}
+const coveragePath=policy.cutover_coverage_file;
+const coverageMatrix=existsSync(pathInRepo(coveragePath))?
+  JSON.parse(read(coveragePath)):null;
+if(coverageMatrix)validateCoverageMatrix(coverageMatrix,policy.phase);
+else check(policy.phase!=="cutover","complete owner coverage matrix required");
+
 git("cat-file","-e",baseline+"^{commit}");
 
 function treeFiles(dir){
@@ -153,10 +206,8 @@ if(policy.phase!=="cutover"){
     check(!/ConnectError::unimplemented|\.encode_to_vec\s*\(|::decode_from_slice\s*\(/.test(code),
       "unimplemented RPC / Buffa-Prost binary bridge remains: "+path);
   }
-  const manifest=policy.cutover_coverage_file;
-  check(existsSync(pathInRepo(manifest)),"all-owner RPC coverage missing: "+manifest);
-  const coverage=JSON.parse(read(manifest));
-  check(Array.isArray(coverage.owners),"typed RPC coverage matrix missing");
+  const coverage=coverageMatrix;
+  check(coverage!==null,"typed RPC coverage matrix missing");
   const declared=Object.keys(implementationOwners);
   check(coverage.owners.length===declared.length,"some original owners not covered");
   check(declared.every(k=>coverage.owners.some(x=>x.owner===k)),
@@ -185,4 +236,4 @@ console.log(JSON.stringify({event:"crm.architecture-gate",result:"PASS",
   phase:policy.phase,baseline,router_count:routerCount,
   d1:production.d1_databases[0].binding,
   legacy_runtime_policy:policy.phase==="migration-freeze"?"FROZEN":policy.phase==="contract-only"?"DISABLED":"REMOVED"}));
-export {failNewRest,validateGeneratedBrowserBoundary,validateOneWorkerRouter};
+export {failNewRest,validateGeneratedBrowserBoundary,validateOneWorkerRouter,validateCoverageMatrix};
