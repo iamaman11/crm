@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import Counter
 import importlib.util
 from pathlib import Path
+import json
 import unittest
 
 
@@ -61,9 +62,11 @@ class ActiveRustSurfaceTests(unittest.TestCase):
 
     def test_exact_original_worker_owner_coverage(self) -> None:
         roots, paths = gate.scope()
-        self.assertEqual(len(roots), 14)
+        report = json.loads(gate.REPORT_PATH.read_text(encoding="utf-8"))
+        linked = {row["crate_path"] for row in report["modules"] if row["linked"]}
         self.assertTrue(roots[0].endswith("rust-party"))
-        self.assertEqual(len(set(roots)), 14)
+        self.assertEqual(set(roots[1:]), linked)
+        self.assertEqual(len(roots), len(set(roots)))
         self.assertTrue(any(f.endswith("modules/crm-parties/src/lib.rs") for f in paths))
 
 
