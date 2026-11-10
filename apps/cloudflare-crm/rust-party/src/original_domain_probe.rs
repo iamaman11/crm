@@ -73,6 +73,8 @@ pub(crate) fn check() -> i32 {
         Ok(x) => x, Err(_) => return 33,
     };
     if crm_sales::decode_deal_state(&bytes).ok() != Some(deal.clone()) { return 34; }
+    #[cfg(feature = "native-ci")]
+    {
     // This is the actual typed outbound wire contract for the original owner,
     // not a JSON schema guessed from the React interface.
     let wire = crate::sales_contract::deal_view(&deal, "tenant-a");
@@ -88,6 +90,7 @@ pub(crate) fn check() -> i32 {
         let encoded = wire.encode_to_vec();
         if crm_proto_contracts::crm::sales::v1::Deal::decode(encoded.as_slice()).ok()
             != Some(wire) { return 37; }
+    }
     }
     if crm_sales::DealStage::try_new(
         crm_sales::PipelineId::try_new("main-pipeline").unwrap(),
