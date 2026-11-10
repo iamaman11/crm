@@ -97,6 +97,15 @@ function inspect(file,source,strict=true){
    fail(file,"computed browser network access forbidden");
   if(ts.isIdentifier(node)&&forbiddenSymbols.has(node.text))
    fail(file,"legacy API symbol "+node.text);
+  // Check identifiers as well as call expressions: aliasing fetch or require must
+  // not bypass the architecture boundary (e.g. fetch.bind(window)).
+  if(inBrowser&&ts.isIdentifier(node)&&directHttp.has(node.text))
+   fail(file,"direct browser transport identifier "+node.text);
+  if(inBrowser&&ts.isIdentifier(node)&&["eval","Function","require"].includes(node.text))
+   fail(file,"untyped browser execution "+node.text);
+  if(inBrowser&&ts.isPropertyAccessExpression(node)&&
+     node.name.text==="sendBeacon")
+   fail(file,"alternate browser transport sendBeacon");
   if(strict&&(node.kind===ts.SyntaxKind.AnyKeyword||
       ts.isAsExpression(node)&&node.type.kind===ts.SyntaxKind.AnyKeyword||
       ts.isTypeAssertionExpression(node)&&node.type.kind===ts.SyntaxKind.AnyKeyword))
