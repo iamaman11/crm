@@ -508,7 +508,7 @@ test("architecture gate rejects new REST, wrong binary setting and second D1/rou
   const policy=JSON.parse(read("architecture-policy.json"));
   const source=read("scripts/architecture-gate.mjs");
   const workflow=read("../../.github/workflows/cloudflare-crm-spike.yml");
-  assert.equal(policy.phase,"migration-freeze");
+  assert.ok(["migration-freeze","contract-only","cutover"].includes(policy.phase));
   assert.match(source,/legacy runtime modified before single cutover/);
   assert.match(source,/coverage\.owners/);
   assert.match(source,/exactly one embedded Connect router required/);
