@@ -33,7 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/check_ci_event_policy.py
-          python -m unittest tests.test_ci_event_policy tests.test_affected_scope
+          python -m unittest tests.test_ci_event_policy
           python scripts/check_action_pinning.py
           node --check scripts/crm-architecture-ast.mjs
           node --check scripts/crm-rpc-descriptors.mjs
@@ -51,6 +51,12 @@ jobs:
           python scripts/check_step13_suppression_baseline.py --check \
             --json-output /tmp/crm-step13-suppression.json \
             --markdown-output /tmp/crm-step13-suppression.md
+      - name: Verify Python governance and affected-scope tests using declared dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
+          python -m unittest tests.test_affected_scope
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
         with:
           toolchain: 1.97.1
