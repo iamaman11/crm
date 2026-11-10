@@ -162,23 +162,23 @@ try{
   assert.equal(created.body.item.name,"Original Native Rust");
   assert.equal((await call("/api/parties/"+id,a)).status,200);
   // Generated v2 Connect -> same original Rust Party aggregate -> one D1.
-  const rpcPath="/crm.parties.v2.PartyService/GetParty";
-  const rpcPartyGet=(token,partyId)=>call(rpcPath,token,{method:"POST",
+  const partyV2RpcPath="/crm.parties.v2.PartyService/GetParty";
+  const partyV2RpcGet=(token,partyId)=>call(partyV2RpcPath,token,{method:"POST",
     headers:{"content-type":"application/json"},
     body:JSON.stringify({partyId})});
-  const found=await rpcPartyGet(a,id);
-  assert.equal(found.status,200,JSON.stringify(found));
-  assert.equal(found.headers["x-crm-module"],"crm.parties");
-  assert.equal(found.body.party.partyId,id);
-  assert.equal(found.body.party.kind,"PARTY_KIND_ORGANIZATION");
-  assert.equal(found.body.party.displayName,"Original Native Rust");
-  assert.equal(found.body.party.version,"1");
-  assert.equal((await rpcPartyGet(viewer,id)).status,200);
-  assert.equal((await rpcPartyGet(b,id)).status,404,"cross-tenant data must be invisible");
-  assert.equal((await rpcPartyGet(a,"nonexistent-party")).status,404);
-  assert.equal((await rpcPartyGet(a,"invalid/party")).status,400);
-  assert.equal((await rpcPartyGet(null,id)).status,401);
-  assert.equal((await call(rpcPath,a)).status,404);
+  const partyV2RpcResult=await partyV2RpcGet(a,id);
+  assert.equal(partyV2RpcResult.status,200,JSON.stringify(partyV2RpcResult));
+  assert.equal(partyV2RpcResult.headers["x-crm-module"],"crm.parties");
+  assert.equal(partyV2RpcResult.body.party.partyId,id);
+  assert.equal(partyV2RpcResult.body.party.kind,"PARTY_KIND_ORGANIZATION");
+  assert.equal(partyV2RpcResult.body.party.displayName,"Original Native Rust");
+  assert.equal(partyV2RpcResult.body.party.version,"1");
+  assert.equal((await partyV2RpcGet(viewer,id)).status,200);
+  assert.equal((await partyV2RpcGet(b,id)).status,404,"cross-tenant data must be invisible");
+  assert.equal((await partyV2RpcGet(a,"nonexistent-party")).status,404);
+  assert.equal((await partyV2RpcGet(a,"invalid/party")).status,400);
+  assert.equal((await partyV2RpcGet(null,id)).status,401);
+  assert.equal((await call(partyV2RpcPath,a)).status,404);
   console.log(JSON.stringify({event:"crm.native-parties-v2-connect",
     result:"PASS",access:true,tenant_scope:true,owner:"crm.parties"}));
 
