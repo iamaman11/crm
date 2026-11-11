@@ -9,7 +9,8 @@ import assert from "node:assert/strict";
 import {binaryPartyGet,decodePartyGet,partyGetPath,
   binaryPartyV3,decodePartyV3,partyV3Path,
   binaryAccountV2,decodeAccountV2,accountV2Path,
-  binaryContactV2,decodeContactV2,contactV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  binaryContactV2,decodeContactV2,contactV2Path,
+  binaryRelationshipV2,decodeRelationshipV2,relationshipV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-contract-only-"));
 const base="http://127.0.0.1:18789";
@@ -484,6 +485,137 @@ try{
    signed_access:true,tenant_ab:true,viewer_write_denied:true,
    no_browser_verification:true,d1_cas:true,d1_receipts:true,d1_audit:true,
    published_active:false}));
+
+ // G3 Relationships v2: original Rust domain owner and one D1, binary
+ // Protobuf descriptor, signed JWT + tenant A/B + viewer rights.
+ const relationV2=async(method,token,payload)=>{
+   const response=await fetch(base+relationshipV2Path(method),{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+       ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:binaryRelationshipV2(method,payload)});
+   return {status:response.status,headers:response.headers,
+     body:response.status<400
+       ?decodeRelationshipV2(method,new Uint8Array(await response.arrayBuffer()))
+       :await response.json()};
+ };
+ const rOther="relationship-aaa-other-"+randomUUID();
+ const rMid="relationship-mid-ours-"+randomUUID();
+ const rLast="relationship-zzz-ours-"+randomUUID();
+ const relType={code:"employment",directionality:1,fromRole:"employer",toRole:"employee"};
+ const relationInput=(relationshipId,fromPartyId,toPartyId,seq)=>({
+   relationshipId,fromPartyId,toPartyId,type:relType,
+   validFrom:{seconds:1700000000n,nanos:1000},
+   validUntil:{seconds:1800000000n,nanos:2000},
+   precondition:{idempotencyKey:"candidate-rel-create-"+seq}
+ });
+ const otherRelation=relationInput(rOther,"binary-rpc-proof-01",pagingPersonId,"other");
+ const midRelation=relationInput(rMid,id,pagingPersonId,"mid");
+ const lastRelation=relationInput(rLast,pagingPersonId,id,"last");
+ assert.equal((await relationV2("CreatePartyRelationship",null,midRelation)).status,401);
+ assert.equal((await relationV2("CreatePartyRelationship",viewer,midRelation)).status,403);
+ assert.equal((await relationV2("CreatePartyRelationship",admin,{
+   ...midRelation,fromPartyId:id,toPartyId:id,
+   precondition:{idempotencyKey:"candidate-rel-self"}})).status,400);
+ assert.equal((await relationV2("CreatePartyRelationship",admin,{
+   ...midRelation,fromPartyId:"missing-party",
+   precondition:{idempotencyKey:"candidate-rel-missing"}})).status,400);
+ assert.equal((await relationV2("CreatePartyRelationship",admin,{
+   ...midRelation,type:{...relType,directionality:0},
+   precondition:{idempotencyKey:"candidate-rel-invalid-type"}})).status,400);
+ const otherCreated=await relationV2("CreatePartyRelationship",admin,otherRelation);
+ assert.equal(otherCreated.status,200,describeProtobuf(otherCreated.body));
+ const midCreated=await relationV2("CreatePartyRelationship",admin,midRelation);
+ assert.equal(midCreated.status,200,describeProtobuf(midCreated.body));
+ assert.equal(midCreated.body.relationship?.relationshipId,rMid);
+ assert.equal(midCreated.body.relationship?.type?.code,"employment");
+ assert.equal(midCreated.body.relationship?.validFrom?.nanos,1000);
+ assert.equal(midCreated.body.receipt?.resourceVersion,1n);
+ assert.equal(midCreated.body.receipt?.requestId,midCreated.headers.get("x-request-id"));
+ const lastCreated=await relationV2("CreatePartyRelationship",admin,lastRelation);
+ assert.equal(lastCreated.status,200,describeProtobuf(lastCreated.body));
+ const midReplay=await relationV2("CreatePartyRelationship",admin,midRelation);
+ assert.equal(midReplay.status,200,describeProtobuf(midReplay.body));
+ assert.equal(midReplay.body.receipt?.replayed,true);
+ assert.equal((await relationV2("CreatePartyRelationship",admin,{
+   ...midRelation,toPartyId:"binary-rpc-proof-01"})).status,409);
+ assert.equal((await relationV2("GetPartyRelationship",tenantB,{relationshipId:rMid})).status,404);
+ assert.equal((await relationV2("GetPartyRelationship",viewer,{relationshipId:rMid}))
+   .body.relationship?.fromPartyId,id);
+ const relList=await collectPages(relationV2,"ListPartyRelationships","relationships",{partyId:id});
+ assert.deepEqual(relList.map(r=>r.relationshipId),[rMid,rLast]);
+ assert.equal((await collectPages(relationV2,"ListPartyRelationships","relationships",
+   {partyId:"missing-party"})).length,0);
+ assert.equal((await relationV2("ListPartyRelationships",tenantB,{
+   partyId:id,page:{pageSize:1}})).body.relationships.length,0);
+ assert.equal((await relationV2("ListPartyRelationships",viewer,{
+   partyId:id,page:{pageSize:101}})).status,400);
+ const afterRel=await relationV2("ListPartyRelationships",viewer,{
+   partyId:id,page:{pageSize:1,pageToken:rLast}});
+ assert.equal(afterRel.status,200,describeProtobuf(afterRel.body));
+ assert.equal(afterRel.body.relationships.length,0);
+ assert.ok(!afterRel.body.pageInfo?.nextPageToken);
+ const relUpdate={relationshipId:rMid,status:2,
+   validFrom:{operation:{case:"set",value:{seconds:1710000000n,nanos:123}}},
+   validUntil:{operation:{case:"clear",value:true}},
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-rel-update-01"}};
+ assert.equal((await relationV2("UpdatePartyRelationship",viewer,relUpdate)).status,403);
+ assert.equal((await relationV2("UpdatePartyRelationship",admin,{
+   ...relUpdate,status:0,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-rel-invalid-status"}})).status,400);
+ const updatedRel=await relationV2("UpdatePartyRelationship",admin,relUpdate);
+ assert.equal(updatedRel.status,200,describeProtobuf(updatedRel.body));
+ assert.equal(updatedRel.body.relationship?.version,2n);
+ assert.equal(updatedRel.body.relationship?.status,2);
+ assert.equal(updatedRel.body.relationship?.validFrom?.seconds,1710000000n);
+ assert.equal(updatedRel.body.relationship?.validUntil,undefined);
+ const relFirstReplay=await relationV2("UpdatePartyRelationship",admin,relUpdate);
+ assert.equal(relFirstReplay.status,200);
+ assert.equal(relFirstReplay.body.receipt?.replayed,true);
+ const relKeep={relationshipId:rMid,status:1,
+   precondition:{expectedVersion:2n,idempotencyKey:"candidate-rel-keep-02"}};
+ const relKeepApplied=await relationV2("UpdatePartyRelationship",admin,relKeep);
+ assert.equal(relKeepApplied.status,200,describeProtobuf(relKeepApplied.body));
+ assert.equal(relKeepApplied.body.relationship?.version,3n);
+ assert.equal(relKeepApplied.body.relationship?.validFrom?.seconds,1710000000n);
+ assert.equal(relKeepApplied.body.relationship?.validUntil,undefined);
+ const relLater=await relationV2("UpdatePartyRelationship",admin,{
+   ...relKeep,status:2,validFrom:{operation:{case:"set",
+     value:{seconds:1720000000n,nanos:987}}},
+   validUntil:{operation:{case:"set",value:{seconds:1820000000n,nanos:654}}},
+   precondition:{expectedVersion:3n,idempotencyKey:"candidate-rel-later-03"}});
+ assert.equal(relLater.status,200,describeProtobuf(relLater.body));
+ assert.equal(relLater.body.relationship?.version,4n);
+ const relAuditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"+
+   " AND subject_id='"+rMid+"'")[0].n;
+ const relKeepReplay=await relationV2("UpdatePartyRelationship",admin,relKeep);
+ assert.equal(relKeepReplay.status,200,describeProtobuf(relKeepReplay.body));
+ assert.equal(relKeepReplay.body.receipt?.replayed,true);
+ assert.equal(relKeepReplay.body.receipt?.resourceVersion,3n);
+ assert.equal(relKeepReplay.body.relationship?.validFrom?.seconds,1710000000n);
+ assert.equal(relKeepReplay.body.relationship?.validUntil,undefined);
+ assert.equal((await relationV2("UpdatePartyRelationship",admin,{
+   ...relKeep,status:2})).status,409,"same key with different intent rejected");
+ assert.equal((await relationV2("UpdatePartyRelationship",admin,{
+   ...relKeep,precondition:{expectedVersion:2n,
+     idempotencyKey:"candidate-rel-stale-04"}})).status,409);
+ const currentRel=await relationV2("GetPartyRelationship",viewer,{relationshipId:rMid});
+ assert.equal(currentRel.body.relationship?.version,4n);
+ assert.equal(currentRel.body.relationship?.validFrom?.seconds,1720000000n);
+ assert.equal(currentRel.body.relationship?.validUntil?.seconds,1820000000n);
+ assert.equal(sql("SELECT version FROM crm_party_relationship_records WHERE tenant='tenant-a'"+
+   " AND id='"+rMid+"'")[0].version,4);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"+
+   " AND subject_id='"+rMid+"'")[0].n,relAuditBefore);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_relationship_receipts WHERE tenant='tenant-a'"+
+   " AND key IN ('candidate-rel-create-mid','candidate-rel-update-01',"+
+   " 'candidate-rel-keep-02','candidate-rel-later-03')")[0].n,4);
+ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2-candidate",
+   result:"PASS",rpc_methods:["CreatePartyRelationship","UpdatePartyRelationship",
+     "GetPartyRelationship","ListPartyRelationships"],
+   generated_binary:true,original_owner:"crm.party-relationships",
+   signed_access:true,tenant_ab:true,viewer_write_denied:true,
+   filtered_pagination:true,temporal_patch:true,replay_after_interleaving:true,
+   no_extra_audit:true,published_active:false}));
 
  console.log(JSON.stringify({event:"crm.native-g3-party-v3-candidate",
    result:"PASS",generated_binary:true,owner:"crm.parties",

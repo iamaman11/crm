@@ -13,11 +13,16 @@ use buffa::Message as BuffaMessage;
 use prost::Message as ProstMessage;
 use serde::Deserialize;
 use wasm_bindgen::JsValue;
-use super::{accounts, bind, contact_points, parties, sales_contract, sales_deals};
+use super::{accounts, bind, contact_points, parties, party_relationships, sales_contract, sales_deals};
 use crm_parties::PartyKind as DomainPartyKind;
 use crm_customer_accounts::{Account as DomainAccount, AccountPartyRole as DomainAccountPartyRole, AccountStatus as DomainAccountStatus};
 use crm_contact_points::{ContactPoint as DomainContactPoint, ContactPointKind as DomainContactPointKind,
     ContactPointStatus as DomainContactPointStatus};
+use crm_party_relationships::{
+    PartyRelationship as DomainRelationship,
+    RelationshipDirectionality as DomainDirectionality,
+    PartyRelationshipStatus as DomainRelationshipStatus,
+};
 use buffa_types::google::protobuf::Timestamp;
 use crm_proto_contracts::crm::{core::v1 as core_contract, sales::v1 as sales_contract_proto};
 
@@ -62,6 +67,13 @@ pub mod proto {
                 include!(concat!(env!("OUT_DIR"), "/crm.contact_points.v2.mod.rs"));
             }
         }
+        pub mod party_relationships {
+            use super::*;
+            pub mod v2 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.party_relationships.v2.mod.rs"));
+            }
+        }
         pub mod parties {
             use super::*;
             pub mod v2 {
@@ -81,6 +93,7 @@ use proto::crm::parties::v3 as party_v3;
 use proto::crm::core::v2 as core_v2;
 use proto::crm::accounts::v2 as account_wire;
 use proto::crm::contact_points::v2 as contact_wire;
+use proto::crm::party_relationships::v2 as rel_wire;
 
 #[derive(Deserialize)]
 struct Row { state: String }
@@ -784,6 +797,183 @@ impl contact_wire::ContactPointService for ContactPointV2Service{
     }
 }
 
+// Generated Connect wire for ORIGINAL crm-party-relationships. No second
+// persistence path: party_relationships.rs owns D1, domain invariants and
+// receipts; this service only checks wire fields and maps typed commands.
+struct RelationshipV2Service {
+    env:Arc<Env>,tenant:String,request_id:String,
+}
+impl RelationshipV2Service {
+    fn d1(&self)->std::result::Result<D1Database,ConnectError>{
+        self.env.d1("DB").map_err(|_|ConnectError::internal("D1 unavailable"))
+    }
+    fn valid_id(raw:&str)->std::result::Result<String,ConnectError>{
+        if raw!=raw.trim()||raw.contains('/') {
+            return Err(ConnectError::invalid_argument("PARTY_RELATIONSHIPS_RELATIONSHIP_ID_INVALID"));
+        }
+        crm_party_relationships::PartyRelationshipId::try_new(raw.to_owned())
+            .map(|x|x.as_str().to_owned())
+            .map_err(|_|ConnectError::invalid_argument("PARTY_RELATIONSHIPS_RELATIONSHIP_ID_INVALID"))
+    }
+    fn patch(patch:Option<&core_v2::TimestampPatch>)
+        ->std::result::Result<party_relationships::TimestampChange,ConnectError>{
+        use party_relationships::TimestampChange;
+        let Some(patch)=patch else{return Ok(TimestampChange::Keep)};
+        match patch.operation.as_ref(){
+            Some(core_v2::timestamp_patch::Operation::Set(ts))=>
+                ContactPointV2Service::nanos(ts).map(TimestampChange::Set),
+            Some(core_v2::timestamp_patch::Operation::Clear(true))=>
+                Ok(TimestampChange::Clear),
+            _=>Err(ConnectError::invalid_argument("invalid timestamp patch")),
+        }
+    }
+    fn convert(relation:&DomainRelationship)
+        ->std::result::Result<rel_wire::PartyRelationship,ConnectError>{
+        let rtype=relation.relationship_type();
+        let directionality=match rtype.directionality(){
+            DomainDirectionality::Directional=>
+                rel_wire::RelationshipDirectionality::RELATIONSHIP_DIRECTIONALITY_DIRECTIONAL,
+            DomainDirectionality::Reciprocal=>
+                rel_wire::RelationshipDirectionality::RELATIONSHIP_DIRECTIONALITY_RECIPROCAL,
+        };
+        let status=match relation.status(){
+            DomainRelationshipStatus::Active=>
+                rel_wire::RelationshipStatus::RELATIONSHIP_STATUS_ACTIVE,
+            DomainRelationshipStatus::Inactive=>
+                rel_wire::RelationshipStatus::RELATIONSHIP_STATUS_INACTIVE,
+        };
+        Ok(rel_wire::PartyRelationship{
+            relationship_id:relation.party_relationship_id().as_str().to_owned(),
+            from_party_id:relation.from_party_ref().as_str().to_owned(),
+            to_party_id:relation.to_party_ref().as_str().to_owned(),
+            r#type:Some(rel_wire::RelationshipType{
+                code:rtype.code().to_owned(),directionality:directionality.into(),
+                from_role:rtype.from_role().to_owned(),to_role:rtype.to_role().to_owned(),
+                ..Default::default()
+            }).into(),
+            status:status.into(),
+            valid_from:relation.valid_from_unix_nanos()
+                .map(ContactPointV2Service::timestamp).into(),
+            valid_until:relation.valid_until_unix_nanos()
+                .map(ContactPointV2Service::timestamp).into(),
+            version:relation.version(),..Default::default()
+        })
+    }
+    fn receipt(&self,out:&party_relationships::MutationOutcome)->core_v2::MutationReceipt{
+        core_v2::MutationReceipt{
+            request_id:self.request_id.clone(),resource_version:out.relationship.version(),
+            replayed:out.replayed,..Default::default()
+        }
+    }
+    fn failed(f:party_relationships::MutationFailure)->ConnectError{
+        match f.status{
+            404=>ConnectError::not_found(f.code),
+            409=>ConnectError::aborted(f.code),
+            422=>ConnectError::invalid_argument(f.code),
+            _=>ConnectError::internal(f.code),
+        }
+    }
+}
+impl rel_wire::PartyRelationshipService for RelationshipV2Service {
+    #[worker::send]
+    async fn create_party_relationship(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,rel_wire::CreatePartyRelationshipRequest>,
+    )->ServiceResult<rel_wire::CreatePartyRelationshipResponse>{
+        let input=req.to_owned_message();
+        let id=Self::valid_id(&input.relationship_id)?;
+        let (key,_)=AccountV2Service::precondition(input.precondition.as_option(),true)?;
+        let typ=input.r#type.as_option()
+            .ok_or_else(||ConnectError::invalid_argument("relationship type required"))?;
+        let directionality=match typ.directionality {
+            x if x==rel_wire::RelationshipDirectionality::RELATIONSHIP_DIRECTIONALITY_DIRECTIONAL=>
+                party_relationships::DirectionalityInput::Directional,
+            x if x==rel_wire::RelationshipDirectionality::RELATIONSHIP_DIRECTIONALITY_RECIPROCAL=>
+                party_relationships::DirectionalityInput::Reciprocal,
+            _=>return Err(ConnectError::invalid_argument("invalid RelationshipDirectionality")),
+        };
+        let from=input.valid_from.as_option()
+            .map(ContactPointV2Service::nanos).transpose()?;
+        let until=input.valid_until.as_option()
+            .map(ContactPointV2Service::nanos).transpose()?;
+        let saved=party_relationships::create_typed(party_relationships::CreateInput{
+            id,from_party_id:input.from_party_id,to_party_id:input.to_party_id,
+            code:typ.code.clone(),directionality,from_role:typ.from_role.clone(),
+            to_role:typ.to_role.clone(),valid_from_unix_nanos:from,
+            valid_until_unix_nanos:until,
+        },&key,&self.d1()?,&self.tenant,&self.request_id).await
+            .map_err(|_|ConnectError::internal("Relationship D1 create failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(rel_wire::CreatePartyRelationshipResponse{
+            relationship:Some(Self::convert(&saved.relationship)?).into(),
+            receipt:Some(self.receipt(&saved)).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn update_party_relationship(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,rel_wire::UpdatePartyRelationshipRequest>,
+    )->ServiceResult<rel_wire::UpdatePartyRelationshipResponse>{
+        let input=req.to_owned_message();
+        let id=Self::valid_id(&input.relationship_id)?;
+        let (key,version)=AccountV2Service::precondition(input.precondition.as_option(),false)?;
+        let status=match input.status{
+            x if x==rel_wire::RelationshipStatus::RELATIONSHIP_STATUS_ACTIVE=>
+                party_relationships::StatusInput::Active,
+            x if x==rel_wire::RelationshipStatus::RELATIONSHIP_STATUS_INACTIVE=>
+                party_relationships::StatusInput::Inactive,
+            _=>return Err(ConnectError::invalid_argument("invalid RelationshipStatus")),
+        };
+        let from=Self::patch(input.valid_from.as_option())?;
+        let until=Self::patch(input.valid_until.as_option())?;
+        let saved=party_relationships::update_typed(party_relationships::UpdateCommand{
+            expected_version:version.unwrap_or_default(),status,
+            valid_from:from,valid_until:until,
+        },&key,&self.d1()?,&self.tenant,&id,&self.request_id).await
+            .map_err(|_|ConnectError::internal("Relationship D1 update failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(rel_wire::UpdatePartyRelationshipResponse{
+            relationship:Some(Self::convert(&saved.relationship)?).into(),
+            receipt:Some(self.receipt(&saved)).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn get_party_relationship(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,rel_wire::GetPartyRelationshipRequest>,
+    )->ServiceResult<rel_wire::GetPartyRelationshipResponse>{
+        let id=Self::valid_id(&req.relationship_id)?;
+        let relationship=party_relationships::load(&self.d1()?,&self.tenant,&id).await
+            .map_err(|_|ConnectError::internal("Relationship D1 read failed"))?
+            .ok_or_else(||ConnectError::not_found("PARTY_RELATIONSHIPS_NOT_FOUND"))?;
+        RpcResponse::ok(rel_wire::GetPartyRelationshipResponse{
+            relationship:Some(Self::convert(&relationship)?).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn list_party_relationships(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,rel_wire::ListPartyRelationshipsRequest>,
+    )->ServiceResult<rel_wire::ListPartyRelationshipsResponse>{
+        let size=if req.page.page_size==0{25}else{req.page.page_size};
+        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
+        let after=&req.page.page_token;
+        if !after.is_empty(){Self::valid_id(after)?;}
+        let party=req.party_id.as_deref();
+        if let Some(id)=party{
+            crm_party_relationships::PartyReference::try_new(id.to_owned())
+                .map_err(|_|ConnectError::invalid_argument("invalid Party filter"))?;
+        }
+        let (list,next)=party_relationships::list_page_typed(
+            &self.d1()?,&self.tenant,after,size as usize,party).await
+            .map_err(|_|ConnectError::internal("Relationship D1 list failed"))?;
+        let mut results=Vec::with_capacity(list.len());
+        for relationship in &list{results.push(Self::convert(relationship)?);}
+        RpcResponse::ok(rel_wire::ListPartyRelationshipsResponse{
+            relationships:results,
+            page_info:Some(core_v2::PageInfo{
+                next_page_token:next.unwrap_or_default(),..Default::default()
+            }).into(),..Default::default()
+        })
+    }
+}
+
 // Called by existing native-only dispatch AFTER signed Access authentication
 // and role decision. No second fetch endpoint, tenant header, or JS route.
 pub(super) async fn route(
@@ -804,6 +994,10 @@ pub(super) async fn route(
             request_id:request_id.to_owned(),
         }))
         .add_service(Arc::new(ContactPointV2Service {
+            env: Arc::clone(&env), tenant: tenant.to_owned(),
+            request_id:request_id.to_owned(),
+        }))
+        .add_service(Arc::new(RelationshipV2Service {
             env: Arc::clone(&env), tenant: tenant.to_owned(),
             request_id:request_id.to_owned(),
         }))

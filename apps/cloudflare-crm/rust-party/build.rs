@@ -10,6 +10,7 @@ fn main() {
     println!("cargo:rerun-if-changed=../../../proto/crm/parties/v3/party.proto");
     println!("cargo:rerun-if-changed=../../../proto/crm/accounts/v2/account.proto");
     println!("cargo:rerun-if-changed=../../../proto/crm/contact_points/v2/contact_point.proto");
+    println!("cargo:rerun-if-changed=../../../proto/crm/party_relationships/v2/relationship.proto");
     connectrpc_build::Config::new()
         .files(&["../../../proto/crm/core/v1/common.proto",
                  "../../../proto/crm/sales/v1/deal.proto",
@@ -17,7 +18,8 @@ fn main() {
                  "../../../proto/crm/core/v2/operation.proto",
                  "../../../proto/crm/parties/v3/party.proto",
                  "../../../proto/crm/accounts/v2/account.proto",
-                 "../../../proto/crm/contact_points/v2/contact_point.proto"])
+                 "../../../proto/crm/contact_points/v2/contact_point.proto",
+                 "../../../proto/crm/party_relationships/v2/relationship.proto"])
         .includes(&["../../../proto"])
         .include_file("_connectrpc.rs")
         .compile()

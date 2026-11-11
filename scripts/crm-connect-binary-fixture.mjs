@@ -68,3 +68,18 @@ export const binaryContactV2=(name,payload)=>{
  return toBinary(rpc.input,create(rpc.input,payload));
 };
 export const decodeContactV2=(name,bytes)=>fromBinary(contactV2Method(name).output,bytes);
+
+// Party Relationships v2: same descriptor-derived binary Connect wire.
+const relationshipService=registry.getService("crm.party_relationships.v2.PartyRelationshipService");
+if(!relationshipService)throw Error("compiled PartyRelationship v2 service missing");
+const relationshipMethod=name=>{
+ const method=relationshipService.methods.find(item=>item.name===name);
+ if(!method)throw Error("compiled PartyRelationship v2 RPC missing "+name);
+ return method;
+};
+export const relationshipV2Path=name=>"/crm.party_relationships.v2.PartyRelationshipService/"+relationshipMethod(name).name;
+export const binaryRelationshipV2=(name,payload)=>{
+ const rpc=relationshipMethod(name);
+ return toBinary(rpc.input,create(rpc.input,payload));
+};
+export const decodeRelationshipV2=(name,bytes)=>fromBinary(relationshipMethod(name).output,bytes);
