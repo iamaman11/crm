@@ -618,13 +618,15 @@ impl ContactPointV2Service{
             ..Default::default()
         }
     }
-    fn time_patch(patch:Option<&core_v2::TimestampPatch>,saved:Option<i64>)
-        ->std::result::Result<Option<i64>,ConnectError>{
-        let Some(patch)=patch else{return Ok(saved)};
+    fn time_patch(patch:Option<&core_v2::TimestampPatch>)
+        ->std::result::Result<contact_points::TimestampChange,ConnectError>{
+        use contact_points::TimestampChange;
+        let Some(patch)=patch else{return Ok(TimestampChange::Keep)};
         match patch.operation.as_ref(){
             Some(core_v2::timestamp_patch::Operation::Set(ts))=>
-                Self::nanos(ts).map(Some),
-            Some(core_v2::timestamp_patch::Operation::Clear(true))=>Ok(None),
+                Self::nanos(ts).map(TimestampChange::Set),
+            Some(core_v2::timestamp_patch::Operation::Clear(true))=>
+                Ok(TimestampChange::Clear),
             _=>Err(ConnectError::invalid_argument("invalid timestamp patch")),
         }
     }
@@ -727,13 +729,10 @@ impl contact_wire::ContactPointService for ContactPointV2Service{
             _=>return Err(ConnectError::invalid_argument("invalid ContactPointStatus")),
         };
         let db=self.d1()?;
-        let current=contact_points::load(&db,&self.tenant,&id).await
-            .map_err(|_|ConnectError::internal("ContactPoint D1 read failed"))?
-            .ok_or_else(||ConnectError::not_found("CONTACT_POINTS_NOT_FOUND"))?;
-        let from=Self::time_patch(input.valid_from.as_option(),
-            current.valid_from_unix_nanos())?;
-        let until=Self::time_patch(input.valid_until.as_option(),
-            current.valid_until_unix_nanos())?;
+        // Hash the unchanged wire patch intent before reading current D1 state;
+        // the existing owner checks its receipt first, even after later updates.
+        let from=Self::time_patch(input.valid_from.as_option())?;
+        let until=Self::time_patch(input.valid_until.as_option())?;
         let saved=contact_points::update_typed(contact_points::UpdateInput{
             expected_version:version.unwrap_or_default(),value:input.value,
             status,preferred:input.preferred,valid_from_unix_nanos:from,

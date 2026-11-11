@@ -47,6 +47,25 @@ pub(super) struct CreateInput {
     pub(super) valid_from_unix_nanos: Option<i64>,
     pub(super) valid_until_unix_nanos: Option<i64>,
 }
+// Hash patch INTENT in the existing receipt, never mutable D1 values.
+// Keep, Clear and Set serialize distinctly (nested Options do not).
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum TimestampChange {
+    Keep,
+    Clear,
+    Set(i64),
+}
+impl TimestampChange {
+    fn resolve(self, current: Option<i64>) -> Option<i64> {
+        match self {
+            Self::Keep => current,
+            Self::Clear => None,
+            Self::Set(value) => Some(value),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct UpdateInput {
@@ -54,8 +73,8 @@ pub(super) struct UpdateInput {
     pub(super) value: String,
     pub(super) status: StatusInput,
     pub(super) preferred: bool,
-    pub(super) valid_from_unix_nanos: Option<i64>,
-    pub(super) valid_until_unix_nanos: Option<i64>,
+    pub(super) valid_from_unix_nanos: TimestampChange,
+    pub(super) valid_until_unix_nanos: TimestampChange,
 }
 #[derive(Deserialize)]
 struct Row { id: String, state: String }
@@ -196,11 +215,13 @@ pub(super) async fn update_typed(input:UpdateInput,idem:&str,db:&D1Database,
     let Some(mut point)=load(db,tenant,id).await? else {
         return Ok(Err(failure("NOT_FOUND",404)));
     };
+    let from=input.valid_from_unix_nanos.resolve(point.valid_from_unix_nanos());
+    let until=input.valid_until_unix_nanos.resolve(point.valid_until_unix_nanos());
     if let Err(e)=point.apply_update(UpdateContactPoint{
         expected_version:input.expected_version,value:input.value,
         status:input.status.into(),preferred:input.preferred,
-        valid_from_unix_nanos:input.valid_from_unix_nanos,
-        valid_until_unix_nanos:input.valid_until_unix_nanos,
+        valid_from_unix_nanos:from,
+        valid_until_unix_nanos:until,
         occurred_at_unix_nanos:now_nanos(),
     }){
         return Ok(Err(failure(e.code.clone(),
@@ -222,16 +243,22 @@ pub(super) async fn update_typed(input:UpdateInput,idem:&str,db:&D1Database,
 pub(super) async fn list_page_typed(db:&D1Database,tenant:&str,after:&str,
     size:usize,party:Option<&str>,
 )->Result<(Vec<ContactPoint>,Option<String>)>{
-    let rows=bind(db,
-        "SELECT id,state FROM crm_contact_point_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?",
-        &[JsValue::from_str(tenant),JsValue::from_str(after),
-          JsValue::from_f64((size+1) as f64)])?.all().await?.results::<Row>()?;
+    // party_id is already a native indexed D1 column: no JSON scan needed.
+    let query=if party.is_some(){
+        "SELECT id,state FROM crm_contact_point_records WHERE tenant=? AND id>? AND party_id=? ORDER BY id LIMIT ?"
+    }else{
+        "SELECT id,state FROM crm_contact_point_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?"
+    };
+    let mut params=vec![JsValue::from_str(tenant),JsValue::from_str(after)];
+    if let Some(id)=party{params.push(JsValue::from_str(id));}
+    params.push(JsValue::from_f64((size+1) as f64));
+    let rows=bind(db,query,&params)?.all().await?.results::<Row>()?;
     let more=rows.len()>size;
     let next=if more{rows.get(size-1).map(|row|row.id.clone())}else{None};
     let mut contacts=Vec::new();
     for row in rows.iter().take(size){
         let point=decode(&row.state)?;
-        if party.is_none_or(|id|id==point.party_ref().as_str()){contacts.push(point);}
+        contacts.push(point);
     }
     Ok((contacts,next))
 }

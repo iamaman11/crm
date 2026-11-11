@@ -119,6 +119,28 @@ try{
        ?decodePartyV3(method,new Uint8Array(await response.arrayBuffer()))
        :await response.json()};
  };
+ // A real binary Connect paginated scan: every nonfinal cursor must carry a
+ // matching record. A filtered empty page with a cursor is a data-loss bug.
+ const collectPages=async(rpc,method,field,filter={})=>{
+   let token="",items=[];
+   const cursors=new Set();
+   for(let attempt=0;attempt<16;attempt++){
+     const result=await rpc(method,viewer,{...filter,page:{pageSize:1,pageToken:token}});
+     assert.equal(result.status,200,describeProtobuf(result.body));
+     const found=result.body[field]??[];
+     assert.ok(found.length<=1,"page_size=1 must bound the filtered result");
+     const next=result.body.pageInfo?.nextPageToken??"";
+     if(next){
+       assert.equal(found.length,1,"filtered cursor skipped a matching row");
+       assert(!cursors.has(next),"cursor cycle in filtered pagination");
+       cursors.add(next);
+     }
+     items.push(...found);
+     if(!next)return items;
+     token=next;
+   }
+   throw Error("filtered pagination never reached its last page");
+ };
  const id="native-v3-"+randomUUID();
  const creation={partyId:id,kind:2,displayName:"  Connect   Native  Rust ",
    precondition:{idempotencyKey:"candidate-v3-create-001"}};
@@ -174,6 +196,29 @@ try{
    "AND subject_id='"+id+"'")[0].n,2);
  assert.equal((await v3("GetParty",admin,{partyId:id})).body.party?.version,2n);
 
+ // Interleave nonmatching person rows between matching organizations.
+ // The old Rust post-LIMIT filter produced an empty middle page here.
+ const pagingPersonId="native-page-person-a-"+randomUUID();
+ for(const [index,personId] of [pagingPersonId,"native-page-person-b-"+randomUUID()].entries()){
+   const made=await v3("CreateParty",admin,{
+     partyId:personId,kind:1,displayName:"Paging Person "+index,
+     precondition:{idempotencyKey:"page-person-create-"+index}});
+   assert.equal(made.status,200,describeProtobuf(made.body));
+ }
+ const organizations=await collectPages(v3,"ListParties","parties",{kind:2});
+ assert.deepEqual(organizations.map(p=>p.partyId),["binary-rpc-proof-01",id]);
+ const personPages=await collectPages(v3,"ListParties","parties",{kind:1});
+ assert.equal(personPages.length,2);
+ assert.deepEqual(personPages.map(p=>p.partyId),
+   [...personPages.map(p=>p.partyId)].sort());
+ assert.ok(personPages.some(p=>p.partyId===pagingPersonId));
+ const beyondParty=await v3("ListParties",viewer,{kind:2,page:{pageSize:1,pageToken:id}});
+ assert.equal(beyondParty.status,200);
+ assert.equal(beyondParty.body.parties.length,0);
+ assert.ok(!beyondParty.body.pageInfo?.nextPageToken);
+ assert.equal((await v3("ListParties",tenantB,{kind:2,page:{pageSize:1}}))
+   .body.parties.length,0);
+ console.log(JSON.stringify({event:"crm.native-g3-party-filtered-pagination",result:"PASS"}));
  // Accounts v2: original Account aggregate and D1 trigger, not a pilot record.
  const accountV2=async(method,token,payload)=>{
    const response=await fetch(base+accountV2Path(method),{method:"POST",
@@ -248,6 +293,33 @@ try{
    signed_access:true,tenant_ab:true,viewer_write_denied:true,
    d1_cas:true,d1_receipts:true,d1_audit:true,published_active:false}));
 
+
+ // Account filter must run BEFORE LIMIT: active records sort before inactive.
+ const accountNextId="account-zzz-inactive-"+randomUUID();
+ for(const [index,accountToCreate] of [
+   "account-aaa-active-"+randomUUID(),"account-aab-active-"+randomUUID(),accountNextId
+ ].entries()){
+   const made=await accountV2("CreateAccount",admin,{
+     accountId:accountToCreate,name:"Paging Account "+index,primaryPartyId:id,
+     precondition:{idempotencyKey:"page-account-create-"+index}});
+   assert.equal(made.status,200,describeProtobuf(made.body));
+ }
+ const inactiveLater=await accountV2("UpdateAccount",admin,{
+   accountId:accountNextId,name:"Later Inactive Account",status:2,
+   precondition:{expectedVersion:1n,idempotencyKey:"page-account-inactive"}});
+ assert.equal(inactiveLater.status,200,describeProtobuf(inactiveLater.body));
+ const inactiveAccounts=await collectPages(accountV2,"ListAccounts","accounts",{status:2});
+ assert.deepEqual(inactiveAccounts.map(a=>a.accountId),[accountId,accountNextId]);
+ assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{status:1})).length,2);
+ assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{status:2})).length,2);
+ const afterAccounts=await accountV2("ListAccounts",viewer,{
+   page:{pageSize:1,pageToken:accountNextId},status:2});
+ assert.equal(afterAccounts.status,200);
+ assert.equal(afterAccounts.body.accounts.length,0);
+ assert.ok(!afterAccounts.body.pageInfo?.nextPageToken);
+ assert.equal((await accountV2("ListAccounts",tenantB,{page:{pageSize:1},status:2}))
+   .body.accounts.length,0);
+ console.log(JSON.stringify({event:"crm.native-g3-account-filtered-pagination",result:"PASS"}));
 
  // ContactPoints v2 uses the original Party-owned contact aggregate, NEVER
  // the removed pilot crm_contacts table. No browser-written verified=true.
@@ -334,6 +406,78 @@ try{
    "AND key IN ('candidate-v2-contact-create-001','candidate-v2-contact-update-001')")[0].n,2);
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
    "AND subject_id='"+contactId+"' AND action LIKE 'contact_points.%'")[0].n,2);
+ // Filtered ContactPoint list uses the EXISTING D1 party_id column.
+ // Nonmatches sort before our two matches, exposing the old LIMIT bug.
+ const contactLastId="contact-zzz-ours-"+randomUUID();
+ for(const [index,pointToCreate] of [
+   ["contact-aaa-other-"+randomUUID(),pagingPersonId],
+   ["contact-aab-other-"+randomUUID(),pagingPersonId],
+   [contactLastId,id]
+ ].entries()){
+   const made=await contactV2("CreateContactPoint",admin,{
+     contactPointId:pointToCreate[0],partyId:pointToCreate[1],kind:1,
+     value:"page-"+index+"@example.org",preferred:false,
+     precondition:{idempotencyKey:"page-contact-create-"+index}});
+   assert.equal(made.status,200,describeProtobuf(made.body));
+ }
+ const filteredContacts=await collectPages(contactV2,"ListContactPoints",
+   "contactPoints",{partyId:id});
+ assert.deepEqual(filteredContacts.map(p=>p.contactPointId),[contactId,contactLastId]);
+ assert.equal((await collectPages(contactV2,"ListContactPoints",
+   "contactPoints",{partyId:"missing-party"})).length,0);
+ assert.equal((await contactV2("ListContactPoints",tenantB,{
+   page:{pageSize:1},partyId:id})).body.contactPoints.length,0);
+ const beyondContact=await contactV2("ListContactPoints",viewer,{
+   partyId:id,page:{pageSize:1,pageToken:contactLastId}});
+ assert.equal(beyondContact.status,200);
+ assert.equal(beyondContact.body.contactPoints.length,0);
+ assert.ok(!beyondContact.body.pageInfo?.nextPageToken);
+
+ // Omitted timestamp patches mean KEEP. Replay the SAME request after a
+ // later successful update which changes both current timestamp fields.
+ const keepRequest={contactPointId:contactId,value:"keep-timestamps@example.org",
+   status:1,preferred:false,
+   precondition:{expectedVersion:2n,idempotencyKey:"candidate-v2-contact-keep-001"}};
+ const keep=await contactV2("UpdateContactPoint",admin,keepRequest);
+ assert.equal(keep.status,200,describeProtobuf(keep.body));
+ assert.equal(keep.body.contactPoint?.version,3n);
+ assert.equal(keep.body.contactPoint?.validFrom?.seconds,1760000000n);
+ assert.equal(keep.body.contactPoint?.validUntil,undefined);
+ const later=await contactV2("UpdateContactPoint",admin,{
+   ...keepRequest,value:"later-timestamps@example.org",
+   validFrom:{operation:{case:"set",value:{seconds:1770000000n,nanos:3}}},
+   validUntil:{operation:{case:"set",value:{seconds:1870000000n,nanos:9}}},
+   precondition:{expectedVersion:3n,idempotencyKey:"candidate-v2-contact-later-001"}});
+ assert.equal(later.status,200,describeProtobuf(later.body));
+ assert.equal(later.body.contactPoint?.version,4n);
+ const beforeReplay=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+contactId+"'")[0].n;
+ const restoredReceipt=await contactV2("UpdateContactPoint",admin,keepRequest);
+ assert.equal(restoredReceipt.status,200,describeProtobuf(restoredReceipt.body));
+ assert.equal(restoredReceipt.body.receipt?.replayed,true);
+ assert.equal(restoredReceipt.body.receipt?.resourceVersion,3n);
+ assert.equal(restoredReceipt.body.contactPoint?.version,3n);
+ assert.equal(restoredReceipt.body.contactPoint?.validFrom?.seconds,1760000000n);
+ assert.equal(restoredReceipt.body.contactPoint?.validUntil,undefined);
+ assert.equal((await contactV2("UpdateContactPoint",admin,{
+   ...keepRequest,value:"not-the-same-request@example.org"})).status,409);
+ assert.equal((await contactV2("UpdateContactPoint",admin,{
+   ...keepRequest,precondition:{expectedVersion:2n,
+     idempotencyKey:"candidate-v2-contact-stale-after-later"}})).status,409);
+ const currentPoint=await contactV2("GetContactPoint",viewer,{contactPointId:contactId});
+ assert.equal(currentPoint.body.contactPoint?.version,4n);
+ assert.equal(currentPoint.body.contactPoint?.validFrom?.seconds,1770000000n);
+ assert.equal(currentPoint.body.contactPoint?.validUntil?.seconds,1870000000n);
+ assert.equal(sql("SELECT version FROM crm_contact_point_records WHERE tenant='tenant-a' "+
+   "AND id='"+contactId+"'")[0].version,4);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+contactId+"'")[0].n,beforeReplay);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_contact_point_receipts "+
+   "WHERE tenant='tenant-a' AND key IN ("+
+   "'candidate-v2-contact-keep-001','candidate-v2-contact-later-001')")[0].n,2);
+ console.log(JSON.stringify({event:"crm.native-g3-contact-pagination-interleaved-replay",
+   result:"PASS",same_original_receipt:true,no_extra_write:true,tenant_isolated:true}));
+
  console.log(JSON.stringify({event:"crm.native-g3-contact-points-v2-candidate",result:"PASS",
    generated_binary:true,owner:"crm.contact-points",
    rpc_methods:["CreateContactPoint","UpdateContactPoint","GetContactPoint","ListContactPoints"],

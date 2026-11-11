@@ -183,18 +183,26 @@ pub(super) async fn update_typed(input: UpdateInput, key: &str, db: &D1Database,
 pub(super) async fn list_page_typed(db:&D1Database,tenant:&str,after:&str,
     size:usize,status:Option<AccountStatus>,
 ) -> Result<(Vec<Account>,Option<String>)>{
-    let rows=bind(db,
-        "SELECT id,state FROM crm_account_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?",
-        &[JsValue::from_str(tenant),JsValue::from_str(after),
-          JsValue::from_f64((size+1) as f64)])?.all().await?.results::<Row>()?;
+    // Original Account persisted state has top-level snake_case status.
+    // Select and page the filtered rows in the same tenant-scoped D1 query.
+    let filter=status.map(|value|match value {
+        AccountStatus::Active=>"active",AccountStatus::Inactive=>"inactive",
+    });
+    let query=if filter.is_some(){
+        "SELECT id,state FROM crm_account_records WHERE tenant=? AND id>? AND json_extract(state,'$.status')=? ORDER BY id LIMIT ?"
+    }else{
+        "SELECT id,state FROM crm_account_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?"
+    };
+    let mut params=vec![JsValue::from_str(tenant),JsValue::from_str(after)];
+    if let Some(value)=filter{params.push(JsValue::from_str(value));}
+    params.push(JsValue::from_f64((size+1) as f64));
+    let rows=bind(db,query,&params)?.all().await?.results::<Row>()?;
     let has_more=rows.len()>size;
     let next=if has_more {rows.get(size-1).map(|r|r.id.clone())} else {None};
     let mut accounts=Vec::new();
     for row in rows.iter().take(size){
         let account=decoded(&row.state)?;
-        if status.is_none_or(|selected|selected==account.status()){
-            accounts.push(account);
-        }
+        accounts.push(account);
     }
     Ok((accounts,next))
 }

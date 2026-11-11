@@ -226,18 +226,28 @@ pub(super) async fn list_page_typed(
     db: &D1Database, tenant: &str, after: &str,
     page_size: usize, kind: Option<PartyKind>,
 ) -> Result<(Vec<Party>, Option<String>)> {
-    let rows = bind(db,
-        "SELECT id,state FROM crm_party_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?",
-        &[JsValue::from_str(tenant), JsValue::from_str(after),
-          JsValue::from_f64((page_size + 1) as f64)])?
-        .all().await?.results::<PartyRow>()?;
+    // The original codec stores kind as top-level snake_case JSON.
+    // Filter before LIMIT so a page cursor never skips matching records.
+    let filter = kind.map(|value| match value {
+        PartyKind::Person => "person",
+        PartyKind::Organization => "organization",
+    });
+    let query = if filter.is_some() {
+        "SELECT id,state FROM crm_party_records WHERE tenant=? AND id>? AND json_extract(state,'$.kind')=? ORDER BY id LIMIT ?"
+    } else {
+        "SELECT id,state FROM crm_party_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?"
+    };
+    let mut params = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
+    if let Some(value) = filter { params.push(JsValue::from_str(value)); }
+    params.push(JsValue::from_f64((page_size + 1) as f64));
+    let rows = bind(db, query, &params)?.all().await?.results::<PartyRow>()?;
     let has_more = rows.len() > page_size;
     let next = if has_more { rows.get(page_size-1).map(|r| r.id.clone()) } else { None };
     let mut items = Vec::new();
     for row in rows.iter().take(page_size) {
         let party = decode_party_state(row.state.as_bytes())
             .map_err(|e| worker::Error::RustError(e.code))?;
-        if kind.is_none_or(|selected| selected == party.kind()) { items.push(party); }
+        items.push(party);
     }
     Ok((items, next))
 }
