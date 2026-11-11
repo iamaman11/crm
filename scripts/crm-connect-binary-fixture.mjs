@@ -98,3 +98,33 @@ export const binaryTaskV2=(name,payload)=>{
  return toBinary(rpc.input,create(rpc.input,payload));
 };
 export const decodeTaskV2=(name,bytes)=>fromBinary(taskMethod(name).output,bytes);
+
+// Quality and identity read-only original Rust owners, same generated descriptors.
+const qualityService=registry.getService("crm.data_quality.v2.DataQualityService");
+if(!qualityService)throw Error("compiled DataQuality v2 service missing");
+const qualityMethod=name=>{
+ const method=qualityService.methods.find(item=>item.name===name);
+ if(!method)throw Error("compiled DataQuality v2 RPC missing "+name);
+ return method;
+};
+export const qualityV2Path=name=>"/crm.data_quality.v2.DataQualityService/"+qualityMethod(name).name;
+export const binaryQualityV2=(name,payload)=>{
+ const method=qualityMethod(name);
+ return toBinary(method.input,create(method.input,payload));
+};
+export const decodeQualityV2=(name,bytes)=>fromBinary(qualityMethod(name).output,bytes);
+
+const identityService=registry.getService("crm.identity_resolution.v2.IdentityResolutionService");
+if(!identityService)throw Error("compiled IdentityResolution v2 service missing");
+const identityMethod=name=>{
+ const method=identityService.methods.find(item=>item.name===name);
+ if(!method)throw Error("compiled IdentityResolution v2 RPC missing "+name);
+ return method;
+};
+export const identityV2Path=name=>"/crm.identity_resolution.v2.IdentityResolutionService/"+identityMethod(name).name;
+export const binaryIdentityV2=(name,payload)=>{
+ const method=identityMethod(name);
+ return toBinary(method.input,create(method.input,payload));
+};
+export const decodeIdentityV2=(name,bytes)=>fromBinary(identityMethod(name).output,bytes);
+

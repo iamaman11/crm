@@ -13,7 +13,7 @@ use buffa::Message as BuffaMessage;
 use prost::Message as ProstMessage;
 use serde::Deserialize;
 use wasm_bindgen::JsValue;
-use super::{accounts, activity_tasks, bind, contact_points, parties, party_relationships, sales_contract, sales_deals};
+use super::{accounts, activity_tasks, bind, contact_points, data_quality, identity_resolution, parties, party_relationships, sales_contract, sales_deals};
 use crm_parties::PartyKind as DomainPartyKind;
 use crm_customer_accounts::{Account as DomainAccount, AccountPartyRole as DomainAccountPartyRole, AccountStatus as DomainAccountStatus};
 use crm_contact_points::{ContactPoint as DomainContactPoint, ContactPointKind as DomainContactPointKind,
@@ -27,6 +27,7 @@ use crm_activities::{
     Task as DomainTask, TaskPriority as DomainTaskPriority,
     TaskStatus as DomainTaskStatus,
 };
+use crm_identity_resolution::{CanonicalPartyPair, PartyReference};
 use buffa_types::google::protobuf::Timestamp;
 use crm_proto_contracts::crm::{core::v1 as core_contract, sales::v1 as sales_contract_proto};
 
@@ -85,6 +86,20 @@ pub mod proto {
                 include!(concat!(env!("OUT_DIR"), "/crm.activities.v2.mod.rs"));
             }
         }
+        pub mod data_quality {
+            use super::*;
+            pub mod v2 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.data_quality.v2.mod.rs"));
+            }
+        }
+        pub mod identity_resolution {
+            use super::*;
+            pub mod v2 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.identity_resolution.v2.mod.rs"));
+            }
+        }
         pub mod parties {
             use super::*;
             pub mod v2 {
@@ -106,6 +121,8 @@ use proto::crm::accounts::v2 as account_wire;
 use proto::crm::contact_points::v2 as contact_wire;
 use proto::crm::party_relationships::v2 as rel_wire;
 use proto::crm::activities::v2 as task_wire;
+use proto::crm::data_quality::v2 as quality_wire;
+use proto::crm::identity_resolution::v2 as identity_wire;
 
 #[derive(Deserialize)]
 struct Row { state: String }
@@ -1149,6 +1166,126 @@ impl task_wire::TaskService for TaskV2Service {
     }
 }
 
+
+// Original read-only crm-data-quality: generated Protobuf, original rule set,
+// tenant-scoped Party read. No shadow rule engine or persisted quality score.
+struct DataQualityV2Service{
+    env:Arc<Env>,
+    tenant:String,
+}
+impl quality_wire::DataQualityService for DataQualityV2Service{
+    #[worker::send]
+    async fn evaluate_party_name(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,quality_wire::EvaluatePartyNameRequest>,
+    )->ServiceResult<quality_wire::EvaluatePartyNameResponse>{
+        let id=PartyV3Service::valid_id(&req.party_id)?;
+        let db=self.env.d1("DB")
+            .map_err(|_|ConnectError::internal("D1 unavailable"))?;
+        let evaluation=data_quality::evaluate_typed(&db,&self.tenant,id.as_str()).await
+            .map_err(|_|ConnectError::internal("DataQuality original owner D1 read failed"))?
+            .ok_or_else(||ConnectError::not_found("PARTIES_NOT_FOUND"))?;
+        let mut checks=Vec::with_capacity(evaluation.checks.len());
+        for check in &evaluation.checks{
+            checks.push(quality_wire::QualityRuleResult{
+                rule_key:check.rule_key.clone(),title:check.title.clone(),
+                remediation:check.remediation.clone(),passed:check.passed,
+                reason_code:check.reason_code.clone(),
+                severity_code:check.severity_code.to_owned(),
+                ..Default::default()
+            });
+        }
+        RpcResponse::ok(quality_wire::EvaluatePartyNameResponse{
+            party:Some(PartyV3Service::convert(&evaluation.party)?).into(),
+            rule_set_version:evaluation.rule_set_version,
+            checks,failed_count:evaluation.failed_count,
+            ..Default::default()
+        })
+    }
+}
+
+// Read-only crm-identity-resolution. Same original discovered observations,
+// same tenant-bound D1. Identical email does NOT confirm identity.
+struct IdentityV2Service{
+    env:Arc<Env>,
+    tenant:String,
+}
+impl identity_wire::IdentityResolutionService for IdentityV2Service{
+    #[worker::send]
+    async fn find_shared_email_candidates(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,identity_wire::FindSharedEmailCandidatesRequest>,
+    )->ServiceResult<identity_wire::FindSharedEmailCandidatesResponse>{
+        let size=if req.page.page_size==0{25}else{req.page.page_size};
+        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
+        // Numeric offset is an opaque cursor over the bounded, deterministic
+        // canonical pair order. Never LIMIT raw contacts before domain filtering.
+        let after=&req.page.page_token;
+        let offset=if after.is_empty(){0}else{
+            let parsed=after.parse::<usize>()
+                .map_err(|_|ConnectError::invalid_argument("invalid page_token"))?;
+            if parsed==0 || parsed.to_string()!=after.as_str(){
+                return Err(ConnectError::invalid_argument("invalid page_token"));
+            }
+            parsed
+        };
+        let db=self.env.d1("DB")
+            .map_err(|_|ConnectError::internal("D1 unavailable"))?;
+        let candidates=match identity_resolution::candidates_typed(&db,&self.tenant).await
+            .map_err(|_|ConnectError::internal("Identity original owner read failed"))? {
+            Ok(items)=>items,
+            Err(identity_resolution::CandidateError::ScanLimit)=>
+                return Err(ConnectError::unavailable("IDENTITY_RESOLUTION_SCAN_LIMIT_REACHED")),
+            Err(identity_resolution::CandidateError::SourceChanged)=>
+                return Err(ConnectError::aborted("IDENTITY_RESOLUTION_SOURCE_CHANGED")),
+        };
+        let mut items=Vec::new();
+        for candidate in candidates.iter().skip(offset).take(size as usize){
+            items.push(identity_wire::SharedEmailCandidate{
+                first_party:Some(PartyV3Service::convert(&candidate.first)?).into(),
+                second_party:Some(PartyV3Service::convert(&candidate.second)?).into(),
+                first_contact_point_id:candidate.first_contact_point_id.clone(),
+                second_contact_point_id:candidate.second_contact_point_id.clone(),
+                both_contacts_verified:candidate.both_verified,
+                ..Default::default()
+            });
+        }
+        let next=if offset.saturating_add(size as usize)<candidates.len(){
+            (offset+size as usize).to_string()
+        }else{String::new()};
+        RpcResponse::ok(identity_wire::FindSharedEmailCandidatesResponse{
+            candidates:items,
+            page_info:Some(core_v2::PageInfo{
+                next_page_token:next,..Default::default()
+            }).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn compare_parties(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,identity_wire::ComparePartiesRequest>,
+    )->ServiceResult<identity_wire::ComparePartiesResponse>{
+        let first=PartyV3Service::valid_id(&req.first_party_id)?;
+        let second=PartyV3Service::valid_id(&req.second_party_id)?;
+        let pair=CanonicalPartyPair::try_new(
+            PartyReference::try_new(first.as_str())
+                .map_err(|_|ConnectError::invalid_argument("invalid first_party_id"))?,
+            PartyReference::try_new(second.as_str())
+                .map_err(|_|ConnectError::invalid_argument("invalid second_party_id"))?,
+        ).map_err(|_|ConnectError::invalid_argument("IDENTITY_RESOLUTION_SELF_PAIR_INVALID"))?;
+        let db=self.env.d1("DB")
+            .map_err(|_|ConnectError::internal("D1 unavailable"))?;
+        let comparison=identity_resolution::compare_typed(
+            &db,&self.tenant,&pair,first.as_str()).await
+            .map_err(|_|ConnectError::internal("Identity original Party read failed"))?
+            .ok_or_else(||ConnectError::not_found("PARTIES_NOT_FOUND"))?;
+        RpcResponse::ok(identity_wire::ComparePartiesResponse{
+            first_party:Some(PartyV3Service::convert(&comparison.first)?).into(),
+            second_party:Some(PartyV3Service::convert(&comparison.second)?).into(),
+            same_party_id:false,identity_confirmed:false,
+            ..Default::default()
+        })
+    }
+}
+
 // Called by existing native-only dispatch AFTER signed Access authentication
 // and role decision. No second fetch endpoint, tenant header, or JS route.
 pub(super) async fn route(
@@ -1179,6 +1316,12 @@ pub(super) async fn route(
         .add_service(Arc::new(TaskV2Service {
             env: Arc::clone(&env),tenant:tenant.to_owned(),
             actor:actor.to_owned(),request_id:request_id.to_owned(),
+        }))
+        .add_service(Arc::new(DataQualityV2Service{
+            env:Arc::clone(&env),tenant:tenant.to_owned(),
+        }))
+        .add_service(Arc::new(IdentityV2Service{
+            env:Arc::clone(&env),tenant:tenant.to_owned(),
         }))
         .add_service(Arc::new(SalesService {
             env,tenant:tenant.to_owned(),

@@ -11,7 +11,9 @@ import {binaryPartyGet,decodePartyGet,partyGetPath,
   binaryAccountV2,decodeAccountV2,accountV2Path,
   binaryContactV2,decodeContactV2,contactV2Path,
   binaryRelationshipV2,decodeRelationshipV2,relationshipV2Path,
-  binaryTaskV2,decodeTaskV2,taskV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  binaryTaskV2,decodeTaskV2,taskV2Path,
+  binaryQualityV2,decodeQualityV2,qualityV2Path,
+  binaryIdentityV2,decodeIdentityV2,identityV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-contract-only-"));
 const base="http://127.0.0.1:18789";
@@ -744,6 +746,94 @@ try{
    filtered_pagination:true,account_fk:true,d1_cas:true,
    no_op_without_write:true,replay:true,d1_receipts:true,d1_audit:true,
    published_active:false}));
+
+
+ // Original read-only DataQuality and Identity Resolution, signed binary
+ // Connect from the exact generated descriptor, with tenant A/B and viewer.
+ const signedReadOnly=(path,encode,decode)=>async(method,token,payload)=>{
+   const r=await fetch(base+path(method),{method:"POST",headers:{
+     "content-type":"application/proto","connect-protocol-version":"1",
+     ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:encode(method,payload)});
+   return {status:r.status,headers:r.headers,
+     body:r.status<400?decode(method,new Uint8Array(await r.arrayBuffer())):await r.json()};
+ };
+ const qualityV2=signedReadOnly(qualityV2Path,binaryQualityV2,decodeQualityV2);
+ const identityV2=signedReadOnly(identityV2Path,binaryIdentityV2,decodeIdentityV2);
+ assert.equal((await qualityV2("EvaluatePartyName",null,{partyId:id})).status,401);
+ assert.equal((await qualityV2("EvaluatePartyName",tenantB,{partyId:id})).status,404);
+ assert.equal((await qualityV2("EvaluatePartyName",viewer,{partyId:""})).status,400);
+ assert.equal((await qualityV2("EvaluatePartyName",viewer,{partyId:"missing-party"})).status,404);
+ const quality=await qualityV2("EvaluatePartyName",viewer,{partyId:id});
+ assert.equal(quality.status,200,describeProtobuf(quality.body));
+ assert.equal(quality.body.party?.partyId,id);
+ assert.ok(quality.body.ruleSetVersion);
+ assert.equal(quality.body.checks.length,2);
+ assert.equal(quality.body.failedCount,0);
+ assert.ok(quality.body.checks.every(c=>c.passed));
+ const shortQualityId="quality-short-"+randomUUID();
+ const shortCreated=await v3("CreateParty",admin,{
+   partyId:shortQualityId,kind:1,displayName:"A",
+   precondition:{idempotencyKey:"quality-short-create"}});
+ assert.equal(shortCreated.status,200,describeProtobuf(shortCreated.body));
+ const poorQuality=await qualityV2("EvaluatePartyName",viewer,{partyId:shortQualityId});
+ assert.equal(poorQuality.status,200,describeProtobuf(poorQuality.body));
+ assert.equal(poorQuality.body.failedCount,1);
+ assert.equal(poorQuality.body.checks.filter(x=>!x.passed).length,1);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+shortQualityId+"'")[0].n,1,
+   "quality read must not append audit or finding");
+ console.log(JSON.stringify({event:"crm.native-g3-data-quality-v2-candidate",
+   result:"PASS",rpc_methods:["EvaluatePartyName"],generated_binary:true,
+   original_owner:"crm.data-quality",tenant_ab:true,viewer_read:true,
+   no_duplicate_rules:true,no_writes:true,published_active:false}));
+
+ const beforeCandidates=await identityV2("FindSharedEmailCandidates",viewer,{page:{pageSize:1}});
+ assert.equal(beforeCandidates.status,200,describeProtobuf(beforeCandidates.body));
+ assert.equal(beforeCandidates.body.candidates.length,0);
+ const auditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n;
+ for(const [index,partyId] of [pagingPersonId,"binary-rpc-proof-01"].entries()){
+   const contact=await contactV2("CreateContactPoint",admin,{
+     contactPointId:"shared-email-"+index+"-"+randomUUID(),
+     partyId,kind:1,value:"later-timestamps@example.org",preferred:false,
+     precondition:{idempotencyKey:"shared-email-create-"+index}});
+   assert.equal(contact.status,200,describeProtobuf(contact.body));
+   assert.equal(contact.body.contactPoint?.verified,false);
+ }
+ const auditAfter=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n;
+ assert.equal(auditAfter,auditBefore+2);
+ assert.equal((await identityV2("FindSharedEmailCandidates",null,{})).status,401);
+ assert.equal((await identityV2("FindSharedEmailCandidates",viewer,{page:{pageSize:101}})).status,400);
+ assert.equal((await identityV2("FindSharedEmailCandidates",viewer,{
+   page:{pageSize:1,pageToken:"invalid"}})).status,400);
+ assert.equal((await identityV2("FindSharedEmailCandidates",tenantB,{
+   page:{pageSize:1}})).body.candidates.length,0);
+ const matches=await collectPages(identityV2,"FindSharedEmailCandidates","candidates");
+ assert.equal(matches.length,3,"three canonical pair observations");
+ assert.ok(matches.every(c=>!c.bothContactsVerified));
+ const pairs=matches.map(c=>[c.firstParty?.partyId,c.secondParty?.partyId].join("|"));
+ assert.equal(new Set(pairs).size,3);
+ assert.ok(matches.every(c=>c.firstParty.partyId<c.secondParty.partyId));
+ const compare={firstPartyId:pagingPersonId,secondPartyId:id};
+ assert.equal((await identityV2("CompareParties",null,compare)).status,401);
+ assert.equal((await identityV2("CompareParties",tenantB,compare)).status,404);
+ assert.equal((await identityV2("CompareParties",viewer,{
+   firstPartyId:id,secondPartyId:id})).status,400);
+ assert.equal((await identityV2("CompareParties",viewer,{
+   firstPartyId:id,secondPartyId:"missing-party"})).status,404);
+ const compared=await identityV2("CompareParties",viewer,compare);
+ assert.equal(compared.status,200,describeProtobuf(compared.body));
+ assert.equal(compared.body.firstParty?.partyId,pagingPersonId);
+ assert.equal(compared.body.secondParty?.partyId,id);
+ assert.equal(compared.body.samePartyId,false);
+ assert.equal(compared.body.identityConfirmed,false);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n,
+   auditAfter,"read-only identity operations must not write audit");
+ console.log(JSON.stringify({event:"crm.native-g3-identity-resolution-v2-candidate",
+   result:"PASS",rpc_methods:["FindSharedEmailCandidates","CompareParties"],
+   generated_binary:true,original_owner:"crm.identity-resolution",
+   tenant_ab:true,viewer_read:true,pagination:true,no_identity_verdict:true,
+   no_writes:true,published_active:false}));
 
  console.log(JSON.stringify({event:"crm.native-g3-party-v3-candidate",
    result:"PASS",generated_binary:true,owner:"crm.parties",
