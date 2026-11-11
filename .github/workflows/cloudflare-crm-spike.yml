@@ -117,6 +117,7 @@ jobs:
           node --test scripts/crm-architecture-ast.test.mjs
           test -s packages/client/gen/crm/sales/v1/deal_pb.ts
           pnpm --filter @ultimate-crm/client typecheck
+          pnpm exec vitest run packages/client/src/cloudflare-v2-contract.test.ts
           pnpm --filter @ultimate-crm/ui typecheck
           # A frozen checkout never changes the source lockfile.
           git diff --exit-code -- pnpm-lock.yaml

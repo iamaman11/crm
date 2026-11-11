@@ -98,12 +98,25 @@ export function inspectUiFile(sourceText,file){
 
 function descriptorMethods(path){
  const set=fromBinary(FileDescriptorSetSchema,readFileSync(path));
+ const types=new Map();
+ for(const file of set.file)for(const message of file.messageType){
+  const key=file.package+"."+message.name;
+  types.set(key,message.field.map(field=>({
+   name:field.name,number:field.number,type:field.type,
+   type_name:(field.typeName||"").replace(/^\./,""),
+   repeated:field.label===3,optional:field.proto3Optional,
+   oneof_index:field.oneofIndex,
+  })));
+ }
  const methods=[];
  for(const file of set.file)for(const service of file.service)
-  for(const method of service.method)
+  for(const method of service.method){
+   const input=(method.inputType||"").replace(/^\./,"");
+   const output=(method.outputType||"").replace(/^\./,"");
    methods.push({path:"/"+file.package+"."+service.name+"/"+method.name,
-    input:(method.inputType||"").replace(/^\./,""),
-    output:(method.outputType||"").replace(/^\./,""),file:file.name});
+    input,output,file:file.name,
+    input_fields:types.get(input)||[],output_fields:types.get(output)||[]});
+  }
  return methods.sort((a,b)=>a.path.localeCompare(b.path));
 }
 
@@ -121,6 +134,7 @@ export function deriveMatrix({files,modules,descriptors,phase,sha}){
   .map(([path,binding])=>({path,module_id:binding.module_id,
    linked:binding.linked,request:binding.request,response:binding.response,
    descriptor_present:actual.has(path),
+   compiled_signature:actual.get(path)||null,
    active:modules.active_rpc_paths.includes(path)}));
  const unmatched=declared.filter(x=>!x.descriptor_present);
  const active=modules.active_rpc_paths.map(path=>{
@@ -139,13 +153,14 @@ export function deriveMatrix({files,modules,descriptors,phase,sha}){
   evidence:"React TypeScript AST + canonical module.yaml/Cargo report + compiled Buf FileDescriptorSet",
   ui:{files:files.map(x=>({file:x.file,controls:x.controls.length,
    legacy_requests:x.requests.length})),controls,legacy_requests:requests,
-   dynamic_legacy_requests:dynamic,verified_button_to_rpc_links:[],
-   note:"Not linked: UI click -> RPC -> Rust owner -> D1 must be established by executable acceptance tests"},
+   dynamic_legacy_requests:dynamic,
+   acceptance:"NOT_MEASURED: AST discovery is not browser click -> RPC -> Rust -> D1 proof"},
   protobuf:{compiled_method_count:descriptors.length,canonical_bindings:declared,
-   bindings_missing_descriptors:unmatched,active_methods:active},
+   bindings_missing_descriptors:unmatched,active_methods:active,
+   activation_evidence:"active-connect.json is provisional; route execution must be proven in workerd"},
   summary:{ui_controls:controls.length,legacy_ui_calls:requests.length,
    dynamic_legacy_calls:dynamic.length,declared_rpc_bindings:declared.length,
-   active_rpc_methods:active.length,verified_button_to_rpc_links:0}};
+   active_rpc_methods:active.length}};
 }
 export function run(){
  const outIndex=process.argv.indexOf("--output");
