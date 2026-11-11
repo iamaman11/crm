@@ -5,6 +5,7 @@ import { PartyService as PartyV3 } from "../gen/crm/parties/v3/party_pb";
 import { AccountService } from "../gen/crm/accounts/v2/account_pb";
 import { ContactPointService } from "../gen/crm/contact_points/v2/contact_point_pb";
 import { PartyRelationshipService } from "../gen/crm/party_relationships/v2/relationship_pb";
+import { TaskService } from "../gen/crm/activities/v2/task_pb";
 
 // One generated binary Connect client for the single Rust Worker.
 // Cloudflare Access supplies identity. Browser NEVER supplies tenant/actor.
@@ -18,5 +19,6 @@ export function createCloudflareCrmClient(baseUrl: string) {
     accounts: createClient(AccountService, transport),
     contactPoints: createClient(ContactPointService, transport),
     relationships: createClient(PartyRelationshipService, transport),
+    tasks: createClient(TaskService, transport),
   };
 }

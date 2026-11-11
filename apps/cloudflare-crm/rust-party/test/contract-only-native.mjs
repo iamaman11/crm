@@ -10,7 +10,8 @@ import {binaryPartyGet,decodePartyGet,partyGetPath,
   binaryPartyV3,decodePartyV3,partyV3Path,
   binaryAccountV2,decodeAccountV2,accountV2Path,
   binaryContactV2,decodeContactV2,contactV2Path,
-  binaryRelationshipV2,decodeRelationshipV2,relationshipV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  binaryRelationshipV2,decodeRelationshipV2,relationshipV2Path,
+  binaryTaskV2,decodeTaskV2,taskV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-contract-only-"));
 const base="http://127.0.0.1:18789";
@@ -616,6 +617,130 @@ try{
    signed_access:true,tenant_ab:true,viewer_write_denied:true,
    filtered_pagination:true,temporal_patch:true,replay_after_interleaving:true,
    no_extra_audit:true,published_active:false}));
+
+ // Activities v2: real signed workerd binary Protobuf against the ORIGINAL
+ // crm-activities Task state, native one-D1 account FK, receipt and audit.
+ const taskV2=async(method,token,payload)=>{
+   const response=await fetch(base+taskV2Path(method),{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+       ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:binaryTaskV2(method,payload)});
+   return {status:response.status,headers:response.headers,
+     body:response.status<400
+       ?decodeTaskV2(method,new Uint8Array(await response.arrayBuffer()))
+       :await response.json()};
+ };
+ const taskOther="task-aaa-other-"+randomUUID();
+ const taskMid="task-mid-ours-"+randomUUID();
+ const taskLast="task-zzz-ours-"+randomUUID();
+ const taskInput=(taskId,accountId,sequence)=>({
+   taskId,accountId,subject:"Check original Account "+sequence,
+   description:"Signed actor task "+sequence,priority:2,
+   dueAt:{seconds:1860000000n,nanos:987654321},
+   reminderAt:{seconds:1850000000n,nanos:123456789},
+   precondition:{idempotencyKey:"candidate-task-create-"+sequence}
+ });
+ const taskOtherInput=taskInput(taskOther,accountNextId,"other");
+ const taskMidInput=taskInput(taskMid,accountId,"mid");
+ const taskLastInput=taskInput(taskLast,accountId,"last");
+ assert.equal((await taskV2("CreateTask",null,taskMidInput)).status,401);
+ assert.equal((await taskV2("CreateTask",viewer,taskMidInput)).status,403);
+ assert.equal((await taskV2("CreateTask",admin,{...taskMidInput,
+   priority:0,precondition:{idempotencyKey:"candidate-task-invalid-priority"}})).status,400);
+ assert.equal((await taskV2("CreateTask",admin,{...taskMidInput,
+   accountId:"missing-account",
+   precondition:{idempotencyKey:"candidate-task-missing-account"}})).status,400);
+ assert.equal((await taskV2("CreateTask",tenantB,{...taskMidInput,
+   precondition:{idempotencyKey:"candidate-task-foreign-account"}})).status,400);
+ assert.equal((await taskV2("CreateTask",admin,{...taskMidInput,
+   reminderAt:{seconds:1700000000n,nanos:0},
+   precondition:{idempotencyKey:"candidate-task-past-reminder"}})).status,400);
+ const taskCreated=await taskV2("CreateTask",admin,taskMidInput);
+ assert.equal(taskCreated.status,200,describeProtobuf(taskCreated.body));
+ assert.equal(taskCreated.body.task?.taskId,taskMid);
+ assert.equal(taskCreated.body.task?.accountId,accountId);
+ assert.equal(taskCreated.body.task?.status,1);
+ assert.equal(taskCreated.body.task?.priority,2);
+ assert.equal(taskCreated.body.task?.description,"Signed actor task mid");
+ assert.equal(taskCreated.body.task?.dueAt?.nanos,987654321);
+ assert.equal(taskCreated.body.task?.reminderAt?.nanos,123456789);
+ assert.equal(taskCreated.body.receipt?.resourceVersion,1n);
+ assert.equal(taskCreated.body.receipt?.requestId,taskCreated.headers.get("x-request-id"));
+ const taskReplay=await taskV2("CreateTask",admin,taskMidInput);
+ assert.equal(taskReplay.status,200);
+ assert.equal(taskReplay.body.receipt?.replayed,true);
+ assert.equal((await taskV2("CreateTask",admin,{
+   ...taskMidInput,subject:"Different same key"})).status,409);
+ assert.equal((await taskV2("GetTask",tenantB,{taskId:taskMid})).status,404);
+ assert.equal((await taskV2("GetTask",viewer,{taskId:taskMid}))
+   .body.task?.accountId,accountId);
+ assert.equal((await taskV2("CreateTask",admin,taskOtherInput)).status,200);
+ assert.equal((await taskV2("CreateTask",admin,taskLastInput)).status,200);
+ const taskFilter=await collectPages(taskV2,"ListTasks","tasks",
+   {accountId,status:1});
+ assert.deepEqual(taskFilter.map(t=>t.taskId),[taskMid,taskLast]);
+ assert.equal((await collectPages(taskV2,"ListTasks","tasks",
+   {accountId:"missing-account"})).length,0);
+ assert.equal((await taskV2("ListTasks",tenantB,{
+   accountId,page:{pageSize:1}})).body.tasks.length,0);
+ assert.equal((await taskV2("ListTasks",viewer,{
+   page:{pageSize:101}})).status,400);
+ const taskComplete={taskId:taskMid,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-task-complete-mid"}};
+ assert.equal((await taskV2("CompleteTask",viewer,taskComplete)).status,403);
+ assert.equal((await taskV2("CompleteTask",admin,{
+   ...taskComplete,precondition:{expectedVersion:0n,
+     idempotencyKey:"candidate-task-invalid-version"}})).status,400);
+ const completed=await taskV2("CompleteTask",admin,taskComplete);
+ assert.equal(completed.status,200,describeProtobuf(completed.body));
+ assert.equal(completed.body.changed,true);
+ assert.equal(completed.body.task?.status,2);
+ assert.equal(completed.body.task?.version,2n);
+ assert.ok(completed.body.task?.completedAt?.seconds>0n);
+ assert.equal(completed.body.task?.reminderAt,undefined);
+ assert.equal(completed.body.receipt?.resourceVersion,2n);
+ const completedReplay=await taskV2("CompleteTask",admin,taskComplete);
+ assert.equal(completedReplay.status,200,describeProtobuf(completedReplay.body));
+ assert.equal(completedReplay.body.receipt?.replayed,true);
+ assert.equal(completedReplay.body.task?.version,2n);
+ const beforeNoop=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+taskMid+"'")[0].n;
+ const unchangedTask=await taskV2("CompleteTask",admin,{
+   taskId:taskMid,
+   precondition:{expectedVersion:2n,idempotencyKey:"candidate-task-unchanged"}});
+ assert.equal(unchangedTask.status,200,describeProtobuf(unchangedTask.body));
+ assert.equal(unchangedTask.body.changed,false);
+ assert.equal(unchangedTask.body.receipt,undefined,
+   "unchanged completion must not claim persisted D1 receipt");
+ assert.equal((await taskV2("CompleteTask",admin,{
+   ...taskComplete,precondition:{expectedVersion:1n,
+     idempotencyKey:"candidate-task-stale"}})).status,409);
+ const lastComplete=await taskV2("CompleteTask",admin,{
+   taskId:taskLast,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-task-complete-last"}});
+ assert.equal(lastComplete.status,200,describeProtobuf(lastComplete.body));
+ assert.equal(lastComplete.body.changed,true);
+ const completedTasks=await collectPages(taskV2,"ListTasks","tasks",
+   {accountId,status:2});
+ assert.deepEqual(completedTasks.map(t=>t.taskId),[taskMid,taskLast]);
+ assert.equal((await collectPages(taskV2,"ListTasks","tasks",
+   {accountId,status:1})).length,0);
+ assert.equal((await collectPages(taskV2,"ListTasks","tasks",
+   {accountId:accountNextId,status:1})).length,1);
+ assert.equal(sql("SELECT version FROM crm_activity_task_records WHERE tenant='tenant-a' "+
+   "AND id='"+taskMid+"'")[0].version,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+taskMid+"'")[0].n,beforeNoop);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts "+
+   "WHERE tenant='tenant-a' AND key IN ('candidate-task-create-mid',"+
+   "'candidate-task-complete-mid')")[0].n,2);
+ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2-candidate",
+   result:"PASS",rpc_methods:["CreateTask","CompleteTask","GetTask","ListTasks"],
+   generated_binary:true,original_owner:"crm.activities",signed_access:true,
+   tenant_ab:true,viewer_write_denied:true,
+   filtered_pagination:true,account_fk:true,d1_cas:true,
+   no_op_without_write:true,replay:true,d1_receipts:true,d1_audit:true,
+   published_active:false}));
 
  console.log(JSON.stringify({event:"crm.native-g3-party-v3-candidate",
    result:"PASS",generated_binary:true,owner:"crm.parties",

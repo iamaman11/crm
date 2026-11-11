@@ -83,3 +83,18 @@ export const binaryRelationshipV2=(name,payload)=>{
  return toBinary(rpc.input,create(rpc.input,payload));
 };
 export const decodeRelationshipV2=(name,bytes)=>fromBinary(relationshipMethod(name).output,bytes);
+
+// Activities/Tasks v2: signed native-ci uses compiled Buf descriptors.
+const taskService=registry.getService("crm.activities.v2.TaskService");
+if(!taskService)throw Error("compiled Task v2 service missing");
+const taskMethod=name=>{
+ const method=taskService.methods.find(item=>item.name===name);
+ if(!method)throw Error("compiled Task v2 RPC missing "+name);
+ return method;
+};
+export const taskV2Path=name=>"/crm.activities.v2.TaskService/"+taskMethod(name).name;
+export const binaryTaskV2=(name,payload)=>{
+ const rpc=taskMethod(name);
+ return toBinary(rpc.input,create(rpc.input,payload));
+};
+export const decodeTaskV2=(name,bytes)=>fromBinary(taskMethod(name).output,bytes);

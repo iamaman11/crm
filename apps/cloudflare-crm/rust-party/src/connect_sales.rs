@@ -13,7 +13,7 @@ use buffa::Message as BuffaMessage;
 use prost::Message as ProstMessage;
 use serde::Deserialize;
 use wasm_bindgen::JsValue;
-use super::{accounts, bind, contact_points, parties, party_relationships, sales_contract, sales_deals};
+use super::{accounts, activity_tasks, bind, contact_points, parties, party_relationships, sales_contract, sales_deals};
 use crm_parties::PartyKind as DomainPartyKind;
 use crm_customer_accounts::{Account as DomainAccount, AccountPartyRole as DomainAccountPartyRole, AccountStatus as DomainAccountStatus};
 use crm_contact_points::{ContactPoint as DomainContactPoint, ContactPointKind as DomainContactPointKind,
@@ -22,6 +22,10 @@ use crm_party_relationships::{
     PartyRelationship as DomainRelationship,
     RelationshipDirectionality as DomainDirectionality,
     PartyRelationshipStatus as DomainRelationshipStatus,
+};
+use crm_activities::{
+    Task as DomainTask, TaskPriority as DomainTaskPriority,
+    TaskStatus as DomainTaskStatus,
 };
 use buffa_types::google::protobuf::Timestamp;
 use crm_proto_contracts::crm::{core::v1 as core_contract, sales::v1 as sales_contract_proto};
@@ -74,6 +78,13 @@ pub mod proto {
                 include!(concat!(env!("OUT_DIR"), "/crm.party_relationships.v2.mod.rs"));
             }
         }
+        pub mod activities {
+            use super::*;
+            pub mod v2 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.activities.v2.mod.rs"));
+            }
+        }
         pub mod parties {
             use super::*;
             pub mod v2 {
@@ -94,6 +105,7 @@ use proto::crm::core::v2 as core_v2;
 use proto::crm::accounts::v2 as account_wire;
 use proto::crm::contact_points::v2 as contact_wire;
 use proto::crm::party_relationships::v2 as rel_wire;
+use proto::crm::activities::v2 as task_wire;
 
 #[derive(Deserialize)]
 struct Row { state: String }
@@ -974,6 +986,169 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
     }
 }
 
+// Native generated Connect service for the ORIGINAL crm-activities Task.
+// Same Task codec, D1 table, CAS and receipts as the blocked historical HTTP.
+struct TaskV2Service {
+    env:Arc<Env>,tenant:String,actor:String,request_id:String,
+}
+impl TaskV2Service {
+    fn d1(&self)->std::result::Result<D1Database,ConnectError>{
+        self.env.d1("DB").map_err(|_|ConnectError::internal("D1 unavailable"))
+    }
+    fn valid_id(raw:&str)->std::result::Result<String,ConnectError>{
+        if raw!=raw.trim()||raw.contains('/') {
+            return Err(ConnectError::invalid_argument("ACTIVITIES_TASK_ID_INVALID"));
+        }
+        crm_module_sdk::RecordId::try_new(raw.to_owned())
+            .map(|x|x.as_str().to_owned())
+            .map_err(|_|ConnectError::invalid_argument("ACTIVITIES_TASK_ID_INVALID"))
+    }
+    fn convert(task:&DomainTask)->std::result::Result<task_wire::Task,ConnectError>{
+        let priority=match task.priority(){
+            DomainTaskPriority::Low=>task_wire::TaskPriority::TASK_PRIORITY_LOW,
+            DomainTaskPriority::Normal=>task_wire::TaskPriority::TASK_PRIORITY_NORMAL,
+            DomainTaskPriority::High=>task_wire::TaskPriority::TASK_PRIORITY_HIGH,
+            DomainTaskPriority::Urgent=>task_wire::TaskPriority::TASK_PRIORITY_URGENT,
+        };
+        let status=match task.status(){
+            DomainTaskStatus::Open=>task_wire::TaskStatus::TASK_STATUS_OPEN,
+            DomainTaskStatus::Completed=>task_wire::TaskStatus::TASK_STATUS_COMPLETED,
+        };
+        let account_id=task.related_resources().iter().find(
+            |item|item.resource_type=="crm.customer-accounts")
+            .ok_or_else(||ConnectError::internal("original Task missing Account reference"))?
+            .resource_id.clone();
+        Ok(task_wire::Task{
+            task_id:task.task_id().as_str().to_owned(),
+            subject:task.subject().to_owned(),
+            description:task.description().map(str::to_owned),
+            account_id,priority:priority.into(),status:status.into(),
+            due_at:task.due_at_unix_nanos()
+                .map(ContactPointV2Service::timestamp).into(),
+            reminder_at:task.reminder_at_unix_nanos()
+                .map(ContactPointV2Service::timestamp).into(),
+            completed_at:task.completed_at_unix_nanos()
+                .map(ContactPointV2Service::timestamp).into(),
+            version:task.version(),..Default::default()
+        })
+    }
+    fn receipt(&self,out:&activity_tasks::MutationOutcome)->core_v2::MutationReceipt{
+        core_v2::MutationReceipt{
+            request_id:self.request_id.clone(),resource_version:out.task.version(),
+            replayed:out.replayed,..Default::default()
+        }
+    }
+    fn failed(f:activity_tasks::MutationFailure)->ConnectError{
+        match f.status{
+            404=>ConnectError::not_found(f.code),
+            409=>ConnectError::aborted(f.code),
+            422=>ConnectError::invalid_argument(f.code),
+            _=>ConnectError::internal(f.code),
+        }
+    }
+}
+impl task_wire::TaskService for TaskV2Service {
+    #[worker::send]
+    async fn create_task(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,task_wire::CreateTaskRequest>,
+    )->ServiceResult<task_wire::CreateTaskResponse>{
+        let input=req.to_owned_message();
+        let id=Self::valid_id(&input.task_id)?;
+        let (key,_)=AccountV2Service::precondition(input.precondition.as_option(),true)?;
+        let priority=match input.priority{
+            x if x==task_wire::TaskPriority::TASK_PRIORITY_LOW=>
+                activity_tasks::Priority::Low,
+            x if x==task_wire::TaskPriority::TASK_PRIORITY_NORMAL=>
+                activity_tasks::Priority::Normal,
+            x if x==task_wire::TaskPriority::TASK_PRIORITY_HIGH=>
+                activity_tasks::Priority::High,
+            x if x==task_wire::TaskPriority::TASK_PRIORITY_URGENT=>
+                activity_tasks::Priority::Urgent,
+            _=>return Err(ConnectError::invalid_argument("invalid TaskPriority")),
+        };
+        let due=input.due_at.as_option()
+            .map(ContactPointV2Service::nanos).transpose()?;
+        let reminder=input.reminder_at.as_option()
+            .map(ContactPointV2Service::nanos).transpose()?;
+        let saved=activity_tasks::create_typed(activity_tasks::CreateInput{
+            id,subject:input.subject,description:input.description,
+            account_id:input.account_id,priority,
+            due_at_unix_nanos:due,reminder_at_unix_nanos:reminder,
+        },&key,&self.d1()?,&self.tenant,&self.actor,&self.request_id).await
+            .map_err(|_|ConnectError::internal("Task D1 create failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(task_wire::CreateTaskResponse{
+            task:Some(Self::convert(&saved.task)?).into(),
+            receipt:Some(self.receipt(&saved)).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn complete_task(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,task_wire::CompleteTaskRequest>,
+    )->ServiceResult<task_wire::CompleteTaskResponse>{
+        let input=req.to_owned_message();
+        let id=Self::valid_id(&input.task_id)?;
+        let (key,version)=AccountV2Service::precondition(input.precondition.as_option(),false)?;
+        let saved=activity_tasks::complete_typed(activity_tasks::CompleteInput{
+            expected_version:version.unwrap_or_default(),
+        },&key,&self.d1()?,&self.tenant,&id,&self.request_id).await
+            .map_err(|_|ConnectError::internal("Task D1 complete failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(task_wire::CompleteTaskResponse{
+            task:Some(Self::convert(&saved.task)?).into(),
+            changed:saved.changed,
+            receipt:if saved.changed||saved.replayed{
+                Some(self.receipt(&saved)).into()
+            }else{None.into()},
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn get_task(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,task_wire::GetTaskRequest>,
+    )->ServiceResult<task_wire::GetTaskResponse>{
+        let id=Self::valid_id(&req.task_id)?;
+        let task=activity_tasks::stored(&self.d1()?,&self.tenant,&id).await
+            .map_err(|_|ConnectError::internal("Task D1 get failed"))?
+            .ok_or_else(||ConnectError::not_found("ACTIVITIES_TASK_NOT_FOUND"))?;
+        RpcResponse::ok(task_wire::GetTaskResponse{
+            task:Some(Self::convert(&task)?).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn list_tasks(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,task_wire::ListTasksRequest>,
+    )->ServiceResult<task_wire::ListTasksResponse>{
+        let size=if req.page.page_size==0{25}else{req.page.page_size};
+        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
+        let after=&req.page.page_token;
+        if !after.is_empty(){Self::valid_id(after)?;}
+        let status=match req.status{
+            None=>None,
+            Some(x) if x==task_wire::TaskStatus::TASK_STATUS_OPEN=>
+                Some(DomainTaskStatus::Open),
+            Some(x) if x==task_wire::TaskStatus::TASK_STATUS_COMPLETED=>
+                Some(DomainTaskStatus::Completed),
+            _=>return Err(ConnectError::invalid_argument("invalid TaskStatus filter")),
+        };
+        let account=req.account_id.as_deref();
+        if let Some(id)=account {
+            crm_module_sdk::RecordId::try_new(id.to_owned())
+                .map_err(|_|ConnectError::invalid_argument("invalid Account filter"))?;
+        }
+        let (list,next)=activity_tasks::list_page_typed(
+            &self.d1()?,&self.tenant,after,size as usize,status,account).await
+            .map_err(|_|ConnectError::internal("Task D1 list failed"))?;
+        let mut tasks=Vec::with_capacity(list.len());
+        for task in &list{tasks.push(Self::convert(task)?);}
+        RpcResponse::ok(task_wire::ListTasksResponse{
+            tasks,page_info:Some(core_v2::PageInfo{
+                next_page_token:next.unwrap_or_default(),..Default::default()
+            }).into(),..Default::default()
+        })
+    }
+}
+
 // Called by existing native-only dispatch AFTER signed Access authentication
 // and role decision. No second fetch endpoint, tenant header, or JS route.
 pub(super) async fn route(
@@ -1000,6 +1175,10 @@ pub(super) async fn route(
         .add_service(Arc::new(RelationshipV2Service {
             env: Arc::clone(&env), tenant: tenant.to_owned(),
             request_id:request_id.to_owned(),
+        }))
+        .add_service(Arc::new(TaskV2Service {
+            env: Arc::clone(&env),tenant:tenant.to_owned(),
+            actor:actor.to_owned(),request_id:request_id.to_owned(),
         }))
         .add_service(Arc::new(SalesService {
             env,tenant:tenant.to_owned(),
