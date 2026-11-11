@@ -24,15 +24,15 @@ describe("Cloudflare CRM v2 Protobuf numeric/patch conformance",()=>{
   }
  });
  it("does not collapse absent, clear and set-empty into one mutation",()=>{
-  const cases=[
-   create(StringPatchSchema,{}),
-   create(StringPatchSchema,{operation:{case:"set",value:""}}),
-   create(StringPatchSchema,{operation:{case:"clear",value:true}}),
-  ];
-  const decoded=cases.map(value=>fromBinary(StringPatchSchema,toBinary(StringPatchSchema,value)));
-  expect(decoded[0].operation.case).toBeUndefined();
-  expect(decoded[1].operation).toEqual({case:"set",value:""});
-  expect(decoded[2].operation).toEqual({case:"clear",value:true});
+  const absent=create(StringPatchSchema,{});
+  const setEmpty=create(StringPatchSchema,{operation:{case:"set",value:""}});
+  const clear=create(StringPatchSchema,{operation:{case:"clear",value:true}});
+  const decodedAbsent=fromBinary(StringPatchSchema,toBinary(StringPatchSchema,absent));
+  const decodedSet=fromBinary(StringPatchSchema,toBinary(StringPatchSchema,setEmpty));
+  const decodedClear=fromBinary(StringPatchSchema,toBinary(StringPatchSchema,clear));
+  expect(decodedAbsent.operation.case).toBeUndefined();
+  expect(decodedSet.operation).toEqual({case:"set",value:""});
+  expect(decodedClear.operation).toEqual({case:"clear",value:true});
  });
  it("keeps explicit expected_version=0 distinct from an absent version",()=>{
   const absent=create(MutationPreconditionSchema,{idempotencyKey:"proof-key"});
