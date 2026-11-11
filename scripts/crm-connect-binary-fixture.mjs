@@ -143,4 +143,19 @@ export const binaryConsentV2=(name,payload)=>{
 };
 export const decodeConsentV2=(name,bytes)=>fromBinary(consentMethod(name).output,bytes);
 
+// Original Deal v2 binary Connect generated through the same Buf descriptor.
+const salesV2Service=registry.getService("crm.sales.v2.DealService");
+if(!salesV2Service)throw Error("compiled Sales v2 service missing");
+const salesV2Method=name=>{
+ const method=salesV2Service.methods.find(item=>item.name===name);
+ if(!method)throw Error("compiled Sales v2 RPC missing "+name);
+ return method;
+};
+export const salesV2Path=name=>"/crm.sales.v2.DealService/"+salesV2Method(name).name;
+export const binarySalesV2=(name,payload)=>{
+ const method=salesV2Method(name);
+ return toBinary(method.input,create(method.input,payload));
+};
+export const decodeSalesV2=(name,bytes)=>fromBinary(salesV2Method(name).output,bytes);
+
 

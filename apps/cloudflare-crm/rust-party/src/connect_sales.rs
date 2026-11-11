@@ -28,6 +28,7 @@ use crm_activities::{
     TaskStatus as DomainTaskStatus,
 };
 use crm_identity_resolution::{CanonicalPartyPair, PartyReference};
+use crm_sales::{Deal as DomainDeal,DealStatus as DomainDealStatus};
 use crm_consents::{
     CommunicationAuthorizationReason as DomainConsentReason,
     CommunicationChannel as DomainConsentChannel,
@@ -63,6 +64,10 @@ pub mod proto {
             pub mod v1 {
                 use super::*;
                 include!(concat!(env!("OUT_DIR"), "/crm.sales.v1.mod.rs"));
+            }
+            pub mod v2 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.sales.v2.mod.rs"));
             }
         }
         pub mod accounts {
@@ -128,6 +133,7 @@ pub mod proto {
     }
 }
 use proto::crm::sales::v1 as sales;
+use proto::crm::sales::v2 as sale_wire;
 use proto::crm::parties::v2 as party_wire;
 use proto::crm::parties::v3 as party_v3;
 use proto::crm::core::v2 as core_v2;
@@ -1439,6 +1445,234 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service{
     }
 }
 
+
+// Sales v2 wraps the EXISTING crm-sales aggregate, D1 persistence and atomic
+// sales->activities delivery. Neither generated wire nor React implements
+// Deal transitions, price rounding, CAS or new business policy.
+struct SalesV2Service {
+    env:Arc<Env>,
+    tenant:String,
+    actor:String,
+    request_id:String,
+}
+impl SalesV2Service {
+    fn d1(&self)->std::result::Result<D1Database,ConnectError>{
+        self.env.d1("DB").map_err(|_|ConnectError::internal("D1 unavailable"))
+    }
+    fn id(raw:&str)->std::result::Result<String,ConnectError>{
+        if raw!=raw.trim()||raw.contains('/'){
+            return Err(ConnectError::invalid_argument("SALES_DEAL_ID_INVALID"));
+        }
+        crm_module_sdk::RecordId::try_new(raw.to_owned())
+            .map(|x|x.as_str().to_owned())
+            .map_err(|_|ConnectError::invalid_argument("SALES_DEAL_ID_INVALID"))
+    }
+    fn stage(wire:&sale_wire::DealStage)
+        ->std::result::Result<(String,String,u16),ConnectError>{
+        let ordinal=u16::try_from(wire.ordinal)
+            .map_err(|_|ConnectError::invalid_argument("invalid stage ordinal"))?;
+        Ok((wire.pipeline_id.clone(),wire.stage_id.clone(),ordinal))
+    }
+    fn deal_status(raw:buffa::EnumValue<sale_wire::DealStatus>)
+        ->std::result::Result<sales_deals::StatusInput,ConnectError>{
+        match raw {
+            x if x==sale_wire::DealStatus::DEAL_STATUS_OPEN=>
+                Ok(sales_deals::StatusInput::Open),
+            x if x==sale_wire::DealStatus::DEAL_STATUS_WON=>
+                Ok(sales_deals::StatusInput::Won),
+            x if x==sale_wire::DealStatus::DEAL_STATUS_LOST=>
+                Ok(sales_deals::StatusInput::Lost),
+            _=>Err(ConnectError::invalid_argument("invalid DealStatus")),
+        }
+    }
+    fn convert(deal:&DomainDeal)->std::result::Result<sale_wire::Deal,ConnectError>{
+        let stage=deal.stage();
+        let status=match deal.status(){
+            DomainDealStatus::Open=>sale_wire::DealStatus::DEAL_STATUS_OPEN,
+            DomainDealStatus::Won=>sale_wire::DealStatus::DEAL_STATUS_WON,
+            DomainDealStatus::Lost=>sale_wire::DealStatus::DEAL_STATUS_LOST,
+        };
+        let account=deal.account()
+            .ok_or_else(||ConnectError::internal("original Deal missing Account"))?;
+        let amount=deal.amount().map(|money|{
+            let units=i64::try_from(money.minor_units())
+                .map_err(|_|ConnectError::internal("original money exceeds wire i64"))?;
+            Ok(core_v2::ExactMoney{
+                minor_units:units,currency_code:money.currency().as_str().to_owned(),
+                ..Default::default()
+            })
+        }).transpose()?;
+        Ok(sale_wire::Deal{
+            deal_id:deal.deal_id().as_str().to_owned(),
+            name:deal.name().to_owned(),account_id:account.resource_id.clone(),
+            stage:Some(sale_wire::DealStage{
+                pipeline_id:stage.pipeline_id().as_str().to_owned(),
+                stage_id:stage.stage_id().as_str().to_owned(),
+                ordinal:u32::from(stage.ordinal()),..Default::default()
+            }).into(),
+            status:status.into(),amount:amount.into(),
+            probability_basis_points:u32::from(deal.probability().get()),
+            version:deal.version(),
+            closed_at:deal.close_outcome().map(|outcome|
+                ContactPointV2Service::timestamp(outcome.closed_at_unix_nanos())).into(),
+            ..Default::default()
+        })
+    }
+    fn receipt(&self,saved:&sales_deals::SalesSaved)->core_v2::MutationReceipt{
+        core_v2::MutationReceipt{
+            request_id:self.request_id.clone(),
+            resource_version:saved.deal.version(),replayed:saved.replayed,
+            ..Default::default()
+        }
+    }
+    fn failed(f:sales_deals::SalesFailure)->ConnectError{
+        match f.status{
+            404=>ConnectError::not_found(f.code),
+            409=>ConnectError::aborted(f.code),
+            422=>ConnectError::invalid_argument(f.code),
+            _=>ConnectError::internal(f.code),
+        }
+    }
+}
+impl sale_wire::DealService for SalesV2Service{
+    #[worker::send]
+    async fn create_deal(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,sale_wire::CreateDealRequest>,
+    )->ServiceResult<sale_wire::CreateDealResponse>{
+        let input=req.to_owned_message();
+        let id=Self::id(&input.deal_id)?;
+        let (key,_)=AccountV2Service::precondition(input.precondition.as_option(),true)?;
+        let stage=input.stage.as_option()
+            .ok_or_else(||ConnectError::invalid_argument("stage required"))?;
+        let (pipeline_id,stage_id,ordinal)=Self::stage(stage)?;
+        let probability_bps=u16::try_from(input.probability_basis_points)
+            .map_err(|_|ConnectError::invalid_argument("invalid probability basis points"))?;
+        let (amount_minor_units,currency)=match input.amount.as_option(){
+            Some(money)=>(Some(money.minor_units),Some(money.currency_code.clone())),
+            None=>(None,None),
+        };
+        let db=self.d1()?;
+        let saved=sales_deals::create_typed(sales_deals::CreateInput{
+            id,name:input.name,account_id:input.account_id,pipeline_id,stage_id,
+            ordinal,probability_bps,amount_minor_units,currency,
+        },&key,&db,&self.tenant,&self.actor,&self.request_id).await
+            .map_err(|_|ConnectError::internal("Sales original D1 create failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(sale_wire::CreateDealResponse{
+            deal:Some(Self::convert(&saved.deal)?).into(),
+            receipt:Some(self.receipt(&saved)).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn update_deal(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,sale_wire::UpdateDealRequest>,
+    )->ServiceResult<sale_wire::UpdateDealResponse>{
+        let input=req.to_owned_message();
+        let id=Self::id(&input.deal_id)?;
+        let (key,version)=AccountV2Service::precondition(input.precondition.as_option(),false)?;
+        let (name,clear_name)=match input.name.as_option(){
+            None=>(None,None),
+            Some(patch)=>match patch.operation.as_ref(){
+                Some(core_v2::string_patch::Operation::Set(name))=>
+                    (Some(name.clone()),None),
+                Some(core_v2::string_patch::Operation::Clear(true))=>(None,Some(true)),
+                _=>return Err(ConnectError::invalid_argument("invalid StringPatch")),
+            }
+        };
+        let (amount_minor_units,currency,clear_amount)=match input.amount.as_option(){
+            None=>(None,None,None),
+            Some(patch)=>match patch.operation.as_ref(){
+                Some(core_v2::money_patch::Operation::Set(money))=>
+                    (Some(money.minor_units),Some(money.currency_code.clone()),None),
+                Some(core_v2::money_patch::Operation::Clear(true))=>
+                    (None,None,Some(true)),
+                _=>return Err(ConnectError::invalid_argument("invalid MoneyPatch")),
+            }
+        };
+        let probability_bps=input.probability_basis_points
+            .map(|v|u16::try_from(v)
+                .map_err(|_|ConnectError::invalid_argument("invalid probability basis points")))
+            .transpose()?;
+        let saved=sales_deals::update_typed(sales_deals::UpdateInput{
+            expected_version:version.unwrap_or_default(),name,clear_name,
+            amount_minor_units,currency,clear_amount,probability_bps,
+        },&key,&self.d1()?,&self.tenant,&id,&self.request_id).await
+            .map_err(|_|ConnectError::internal("Sales original D1 update failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(sale_wire::UpdateDealResponse{
+            deal:Some(Self::convert(&saved.deal)?).into(),
+            receipt:Some(self.receipt(&saved)).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn advance_stage(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,sale_wire::AdvanceStageRequest>,
+    )->ServiceResult<sale_wire::AdvanceStageResponse>{
+        let input=req.to_owned_message();
+        let id=Self::id(&input.deal_id)?;
+        let (key,version)=AccountV2Service::precondition(input.precondition.as_option(),false)?;
+        let stage=input.target_stage.as_option()
+            .ok_or_else(||ConnectError::invalid_argument("target_stage required"))?;
+        let (pipeline_id,stage_id,ordinal)=Self::stage(stage)?;
+        let status=Self::deal_status(input.target_status)?;
+        let advanced=sales_deals::advance_typed(sales_deals::StageInput{
+            expected_version:version.unwrap_or_default(),
+            pipeline_id,stage_id,ordinal,status,
+            close_reason_code:input.close_reason_code,
+        },&key,&self.d1()?,&self.tenant,&id,&self.actor,&self.request_id).await
+            .map_err(|_|ConnectError::internal("Sales original D1 stage advance failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(sale_wire::AdvanceStageResponse{
+            deal:Some(Self::convert(&advanced.saved.deal)?).into(),
+            receipt:Some(self.receipt(&advanced.saved)).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn get_deal(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,sale_wire::GetDealRequest>,
+    )->ServiceResult<sale_wire::GetDealResponse>{
+        let id=Self::id(&req.deal_id)?;
+        let deal=sales_deals::load(&self.d1()?,&self.tenant,&id).await
+            .map_err(|_|ConnectError::internal("Sales original D1 read failed"))?
+            .ok_or_else(||ConnectError::not_found("SALES_DEAL_NOT_FOUND"))?;
+        RpcResponse::ok(sale_wire::GetDealResponse{
+            deal:Some(Self::convert(&deal)?).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn list_deals(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,sale_wire::ListDealsRequest>,
+    )->ServiceResult<sale_wire::ListDealsResponse>{
+        let size=if req.page.page_size==0{25}else{req.page.page_size};
+        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
+        let after=&req.page.page_token;
+        if !after.is_empty(){Self::id(after)?;}
+        let pipeline=req.pipeline_id.as_deref();
+        if let Some(id)=pipeline{
+            crm_sales::PipelineId::try_new(id)
+                .map_err(|_|ConnectError::invalid_argument("invalid pipeline filter"))?;
+        }
+        let status=match req.status {
+            None=>None,Some(s)=>Some(match s{
+                x if x==sale_wire::DealStatus::DEAL_STATUS_OPEN=>DomainDealStatus::Open,
+                x if x==sale_wire::DealStatus::DEAL_STATUS_WON=>DomainDealStatus::Won,
+                x if x==sale_wire::DealStatus::DEAL_STATUS_LOST=>DomainDealStatus::Lost,
+                _=>return Err(ConnectError::invalid_argument("invalid DealStatus filter")),
+            })
+        };
+        let (list,next)=sales_deals::list_page_typed(
+            &self.d1()?,&self.tenant,after,size as usize,pipeline,status).await
+            .map_err(|_|ConnectError::internal("Sales original D1 list failed"))?;
+        let deals=list.iter().map(Self::convert)
+            .collect::<std::result::Result<Vec<_>,ConnectError>>()?;
+        RpcResponse::ok(sale_wire::ListDealsResponse{
+            deals,page_info:Some(core_v2::PageInfo{
+                next_page_token:next.unwrap_or_default(),..Default::default()
+            }).into(),..Default::default()
+        })
+    }
+}
+
 // Called by existing native-only dispatch AFTER signed Access authentication
 // and role decision. No second fetch endpoint, tenant header, or JS route.
 pub(super) async fn route(
@@ -1477,6 +1711,10 @@ pub(super) async fn route(
             env:Arc::clone(&env),tenant:tenant.to_owned(),
         }))
         .add_service(Arc::new(ConsentV2Service{
+            env:Arc::clone(&env),tenant:tenant.to_owned(),
+            actor:actor.to_owned(),request_id:request_id.to_owned(),
+        }))
+        .add_service(Arc::new(SalesV2Service{
             env:Arc::clone(&env),tenant:tenant.to_owned(),
             actor:actor.to_owned(),request_id:request_id.to_owned(),
         }))

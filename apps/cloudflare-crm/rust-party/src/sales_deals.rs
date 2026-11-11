@@ -31,7 +31,7 @@ pub(super) struct CreateInput {
 }
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all="snake_case")]
-enum StatusInput { Open, Won, Lost }
+pub(super) enum StatusInput { Open, Won, Lost }
 impl From<StatusInput> for DealStatus {
     fn from(value: StatusInput)->Self{
         match value {StatusInput::Open=>Self::Open,
@@ -40,27 +40,30 @@ impl From<StatusInput> for DealStatus {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct StageInput {
-    expected_version: i64,
-    pipeline_id: String,
-    stage_id: String,
-    ordinal: u16,
-    status: StatusInput,
-    close_reason_code: Option<String>,
+pub(super) struct StageInput {
+    pub(super) expected_version:i64,
+    pub(super) pipeline_id:String,
+    pub(super) stage_id:String,
+    pub(super) ordinal:u16,
+    pub(super) status:StatusInput,
+    pub(super) close_reason_code:Option<String>,
 }
 // HTTP only edits the original Deal's business fields, never trusted ownership.
 #[derive(Serialize,Deserialize)]
 #[serde(deny_unknown_fields)]
-struct UpdateInput {
-    expected_version:i64,
-    name:Option<String>,
-    amount_minor_units:Option<i64>,
-    currency:Option<String>,
-    clear_amount:Option<bool>,
-    probability_bps:Option<u16>,
+pub(super) struct UpdateInput {
+    pub(super) expected_version:i64,
+    pub(super) name:Option<String>,
+    pub(super) clear_name:Option<bool>,
+    pub(super) amount_minor_units:Option<i64>,
+    pub(super) currency:Option<String>,
+    pub(super) clear_amount:Option<bool>,
+    pub(super) probability_bps:Option<u16>,
 }
 #[derive(Deserialize)]
 struct Row { state: String }
+#[derive(Deserialize)]
+struct PagedRow { id:String,state:String }
 #[derive(Deserialize)]
 struct Receipt { digest:String,state:String }
 
@@ -116,7 +119,7 @@ async fn prior(db:&D1Database,tenant:&str,k:&str)->Result<Option<Receipt>>{
     bind(db,"SELECT digest,state FROM crm_sales_deal_receipts WHERE tenant=? AND key=?",
         &[JsValue::from_str(tenant),JsValue::from_str(k)])?.first::<Receipt>(None).await
 }
-async fn load(db:&D1Database,tenant:&str,id:&str)->Result<Option<Deal>>{
+pub(super) async fn load(db:&D1Database,tenant:&str,id:&str)->Result<Option<Deal>>{
     bind(db,"SELECT state FROM crm_sales_deal_records WHERE tenant=? AND id=?",
         &[JsValue::from_str(tenant),JsValue::from_str(id)])?
         .first::<Row>(None).await?.map(|row|decode(&row.state)).transpose()
@@ -217,110 +220,153 @@ async fn create(mut req:Request,db:&D1Database,tenant:&str,actor:&str,trace:&str
         Err(failure)=>error(&failure.code,failure.status),
     }
 }
-async fn update(mut req:Request,db:&D1Database,tenant:&str,id:&str,trace:&str)->Result<Response>{
-    let Some(k)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
-    let input=match serde_json::from_str::<UpdateInput>(&req.text().await?){
-        Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422),
-    };
-    let digest=hash("update",id,&input)?;
-    if let Some(prior)=prior(db,tenant,&k).await?{
-        if prior.digest!=digest{return error("IDEMPOTENCY_CONFLICT",409);}
-        return response(json!({"item":view(&decode(&prior.state)?),"replayed":true}),200);
+/// The ORIGINAL owner applies Sales updates, CAS, receipt replay and audit.
+pub(super) async fn update_typed(
+    input:UpdateInput,key:&str,db:&D1Database,tenant:&str,id:&str,trace:&str,
+)->Result<std::result::Result<SalesSaved,SalesFailure>>{
+    if !(8..=120).contains(&key.len()){
+        return Ok(rejected("IDEMPOTENCY_KEY_REQUIRED",422));
     }
-    let Some(mut deal)=load(db,tenant,id).await? else{return error("NOT_FOUND",404)};
-    if input.clear_amount==Some(true) &&
+    let digest=hash("update",id,&input)?;
+    if let Some(p)=prior(db,tenant,key).await?{
+        if p.digest!=digest{return Ok(rejected("IDEMPOTENCY_CONFLICT",409));}
+        return Ok(Ok(SalesSaved{deal:decode(&p.state)?,replayed:true}));
+    }
+    let Some(mut deal)=load(db,tenant,id).await? else{return Ok(rejected("NOT_FOUND",404));};
+    if input.clear_name==Some(true)&&input.name.is_some(){
+        return Ok(rejected("SALES_NAME_UPDATE_CONFLICT",422));
+    }
+    let name=if input.clear_name==Some(true){Patch::Clear}
+        else{input.name.map_or(Patch::Keep,Patch::Set)};
+    if input.clear_amount==Some(true)&&
         (input.amount_minor_units.is_some()||input.currency.is_some()){
-        return error("SALES_AMOUNT_UPDATE_CONFLICT",422);
+        return Ok(rejected("SALES_AMOUNT_UPDATE_CONFLICT",422));
     }
     let amount=if input.clear_amount==Some(true){Patch::Clear}else{
         match (input.amount_minor_units,input.currency){
             (None,None)=>Patch::Keep,
             (Some(units),Some(currency))=>{
                 let currency=match CurrencyCode::try_new(currency){
-                    Ok(x)=>x,Err(e)=>return error(&e.code,422),
+                    Ok(x)=>x,Err(e)=>return Ok(rejected(e.code,422)),
                 };
                 Patch::Set(Money::new(i128::from(units),currency))
             },
-            _=>return error("SALES_AMOUNT_CURRENCY_PAIR_REQUIRED",422),
+            _=>return Ok(rejected("SALES_AMOUNT_CURRENCY_PAIR_REQUIRED",422)),
         }
     };
     let probability=match input.probability_bps{
         Some(v)=>match BasisPoints::try_new(v){
-            Ok(x)=>Patch::Set(x),Err(e)=>return error(&e.code,422),
+            Ok(x)=>Patch::Set(x),Err(e)=>return Ok(rejected(e.code,422)),
         },
         None=>Patch::Keep,
     };
-    if input.name.is_none() && matches!(amount,Patch::Keep) &&
-        matches!(probability,Patch::Keep){return error("SALES_EMPTY_UPDATE",422);}
+    if matches!(name,Patch::Keep)&&matches!(amount,Patch::Keep)&&
+        matches!(probability,Patch::Keep){
+        return Ok(rejected("SALES_EMPTY_UPDATE",422));
+    }
     if let Err(e)=deal.apply_update(UpdateDeal{
         expected_version:input.expected_version,
-        name:input.name.map_or(Patch::Keep,Patch::Set),
-        owner:Patch::Keep,account:Patch::Keep,primary_contact:Patch::Keep,
-        amount,expected_close_date:Patch::Keep,probability,
+        name,owner:Patch::Keep,account:Patch::Keep,
+        primary_contact:Patch::Keep,amount,
+        expected_close_date:Patch::Keep,probability,
         occurred_at_unix_nanos:now_nanos(),
     }){
-        return error(&e.code,if e.category==ErrorCategory::Conflict{409}else{422});
+        return Ok(rejected(e.code,
+            if e.category==ErrorCategory::Conflict{409}else{422}));
     }
     let saved=encode(&deal)?;
     let result=bind(db,"UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,last_action='sales_deals.update' WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&saved),JsValue::from_f64(deal.version() as f64),
-          JsValue::from_str(&k),JsValue::from_str(&digest),JsValue::from_str(trace),
+          JsValue::from_str(key),JsValue::from_str(&digest),JsValue::from_str(trace),
           JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
-    let Ok(result)=result else{return error("SALES_DEAL_UPDATE_CONFLICT",409)};
+    let Ok(result)=result else{return Ok(rejected("SALES_DEAL_UPDATE_CONFLICT",409));};
     if result.meta()?.and_then(|m|m.changes).unwrap_or(0)==0{
-        return error("SALES_DEAL_VERSION_CONFLICT",409);
+        return Ok(rejected("SALES_DEAL_VERSION_CONFLICT",409));
     }
-    response(json!({"item":view(&deal),"replayed":false}),200)
+    Ok(Ok(SalesSaved{deal,replayed:false}))
 }
-async fn advance(mut req:Request,db:&D1Database,tenant:&str,id:&str,actor:&str,trace:&str)->Result<Response>{
+async fn update(mut req:Request,db:&D1Database,tenant:&str,id:&str,trace:&str)
+    ->Result<Response>{
     let Some(k)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
-    let input=match serde_json::from_str::<StageInput>(&req.text().await?) {
+    let input=match serde_json::from_str::<UpdateInput>(&req.text().await?){
         Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422),
     };
-    let digest=hash("advance",id,&input)?;
-    if let Some(p)=prior(db,tenant,&k).await?{
-        if p.digest!=digest{return error("IDEMPOTENCY_CONFLICT",409);}
-        return response(json!({"item":view(&decode(&p.state)?),"replayed":true}),200);
+    match update_typed(input,&k,db,tenant,id,trace).await?{
+        Ok(saved)=>response(json!({"item":view(&saved.deal),
+            "replayed":saved.replayed}),200),
+        Err(f)=>error(&f.code,f.status),
     }
-    let Some(mut deal)=load(db,tenant,id).await? else{return error("NOT_FOUND",404)};
+}
+
+pub(super) struct LinkOutcome {
+    pub(super) delivery_id:String,
+    pub(super) applied:bool,
+    pub(super) task_id:Option<String>,
+}
+pub(super) struct AdvanceSaved {
+    pub(super) saved:SalesSaved,
+    pub(super) link:Option<LinkOutcome>,
+}
+fn advance_rejected(code:impl Into<String>,status:u16)
+    ->std::result::Result<AdvanceSaved,SalesFailure>{
+    Err(SalesFailure{code:code.into(),status})
+}
+/// Atomically persists ONE domain stage advancement, its idempotency receipt
+/// and an optional original Activities follow-up in the SAME D1 batch.
+pub(super) async fn advance_typed(
+    input:StageInput,key:&str,db:&D1Database,tenant:&str,id:&str,actor:&str,
+    trace:&str,
+)->Result<std::result::Result<AdvanceSaved,SalesFailure>>{
+    if !(8..=120).contains(&key.len()){
+        return Ok(advance_rejected("IDEMPOTENCY_KEY_REQUIRED",422));
+    }
+    let digest=hash("advance",id,&input)?;
+    if let Some(p)=prior(db,tenant,key).await?{
+        if p.digest!=digest{return Ok(advance_rejected("IDEMPOTENCY_CONFLICT",409));}
+        return Ok(Ok(AdvanceSaved{
+            saved:SalesSaved{deal:decode(&p.state)?,replayed:true},link:None
+        }));
+    }
+    let Some(mut deal)=load(db,tenant,id).await? else{
+        return Ok(advance_rejected("NOT_FOUND",404));
+    };
     let before=deal.clone();
     let target=match stage(input.pipeline_id,input.stage_id,input.ordinal){
-        Ok(x)=>x,Err(code)=>return error(&code,422),
+        Ok(x)=>x,Err(code)=>return Ok(advance_rejected(code,422)),
     };
-    let reason=match input.close_reason_code {
-        Some(code)=>match ReasonCode::try_new(code) {
-            Ok(v)=>Some(v),Err(e)=>return error(&e.code,422),
+    let reason=match input.close_reason_code{
+        Some(code)=>match ReasonCode::try_new(code){
+            Ok(v)=>Some(v),Err(e)=>return Ok(advance_rejected(e.code,422)),
         },
         None=>None,
     };
-    let next=deal.advance_stage(AdvanceDealStage{
+    if let Err(e)=deal.advance_stage(AdvanceDealStage{
         expected_version:input.expected_version,
         target_stage:target,target_status:input.status.into(),
         close_reason_code:reason,occurred_at_unix_nanos:now_nanos(),
         policy:StageTransitionPolicy::default(),
-    });
-    if let Err(e)=next {
-        return error(&e.code,if e.category==ErrorCategory::Conflict{409}else{422});
+    }){
+        return Ok(advance_rejected(e.code,
+            if e.category==ErrorCategory::Conflict{409}else{422}));
     }
     let saved=encode(&deal)?;
-    // Exact existing original link + Protobuf adapter; the link decides whether
-    // Open creates a follow-up and Won/Lost is ignored. Only these staged
-    // original domain results are committed, in ONE atomic Cloudflare D1 batch.
     let prepared=match super::sales_activities_link::prepare(
-        &before,&deal,tenant,actor,trace,now_nanos()).await {
-        Ok(x)=>x,Err(e)=>return error(&e.code,
-            if e.category==ErrorCategory::Conflict{409}else{422}),
+        &before,&deal,tenant,actor,trace,now_nanos()).await{
+        Ok(x)=>x,Err(e)=>return Ok(advance_rejected(e.code,
+            if e.category==ErrorCategory::Conflict{409}else{422})),
     };
     let update=bind(db,"UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,last_action='sales_deals.advance' WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&saved),JsValue::from_f64(deal.version() as f64),
-          JsValue::from_str(&k),JsValue::from_str(&digest),JsValue::from_str(trace),
+          JsValue::from_str(key),JsValue::from_str(&digest),JsValue::from_str(trace),
           JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?;
     let mut writes=vec![update];
-    if let Some(task)=&prepared.task {
-        let account_id=match deal.account(){Some(x)=>&x.resource_id,
-            None=>return error("SALES_LINK_ACCOUNT_REQUIRED",422)};
+    if let Some(task)=&prepared.task{
+        let account_id=match deal.account(){
+            Some(x)=>&x.resource_id,
+            None=>return Ok(advance_rejected("SALES_LINK_ACCOUNT_REQUIRED",422)),
+        };
         let task_state=String::from_utf8(crm_activities::encode_task_state(task)
             .map_err(|e|worker::Error::RustError(e.code))?)
             .map_err(|e|worker::Error::RustError(e.to_string()))?;
@@ -329,14 +375,12 @@ async fn advance(mut req:Request,db:&D1Database,tenant:&str,id:&str,actor:&str,t
               JsValue::from_str(account_id),JsValue::from_str(&task_state),
               JsValue::from_f64(task.version() as f64),
               JsValue::from_str(&prepared.delivery_id),
-              JsValue::from_str(&prepared.event_id),
-              JsValue::from_str(trace)])?;
+              JsValue::from_str(&prepared.event_id),JsValue::from_str(trace)])?;
         writes.push(task_stmt);
     }
     let link_stmt=bind(db,"INSERT INTO crm_sales_link_delivery_records(tenant,delivery_id,event_id,deal_id,deal_version,task_id,disposition,state_json,request_id) VALUES(?,?,?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant),
-          JsValue::from_str(&prepared.delivery_id),
-          JsValue::from_str(&prepared.event_id),
+          JsValue::from_str(&prepared.delivery_id),JsValue::from_str(&prepared.event_id),
           JsValue::from_str(id),JsValue::from_f64(deal.version() as f64),
           prepared.task.as_ref().map_or(JsValue::NULL,|task|
               JsValue::from_str(task.task_id().as_str())),
@@ -344,12 +388,64 @@ async fn advance(mut req:Request,db:&D1Database,tenant:&str,id:&str,actor:&str,t
           JsValue::from_str(&prepared.state_json),JsValue::from_str(trace)])?;
     writes.push(link_stmt);
     if db.batch(writes).await.is_err(){
-        return error("SALES_LINK_ATOMIC_COMMIT_CONFLICT",409);
+        return Ok(advance_rejected("SALES_LINK_ATOMIC_COMMIT_CONFLICT",409));
     }
-    response(json!({"item":view(&deal),"replayed":false,
-        "link":{"delivery_id":prepared.delivery_id,
-            "disposition":if prepared.task.is_some(){"applied"}else{"ignored"},
-            "task_id":prepared.task.as_ref().map(|x|x.task_id().as_str())}}),200)
+    let link=Some(LinkOutcome{
+        delivery_id:prepared.delivery_id,
+        applied:prepared.task.is_some(),
+        task_id:prepared.task.as_ref().map(|x|x.task_id().as_str().to_owned()),
+    });
+    Ok(Ok(AdvanceSaved{
+        saved:SalesSaved{deal,replayed:false},link,
+    }))
+}
+async fn advance(mut req:Request,db:&D1Database,tenant:&str,id:&str,actor:&str,
+    trace:&str)->Result<Response>{
+    let Some(k)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
+    let input=match serde_json::from_str::<StageInput>(&req.text().await?){
+        Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422),
+    };
+    match advance_typed(input,&k,db,tenant,id,actor,trace).await?{
+        Ok(outcome)=>response(json!({
+            "item":view(&outcome.saved.deal),"replayed":outcome.saved.replayed,
+            "link":outcome.link.as_ref().map(|link|json!({
+                "delivery_id":link.delivery_id,
+                "disposition":if link.applied{"applied"}else{"ignored"},
+                "task_id":link.task_id,
+            }))
+        }),200),
+        Err(f)=>error(&f.code,f.status),
+    }
+}
+
+/// Filter BEFORE LIMIT so filtered pagination never drops matching Deals.
+/// State is owned by crm-sales' exact persisted DealStateV1 JSON codec; no
+/// alternate status or pipeline projection table is added.
+pub(super) async fn list_page_typed(
+    db:&D1Database,tenant:&str,after:&str,size:usize,
+    pipeline:Option<&str>,status:Option<DealStatus>,
+)->Result<(Vec<Deal>,Option<String>)>{
+    let mut args=vec![JsValue::from_str(tenant),JsValue::from_str(after)];
+    let mut sql=String::from(
+        "SELECT id,state FROM crm_sales_deal_records WHERE tenant=? AND id>?");
+    if let Some(pipeline)=pipeline{
+        sql.push_str(" AND json_extract(state,'$.stage.pipeline_id')=?");
+        args.push(JsValue::from_str(pipeline));
+    }
+    if let Some(status)=status{
+        sql.push_str(" AND json_extract(state,'$.status')=?");
+        args.push(JsValue::from_str(match status{
+            DealStatus::Open=>"open",DealStatus::Won=>"won",DealStatus::Lost=>"lost",
+        }));
+    }
+    sql.push_str(" ORDER BY id LIMIT ?");
+    args.push(JsValue::from_f64((size+1) as f64));
+    let mut rows=bind(db,&sql,&args)?.all().await?.results::<PagedRow>()?;
+    let more=rows.len()>size;
+    rows.truncate(size);
+    let next=if more{rows.last().map(|x|x.id.clone())}else{None};
+    let deals=rows.iter().map(|x|decode(&x.state)).collect::<Result<Vec<_>>>()?;
+    Ok((deals,next))
 }
 async fn list(db:&D1Database,tenant:&str)->Result<Response>{
     let rows=bind(db,"SELECT state FROM crm_sales_deal_records WHERE tenant=? ORDER BY id LIMIT 300",

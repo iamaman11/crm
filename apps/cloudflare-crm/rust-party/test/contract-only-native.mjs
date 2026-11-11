@@ -14,7 +14,8 @@ import {binaryPartyGet,decodePartyGet,partyGetPath,
   binaryTaskV2,decodeTaskV2,taskV2Path,
   binaryQualityV2,decodeQualityV2,qualityV2Path,
   binaryIdentityV2,decodeIdentityV2,identityV2Path,
-  binaryConsentV2,decodeConsentV2,consentV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  binaryConsentV2,decodeConsentV2,consentV2Path,
+  binarySalesV2,decodeSalesV2,salesV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-contract-only-"));
 const base="http://127.0.0.1:18789";
@@ -917,6 +918,149 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2-candidate",result:"
   tenant_ab:true,viewer_read:true,viewer_write_denied:true,operator_deny_only:true,
   no_grant_ingress:true,before_limit_filtered_pagination:true,
   d1_receipts:true,no_extra_audit:true,published_active:false}));
+
+// Original crm-sales v2: generated binary Connect, original Deal aggregate,
+// one tenant D1, exact money, CAS, receipt replay, and atomic stage->Activity.
+const salesV2=signedReadOnly(salesV2Path,binarySalesV2,decodeSalesV2);
+const dealId="sales-mid-"+randomUUID();
+const stageLead={pipelineId:"pipeline.enterprise",stageId:"lead",ordinal:1};
+const stageQualified={pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:2};
+const saleCreate={dealId,name:"Connect Deal",accountId,
+  stage:stageLead,amount:{minorUnits:12500n,currencyCode:"USD"},
+  probabilityBasisPoints:2500,
+  precondition:{idempotencyKey:"connect-sales-create-main"}};
+assert.equal((await salesV2("CreateDeal",null,saleCreate)).status,401);
+assert.equal((await salesV2("CreateDeal",viewer,saleCreate)).status,403);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,stage:undefined,
+  precondition:{idempotencyKey:"connect-sales-no-stage"}})).status,400);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,accountId:"missing-account",
+  precondition:{idempotencyKey:"connect-sales-no-account"}})).status,400);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,probabilityBasisPoints:10001,
+  precondition:{idempotencyKey:"connect-sales-invalid-probability"}})).status,400);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,precondition:{idempotencyKey:"connect-sales-create-invalid-version",
+    expectedVersion:1n}})).status,400);
+const salesCreated=await salesV2("CreateDeal",admin,saleCreate);
+assert.equal(salesCreated.status,200,describeProtobuf(salesCreated.body));
+assert.equal(salesCreated.body.deal?.dealId,dealId);
+assert.equal(salesCreated.body.deal?.name,"Connect Deal");
+assert.equal(salesCreated.body.deal?.amount?.minorUnits,12500n);
+assert.equal(salesCreated.body.deal?.amount?.currencyCode,"USD");
+assert.equal(salesCreated.body.deal?.status,1);
+assert.equal(salesCreated.body.receipt?.resourceVersion,1n);
+assert.equal(salesCreated.body.receipt?.replayed,false);
+assert.equal(salesCreated.body.receipt?.requestId,salesCreated.headers.get("x-request-id"));
+const saleReplayed=await salesV2("CreateDeal",admin,saleCreate);
+assert.equal(saleReplayed.status,200);
+assert.equal(saleReplayed.body.receipt?.replayed,true);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,name:"changed idempotency payload"})).status,409);
+assert.equal((await salesV2("GetDeal",tenantB,{dealId})).status,404);
+assert.equal((await salesV2("GetDeal",viewer,{dealId})).body.deal?.dealId,dealId);
+assert.equal((await salesV2("GetDeal",viewer,{dealId:"bad/invalid"})).status,400);
+const updateSale={dealId,
+  name:{operation:{case:"set",value:"Updated Connect Deal"}},
+  amount:{operation:{case:"set",value:{minorUnits:98765n,currencyCode:"PLN"}}},
+  probabilityBasisPoints:6750,
+  precondition:{expectedVersion:1n,idempotencyKey:"connect-sales-update-main"}};
+assert.equal((await salesV2("UpdateDeal",viewer,updateSale)).status,403);
+assert.equal((await salesV2("UpdateDeal",admin,{
+  ...updateSale,precondition:{expectedVersion:100n,
+    idempotencyKey:"connect-sales-stale-version"}})).status,409);
+const saleUpdated=await salesV2("UpdateDeal",admin,updateSale);
+assert.equal(saleUpdated.status,200,describeProtobuf(saleUpdated.body));
+assert.equal(saleUpdated.body.deal?.name,"Updated Connect Deal");
+assert.equal(saleUpdated.body.deal?.amount?.minorUnits,98765n);
+assert.equal(saleUpdated.body.deal?.amount?.currencyCode,"PLN");
+assert.equal(saleUpdated.body.deal?.probabilityBasisPoints,6750);
+assert.equal(saleUpdated.body.receipt?.resourceVersion,2n);
+assert.equal(saleUpdated.body.receipt?.replayed,false);
+const saleUpdateReplayed=await salesV2("UpdateDeal",admin,updateSale);
+assert.equal(saleUpdateReplayed.status,200);
+assert.equal(saleUpdateReplayed.body.receipt?.replayed,true);
+assert.equal((await salesV2("UpdateDeal",admin,{
+  ...updateSale,probabilityBasisPoints:100})).status,409);
+const advanceSale={dealId,targetStage:stageQualified,targetStatus:1,
+  precondition:{expectedVersion:2n,idempotencyKey:"connect-sales-advance-main"}};
+assert.equal((await salesV2("AdvanceStage",viewer,advanceSale)).status,403);
+assert.equal((await salesV2("AdvanceStage",admin,{
+  ...advanceSale,targetStage:stageLead,
+  precondition:{expectedVersion:2n,idempotencyKey:"connect-sales-regress"}})).status,400);
+const taskCountBefore=sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
+  "WHERE tenant='tenant-a'")[0].n;
+const advancedSale=await salesV2("AdvanceStage",admin,advanceSale);
+assert.equal(advancedSale.status,200,describeProtobuf(advancedSale.body));
+assert.equal(advancedSale.body.deal?.stage?.stageId,"qualified");
+assert.equal(advancedSale.body.deal?.version,3n);
+assert.equal(advancedSale.body.receipt?.resourceVersion,3n);
+assert.equal(advancedSale.body.receipt?.replayed,false);
+const taskCountAfter=sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
+  "WHERE tenant='tenant-a'")[0].n;
+assert.equal(taskCountAfter,taskCountBefore+1,
+  "original Sales stage event must create one Activities Task atomically");
+const advanceReplayed=await salesV2("AdvanceStage",admin,advanceSale);
+assert.equal(advanceReplayed.status,200);
+assert.equal(advanceReplayed.body.receipt?.replayed,true);
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
+  "WHERE tenant='tenant-a'")[0].n,taskCountAfter);
+const closeSale={dealId,targetStage:{pipelineId:"pipeline.enterprise",
+  stageId:"won",ordinal:3},targetStatus:2,closeReasonCode:"contract-signed",
+  precondition:{expectedVersion:3n,idempotencyKey:"connect-sales-close-main"}};
+const closedSale=await salesV2("AdvanceStage",admin,closeSale);
+assert.equal(closedSale.status,200,describeProtobuf(closedSale.body));
+assert.equal(closedSale.body.deal?.status,2);
+assert.equal(closedSale.body.deal?.version,4n);
+assert.ok(closedSale.body.deal?.closedAt);
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
+  "WHERE tenant='tenant-a'")[0].n,taskCountAfter,
+  "Won closure must not create a second follow-up Task");
+assert.equal((await salesV2("AdvanceStage",admin,closeSale))
+  .body.receipt?.replayed,true);
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
+  "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'")[0].n,2,
+  "two original one-batch Sales->Activities delivery receipts");
+const dealOther="sales-aaa-other-"+randomUUID();
+const dealLast="sales-zzz-ours-"+randomUUID();
+for(const [index,nextId,pipe] of [
+  [0,dealOther,"pipeline.other"],[1,dealLast,"pipeline.enterprise"]
+]){
+  const created=await salesV2("CreateDeal",admin,{
+    dealId:nextId,name:"Sales page "+index,accountId,
+    stage:{pipelineId:pipe,stageId:"lead",ordinal:1},
+    probabilityBasisPoints:1000,
+    precondition:{idempotencyKey:"connect-sales-paging-"+index}});
+  assert.equal(created.status,200,describeProtobuf(created.body));
+}
+assert.equal((await salesV2("ListDeals",viewer,{page:{pageSize:101}})).status,400);
+assert.equal((await salesV2("ListDeals",viewer,{status:0})).status,400);
+assert.equal((await salesV2("ListDeals",tenantB,{page:{pageSize:1}}))
+  .body.deals.length,0);
+const wonList=await collectPages(salesV2,"ListDeals","deals",{status:2});
+assert.deepEqual(wonList.map(x=>x.dealId),[dealId]);
+const filteredSales=await collectPages(salesV2,"ListDeals","deals",{
+  pipelineId:"pipeline.enterprise"});
+assert.deepEqual(filteredSales.map(x=>x.dealId),[dealId,dealLast]);
+assert.equal((await collectPages(salesV2,"ListDeals","deals",{
+  pipelineId:"pipeline.other"})).length,1);
+assert.equal((await salesV2("ListDeals",viewer,{
+  page:{pageSize:1,pageToken:dealLast},pipelineId:"pipeline.enterprise"})
+  ).body.deals.length,0);
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
+  "WHERE tenant='tenant-a' AND key IN ('connect-sales-create-main',"+
+  "'connect-sales-update-main','connect-sales-advance-main','connect-sales-close-main')"
+  )[0].n,4,"original Deal receipt owners and D1 triggers remain singular");
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+dealId+"'")[0].n,4,
+  "create + update + two stage transitions each write exactly one audit");
+console.log(JSON.stringify({event:"crm.native-g3-sales-v2-candidate",result:"PASS",
+  rpc_methods:["CreateDeal","UpdateDeal","AdvanceStage","GetDeal","ListDeals"],
+  generated_binary:true,original_owner:"crm.sales",signed_access:true,tenant_ab:true,
+  viewer_read:true,viewer_write_denied:true,exact_money:true,
+  before_limit_filters:true,cas:true,idempotent_receipts:true,
+  atomic_sales_activities:true,no_extra_audit:true,published_active:false}));
 
  console.log(JSON.stringify({event:"crm.native-g3-party-v3-candidate",
    result:"PASS",generated_binary:true,owner:"crm.parties",

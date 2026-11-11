@@ -15,6 +15,7 @@ fn main() {
     println!("cargo:rerun-if-changed=../../../proto/crm/data_quality/v2/quality.proto");
     println!("cargo:rerun-if-changed=../../../proto/crm/identity_resolution/v2/identity.proto");
     println!("cargo:rerun-if-changed=../../../proto/crm/consents/v2/consent.proto");
+    println!("cargo:rerun-if-changed=../../../proto/crm/sales/v2/deal.proto");
     connectrpc_build::Config::new()
         .files(&["../../../proto/crm/core/v1/common.proto",
                  "../../../proto/crm/sales/v1/deal.proto",
@@ -27,7 +28,8 @@ fn main() {
                  "../../../proto/crm/activities/v2/task.proto",
                  "../../../proto/crm/data_quality/v2/quality.proto",
                  "../../../proto/crm/identity_resolution/v2/identity.proto",
-                 "../../../proto/crm/consents/v2/consent.proto"])
+                 "../../../proto/crm/consents/v2/consent.proto",
+                 "../../../proto/crm/sales/v2/deal.proto"])
         .includes(&["../../../proto"])
         .include_file("_connectrpc.rs")
         .compile()

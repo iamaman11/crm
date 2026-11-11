@@ -9,6 +9,7 @@ import { TaskService } from "../gen/crm/activities/v2/task_pb";
 import { DataQualityService } from "../gen/crm/data_quality/v2/quality_pb";
 import { IdentityResolutionService } from "../gen/crm/identity_resolution/v2/identity_pb";
 import { ConsentAuthorizationService } from "../gen/crm/consents/v2/consent_pb";
+import { DealService as DealServiceV2 } from "../gen/crm/sales/v2/deal_pb";
 
 // One generated binary Connect client for the single Rust Worker.
 // Cloudflare Access supplies identity. Browser NEVER supplies tenant/actor.
@@ -26,5 +27,6 @@ export function createCloudflareCrmClient(baseUrl: string) {
     dataQuality: createClient(DataQualityService, transport),
     identityResolution: createClient(IdentityResolutionService, transport),
     consents: createClient(ConsentAuthorizationService, transport),
+    deals: createClient(DealServiceV2, transport),
   };
 }
