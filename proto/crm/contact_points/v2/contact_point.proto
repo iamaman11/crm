@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package crm.contact_points.v2;
+
+import "crm/core/v2/operation.proto";
+import "google/protobuf/timestamp.proto";
+
+// Verification cannot be set from the browser. Only trusted evidence can
+// transition the original ContactPoint aggregate to verified.
+enum ContactPointKind {
+  CONTACT_POINT_KIND_UNSPECIFIED = 0;
+  CONTACT_POINT_KIND_EMAIL = 1;
+  CONTACT_POINT_KIND_PHONE = 2;
+  CONTACT_POINT_KIND_POSTAL = 3;
+  CONTACT_POINT_KIND_WEB = 4;
+  CONTACT_POINT_KIND_MESSAGING = 5;
+}
+
+enum ContactPointStatus {
+  CONTACT_POINT_STATUS_UNSPECIFIED = 0;
+  CONTACT_POINT_STATUS_ACTIVE = 1;
+  CONTACT_POINT_STATUS_INACTIVE = 2;
+}
+
+message ContactPoint {
+  string contact_point_id = 1;
+  string party_id = 2;
+  ContactPointKind kind = 3;
+  string display_value = 4;
+  string normalized_value = 5;
+  bool preferred = 6;
+  ContactPointStatus status = 7;
+  bool verified = 8;
+  google.protobuf.Timestamp valid_from = 9;
+  google.protobuf.Timestamp valid_until = 10;
+  int64 version = 11;
+}
+
+message CreateContactPointRequest {
+  string contact_point_id = 1;
+  string party_id = 2;
+  ContactPointKind kind = 3;
+  string value = 4;
+  bool preferred = 5;
+  google.protobuf.Timestamp valid_from = 6;
+  google.protobuf.Timestamp valid_until = 7;
+  crm.core.v2.MutationPrecondition precondition = 8;
+}
+
+message CreateContactPointResponse {
+  ContactPoint contact_point = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message UpdateContactPointRequest {
+  string contact_point_id = 1;
+  string value = 2;
+  ContactPointStatus status = 3;
+  bool preferred = 4;
+  crm.core.v2.TimestampPatch valid_from = 5;
+  crm.core.v2.TimestampPatch valid_until = 6;
+  crm.core.v2.MutationPrecondition precondition = 7;
+}
+
+message UpdateContactPointResponse {
+  ContactPoint contact_point = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetContactPointRequest {
+  string contact_point_id = 1;
+}
+
+message GetContactPointResponse {
+  ContactPoint contact_point = 1;
+}
+
+message ListContactPointsRequest {
+  crm.core.v2.PageRequest page = 1;
+  optional string party_id = 2;
+}
+
+message ListContactPointsResponse {
+  repeated ContactPoint contact_points = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+service ContactPointService {
+  rpc CreateContactPoint(CreateContactPointRequest) returns (CreateContactPointResponse);
+  rpc UpdateContactPoint(UpdateContactPointRequest) returns (UpdateContactPointResponse);
+  rpc GetContactPoint(GetContactPointRequest) returns (GetContactPointResponse);
+  rpc ListContactPoints(ListContactPointsRequest) returns (ListContactPointsResponse);
+}

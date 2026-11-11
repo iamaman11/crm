@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package crm.identity_resolution.v2;
+
+import "crm/core/v2/operation.proto";
+import "crm/parties/v3/party.proto";
+
+// Observations are NOT proof of identity; no Merge, Confirm or mutating
+// candidate-case RPC is connected in the current CRM.
+message SharedEmailCandidate {
+  crm.parties.v3.Party first_party = 1;
+  crm.parties.v3.Party second_party = 2;
+  string first_contact_point_id = 3;
+  string second_contact_point_id = 4;
+  bool both_contacts_verified = 5;
+}
+
+message FindSharedEmailCandidatesRequest {
+  crm.core.v2.PageRequest page = 1;
+}
+
+message FindSharedEmailCandidatesResponse {
+  repeated SharedEmailCandidate candidates = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+message ComparePartiesRequest {
+  string first_party_id = 1;
+  string second_party_id = 2;
+}
+
+message ComparePartiesResponse {
+  crm.parties.v3.Party first_party = 1;
+  crm.parties.v3.Party second_party = 2;
+  bool same_party_id = 3;
+  bool identity_confirmed = 4;
+}
+
+service IdentityResolutionService {
+  rpc FindSharedEmailCandidates(FindSharedEmailCandidatesRequest) returns (FindSharedEmailCandidatesResponse);
+  rpc CompareParties(ComparePartiesRequest) returns (ComparePartiesResponse);
+}

@@ -35,3 +35,26 @@ test("real React source is analyzed without a fixed component count",()=>{
  assert.ok(result.requests.length>=2);
  assert.ok(result.controls.some(x=>x.element==="button"));
 });
+
+test("new versioned contract resolves its owner from canonical bindings, never from a hand catalog",()=>{
+ const owner={module_id:"crm.example",linked:true,
+  rpc_bindings:[{path:"/crm.example.v1.ExampleService/GetExample",
+    request:"crm.example.v1.GetExampleRequest",response:"crm.example.v1.GetExampleResponse"}]};
+ const proposed={file:"crm/example/v2/example.proto",
+  path:"/crm.example.v2.ExampleService/CreateExample",
+  input:"crm.example.v2.CreateExampleRequest",
+  output:"crm.example.v2.CreateExampleResponse"};
+ const report=deriveMatrix({files:[],modules:{modules:[owner],active_rpc_paths:[]},
+  descriptors:[proposed],phase:"contract-only",sha:"a"});
+ assert.equal(report.protobuf.proposed_cutover_contracts[0].module_id,"crm.example");
+ assert.equal(report.protobuf.proposed_cutover_contracts[0].activation,
+  "CONTRACT_ONLY_NOT_IMPLEMENTED");
+ assert.equal(report.summary.active_rpc_methods,0);
+});
+test("orphan new RPC proposal fails closed without an original Rust owner",()=>{
+ assert.throws(()=>deriveMatrix({files:[],
+  modules:{modules:[],active_rpc_paths:[]},
+  descriptors:[{file:"crm/ghost/v2/ghost.proto",
+   path:"/crm.ghost.v2.GhostService/GetGhost"}],
+  phase:"contract-only",sha:"a"}),/new contract lacks original module owner/);
+});

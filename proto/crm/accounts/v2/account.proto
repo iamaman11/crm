@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package crm.accounts.v2;
+
+import "crm/core/v2/operation.proto";
+
+// Account links to an existing Party in the signed-Access tenant. No
+// tenant/actor/role field is accepted from the browser.
+enum AccountStatus {
+  ACCOUNT_STATUS_UNSPECIFIED = 0;
+  ACCOUNT_STATUS_ACTIVE = 1;
+  ACCOUNT_STATUS_INACTIVE = 2;
+}
+
+enum AccountPartyRole {
+  ACCOUNT_PARTY_ROLE_UNSPECIFIED = 0;
+  ACCOUNT_PARTY_ROLE_PRIMARY = 1;
+  ACCOUNT_PARTY_ROLE_MEMBER = 2;
+}
+
+message AccountPartyAssociation {
+  string party_id = 1;
+  AccountPartyRole role = 2;
+}
+
+message Account {
+  string account_id = 1;
+  string name = 2;
+  AccountStatus status = 3;
+  repeated AccountPartyAssociation parties = 4;
+  int64 version = 5;
+}
+
+message CreateAccountRequest {
+  string account_id = 1;
+  string name = 2;
+  string primary_party_id = 3;
+  crm.core.v2.MutationPrecondition precondition = 4;
+}
+
+message CreateAccountResponse {
+  Account account = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message UpdateAccountRequest {
+  string account_id = 1;
+  string name = 2;
+  AccountStatus status = 3;
+  crm.core.v2.MutationPrecondition precondition = 4;
+}
+
+message UpdateAccountResponse {
+  Account account = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetAccountRequest {
+  string account_id = 1;
+}
+
+message GetAccountResponse {
+  Account account = 1;
+}
+
+message ListAccountsRequest {
+  crm.core.v2.PageRequest page = 1;
+  optional AccountStatus status = 2;
+}
+
+message ListAccountsResponse {
+  repeated Account accounts = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+service AccountService {
+  rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+  rpc UpdateAccount(UpdateAccountRequest) returns (UpdateAccountResponse);
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+}

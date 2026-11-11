@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+package crm.sales.v2;
+
+import "crm/core/v2/operation.proto";
+import "google/protobuf/timestamp.proto";
+
+// Original crm-sales alone validates amounts, stage transitions, CAS and the
+// sales->activities atomic delivery. No caller-supplied bypass policy.
+enum DealStatus {
+  DEAL_STATUS_UNSPECIFIED = 0;
+  DEAL_STATUS_OPEN = 1;
+  DEAL_STATUS_WON = 2;
+  DEAL_STATUS_LOST = 3;
+}
+
+message DealStage {
+  string pipeline_id = 1;
+  string stage_id = 2;
+  uint32 ordinal = 3;
+}
+
+message Deal {
+  string deal_id = 1;
+  string name = 2;
+  string account_id = 3;
+  DealStage stage = 4;
+  DealStatus status = 5;
+  crm.core.v2.ExactMoney amount = 6;
+  uint32 probability_basis_points = 7;
+  int64 version = 8;
+  google.protobuf.Timestamp closed_at = 9;
+}
+
+message CreateDealRequest {
+  string deal_id = 1;
+  string name = 2;
+  string account_id = 3;
+  DealStage stage = 4;
+  crm.core.v2.ExactMoney amount = 5;
+  uint32 probability_basis_points = 6;
+  crm.core.v2.MutationPrecondition precondition = 7;
+}
+
+message CreateDealResponse {
+  Deal deal = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message UpdateDealRequest {
+  string deal_id = 1;
+  crm.core.v2.StringPatch name = 2;
+  crm.core.v2.MoneyPatch amount = 3;
+  optional uint32 probability_basis_points = 4;
+  crm.core.v2.MutationPrecondition precondition = 5;
+}
+
+message UpdateDealResponse {
+  Deal deal = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message AdvanceStageRequest {
+  string deal_id = 1;
+  DealStage target_stage = 2;
+  DealStatus target_status = 3;
+  optional string close_reason_code = 4;
+  crm.core.v2.MutationPrecondition precondition = 5;
+}
+
+message AdvanceStageResponse {
+  Deal deal = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetDealRequest {
+  string deal_id = 1;
+}
+
+message GetDealResponse {
+  Deal deal = 1;
+}
+
+message ListDealsRequest {
+  crm.core.v2.PageRequest page = 1;
+  optional string pipeline_id = 2;
+  optional DealStatus status = 3;
+}
+
+message ListDealsResponse {
+  repeated Deal deals = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+service DealService {
+  rpc CreateDeal(CreateDealRequest) returns (CreateDealResponse);
+  rpc UpdateDeal(UpdateDealRequest) returns (UpdateDealResponse);
+  rpc AdvanceStage(AdvanceStageRequest) returns (AdvanceStageResponse);
+  rpc GetDeal(GetDealRequest) returns (GetDealResponse);
+  rpc ListDeals(ListDealsRequest) returns (ListDealsResponse);
+}

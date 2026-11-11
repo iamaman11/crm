@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package crm.parties.v3;
+
+import "crm/core/v2/operation.proto";
+
+// Final CRUD surface for the original crm-parties owner. The contract-only
+// crm.parties.v2.GetParty stays unchanged until the single release cutover.
+enum PartyKind {
+  PARTY_KIND_UNSPECIFIED = 0;
+  PARTY_KIND_PERSON = 1;
+  PARTY_KIND_ORGANIZATION = 2;
+}
+
+message Party {
+  string party_id = 1;
+  PartyKind kind = 2;
+  string display_name = 3;
+  int64 version = 4;
+}
+
+message CreatePartyRequest {
+  string party_id = 1;
+  PartyKind kind = 2;
+  string display_name = 3;
+  crm.core.v2.MutationPrecondition precondition = 4;
+}
+
+message CreatePartyResponse {
+  Party party = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message UpdatePartyRequest {
+  string party_id = 1;
+  string display_name = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message UpdatePartyResponse {
+  Party party = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetPartyRequest {
+  string party_id = 1;
+}
+
+message GetPartyResponse {
+  Party party = 1;
+}
+
+message ListPartiesRequest {
+  crm.core.v2.PageRequest page = 1;
+  optional PartyKind kind = 2;
+}
+
+message ListPartiesResponse {
+  repeated Party parties = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+service PartyService {
+  rpc CreateParty(CreatePartyRequest) returns (CreatePartyResponse);
+  rpc UpdateParty(UpdatePartyRequest) returns (UpdatePartyResponse);
+  rpc GetParty(GetPartyRequest) returns (GetPartyResponse);
+  rpc ListParties(ListPartiesRequest) returns (ListPartiesResponse);
+}

@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package crm.consents.v2;
+
+import "crm/core/v2/operation.proto";
+
+// Only trusted consent evidence can authorize a GRANT. This CRM supports
+// operator DENY, tenant-scoped reads and explicit evaluation, never fake grants.
+enum CommunicationChannel {
+  COMMUNICATION_CHANNEL_UNSPECIFIED = 0;
+  COMMUNICATION_CHANNEL_EMAIL = 1;
+  COMMUNICATION_CHANNEL_PHONE = 2;
+  COMMUNICATION_CHANNEL_SMS = 3;
+  COMMUNICATION_CHANNEL_POSTAL = 4;
+  COMMUNICATION_CHANNEL_MESSAGING = 5;
+  COMMUNICATION_CHANNEL_PUSH = 6;
+}
+
+enum ConsentEffect {
+  CONSENT_EFFECT_UNSPECIFIED = 0;
+  CONSENT_EFFECT_GRANT = 1;
+  CONSENT_EFFECT_DENY = 2;
+}
+
+enum ConsentStatus {
+  CONSENT_STATUS_UNSPECIFIED = 0;
+  CONSENT_STATUS_ACTIVE = 1;
+  CONSENT_STATUS_WITHDRAWN = 2;
+}
+
+enum EvaluationReason {
+  EVALUATION_REASON_UNSPECIFIED = 0;
+  EVALUATION_REASON_ACTIVE_GRANT = 1;
+  EVALUATION_REASON_ACTIVE_DENY = 2;
+  EVALUATION_REASON_WITHDRAWN = 3;
+  EVALUATION_REASON_NO_APPLICABLE_GRANT = 4;
+}
+
+message ConsentAuthorization {
+  string authorization_id = 1;
+  string party_id = 2;
+  optional string contact_point_id = 3;
+  string purpose = 4;
+  CommunicationChannel channel = 5;
+  ConsentEffect effect = 6;
+  ConsentStatus status = 7;
+  string jurisdiction = 8;
+  int64 version = 9;
+}
+
+message EvaluateConsentRequest {
+  string party_id = 1;
+  optional string contact_point_id = 2;
+  string purpose = 3;
+  CommunicationChannel channel = 4;
+}
+
+message EvaluateConsentResponse {
+  bool allowed = 1;
+  EvaluationReason reason = 2;
+}
+
+message SuppressCommunicationRequest {
+  string authorization_id = 1;
+  string party_id = 2;
+  optional string contact_point_id = 3;
+  string purpose = 4;
+  CommunicationChannel channel = 5;
+  string jurisdiction = 6;
+  crm.core.v2.MutationPrecondition precondition = 7;
+}
+
+message SuppressCommunicationResponse {
+  ConsentAuthorization authorization = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message ListConsentAuthorizationsRequest {
+  crm.core.v2.PageRequest page = 1;
+  optional string party_id = 2;
+}
+
+message ListConsentAuthorizationsResponse {
+  repeated ConsentAuthorization authorizations = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+service ConsentAuthorizationService {
+  rpc EvaluateConsent(EvaluateConsentRequest) returns (EvaluateConsentResponse);
+  rpc SuppressCommunication(SuppressCommunicationRequest) returns (SuppressCommunicationResponse);
+  rpc ListConsentAuthorizations(ListConsentAuthorizationsRequest) returns (ListConsentAuthorizationsResponse);
+}

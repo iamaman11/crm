@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package crm.party_relationships.v2;
+
+import "crm/core/v2/operation.proto";
+import "google/protobuf/timestamp.proto";
+
+enum RelationshipDirectionality {
+  RELATIONSHIP_DIRECTIONALITY_UNSPECIFIED = 0;
+  RELATIONSHIP_DIRECTIONALITY_DIRECTIONAL = 1;
+  RELATIONSHIP_DIRECTIONALITY_RECIPROCAL = 2;
+}
+
+enum RelationshipStatus {
+  RELATIONSHIP_STATUS_UNSPECIFIED = 0;
+  RELATIONSHIP_STATUS_ACTIVE = 1;
+  RELATIONSHIP_STATUS_INACTIVE = 2;
+}
+
+message RelationshipType {
+  string code = 1;
+  RelationshipDirectionality directionality = 2;
+  string from_role = 3;
+  string to_role = 4;
+}
+
+message PartyRelationship {
+  string relationship_id = 1;
+  string from_party_id = 2;
+  string to_party_id = 3;
+  RelationshipType type = 4;
+  RelationshipStatus status = 5;
+  google.protobuf.Timestamp valid_from = 6;
+  google.protobuf.Timestamp valid_until = 7;
+  int64 version = 8;
+}
+
+message CreatePartyRelationshipRequest {
+  string relationship_id = 1;
+  string from_party_id = 2;
+  string to_party_id = 3;
+  RelationshipType type = 4;
+  google.protobuf.Timestamp valid_from = 5;
+  google.protobuf.Timestamp valid_until = 6;
+  crm.core.v2.MutationPrecondition precondition = 7;
+}
+
+message CreatePartyRelationshipResponse {
+  PartyRelationship relationship = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message UpdatePartyRelationshipRequest {
+  string relationship_id = 1;
+  RelationshipStatus status = 2;
+  crm.core.v2.TimestampPatch valid_from = 3;
+  crm.core.v2.TimestampPatch valid_until = 4;
+  crm.core.v2.MutationPrecondition precondition = 5;
+}
+
+message UpdatePartyRelationshipResponse {
+  PartyRelationship relationship = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetPartyRelationshipRequest {
+  string relationship_id = 1;
+}
+
+message GetPartyRelationshipResponse {
+  PartyRelationship relationship = 1;
+}
+
+message ListPartyRelationshipsRequest {
+  crm.core.v2.PageRequest page = 1;
+  optional string party_id = 2;
+}
+
+message ListPartyRelationshipsResponse {
+  repeated PartyRelationship relationships = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+service PartyRelationshipService {
+  rpc CreatePartyRelationship(CreatePartyRelationshipRequest) returns (CreatePartyRelationshipResponse);
+  rpc UpdatePartyRelationship(UpdatePartyRelationshipRequest) returns (UpdatePartyRelationshipResponse);
+  rpc GetPartyRelationship(GetPartyRelationshipRequest) returns (GetPartyRelationshipResponse);
+  rpc ListPartyRelationships(ListPartyRelationshipsRequest) returns (ListPartyRelationshipsResponse);
+}
