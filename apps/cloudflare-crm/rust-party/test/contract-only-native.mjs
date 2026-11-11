@@ -867,15 +867,15 @@ assert.equal(suppressed.body.authorization?.partyId,id);
 assert.equal(suppressed.body.receipt?.resourceVersion,1n);
 assert.equal(suppressed.body.receipt?.replayed,false);
 assert.equal(suppressed.body.receipt?.requestId,suppressed.headers.get("x-request-id"));
-const replay=await consentV2("SuppressCommunication",admin,denyInput);
-assert.equal(replay.status,200,describeProtobuf(replay.body));
-assert.equal(replay.body.receipt?.replayed,true);
+const consentReplay=await consentV2("SuppressCommunication",admin,denyInput);
+assert.equal(consentReplay.status,200,describeProtobuf(consentReplay.body));
+assert.equal(consentReplay.body.receipt?.replayed,true);
 assert.equal((await consentV2("SuppressCommunication",admin,{
   ...denyInput,purpose:"marketing.different"})).status,409);
-const denied=await consentV2("EvaluateConsent",viewer,consentScope);
-assert.equal(denied.status,200,describeProtobuf(denied.body));
-assert.equal(denied.body.allowed,false);
-assert.equal(denied.body.reason,2,"ACTIVE_DENY");
+const consentDenied=await consentV2("EvaluateConsent",viewer,consentScope);
+assert.equal(consentDenied.status,200,describeProtobuf(consentDenied.body));
+assert.equal(consentDenied.body.allowed,false);
+assert.equal(consentDenied.body.reason,2,"ACTIVE_DENY");
 const otherScope=await consentV2("EvaluateConsent",admin,{
   ...consentScope,purpose:"marketing.unrelated"});
 assert.equal(otherScope.status,200);
