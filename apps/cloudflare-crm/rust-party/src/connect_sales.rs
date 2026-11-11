@@ -1497,7 +1497,7 @@ impl SalesV2Service {
         let amount=deal.amount().map(|money|{
             let units=i64::try_from(money.minor_units())
                 .map_err(|_|ConnectError::internal("original money exceeds wire i64"))?;
-            Ok(core_v2::ExactMoney{
+            Ok::<core_v2::ExactMoney,ConnectError>(core_v2::ExactMoney{
                 minor_units:units,currency_code:money.currency().as_str().to_owned(),
                 ..Default::default()
             })
