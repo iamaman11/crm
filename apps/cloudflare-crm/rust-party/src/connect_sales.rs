@@ -1314,7 +1314,7 @@ impl ConsentV2Service{
     fn d1(&self)->std::result::Result<D1Database,ConnectError>{
         self.env.d1("DB").map_err(|_|ConnectError::internal("D1 unavailable"))
     }
-    fn channel(raw:i32)->std::result::Result<consents::ChannelInput,ConnectError>{
+    fn channel(raw:buffa::EnumValue<consent_wire::CommunicationChannel>)->std::result::Result<consents::ChannelInput,ConnectError>{
         match raw{
             x if x==consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_EMAIL=>
                 Ok(consents::ChannelInput::Email),
@@ -1419,7 +1419,7 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service{
         if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
         let after=&req.page.page_token;
         if !after.is_empty(){
-            crm_consents::ConsentAuthorizationId::try_new(after)
+            crm_consents::ConsentAuthorizationId::try_new(*after)
                 .map_err(|_|ConnectError::invalid_argument("invalid page_token"))?;
         }
         let filter=req.party_id.as_deref();
