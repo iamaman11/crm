@@ -264,6 +264,8 @@ try{
  const contactId="contact-native-"+randomUUID();
  const contactInput={contactPointId:contactId,partyId:id,kind:1,
    value:"  contact@example.com  ",preferred:true,
+   validFrom:{seconds:1700000000n,nanos:123000000},
+   validUntil:{seconds:1800000000n,nanos:456000000},
    precondition:{idempotencyKey:"candidate-v2-contact-create-001"}};
  assert.equal((await contactV2("CreateContactPoint",null,contactInput)).status,401);
  assert.equal((await contactV2("CreateContactPoint",viewer,contactInput)).status,403);
@@ -279,6 +281,10 @@ try{
  assert.equal(contactCreated.body.contactPoint?.partyId,id);
  assert.equal(contactCreated.body.contactPoint?.verified,false);
  assert.equal(contactCreated.body.contactPoint?.normalizedValue,"contact@example.com");
+ assert.equal(contactCreated.body.contactPoint?.validFrom?.seconds,1700000000n);
+ assert.equal(contactCreated.body.contactPoint?.validFrom?.nanos,123000000);
+ assert.equal(contactCreated.body.contactPoint?.validUntil?.seconds,1800000000n);
+ assert.equal(contactCreated.body.contactPoint?.validUntil?.nanos,456000000);
  assert.equal(contactCreated.body.receipt?.resourceVersion,1n);
  assert.equal(contactCreated.body.receipt?.replayed,false);
  assert.equal(contactCreated.body.receipt?.requestId,contactCreated.headers.get("x-request-id"));
@@ -297,7 +303,10 @@ try{
  assert.equal((await contactV2("ListContactPoints",viewer,{partyId:"missing"}))
    .body.contactPoints.length,0);
  const contactUpdate={contactPointId:contactId,value:"next@example.org",status:1,
-   preferred:false,precondition:{
+   preferred:false,
+   validFrom:{operation:{case:"set",value:{seconds:1760000000n,nanos:987654321}}},
+   validUntil:{operation:{case:"clear",value:true}},
+   precondition:{
      expectedVersion:1n,idempotencyKey:"candidate-v2-contact-update-001"}};
  assert.equal((await contactV2("UpdateContactPoint",viewer,contactUpdate)).status,403);
  assert.equal((await contactV2("UpdateContactPoint",admin,{...contactUpdate,status:0,
@@ -308,6 +317,10 @@ try{
  assert.equal(contactUpdated.body.contactPoint?.version,2n);
  assert.equal(contactUpdated.body.contactPoint?.verified,false);
  assert.equal(contactUpdated.body.contactPoint?.normalizedValue,"next@example.org");
+ assert.equal(contactUpdated.body.contactPoint?.validFrom?.seconds,1760000000n);
+ assert.equal(contactUpdated.body.contactPoint?.validFrom?.nanos,987654321);
+ assert.equal(contactUpdated.body.contactPoint?.validUntil,undefined,
+   "explicit clear timestamp patch must remove validUntil");
  assert.equal(contactUpdated.body.receipt?.resourceVersion,2n);
  const contactReupdate=await contactV2("UpdateContactPoint",admin,contactUpdate);
  assert.equal(contactReupdate.status,200,describeProtobuf(contactReupdate.body));
