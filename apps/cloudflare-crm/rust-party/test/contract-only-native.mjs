@@ -7,7 +7,8 @@ import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
 import {binaryPartyGet,decodePartyGet,partyGetPath,
-  binaryPartyV3,decodePartyV3,partyV3Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  binaryPartyV3,decodePartyV3,partyV3Path,
+  binaryAccountV2,decodeAccountV2,accountV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-contract-only-"));
 const base="http://127.0.0.1:18789";
@@ -171,6 +172,81 @@ try{
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
    "AND subject_id='"+id+"'")[0].n,2);
  assert.equal((await v3("GetParty",admin,{partyId:id})).body.party?.version,2n);
+
+ // Accounts v2: original Account aggregate and D1 trigger, not a pilot record.
+ const accountV2=async(method,token,payload)=>{
+   const response=await fetch(base+accountV2Path(method),{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+       ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:binaryAccountV2(method,payload)});
+   return {status:response.status,headers:response.headers,
+     body:response.status<400
+       ?decodeAccountV2(method,new Uint8Array(await response.arrayBuffer()))
+       :await response.json()};
+ };
+ const accountId="account-native-"+randomUUID();
+ const accountInput={accountId,name:"  Connected   Account  ",primaryPartyId:id,
+   precondition:{idempotencyKey:"candidate-v2-account-create-001"}};
+ assert.equal((await accountV2("CreateAccount",null,accountInput)).status,401);
+ assert.equal((await accountV2("CreateAccount",viewer,accountInput)).status,403);
+ assert.equal((await accountV2("CreateAccount",admin,{...accountInput,
+   precondition:{idempotencyKey:"candidate-v2-account-version",expectedVersion:1n}})).status,400);
+ assert.equal((await accountV2("CreateAccount",admin,{...accountInput,
+   primaryPartyId:"no-such-party",
+   precondition:{idempotencyKey:"candidate-v2-account-fk"}})).status,400);
+ const accountCreated=await accountV2("CreateAccount",admin,accountInput);
+ assert.equal(accountCreated.status,200,describeProtobuf(accountCreated.body));
+ assert.equal(accountCreated.body.account?.accountId,accountId);
+ assert.equal(accountCreated.body.account?.name,"Connected Account");
+ assert.equal(accountCreated.body.account?.parties?.[0]?.partyId,id);
+ assert.equal(accountCreated.body.account?.parties?.[0]?.role,1);
+ assert.equal(accountCreated.body.receipt?.resourceVersion,1n);
+ assert.equal(accountCreated.body.receipt?.replayed,false);
+ assert.equal(accountCreated.body.receipt?.requestId,accountCreated.headers.get("x-request-id"));
+ const accountReplay=await accountV2("CreateAccount",admin,accountInput);
+ assert.equal(accountReplay.status,200,describeProtobuf(accountReplay.body));
+ assert.equal(accountReplay.body.receipt?.replayed,true);
+ assert.equal((await accountV2("CreateAccount",admin,{...accountInput,
+   name:"different idempotent body"})).status,409);
+ assert.equal((await accountV2("GetAccount",tenantB,{accountId})).status,404);
+ assert.equal((await accountV2("GetAccount",viewer,{accountId})).body.account?.name,"Connected Account");
+ const accountList=await accountV2("ListAccounts",viewer,{page:{pageSize:1}});
+ assert.equal(accountList.status,200,describeProtobuf(accountList.body));
+ assert.equal(accountList.body.accounts.length,1);
+ assert.equal(accountList.body.accounts[0].accountId,accountId);
+ assert.equal((await accountV2("ListAccounts",viewer,{page:{pageSize:101}})).status,400);
+ const accountUpdate={accountId,name:"Updated Account",status:2,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-v2-account-update-001"}};
+ assert.equal((await accountV2("UpdateAccount",viewer,accountUpdate)).status,403);
+ assert.equal((await accountV2("UpdateAccount",admin,{...accountUpdate,status:0,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-v2-account-invalid"}})).status,400);
+ const accountUpdated=await accountV2("UpdateAccount",admin,accountUpdate);
+ assert.equal(accountUpdated.status,200,describeProtobuf(accountUpdated.body));
+ assert.equal(accountUpdated.body.account?.status,2);
+ assert.equal(accountUpdated.body.account?.version,2n);
+ assert.equal(accountUpdated.body.receipt?.replayed,false);
+ const accountReupdate=await accountV2("UpdateAccount",admin,accountUpdate);
+ assert.equal(accountReupdate.status,200,describeProtobuf(accountReupdate.body));
+ assert.equal(accountReupdate.body.receipt?.replayed,true);
+ assert.equal((await accountV2("UpdateAccount",admin,{...accountUpdate,
+   precondition:{expectedVersion:1n,
+     idempotencyKey:"candidate-v2-account-stale"}})).status,409);
+ assert.equal((await accountV2("ListAccounts",viewer,{page:{pageSize:1},status:1}))
+   .body.accounts.length,0);
+ assert.equal((await accountV2("ListAccounts",viewer,{page:{pageSize:1},status:2}))
+   .body.accounts.length,1);
+ assert.equal(sql("SELECT version FROM crm_account_records WHERE tenant='tenant-a' "+
+   "AND id='"+accountId+"'")[0].version,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_account_receipts WHERE tenant='tenant-a' "+
+   "AND key IN ('candidate-v2-account-create-001','candidate-v2-account-update-001')")[0].n,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+accountId+"' AND action LIKE 'accounts.%'")[0].n,2);
+ console.log(JSON.stringify({event:"crm.native-g3-account-v2-candidate",result:"PASS",
+   generated_binary:true,owner:"crm.customer-accounts",
+   rpc_methods:["CreateAccount","UpdateAccount","GetAccount","ListAccounts"],
+   signed_access:true,tenant_ab:true,viewer_write_denied:true,
+   d1_cas:true,d1_receipts:true,d1_audit:true,published_active:false}));
+
  console.log(JSON.stringify({event:"crm.native-g3-party-v3-candidate",
    result:"PASS",generated_binary:true,owner:"crm.parties",
    rpc_methods:["CreateParty","UpdateParty","GetParty","ListParties"],

@@ -166,6 +166,7 @@ if(policy.phase!=="cutover"){
   // These are source-file freeze exceptions, NOT an API capability registry.
   const candidateSources=new Set([
     "apps/cloudflare-crm/rust-party/src/parties.rs",
+    "apps/cloudflare-crm/rust-party/src/accounts.rs",
     "apps/cloudflare-crm/rust-party/src/connect_sales.rs",
     "apps/cloudflare-crm/rust-party/build.rs"
   ]);
@@ -200,6 +201,7 @@ if(policy.phase!=="cutover"){
       "legacy business endpoints must return HTTP 410");
     check(runtime.includes('cfg!(feature = "native-ci")') &&
       runtime.includes('path.starts_with("/crm.parties.v3.PartyService/")') &&
+      runtime.includes('path.starts_with("/crm.accounts.v2.AccountService/")') &&
       runtime.includes('path != "/crm.parties.v2.PartyService/GetParty" && !ci_candidate'),
       "Party v3 candidate MUST remain inaccessible in production contract-only");
     check(JSON.stringify(policy.contract_only_rpc_methods)===

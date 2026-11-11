@@ -13,8 +13,9 @@ use buffa::Message as BuffaMessage;
 use prost::Message as ProstMessage;
 use serde::Deserialize;
 use wasm_bindgen::JsValue;
-use super::{bind, parties, sales_contract, sales_deals};
+use super::{accounts, bind, parties, sales_contract, sales_deals};
 use crm_parties::PartyKind as DomainPartyKind;
+use crm_customer_accounts::{Account as DomainAccount, AccountPartyRole as DomainAccountPartyRole, AccountStatus as DomainAccountStatus};
 use crm_proto_contracts::crm::{core::v1 as core_contract, sales::v1 as sales_contract_proto};
 
 // The published crm.core.v1 package shadows Rust's 'core' crate name.
@@ -44,6 +45,13 @@ pub mod proto {
                 include!(concat!(env!("OUT_DIR"), "/crm.sales.v1.mod.rs"));
             }
         }
+        pub mod accounts {
+            use super::*;
+            pub mod v2 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.accounts.v2.mod.rs"));
+            }
+        }
         pub mod parties {
             use super::*;
             pub mod v2 {
@@ -61,6 +69,7 @@ use proto::crm::sales::v1 as sales;
 use proto::crm::parties::v2 as party_wire;
 use proto::crm::parties::v3 as party_v3;
 use proto::crm::core::v2 as core_v2;
+use proto::crm::accounts::v2 as account_wire;
 
 #[derive(Deserialize)]
 struct Row { state: String }
@@ -407,6 +416,164 @@ impl party_v3::PartyService for PartyV3Service {
     }
 }
 
+// One new Connect surface for the EXISTING customer-accounts Rust owner.
+// All commands and D1 writes reside in accounts.rs; no parallel JSON handler.
+struct AccountV2Service {
+    env: Arc<Env>,
+    tenant: String,
+    request_id: String,
+}
+impl AccountV2Service {
+    fn d1(&self)->std::result::Result<D1Database,ConnectError>{
+        self.env.d1("DB").map_err(|_|ConnectError::internal("D1 unavailable"))
+    }
+    fn valid_id(id:&str)->std::result::Result<String,ConnectError>{
+        if id!=id.trim()||id.contains('/') {
+            return Err(ConnectError::invalid_argument("CUSTOMER_ACCOUNTS_ID_INVALID"));
+        }
+        let value=crm_customer_accounts::AccountId::try_new(id)
+            .map_err(|_|ConnectError::invalid_argument("CUSTOMER_ACCOUNTS_ID_INVALID"))?;
+        Ok(value.as_str().to_owned())
+    }
+    fn convert(account:&DomainAccount)
+        ->std::result::Result<account_wire::Account,ConnectError>{
+        let status=match account.status(){
+            DomainAccountStatus::Active=>account_wire::AccountStatus::ACCOUNT_STATUS_ACTIVE,
+            DomainAccountStatus::Inactive=>account_wire::AccountStatus::ACCOUNT_STATUS_INACTIVE,
+        };
+        let parties=account.party_associations().iter().map(|association|{
+            let role=match association.role(){
+                DomainAccountPartyRole::Primary=>account_wire::AccountPartyRole::ACCOUNT_PARTY_ROLE_PRIMARY,
+                DomainAccountPartyRole::Member=>account_wire::AccountPartyRole::ACCOUNT_PARTY_ROLE_MEMBER,
+            };
+            account_wire::AccountPartyAssociation{
+                party_id:association.party().as_str().to_owned(),role:role.into(),
+                ..Default::default()
+            }
+        }).collect();
+        Ok(account_wire::Account {
+            account_id:account.account_id().as_str().to_owned(),
+            name:account.name().to_owned(),status:status.into(),parties,
+            version:i64::try_from(account.version())
+                .map_err(|_|ConnectError::internal("invalid Account version"))?,
+            ..Default::default()
+        })
+    }
+    fn receipt(&self,outcome:&accounts::MutationOutcome)
+        ->std::result::Result<core_v2::MutationReceipt,ConnectError>{
+        Ok(core_v2::MutationReceipt {
+            request_id:self.request_id.clone(),
+            resource_version:i64::try_from(outcome.account.version())
+                .map_err(|_|ConnectError::internal("invalid Account version"))?,
+            replayed:outcome.replayed,..Default::default()
+        })
+    }
+    fn failed(f:accounts::MutationFailure)->ConnectError{
+        match f.status{
+            404=>ConnectError::not_found(f.code),
+            409=>ConnectError::aborted(f.code),
+            422=>ConnectError::invalid_argument(f.code),
+            _=>ConnectError::internal(f.code),
+        }
+    }
+    fn precondition(
+        pre:Option<&core_v2::MutationPrecondition>,create:bool
+    )->std::result::Result<(String,Option<i64>),ConnectError>{
+        let pre=pre.ok_or_else(||ConnectError::invalid_argument("precondition required"))?;
+        if !(8..=120).contains(&pre.idempotency_key.len()){
+            return Err(ConnectError::invalid_argument("IDEMPOTENCY_KEY_REQUIRED"));
+        }
+        match (create,pre.expected_version){
+            (true,None)=>Ok((pre.idempotency_key.clone(),None)),
+            (false,Some(version)) if version>0=>Ok((pre.idempotency_key.clone(),Some(version))),
+            _=>Err(ConnectError::invalid_argument("invalid mutation version")),
+        }
+    }
+}
+impl account_wire::AccountService for AccountV2Service{
+    #[worker::send]
+    async fn create_account(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,account_wire::CreateAccountRequest>,
+    )->ServiceResult<account_wire::CreateAccountResponse>{
+        let input=req.to_owned_message();
+        let id=Self::valid_id(&input.account_id)?;
+        let (key,_)=Self::precondition(input.precondition.as_option(),true)?;
+        let saved=accounts::create_typed(accounts::CreateInput{
+            id,name:input.name,party_id:input.primary_party_id,
+        },&key,&self.d1()?,&self.tenant,&self.request_id).await
+            .map_err(|_|ConnectError::internal("Account D1 create failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(account_wire::CreateAccountResponse{
+            account:Some(Self::convert(&saved.account)?).into(),
+            receipt:Some(self.receipt(&saved)?).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn update_account(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,account_wire::UpdateAccountRequest>,
+    )->ServiceResult<account_wire::UpdateAccountResponse>{
+        let input=req.to_owned_message();
+        let id=Self::valid_id(&input.account_id)?;
+        let (key,version)=Self::precondition(input.precondition.as_option(),false)?;
+        let status=match input.status{
+            x if x==account_wire::AccountStatus::ACCOUNT_STATUS_ACTIVE=>
+                accounts::AccountStatusInput::Active,
+            x if x==account_wire::AccountStatus::ACCOUNT_STATUS_INACTIVE=>
+                accounts::AccountStatusInput::Inactive,
+            _=>return Err(ConnectError::invalid_argument("invalid AccountStatus")),
+        };
+        let saved=accounts::update_typed(accounts::UpdateInput{
+            name:input.name,status,expected_version:version.unwrap_or_default(),
+        },&key,&self.d1()?,&self.tenant,&id,&self.request_id).await
+            .map_err(|_|ConnectError::internal("Account D1 update failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(account_wire::UpdateAccountResponse{
+            account:Some(Self::convert(&saved.account)?).into(),
+            receipt:Some(self.receipt(&saved)?).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn get_account(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,account_wire::GetAccountRequest>,
+    )->ServiceResult<account_wire::GetAccountResponse>{
+        let id=Self::valid_id(&req.account_id)?;
+        let account=accounts::load(&self.d1()?,&self.tenant,&id).await
+            .map_err(|_|ConnectError::internal("Account D1 read failed"))?
+            .ok_or_else(||ConnectError::not_found("CUSTOMER_ACCOUNTS_NOT_FOUND"))?;
+        RpcResponse::ok(account_wire::GetAccountResponse{
+            account:Some(Self::convert(&account)?).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn list_accounts(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,account_wire::ListAccountsRequest>,
+    )->ServiceResult<account_wire::ListAccountsResponse>{
+        let size=if req.page.page_size==0{25}else{req.page.page_size};
+        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
+        let after=&req.page.page_token;
+        if !after.is_empty(){Self::valid_id(after)?;}
+        let status=match req.status{
+            None=>None,
+            Some(x) if x==account_wire::AccountStatus::ACCOUNT_STATUS_ACTIVE=>
+                Some(DomainAccountStatus::Active),
+            Some(x) if x==account_wire::AccountStatus::ACCOUNT_STATUS_INACTIVE=>
+                Some(DomainAccountStatus::Inactive),
+            _=>return Err(ConnectError::invalid_argument("invalid AccountStatus filter")),
+        };
+        let (list,next)=accounts::list_page_typed(&self.d1()?,&self.tenant,
+            after,size as usize,status).await
+            .map_err(|_|ConnectError::internal("Account D1 list failed"))?;
+        let mut result=Vec::new();
+        for account in &list{result.push(Self::convert(account)?);}
+        RpcResponse::ok(account_wire::ListAccountsResponse{
+            accounts:result,
+            page_info:Some(core_v2::PageInfo{
+                next_page_token:next.unwrap_or_default(),..Default::default()
+            }).into(),..Default::default()
+        })
+    }
+}
+
 // Called by existing native-only dispatch AFTER signed Access authentication
 // and role decision. No second fetch endpoint, tenant header, or JS route.
 pub(super) async fn route(
@@ -419,6 +586,10 @@ pub(super) async fn route(
             env: Arc::clone(&env), tenant: tenant.to_owned(),
         }))
         .add_service(Arc::new(PartyV3Service {
+            env: Arc::clone(&env), tenant: tenant.to_owned(),
+            request_id:request_id.to_owned(),
+        }))
+        .add_service(Arc::new(AccountV2Service {
             env: Arc::clone(&env), tenant: tenant.to_owned(),
             request_id:request_id.to_owned(),
         }))

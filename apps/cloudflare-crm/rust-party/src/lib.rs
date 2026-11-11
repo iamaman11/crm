@@ -262,7 +262,8 @@ fn legacy_transport_disabled(path: &str) -> bool {
     // G3 candidate is physically testable under signed native-ci JWT only.
     // Production contract-only continues returning HTTP 410 for ALL v3 RPCs.
     let ci_candidate = cfg!(feature = "native-ci") &&
-        path.starts_with("/crm.parties.v3.PartyService/");
+        (path.starts_with("/crm.parties.v3.PartyService/") ||
+         path.starts_with("/crm.accounts.v2.AccountService/"));
     (path.starts_with("/api/") && !diagnostic && !ci_only) ||
         (path.starts_with("/crm.") &&
             path != "/crm.parties.v2.PartyService/GetParty" && !ci_candidate)
@@ -290,7 +291,9 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
              path == "/crm.sales.v1.DealService/ListDeals" ||
              path == "/crm.parties.v2.PartyService/GetParty" ||
              path == "/crm.parties.v3.PartyService/GetParty" ||
-             path == "/crm.parties.v3.PartyService/ListParties")
+             path == "/crm.parties.v3.PartyService/ListParties" ||
+             path == "/crm.accounts.v2.AccountService/GetAccount" ||
+             path == "/crm.accounts.v2.AccountService/ListAccounts")
         && !(path == "/api/consents/evaluate" && method == Method::Post)
     {
         return error("FORBIDDEN", 403);
@@ -298,7 +301,8 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     #[cfg(feature = "native")]
     if path.starts_with("/crm.sales.v1.DealService/") ||
        path.starts_with("/crm.parties.v2.PartyService/") ||
-       path.starts_with("/crm.parties.v3.PartyService/") {
+       path.starts_with("/crm.parties.v3.PartyService/") ||
+       path.starts_with("/crm.accounts.v2.AccountService/") {
         if method != Method::Post { return error("NOT_FOUND",404); }
         let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
         return connect_sales::route(req,env,tenant,actor,&request_id).await;
@@ -458,6 +462,10 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             ("/crm.parties.v3.PartyService/UpdateParty", Method::Post) => "parties.rpc.update",
             ("/crm.parties.v3.PartyService/GetParty", Method::Post) => "parties.rpc.get",
             ("/crm.parties.v3.PartyService/ListParties", Method::Post) => "parties.rpc.list",
+            ("/crm.accounts.v2.AccountService/CreateAccount", Method::Post) => "accounts.rpc.create",
+            ("/crm.accounts.v2.AccountService/UpdateAccount", Method::Post) => "accounts.rpc.update",
+            ("/crm.accounts.v2.AccountService/GetAccount", Method::Post) => "accounts.rpc.get",
+            ("/crm.accounts.v2.AccountService/ListAccounts", Method::Post) => "accounts.rpc.list",
             ("/crm.sales.v1.DealService/GetDeal", Method::Post) => "sales-deals.rpc.get",
             ("/crm.sales.v1.DealService/ListDeals", Method::Post) => "sales-deals.rpc.list",
             ("/crm.sales.v1.DealService/CreateDeal", Method::Post) => "sales-deals.rpc.create",

@@ -36,3 +36,19 @@ export const binaryPartyV3=(name,payload)=>{
  return toBinary(rpc.input,create(rpc.input,payload));
 };
 export const decodePartyV3=(name,bytes)=>fromBinary(v3Method(name).output,bytes);
+
+
+// Account v2 wire is derived from canonical Buf descriptors, not handwritten.
+const accountV2Service=registry.getService("crm.accounts.v2.AccountService");
+if(!accountV2Service)throw Error("compiled Account v2 service missing");
+const accountV2Method=name=>{
+ const item=accountV2Service.methods.find(method=>method.name===name);
+ if(!item)throw Error("compiled Account v2 RPC missing: "+name);
+ return item;
+};
+export const accountV2Path=name=>"/crm.accounts.v2.AccountService/"+accountV2Method(name).name;
+export const binaryAccountV2=(name,payload)=>{
+ const rpc=accountV2Method(name);
+ return toBinary(rpc.input,create(rpc.input,payload));
+};
+export const decodeAccountV2=(name,bytes)=>fromBinary(accountV2Method(name).output,bytes);
