@@ -143,24 +143,50 @@ jobs:
       - name: Build React CRM
         run: npm run build
         working-directory: apps/cloudflare-crm
-      - name: Install Chromium and system dependencies before expensive native builds
+      - name: Install and launch Chromium before expensive native builds
         working-directory: apps/cloudflare-crm
         shell: bash
         run: |
           set -euo pipefail
-          # DNS failures on hosted Ubuntu mirrors are transient runner failures.
-          # Retry once, but never skip the actual browser or OS dependencies.
+          # GitHub-hosted Ubuntu already ships many browser libraries; do not
+          # unconditionally call apt and depend on an external Ubuntu mirror.
+          # Verify by launching the SAME pinned Playwright Chromium headlessly.
           for attempt in 1 2; do
-            if npx playwright install --with-deps chromium; then
-              exit 0
+            if npx playwright install chromium; then
+              break
             fi
-            if [ "$attempt" -eq 1 ]; then
-              echo "::warning::Chromium OS dependency install failed; retrying once before Rust/WASM compilation"
-              sleep 10
+            if [ "$attempt" -eq 2 ]; then
+              echo "::error::Pinned Playwright Chromium download failed"
+              exit 1
             fi
+            sleep 10
           done
-          echo "::error::Chromium installation failed on both attempts; native/browser tests are required"
-          exit 1
+          launch_browser() {
+            node --input-type=module -e '
+              import { chromium } from "playwright";
+              const browser = await chromium.launch({headless: true});
+              const page = await browser.newPage();
+              await page.goto("data:text/html,<h1>CRM browser preflight</h1>");
+              if (await page.locator("h1").innerText() !== "CRM browser preflight")
+                throw new Error("Chromium rendered unexpected content");
+              await browser.close();
+            '
+          }
+          if launch_browser; then
+            echo "Chromium physically launched with existing system libraries"
+          else
+            echo "::warning::Chromium needs OS libraries; installing declared Playwright dependencies"
+            for attempt in 1 2; do
+              if npx playwright install-deps chromium && launch_browser; then
+                exit 0
+              fi
+              if [ "$attempt" -eq 2 ]; then
+                echo "::error::Chromium system dependencies or physical launch failed"
+                exit 1
+              fi
+              sleep 10
+            done
+          fi
       - name: Verify every activated Rust module compiles for WebAssembly
         shell: bash
         run: |
