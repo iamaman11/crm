@@ -56,5 +56,5 @@ test("orphan new RPC proposal fails closed without an original Rust owner",()=>{
   modules:{modules:[],active_rpc_paths:[]},
   descriptors:[{file:"crm/ghost/v2/ghost.proto",
    path:"/crm.ghost.v2.GhostService/GetGhost"}],
-  phase:"contract-only",sha:"a"}),/new contract lacks original module owner/);
+  phase:"contract-only",sha:"a"}),/ambiguous or missing original Rust owner/);
 });
