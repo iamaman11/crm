@@ -137,10 +137,9 @@ async function deploy(){
   record("deployed.json",{git_sha:sha,worker_version:newVersion,d1_database:database,rust,result:"E2E_PENDING"});
   console.log(JSON.stringify({event:"crm.deploy",sha,result:"E2E_PENDING",version:newVersion}));
 }
-// Each protected E2E deploy gets clean, isolated tenants IN THE SAME D1.
-// The two dedicated Access service identities alone are reassigned; nothing
-// belonging to another tenant is deleted or modified. Old test data is retained
-// for audit instead of being silently destroyed to make an E2E gate green.
+// Each release tests two freshly enrolled signed-Access service principals
+// in isolated tenants of the SAME clean CRM D1. Existing CRM records are
+// disposable test data; no pilot schema or historical data is migrated.
 async function prepareE2e(){
   const run=required("GITHUB_RUN_ID"),attempt=required("GITHUB_RUN_ATTEMPT");
   if(!/^\d+$/.test(run)||!/^\d+$/.test(attempt))throw Error("Invalid E2E run identity");
@@ -151,6 +150,17 @@ async function prepareE2e(){
   };
   const a=principal("A"),b=principal("B");
   if(a===b)throw Error("E2E identities must be distinct");
+  // A clean D1 has no pre-enrolled service actors. Enroll through the same
+  // signed Cloudflare Access entrypoint as production, not with forged DB roles.
+  for(const n of ["A","B"]){
+    const id=required("CRM_E2E_"+n+"_CLIENT_ID");
+    const secret=required("CRM_E2E_"+n+"_CLIENT_SECRET");
+    const reply=await fetch(url+"/api/session",{
+      headers:{"CF-Access-Client-Id":id,"CF-Access-Client-Secret":secret},
+      redirect:"manual",cache:"no-store"});
+    if(reply.status!==200)
+      throw Error("Signed E2E service principal "+n+" failed to enroll: HTTP "+reply.status);
+  }
   const endpoint="/d1/database/"+database+"/query";
   const query=async(sql,params)=>{
     const r=await cf(endpoint,"POST",{sql,params});
@@ -472,7 +482,7 @@ async function verifyData(){
   const sql="SELECT (SELECT COUNT(*) FROM crm_party_records WHERE id IN (?,?)) AS records, "+
     "(SELECT COUNT(*) FROM crm_party_receipts WHERE key IN (?,?,?)) AS receipts, "+
     "(SELECT COUNT(*) FROM crm_audit WHERE subject_id IN (?,?) AND action LIKE 'parties.%') AS audits, "+
-    "(SELECT COUNT(*) FROM d1_migrations WHERE name='0002_rust_party.sql') AS migration";
+    "(SELECT COUNT(*) FROM d1_migrations WHERE name='0001_initial.sql') AS migration";
   const result=await cf("/d1/database/"+database+"/query","POST",{sql,params:[a,b,ka,ku,kb,a,b]});
   const row=result?.[0]?.results?.[0];
   if(!row||row.records!==2||row.receipts!==3||row.audits!==3||row.migration!==1)throw Error("Rust Party D1 audit/receipt/schema mismatch "+JSON.stringify(row));
