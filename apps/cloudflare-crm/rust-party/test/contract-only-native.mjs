@@ -106,6 +106,8 @@ try{
  // G3 candidate, active only in signed native-ci workerd. Every request and
  // response is generated from the SAME Buf descriptor as the React client.
  // The production contract-only Worker must continue returning 410 for v3.
+ const describeProtobuf=value=>JSON.stringify(value,
+   (_key,item)=>typeof item==="bigint"?item.toString():item);
  const v3=async(method,token,payload)=>{
    const response=await fetch(base+partyV3Path(method),{method:"POST",
      headers:{"content-type":"application/proto","connect-protocol-version":"1",
@@ -127,7 +129,7 @@ try{
    precondition:{idempotencyKey:"candidate-v3-invalid-pre",
      expectedVersion:1n}})).status,400);
  const created=await v3("CreateParty",admin,creation);
- assert.equal(created.status,200,JSON.stringify(created.body));
+ assert.equal(created.status,200,describeProtobuf(created.body));
  assert.equal(created.body.party?.partyId,id);
  assert.equal(created.body.party?.displayName,"Connect Native Rust");
  assert.equal(created.body.receipt?.resourceVersion,1n);
@@ -143,7 +145,7 @@ try{
  assert.equal(read.status,200);
  assert.equal(read.body.party?.displayName,"Connect Native Rust");
  const listing=await v3("ListParties",viewer,{page:{pageSize:1}});
- assert.equal(listing.status,200,JSON.stringify(listing.body));
+ assert.equal(listing.status,200,describeProtobuf(listing.body));
  assert.equal(listing.body.parties.length,1);
  assert.ok(listing.body.pageInfo?.nextPageToken);
  assert.equal((await v3("ListParties",viewer,{page:{pageSize:101}})).status,400);
@@ -151,7 +153,7 @@ try{
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-v3-update-001"}};
  assert.equal((await v3("UpdateParty",viewer,updatedInput)).status,403);
  const updated=await v3("UpdateParty",admin,updatedInput);
- assert.equal(updated.status,200,JSON.stringify(updated.body));
+ assert.equal(updated.status,200,describeProtobuf(updated.body));
  assert.equal(updated.body.party?.version,2n);
  assert.equal(updated.body.party?.displayName,"Updated via native v3");
  assert.equal(updated.body.receipt?.resourceVersion,2n);
