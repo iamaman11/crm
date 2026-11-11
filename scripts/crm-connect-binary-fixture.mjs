@@ -52,3 +52,19 @@ export const binaryAccountV2=(name,payload)=>{
  return toBinary(rpc.input,create(rpc.input,payload));
 };
 export const decodeAccountV2=(name,bytes)=>fromBinary(accountV2Method(name).output,bytes);
+
+
+// Contact Points v2: real generated Buffer messages from the canonical schema.
+const contactV2Service=registry.getService("crm.contact_points.v2.ContactPointService");
+if(!contactV2Service)throw Error("compiled ContactPoint v2 service missing");
+const contactV2Method=name=>{
+ const item=contactV2Service.methods.find(method=>method.name===name);
+ if(!item)throw Error("compiled ContactPoint v2 RPC missing: "+name);
+ return item;
+};
+export const contactV2Path=name=>"/crm.contact_points.v2.ContactPointService/"+contactV2Method(name).name;
+export const binaryContactV2=(name,payload)=>{
+ const rpc=contactV2Method(name);
+ return toBinary(rpc.input,create(rpc.input,payload));
+};
+export const decodeContactV2=(name,bytes)=>fromBinary(contactV2Method(name).output,bytes);

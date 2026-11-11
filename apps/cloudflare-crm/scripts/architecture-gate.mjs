@@ -167,6 +167,7 @@ if(policy.phase!=="cutover"){
   const candidateSources=new Set([
     "apps/cloudflare-crm/rust-party/src/parties.rs",
     "apps/cloudflare-crm/rust-party/src/accounts.rs",
+    "apps/cloudflare-crm/rust-party/src/contact_points.rs",
     "apps/cloudflare-crm/rust-party/src/connect_sales.rs",
     "apps/cloudflare-crm/rust-party/build.rs"
   ]);
@@ -202,6 +203,7 @@ if(policy.phase!=="cutover"){
     check(runtime.includes('cfg!(feature = "native-ci")') &&
       runtime.includes('path.starts_with("/crm.parties.v3.PartyService/")') &&
       runtime.includes('path.starts_with("/crm.accounts.v2.AccountService/")') &&
+      runtime.includes('path.starts_with("/crm.contact_points.v2.ContactPointService/")') &&
       runtime.includes('path != "/crm.parties.v2.PartyService/GetParty" && !ci_candidate'),
       "Party v3 candidate MUST remain inaccessible in production contract-only");
     check(JSON.stringify(policy.contract_only_rpc_methods)===

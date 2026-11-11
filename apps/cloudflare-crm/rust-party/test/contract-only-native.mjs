@@ -8,7 +8,8 @@ import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
 import {binaryPartyGet,decodePartyGet,partyGetPath,
   binaryPartyV3,decodePartyV3,partyV3Path,
-  binaryAccountV2,decodeAccountV2,accountV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  binaryAccountV2,decodeAccountV2,accountV2Path,
+  binaryContactV2,decodeContactV2,contactV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-contract-only-"));
 const base="http://127.0.0.1:18789";
@@ -246,6 +247,86 @@ try{
    rpc_methods:["CreateAccount","UpdateAccount","GetAccount","ListAccounts"],
    signed_access:true,tenant_ab:true,viewer_write_denied:true,
    d1_cas:true,d1_receipts:true,d1_audit:true,published_active:false}));
+
+
+ // ContactPoints v2 uses the original Party-owned contact aggregate, NEVER
+ // the removed pilot crm_contacts table. No browser-written verified=true.
+ const contactV2=async(method,token,payload)=>{
+   const response=await fetch(base+contactV2Path(method),{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+       ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:binaryContactV2(method,payload)});
+   return {status:response.status,headers:response.headers,
+     body:response.status<400
+       ?decodeContactV2(method,new Uint8Array(await response.arrayBuffer()))
+       :await response.json()};
+ };
+ const contactId="contact-native-"+randomUUID();
+ const contactInput={contactPointId:contactId,partyId:id,kind:1,
+   value:"  contact@example.com  ",preferred:true,
+   precondition:{idempotencyKey:"candidate-v2-contact-create-001"}};
+ assert.equal((await contactV2("CreateContactPoint",null,contactInput)).status,401);
+ assert.equal((await contactV2("CreateContactPoint",viewer,contactInput)).status,403);
+ assert.equal((await contactV2("CreateContactPoint",admin,{
+   ...contactInput,kind:0,
+   precondition:{idempotencyKey:"candidate-v2-contact-invalid-kind"}})).status,400);
+ assert.equal((await contactV2("CreateContactPoint",admin,{
+   ...contactInput,partyId:"missing-party",
+   precondition:{idempotencyKey:"candidate-v2-contact-invalid-party"}})).status,400);
+ const contactCreated=await contactV2("CreateContactPoint",admin,contactInput);
+ assert.equal(contactCreated.status,200,describeProtobuf(contactCreated.body));
+ assert.equal(contactCreated.body.contactPoint?.contactPointId,contactId);
+ assert.equal(contactCreated.body.contactPoint?.partyId,id);
+ assert.equal(contactCreated.body.contactPoint?.verified,false);
+ assert.equal(contactCreated.body.contactPoint?.normalizedValue,"contact@example.com");
+ assert.equal(contactCreated.body.receipt?.resourceVersion,1n);
+ assert.equal(contactCreated.body.receipt?.replayed,false);
+ assert.equal(contactCreated.body.receipt?.requestId,contactCreated.headers.get("x-request-id"));
+ const contactReplay=await contactV2("CreateContactPoint",admin,contactInput);
+ assert.equal(contactReplay.status,200,describeProtobuf(contactReplay.body));
+ assert.equal(contactReplay.body.receipt?.replayed,true);
+ assert.equal((await contactV2("CreateContactPoint",admin,{...contactInput,
+   value:"different@example.com"})).status,409);
+ assert.equal((await contactV2("GetContactPoint",tenantB,{contactPointId:contactId})).status,404);
+ assert.equal((await contactV2("GetContactPoint",viewer,{contactPointId:contactId}))
+   .body.contactPoint?.verified,false);
+ const contactList=await contactV2("ListContactPoints",viewer,{page:{pageSize:1},partyId:id});
+ assert.equal(contactList.status,200,describeProtobuf(contactList.body));
+ assert.equal(contactList.body.contactPoints?.[0]?.contactPointId,contactId);
+ assert.equal((await contactV2("ListContactPoints",viewer,{page:{pageSize:101}})).status,400);
+ assert.equal((await contactV2("ListContactPoints",viewer,{partyId:"missing"}))
+   .body.contactPoints.length,0);
+ const contactUpdate={contactPointId:contactId,value:"next@example.org",status:1,
+   preferred:false,precondition:{
+     expectedVersion:1n,idempotencyKey:"candidate-v2-contact-update-001"}};
+ assert.equal((await contactV2("UpdateContactPoint",viewer,contactUpdate)).status,403);
+ assert.equal((await contactV2("UpdateContactPoint",admin,{...contactUpdate,status:0,
+   precondition:{expectedVersion:1n,
+     idempotencyKey:"candidate-v2-contact-invalid-status"}})).status,400);
+ const contactUpdated=await contactV2("UpdateContactPoint",admin,contactUpdate);
+ assert.equal(contactUpdated.status,200,describeProtobuf(contactUpdated.body));
+ assert.equal(contactUpdated.body.contactPoint?.version,2n);
+ assert.equal(contactUpdated.body.contactPoint?.verified,false);
+ assert.equal(contactUpdated.body.contactPoint?.normalizedValue,"next@example.org");
+ assert.equal(contactUpdated.body.receipt?.resourceVersion,2n);
+ const contactReupdate=await contactV2("UpdateContactPoint",admin,contactUpdate);
+ assert.equal(contactReupdate.status,200,describeProtobuf(contactReupdate.body));
+ assert.equal(contactReupdate.body.receipt?.replayed,true);
+ assert.equal((await contactV2("UpdateContactPoint",admin,{...contactUpdate,
+   precondition:{expectedVersion:1n,
+     idempotencyKey:"candidate-v2-contact-stale"}})).status,409);
+ assert.equal(sql("SELECT version FROM crm_contact_point_records WHERE tenant='tenant-a' "+
+   "AND id='"+contactId+"'")[0].version,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_contact_point_receipts WHERE tenant='tenant-a' "+
+   "AND key IN ('candidate-v2-contact-create-001','candidate-v2-contact-update-001')")[0].n,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+contactId+"' AND action LIKE 'contact_points.%'")[0].n,2);
+ console.log(JSON.stringify({event:"crm.native-g3-contact-points-v2-candidate",result:"PASS",
+   generated_binary:true,owner:"crm.contact-points",
+   rpc_methods:["CreateContactPoint","UpdateContactPoint","GetContactPoint","ListContactPoints"],
+   signed_access:true,tenant_ab:true,viewer_write_denied:true,
+   no_browser_verification:true,d1_cas:true,d1_receipts:true,d1_audit:true,
+   published_active:false}));
 
  console.log(JSON.stringify({event:"crm.native-g3-party-v3-candidate",
    result:"PASS",generated_binary:true,owner:"crm.parties",

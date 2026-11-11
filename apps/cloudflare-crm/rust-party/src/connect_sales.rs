@@ -13,9 +13,12 @@ use buffa::Message as BuffaMessage;
 use prost::Message as ProstMessage;
 use serde::Deserialize;
 use wasm_bindgen::JsValue;
-use super::{accounts, bind, parties, sales_contract, sales_deals};
+use super::{accounts, bind, contact_points, parties, sales_contract, sales_deals};
 use crm_parties::PartyKind as DomainPartyKind;
 use crm_customer_accounts::{Account as DomainAccount, AccountPartyRole as DomainAccountPartyRole, AccountStatus as DomainAccountStatus};
+use crm_contact_points::{ContactPoint as DomainContactPoint, ContactPointKind as DomainContactPointKind,
+    ContactPointStatus as DomainContactPointStatus};
+use buffa_types::google::protobuf::Timestamp;
 use crm_proto_contracts::crm::{core::v1 as core_contract, sales::v1 as sales_contract_proto};
 
 // The published crm.core.v1 package shadows Rust's 'core' crate name.
@@ -52,6 +55,13 @@ pub mod proto {
                 include!(concat!(env!("OUT_DIR"), "/crm.accounts.v2.mod.rs"));
             }
         }
+        pub mod contact_points {
+            use super::*;
+            pub mod v2 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.contact_points.v2.mod.rs"));
+            }
+        }
         pub mod parties {
             use super::*;
             pub mod v2 {
@@ -70,6 +80,7 @@ use proto::crm::parties::v2 as party_wire;
 use proto::crm::parties::v3 as party_v3;
 use proto::crm::core::v2 as core_v2;
 use proto::crm::accounts::v2 as account_wire;
+use proto::crm::contact_points::v2 as contact_wire;
 
 #[derive(Deserialize)]
 struct Row { state: String }
@@ -574,6 +585,206 @@ impl account_wire::AccountService for AccountV2Service{
     }
 }
 
+// Connect wire for ORIGINAL crm-contact-points (no browser verification claim).
+struct ContactPointV2Service{
+    env:Arc<Env>,
+    tenant:String,
+    request_id:String,
+}
+impl ContactPointV2Service{
+    fn d1(&self)->std::result::Result<D1Database,ConnectError>{
+        self.env.d1("DB").map_err(|_|ConnectError::internal("D1 unavailable"))
+    }
+    fn valid_id(id:&str)->std::result::Result<String,ConnectError>{
+        if id!=id.trim()||id.contains('/') {
+            return Err(ConnectError::invalid_argument("CONTACT_POINTS_ID_INVALID"));
+        }
+        let value=crm_contact_points::ContactPointId::try_new(id)
+            .map_err(|_|ConnectError::invalid_argument("CONTACT_POINTS_ID_INVALID"))?;
+        Ok(value.as_str().to_owned())
+    }
+    fn nanos(ts:&Timestamp)->std::result::Result<i64,ConnectError>{
+        if !(0..1_000_000_000).contains(&ts.nanos){
+            return Err(ConnectError::invalid_argument("invalid timestamp nanos"));
+        }
+        ts.seconds.checked_mul(1_000_000_000)
+            .and_then(|s|s.checked_add(i64::from(ts.nanos)))
+            .ok_or_else(||ConnectError::invalid_argument("timestamp outside domain range"))
+    }
+    fn timestamp(nanos:i64)->Timestamp{
+        Timestamp{
+            seconds:nanos.div_euclid(1_000_000_000),
+            nanos:nanos.rem_euclid(1_000_000_000) as i32,
+            ..Default::default()
+        }
+    }
+    fn time_patch(patch:Option<&core_v2::TimestampPatch>,saved:Option<i64>)
+        ->std::result::Result<Option<i64>,ConnectError>{
+        let Some(patch)=patch else{return Ok(saved)};
+        match patch.operation.as_ref(){
+            Some(core_v2::timestamp_patch::Operation::Set(ts))=>
+                Self::nanos(ts).map(Some),
+            Some(core_v2::timestamp_patch::Operation::Clear(true))=>Ok(None),
+            _=>Err(ConnectError::invalid_argument("invalid timestamp patch")),
+        }
+    }
+    fn convert(point:&DomainContactPoint)
+        ->std::result::Result<contact_wire::ContactPoint,ConnectError>{
+        let kind=match point.kind(){
+            DomainContactPointKind::Email=>contact_wire::ContactPointKind::CONTACT_POINT_KIND_EMAIL,
+            DomainContactPointKind::Phone=>contact_wire::ContactPointKind::CONTACT_POINT_KIND_PHONE,
+            DomainContactPointKind::Postal=>contact_wire::ContactPointKind::CONTACT_POINT_KIND_POSTAL,
+            DomainContactPointKind::Web=>contact_wire::ContactPointKind::CONTACT_POINT_KIND_WEB,
+            DomainContactPointKind::Messaging=>contact_wire::ContactPointKind::CONTACT_POINT_KIND_MESSAGING,
+        };
+        let status=match point.status(){
+            DomainContactPointStatus::Active=>contact_wire::ContactPointStatus::CONTACT_POINT_STATUS_ACTIVE,
+            DomainContactPointStatus::Inactive=>contact_wire::ContactPointStatus::CONTACT_POINT_STATUS_INACTIVE,
+        };
+        Ok(contact_wire::ContactPoint{
+            contact_point_id:point.contact_point_id().as_str().to_owned(),
+            party_id:point.party_ref().as_str().to_owned(),kind:kind.into(),
+            display_value:point.display_value().to_owned(),
+            normalized_value:point.normalized_value().to_owned(),
+            preferred:point.preferred(),status:status.into(),
+            verified:point.verification().is_verified(),
+            valid_from:point.valid_from_unix_nanos().map(Self::timestamp).into(),
+            valid_until:point.valid_until_unix_nanos().map(Self::timestamp).into(),
+            version:i64::try_from(point.version())
+                .map_err(|_|ConnectError::internal("invalid ContactPoint version"))?,
+            ..Default::default()
+        })
+    }
+    fn receipt(&self,outcome:&contact_points::MutationOutcome)
+        ->std::result::Result<core_v2::MutationReceipt,ConnectError>{
+        Ok(core_v2::MutationReceipt{
+            request_id:self.request_id.clone(),
+            resource_version:i64::try_from(outcome.contact_point.version())
+                .map_err(|_|ConnectError::internal("invalid ContactPoint version"))?,
+            replayed:outcome.replayed,..Default::default()
+        })
+    }
+    fn failed(f:contact_points::MutationFailure)->ConnectError{
+        match f.status{
+            404=>ConnectError::not_found(f.code),
+            409=>ConnectError::aborted(f.code),
+            422=>ConnectError::invalid_argument(f.code),
+            _=>ConnectError::internal(f.code),
+        }
+    }
+    fn precondition(pre:Option<&core_v2::MutationPrecondition>,create:bool)
+        ->std::result::Result<(String,Option<i64>),ConnectError>{
+        AccountV2Service::precondition(pre,create)
+    }
+}
+impl contact_wire::ContactPointService for ContactPointV2Service{
+    #[worker::send]
+    async fn create_contact_point(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,contact_wire::CreateContactPointRequest>,
+    )->ServiceResult<contact_wire::CreateContactPointResponse>{
+        let input=req.to_owned_message();
+        let id=Self::valid_id(&input.contact_point_id)?;
+        let kind=match input.kind{
+            x if x==contact_wire::ContactPointKind::CONTACT_POINT_KIND_EMAIL=>
+                contact_points::KindInput::Email,
+            x if x==contact_wire::ContactPointKind::CONTACT_POINT_KIND_PHONE=>
+                contact_points::KindInput::Phone,
+            x if x==contact_wire::ContactPointKind::CONTACT_POINT_KIND_POSTAL=>
+                contact_points::KindInput::Postal,
+            x if x==contact_wire::ContactPointKind::CONTACT_POINT_KIND_WEB=>
+                contact_points::KindInput::Web,
+            x if x==contact_wire::ContactPointKind::CONTACT_POINT_KIND_MESSAGING=>
+                contact_points::KindInput::Messaging,
+            _=>return Err(ConnectError::invalid_argument("invalid ContactPointKind")),
+        };
+        let (key,_)=Self::precondition(input.precondition.as_option(),true)?;
+        let from=input.valid_from.as_option().map(Self::nanos).transpose()?;
+        let until=input.valid_until.as_option().map(Self::nanos).transpose()?;
+        let saved=contact_points::create_typed(contact_points::CreateInput{
+            id,party_id:input.party_id,kind,value:input.value,
+            preferred:input.preferred,valid_from_unix_nanos:from,
+            valid_until_unix_nanos:until,
+        },&key,&self.d1()?,&self.tenant,&self.request_id).await
+            .map_err(|_|ConnectError::internal("ContactPoint D1 create failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(contact_wire::CreateContactPointResponse{
+            contact_point:Some(Self::convert(&saved.contact_point)?).into(),
+            receipt:Some(self.receipt(&saved)?).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn update_contact_point(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,contact_wire::UpdateContactPointRequest>,
+    )->ServiceResult<contact_wire::UpdateContactPointResponse>{
+        let input=req.to_owned_message();
+        let id=Self::valid_id(&input.contact_point_id)?;
+        let (key,version)=Self::precondition(input.precondition.as_option(),false)?;
+        let status=match input.status{
+            x if x==contact_wire::ContactPointStatus::CONTACT_POINT_STATUS_ACTIVE=>
+                contact_points::StatusInput::Active,
+            x if x==contact_wire::ContactPointStatus::CONTACT_POINT_STATUS_INACTIVE=>
+                contact_points::StatusInput::Inactive,
+            _=>return Err(ConnectError::invalid_argument("invalid ContactPointStatus")),
+        };
+        let db=self.d1()?;
+        let current=contact_points::load(&db,&self.tenant,&id).await
+            .map_err(|_|ConnectError::internal("ContactPoint D1 read failed"))?
+            .ok_or_else(||ConnectError::not_found("CONTACT_POINTS_NOT_FOUND"))?;
+        let from=Self::time_patch(input.valid_from.as_option(),
+            current.valid_from_unix_nanos())?;
+        let until=Self::time_patch(input.valid_until.as_option(),
+            current.valid_until_unix_nanos())?;
+        let saved=contact_points::update_typed(contact_points::UpdateInput{
+            expected_version:version.unwrap_or_default(),value:input.value,
+            status,preferred:input.preferred,valid_from_unix_nanos:from,
+            valid_until_unix_nanos:until,
+        },&key,&db,&self.tenant,&id,&self.request_id).await
+            .map_err(|_|ConnectError::internal("ContactPoint D1 update failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(contact_wire::UpdateContactPointResponse{
+            contact_point:Some(Self::convert(&saved.contact_point)?).into(),
+            receipt:Some(self.receipt(&saved)?).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn get_contact_point(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,contact_wire::GetContactPointRequest>,
+    )->ServiceResult<contact_wire::GetContactPointResponse>{
+        let id=Self::valid_id(&req.contact_point_id)?;
+        let point=contact_points::load(&self.d1()?,&self.tenant,&id).await
+            .map_err(|_|ConnectError::internal("ContactPoint D1 read failed"))?
+            .ok_or_else(||ConnectError::not_found("CONTACT_POINTS_NOT_FOUND"))?;
+        RpcResponse::ok(contact_wire::GetContactPointResponse{
+            contact_point:Some(Self::convert(&point)?).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn list_contact_points(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,contact_wire::ListContactPointsRequest>,
+    )->ServiceResult<contact_wire::ListContactPointsResponse>{
+        let size=if req.page.page_size==0{25}else{req.page.page_size};
+        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
+        let after=&req.page.page_token;
+        if !after.is_empty(){Self::valid_id(after)?;}
+        let filter=req.party_id.as_deref();
+        if let Some(party)=filter{
+            crm_contact_points::PartyReference::try_new(party)
+                .map_err(|_|ConnectError::invalid_argument("invalid party_id filter"))?;
+        }
+        let (list,next)=contact_points::list_page_typed(&self.d1()?,&self.tenant,
+            after,size as usize,filter).await
+            .map_err(|_|ConnectError::internal("ContactPoint D1 list failed"))?;
+        let mut results=Vec::new();
+        for point in &list{results.push(Self::convert(point)?);}
+        RpcResponse::ok(contact_wire::ListContactPointsResponse{
+            contact_points:results,
+            page_info:Some(core_v2::PageInfo{
+                next_page_token:next.unwrap_or_default(),..Default::default()
+            }).into(),..Default::default()
+        })
+    }
+}
+
 // Called by existing native-only dispatch AFTER signed Access authentication
 // and role decision. No second fetch endpoint, tenant header, or JS route.
 pub(super) async fn route(
@@ -590,6 +801,10 @@ pub(super) async fn route(
             request_id:request_id.to_owned(),
         }))
         .add_service(Arc::new(AccountV2Service {
+            env: Arc::clone(&env), tenant: tenant.to_owned(),
+            request_id:request_id.to_owned(),
+        }))
+        .add_service(Arc::new(ContactPointV2Service {
             env: Arc::clone(&env), tenant: tenant.to_owned(),
             request_id:request_id.to_owned(),
         }))

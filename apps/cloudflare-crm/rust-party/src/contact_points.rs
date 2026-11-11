@@ -15,7 +15,7 @@ use super::{bind, error, now_nanos, response};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum KindInput { Email, Phone, Postal, Web, Messaging }
+pub(super) enum KindInput { Email, Phone, Postal, Web, Messaging }
 impl From<KindInput> for ContactPointKind {
     fn from(value: KindInput) -> Self {
         match value {
@@ -27,7 +27,7 @@ impl From<KindInput> for ContactPointKind {
 }
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum StatusInput { Active, Inactive }
+pub(super) enum StatusInput { Active, Inactive }
 impl From<StatusInput> for ContactPointStatus {
     fn from(value: StatusInput) -> Self {
         match value {
@@ -38,27 +38,27 @@ impl From<StatusInput> for ContactPointStatus {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct CreateInput {
-    id: String,
-    party_id: String,
-    kind: KindInput,
-    value: String,
-    preferred: bool,
-    valid_from_unix_nanos: Option<i64>,
-    valid_until_unix_nanos: Option<i64>,
+pub(super) struct CreateInput {
+    pub(super) id: String,
+    pub(super) party_id: String,
+    pub(super) kind: KindInput,
+    pub(super) value: String,
+    pub(super) preferred: bool,
+    pub(super) valid_from_unix_nanos: Option<i64>,
+    pub(super) valid_until_unix_nanos: Option<i64>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct UpdateInput {
-    expected_version: i64,
-    value: String,
-    status: StatusInput,
-    preferred: bool,
-    valid_from_unix_nanos: Option<i64>,
-    valid_until_unix_nanos: Option<i64>,
+pub(super) struct UpdateInput {
+    pub(super) expected_version: i64,
+    pub(super) value: String,
+    pub(super) status: StatusInput,
+    pub(super) preferred: bool,
+    pub(super) valid_from_unix_nanos: Option<i64>,
+    pub(super) valid_until_unix_nanos: Option<i64>,
 }
 #[derive(Deserialize)]
-struct Row { state: String }
+struct Row { id: String, state: String }
 #[derive(Deserialize)]
 struct Receipt { digest: String, state: String }
 
@@ -109,7 +109,7 @@ async fn previous(db: &D1Database, tenant: &str, idem: &str) -> Result<Option<Re
         &[JsValue::from_str(tenant), JsValue::from_str(idem)])?
         .first::<Receipt>(None).await
 }
-async fn load(db: &D1Database, tenant: &str, id: &str) -> Result<Option<ContactPoint>> {
+pub(super) async fn load(db: &D1Database, tenant: &str, id: &str) -> Result<Option<ContactPoint>> {
     bind(db, "SELECT state FROM crm_contact_point_records WHERE tenant = ? AND id = ?",
         &[JsValue::from_str(tenant), JsValue::from_str(id)])?
         .first::<Row>(None).await?
@@ -120,82 +120,143 @@ async fn party_exists(db: &D1Database, tenant: &str, id: &str) -> Result<bool> {
         &[JsValue::from_str(tenant), JsValue::from_str(id)])?
         .first::<Value>(None).await?.is_some())
 }
-async fn create(mut req: Request, db: &D1Database, tenant: &str, trace: &str) -> Result<Response> {
-    let Some(idem) = key(&req)? else { return error("IDEMPOTENCY_KEY_REQUIRED",422); };
-    let input = match serde_json::from_str::<CreateInput>(&req.text().await?) {
-        Ok(x) => x, Err(_) => return error("INVALID_INPUT",422),
-    };
-    let hash = digest("create", &input.id, &input)?;
-    if let Some(receipt) = previous(db, tenant, &idem).await? {
-        if receipt.digest != hash { return error("IDEMPOTENCY_CONFLICT",409); }
-        return response(json!({"item":view(&decode(&receipt.state)?),"replayed":true}),200);
+// Native D1 commands owned ONLY by the ORIGINAL ContactPoint aggregate.
+// Connect and the blocked old HTTP wrappers call these same functions.
+pub(super) struct MutationOutcome {
+    pub(super) contact_point: ContactPoint,
+    pub(super) replayed: bool,
+}
+pub(super) struct MutationFailure{
+    pub(super) code: String,
+    pub(super) status: u16,
+}
+fn failure(code:impl Into<String>,status:u16)->MutationFailure{
+    MutationFailure{code:code.into(),status}
+}
+pub(super) async fn create_typed(input:CreateInput,idem:&str,db:&D1Database,
+    tenant:&str,trace:&str,
+)->Result<std::result::Result<MutationOutcome,MutationFailure>>{
+    if !(8..=120).contains(&idem.len()){
+        return Ok(Err(failure("IDEMPOTENCY_KEY_REQUIRED",422)));
     }
-    let id = match ContactPointId::try_new(&input.id) {
-        Ok(x) => x, Err(e) => return error(&e.code,422),
-    };
-    let party = match PartyReference::try_new(&input.party_id) {
-        Ok(x) => x, Err(e) => return error(&e.code,422),
-    };
-    if !party_exists(db, tenant, party.as_str()).await? {
-        return error("CONTACT_POINTS_PARTY_NOT_FOUND",422);
+    let hash=digest("create",&input.id,&input)?;
+    if let Some(receipt)=previous(db,tenant,idem).await?{
+        if receipt.digest!=hash{return Ok(Err(failure("IDEMPOTENCY_CONFLICT",409)));}
+        let contact_point=decode(&receipt.state)?;
+        if contact_point.contact_point_id().as_str()!=input.id{
+            return Ok(Err(failure("IDEMPOTENCY_CONFLICT",409)));
+        }
+        return Ok(Ok(MutationOutcome{contact_point,replayed:true}));
     }
-    let point = match ContactPoint::create(CreateContactPoint {
-        contact_point_id: id, party_ref: party,
-        kind: input.kind.into(), value: input.value, preferred: input.preferred,
-        valid_from_unix_nanos: input.valid_from_unix_nanos,
-        valid_until_unix_nanos: input.valid_until_unix_nanos,
-        occurred_at_unix_nanos: now_nanos(),
-    }) { Ok(x) => x, Err(e) => return error(&e.code,422) };
-    let saved = encode(&point)?;
-    let r = bind(db, "INSERT INTO crm_contact_point_records(tenant,id,party_id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?,?)",
+    let id=match ContactPointId::try_new(&input.id){
+        Ok(x)=>x,Err(e)=>return Ok(Err(failure(e.code,422))),
+    };
+    let party=match PartyReference::try_new(&input.party_id){
+        Ok(x)=>x,Err(e)=>return Ok(Err(failure(e.code,422))),
+    };
+    if !party_exists(db,tenant,party.as_str()).await?{
+        return Ok(Err(failure("CONTACT_POINTS_PARTY_NOT_FOUND",422)));
+    }
+    let point=match ContactPoint::create(CreateContactPoint{
+        contact_point_id:id,party_ref:party,kind:input.kind.into(),
+        value:input.value,preferred:input.preferred,
+        valid_from_unix_nanos:input.valid_from_unix_nanos,
+        valid_until_unix_nanos:input.valid_until_unix_nanos,
+        occurred_at_unix_nanos:now_nanos(),
+    }){
+        Ok(x)=>x,Err(e)=>return Ok(Err(failure(e.code,422))),
+    };
+    let saved=encode(&point)?;
+    let result=bind(db,
+        "INSERT INTO crm_contact_point_records(tenant,id,party_id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant),JsValue::from_str(point.contact_point_id().as_str()),
           JsValue::from_str(point.party_ref().as_str()),JsValue::from_str(&saved),
-          JsValue::from_f64(point.version() as f64),
-          JsValue::from_str(&idem),JsValue::from_str(&hash),
-          JsValue::from_str(trace)])?.run().await;
-    if r.is_err() { return error("CONTACT_POINTS_CREATE_CONFLICT",409); }
-    response(json!({"item":view(&point),"replayed":false}),201)
+          JsValue::from_f64(point.version() as f64),JsValue::from_str(idem),
+          JsValue::from_str(&hash),JsValue::from_str(trace)])?.run().await;
+    if result.is_err(){return Ok(Err(failure("CONTACT_POINTS_CREATE_CONFLICT",409)));}
+    Ok(Ok(MutationOutcome{contact_point:point,replayed:false}))
 }
-async fn update(mut req: Request, db: &D1Database, tenant: &str, id: &str, trace: &str) -> Result<Response> {
-    let Some(idem) = key(&req)? else { return error("IDEMPOTENCY_KEY_REQUIRED",422); };
-    let input = match serde_json::from_str::<UpdateInput>(&req.text().await?) {
-        Ok(x) => x, Err(_) => return error("INVALID_INPUT",422),
-    };
-    let hash = digest("update", id, &input)?;
-    if let Some(receipt) = previous(db, tenant, &idem).await? {
-        if receipt.digest != hash { return error("IDEMPOTENCY_CONFLICT",409); }
-        return response(json!({"item":view(&decode(&receipt.state)?),"replayed":true}),200);
+pub(super) async fn update_typed(input:UpdateInput,idem:&str,db:&D1Database,
+    tenant:&str,id:&str,trace:&str,
+)->Result<std::result::Result<MutationOutcome,MutationFailure>>{
+    if !(8..=120).contains(&idem.len()){
+        return Ok(Err(failure("IDEMPOTENCY_KEY_REQUIRED",422)));
     }
-    let Some(mut point) = load(db, tenant, id).await? else {
-        return error("NOT_FOUND",404);
-    };
-    if let Err(e) = point.apply_update(UpdateContactPoint {
-        expected_version: input.expected_version, value: input.value,
-        status: input.status.into(), preferred: input.preferred,
-        valid_from_unix_nanos: input.valid_from_unix_nanos,
-        valid_until_unix_nanos: input.valid_until_unix_nanos,
-        occurred_at_unix_nanos: now_nanos(),
-    }) {
-        return error(&e.code,if e.code=="CONTACT_POINTS_VERSION_CONFLICT"{409}else{422});
+    let hash=digest("update",id,&input)?;
+    if let Some(receipt)=previous(db,tenant,idem).await?{
+        if receipt.digest!=hash{return Ok(Err(failure("IDEMPOTENCY_CONFLICT",409)));}
+        let contact_point=decode(&receipt.state)?;
+        if contact_point.contact_point_id().as_str()!=id{
+            return Ok(Err(failure("IDEMPOTENCY_CONFLICT",409)));
+        }
+        return Ok(Ok(MutationOutcome{contact_point,replayed:true}));
     }
-    let saved = encode(&point)?;
-    let r=bind(db,"UPDATE crm_contact_point_records SET state = ?,version = ?,idem_key = ?,idem_digest = ?,request_id = ? WHERE tenant = ? AND id = ? AND version = ?",
+    let Some(mut point)=load(db,tenant,id).await? else {
+        return Ok(Err(failure("NOT_FOUND",404)));
+    };
+    if let Err(e)=point.apply_update(UpdateContactPoint{
+        expected_version:input.expected_version,value:input.value,
+        status:input.status.into(),preferred:input.preferred,
+        valid_from_unix_nanos:input.valid_from_unix_nanos,
+        valid_until_unix_nanos:input.valid_until_unix_nanos,
+        occurred_at_unix_nanos:now_nanos(),
+    }){
+        return Ok(Err(failure(e.code.clone(),
+            if e.code=="CONTACT_POINTS_VERSION_CONFLICT"{409}else{422})));
+    }
+    let saved=encode(&point)?;
+    let result=bind(db,
+        "UPDATE crm_contact_point_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&saved),JsValue::from_f64(point.version() as f64),
-          JsValue::from_str(&idem),JsValue::from_str(&hash),JsValue::from_str(trace),
+          JsValue::from_str(idem),JsValue::from_str(&hash),JsValue::from_str(trace),
           JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
-    let Ok(result)=r else{return error("CONTACT_POINTS_UPDATE_CONFLICT",409)};
-    if result.meta()?.and_then(|m|m.changes).unwrap_or(0)==0 {
-        return error("CONTACT_POINTS_VERSION_CONFLICT",409);
+    let Ok(changed)=result else{return Ok(Err(failure("CONTACT_POINTS_UPDATE_CONFLICT",409)))};
+    if changed.meta()?.and_then(|m|m.changes).unwrap_or(0)==0 {
+        return Ok(Err(failure("CONTACT_POINTS_VERSION_CONFLICT",409)));
     }
-    response(json!({"item":view(&point),"replayed":false}),200)
+    Ok(Ok(MutationOutcome{contact_point:point,replayed:false}))
 }
-async fn list(db: &D1Database, tenant: &str) -> Result<Response> {
-    let rows=bind(db,"SELECT state FROM crm_contact_point_records WHERE tenant = ? ORDER BY id LIMIT 300",
-        &[JsValue::from_str(tenant)])?.all().await?.results::<Row>()?;
-    let items=rows.iter().map(|row|decode(&row.state).map(|point|view(&point)))
-        .collect::<Result<Vec<_>>>()?;
-    response(json!({"items":items}),200)
+pub(super) async fn list_page_typed(db:&D1Database,tenant:&str,after:&str,
+    size:usize,party:Option<&str>,
+)->Result<(Vec<ContactPoint>,Option<String>)>{
+    let rows=bind(db,
+        "SELECT id,state FROM crm_contact_point_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?",
+        &[JsValue::from_str(tenant),JsValue::from_str(after),
+          JsValue::from_f64((size+1) as f64)])?.all().await?.results::<Row>()?;
+    let more=rows.len()>size;
+    let next=if more{rows.get(size-1).map(|row|row.id.clone())}else{None};
+    let mut contacts=Vec::new();
+    for row in rows.iter().take(size){
+        let point=decode(&row.state)?;
+        if party.is_none_or(|id|id==point.party_ref().as_str()){contacts.push(point);}
+    }
+    Ok((contacts,next))
+}
+async fn create(mut req:Request,db:&D1Database,tenant:&str,trace:&str)->Result<Response>{
+    let Some(idem)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
+    let input=match serde_json::from_str::<CreateInput>(&req.text().await?){
+        Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422),
+    };
+    match create_typed(input,&idem,db,tenant,trace).await?{
+        Ok(out)=>response(json!({"item":view(&out.contact_point),"replayed":out.replayed}),
+            if out.replayed{200}else{201}),
+        Err(f)=>error(&f.code,f.status),
+    }
+}
+async fn update(mut req:Request,db:&D1Database,tenant:&str,id:&str,trace:&str)->Result<Response>{
+    let Some(idem)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
+    let input=match serde_json::from_str::<UpdateInput>(&req.text().await?){
+        Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422),
+    };
+    match update_typed(input,&idem,db,tenant,id,trace).await?{
+        Ok(out)=>response(json!({"item":view(&out.contact_point),"replayed":out.replayed}),200),
+        Err(f)=>error(&f.code,f.status),
+    }
+}
+async fn list(db:&D1Database,tenant:&str)->Result<Response>{
+    let (contacts,_)=list_page_typed(db,tenant,"",100,None).await?;
+    response(json!({"items":contacts.iter().map(view).collect::<Vec<_>>()}),200)
 }
 pub(super) async fn route(req: Request, db: D1Database, tenant: &str, trace: &str) -> Result<Response> {
     let path=req.path();
