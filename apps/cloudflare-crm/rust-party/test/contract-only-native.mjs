@@ -28,14 +28,13 @@ function jwt(email){
 let child;
 try{
  run(["d1","execute","crm-rust-party-local","--local",
-   "--file","./migrations/0001_local.sql","--persist-to",data]);
+   "--file","../migrations/0001_initial.sql","--persist-to",data]);
  run(["d1","execute","crm-rust-party-local","--local","--persist-to",data,
-   "--command","CREATE TABLE crm_tenants(id TEXT PRIMARY KEY,name TEXT NOT NULL);"+
-   "INSERT INTO crm_tenants VALUES('tenant-a','A'),('tenant-b','B');"+
-   "CREATE TABLE crm_users(email TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,role TEXT NOT NULL,active INTEGER NOT NULL);"+
-   "INSERT INTO crm_users VALUES('native-a@example.test','tenant-a','admin',1);"+
-   "INSERT INTO crm_users VALUES('native-viewer@example.test','tenant-a','viewer',1);"+
-   "INSERT INTO crm_users VALUES('native-b@example.test','tenant-b','admin',1);"]);
+   "--command","INSERT INTO crm_tenants VALUES('tenant-a','A'),('tenant-b','B');"+
+   "INSERT INTO crm_users(email,tenant_id,role,active) VALUES"+
+   "('native-a@example.test','tenant-a','admin',1),"+
+   "('native-viewer@example.test','tenant-a','viewer',1),"+
+   "('native-b@example.test','tenant-b','admin',1);"]);
  // This is a fixture row created in isolated D1 before the Worker starts,
  // not a second implementation of CRM's Party persistence.
  const state=JSON.stringify({party_id:"binary-rpc-proof-01",kind:"organization",
