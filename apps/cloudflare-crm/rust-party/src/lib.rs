@@ -268,7 +268,8 @@ fn legacy_transport_disabled(path: &str) -> bool {
          path.starts_with("/crm.party_relationships.v2.PartyRelationshipService/") ||
          path.starts_with("/crm.activities.v2.TaskService/") ||
          path.starts_with("/crm.data_quality.v2.DataQualityService/") ||
-         path.starts_with("/crm.identity_resolution.v2.IdentityResolutionService/"));
+         path.starts_with("/crm.identity_resolution.v2.IdentityResolutionService/") ||
+         path.starts_with("/crm.consents.v2.ConsentAuthorizationService/"));
     (path.starts_with("/api/") && !diagnostic && !ci_only) ||
         (path.starts_with("/crm.") &&
             path != "/crm.parties.v2.PartyService/GetParty" && !ci_candidate)
@@ -307,7 +308,9 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
              path == "/crm.activities.v2.TaskService/ListTasks" ||
              path == "/crm.data_quality.v2.DataQualityService/EvaluatePartyName" ||
              path == "/crm.identity_resolution.v2.IdentityResolutionService/FindSharedEmailCandidates" ||
-             path == "/crm.identity_resolution.v2.IdentityResolutionService/CompareParties")
+             path == "/crm.identity_resolution.v2.IdentityResolutionService/CompareParties" ||
+             path == "/crm.consents.v2.ConsentAuthorizationService/EvaluateConsent" ||
+             path == "/crm.consents.v2.ConsentAuthorizationService/ListConsentAuthorizations")
         && !(path == "/api/consents/evaluate" && method == Method::Post)
     {
         return error("FORBIDDEN", 403);
@@ -321,7 +324,8 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
        path.starts_with("/crm.party_relationships.v2.PartyRelationshipService/") ||
        path.starts_with("/crm.activities.v2.TaskService/") ||
        path.starts_with("/crm.data_quality.v2.DataQualityService/") ||
-       path.starts_with("/crm.identity_resolution.v2.IdentityResolutionService/") {
+       path.starts_with("/crm.identity_resolution.v2.IdentityResolutionService/") ||
+       path.starts_with("/crm.consents.v2.ConsentAuthorizationService/") {
         if method != Method::Post { return error("NOT_FOUND",404); }
         let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
         return connect_sales::route(req,env,tenant,actor,&request_id).await;

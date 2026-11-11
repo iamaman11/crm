@@ -13,7 +13,8 @@ import {binaryPartyGet,decodePartyGet,partyGetPath,
   binaryRelationshipV2,decodeRelationshipV2,relationshipV2Path,
   binaryTaskV2,decodeTaskV2,taskV2Path,
   binaryQualityV2,decodeQualityV2,qualityV2Path,
-  binaryIdentityV2,decodeIdentityV2,identityV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  binaryIdentityV2,decodeIdentityV2,identityV2Path,
+  binaryConsentV2,decodeConsentV2,consentV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-contract-only-"));
 const base="http://127.0.0.1:18789";
@@ -834,6 +835,88 @@ try{
    generated_binary:true,original_owner:"crm.identity-resolution",
    tenant_ab:true,viewer_read:true,pagination:true,no_identity_verdict:true,
    no_writes:true,published_active:false}));
+
+
+// Original crm-consents v2: operator may DENY, never self-attest GRANT.
+// Every RPC is generated binary Protobuf through signed native workerd/D1.
+const consentV2=signedReadOnly(consentV2Path,binaryConsentV2,decodeConsentV2);
+const consentScope={partyId:id,contactPointId:contactId,
+  purpose:"marketing.newsletter",channel:1};
+assert.equal((await consentV2("EvaluateConsent",null,consentScope)).status,401);
+assert.equal((await consentV2("EvaluateConsent",viewer,{
+  ...consentScope,channel:0})).status,400);
+assert.equal((await consentV2("EvaluateConsent",tenantB,consentScope)).status,400);
+const noGrant=await consentV2("EvaluateConsent",viewer,consentScope);
+assert.equal(noGrant.status,200,describeProtobuf(noGrant.body));
+assert.equal(noGrant.body.allowed,false,"no source-backed GRANT is available");
+assert.equal(noGrant.body.reason,4,"NO_APPLICABLE_GRANT");
+const denyInput={authorizationId:"consent-mid-"+randomUUID(),
+  ...consentScope,jurisdiction:"eu",
+  precondition:{idempotencyKey:"connect-consent-deny-mid"}};
+assert.equal((await consentV2("SuppressCommunication",null,denyInput)).status,401);
+assert.equal((await consentV2("SuppressCommunication",viewer,denyInput)).status,403);
+assert.equal((await consentV2("SuppressCommunication",tenantB,denyInput)).status,400);
+assert.equal((await consentV2("SuppressCommunication",admin,{
+  ...denyInput,channel:0,
+  precondition:{idempotencyKey:"connect-consent-invalid-channel"}})).status,400);
+const suppressed=await consentV2("SuppressCommunication",admin,denyInput);
+assert.equal(suppressed.status,200,describeProtobuf(suppressed.body));
+assert.equal(suppressed.body.authorization?.effect,2,"DENY only");
+assert.equal(suppressed.body.authorization?.status,1,"ACTIVE");
+assert.equal(suppressed.body.authorization?.partyId,id);
+assert.equal(suppressed.body.receipt?.resourceVersion,1n);
+assert.equal(suppressed.body.receipt?.replayed,false);
+assert.equal(suppressed.body.receipt?.requestId,suppressed.headers.get("x-request-id"));
+const replay=await consentV2("SuppressCommunication",admin,denyInput);
+assert.equal(replay.status,200,describeProtobuf(replay.body));
+assert.equal(replay.body.receipt?.replayed,true);
+assert.equal((await consentV2("SuppressCommunication",admin,{
+  ...denyInput,purpose:"marketing.different"})).status,409);
+const denied=await consentV2("EvaluateConsent",viewer,consentScope);
+assert.equal(denied.status,200,describeProtobuf(denied.body));
+assert.equal(denied.body.allowed,false);
+assert.equal(denied.body.reason,2,"ACTIVE_DENY");
+const otherScope=await consentV2("EvaluateConsent",admin,{
+  ...consentScope,purpose:"marketing.unrelated"});
+assert.equal(otherScope.status,200);
+assert.equal(otherScope.body.allowed,false);
+assert.equal(otherScope.body.reason,4);
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+denyInput.authorizationId+"'")[0].n,1,
+  "repeat suppression and consent evaluation must not duplicate audit");
+const originalList=await consentV2("ListConsentAuthorizations",viewer,{page:{pageSize:1}});
+assert.equal(originalList.status,200,describeProtobuf(originalList.body));
+assert.equal(originalList.body.authorizations.length,1);
+assert.equal((await consentV2("ListConsentAuthorizations",tenantB,{page:{pageSize:1}}))
+  .body.authorizations.length,0);
+assert.equal((await consentV2("ListConsentAuthorizations",viewer,{page:{pageSize:101}}))
+  .status,400);
+const otherId="consent-aaa-other-"+randomUUID();
+const lastId="consent-zzz-own-"+randomUUID();
+for(const [index,authorizationId,partyId] of [
+  [0,otherId,pagingPersonId],[1,lastId,id]
+]){
+  const inserted=await consentV2("SuppressCommunication",admin,{
+    authorizationId,partyId,purpose:"marketing.other",channel:1,jurisdiction:"eu",
+    precondition:{idempotencyKey:"connect-consent-additional-"+index}});
+  assert.equal(inserted.status,200,describeProtobuf(inserted.body));
+}
+const filteredConsents=await collectPages(consentV2,"ListConsentAuthorizations",
+  "authorizations",{partyId:id});
+assert.deepEqual(filteredConsents.map(x=>x.authorizationId),
+  [denyInput.authorizationId,lastId]);
+const allConsents=await collectPages(consentV2,"ListConsentAuthorizations","authorizations");
+assert.equal(allConsents.length,3);
+assert.equal((await consentV2("ListConsentAuthorizations",viewer,{
+  page:{pageSize:1,pageToken:lastId},partyId:id})).body.authorizations.length,0);
+assert.equal((await consentV2("ListConsentAuthorizations",viewer,{
+  page:{pageSize:1},partyId:"missing-party"})).body.authorizations.length,0);
+console.log(JSON.stringify({event:"crm.native-g3-consents-v2-candidate",result:"PASS",
+  rpc_methods:["EvaluateConsent","SuppressCommunication","ListConsentAuthorizations"],
+  generated_binary:true,original_owner:"crm.consents",signed_access:true,
+  tenant_ab:true,viewer_read:true,viewer_write_denied:true,operator_deny_only:true,
+  no_grant_ingress:true,before_limit_filtered_pagination:true,
+  d1_receipts:true,no_extra_audit:true,published_active:false}));
 
  console.log(JSON.stringify({event:"crm.native-g3-party-v3-candidate",
    result:"PASS",generated_binary:true,owner:"crm.parties",

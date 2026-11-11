@@ -172,6 +172,7 @@ if(policy.phase!=="cutover"){
     "apps/cloudflare-crm/rust-party/src/activity_tasks.rs",
     "apps/cloudflare-crm/rust-party/src/data_quality.rs",
     "apps/cloudflare-crm/rust-party/src/identity_resolution.rs",
+    "apps/cloudflare-crm/rust-party/src/consents.rs",
     "apps/cloudflare-crm/rust-party/src/connect_sales.rs",
     "apps/cloudflare-crm/rust-party/build.rs",
     // Candidate-only generated Connect-Web facade; never loaded by the
@@ -216,6 +217,7 @@ if(policy.phase!=="cutover"){
       runtime.includes('path.starts_with("/crm.activities.v2.TaskService/")') &&
       runtime.includes('path.starts_with("/crm.data_quality.v2.DataQualityService/")') &&
       runtime.includes('path.starts_with("/crm.identity_resolution.v2.IdentityResolutionService/")') &&
+      runtime.includes('path.starts_with("/crm.consents.v2.ConsentAuthorizationService/")') &&
       runtime.includes('path != "/crm.parties.v2.PartyService/GetParty" && !ci_candidate'),
       "Party v3 candidate MUST remain inaccessible in production contract-only");
     check(JSON.stringify(policy.contract_only_rpc_methods)===

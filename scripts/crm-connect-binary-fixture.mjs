@@ -128,3 +128,19 @@ export const binaryIdentityV2=(name,payload)=>{
 };
 export const decodeIdentityV2=(name,bytes)=>fromBinary(identityMethod(name).output,bytes);
 
+// Original Consent Authorization service, descriptor-derived binary Connect.
+const consentService=registry.getService("crm.consents.v2.ConsentAuthorizationService");
+if(!consentService)throw Error("compiled Consents v2 service missing");
+const consentMethod=name=>{
+ const method=consentService.methods.find(item=>item.name===name);
+ if(!method)throw Error("compiled Consent v2 RPC missing "+name);
+ return method;
+};
+export const consentV2Path=name=>"/crm.consents.v2.ConsentAuthorizationService/"+consentMethod(name).name;
+export const binaryConsentV2=(name,payload)=>{
+ const method=consentMethod(name);
+ return toBinary(method.input,create(method.input,payload));
+};
+export const decodeConsentV2=(name,bytes)=>fromBinary(consentMethod(name).output,bytes);
+
+

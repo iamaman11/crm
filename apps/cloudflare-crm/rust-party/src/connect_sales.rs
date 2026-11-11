@@ -13,7 +13,7 @@ use buffa::Message as BuffaMessage;
 use prost::Message as ProstMessage;
 use serde::Deserialize;
 use wasm_bindgen::JsValue;
-use super::{accounts, activity_tasks, bind, contact_points, data_quality, identity_resolution, parties, party_relationships, sales_contract, sales_deals};
+use super::{accounts, activity_tasks, bind, consents, contact_points, data_quality, identity_resolution, parties, party_relationships, sales_contract, sales_deals};
 use crm_parties::PartyKind as DomainPartyKind;
 use crm_customer_accounts::{Account as DomainAccount, AccountPartyRole as DomainAccountPartyRole, AccountStatus as DomainAccountStatus};
 use crm_contact_points::{ContactPoint as DomainContactPoint, ContactPointKind as DomainContactPointKind,
@@ -28,6 +28,13 @@ use crm_activities::{
     TaskStatus as DomainTaskStatus,
 };
 use crm_identity_resolution::{CanonicalPartyPair, PartyReference};
+use crm_consents::{
+    CommunicationAuthorizationReason as DomainConsentReason,
+    CommunicationChannel as DomainConsentChannel,
+    ConsentAuthorization as DomainConsent,
+    ConsentAuthorizationStatus as DomainConsentStatus,
+    ConsentEffect as DomainConsentEffect,
+};
 use buffa_types::google::protobuf::Timestamp;
 use crm_proto_contracts::crm::{core::v1 as core_contract, sales::v1 as sales_contract_proto};
 
@@ -100,6 +107,13 @@ pub mod proto {
                 include!(concat!(env!("OUT_DIR"), "/crm.identity_resolution.v2.mod.rs"));
             }
         }
+        pub mod consents {
+            use super::*;
+            pub mod v2 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.consents.v2.mod.rs"));
+            }
+        }
         pub mod parties {
             use super::*;
             pub mod v2 {
@@ -123,6 +137,7 @@ use proto::crm::party_relationships::v2 as rel_wire;
 use proto::crm::activities::v2 as task_wire;
 use proto::crm::data_quality::v2 as quality_wire;
 use proto::crm::identity_resolution::v2 as identity_wire;
+use proto::crm::consents::v2 as consent_wire;
 
 #[derive(Deserialize)]
 struct Row { state: String }
@@ -1286,6 +1301,144 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service{
     }
 }
 
+
+// The original crm-consents domain owns communication decisions and operator
+// suppression. This generated Connect boundary never accepts evidence/GRANT.
+struct ConsentV2Service{
+    env:Arc<Env>,
+    tenant:String,
+    actor:String,
+    request_id:String,
+}
+impl ConsentV2Service{
+    fn d1(&self)->std::result::Result<D1Database,ConnectError>{
+        self.env.d1("DB").map_err(|_|ConnectError::internal("D1 unavailable"))
+    }
+    fn channel(raw:i32)->std::result::Result<consents::ChannelInput,ConnectError>{
+        match raw{
+            x if x==consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_EMAIL=>
+                Ok(consents::ChannelInput::Email),
+            x if x==consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_PHONE=>
+                Ok(consents::ChannelInput::Phone),
+            x if x==consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_SMS=>
+                Ok(consents::ChannelInput::Sms),
+            x if x==consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_POSTAL=>
+                Ok(consents::ChannelInput::Postal),
+            x if x==consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_MESSAGING=>
+                Ok(consents::ChannelInput::Messaging),
+            x if x==consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_PUSH=>
+                Ok(consents::ChannelInput::Push),
+            _=>Err(ConnectError::invalid_argument("invalid CommunicationChannel")),
+        }
+    }
+    fn convert(item:&DomainConsent)->consent_wire::ConsentAuthorization{
+        let channel=match item.channel(){
+            DomainConsentChannel::Email=>consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_EMAIL,
+            DomainConsentChannel::Phone=>consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_PHONE,
+            DomainConsentChannel::Sms=>consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_SMS,
+            DomainConsentChannel::Postal=>consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_POSTAL,
+            DomainConsentChannel::Messaging=>consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_MESSAGING,
+            DomainConsentChannel::Push=>consent_wire::CommunicationChannel::COMMUNICATION_CHANNEL_PUSH,
+        };
+        let effect=match item.effect(){
+            DomainConsentEffect::Grant=>consent_wire::ConsentEffect::CONSENT_EFFECT_GRANT,
+            DomainConsentEffect::Deny=>consent_wire::ConsentEffect::CONSENT_EFFECT_DENY,
+        };
+        let status=match item.status(){
+            DomainConsentStatus::Active=>consent_wire::ConsentStatus::CONSENT_STATUS_ACTIVE,
+            DomainConsentStatus::Withdrawn=>consent_wire::ConsentStatus::CONSENT_STATUS_WITHDRAWN,
+        };
+        consent_wire::ConsentAuthorization{
+            authorization_id:item.authorization_id().as_str().to_owned(),
+            party_id:item.party_ref().as_str().to_owned(),
+            contact_point_id:item.contact_point_ref().map(|x|x.as_str().to_owned()),
+            purpose:item.purpose().as_str().to_owned(),
+            channel:channel.into(),effect:effect.into(),status:status.into(),
+            jurisdiction:item.jurisdiction().as_str().to_owned(),
+            version:item.version(),..Default::default()
+        }
+    }
+    fn failed(f:consents::OperationFailure)->ConnectError{
+        match f.status{
+            404=>ConnectError::not_found(f.code),
+            409=>ConnectError::aborted(f.code),
+            422=>ConnectError::invalid_argument(f.code),
+            _=>ConnectError::internal(f.code),
+        }
+    }
+}
+impl consent_wire::ConsentAuthorizationService for ConsentV2Service{
+    #[worker::send]
+    async fn evaluate_consent(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,consent_wire::EvaluateConsentRequest>,
+    )->ServiceResult<consent_wire::EvaluateConsentResponse>{
+        let input=req.to_owned_message();
+        let decision=consents::evaluate_typed(consents::ScopeInput{
+            party_id:input.party_id,contact_point_id:input.contact_point_id,
+            purpose:input.purpose,channel:Self::channel(input.channel)?,
+        },&self.d1()?,&self.tenant).await
+            .map_err(|_|ConnectError::internal("Original Consent evaluation failed"))?
+            .map_err(Self::failed)?;
+        let reason=match decision.reason{
+            DomainConsentReason::ActiveGrant=>consent_wire::EvaluationReason::EVALUATION_REASON_ACTIVE_GRANT,
+            DomainConsentReason::ActiveDeny=>consent_wire::EvaluationReason::EVALUATION_REASON_ACTIVE_DENY,
+            DomainConsentReason::Withdrawn=>consent_wire::EvaluationReason::EVALUATION_REASON_WITHDRAWN,
+            DomainConsentReason::NoApplicableGrant=>consent_wire::EvaluationReason::EVALUATION_REASON_NO_APPLICABLE_GRANT,
+        };
+        RpcResponse::ok(consent_wire::EvaluateConsentResponse{
+            allowed:decision.allowed,reason:reason.into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn suppress_communication(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,consent_wire::SuppressCommunicationRequest>,
+    )->ServiceResult<consent_wire::SuppressCommunicationResponse>{
+        let input=req.to_owned_message();
+        let (key,_)=AccountV2Service::precondition(input.precondition.as_option(),true)?;
+        let saved=consents::suppress_typed(consents::SuppressionInput{
+            id:input.authorization_id,party_id:input.party_id,
+            contact_point_id:input.contact_point_id,purpose:input.purpose,
+            channel:Self::channel(input.channel)?,jurisdiction:input.jurisdiction,
+        },&key,&self.d1()?,&self.tenant,&self.actor,&self.request_id).await
+            .map_err(|_|ConnectError::internal("Original Consent suppression failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(consent_wire::SuppressCommunicationResponse{
+            authorization:Some(Self::convert(&saved.item)).into(),
+            receipt:Some(core_v2::MutationReceipt{
+                request_id:self.request_id.clone(),
+                resource_version:saved.item.version(),replayed:saved.replayed,
+                ..Default::default()
+            }).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn list_consent_authorizations(&self,_ctx:RequestContext,
+        req:ServiceRequest<'_,consent_wire::ListConsentAuthorizationsRequest>,
+    )->ServiceResult<consent_wire::ListConsentAuthorizationsResponse>{
+        let size=if req.page.page_size==0{25}else{req.page.page_size};
+        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
+        let after=&req.page.page_token;
+        if !after.is_empty(){
+            crm_consents::ConsentAuthorizationId::try_new(after)
+                .map_err(|_|ConnectError::invalid_argument("invalid page_token"))?;
+        }
+        let filter=req.party_id.as_deref();
+        if let Some(party)=filter{
+            crm_consents::PartyReference::try_new(party)
+                .map_err(|_|ConnectError::invalid_argument("invalid party_id filter"))?;
+        }
+        let (list,next)=consents::list_page_typed(
+            &self.d1()?,&self.tenant,after,size as usize,filter).await
+            .map_err(|_|ConnectError::internal("Original Consent D1 list failed"))?;
+        let authorizations=list.iter().map(Self::convert).collect();
+        RpcResponse::ok(consent_wire::ListConsentAuthorizationsResponse{
+            authorizations,page_info:Some(core_v2::PageInfo{
+                next_page_token:next.unwrap_or_default(),..Default::default()
+            }).into(),..Default::default()
+        })
+    }
+}
+
 // Called by existing native-only dispatch AFTER signed Access authentication
 // and role decision. No second fetch endpoint, tenant header, or JS route.
 pub(super) async fn route(
@@ -1322,6 +1475,10 @@ pub(super) async fn route(
         }))
         .add_service(Arc::new(IdentityV2Service{
             env:Arc::clone(&env),tenant:tenant.to_owned(),
+        }))
+        .add_service(Arc::new(ConsentV2Service{
+            env:Arc::clone(&env),tenant:tenant.to_owned(),
+            actor:actor.to_owned(),request_id:request_id.to_owned(),
         }))
         .add_service(Arc::new(SalesService {
             env,tenant:tenant.to_owned(),
