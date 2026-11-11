@@ -60,6 +60,8 @@ pub(super) struct UpdateInput {
 #[derive(Deserialize)]
 struct Row { id: String, state: String }
 #[derive(Deserialize)]
+struct Stored { state: String }
+#[derive(Deserialize)]
 struct Receipt { digest: String, state: String }
 
 fn digest<T: Serialize>(operation: &str, id: &str, input: &T) -> Result<String> {
@@ -112,7 +114,7 @@ async fn previous(db: &D1Database, tenant: &str, idem: &str) -> Result<Option<Re
 pub(super) async fn load(db: &D1Database, tenant: &str, id: &str) -> Result<Option<ContactPoint>> {
     bind(db, "SELECT state FROM crm_contact_point_records WHERE tenant = ? AND id = ?",
         &[JsValue::from_str(tenant), JsValue::from_str(id)])?
-        .first::<Row>(None).await?
+        .first::<Stored>(None).await?
         .map(|row| decode(&row.state)).transpose()
 }
 async fn party_exists(db: &D1Database, tenant: &str, id: &str) -> Result<bool> {
