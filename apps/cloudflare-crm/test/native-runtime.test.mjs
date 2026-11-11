@@ -197,7 +197,7 @@ test("Party relationships UI uses original Rust owner with one App list",()=>{
   assert.match(ui,/expected_version/);
   assert.match(ui,/idempotency-key/);
   assert.match(owner,/PartyRelationship::create/);
-  assert.match(owner,/relation\.apply_update/);
+  assert.match(owner,/relationship\.apply_update/);
   assert.match(owner,/PARTY_RELATIONSHIPS_PARTY_NOT_FOUND/);
   assert.match(owner,/crm_party_relationship_records/);
   assert.ok(existsSync(resolve(root,"web/src/Relationships.jsx")));
