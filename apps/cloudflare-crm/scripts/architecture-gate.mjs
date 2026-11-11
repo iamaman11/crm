@@ -160,9 +160,20 @@ check(routerCount===1,"exactly one embedded Connect router required, found "+rou
 if(policy.phase!=="cutover"){
   const prev=new Set(baselineFiles("apps/cloudflare-crm"));
   prev.add("packages/client/src/cloudflare.ts");
+  // Only the in-place Party owner, the existing single Connect router and
+  // build-time Protobuf codegen may evolve as a private signed-workerd G3
+  // candidate. All production v3 requests remain 410 until the full cutover.
+  // These are source-file freeze exceptions, NOT an API capability registry.
+  const candidateSources=new Set([
+    "apps/cloudflare-crm/rust-party/src/parties.rs",
+    "apps/cloudflare-crm/rust-party/src/connect_sales.rs",
+    "apps/cloudflare-crm/rust-party/build.rs"
+  ]);
   for(const path of frozenRuntimeFiles()){
     check(prev.has(path),"new runtime file before full cutover: "+path);
-    if(policy.phase==="contract-only"&&path==="apps/cloudflare-crm/rust-party/src/lib.rs")continue;
+    if(policy.phase==="contract-only"&&
+       (path==="apps/cloudflare-crm/rust-party/src/lib.rs"||
+        candidateSources.has(path)))continue;
     if(path==="apps/cloudflare-crm/wrangler.jsonc"||
        path==="apps/cloudflare-crm/rust-party/wrangler.jsonc"){
       // Only this security-strengthening routing rule may change during freeze.
@@ -187,6 +198,10 @@ if(policy.phase!=="cutover"){
       "missing fail-closed legacy runtime router");
     check(runtime.includes('error("LEGACY_TRANSPORT_DISABLED", 410)'),
       "legacy business endpoints must return HTTP 410");
+    check(runtime.includes('cfg!(feature = "native-ci")') &&
+      runtime.includes('path.starts_with("/crm.parties.v3.PartyService/")') &&
+      runtime.includes('path != "/crm.parties.v2.PartyService/GetParty" && !ci_candidate'),
+      "Party v3 candidate MUST remain inaccessible in production contract-only");
     check(JSON.stringify(policy.contract_only_rpc_methods)===
       JSON.stringify(["/crm.parties.v2.PartyService/GetParty"]),
       "only physically proven Party GetParty RPC may remain live");

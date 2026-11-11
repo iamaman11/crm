@@ -32,8 +32,12 @@ pub mod proto {
                 use super::*;
                 include!(concat!(env!("OUT_DIR"), "/crm.core.v1.mod.rs"));
             }
+            pub mod v2 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.core.v2.mod.rs"));
+            }
         }
-        pub mod sales {
+                pub mod sales {
             use super::*;
             pub mod v1 {
                 use super::*;
@@ -46,11 +50,17 @@ pub mod proto {
                 use super::*;
                 include!(concat!(env!("OUT_DIR"), "/crm.parties.v2.mod.rs"));
             }
+            pub mod v3 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.parties.v3.mod.rs"));
+            }
         }
     }
 }
 use proto::crm::sales::v1 as sales;
 use proto::crm::parties::v2 as party_wire;
+use proto::crm::parties::v3 as party_v3;
+use proto::crm::core::v2 as core_v2;
 
 #[derive(Deserialize)]
 struct Row { state: String }
@@ -256,6 +266,147 @@ impl party_wire::PartyService for PartyService {
     }
 }
 
+// Cutover Party v3: generated Connect wire only. The historical Party owner
+// in parties.rs remains the SOLE state codec, D1 mutation and receipt owner.
+// This service is exposed to signed native-ci workerd only until full cutover.
+struct PartyV3Service {
+    env: Arc<Env>,
+    tenant: String,
+    request_id: String,
+}
+impl PartyV3Service {
+    fn d1(&self) -> std::result::Result<D1Database, ConnectError> {
+        self.env.d1("DB").map_err(|_|ConnectError::internal("D1 binding unavailable"))
+    }
+    fn valid_id(raw: &str) -> std::result::Result<crm_parties::PartyId, ConnectError> {
+        if raw != raw.trim() || raw.contains('/') {
+            return Err(ConnectError::invalid_argument("PARTIES_PARTY_ID_INVALID"));
+        }
+        crm_parties::PartyId::try_new(raw.to_owned())
+            .map_err(|_|ConnectError::invalid_argument("PARTIES_PARTY_ID_INVALID"))
+    }
+    fn convert(party: &crm_parties::Party)
+        -> std::result::Result<party_v3::Party,ConnectError> {
+        let version=i64::try_from(party.version())
+            .map_err(|_|ConnectError::internal("invalid Party version"))?;
+        let kind=match party.kind(){
+            DomainPartyKind::Person=>party_v3::PartyKind::PARTY_KIND_PERSON,
+            DomainPartyKind::Organization=>party_v3::PartyKind::PARTY_KIND_ORGANIZATION,
+        };
+        Ok(party_v3::Party {
+            party_id:party.party_id().as_str().to_owned(),
+            kind:kind.into(),display_name:party.display_name().to_owned(),
+            version,..Default::default()
+        })
+    }
+    fn receipt(&self, outcome:&parties::MutationOutcome)
+        -> std::result::Result<core_v2::MutationReceipt,ConnectError> {
+        Ok(core_v2::MutationReceipt {
+            request_id:self.request_id.clone(),
+            resource_version:i64::try_from(outcome.party.version())
+                .map_err(|_|ConnectError::internal("invalid Party version"))?,
+            replayed:outcome.replayed,..Default::default()
+        })
+    }
+    fn mutation_error(f: parties::MutationFailure) -> ConnectError {
+        match f.status {
+            404=>ConnectError::not_found(f.code),
+            409=>ConnectError::aborted(f.code),
+            422=>ConnectError::invalid_argument(f.code),
+            _=>ConnectError::internal(f.code),
+        }
+    }
+}
+impl party_v3::PartyService for PartyV3Service {
+    #[worker::send]
+    async fn create_party(
+        &self,_ctx:RequestContext,req:ServiceRequest<'_,party_v3::CreatePartyRequest>,
+    )->ServiceResult<party_v3::CreatePartyResponse>{
+        let input=req.to_owned_message();
+        let id=Self::valid_id(&input.party_id)?;
+        let kind=match input.kind {
+            x if x==party_v3::PartyKind::PARTY_KIND_PERSON=>DomainPartyKind::Person,
+            x if x==party_v3::PartyKind::PARTY_KIND_ORGANIZATION=>DomainPartyKind::Organization,
+            _=>return Err(ConnectError::invalid_argument("INVALID_KIND")),
+        };
+        let pre=input.precondition.as_option()
+            .ok_or_else(||ConnectError::invalid_argument("mutation precondition required"))?;
+        if pre.expected_version.is_some() {
+            return Err(ConnectError::invalid_argument("create must not specify expected_version"));
+        }
+        let saved=parties::create_typed(&self.d1()?,&self.tenant,
+            id.as_str().to_owned(),kind,input.display_name,
+            &pre.idempotency_key,&self.request_id).await
+            .map_err(|_|ConnectError::internal("Party D1 create failed"))?
+            .map_err(Self::mutation_error)?;
+        RpcResponse::ok(party_v3::CreatePartyResponse {
+            party:Some(Self::convert(&saved.party)?).into(),
+            receipt:Some(self.receipt(&saved)?).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn update_party(
+        &self,_ctx:RequestContext,req:ServiceRequest<'_,party_v3::UpdatePartyRequest>,
+    )->ServiceResult<party_v3::UpdatePartyResponse>{
+        let input=req.to_owned_message();
+        let id=Self::valid_id(&input.party_id)?;
+        let pre=input.precondition.as_option()
+            .ok_or_else(||ConnectError::invalid_argument("mutation precondition required"))?;
+        let version=pre.expected_version
+            .ok_or_else(||ConnectError::invalid_argument("expected_version required"))?;
+        if version<1 {return Err(ConnectError::invalid_argument("invalid expected_version"));}
+        let saved=parties::update_typed(&self.d1()?,&self.tenant,
+            id.as_str(),input.display_name,version,&pre.idempotency_key,
+            &self.request_id).await
+            .map_err(|_|ConnectError::internal("Party D1 update failed"))?
+            .map_err(Self::mutation_error)?;
+        RpcResponse::ok(party_v3::UpdatePartyResponse {
+            party:Some(Self::convert(&saved.party)?).into(),
+            receipt:Some(self.receipt(&saved)?).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn get_party(
+        &self,_ctx:RequestContext,req:ServiceRequest<'_,party_v3::GetPartyRequest>,
+    )->ServiceResult<party_v3::GetPartyResponse>{
+        let id=Self::valid_id(&req.party_id)?;
+        let party=parties::stored(&self.d1()?,&self.tenant,id.as_str()).await
+            .map_err(|_|ConnectError::internal("Party D1 get failed"))?
+            .ok_or_else(||ConnectError::not_found("PARTIES_NOT_FOUND"))?;
+        RpcResponse::ok(party_v3::GetPartyResponse {
+            party:Some(Self::convert(&party)?).into(),..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn list_parties(
+        &self,_ctx:RequestContext,req:ServiceRequest<'_,party_v3::ListPartiesRequest>,
+    )->ServiceResult<party_v3::ListPartiesResponse>{
+        let size=if req.page.page_size==0 {25} else {req.page.page_size};
+        if size>100 {return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
+        let after=&req.page.page_token;
+        if !after.is_empty(){Self::valid_id(after)?;}
+        let filter=match req.kind {
+            None=>None,
+            Some(x) if x==party_v3::PartyKind::PARTY_KIND_PERSON=>Some(DomainPartyKind::Person),
+            Some(x) if x==party_v3::PartyKind::PARTY_KIND_ORGANIZATION=>
+                Some(DomainPartyKind::Organization),
+            _=>return Err(ConnectError::invalid_argument("invalid PartyKind filter")),
+        };
+        let (parties,next)=parties::list_page_typed(&self.d1()?,&self.tenant,
+            after,size as usize,filter).await
+            .map_err(|_|ConnectError::internal("Party D1 list failed"))?;
+        let mut items=Vec::with_capacity(parties.len());
+        for party in &parties {items.push(Self::convert(party)?);}
+        RpcResponse::ok(party_v3::ListPartiesResponse {
+            parties:items,
+            page_info:Some(core_v2::PageInfo {
+                next_page_token:next.unwrap_or_default(),..Default::default()
+            }).into(),
+            ..Default::default()
+        })
+    }
+}
+
 // Called by existing native-only dispatch AFTER signed Access authentication
 // and role decision. No second fetch endpoint, tenant header, or JS route.
 pub(super) async fn route(
@@ -266,6 +417,10 @@ pub(super) async fn route(
     let mut app:Router=ConnectRouter::new()
         .add_service(Arc::new(PartyService {
             env: Arc::clone(&env), tenant: tenant.to_owned(),
+        }))
+        .add_service(Arc::new(PartyV3Service {
+            env: Arc::clone(&env), tenant: tenant.to_owned(),
+            request_id:request_id.to_owned(),
         }))
         .add_service(Arc::new(SalesService {
             env,tenant:tenant.to_owned(),

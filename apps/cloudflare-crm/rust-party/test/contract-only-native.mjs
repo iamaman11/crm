@@ -1,12 +1,13 @@
 // Isolated native-ci RSA-signed Access proof of intentional contract-only shutdown.
 import {spawn,execFileSync} from "node:child_process";
-import {generateKeyPairSync,createSign} from "node:crypto";
+import {generateKeyPairSync,createSign,randomUUID} from "node:crypto";
 import {mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
-import {binaryPartyGet,decodePartyGet,partyGetPath} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+import {binaryPartyGet,decodePartyGet,partyGetPath,
+  binaryPartyV3,decodePartyV3,partyV3Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-contract-only-"));
 const base="http://127.0.0.1:18789";
@@ -101,6 +102,81 @@ try{
    "--persist-to",data,"--json","--command",
    "SELECT COUNT(*) AS n FROM crm_party_records;"]));
  assert.equal(db[0]?.results?.[0]?.n,1,"read-only RPC must not mutate original D1");
+
+ // G3 candidate, active only in signed native-ci workerd. Every request and
+ // response is generated from the SAME Buf descriptor as the React client.
+ // The production contract-only Worker must continue returning 410 for v3.
+ const v3=async(method,token,payload)=>{
+   const response=await fetch(base+partyV3Path(method),{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+       ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:binaryPartyV3(method,payload)});
+   return {status:response.status,headers:response.headers,
+     body:response.status<400
+       ?decodePartyV3(method,new Uint8Array(await response.arrayBuffer()))
+       :await response.json()};
+ };
+ const id="native-v3-"+randomUUID();
+ const creation={partyId:id,kind:2,displayName:"  Connect   Native  Rust ",
+   precondition:{idempotencyKey:"candidate-v3-create-001"}};
+ assert.equal((await v3("CreateParty",null,creation)).status,401);
+ assert.equal((await v3("CreateParty",viewer,creation)).status,403);
+ assert.equal((await v3("CreateParty",admin,{...creation,kind:0,
+   precondition:{idempotencyKey:"candidate-v3-invalid-kind"}})).status,400);
+ assert.equal((await v3("CreateParty",admin,{...creation,
+   precondition:{idempotencyKey:"candidate-v3-invalid-pre",
+     expectedVersion:1n}})).status,400);
+ const created=await v3("CreateParty",admin,creation);
+ assert.equal(created.status,200,JSON.stringify(created.body));
+ assert.equal(created.body.party?.partyId,id);
+ assert.equal(created.body.party?.displayName,"Connect Native Rust");
+ assert.equal(created.body.receipt?.resourceVersion,1n);
+ assert.equal(created.body.receipt?.replayed,false);
+ assert.equal(created.body.receipt?.requestId,created.headers.get("x-request-id"));
+ const replay=await v3("CreateParty",admin,creation);
+ assert.equal(replay.status,200);
+ assert.equal(replay.body.receipt?.replayed,true);
+ assert.equal((await v3("CreateParty",admin,{...creation,
+   displayName:"different replay"})).status,409);
+ assert.equal((await v3("GetParty",tenantB,{partyId:id})).status,404);
+ const read=await v3("GetParty",viewer,{partyId:id});
+ assert.equal(read.status,200);
+ assert.equal(read.body.party?.displayName,"Connect Native Rust");
+ const listing=await v3("ListParties",viewer,{page:{pageSize:1}});
+ assert.equal(listing.status,200,JSON.stringify(listing.body));
+ assert.equal(listing.body.parties.length,1);
+ assert.ok(listing.body.pageInfo?.nextPageToken);
+ assert.equal((await v3("ListParties",viewer,{page:{pageSize:101}})).status,400);
+ const updatedInput={partyId:id,displayName:"Updated via native v3",
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-v3-update-001"}};
+ assert.equal((await v3("UpdateParty",viewer,updatedInput)).status,403);
+ const updated=await v3("UpdateParty",admin,updatedInput);
+ assert.equal(updated.status,200,JSON.stringify(updated.body));
+ assert.equal(updated.body.party?.version,2n);
+ assert.equal(updated.body.party?.displayName,"Updated via native v3");
+ assert.equal(updated.body.receipt?.resourceVersion,2n);
+ assert.equal(updated.body.receipt?.replayed,false);
+ const again=await v3("UpdateParty",admin,updatedInput);
+ assert.equal(again.status,200);
+ assert.equal(again.body.receipt?.replayed,true);
+ assert.equal((await v3("UpdateParty",admin,{...updatedInput,
+   precondition:{expectedVersion:1n,
+      idempotencyKey:"candidate-v3-stale-version"}})).status,409);
+ const sql=(query)=>JSON.parse(run(["d1","execute","crm-rust-party-local","--local",
+   "--persist-to",data,"--json","--command",query]))[0].results;
+ assert.equal(sql("SELECT version FROM crm_party_records WHERE id='"+id+"'")[0].version,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_receipts WHERE tenant='tenant-a' "+
+   "AND key IN ('candidate-v3-create-001','candidate-v3-update-001')")[0].n,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_audit WHERE tenant='tenant-a' "+
+   "AND id='"+id+"'")[0].n,2);
+ assert.equal((await v3("GetParty",admin,{partyId:id})).body.party?.version,2n);
+ console.log(JSON.stringify({event:"crm.native-g3-party-v3-candidate",
+   result:"PASS",generated_binary:true,owner:"crm.parties",
+   rpc_methods:["CreateParty","UpdateParty","GetParty","ListParties"],
+   signed_access:true,tenant_ab:true,viewer_mutation_denied:true,
+   original_d1_cas:true,d1_receipts:true,d1_audit:true,
+   published_active:false}));
+
  assert.equal((await call("/crm.future.v9.FutureService/NotRegistered",viewer,"POST")).status,410);
  console.log(JSON.stringify({event:"crm.contract-only-signed-access",
    result:"PASS",admin:true,viewer:true,unauthenticated_denied:true,

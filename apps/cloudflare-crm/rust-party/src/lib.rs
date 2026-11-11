@@ -259,9 +259,13 @@ fn legacy_transport_disabled(path: &str) -> bool {
     let diagnostic = matches!(path, "/api/health" | "/api/doctor" |
         "/api/session" | "/api/version");
     let ci_only = cfg!(feature = "native-ci") && path == "/api/_ci/original-domain-check";
+    // G3 candidate is physically testable under signed native-ci JWT only.
+    // Production contract-only continues returning HTTP 410 for ALL v3 RPCs.
+    let ci_candidate = cfg!(feature = "native-ci") &&
+        path.starts_with("/crm.parties.v3.PartyService/");
     (path.starts_with("/api/") && !diagnostic && !ci_only) ||
         (path.starts_with("/crm.") &&
-            path != "/crm.parties.v2.PartyService/GetParty")
+            path != "/crm.parties.v2.PartyService/GetParty" && !ci_candidate)
 }
 
 async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>,
@@ -284,14 +288,17 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
         && method != Method::Get
         && !(path == "/crm.sales.v1.DealService/GetDeal" ||
              path == "/crm.sales.v1.DealService/ListDeals" ||
-             path == "/crm.parties.v2.PartyService/GetParty")
+             path == "/crm.parties.v2.PartyService/GetParty" ||
+             path == "/crm.parties.v3.PartyService/GetParty" ||
+             path == "/crm.parties.v3.PartyService/ListParties")
         && !(path == "/api/consents/evaluate" && method == Method::Post)
     {
         return error("FORBIDDEN", 403);
     }
     #[cfg(feature = "native")]
     if path.starts_with("/crm.sales.v1.DealService/") ||
-       path.starts_with("/crm.parties.v2.PartyService/") {
+       path.starts_with("/crm.parties.v2.PartyService/") ||
+       path.starts_with("/crm.parties.v3.PartyService/") {
         if method != Method::Post { return error("NOT_FOUND",404); }
         let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
         return connect_sales::route(req,env,tenant,actor,&request_id).await;
@@ -447,6 +454,10 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             ("/api/consents/evaluate", Method::Post) => "consents.evaluate",
             ("/api/consents/suppress", Method::Post) => "consents.suppress",
             ("/crm.parties.v2.PartyService/GetParty", Method::Post) => "parties.rpc.get",
+            ("/crm.parties.v3.PartyService/CreateParty", Method::Post) => "parties.rpc.create",
+            ("/crm.parties.v3.PartyService/UpdateParty", Method::Post) => "parties.rpc.update",
+            ("/crm.parties.v3.PartyService/GetParty", Method::Post) => "parties.rpc.get",
+            ("/crm.parties.v3.PartyService/ListParties", Method::Post) => "parties.rpc.list",
             ("/crm.sales.v1.DealService/GetDeal", Method::Post) => "sales-deals.rpc.get",
             ("/crm.sales.v1.DealService/ListDeals", Method::Post) => "sales-deals.rpc.list",
             ("/crm.sales.v1.DealService/CreateDeal", Method::Post) => "sales-deals.rpc.create",
@@ -499,7 +510,8 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         reply.headers_mut().set("x-request-id", &request_id)?;
         let module = if path == "/api/doctor" { "crm.diagnostics" }
             else if path.starts_with("/api/parties") ||
-                path.starts_with("/crm.parties.v2.PartyService/") { "crm.parties" }
+                (path.starts_with("/crm.parties.v2.PartyService/") ||
+                 path.starts_with("/crm.parties.v3.PartyService/")) { "crm.parties" }
             else if path.starts_with("/api/accounts") { "crm.customer-accounts" }
             else if path.starts_with("/api/contact-points") { "crm.contact-points" }
             else if path.starts_with("/api/party-relationships") { "crm.party-relationships" }

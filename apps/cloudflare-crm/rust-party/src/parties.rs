@@ -125,9 +125,124 @@ async fn previous(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Rec
         .first::<Receipt>(None).await
 }
 
-async fn create(mut req: Request, db: D1Database, tenant: &str, request_id: &str) -> Result<Response> {
+// The ONLY Party persistence implementation. Both the historical (blocked)
+// HTTP call and the generated Connect service use these original Rust owner
+// commands. Do not add another Party aggregate or duplicate D1 writes.
+pub(super) struct MutationOutcome {
+    pub(super) party: Party,
+    pub(super) replayed: bool,
+}
+pub(super) struct MutationFailure {
+    pub(super) code: String,
+    pub(super) status: u16,
+}
+fn failed(code: impl Into<String>, status: u16) -> MutationFailure {
+    MutationFailure { code: code.into(), status }
+}
+pub(super) async fn create_typed(
+    db: &D1Database, tenant: &str, id: String, kind: PartyKind,
+    name: String, key: &str, request_id: &str,
+) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    if !(8..=120).contains(&key.len()) {
+        return Ok(Err(failed("IDEMPOTENCY_KEY_REQUIRED", 422)));
+    }
+    let hash = digest("create", &id, &name, 0);
+    if let Some(old) = previous(db, tenant, key).await? {
+        if old.digest != hash { return Ok(Err(failed("IDEMPOTENCY_CONFLICT", 409))); }
+        let party = decode_party_state(old.state.as_bytes())
+            .map_err(|e| worker::Error::RustError(e.code))?;
+        if party.party_id().as_str()!=id || party.kind()!=kind {
+            return Ok(Err(failed("IDEMPOTENCY_CONFLICT", 409)));
+        }
+        return Ok(Ok(MutationOutcome { party, replayed: true }));
+    }
+    let id = match PartyId::try_new(id) {
+        Ok(value) => value,
+        Err(_) => return Ok(Err(failed("PARTIES_PARTY_ID_INVALID", 422))),
+    };
+    let party = match Party::create(CreateParty {
+        party_id: id, kind, display_name: name, occurred_at_unix_nanos: now_nanos(),
+    }) {
+        Ok(value) => value,
+        Err(e) => return Ok(Err(failed(e.code, 422))),
+    };
+    let state = String::from_utf8(encode_party_state(&party)
+        .map_err(|e| worker::Error::RustError(e.code))?)
+        .map_err(|e| worker::Error::RustError(e.to_string()))?;
+    // Existing D1 triggers write the audit and idempotency receipt atomically.
+    let result = bind(db,
+        "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?)",
+        &[JsValue::from_str(tenant), JsValue::from_str(party.party_id().as_str()),
+          JsValue::from_str(&state), JsValue::from_f64(1.0),
+          JsValue::from_str(key), JsValue::from_str(&hash),
+          JsValue::from_str(request_id)])?.run().await;
+    if result.is_err() { return Ok(Err(failed("PARTIES_PARTY_CREATE_CONFLICT", 409))); }
+    Ok(Ok(MutationOutcome { party, replayed: false }))
+}
+pub(super) async fn update_typed(
+    db: &D1Database, tenant: &str, id: &str, name: String,
+    expected_version: i64, key: &str, request_id: &str,
+) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    if !(8..=120).contains(&key.len()) {
+        return Ok(Err(failed("IDEMPOTENCY_KEY_REQUIRED", 422)));
+    }
+    let hash = digest("update", id, &name, expected_version);
+    if let Some(old) = previous(db, tenant, key).await? {
+        if old.digest != hash { return Ok(Err(failed("IDEMPOTENCY_CONFLICT", 409))); }
+        let party = decode_party_state(old.state.as_bytes())
+            .map_err(|e| worker::Error::RustError(e.code))?;
+        if party.party_id().as_str()!=id {
+            return Ok(Err(failed("IDEMPOTENCY_CONFLICT", 409)));
+        }
+        return Ok(Ok(MutationOutcome { party, replayed: true }));
+    }
+    let Some(mut party) = stored(db, tenant, id).await? else {
+        return Ok(Err(failed("NOT_FOUND", 404)));
+    };
+    if let Err(e) = party.apply_update(UpdateParty {
+        expected_version, display_name: name, occurred_at_unix_nanos: now_nanos(),
+    }) {
+        let status = if e.code == "PARTIES_PARTY_VERSION_CONFLICT" { 409 } else { 422 };
+        return Ok(Err(failed(e.code, status)));
+    }
+    let state = String::from_utf8(encode_party_state(&party)
+        .map_err(|e| worker::Error::RustError(e.code))?)
+        .map_err(|e| worker::Error::RustError(e.to_string()))?;
+    let result = bind(db,
+        "UPDATE crm_party_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?",
+        &[JsValue::from_str(&state), JsValue::from_f64(party.version() as f64),
+          JsValue::from_str(key), JsValue::from_str(&hash),
+          JsValue::from_str(request_id), JsValue::from_str(tenant),
+          JsValue::from_str(id), JsValue::from_f64(expected_version as f64)])?.run().await;
+    let Ok(changed) = result else {
+        return Ok(Err(failed("PARTIES_PARTY_UPDATE_CONFLICT", 409)));
+    };
+    if changed.meta()?.and_then(|meta| meta.changes).unwrap_or(0) == 0 {
+        return Ok(Err(failed("PARTIES_PARTY_VERSION_CONFLICT", 409)));
+    }
+    Ok(Ok(MutationOutcome { party, replayed: false }))
+}
+pub(super) async fn list_page_typed(
+    db: &D1Database, tenant: &str, after: &str,
+    page_size: usize, kind: Option<PartyKind>,
+) -> Result<(Vec<Party>, Option<String>)> {
+    let rows = bind(db,
+        "SELECT id,state FROM crm_party_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?",
+        &[JsValue::from_str(tenant), JsValue::from_str(after),
+          JsValue::from_f64((page_size + 1) as f64)])?
+        .all().await?.results::<PartyRow>()?;
+    let has_more = rows.len() > page_size;
+    let next = if has_more { rows.get(page_size-1).map(|r| r.id.clone()) } else { None };
+    let mut items = Vec::new();
+    for row in rows.iter().take(page_size) {
+        let party = decode_party_state(row.state.as_bytes())
+            .map_err(|e| worker::Error::RustError(e.code))?;
+        if kind.is_none_or(|selected| selected == party.kind()) { items.push(party); }
+    }
+    Ok((items, next))
+}
+async fn create(mut req: Request, db: D1Database, tenant: &str, trace: &str) -> Result<Response> {
     let key = req.headers().get("idempotency-key")?.unwrap_or_default();
-    if key.len() < 8 || key.len() > 120 { return error("IDEMPOTENCY_KEY_REQUIRED", 422); }
     let input = match req.json::<CreateInput>().await {
         Ok(value) => value, Err(_) => return error("INVALID_INPUT", 422),
     };
@@ -136,70 +251,24 @@ async fn create(mut req: Request, db: D1Database, tenant: &str, request_id: &str
         "organization" => PartyKind::Organization,
         _ => return error("INVALID_KIND", 422),
     };
-    let hash = digest("create", &input.id, &input.name, 0);
-    if let Some(old) = previous(&db, tenant, &key).await? {
-        if old.digest != hash { return error("IDEMPOTENCY_CONFLICT", 409); }
-        let p = decode_party_state(old.state.as_bytes())
-            .map_err(|e| worker::Error::RustError(e.code))?;
-        return response(json!({"item":view(&p), "replayed":true}), 200);
+    match create_typed(&db, tenant, input.id, kind, input.name, &key, trace).await? {
+        Ok(result) => response(json!({"item":view(&result.party),
+            "replayed":result.replayed}), if result.replayed { 200 } else { 201 }),
+        Err(failure) => error(&failure.code, failure.status),
     }
-    let id = match PartyId::try_new(input.id) {
-        Ok(id) => id, Err(_) => return error("PARTIES_PARTY_ID_INVALID", 422),
-    };
-    let party = match Party::create(CreateParty {
-        party_id: id, kind, display_name: input.name, occurred_at_unix_nanos: now_nanos(),
-    }) {
-        Ok(p) => p, Err(e) => return error(&e.code, 422),
-    };
-    let state = String::from_utf8(encode_party_state(&party)
-        .map_err(|e| worker::Error::RustError(e.code))?)
-        .map_err(|e| worker::Error::RustError(e.to_string()))?;
-    // SQLite triggers atomically create the audit and idempotency receipt.
-    // Any unique-key failure aborts the *entire* insert and both trigger effects.
-    let r = bind(&db, "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?)",
-        &[JsValue::from_str(tenant), JsValue::from_str(party.party_id().as_str()),
-          JsValue::from_str(&state), JsValue::from_f64(1.0),
-          JsValue::from_str(&key), JsValue::from_str(&hash), JsValue::from_str(request_id)])?.run().await;
-    if r.is_err() { return error("PARTIES_PARTY_CREATE_CONFLICT", 409); }
-    response(json!({"item":view(&party), "replayed":false}), 201)
 }
-async fn update(mut req: Request, db: D1Database, tenant: &str, id: &str, request_id: &str) -> Result<Response> {
+async fn update(mut req: Request, db: D1Database, tenant: &str,
+    id: &str, trace: &str) -> Result<Response> {
     let key = req.headers().get("idempotency-key")?.unwrap_or_default();
-    if key.len() < 8 || key.len() > 120 { return error("IDEMPOTENCY_KEY_REQUIRED", 422); }
     let input = match req.json::<UpdateInput>().await {
         Ok(value) => value, Err(_) => return error("INVALID_INPUT", 422),
     };
-    let hash = digest("update", id, &input.name, input.expected_version);
-    if let Some(old) = previous(&db, tenant, &key).await? {
-        if old.digest != hash { return error("IDEMPOTENCY_CONFLICT", 409); }
-        let p = decode_party_state(old.state.as_bytes())
-            .map_err(|e| worker::Error::RustError(e.code))?;
-        return response(json!({"item":view(&p), "replayed":true}), 200);
+    match update_typed(&db, tenant, id, input.name, input.expected_version,
+        &key, trace).await? {
+        Ok(result) => response(json!({"item":view(&result.party),
+            "replayed":result.replayed}), 200),
+        Err(failure) => error(&failure.code, failure.status),
     }
-    let Some(mut party) = stored(&db, tenant, id).await? else {
-        return error("NOT_FOUND", 404);
-    };
-    if let Err(e) = party.apply_update(UpdateParty {
-        expected_version: input.expected_version,
-        display_name: input.name,
-        occurred_at_unix_nanos: now_nanos(),
-    }) { return error(&e.code, if e.code == "PARTIES_PARTY_VERSION_CONFLICT" { 409 } else { 422 }); }
-    let state = String::from_utf8(encode_party_state(&party)
-        .map_err(|e| worker::Error::RustError(e.code))?)
-        .map_err(|e| worker::Error::RustError(e.to_string()))?;
-    let updated = bind(&db, "UPDATE crm_party_records SET state = ?, version = ?, idem_key = ?, idem_digest = ?, request_id = ? WHERE tenant = ? AND id = ? AND version = ?",
-        &[JsValue::from_str(&state), JsValue::from_f64(party.version() as f64),
-          JsValue::from_str(&key), JsValue::from_str(&hash), JsValue::from_str(request_id),
-          JsValue::from_str(tenant), JsValue::from_str(id),
-          JsValue::from_f64(input.expected_version as f64)])?.run().await;
-    let Ok(result) = updated else { return error("PARTIES_PARTY_UPDATE_CONFLICT", 409); };
-    // D1's changes count may include the audit and receipt triggers. A versioned
-    // UPDATE is successful when it changed at least one row, not exactly one.
-    // A missed optimistic-version predicate changes zero rows and fires no triggers.
-    if result.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
-        return error("PARTIES_PARTY_VERSION_CONFLICT", 409);
-    }
-    response(json!({"item":view(&party), "replayed":false}), 200)
 }
 async fn read(db: D1Database, tenant: &str, id: &str) -> Result<Response> {
     match stored(&db, tenant, id).await? {
@@ -208,16 +277,8 @@ async fn read(db: D1Database, tenant: &str, id: &str) -> Result<Response> {
     }
 }
 async fn list(db: D1Database, tenant: &str) -> Result<Response> {
-    let rows = bind(&db,
-        "SELECT id,state FROM crm_party_records WHERE tenant = ? ORDER BY id LIMIT 100",
-        &[JsValue::from_str(tenant)])?.all().await?.results::<PartyRow>()?;
-    let mut items = Vec::new();
-    for row in rows {
-        let p = decode_party_state(row.state.as_bytes())
-            .map_err(|e| worker::Error::RustError(e.code))?;
-        items.push(view(&p));
-    }
-    response(json!({"items":items}), 200)
+    let (parties, _) = list_page_typed(&db, tenant, "", 100, None).await?;
+    response(json!({"items":parties.iter().map(view).collect::<Vec<_>>()}), 200)
 }
 
 pub(super) async fn route(req:Request, db:D1Database, tenant:&str, trace:&str)->Result<Response>{

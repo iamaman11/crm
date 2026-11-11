@@ -19,3 +19,20 @@ if(!method)throw Error("compiled Party v2 GetParty descriptor missing");
 export const binaryPartyGet=id=>toBinary(method.input,create(method.input,{partyId:id}));
 export const decodePartyGet=bytes=>fromBinary(method.output,bytes);
 export const partyGetPath="/crm.parties.v2.PartyService/GetParty";
+
+
+// Same compiled descriptor, no separate v3 handwritten wire layout.
+// This G3 candidate is invoked only through the signed native-ci workerd.
+const partyV3Service=registry.getService("crm.parties.v3.PartyService");
+if(!partyV3Service)throw Error("compiled Party v3 service missing");
+const v3Method=name=>{
+ const item=partyV3Service.methods.find(method=>method.name===name);
+ if(!item)throw Error("compiled Party v3 RPC missing: "+name);
+ return item;
+};
+export const partyV3Path=name=>"/crm.parties.v3.PartyService/"+v3Method(name).name;
+export const binaryPartyV3=(name,payload)=>{
+ const rpc=v3Method(name);
+ return toBinary(rpc.input,create(rpc.input,payload));
+};
+export const decodePartyV3=(name,bytes)=>fromBinary(v3Method(name).output,bytes);
