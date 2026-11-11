@@ -22,7 +22,10 @@ const json = async (path, options={}) => {
 };
 try {
   console.log(run(["d1","execute","crm-rust-party-local","--local",
-    "--file","./migrations/0001_local.sql","--persist-to",persist]));
+    "--file","../migrations/0001_initial.sql","--persist-to",persist]));
+  run(["d1","execute","crm-rust-party-local","--local",
+    "--command","INSERT INTO crm_tenants VALUES('tenant-a','A'),('tenant-b','B')",
+    "--persist-to",persist]);
   child = spawn("npx", ["wrangler","dev","--local","--port","18787",
     "--persist-to",persist], {cwd,env,detached:true,stdio:["ignore","ignore","pipe"]});
   let stderr = "";
@@ -118,7 +121,7 @@ try {
  }
  try {
   const a=run(["d1","execute","crm-rust-party-local","--local",
-    "--command","SELECT tenant, COUNT(*) AS audited FROM crm_party_audit GROUP BY tenant ORDER BY tenant",
+    "--command","SELECT tenant_id AS tenant, COUNT(*) AS audited FROM crm_audit WHERE action LIKE 'parties.%' GROUP BY tenant_id ORDER BY tenant_id",
     "--persist-to",persist]);
   console.log("D1 audit readback:",a.slice(-2200));
   if(scenarioCompleted){

@@ -167,7 +167,7 @@ test("privacy request intake uses only original PrivacyCase and one D1",()=>{
   const ui=read("web/src/PrivacyCases.jsx");
   const api=read("rust-party/src/customer_privacy.rs");
   const runtime=read("rust-party/src/lib.rs");
-  const migration=read("migrations/0011_original_customer_privacy_intake.sql");
+  const migration=read("migrations/0001_initial.sql");
   assert.ok(ui.includes("customer-privacy/cases"));
   assert.ok(ui.includes("Отправить заявку"));
   assert.ok(ui.includes("Отменить заявку"));
@@ -323,7 +323,7 @@ test("original Customer Enrichment immutable definitions use one native Rust own
   const adapter=read("rust-party/src/customer_enrichment.rs");
   const core=read("../../modules/crm-customer-enrichment/src/definitions.rs");
   const codec=read("../../modules/crm-customer-enrichment/src/definition_persistence.rs");
-  const migration=read("migrations/0012_original_customer_enrichment_definitions.sql");
+  const migration=read("migrations/0001_initial.sql");
   const runtime=read("rust-party/src/lib.rs");
   const e2e=read("e2e/live.mjs"),local=read("rust-party/test/native.mjs");
   assert.ok(app.includes("<Enrichment load={api}"));

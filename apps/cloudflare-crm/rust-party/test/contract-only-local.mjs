@@ -12,7 +12,7 @@ const cmd=(...args)=>execFileSync("npx",["wrangler",...args],{cwd,encoding:"utf8
 let child;
 try {
   cmd("d1","execute","crm-rust-party-local","--local",
-    "--file","./migrations/0001_local.sql","--persist-to",persist);
+    "--file","../migrations/0001_initial.sql","--persist-to",persist);
   child=spawn("npx",["wrangler","dev","--local","--port","18787","--persist-to",persist],
     {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
   let errors="";

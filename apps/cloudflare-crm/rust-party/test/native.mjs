@@ -42,41 +42,16 @@ const call=async(path,token,init={})=>{
 let child;
 try{
   run(["d1","execute","crm-rust-party-local","--local",
-    "--file","./migrations/0001_local.sql","--persist-to",data]);
-  const sql="CREATE TABLE crm_tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL);"+
-    "INSERT INTO crm_tenants VALUES('tenant-a','A'),('tenant-b','B');"+
-    "CREATE TABLE crm_users (email TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'admin', active INTEGER NOT NULL DEFAULT 1);"+
-    "CREATE TABLE crm_customers (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL, updated_at TEXT NOT NULL);"+
-    "CREATE TABLE crm_contacts (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, customer_id TEXT NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT NOT NULL, updated_at TEXT NOT NULL);"+
-    "CREATE TABLE crm_deals (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, customer_id TEXT NOT NULL, title TEXT NOT NULL, stage TEXT NOT NULL, amount REAL NOT NULL, updated_at TEXT NOT NULL);"+
-    "CREATE TABLE crm_tasks (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, customer_id TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, due_date TEXT NOT NULL, updated_at TEXT NOT NULL);"+
-    "CREATE TABLE crm_audit (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, action TEXT NOT NULL, subject_id TEXT NOT NULL, created_at TEXT NOT NULL, request_id TEXT);"+
-    "INSERT INTO crm_users VALUES('native-a@example.test','tenant-a','admin',1);"+
-    "INSERT INTO crm_users VALUES('native-b@example.test','tenant-b','admin',1);"+
-    "INSERT INTO crm_users VALUES('native-viewer@example.test','tenant-a','viewer',1);"+
-    "INSERT INTO crm_users VALUES('service:ci-native-b-0001.access','tenant-b','admin',1);";
+    "--file","../migrations/0001_initial.sql","--persist-to",data]);
+  const sql="INSERT INTO crm_tenants VALUES('tenant-a','A'),('tenant-b','B');"+
+    "INSERT INTO crm_users(email,tenant_id,role,active) VALUES"+
+    "('native-a@example.test','tenant-a','admin',1),"+
+    "('native-b@example.test','tenant-b','admin',1),"+
+    "('native-viewer@example.test','tenant-a','viewer',1),"+
+    "('service:ci-native-b-0001.access','tenant-b','admin',1);";
   run(["d1","execute","crm-rust-party-local","--local",
     "--command",sql,"--persist-to",data]);
-  // Exactly the production original Account migration against isolated D1;
-  // no duplicate CI SQL rules, no second datastore.
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0004_original_customer_accounts.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0005_original_contact_points.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0006_original_party_relationships.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0007_original_activity_tasks.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0008_original_sales_deals.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0009_original_consents.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0010_original_sales_activities_link.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0011_original_customer_privacy_intake.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0012_original_customer_enrichment_definitions.sql","--persist-to",data]);
+  // All original owner tables are installed by the ONE canonical clean schema.
   child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
     "--var","CRM_CI_LOCAL_ONLY:yes","--var","CRM_NATIVE_CI_JWKS:"+jwks],
     {cwd,detached:true,stdio:["ignore","ignore","pipe"]});

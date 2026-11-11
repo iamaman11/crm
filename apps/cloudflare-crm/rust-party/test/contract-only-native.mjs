@@ -169,8 +169,8 @@ try{
  assert.equal(sql("SELECT version FROM crm_party_records WHERE id='"+id+"'")[0].version,2);
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_receipts WHERE tenant='tenant-a' "+
    "AND key IN ('candidate-v3-create-001','candidate-v3-update-001')")[0].n,2);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_audit WHERE tenant='tenant-a' "+
-   "AND id='"+id+"'")[0].n,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+id+"'")[0].n,2);
  assert.equal((await v3("GetParty",admin,{partyId:id})).body.party?.version,2n);
  console.log(JSON.stringify({event:"crm.native-g3-party-v3-candidate",
    result:"PASS",generated_binary:true,owner:"crm.parties",
