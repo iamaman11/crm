@@ -169,7 +169,11 @@ if(policy.phase!=="cutover"){
     "apps/cloudflare-crm/rust-party/src/accounts.rs",
     "apps/cloudflare-crm/rust-party/src/contact_points.rs",
     "apps/cloudflare-crm/rust-party/src/connect_sales.rs",
-    "apps/cloudflare-crm/rust-party/build.rs"
+    "apps/cloudflare-crm/rust-party/build.rs",
+    // Candidate-only generated Connect-Web facade; never loaded by the
+    // contract-only public SPA. The boundary above rejects manual fetch,
+    // legacy gateways, nonbinary transport and JS tenant forwarding.
+    "packages/client/src/cloudflare.ts"
   ]);
   for(const path of frozenRuntimeFiles()){
     check(prev.has(path),"new runtime file before full cutover: "+path);
