@@ -143,6 +143,24 @@ jobs:
       - name: Build React CRM
         run: npm run build
         working-directory: apps/cloudflare-crm
+      - name: Install Chromium and system dependencies before expensive native builds
+        working-directory: apps/cloudflare-crm
+        shell: bash
+        run: |
+          set -euo pipefail
+          # DNS failures on hosted Ubuntu mirrors are transient runner failures.
+          # Retry once, but never skip the actual browser or OS dependencies.
+          for attempt in 1 2; do
+            if npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 1 ]; then
+              echo "::warning::Chromium OS dependency install failed; retrying once before Rust/WASM compilation"
+              sleep 10
+            fi
+          done
+          echo "::error::Chromium installation failed on both attempts; native/browser tests are required"
+          exit 1
       - name: Verify every activated Rust module compiles for WebAssembly
         shell: bash
         run: |
@@ -374,9 +392,6 @@ jobs:
       - name: Compile native Rust Access gate using isolated RSA test keys
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --features native-ci
-      - name: Install Chromium for physical React to native Rust Worker proof
-        working-directory: apps/cloudflare-crm
-        run: npx playwright install --with-deps chromium
       - name: Test native WebCrypto JWT and all React CRM screens under workerd
         working-directory: apps/cloudflare-crm
         env:
