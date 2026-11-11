@@ -34,7 +34,10 @@ try {
     ["/api/contact-points","POST"],["/api/sales-deals","POST"],
     ["/api/activity-tasks","GET"],["/api/consents","GET"],
     ["/api/customer-data-operations/parties.csv","GET"],
-    ["/crm.sales.v1.DealService/GetDeal","POST"]
+    ["/crm.sales.v1.DealService/GetDeal","POST"],
+    // New versioned services must reach the Worker and fail closed,
+    // not return HTML from the SPA assets fallback.
+    ["/crm.future.v9.FutureService/NotRegistered","POST"]
   ];
   for(const [path,method] of disabled){
     const r=await request(path,{method,body:method==="POST"?"{}":undefined});
@@ -43,6 +46,9 @@ try {
   }
   assert.equal((await request("/crm.parties.v2.PartyService/GetParty",{
     method:"POST",body:'{"partyId":"not-present"}'})).status,404);
+  const staticAsset=await fetch(base+"/");
+  assert.equal(staticAsset.status,200,"static SPA must remain assets-first");
+  assert.match(await staticAsset.text(),/CRM/, "root must be served as HTML asset");
   const unauth=await fetch(base+"/api/parties");
   assert.equal(unauth.status,403,"unsigned CI tenant is still rejected");
   const result=cmd("d1","execute","crm-rust-party-local","--local",

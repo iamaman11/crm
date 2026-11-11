@@ -54,7 +54,7 @@ test("one published native Worker with one D1 and no competing backend",()=>{
   assert.equal(config.name,"crm-dev");
   assert.equal(config.main,"./rust-party/build/index.js");
   assert.deepEqual(config.assets.run_worker_first,
-    ["/api/*","/crm.sales.v1.DealService/*","/crm.parties.v2.PartyService/*"]);
+    ["/api/*","/crm.*/*"]);
   assert.deepEqual(JSON.parse(read("rust-party/wrangler.jsonc")).assets.run_worker_first,
     config.assets.run_worker_first,
     "native workerd and deployed Worker must route the same typed RPC paths");
@@ -545,6 +545,9 @@ test("architecture gate rejects new REST, wrong binary setting and second D1/rou
   const local=JSON.parse(read("rust-party/wrangler.jsonc"));
   local.assets.run_worker_first=["/api/*"];
   assert.throws(()=>validateOneWorkerRouter("native",config,local),/RPC routing differ/);
+  const invalid={...config,assets:{...config.assets,run_worker_first:["/api/*","/crm.parties.v2.PartyService/*"]}};
+  assert.throws(()=>validateOneWorkerRouter("native",invalid,
+    JSON.parse(read("rust-party/wrangler.jsonc"))),/universal Worker-first/);
   const policy=JSON.parse(read("architecture-policy.json"));
   const source=read("scripts/architecture-gate.mjs");
   const workflow=read("../../.github/workflows/cloudflare-crm-spike.yml");

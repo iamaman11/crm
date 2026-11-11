@@ -54,12 +54,14 @@ try{
  assert.equal((await call("/api/parties",null)).status,401);
  const admin=jwt("native-a@example.test"),viewer=jwt("native-viewer@example.test");
  for(const [path,method] of [["/api/parties","GET"],["/api/parties","POST"],
-     ["/api/accounts","GET"],["/crm.sales.v1.DealService/GetDeal","POST"]]){
+     ["/api/accounts","GET"],["/crm.sales.v1.DealService/GetDeal","POST"],
+     ["/crm.future.v9.FutureService/NotRegistered","POST"]]){
    const r=await call(path,admin,method);
    assert.equal(r.status,410,path);
    assert.equal(r.body.code,"LEGACY_TRANSPORT_DISABLED");
  }
  assert.equal((await call("/api/parties",viewer)).status,410);
+ assert.equal((await call("/crm.future.v9.FutureService/NotRegistered",viewer,"POST")).status,410);
  console.log(JSON.stringify({event:"crm.contract-only-signed-access",
    result:"PASS",admin:true,viewer:true,unauthenticated_denied:true,
    legacy_mutations:0,verified_auth:true}));

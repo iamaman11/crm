@@ -50,9 +50,10 @@ for(const x of proof.methods){
  }
  const wrangler=JSON.parse(rd("apps/cloudflare-crm/wrangler.jsonc"));
  const local=JSON.parse(rd("apps/cloudflare-crm/rust-party/wrangler.jsonc"));
- const prefix=route.slice(0,route.lastIndexOf("/"))+"/*";
- if(!wrangler.assets.run_worker_first.includes(prefix)||
-    !local.assets.run_worker_first.includes(prefix))fail("RPC not routed to Worker "+route);
+ const workerFirst=["/api/*","/crm.*/*"];
+ if(JSON.stringify(wrangler.assets?.run_worker_first)!==JSON.stringify(workerFirst)||
+    JSON.stringify(local.assets?.run_worker_first)!==JSON.stringify(workerFirst))
+   fail("RPC not routed through universal Worker-first CRM namespace "+route);
 }
 const allowed=new Set(proof.methods.map(x=>x.path));
 if(policy.phase==="contract-only"){

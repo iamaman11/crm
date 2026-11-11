@@ -137,8 +137,13 @@ function validateOneWorkerRouter(source,wrangler,local){
   check(wrangler.main==="./rust-party/build/index.js","Worker must be native workers-rs");
   check(wrangler.d1_databases?.length===1 && wrangler.d1_databases[0].binding==="DB",
     "exactly one native D1 binding");
-  check(JSON.stringify(wrangler.assets?.run_worker_first)===JSON.stringify(local.assets?.run_worker_first),
+  const canonical=["/api/*","/crm.*/*"];
+  check(JSON.stringify(wrangler.assets?.run_worker_first)===JSON.stringify(canonical),
+    "production must use universal Worker-first Connect namespace and API routes");
+  check(JSON.stringify(local.assets?.run_worker_first)===JSON.stringify(canonical),
     "local and published RPC routing differ");
+  // /crm.*/* matches versioned Connect /crm.<domain>.vN.Service/Method
+  // without routing ordinary static asset filenames through the Worker.
   check(!/axum::serve|TcpListener/.test(source),"second listening server forbidden");
 }
 const client=read("packages/client/src/cloudflare.ts");
@@ -158,6 +163,18 @@ if(policy.phase!=="cutover"){
   for(const path of frozenRuntimeFiles()){
     check(prev.has(path),"new runtime file before full cutover: "+path);
     if(policy.phase==="contract-only"&&path==="apps/cloudflare-crm/rust-party/src/lib.rs")continue;
+    if(path==="apps/cloudflare-crm/wrangler.jsonc"||
+       path==="apps/cloudflare-crm/rust-party/wrangler.jsonc"){
+      // Only this security-strengthening routing rule may change during freeze.
+      // Everything else in both frozen Wrangler configurations remains identical.
+      const before=JSON.parse(baselineContent(path));
+      const now=JSON.parse(read(path));
+      delete before.assets.run_worker_first;
+      delete now.assets.run_worker_first;
+      check(JSON.stringify(before)===JSON.stringify(now),
+        "unexpected frozen Wrangler config change: "+path);
+      continue;
+    }
     requireUnchanged(path);
   }
   // No new REST endpoints are permitted, even in generated/future features.
