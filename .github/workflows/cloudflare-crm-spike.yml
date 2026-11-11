@@ -41,6 +41,9 @@ jobs:
           node --check scripts/crm-connect-binary-fixture.mjs
           python -m py_compile scripts/crm-module-coverage.py scripts/crm-active-rust-surface.py
           node --check scripts/crm-architecture-ast.test.mjs
+          node --check scripts/crm-functional-matrix.mjs
+          node --check scripts/crm-functional-matrix.test.mjs
+          node --check scripts/crm-core-v2.test.mjs
           node --check apps/cloudflare-crm/rust-party/test/native.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
       - name: Verify Python governance and affected-scope tests using declared dependencies
@@ -104,6 +107,10 @@ jobs:
           pnpm exec buf generate --template buf.gen.web.yaml
           pnpm exec buf build proto --as-file-descriptor-set -o /tmp/crm-proto-descriptors.binpb
           node scripts/crm-rpc-descriptors.mjs /tmp/crm-proto-descriptors.binpb
+          CRM_PROTO_DESCRIPTOR_FILE=/tmp/crm-proto-descriptors.binpb \
+            node scripts/crm-functional-matrix.mjs --output /tmp/crm-functional-matrix.json
+          CRM_PROTO_DESCRIPTOR_FILE=/tmp/crm-proto-descriptors.binpb \
+            node --test scripts/crm-functional-matrix.test.mjs scripts/crm-core-v2.test.mjs
           CRM_PROTO_DESCRIPTOR_FILE=/tmp/crm-proto-descriptors.binpb \
             node --test scripts/crm-rpc-descriptors.test.mjs
           node scripts/crm-architecture-ast.mjs
