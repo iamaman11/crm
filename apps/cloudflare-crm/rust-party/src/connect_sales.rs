@@ -1222,7 +1222,7 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service{
         let offset=if after.is_empty(){0}else{
             let parsed=after.parse::<usize>()
                 .map_err(|_|ConnectError::invalid_argument("invalid page_token"))?;
-            if parsed==0 || parsed.to_string()!=after{
+            if parsed==0 || parsed.to_string()!=*after{
                 return Err(ConnectError::invalid_argument("invalid page_token"));
             }
             parsed
