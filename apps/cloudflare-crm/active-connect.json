@@ -6,11 +6,11 @@
       "handler": "apps/cloudflare-crm/rust-party/src/connect_sales.rs",
       "wire_alias": "party_wire",
       "rust_struct": "PartyService",
-      "native_test": "apps/cloudflare-crm/rust-party/test/contract-only-local.mjs",
-      "native_test_marker": "crm.contract-only-native-d1",
+      "native_test": "apps/cloudflare-crm/rust-party/test/contract-only-native.mjs",
+      "native_test_marker": "crm.contract-only-signed-access",
       "published_test": "apps/cloudflare-crm/e2e/contract-only.mjs",
       "published_test_marker": "crm.contract-only-browser"
     }
   ],
-  "note": "contract-only: both referenced tests are the scripts ACTUALLY executed by current CI; update paths and runtime assertions on final cutover"
+  "note": "Verified active Party RPC must execute inside native-ci signed Access workerd, not ci-local without native Router. Published test remains release-gated."
 }

@@ -5,7 +5,6 @@ import {tmpdir} from "node:os";
 import {join,dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
-import {binaryPartyGet,partyGetPath} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const persist=mkdtempSync(join(tmpdir(),"crm-contract-only-"));
 const base="http://127.0.0.1:18787";
@@ -47,16 +46,8 @@ try {
   }
   assert.equal((await request("/crm.parties.v2.PartyService/GetParty",{
     method:"POST",body:'{"partyId":"not-present"}'})).status,404);
-  // Actual binary Connect request marshalled by the canonical compiled schema.
-  const binary=await fetch(base+partyGetPath,{
-    method:"POST",
-    headers:{"x-crm-ci-tenant":"tenant-a","content-type":"application/proto",
-      "connect-protocol-version":"1"},
-    body:binaryPartyGet("not-present")
-  });
-  assert.equal(binary.status,404,"binary Connect must execute the Party domain");
-  const binaryError=await binary.json();
-  assert.equal(binaryError.code,"not_found");
+  // ci-local lacks the native feature, so its 404 is NOT evidence of the
+  // Connect handler. Only native-ci with signed Access proves the RPC.
   const staticAsset=await fetch(base+"/");
   assert.equal(staticAsset.status,200,"static SPA must remain assets-first");
   assert.match(await staticAsset.text(),/CRM/, "root must be served as HTML asset");
@@ -67,7 +58,8 @@ try {
   const rows=JSON.parse(result);
   assert.equal(rows[0]?.results?.[0]?.n,0,"no legacy Party mutation may persist");
   console.log(JSON.stringify({event:"crm.contract-only-native-d1",result:"PASS",
-    disabled_paths:disabled.length,authorized_rpc:"Party GetParty",legacy_writes:0}));
+    disabled_paths:disabled.length,active_rpc:"NOT_TESTED_IN_CI_LOCAL",
+    legacy_writes:0}));
 }finally {
   if(child){
     try{process.kill(-child.pid,"SIGTERM");}catch(e){if(e.code!=="ESRCH")throw e;}

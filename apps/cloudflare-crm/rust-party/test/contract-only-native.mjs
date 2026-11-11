@@ -74,6 +74,7 @@ try{
  assert.equal((await call("/api/parties",viewer)).status,410);
  // Exercise the *actual* generated binary request/response, signed JWT,
  // tenant A/B read isolation, and read-only D1 persistence in workerd.
+ assert.equal(partyGetPath,"/crm.parties.v2.PartyService/GetParty");
  const binaryCall=async(token,id)=>{
    const r=await fetch(base+partyGetPath,{method:"POST",headers:{
      "cf-access-jwt-assertion":token,"content-type":"application/proto",
