@@ -1021,7 +1021,7 @@ impl TaskV2Service {
         Ok(task_wire::Task{
             task_id:task.task_id().as_str().to_owned(),
             subject:task.subject().to_owned(),
-            description:task.description().map(str::to_owned),
+            description:task.description().unwrap_or_default().to_owned(),
             account_id,priority:priority.into(),status:status.into(),
             due_at:task.due_at_unix_nanos()
                 .map(ContactPointV2Service::timestamp).into(),

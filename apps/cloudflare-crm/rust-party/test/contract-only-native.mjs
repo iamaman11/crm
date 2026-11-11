@@ -640,7 +640,7 @@ try{
    reminderAt:{seconds:1850000000n,nanos:123456789},
    precondition:{idempotencyKey:"candidate-task-create-"+sequence}
  });
- const taskOtherInput=taskInput(taskOther,accountNextId,"other");
+ const taskOtherInput={...taskInput(taskOther,accountNextId,"other"),description:undefined};
  const taskMidInput=taskInput(taskMid,accountId,"mid");
  const taskLastInput=taskInput(taskLast,accountId,"last");
  assert.equal((await taskV2("CreateTask",null,taskMidInput)).status,401);
@@ -674,7 +674,10 @@ try{
  assert.equal((await taskV2("GetTask",tenantB,{taskId:taskMid})).status,404);
  assert.equal((await taskV2("GetTask",viewer,{taskId:taskMid}))
    .body.task?.accountId,accountId);
- assert.equal((await taskV2("CreateTask",admin,taskOtherInput)).status,200);
+ const taskOtherCreated=await taskV2("CreateTask",admin,taskOtherInput);
+ assert.equal(taskOtherCreated.status,200,describeProtobuf(taskOtherCreated.body));
+ assert.equal(taskOtherCreated.body.task?.description,"",
+   "optional CreateTask.description absent is canonical empty Task.description");
  assert.equal((await taskV2("CreateTask",admin,taskLastInput)).status,200);
  const taskFilter=await collectPages(taskV2,"ListTasks","tasks",
    {accountId,status:1});
