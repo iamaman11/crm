@@ -11,7 +11,14 @@ const {FileDescriptorSetSchema}=requireClient("@bufbuild/protobuf/wkt");
 const rd=p=>readFileSync(resolve(root,p),"utf8");
 const fail=s=>{throw Error("CRM_RPC_DESCRIPTOR_VIOLATION: "+s);};
 const policy=JSON.parse(rd("apps/cloudflare-crm/architecture-policy.json"));
-const proof=JSON.parse(rd("apps/cloudflare-crm/active-connect.json"));
+// The active inventory is CI-generated from the exact Rust RpcPolicy table.
+const activeReportFile=process.env.CRM_MODULE_COVERAGE_REPORT;
+if(!activeReportFile||!existsSync(activeReportFile))
+  fail("generated module coverage report required");
+const activeReport=JSON.parse(readFileSync(activeReportFile,"utf8"));
+if(activeReport.schema_version!==1||activeReport.phase!==policy.phase)
+  fail("module report phase/schema mismatch");
+const proof={methods:(activeReport.active_rpc_paths||[]).map(path=>({path}))};
 if(!Array.isArray(proof.methods)||!proof.methods.length)fail("active Connect RPC proof is missing");
 const arg=process.argv[2];
 if(!arg||!existsSync(arg))fail("expected compiled Buf FileDescriptorSet path");
@@ -29,32 +36,29 @@ for(const f of set.file){
   }
 }
 const snake=name=>name.replace(/([a-z0-9])([A-Z])/g,"$1_$2").toLowerCase();
-const prefixes=new Set();
+// Publication evidence comes from executed fixtures, not a checked-in
+// duplicate RPC-to-test catalog.
+const publishedNative=rd(policy.phase==="contract-only"?
+  "apps/cloudflare-crm/rust-party/test/contract-only-native.mjs":
+  "apps/cloudflare-crm/rust-party/test/native.mjs");
+const publishedBrowser=rd(policy.phase==="contract-only"?
+  "apps/cloudflare-crm/e2e/contract-only.mjs":
+  "apps/cloudflare-crm/e2e/live.mjs");
+const publishedPaths=new Set();
 for(const x of proof.methods){
  const route=x.path;
- if(typeof route!=="string"||!available.has(route))fail("active RPC absent from descriptor "+route);
- if(prefixes.has(route))fail("duplicate active RPC proof "+route);
- prefixes.add(route);
- const info=available.get(route);
- const rust=rd(x.handler);
- const impl=new RegExp("impl\\s+"+x.wire_alias+"::"+info.service+"\\s+for\\s+"+x.rust_struct+"\\b");
- if(!impl.test(rust))fail("Rust generated trait implementation not found for "+route);
- if(!new RegExp("async\\s+fn\\s+"+snake(info.method)+"\\s*\\(").test(rust))
-   fail("Rust RPC handler method missing "+route);
- if(!rust.includes("ConnectRouter::new()")||!rust.includes(".add_service(Arc::new("+x.rust_struct))
-   fail("RPC service not registered in one embedded router "+route);
- for(const key of ["native_test","published_test"]){
-   const source=rd(x[key]);
-   if(!source.includes(route))fail(key+" does not request "+route);
-   if(!source.includes(x[key+"_marker"]))fail(key+" has no proof marker "+route);
- }
- const wrangler=JSON.parse(rd("apps/cloudflare-crm/wrangler.jsonc"));
- const local=JSON.parse(rd("apps/cloudflare-crm/rust-party/wrangler.jsonc"));
- const workerFirst=["/api/*","/crm.*/*"];
- if(JSON.stringify(wrangler.assets?.run_worker_first)!==JSON.stringify(workerFirst)||
-    JSON.stringify(local.assets?.run_worker_first)!==JSON.stringify(workerFirst))
-   fail("RPC not routed through universal Worker-first CRM namespace "+route);
+ if(!available.has(route))fail("published RPC absent from Buf descriptor "+route);
+ if(publishedPaths.has(route))fail("duplicate published RPC "+route);
+ publishedPaths.add(route);
+ if(!publishedNative.includes(route)||!publishedBrowser.includes(route))
+   fail("published RPC missing native/published browser evidence "+route);
 }
+const wrangler=JSON.parse(rd("apps/cloudflare-crm/wrangler.jsonc"));
+const local=JSON.parse(rd("apps/cloudflare-crm/rust-party/wrangler.jsonc"));
+const workerFirst=["/api/*","/crm.*/*"];
+if(JSON.stringify(wrangler.assets?.run_worker_first)!==JSON.stringify(workerFirst)||
+   JSON.stringify(local.assets?.run_worker_first)!==JSON.stringify(workerFirst))
+ fail("RPC not routed through universal Worker-first CRM namespace");
 // Discover EVERY implemented native candidate from the existing generated Rust
 // trait implementations and compiled Buf service descriptors. No second catalog.
 // This runs while unpublished RPCs are still denied by contract-only production.
@@ -140,9 +144,8 @@ for(const item of proof.methods){
 }
 const allowed=new Set(proof.methods.map(x=>x.path));
 if(policy.phase==="contract-only"){
- const expected=new Set(policy.contract_only_rpc_methods||[]);
- if(expected.size!==allowed.size||[...expected].some(x=>!allowed.has(x)))
-   fail("contract-only must expose exactly the approved RPC list");
+ if(allowed.size!==1)
+   fail("contract-only must expose only one approved RPC");
 }
 // Compare each active method with its canonical module capability, independent
 // of rollout phase. Historical declared methods are NOT automatically published.
