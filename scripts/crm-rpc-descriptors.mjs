@@ -103,20 +103,37 @@ for(const impl of candidateRust.matchAll(
       fail("candidate RPC missing signed binary native E2E "+path);
   }
 }
-// Every candidate service must remain behind the signed native-ci gate,
-// yet also reach the one embedded Rust router. No handwritten service catalog.
+// The Worker owns one explicit, exact-path RPC policy (permission + phase).
+// Derive the test/registration comparison from that Rust table, not a second
+// handwritten list of service prefixes or another capability manifest.
 const runtimeRust=rd("apps/cloudflare-crm/rust-party/src/lib.rs");
-const start=runtimeRust.indexOf("fn legacy_transport_disabled(");
-const stop=runtimeRust.indexOf("async fn dispatch(",start);
-const guard=runtimeRust.slice(start,stop);
-if(start<0||stop<=start||!guard.includes('cfg!(feature = "native-ci")')||
-  !runtimeRust.includes('if path.starts_with("/crm.")'))
-  fail("native Connect routes must pass the fail-closed signed candidate gate");
+if(!runtimeRust.includes('fn rpc_policy(path: &str)') ||
+   !runtimeRust.includes('cfg!(feature = "native-ci")'))
+  fail("single fail-closed Rust RPC policy is missing");
+const policies=[...runtimeRust.matchAll(
+  /^\\s*"(\\/crm\\.[^"]+)"\\s*=>\\s*\\((Read|Write),\\s*(Published|Candidate)\\),?\\s*$/gm
+)];
+const registered=new Map();
+for(const match of policies){
+  const [,path,permission,activation]=match;
+  if(registered.has(path))fail("duplicate Rust RPC policy "+path);
+  if(!available.has(path))fail("Rust RPC policy absent from compiled Buf "+path);
+  registered.set(path,{permission,activation});
+}
+if(!registered.size)fail("no exact-path Rust RPC policy found");
 for(const path of candidatePaths){
-  if(proof.methods.some(item=>item.path===path))continue;
-  const prefix=path.slice(0,path.lastIndexOf("/")+1);
-  if(!guard.includes('path.starts_with("'+prefix+'")'))
-    fail("candidate missing from the single native-ci activation gate "+path);
+  if(registered.get(path)?.activation!=="Candidate")
+    fail("candidate missing exact Rust activation policy "+path);
+}
+for(const [path,rule] of registered){
+  if(rule.activation==="Candidate" && !candidatePaths.has(path))
+    fail("candidate Rust policy has no implemented RPC "+path);
+  if(rule.activation==="Published" && !proof.methods.some(item=>item.path===path))
+    fail("published Rust policy absent from active RPC evidence "+path);
+}
+for(const item of proof.methods){
+  if(registered.get(item.path)?.activation!=="Published")
+    fail("active RPC missing published Rust policy "+item.path);
 }
 const allowed=new Set(proof.methods.map(x=>x.path));
 if(policy.phase==="contract-only"){
