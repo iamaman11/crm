@@ -39,7 +39,7 @@ export function TaskScreen() {
           ...(dueAt?{dueAt}:{}),...(reminderAt?{reminderAt}:{}),precondition:{idempotencyKey:mutation.key}});
       },async()=>{setDraftId(newId());await query.reload();});
     }}><FormGrid>
-      <TextField label="Тема" name="subject" required/><AccountPicker/>
+      <TextField label="Тема задачи" name="subject" required/><AccountPicker/>
       <TextField label="Описание" name="description"/>
       <SelectField label="Приоритет" name="priority" defaultValue="2">
         <option value="1">Низкий</option><option value="2">Обычный</option><option value="3">Высокий</option><option value="4">Срочный</option>

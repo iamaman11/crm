@@ -25,12 +25,13 @@ export function useQuery<T>(load:()=>Promise<T>) {
 }
 export function useMutation() {
   const [key,setKey]=useState(newId);
+  const inFlight=useRef(false);
   const [busy,setBusy]=useState(false);
   const [notice,setNotice]=useState<{tone:"success"|"warning"|"danger";text:string}>();
   const changed=()=>{setKey(newId());};
-  const run=async(write:()=>Promise<{receipt?:MutationReceipt}>,refresh?:()=>Promise<unknown>)=>{
-    if(busy)return;
-    setBusy(true);setNotice(undefined);
+  const run=async(write:()=>Promise<{receipt:MutationReceipt|undefined}>,refresh?:()=>Promise<unknown>)=>{
+    if(inFlight.current)return;
+    inFlight.current=true;setBusy(true);setNotice(undefined);
     try {
       const result=await write();
       const saved=result.receipt?.replayed?"Сохранено ранее. Повторная запись не выполнялась.":"Сохранено.";
@@ -41,7 +42,7 @@ export function useMutation() {
         catch(error){setNotice({tone:"warning",text:saved+correlation+" Список устарел: "+api.describeError(error)});}
       }
     } catch(error) {setNotice({tone:"danger",text:api.describeError(error)});}
-    finally {setBusy(false);}
+    finally {inFlight.current=false;setBusy(false);}
   };
   return {key,busy,notice,changed,run};
 }

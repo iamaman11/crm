@@ -6,6 +6,7 @@ import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
+import {typedBrowser} from "./typed-browser.mjs";
 import {binaryPartyGet,decodePartyGet,partyGetPath,
   binaryPartyV3,decodePartyV3,partyV3Path,
   binaryAccountV2,decodeAccountV2,accountV2Path,
@@ -1420,6 +1421,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2-candidate",result:"PAS
  console.log(JSON.stringify({event:"crm.native-party-csv-v2",result:"PASS",admin_read:true,
    original_owner:"crm.customer-data-operations",party_owner:"crm.parties",
    tenant_ab:true,atomic:true,replay:true,audit:true,csv_bytes_sha256:true,bounded:true}));
+ await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha});
  // Write evidence only after every scenario assertion above has completed.
  // A successful call is transport exercise coverage, not proof of all possible
  // business states. Domain/CAS/tenant assertions remain independently explicit.

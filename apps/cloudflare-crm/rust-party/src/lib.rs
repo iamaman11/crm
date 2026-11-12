@@ -64,6 +64,14 @@ fn error(code: &str, status: u16) -> Result<Response> {
     reply.headers_mut().set("x-crm-error-code", code)?;
     Ok(reply)
 }
+#[cfg(feature = "native")]
+fn rpc_error(error:connectrpc::ConnectError)->Result<Response>{
+    // Unary binary Connect errors use the library's standard JSON envelope.
+    let mut reply=Response::from_bytes(error.to_json().to_vec())?
+        .with_status(error.http_status().as_u16());
+    reply.headers_mut().set("content-type","application/json")?;
+    Ok(reply)
+}
 fn now_nanos() -> i64 {
     (Date::now().as_millis() as i64).saturating_mul(1_000_000)
 }
@@ -379,9 +387,9 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
             return error("LEGACY_TRANSPORT_DISABLED",410);
         };
         if matches!(rule.permission,RpcPermission::Write|RpcPermission::AdminRead) && role != Some("admin") {
-            return error("FORBIDDEN",403);
+            return rpc_error(connectrpc::ConnectError::permission_denied("FORBIDDEN"));
         }
-        let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
+        let Some(actor)=verified_actor else{return rpc_error(connectrpc::ConnectError::unauthenticated("AUTH_REQUIRED"))};
         return connect_sales::route(req,env,tenant,actor,&request_id).await;
     }
     let db = env.d1("DB")?;
@@ -566,11 +574,14 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 (native_doctor(&env, &actor.tenant).await, "diagnostics"),
             Ok(Some(actor)) =>
                 (dispatch(req, env, &actor.tenant, Some(&request_id), Some(&actor.role), Some(&actor.identity)).await, "domain_d1"),
+            Ok(None) if path.starts_with("/crm.") => (rpc_error(connectrpc::ConnectError::unauthenticated("AUTH_REQUIRED")), "access"),
             Ok(None) => (error("AUTH_REQUIRED", 401), "access"),
+            Err(_) if path.starts_with("/crm.") => (rpc_error(connectrpc::ConnectError::unavailable("ACCESS_INTERNAL_ERROR")), "access"),
             Err(_) => (error("ACCESS_INTERNAL_ERROR", 503), "access"),
         };
         let mut reply = match result {
             Ok(reply) => reply,
+            Err(_) if path.starts_with("/crm.") => rpc_error(connectrpc::ConnectError::internal("INTERNAL_ERROR"))?,
             Err(_) => error("INTERNAL_ERROR", 500)?,
         };
         reply.headers_mut().set("x-request-id", &request_id)?;

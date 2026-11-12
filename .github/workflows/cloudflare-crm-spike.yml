@@ -45,6 +45,7 @@ jobs:
           node --check scripts/crm-cutover-contracts.test.mjs
           node --check scripts/crm-clean-schema.test.mjs
           node --check apps/cloudflare-crm/rust-party/test/native.mjs
+          node --check apps/cloudflare-crm/rust-party/test/typed-browser.mjs
           node --check apps/cloudflare-crm/rust-party/test/contract-only-native.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
       - name: Verify Python governance and affected-scope tests using declared dependencies
@@ -294,7 +295,7 @@ jobs:
       - name: Compile native Rust Access gate using isolated RSA test keys
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --features native-ci
-      - name: Test native WebCrypto JWT and all React CRM screens under workerd
+      - name: Test signed RPC and generated-client React scenarios under workerd
         working-directory: apps/cloudflare-crm
         env:
           CRM_SOURCE_SHA: ${{ github.sha }}
@@ -325,7 +326,7 @@ jobs:
         with:
           name: crm-native-party-proof-${{ github.sha }}
           path: apps/cloudflare-crm/e2e-evidence-native/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
       - name: Restore compiled production Worker after JWT test
         run: |
