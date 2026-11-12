@@ -200,3 +200,11 @@ export const binaryCsvV2=(name,payload)=>{
  const method=csvMethod(name);return toBinary(method.input,create(method.input,payload));
 };
 export const decodeCsvV2=(name,bytes)=>fromBinary(csvMethod(name).output,bytes);
+
+const overviewService=registry.getService("crm.customer_360.v2.Customer360Service");
+if(!overviewService)throw Error("compiled Customer360 v2 service missing");
+const overviewMethod=overviewService.methods.find(item=>item.name==="GetAccountOverview");
+if(!overviewMethod)throw Error("compiled GetAccountOverview missing");
+export const overviewV2Path=()=>"/crm.customer_360.v2.Customer360Service/GetAccountOverview";
+export const binaryOverviewV2=(_name,payload)=>toBinary(overviewMethod.input,create(overviewMethod.input,payload));
+export const decodeOverviewV2=(_name,bytes)=>fromBinary(overviewMethod.output,bytes);

@@ -16,6 +16,7 @@ fn main() {
         "../../../proto/crm/customer_privacy/v2/case.proto",
         "../../../proto/crm/customer_enrichment/v2/config.proto",
         "../../../proto/crm/customer_data_operations/v2/party_csv.proto",
+        "../../../proto/crm/customer_360/v2/customer_360.proto",
     ];
     let protoc = protoc_bin_vendored::protoc_bin_path().expect("vendored protoc");
     unsafe { std::env::set_var("PROTOC", protoc); }

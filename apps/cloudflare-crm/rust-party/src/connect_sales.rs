@@ -99,6 +99,13 @@ pub mod proto {
                 include!(concat!(env!("OUT_DIR"), "/crm.identity_resolution.v2.mod.rs"));
             }
         }
+        pub mod customer_360 {
+            use super::*;
+            pub mod v2 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.customer_360.v2.mod.rs"));
+            }
+        }
         pub mod customer_data_operations {
             use super::*;
             pub mod v2 {
@@ -162,6 +169,9 @@ mod quality_handlers;
 mod identity_handlers;
 mod consent_handlers;
 mod sales_handlers;
+mod overview_handlers;
+use overview_handlers::Customer360V2Service;
+use proto::crm::customer_360::v2 as overview_wire;
 mod data_operations_handlers;
 use data_operations_handlers::PartyCsvV2Service;
 use proto::crm::customer_data_operations::v2 as csv_wire;
@@ -794,6 +804,9 @@ pub(super) fn router(env:Env,tenant:&str,actor:&str,request_id:&str)->ConnectRou
         .add_service(Arc::new(ConsentV2Service{
             env:Arc::clone(&env),tenant:tenant.to_owned(),
             actor:actor.to_owned(),request_id:request_id.to_owned(),
+        }))
+        .add_service(Arc::new(Customer360V2Service{
+            env:Arc::clone(&env),tenant:tenant.to_owned(),
         }))
         .add_service(Arc::new(PartyCsvV2Service{
             env:Arc::clone(&env),tenant:tenant.to_owned(),request_id:request_id.to_owned(),

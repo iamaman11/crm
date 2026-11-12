@@ -280,6 +280,7 @@ struct RpcPolicy {
 
 #[cfg(feature = "native")]
 const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
+    ("/crm.customer_360.v2.Customer360Service/GetAccountOverview", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
     ("/crm.customer_data_operations.v2.PartyCsvService/PreviewPartyExport", RpcPolicy { permission: RpcPermission::AdminRead, activation: RpcActivation::Candidate }),
     ("/crm.customer_data_operations.v2.PartyCsvService/PreviewPartyImport", RpcPolicy { permission: RpcPermission::AdminRead, activation: RpcActivation::Candidate }),
     ("/crm.customer_data_operations.v2.PartyCsvService/ApplyPartyImport", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
@@ -451,15 +452,6 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     #[cfg(feature = "native")]
     if path == "/api/contact-points" || path.starts_with("/api/contact-points/") {
         return contact_points::route(req, db, tenant, &request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if let Some(id) = path.strip_prefix("/api/accounts/")
-        .and_then(|segment| segment.strip_suffix("/overview"))
-    {
-        if id.is_empty() || id.contains('/') || method != Method::Get {
-            return error("NOT_FOUND", 404);
-        }
-        return account_overview::overview(&db, tenant, id).await;
     }
     #[cfg(feature = "native")]
     if path == "/api/accounts" || path.starts_with("/api/accounts/") {

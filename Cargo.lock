@@ -671,14 +671,20 @@ dependencies = [
 name = "crm-customer-360-query-adapter"
 version = "0.1.0"
 dependencies = [
+ "crm-activities",
  "crm-application-composition",
  "crm-capability-plan-support",
  "crm-capability-runtime",
+ "crm-contact-points",
  "crm-core-data",
  "crm-customer-360-composition",
+ "crm-customer-accounts",
  "crm-module-sdk",
+ "crm-parties",
+ "crm-party-relationships",
  "crm-proto-contracts",
  "crm-query-runtime",
+ "crm-sales",
  "prost",
  "serde_json",
  "sqlx",

@@ -180,7 +180,9 @@ jobs:
               sleep 10
             done
           fi
-      - name: Verify every activated Rust module compiles for WebAssembly
+      - name: Compile the actual Worker owner graph for WebAssembly
+        run: cargo check --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native
+      - name: Test original Rust owners with the Worker dependency features
         shell: bash
         run: |
           set -euo pipefail
@@ -188,141 +190,26 @@ jobs:
           import json
           import os
           import subprocess
+          import tomllib
+          from pathlib import Path
           report = json.load(open(os.environ["CRM_MODULE_COVERAGE_REPORT"], encoding="utf-8"))
-          names = sorted({m["crate_name"] for m in report["modules"] if m["linked"]})
-          if not names:
-              raise SystemExit("No linked Rust modules in compiled manifest report")
-          command = ["cargo", "check", "--locked", "--target", "wasm32-unknown-unknown"]
-          for name in names:
-              command.extend(["-p", name])
-          subprocess.run(command, check=True)
-          print(json.dumps({"event":"crm.linked-owner-wasm-check","result":"PASS",
-                            "compiled_crates":names,"count":len(names)}))
+          worker = Path("apps/cloudflare-crm/rust-party")
+          cargo = tomllib.loads((worker / "Cargo.toml").read_text(encoding="utf-8"))
+          by_path = {(worker / dep["path"]).resolve(): dep
+                     for dep in cargo["dependencies"].values()
+                     if isinstance(dep, dict) and "path" in dep}
+          linked = [module for module in report["modules"] if module["linked"]]
+          if not linked:
+              raise SystemExit("No linked original owners")
+          for module in linked:
+              dep = by_path[Path(module["crate_path"]).resolve()]
+              command = ["cargo", "test", "--locked", "-p", module["crate_name"]]
+              if not dep.get("default-features", True):
+                  command.append("--no-default-features")
+              if dep.get("features"):
+                  command.extend(["--features", ",".join(dep["features"])])
+              subprocess.run(command, check=True)
           PY
-      - name: Execute the original Rust domain rules from WASM in Node
-        shell: bash
-        run: |
-          set -euo pipefail
-          probe="$(mktemp -d)"
-          mkdir -p "$probe/src"
-          cat > "$probe/Cargo.toml" <<EOF
-          [package]
-          name = "crm-wasm-probe"
-          version = "0.1.0"
-          edition = "2024"
-          [lib]
-          crate-type = ["cdylib"]
-          [dependencies]
-          crm-module-sdk = { path = "$GITHUB_WORKSPACE/crates/crm-module-sdk" }
-          crm-core-contracts = { path = "$GITHUB_WORKSPACE/crates/crm-core-contracts" }
-          EOF
-          cat > "$probe/src/lib.rs" <<'RUST'
-          use crm_parties::{
-              CreateParty, UpdateParty, Party, PartyId, PartyKind,
-              encode_party_state, decode_party_state,
-          };
-          // This is a diagnostic ABI only: all domain rules are from existing crm-parties.
-          #[unsafe(no_mangle)]
-          pub extern "C" fn crm_party_domain_probe() -> i32 {
-              let id = match PartyId::try_new("wasm-proof-01") {
-                  Ok(v) => v,
-                  Err(_) => return 1,
-              };
-              let mut party = match Party::create(CreateParty {
-                  party_id: id, kind: PartyKind::Organization,
-                  display_name: "  Example  Organization ".to_owned(),
-                  occurred_at_unix_nanos: 10,
-              }) {
-                  Ok(v) => v,
-                  Err(_) => return 2,
-              };
-              if party.display_name() != "Example Organization" || party.version() != 1 {
-                  return 3;
-              }
-              if party.apply_update(UpdateParty {
-                  expected_version: 1, display_name: "Example Corporation".to_owned(),
-                  occurred_at_unix_nanos: 20,
-              }).is_err() { return 4; }
-              if party.version() != 2 { return 5; }
-              if party.apply_update(UpdateParty {
-                  expected_version: 1, display_name: "Should Fail".to_owned(),
-                  occurred_at_unix_nanos: 30,
-              }).err().map(|e| e.code) != Some("PARTIES_PARTY_VERSION_CONFLICT".to_string()) {
-                  return 6;
-              }
-              let saved = match encode_party_state(&party) {
-                  Ok(v) => v, Err(_) => return 7,
-              };
-              let loaded = match decode_party_state(&saved) {
-                  Ok(v) => v, Err(_) => return 8,
-              };
-              if loaded != party { return 9; }
-              let error = Party::create(CreateParty {
-                  party_id: PartyId::try_new("wasm-proof-02").unwrap(),
-                  kind: PartyKind::Person, display_name: " ".to_owned(),
-                  occurred_at_unix_nanos: 21,
-              }).err();
-              if error.map(|e| e.code) != Some("PARTIES_DISPLAY_NAME_INVALID".to_string()) {
-                  return 10;
-              }
-              0
-          }
-          // Calls authoritative original owners: no separate validation rules.
-          // Include the SAME owner behavior code as the native Worker CI gate.
-          // No competing test-only domain logic in this workflow.
-          mod original_domain_probe {
-              include!(concat!(env!("GITHUB_WORKSPACE"),
-                  "/apps/cloudflare-crm/rust-party/src/original_domain_probe.rs"));
-          }
-          #[unsafe(no_mangle)]
-          pub extern "C" fn crm_owner_domain_probe() -> i32 {
-              original_domain_probe::check()
-          }
-
-          RUST
-          # Reuse the same compiled canonical module report, not another
-          # manually maintained list of owner crates in the WASM fixture.
-          python - "$probe/Cargo.toml" <<'PY'
-          import json
-          import os
-          import sys
-          report = json.load(open(os.environ["CRM_MODULE_COVERAGE_REPORT"], encoding="utf-8"))
-          with open(sys.argv[1], "a", encoding="utf-8") as cargo:
-              for module in sorted(report["modules"], key=lambda m:m["crate_name"]):
-                  if not module["linked"]:
-                      continue
-                  crate, relative = module["crate_name"], module["crate_path"]
-                  cargo.write(f'{crate} = {{ path = "{os.environ["GITHUB_WORKSPACE"]}/{relative}" }}\n')
-          PY
-          cargo build --manifest-path "$probe/Cargo.toml" --target wasm32-unknown-unknown
-          node - "$probe/target/wasm32-unknown-unknown/debug/crm_wasm_probe.wasm" <<'NODE'
-          const fs = require('node:fs');
-          const file = process.argv[2];
-          (async () => {
-            const { instance } = await WebAssembly.instantiate(fs.readFileSync(file), {});
-            if (typeof instance.exports.crm_party_domain_probe !== 'function') {
-              throw new Error('Rust Party WASM export missing');
-            }
-            const result = instance.exports.crm_party_domain_probe();
-            if (result !== 0) throw new Error('Existing Rust domain WASM rejected, code=' + result);
-            if (typeof instance.exports.crm_owner_domain_probe !== 'function') {
-              throw new Error('Original owner domain behavior ABI missing');
-            }
-            const ownerResult = instance.exports.crm_owner_domain_probe();
-            if (ownerResult !== 0) throw new Error('Original owner domain invariants failed, code=' + ownerResult);
-            console.log(JSON.stringify({event:'crm.rust-domain-wasm', result:'PASS',
-              crate:'crm-parties', target:'wasm32-unknown-unknown',
-              runtime:'node WebAssembly', tests:['normalize','version',
-                'stale update denied','serialize/rehydrate','invalid name denied'],
-              module_link:{result:'CHECKED_IN_EARLIER_STAGE',
-                evidence:'generated manifest activation + cargo check for every linked crate',
-                domain_behaviors:'PARTIAL_ORIGINAL_OWNER_FIXTURE'},
-              owners:{result:'PASS',modules:['crm-customer-accounts','crm-contact-points',
-                'crm-sales','crm-activities'],operations:['create','roundtrip','negative','version'],
-                live_d1:'NOT_TESTED'},
-              cloudflare_worker_invocation:'NOT_TESTED', d1_adapter:'NOT_TESTED'}));
-          })().catch(error => {console.error(error);process.exitCode=1;});
-          NODE
       # Cache only the pinned installer binaries. No target/ or generated build
       # output crosses source revisions; main always builds its exact SHA.
       - name: Cache pinned native Rust tool CLIs

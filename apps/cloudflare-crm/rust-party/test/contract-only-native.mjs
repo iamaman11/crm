@@ -18,7 +18,8 @@ import {binaryPartyGet,decodePartyGet,partyGetPath,
   binarySalesV2,decodeSalesV2,salesV2Path,
   binaryPrivacyV2,decodePrivacyV2,privacyV2Path,
   binaryEnrichmentV2,decodeEnrichmentV2,enrichmentV2Path,
-  binaryCsvV2,decodeCsvV2,csvV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  binaryCsvV2,decodeCsvV2,csvV2Path,
+  binaryOverviewV2,decodeOverviewV2,overviewV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-contract-only-"));
 const base="http://127.0.0.1:18789";
@@ -1255,6 +1256,51 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2-candidate",result:"PAS
    original_owner:"crm.customer-enrichment",immutable:true,tenant_ab:true,replay:true,
    page_bounds:true,d1_audit:true,timestamp_precision:true,provider_execution:"NOT_CONNECTED"}));
 
+
+ // Account-rooted composition uses the original owner values and never writes.
+ const overviewCall=signedReadOnly(overviewV2Path,binaryOverviewV2,decodeOverviewV2);
+ const overviewAudit=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ assert.equal((await overviewCall("GetAccountOverview",tenantB,{accountId})).body.code,"not_found");
+ assert.equal((await overviewCall("GetAccountOverview",viewer,{accountId:"bad/id"})).body.code,"invalid_argument");
+ assert.equal((await overviewCall("GetAccountOverview",viewer,{accountId:"missing-account"})).body.code,"not_found");
+ const overviewResult=await overviewCall("GetAccountOverview",viewer,{accountId});
+ assert.equal(overviewResult.status,200,describeProtobuf(overviewResult.body));
+ const card=overviewResult.body.overview;
+ assert.equal(card.account.accountId,accountId);
+ assert.equal(card.primaryParty.partyId,id);
+ assert.equal(card.perCollectionLimit,100);
+ assert.equal(card.truncated.contactPoints,false);
+ assert.equal(card.truncated.relationships,false);
+ assert.equal(card.truncated.deals,false);
+ assert.equal(card.truncated.tasks,false);
+ assert.deepEqual(card.primaryParty,(await v3("GetParty",viewer,{partyId:id})).body.party);
+ assert.deepEqual(card.contactPoints,await collectPages(contactV2,"ListContactPoints","contactPoints",{partyId:id}));
+ assert.deepEqual(card.relationships,await collectPages(relationV2,"ListPartyRelationships","relationships",{partyId:id}));
+ assert.deepEqual(card.deals,(await collectPages(salesV2,"ListDeals","deals")).filter(item=>item.accountId===accountId));
+ assert.deepEqual(card.tasks,await collectPages(taskV2,"ListTasks","tasks",{accountId}));
+ assert.ok(card.contactPoints.some(item=>item.contactPointId===contactId));
+ assert.ok(card.relationships.some(item=>item.relationshipId===rMid));
+ assert.ok(card.deals.some(item=>item.dealId===dealId));
+ assert.ok(card.tasks.some(item=>item.taskId===taskMid));
+ assert.ok(card.tasks.every(item=>item.taskId!==taskOther));
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,overviewAudit);
+ // Exercise the composition bound with real original ContactPoint mutations.
+ for(let index=0;index<101-card.contactPoints.length;index++){
+   const created=await contactV2("CreateContactPoint",admin,{
+     contactPointId:"overview-boundary-"+String(index).padStart(3,"0"),partyId:id,kind:1,
+     value:"overview-"+index+"@example.org",
+     precondition:{idempotencyKey:"overview-contact-"+String(index).padStart(3,"0")}});
+   assert.equal(created.status,200,describeProtobuf(created.body));
+ }
+ const boundedAudit=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ const boundedCard=(await overviewCall("GetAccountOverview",viewer,{accountId})).body.overview;
+ assert.equal(boundedCard.contactPoints.length,100);
+ assert.equal(boundedCard.truncated.contactPoints,true);
+ assert.equal(boundedCard.truncated.tasks,false);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,boundedAudit);
+ console.log(JSON.stringify({event:"crm.native-account-overview-v2",result:"PASS",
+   owner:"crm.customer360",account_rooted:true,original_owners:true,
+   tenant_ab:true,read_only:true,bounded:true}));
  // CSV operations use the original parser/Party owner, explicit admin permissions,
  // atomic D1 writes and a per-operation receipt in that same database.
  const csv=signedReadOnly(csvV2Path,binaryCsvV2,decodeCsvV2);
