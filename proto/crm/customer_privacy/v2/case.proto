@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package crm.customer_privacy.v2;
+
+import "crm/core/v2/operation.proto";
+
+// Existing CRM connects only draft, submit, cancel, get and list.
+// Subject verification, restriction/erasure execution stay NOT_CONNECTED.
+enum PrivacyCaseKind {
+  PRIVACY_CASE_KIND_UNSPECIFIED = 0;
+  PRIVACY_CASE_KIND_ACCESS = 1;
+  PRIVACY_CASE_KIND_PORTABILITY_EXPORT = 2;
+  PRIVACY_CASE_KIND_RESTRICT_PROCESSING = 3;
+  PRIVACY_CASE_KIND_ERASURE = 4;
+}
+
+enum PrivacyCaseStatus {
+  PRIVACY_CASE_STATUS_UNSPECIFIED = 0;
+  PRIVACY_CASE_STATUS_DRAFT = 1;
+  PRIVACY_CASE_STATUS_SUBMITTED = 2;
+  PRIVACY_CASE_STATUS_SUBJECT_VERIFIED = 3;
+  PRIVACY_CASE_STATUS_SCOPING = 4;
+  PRIVACY_CASE_STATUS_SCOPED = 5;
+  PRIVACY_CASE_STATUS_PLANNED = 6;
+  PRIVACY_CASE_STATUS_AWAITING_APPROVAL = 7;
+  PRIVACY_CASE_STATUS_EXECUTING = 8;
+  PRIVACY_CASE_STATUS_CONVERGING = 9;
+  PRIVACY_CASE_STATUS_RESCOPE_REQUIRED = 10;
+  PRIVACY_CASE_STATUS_FAILED_RETRYABLE = 11;
+  PRIVACY_CASE_STATUS_COMPLETED = 12;
+  PRIVACY_CASE_STATUS_PARTIALLY_COMPLETED = 13;
+  PRIVACY_CASE_STATUS_DENIED = 14;
+  PRIVACY_CASE_STATUS_CANCELLED = 15;
+  PRIVACY_CASE_STATUS_FAILED_TERMINAL = 16;
+}
+
+message PrivacyCase {
+  string case_id = 1;
+  PrivacyCaseKind kind = 2;
+  PrivacyCaseStatus status = 3;
+  int64 version = 4;
+  bool subject_verified = 5;
+}
+
+message CreatePrivacyCaseRequest {
+  string case_id = 1;
+  PrivacyCaseKind kind = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message CreatePrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message SubmitPrivacyCaseRequest {
+  string case_id = 1;
+  crm.core.v2.MutationPrecondition precondition = 2;
+}
+
+message SubmitPrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message CancelPrivacyCaseRequest {
+  string case_id = 1;
+  crm.core.v2.MutationPrecondition precondition = 2;
+}
+
+message CancelPrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetPrivacyCaseRequest {
+  string case_id = 1;
+}
+
+message GetPrivacyCaseResponse {
+  PrivacyCase privacy_case = 1;
+}
+
+message ListPrivacyCasesRequest {
+  crm.core.v2.PageRequest page = 1;
+}
+
+message ListPrivacyCasesResponse {
+  repeated PrivacyCase cases = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+service PrivacyCaseService {
+  rpc CreatePrivacyCase(CreatePrivacyCaseRequest) returns (CreatePrivacyCaseResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc SubmitPrivacyCase(SubmitPrivacyCaseRequest) returns (SubmitPrivacyCaseResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc CancelPrivacyCase(CancelPrivacyCaseRequest) returns (CancelPrivacyCaseResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetPrivacyCase(GetPrivacyCaseRequest) returns (GetPrivacyCaseResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListPrivacyCases(ListPrivacyCasesRequest) returns (ListPrivacyCasesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}

@@ -28,6 +28,8 @@ on:
       - "database/tests/0004_search_runtime_role_grants.sql"
       - ".github/workflows/search-runtime.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

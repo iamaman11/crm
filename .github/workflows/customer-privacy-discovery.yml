@@ -23,6 +23,8 @@ on:
       - "docs/CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md"
       - ".github/workflows/customer-privacy-discovery.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

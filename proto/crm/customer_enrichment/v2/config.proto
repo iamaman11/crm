@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package crm.customer_enrichment.v2;
+
+import "crm/core/v2/operation.proto";
+import "google/protobuf/timestamp.proto";
+
+// Immutable versions of provider/mapping CONFIGURATION only. This does not
+// dispatch to a provider, accept credentials, create suggestions or mutate Party.
+enum RawPayloadPolicy {
+  RAW_PAYLOAD_POLICY_UNSPECIFIED = 0;
+  RAW_PAYLOAD_POLICY_DIGEST_ONLY = 1;
+  RAW_PAYLOAD_POLICY_GOVERNED_PROTECTED_EVIDENCE = 2;
+}
+
+message ProviderProfileVersion {
+  string profile_version_id = 1;
+  string provider_key = 2;
+  string adapter_kind = 3;
+  string adapter_contract_version = 4;
+  repeated string purpose_codes = 5;
+  string license_id = 6;
+  string permitted_use_class = 7;
+  string residency_region = 8;
+  uint32 retention_days = 9;
+  RawPayloadPolicy raw_payload_policy = 10;
+  repeated string credential_handle_aliases = 11;
+  google.protobuf.Timestamp effective_at = 12;
+  google.protobuf.Timestamp expires_at = 13;
+}
+
+message MappingVersion {
+  string mapping_version_id = 1;
+  string mapping_key = 2;
+  string provider_profile_version_id = 3;
+  string provider_response_field_path = 4;
+  uint32 maximum_suggestions_per_response = 5;
+  bool confidence_required = 6;
+}
+
+message PublishProviderProfileRequest {
+  string provider_key = 1;
+  string adapter_kind = 2;
+  string adapter_contract_version = 3;
+  repeated string purpose_codes = 4;
+  string license_id = 5;
+  string permitted_use_class = 6;
+  string residency_region = 7;
+  uint32 retention_days = 8;
+  RawPayloadPolicy raw_payload_policy = 9;
+  repeated string credential_handle_aliases = 10;
+  google.protobuf.Timestamp effective_at = 11;
+  google.protobuf.Timestamp expires_at = 12;
+  crm.core.v2.MutationPrecondition precondition = 13;
+}
+
+message PublishProviderProfileResponse {
+  ProviderProfileVersion profile = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message PublishMappingRequest {
+  string mapping_key = 1;
+  string provider_profile_version_id = 2;
+  string provider_response_field_path = 3;
+  uint32 maximum_suggestions_per_response = 4;
+  bool confidence_required = 5;
+  crm.core.v2.MutationPrecondition precondition = 6;
+}
+
+message PublishMappingResponse {
+  MappingVersion mapping = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetProviderProfileRequest {
+  string profile_version_id = 1;
+}
+
+message GetProviderProfileResponse {
+  ProviderProfileVersion profile = 1;
+}
+
+message GetMappingRequest {
+  string mapping_version_id = 1;
+}
+
+message GetMappingResponse {
+  MappingVersion mapping = 1;
+}
+
+message ListProviderProfilesRequest {
+  crm.core.v2.PageRequest page = 1;
+}
+
+message ListProviderProfilesResponse {
+  repeated ProviderProfileVersion profiles = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+message ListMappingsRequest {
+  crm.core.v2.PageRequest page = 1;
+}
+
+message ListMappingsResponse {
+  repeated MappingVersion mappings = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+service EnrichmentConfigurationService {
+  rpc PublishProviderProfile(PublishProviderProfileRequest) returns (PublishProviderProfileResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc PublishMapping(PublishMappingRequest) returns (PublishMappingResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetProviderProfile(GetProviderProfileRequest) returns (GetProviderProfileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetMapping(GetMappingRequest) returns (GetMappingResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListProviderProfiles(ListProviderProfilesRequest) returns (ListProviderProfilesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListMappings(ListMappingsRequest) returns (ListMappingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}

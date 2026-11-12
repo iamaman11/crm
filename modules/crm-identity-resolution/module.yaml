@@ -105,6 +105,20 @@ provides:
         rpc: crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionService.IdentityResolutionPrivacyScopeContribution
         request: crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionRequest
         response: crm.customer_privacy.v1.IdentityResolutionPrivacyScopeContributionResponse
+    - id: identity_resolution.party.compare
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v2.IdentityResolutionService.CompareParties
+        request: crm.identity_resolution.v2.ComparePartiesRequest
+        response: crm.identity_resolution.v2.ComparePartiesResponse
+    - id: identity_resolution.party.shared_email_candidates
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v2.IdentityResolutionService.FindSharedEmailCandidates
+        request: crm.identity_resolution.v2.FindSharedEmailCandidatesRequest
+        response: crm.identity_resolution.v2.FindSharedEmailCandidatesResponse
   events:
     - id: identity_resolution.candidate.registered
       version: 1.0.0

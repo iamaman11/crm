@@ -4,21 +4,21 @@
   "compatibility_date": "2026-11-07",
   "workers_dev": false,
   "preview_urls": false,
+  "vars": {
+    "CRM_CI_LOCAL_ONLY": "yes"
+  },
   "assets": {
     "directory": "../dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/crm.sales.v1.DealService/*", "/crm.parties.v2.PartyService/*"]
-  },
-  "vars": {
-    "CRM_CI_LOCAL_ONLY": "yes"
+    "run_worker_first": ["/api/*", "/crm.*/*"]
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "crm-rust-party-local",
       "database_id": "00000000-0000-4000-8000-000000000001",
-      "migrations_dir": "./migrations"
+      "migrations_dir": "../migrations"
     }
   ]
 }

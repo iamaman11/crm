@@ -144,6 +144,41 @@ provides:
         rpc: crm.customer_privacy.v1.CustomerPrivacyControlService.ListCustomerDataLegalHoldsBySubject
         request: crm.customer_privacy.v1.ListCustomerDataLegalHoldsBySubjectRequest
         response: crm.customer_privacy.v1.ListCustomerDataLegalHoldsBySubjectResponse
+    - id: customer_privacy.case.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v2.PrivacyCaseService.CreatePrivacyCase
+        request: crm.customer_privacy.v2.CreatePrivacyCaseRequest
+        response: crm.customer_privacy.v2.CreatePrivacyCaseResponse
+    - id: customer_privacy.case.submit
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v2.PrivacyCaseService.SubmitPrivacyCase
+        request: crm.customer_privacy.v2.SubmitPrivacyCaseRequest
+        response: crm.customer_privacy.v2.SubmitPrivacyCaseResponse
+    - id: customer_privacy.case.cancel
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v2.PrivacyCaseService.CancelPrivacyCase
+        request: crm.customer_privacy.v2.CancelPrivacyCaseRequest
+        response: crm.customer_privacy.v2.CancelPrivacyCaseResponse
+    - id: customer_privacy.case.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v2.PrivacyCaseService.GetPrivacyCase
+        request: crm.customer_privacy.v2.GetPrivacyCaseRequest
+        response: crm.customer_privacy.v2.GetPrivacyCaseResponse
+    - id: customer_privacy.case.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v2.PrivacyCaseService.ListPrivacyCases
+        request: crm.customer_privacy.v2.ListPrivacyCasesRequest
+        response: crm.customer_privacy.v2.ListPrivacyCasesResponse
   events:
     - id: customer_privacy.case.created
       version: 1.0.0

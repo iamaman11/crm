@@ -27,6 +27,8 @@ on:
       - "database/tests/0013_customer_data_export_adapter.sql"
       - ".github/workflows/export-process-runtime.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

@@ -28,6 +28,8 @@ on:
       - "tests/test_generic_conformance_adoption.py"
       - ".github/workflows/generic-conformance.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

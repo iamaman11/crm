@@ -302,6 +302,19 @@ name = "crm-core-contracts"
 version = "0.1.0"
 
 [[package]]
+name = "crm-customer-360-query-adapter"
+version = "0.1.0"
+dependencies = [
+ "crm-activities",
+ "crm-contact-points",
+ "crm-customer-accounts",
+ "crm-module-sdk",
+ "crm-parties",
+ "crm-party-relationships",
+ "crm-sales",
+]
+
+[[package]]
 name = "crm-customer-accounts"
 version = "0.1.0"
 dependencies = [
@@ -385,6 +398,7 @@ dependencies = [
  "crm-consents",
  "crm-contact-points",
  "crm-core-contracts",
+ "crm-customer-360-query-adapter",
  "crm-customer-accounts",
  "crm-customer-data-operations",
  "crm-customer-enrichment",

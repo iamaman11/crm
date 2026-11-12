@@ -23,6 +23,8 @@ on:
       - "database/tests/0024_parties_privacy_scope_fixture.sql"
       - ".github/workflows/parties-privacy-scope.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

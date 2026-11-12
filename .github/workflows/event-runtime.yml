@@ -18,6 +18,8 @@ on:
       - "database/tests/**"
       - ".github/workflows/event-runtime.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

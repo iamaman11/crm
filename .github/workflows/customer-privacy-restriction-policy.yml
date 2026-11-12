@@ -33,6 +33,8 @@ on:
       - "database/tests/0020_customer_privacy_persistence_fixture.sql"
       - ".github/workflows/customer-privacy-restriction-policy.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

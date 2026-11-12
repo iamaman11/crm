@@ -34,6 +34,13 @@ provides:
         rpc: crm.customer_360.v1.Customer360Service.GetCustomer360
         request: crm.customer_360.v1.GetCustomer360Request
         response: crm.customer_360.v1.GetCustomer360Response
+    - id: customer360.account.overview
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_360.v2.Customer360Service.GetAccountOverview
+        request: crm.customer_360.v2.GetAccountOverviewRequest
+        response: crm.customer_360.v2.GetAccountOverviewResponse
   events: []
   objects: []
   ui_extensions: []

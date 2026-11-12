@@ -28,6 +28,8 @@ on:
       - "database/tests/0010_identity_resolution_adapter.sql"
       - ".github/workflows/identity-resolution-privacy-scope.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

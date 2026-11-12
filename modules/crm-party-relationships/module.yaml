@@ -56,6 +56,34 @@ provides:
         rpc: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionService.PartyRelationshipsPrivacyScopeContribution
         request: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionRequest
         response: crm.customer_privacy.v1.PartyRelationshipsPrivacyScopeContributionResponse
+    - id: party-relationships.party-relationship.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.party_relationships.v2.PartyRelationshipService.CreatePartyRelationship
+        request: crm.party_relationships.v2.CreatePartyRelationshipRequest
+        response: crm.party_relationships.v2.CreatePartyRelationshipResponse
+    - id: party-relationships.party-relationship.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.party_relationships.v2.PartyRelationshipService.UpdatePartyRelationship
+        request: crm.party_relationships.v2.UpdatePartyRelationshipRequest
+        response: crm.party_relationships.v2.UpdatePartyRelationshipResponse
+    - id: party-relationships.party-relationship.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.party_relationships.v2.PartyRelationshipService.GetPartyRelationship
+        request: crm.party_relationships.v2.GetPartyRelationshipRequest
+        response: crm.party_relationships.v2.GetPartyRelationshipResponse
+    - id: party-relationships.party-relationship.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.party_relationships.v2.PartyRelationshipService.ListPartyRelationships
+        request: crm.party_relationships.v2.ListPartyRelationshipsRequest
+        response: crm.party_relationships.v2.ListPartyRelationshipsResponse
   events:
     - id: party-relationships.party-relationship.created
       version: 1.0.0

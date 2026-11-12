@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package crm.activities.v2;
+
+import "crm/core/v2/operation.proto";
+import "google/protobuf/timestamp.proto";
+
+// Task ownership is assigned by signed Access; the browser cannot set actor.
+enum TaskPriority {
+  TASK_PRIORITY_UNSPECIFIED = 0;
+  TASK_PRIORITY_LOW = 1;
+  TASK_PRIORITY_NORMAL = 2;
+  TASK_PRIORITY_HIGH = 3;
+  TASK_PRIORITY_URGENT = 4;
+}
+
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_OPEN = 1;
+  TASK_STATUS_COMPLETED = 2;
+}
+
+message Task {
+  string task_id = 1;
+  string subject = 2;
+  string description = 3;
+  string account_id = 4;
+  TaskPriority priority = 5;
+  TaskStatus status = 6;
+  google.protobuf.Timestamp due_at = 7;
+  google.protobuf.Timestamp reminder_at = 8;
+  google.protobuf.Timestamp completed_at = 9;
+  int64 version = 10;
+}
+
+message CreateTaskRequest {
+  string task_id = 1;
+  string subject = 2;
+  optional string description = 3;
+  string account_id = 4;
+  TaskPriority priority = 5;
+  google.protobuf.Timestamp due_at = 6;
+  google.protobuf.Timestamp reminder_at = 7;
+  crm.core.v2.MutationPrecondition precondition = 8;
+}
+
+message CreateTaskResponse {
+  Task task = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message CompleteTaskRequest {
+  string task_id = 1;
+  crm.core.v2.MutationPrecondition precondition = 2;
+}
+
+message CompleteTaskResponse {
+  Task task = 1;
+  bool changed = 2;
+  crm.core.v2.MutationReceipt receipt = 3;
+}
+
+message GetTaskRequest {
+  string task_id = 1;
+}
+
+message GetTaskResponse {
+  Task task = 1;
+}
+
+message ListTasksRequest {
+  crm.core.v2.PageRequest page = 1;
+  optional TaskStatus status = 2;
+  optional string account_id = 3;
+}
+
+message ListTasksResponse {
+  repeated Task tasks = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+service TaskService {
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc CompleteTask(CompleteTaskRequest) returns (CompleteTaskResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}

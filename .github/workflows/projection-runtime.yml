@@ -26,6 +26,8 @@ on:
       - "database/tests/0003_sales_activities_adapters.sql"
       - ".github/workflows/projection-runtime.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

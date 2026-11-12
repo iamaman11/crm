@@ -1,7 +1,7 @@
 use crm_module_sdk::{ErrorCategory, FieldName, FieldViolation, RecordId, SdkError};
 use sha2::{Digest, Sha256};
-use std::fmt::Write as _;
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 const MAX_SEMANTIC_CODE_BYTES: usize = 128;
 const MAX_EVIDENCE_REFERENCE_BYTES: usize = 512;
@@ -129,25 +129,34 @@ pub fn discover_shared_recorded_emails(
 ) -> Result<Vec<SharedRecordedEmail>, SdkError> {
     let mut by_email: BTreeMap<&str, Vec<&RecordedEmailContact>> = BTreeMap::new();
     for record in contacts {
-        RecordId::try_new(record.contact_id.clone()).map_err(|_| invalid(
-            "IDENTITY_RESOLUTION_CONTACT_REFERENCE_INVALID",
-            "identity_resolution.contact_id",
-            "observed ContactPoint reference is invalid",
-        ))?;
-        if record.normalized_email.is_empty() || record.normalized_email.chars().any(char::is_control) {
+        RecordId::try_new(record.contact_id.clone()).map_err(|_| {
+            invalid(
+                "IDENTITY_RESOLUTION_CONTACT_REFERENCE_INVALID",
+                "identity_resolution.contact_id",
+                "observed ContactPoint reference is invalid",
+            )
+        })?;
+        if record.normalized_email.is_empty()
+            || record.normalized_email.chars().any(char::is_control)
+        {
             return Err(invalid(
                 "IDENTITY_RESOLUTION_RECORDED_EMAIL_INVALID",
                 "identity_resolution.recorded_email",
                 "source email must be a nonempty canonical ContactPoint value",
             ));
         }
-        by_email.entry(&record.normalized_email).or_default().push(record);
+        by_email
+            .entry(&record.normalized_email)
+            .or_default()
+            .push(record);
     }
     let mut pairs: BTreeMap<CanonicalPartyPair, SharedRecordedEmail> = BTreeMap::new();
     for records in by_email.values() {
         for (i, first) in records.iter().enumerate() {
             for second in records.iter().skip(i + 1) {
-                if first.party == second.party { continue; }
+                if first.party == second.party {
+                    continue;
+                }
                 let pair = CanonicalPartyPair::try_new(first.party.clone(), second.party.clone())?;
                 let (left_contact_id, right_contact_id) = if pair.left() == &first.party {
                     (first.contact_id.clone(), second.contact_id.clone())
@@ -156,11 +165,14 @@ pub fn discover_shared_recorded_emails(
                 };
                 let evidence = SharedRecordedEmail {
                     pair: pair.clone(),
-                    left_contact_id, right_contact_id,
+                    left_contact_id,
+                    right_contact_id,
                     both_verified: first.verified && second.verified,
                 };
                 match pairs.entry(pair) {
-                    std::collections::btree_map::Entry::Vacant(slot) => {slot.insert(evidence);}
+                    std::collections::btree_map::Entry::Vacant(slot) => {
+                        slot.insert(evidence);
+                    }
                     std::collections::btree_map::Entry::Occupied(mut slot) => {
                         if evidence.both_verified && !slot.get().both_verified {
                             slot.insert(evidence);
@@ -187,7 +199,9 @@ mod recorded_email_tests {
     fn contact(party: &str, id: &str, email: &str, verified: bool) -> RecordedEmailContact {
         RecordedEmailContact {
             party: PartyReference::try_new(party).unwrap(),
-            contact_id: id.into(), normalized_email: email.into(), verified,
+            contact_id: id.into(),
+            normalized_email: email.into(),
+            verified,
         }
     }
     #[test]
@@ -206,9 +220,10 @@ mod recorded_email_tests {
     }
     #[test]
     fn source_provenance_is_not_allowed_to_be_empty() {
-        assert!(discover_shared_recorded_emails(&[
-            contact("party-a", "", "same@example.test", false)
-        ]).is_err());
+        assert!(
+            discover_shared_recorded_emails(&[contact("party-a", "", "same@example.test", false)])
+                .is_err()
+        );
     }
 }
 

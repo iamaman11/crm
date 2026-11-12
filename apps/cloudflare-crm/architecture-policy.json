@@ -1,19 +1,12 @@
 {
   "schema_version": 1,
-  "phase": "contract-only",
-  "accepted_runtime_sha": "823e19a7d9a6895e1ff633f803bda9227507082a",
   "desired_runtime": "one workers-rs Rust/WASM Worker, embedded Axum 0.8 Connect-Rust/Buffa, one D1",
   "browser_wire_format": "Connect binary Protobuf",
-  "cutover_coverage_file": "apps/cloudflare-crm/contract-coverage.json",
   "allowed_non_rpc_http": [
     "/api/health",
     "/api/doctor",
     "/api/session",
     "/api/version",
     "/api/customer-data-operations/parties.csv"
-  ],
-  "note": "OLD BUSINESS REST AND SALES RPC ARE DISABLED. Only active Party GetParty and diagnostics work until one full TSX+Connect cutover is accepted.",
-  "contract_only_rpc_methods": [
-    "/crm.parties.v2.PartyService/GetParty"
   ]
 }

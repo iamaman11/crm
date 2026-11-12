@@ -19,6 +19,8 @@ on:
       - "tests/test_generic_conformance_adoption.py"
       - ".github/workflows/customer-privacy-owner-execution.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "crates/crm-application-runtime/examples/customer_privacy_application_runtime_lifecycle.rs"
       - "crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs"

@@ -1,91 +1,179 @@
-// TypeScript Compiler API, not regex: inspect actual source nodes and import edges.
-// Used before every CRM Worker build, even while old JSX stays frozen and unused.
+// Enforce the *reachable* CRM frontend module graph through the TypeScript AST.
+// No regex-only source matching, no legacy barrel import, no alternative browser transport.
+// Backend Rust and generated code have their own independent compile/runtime gates.
 import ts from "typescript";
 import {readFileSync,existsSync,readdirSync} from "node:fs";
-import {resolve,dirname,extname} from "node:path";
+import {resolve,dirname,extname,relative,sep} from "node:path";
 import {fileURLToPath} from "node:url";
+
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
-const rd=p=>readFileSync(resolve(root,p),"utf8");
-const policy=JSON.parse(rd("apps/cloudflare-crm/architecture-policy.json"));
-const forbiddenSource=/^(?:.*\/)?(?:transport|gateway)(?:\.[cm]?[jt]sx?)?$|\/gen\/crm\/gateway\/|^@connectrpc\/connect-node$/;
-const legacySymbols=new Set(["createGrpcWebTransport","ApplicationGatewayService","GovernedClient","createGrpcTransport"]);
-const badHttp=/^\/api\/(?!health(?:$|\/)|doctor(?:$|\/)|session(?:$|\/)|version(?:$|\/))/;
-const fail=(file,msg)=>{throw Error("CRM_AST_VIOLATION "+file+": "+msg);};
-const tsExt=/\.(ts|tsx|js|jsx|mjs)$/;
-function list(dir){
-  const result=[];
-  function visit(p){if(!existsSync(resolve(root,p)))return;for(const e of readdirSync(resolve(root,p),{withFileTypes:true})){const f=p+"/"+e.name;if(e.isDirectory())visit(f);else if(e.isFile()&&tsExt.test(f))result.push(f);}}
-  visit(dir);return result;
+const policy=JSON.parse(readFileSync(resolve(root,"apps/cloudflare-crm/architecture-policy.json"),"utf8"));
+const fail=(file,message)=>{throw Error("CRM_AST_VIOLATION "+file+": "+message);};
+const forbiddenSource=/(^|\/)(gateway|transport)(\.[cm]?[jt]sx?)?$|\/gen\/crm\/gateway\/|^@connectrpc\/connect-node(?:\/|$)/;
+const forbiddenSymbols=new Set(["createGrpcWebTransport","createGrpcTransport","ApplicationGatewayService","GovernedClient","GovernedCrmClient"]);
+const directHttp=new Set(["fetch","XMLHttpRequest","WebSocket","EventSource"]);
+const forbiddenHttpPath=/^\/api\/(?!health(?:$|\/)|doctor(?:$|\/)|session(?:$|\/)|version(?:$|\/)|customer-data-operations\/parties\.csv$)/;
+// Read exactly the configuration used by the app's tsc invocation.
+const configPath=resolve(root,"apps/cloudflare-crm/tsconfig.json");
+const configFile=ts.readConfigFile(configPath,ts.sys.readFile);
+if(configFile.error)throw Error(ts.flattenDiagnosticMessageText(configFile.error.messageText,"\n"));
+const config=ts.parseJsonConfigFileContent(configFile.config,ts.sys,dirname(configPath));
+if(config.errors.length)throw Error(ts.formatDiagnosticsWithColorAndContext(config.errors,{
+ getCanonicalFileName:file=>file,getCurrentDirectory:()=>root,getNewLine:()=>"\n",
+}));
+const allowedBrowserPackages=new Set(["react","react-dom","@ultimate-crm/ui","@ultimate-crm/client"]);
+const insideRepo=path=>{
+ const rel=relative(root,path);
+ return rel && rel!==".." && !rel.startsWith(".."+sep) && !rel.startsWith("/") ? rel.replaceAll("\\","/") : null;
+};
+const read=path=>readFileSync(resolve(root,path),"utf8");
+function collect(directory){
+ const files=[];
+ function visit(dir){
+  if(!existsSync(resolve(root,dir)))return;
+  for(const item of readdirSync(resolve(root,dir),{withFileTypes:true})){
+   const next=dir+"/"+item.name;
+   if(item.isDirectory())visit(next);
+   else if(item.isFile()&&/\.(?:ts|tsx|js|jsx|mjs)$/.test(item.name))files.push(next);
+  }
+ }
+ visit(directory);
+ return files;
 }
 function inspect(file,source,strict=true){
- const kind=file.endsWith(".tsx")||file.endsWith(".jsx")?ts.ScriptKind.TSX:ts.ScriptKind.TS;
+ const kind=/\.(?:tsx|jsx)$/.test(file)?ts.ScriptKind.TSX:ts.ScriptKind.TS;
  const tree=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,kind);
  if(tree.parseDiagnostics.length)fail(file,"parse error "+tree.parseDiagnostics[0].messageText);
+ if(strict && /@ts-(?:ignore|nocheck|expect-error)/.test(source))
+  fail(file,"TypeScript diagnostics suppression is forbidden in active CRM");
  const imports=[];
+ const inBrowser=file.startsWith("apps/cloudflare-crm/web/");
+ function importedName(spec,node){
+  if(forbiddenSource.test(spec))fail(file,"legacy transport import "+spec);
+  if(spec.startsWith("@connectrpc/")&&file!=="packages/client/src/cloudflare.ts")
+   fail(file,"Connect transport belongs only to packages/client/src/cloudflare.ts");
+  if(!inBrowser)return;
+  if(spec.startsWith("@connectrpc/")||spec.startsWith("@bufbuild/"))
+   fail(file,"UI must import generated client, not protocol libraries: "+spec);
+  if(spec==="@ultimate-crm/client"){
+   fail(file,"legacy client barrel forbidden; import @ultimate-crm/client/cloudflare");
+  }
+  if(spec.startsWith("@ultimate-crm/client/")&&spec!=="@ultimate-crm/client/cloudflare")
+   fail(file,"unapproved client entrypoint "+spec);
+  if(spec==="@ultimate-crm/client/cloudflare"){
+   if(!ts.isImportDeclaration(node)||!node.importClause||
+      !ts.isNamedImports(node.importClause.namedBindings))
+    fail(file,"CRM client imports must be explicit named imports");
+   const names=node.importClause.namedBindings.elements
+    .filter(x=>!node.importClause.isTypeOnly&&!x.isTypeOnly)
+    .map(x=>x.propertyName?.text||x.name.text);
+   if(names.some(x=>x!=="createCloudflareCrmClient"))
+    fail(file,"only the generated Connect CRM client is allowed");
+  }
+ }
  const walk=node=>{
-   if(ts.isImportDeclaration(node)||ts.isExportDeclaration(node)){
-     if(node.moduleSpecifier&&ts.isStringLiteral(node.moduleSpecifier)){
-       const name=node.moduleSpecifier.text;imports.push(name);
-       if(forbiddenSource.test(name))fail(file,"legacy gateway import "+name);
-       if(file.includes("/web/") && name.startsWith("@connectrpc/"))
-         fail(file,"web must import the generated client package, not raw transports");
-     }
+  if(ts.isImportDeclaration(node)||ts.isExportDeclaration(node)){
+   if(node.moduleSpecifier&&ts.isStringLiteral(node.moduleSpecifier)){
+    const spec=node.moduleSpecifier.text;
+    imports.push(spec);
+    importedName(spec,node);
    }
-   if(ts.isImportEqualsDeclaration(node))fail(file,"CommonJS import alias not allowed");
-   if(ts.isCallExpression(node)){
-     const e=node.expression;
-     if(e.kind===ts.SyntaxKind.ImportKeyword){
-       if(!node.arguments.length||!ts.isStringLiteral(node.arguments[0]))
-         fail(file,"dynamic imports must use a literal specifier");
-       if(forbiddenSource.test(node.arguments[0].text))fail(file,"legacy dynamic import");
-     }
-     if(ts.isIdentifier(e)){
-       if(e.text==="require"||e.text==="eval"||e.text==="Function")
-         fail(file,"untyped dynamic loading not allowed: "+e.text);
-       if(e.text==="fetch"||e.text==="XMLHttpRequest")
-         fail(file,"direct HTTP bypass not allowed: "+e.text);
-       if(legacySymbols.has(e.text))fail(file,"legacy transport call "+e.text);
-     }
-     if(ts.isPropertyAccessExpression(e)&&["fetch","request"].includes(e.name.text)
-        && file.includes("/web/"))fail(file,"indirect browser HTTP request not allowed");
+  }
+  if(ts.isImportEqualsDeclaration(node))fail(file,"CommonJS import alias forbidden");
+  if(ts.isCallExpression(node)){
+   const e=node.expression;
+   if(e.kind===ts.SyntaxKind.ImportKeyword){
+    const spec=node.arguments[0];
+    if(!spec||!ts.isStringLiteral(spec))
+     fail(file,"computed dynamic import forbidden");
+    importedName(spec.text,node);
+    imports.push(spec.text);
    }
-   if(ts.isNewExpression(node)&&ts.isIdentifier(node.expression)
-     &&["XMLHttpRequest","WebSocket","EventSource"].includes(node.expression.text))
-     fail(file,"alternate transport not allowed "+node.expression.text);
-   if(ts.isIdentifier(node)&&legacySymbols.has(node.text))
-     fail(file,"legacy transport identifier "+node.text);
-   if(strict&&(node.kind===ts.SyntaxKind.AnyKeyword||ts.isAsExpression(node)&&
-       node.type.kind===ts.SyntaxKind.AnyKeyword))
-     fail(file,"unsafe any is not allowed in active typed CRM");
-   if(strict&&ts.isTypeAssertionExpression(node)&&node.type.kind===ts.SyntaxKind.AnyKeyword)
-     fail(file,"unsafe type assertion");
-   if(ts.isStringLiteral(node)&&badHttp.test(node.text))
-     fail(file,"manual business REST path "+node.text);
-   ts.forEachChild(node,walk);
+   if(ts.isIdentifier(e)){
+    if(["require","eval","Function"].includes(e.text))
+     fail(file,"dynamic loading/eval forbidden: "+e.text);
+    if(directHttp.has(e.text))fail(file,"direct network call forbidden: "+e.text);
+   }
+  }
+  if(ts.isNewExpression(node)&&ts.isIdentifier(node.expression)
+      &&directHttp.has(node.expression.text))
+   fail(file,"alternate browser network transport: "+node.expression.text);
+  if(ts.isPropertyAccessExpression(node)&&
+      directHttp.has(node.name.text)&&
+      (inBrowser||node.expression.getText(tree).match(/^(?:window|globalThis|self)$/)))
+   fail(file,"indirect HTTP/network call forbidden: "+node.getText(tree));
+  if(ts.isElementAccessExpression(node)&&node.argumentExpression&&
+      ts.isStringLiteral(node.argumentExpression)&&
+      directHttp.has(node.argumentExpression.text))
+   fail(file,"computed browser network access forbidden");
+  if(ts.isIdentifier(node)&&forbiddenSymbols.has(node.text))
+   fail(file,"legacy API symbol "+node.text);
+  // Check identifiers as well as call expressions: aliasing fetch or require must
+  // not bypass the architecture boundary (e.g. fetch.bind(window)).
+  if(inBrowser&&ts.isIdentifier(node)&&directHttp.has(node.text))
+   fail(file,"direct browser transport identifier "+node.text);
+  if(inBrowser&&ts.isIdentifier(node)&&["eval","Function","require"].includes(node.text))
+   fail(file,"untyped browser execution "+node.text);
+  if(inBrowser&&ts.isPropertyAccessExpression(node)&&
+     node.name.text==="sendBeacon")
+   fail(file,"alternate browser transport sendBeacon");
+  if(strict&&(node.kind===ts.SyntaxKind.AnyKeyword||
+      ts.isAsExpression(node)&&node.type.kind===ts.SyntaxKind.AnyKeyword||
+      ts.isTypeAssertionExpression(node)&&node.type.kind===ts.SyntaxKind.AnyKeyword))
+   fail(file,"unsafe any is forbidden");
+  if(strict&&ts.isAsExpression(node)&&ts.isAsExpression(node.expression)
+      &&node.expression.type.kind===ts.SyntaxKind.UnknownKeyword)
+   fail(file,"double type assertions cannot bypass the generated contract");
+  if(ts.isStringLiteral(node)&&forbiddenHttpPath.test(node.text))
+   fail(file,"manual business REST URL "+node.text);
+  ts.forEachChild(node,walk);
  };
  walk(tree);
  return imports;
 }
-const target=["packages/client/src/cloudflare.ts"];
-if(policy.phase==="contract-only")target.push("apps/cloudflare-crm/web/contract-only.tsx");
-if(policy.phase==="cutover")target.push(...list("apps/cloudflare-crm/web/src"));
+const entries=["packages/client/src/cloudflare.ts"];
+entries.push("apps/cloudflare-crm/web/src/app.tsx",...collect("apps/cloudflare-crm/web/src"));
 const visited=new Set();
-const follow=file=>{
- if(visited.has(file))return;visited.add(file);
- if(!existsSync(resolve(root,file)))fail(file,"required active source missing");
- for(const imp of inspect(file,rd(file))){
-   if(!imp.startsWith("."))continue;
-   const dir=dirname(resolve(root,file));const abs=resolve(dir,imp);
-   const candidate=[abs,abs+".ts",abs+".tsx",abs+".js",abs+".jsx",abs+"/index.ts",abs+"/index.tsx"];
-   const next=candidate.find(existsSync);
-   if(!next)fail(file,"unresolved relative import "+imp);
-   const normalized=next.slice(root.length+1).replaceAll("\\","/");
-   if(/\.(jsx|js|mjs)$/.test(normalized)&&policy.phase!=="migration-freeze")
-     fail(file,"active code imports legacy JavaScript "+normalized);
-   if(normalized.startsWith("apps/cloudflare-crm/web/")||normalized==="packages/client/src/cloudflare.ts")
-     follow(normalized);
+function resolveInternal(spec,parent){
+ if(/\.(?:css|scss|sass|svg|png|jpe?g|webp|woff2?|ico)(?:\?.*)?$/.test(spec))return null;
+ const from=resolve(root,parent);
+ const resolved=ts.resolveModuleName(spec,from,config.options,ts.sys).resolvedModule;
+ if(!resolved)fail(parent,"unresolved import "+spec);
+ const actual=ts.sys.realpath ? ts.sys.realpath(resolved.resolvedFileName) : resolved.resolvedFileName;
+ const rel=insideRepo(actual);
+ if(parent.startsWith("apps/cloudflare-crm/web/")&&spec.startsWith(".")&&
+    !rel?.startsWith("apps/cloudflare-crm/web/src/"))
+  fail(parent,"relative import bypasses public workspace exports: "+spec);
+ // External declarations are checked by tsc. Runtime package boundaries are
+ // explicit; workspace exports are resolved by TypeScript, never a path table.
+ const workspace=rel&&!rel.split("/").includes("node_modules");
+ if(!spec.startsWith(".")&&parent.startsWith("apps/cloudflare-crm/web/")){
+  const packageName=spec.startsWith("@")?spec.split("/").slice(0,2).join("/"):spec.split("/")[0];
+  if(!allowedBrowserPackages.has(packageName))
+   fail(parent,"unapproved browser dependency "+spec);
  }
-};
-target.forEach(follow);
-console.log(JSON.stringify({event:"crm.ts-ast-architecture",result:"PASS",phase:policy.phase,inspected:[...visited]}));
-export {inspect};
+ if(!workspace){
+  if(spec.startsWith("."))fail(parent,"internal import escapes repository "+spec);
+  return null;
+ }
+ return rel;
+}
+function follow(file){
+ if(visited.has(file))return;
+ visited.add(file);
+ if(!existsSync(resolve(root,file)))fail(file,"required active source missing");
+ if(file.startsWith("apps/cloudflare-crm/web/src/")&&
+    !/\.(ts|tsx)$/.test(file))
+   fail(file,"legacy JS/JSX reachable after cutover");
+ // Generated protobuf source is fully checked by the pinned generation/typecheck.
+ if(file.startsWith("packages/client/gen/"))return;
+ const source=read(file);
+ for(const imp of inspect(file,source,true)){
+  const next=resolveInternal(imp,file);
+  if(next)follow(next);
+ }
+}
+entries.forEach(follow);
+console.log(JSON.stringify({event:"crm.ts-ast-architecture",result:"PASS",
+ policy_schema:policy.schema_version,inspected:[...visited].sort()}));
+export {inspect,resolveInternal};

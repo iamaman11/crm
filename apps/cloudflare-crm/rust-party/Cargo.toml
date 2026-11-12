@@ -9,14 +9,13 @@ crate-type = ["cdylib"]
 
 [features]
 default = []
-# Only for loopback workerd CI. The production build cannot accept these headers.
-ci-local = []
 # Sole deployed runtime: one native workers-rs fetch; no JS tenant delegation.
 native = []
 # CI-only signed JWT fixture, same Rust verifier and D1 actor path.
 native-ci = ["native"]
 
 [dependencies]
+crm-customer-360-query-adapter = { path = "../../../crates/crm-customer-360-query-adapter", default-features = false, features = ["account-overview"] }
 worker = { version = "=0.8.7", features = ["d1", "http"] }
 connectrpc = { version = "=0.9.1", default-features = false, features = ["json", "axum"] }
 axum = { version = "0.8", default-features = false }

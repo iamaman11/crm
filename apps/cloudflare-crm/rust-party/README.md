@@ -1,11 +1,12 @@
 # CRM: единственный нативный Cloudflare Worker
 
-Опубликованное приложение использует React Static Assets → один `workers-rs` Worker → D1. Никакого рукописного JS-маршрутизатора или отдельного JS-бэкенда нет.
+Целевая схема и текущая приёмка: [ARCHITECTURE.md](../ARCHITECTURE.md) и [Issue #350](https://github.com/iamaman11/crm/issues/350). Состояние исходников не означает, что версия уже опубликована или принята.
 
-- `src/lib.rs` — единственная точка входа, исходный доменный модуль `crm-parties`, D1 и `GET /api/doctor`.
+- `src/lib.rs` — единственная точка входа и явная RPC policy; `GET /api/doctor` выполняет только read-only диагностику.
 - `src/access.rs` — штатная проверка подписанного Cloudflare Access JWT и привязка к tenant.
-- `src/pilot.rs` — минимальные нативные HTTP/D1-обработчики текущих тестовых экранов (клиенты, контакты, сделки, задачи, Customer360). Не подменяют остальные исходные экспертные Rust-модули.
+- `src/connect_sales.rs` и его handler modules — generated Connect traits, typed wire/domain mappings и один router.
+- Существующие owner-файлы вызывают оригинальные `modules/crm-*` и выполняют D1 SQL/CAS/receipt/audit. Customer360 — read-only Account composition; Sales–Activities — атомарный linked flow.
 
-`--features ci-local` — только изолированный workerd-тест с локальной D1. `--features native-ci` — изолированный тест RS256 с тестовым JWKS. Обе проверки не разрешены как публичная production-аутентификация. Релиз публикуется только с `--features native`.
+`--features native-ci` — изолированный workerd-тест RS256 с тестовым JWKS: только loopback и явный локальный флаг. Релиз собирается с `--features native` и проверяет настоящие Access keys. CI сохраняет production artifact до test-only сборки и восстанавливает его после тестов.
 
-Приёмка: `npm test` + `npm run doctor` + Rust WASM/workerd + реальный Chromium после публикации + точное совпадение `x-request-id` каждой операции браузера с `crm_audit` и структурированными Cloudflare Logs на той же версии Worker. Исходные данные и учётные данные в отчёт не включаются. Версии и доказательства фиксируются в GitHub Issue #338.
+Приёмка выполняется в существующем GitHub CI: Buf/strict TS, rustfmt/Clippy/domain tests, Rust WASM/workerd/D1 и реальный Chromium через общий generated client. После переключения обязательны тот же браузерный сценарий через Access, D1/audit и Cloudflare Logs на точной Worker version. Read-only RPC не создают вымышленных audit rows. Doctor не заменяет эти проверки. Доказательства и оставшаяся работа фиксируются в #350.

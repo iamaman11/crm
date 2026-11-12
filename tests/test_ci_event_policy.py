@@ -22,6 +22,8 @@ on:
     branches:
       - main
   pull_request:
+    branches:
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -52,6 +54,7 @@ jobs:
         self.assertEqual(
             check_workflow(path).errors,
             (
+                "pull_request must be restricted to branch main",
                 "push must be restricted to branch main",
                 "missing top-level concurrency block",
             ),
@@ -71,7 +74,7 @@ on:
       - dev
   pull_request:
     branches:
-      - main
+      - dev
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -84,7 +87,7 @@ jobs:
         self.assertEqual(check_workflow(path).errors, ())
         path.write_text(
             path.read_text(encoding="utf-8").replace(
-                "      - dev", "      - main"
+                "  push:\n    branches:\n      - dev", "  push:\n    branches:\n      - main"
             ),
             encoding="utf-8",
         )
@@ -101,6 +104,8 @@ on:
     branches:
       - dev
   pull_request:
+    branches:
+      - main
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -113,6 +118,50 @@ jobs:
             check_workflow(path).errors,
             ("push must be restricted to branch main",),
         )
+
+    def test_rejects_legacy_pr_into_dev_even_for_pr_only_workflows(self) -> None:
+        path = self.write_workflow("""name: Legacy
+on:
+  pull_request:
+    branches:
+      - dev
+jobs:
+  test:
+    runs-on: ubuntu-latest
+""")
+        self.assertEqual(
+            check_workflow(path).errors,
+            ("pull_request must be restricted to branch main",),
+        )
+
+    def test_rejects_unrestricted_pr_only_workflow(self) -> None:
+        path = self.write_workflow("""name: Legacy
+on:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+""")
+        self.assertEqual(
+            check_workflow(path).errors,
+            ("pull_request must be restricted to branch main",),
+        )
+
+    def test_accepts_main_pr_with_additional_path_filters(self) -> None:
+        path = self.write_workflow("""name: Legacy
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize]
+    paths:
+      - "modules/**"
+      - "proto/**"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+""")
+        self.assertEqual(check_workflow(path).errors, ())
 
     def test_ignores_non_pr_workflows(self) -> None:
         path = self.write_workflow(

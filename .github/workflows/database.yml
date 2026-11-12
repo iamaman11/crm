@@ -36,6 +36,8 @@ on:
       - "docs/adr/ADR-030-public-gateway-acceptance.md"
       - ".github/workflows/database.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

@@ -147,6 +147,48 @@ provides:
         rpc: crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionService.CustomerEnrichmentPrivacyScopeContribution
         request: crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionRequest
         response: crm.customer_privacy.v1.CustomerEnrichmentPrivacyScopeContributionResponse
+    - id: customer_enrichment.provider_profile.publish
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v2.EnrichmentConfigurationService.PublishProviderProfile
+        request: crm.customer_enrichment.v2.PublishProviderProfileRequest
+        response: crm.customer_enrichment.v2.PublishProviderProfileResponse
+    - id: customer_enrichment.provider_profile.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v2.EnrichmentConfigurationService.GetProviderProfile
+        request: crm.customer_enrichment.v2.GetProviderProfileRequest
+        response: crm.customer_enrichment.v2.GetProviderProfileResponse
+    - id: customer_enrichment.provider_profile.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v2.EnrichmentConfigurationService.ListProviderProfiles
+        request: crm.customer_enrichment.v2.ListProviderProfilesRequest
+        response: crm.customer_enrichment.v2.ListProviderProfilesResponse
+    - id: customer_enrichment.mapping.publish
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v2.EnrichmentConfigurationService.PublishMapping
+        request: crm.customer_enrichment.v2.PublishMappingRequest
+        response: crm.customer_enrichment.v2.PublishMappingResponse
+    - id: customer_enrichment.mapping.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v2.EnrichmentConfigurationService.GetMapping
+        request: crm.customer_enrichment.v2.GetMappingRequest
+        response: crm.customer_enrichment.v2.GetMappingResponse
+    - id: customer_enrichment.mapping.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_enrichment.v2.EnrichmentConfigurationService.ListMappings
+        request: crm.customer_enrichment.v2.ListMappingsRequest
+        response: crm.customer_enrichment.v2.ListMappingsResponse
   events:
     - id: customer_enrichment.provider_profile.published
       version: 1.0.0

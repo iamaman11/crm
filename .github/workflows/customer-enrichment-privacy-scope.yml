@@ -38,6 +38,8 @@ on:
       - "database/tests/0019_customer_enrichment_consent_policy.sql"
       - ".github/workflows/customer-enrichment-privacy-scope.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

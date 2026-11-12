@@ -1,1635 +1,1430 @@
-// Exact native workerd Access RS256 proof, isolated D1 and signed CI-only JWTs.
+// Full generated binary Connect contract and actual React against signed workerd/D1.
 import {spawn,execFileSync} from "node:child_process";
-import {generateKeyPairSync,createSign,createHash,randomUUID} from "node:crypto";
-import {mkdtempSync,rmSync} from "node:fs";
+import {generateKeyPairSync,createSign,randomUUID,createHash} from "node:crypto";
+import {mkdtempSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
-import { chromium } from "playwright";
-import { mkdirSync, writeFileSync } from "node:fs";
+import {typedBrowser} from "./typed-browser.mjs";
+import {binaryPartyV3,decodePartyV3,partyV3Path,
+  binaryAccountV2,decodeAccountV2,accountV2Path,
+  binaryContactV2,decodeContactV2,contactV2Path,
+  binaryRelationshipV2,decodeRelationshipV2,relationshipV2Path,
+  binaryTaskV2,decodeTaskV2,taskV2Path,
+  binaryQualityV2,decodeQualityV2,qualityV2Path,
+  binaryIdentityV2,decodeIdentityV2,identityV2Path,
+  binaryConsentV2,decodeConsentV2,consentV2Path,
+  binarySalesV2,decodeSalesV2,salesV2Path,
+  binaryPrivacyV2,decodePrivacyV2,privacyV2Path,
+  binaryEnrichmentV2,decodeEnrichmentV2,enrichmentV2Path,
+  binaryCsvV2,decodeCsvV2,csvV2Path,
+  binaryOverviewV2,decodeOverviewV2,overviewV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
-const data=mkdtempSync(join(tmpdir(),"crm-native-jwt-"));
-const origin="http://127.0.0.1:18789";
-const run=args=>execFileSync("npx",["wrangler",...args],{cwd,encoding:"utf8"});
-// Read the SAME isolated Wrangler D1 used by workerd. Never infer committed
-// audit events from HTTP status, source inspection or a mock repository.
-const d1Rows=(sql)=>{
-  const output=JSON.parse(run(["d1","execute","crm-rust-party-local",
-    "--local","--command",sql,"--persist-to",data,"--json"]));
-  assert.equal(output.length,1,"one D1 SQL statement expected");
-  assert.equal(output[0].success,true,"physical D1 read must succeed");
-  return output[0].results;
+const data=mkdtempSync(join(tmpdir(),"crm-native-connect-"));
+const base="http://127.0.0.1:18789";
+const successfulCalls=new Set();
+const rpcFetch=async(path,options)=>{
+ const response=await globalThis.fetch(base+path,options);
+ if(path.startsWith("/crm.")&&response.ok)successfulCalls.add(path);
+ return response;
 };
+const sourceSha=execFileSync("git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
+assert.equal(process.env.CRM_SOURCE_SHA,sourceSha,"runtime evidence must identify tested checkout");
+assert.ok(process.env.CRM_RPC_RUNTIME_PROOF,"CI runtime output path required");
+const run=(args)=>execFileSync("npx",["wrangler",...args],{cwd,encoding:"utf8"});
 const {privateKey,publicKey}=generateKeyPairSync("rsa",{modulusLength:2048});
 const kid="local-signed-rsa-fixture";
 const jwks=JSON.stringify({keys:[{...publicKey.export({format:"jwk"}),kid,alg:"RS256",use:"sig"}]});
 const iss="https://royal-limit-ea43.cloudflareaccess.com";
 const aud="e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
 const now=Math.floor(Date.now()/1000);
-const jwt=(claims={},header={})=>{
-  const parts=[{alg:"RS256",kid,typ:"JWT",...header},
-    {iss,aud,exp:now+3600,iat:now-10,sub:"native-test-a",email:"native-a@example.test",...claims}]
-    .map(x=>Buffer.from(JSON.stringify(x)).toString("base64url"));
-  const input=parts.join(".");
-  return input+"."+createSign("RSA-SHA256").update(input).end().sign(privateKey).toString("base64url");
-};
-const call=async(path,token,init={})=>{
-  const response=await fetch(origin+path,{...init,headers:{
-    ...(token?{"cf-access-jwt-assertion":token}:{}),...(init.headers||{})}});
-  return {status:response.status,headers:Object.fromEntries(response.headers),body:await response.json()};
-};
+function jwt(email){
+ const parts=[{alg:"RS256",kid,typ:"JWT"},{
+   iss,aud,exp:now+3600,iat:now-10,sub:email,email
+ }].map(x=>Buffer.from(JSON.stringify(x)).toString("base64url"));
+ const raw=parts.join(".");
+ return raw+"."+createSign("RSA-SHA256").update(raw).end().sign(privateKey).toString("base64url");
+}
 let child;
 try{
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","./migrations/0001_local.sql","--persist-to",data]);
-  const sql="CREATE TABLE crm_tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL);"+
-    "INSERT INTO crm_tenants VALUES('tenant-a','A'),('tenant-b','B');"+
-    "CREATE TABLE crm_users (email TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'admin', active INTEGER NOT NULL DEFAULT 1);"+
-    "CREATE TABLE crm_customers (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL, updated_at TEXT NOT NULL);"+
-    "CREATE TABLE crm_contacts (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, customer_id TEXT NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT NOT NULL, updated_at TEXT NOT NULL);"+
-    "CREATE TABLE crm_deals (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, customer_id TEXT NOT NULL, title TEXT NOT NULL, stage TEXT NOT NULL, amount REAL NOT NULL, updated_at TEXT NOT NULL);"+
-    "CREATE TABLE crm_tasks (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, customer_id TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, due_date TEXT NOT NULL, updated_at TEXT NOT NULL);"+
-    "CREATE TABLE crm_audit (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, action TEXT NOT NULL, subject_id TEXT NOT NULL, created_at TEXT NOT NULL, request_id TEXT);"+
-    "INSERT INTO crm_users VALUES('native-a@example.test','tenant-a','admin',1);"+
-    "INSERT INTO crm_users VALUES('native-b@example.test','tenant-b','admin',1);"+
-    "INSERT INTO crm_users VALUES('native-viewer@example.test','tenant-a','viewer',1);"+
-    "INSERT INTO crm_users VALUES('service:ci-native-b-0001.access','tenant-b','admin',1);";
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--command",sql,"--persist-to",data]);
-  // Exactly the production original Account migration against isolated D1;
-  // no duplicate CI SQL rules, no second datastore.
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0004_original_customer_accounts.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0005_original_contact_points.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0006_original_party_relationships.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0007_original_activity_tasks.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0008_original_sales_deals.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0009_original_consents.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0010_original_sales_activities_link.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0011_original_customer_privacy_intake.sql","--persist-to",data]);
-  run(["d1","execute","crm-rust-party-local","--local",
-    "--file","../migrations/0012_original_customer_enrichment_definitions.sql","--persist-to",data]);
-  child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
-    "--var","CRM_CI_LOCAL_ONLY:yes","--var","CRM_NATIVE_CI_JWKS:"+jwks],
-    {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
-  let stderr="";
-  child.stderr.on("data",b=>{stderr=(stderr+b.toString()).slice(-4000);});
-  let ready=false;
-  for(let i=0;i<100;i++){
-    if(child.exitCode!==null)throw Error("native workerd exited "+stderr);
-    try{if((await fetch(origin+"/api/parties")).status===401){ready=true;break;}}catch{}
-    await new Promise(resolve=>setTimeout(resolve,250));
-  }
-  assert.ok(ready,"native workerd not ready: "+stderr);
-  assert.equal((await call("/api/parties",null)).status,401);
-  assert.equal((await call("/api/parties","broken")).status,401);
-  assert.equal((await call("/api/parties",jwt({exp:now-1}))).status,401);
-  assert.equal((await call("/api/parties",jwt({iss:"https://fake.example"}))).status,401);
-  assert.equal((await call("/api/parties",jwt({aud:"wrong"}))).status,401);
-  assert.equal((await call("/api/parties",jwt({}, {alg:"HS256"}))).status,401);
-  assert.equal((await call("/api/parties",jwt({}, {kid:"missing"}))).status,401);
-  assert.equal((await call("/api/parties",jwt({email:"not-enrolled@example.test"}))).status,200,
-    "verified first entry creates tenant through native Rust");
-  const a=jwt(),b=jwt({email:"native-b@example.test",sub:"native-test-b"});
-  const viewer=jwt({email:"native-viewer@example.test",sub:"native-test-viewer"});
-  // Real Cloudflare Access service-token JWT has sub:"" and a signed
-  // common_name. It must map to service:<client-id>, NOT to an email.
-  const serviceB=jwt({sub:"",email:"",common_name:"ci-native-b-0001.access"});
-  assert.equal((await call("/api/parties",serviceB)).status,200,
-    "signed Access service JWT with empty sub accepted");
-  assert.equal((await call("/api/parties",jwt({sub:"",email:"native-a@example.test"}))).status,401,
-    "empty sub with only human email denied");
-  assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"invalid"}))).status,401,
-    "empty sub requires valid signed service common_name");
-  assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"unknown-service.access"}))).status,200,
-    "signed new service token receives isolated native tenant");
-  assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"ci-native-b-0001.access",aud:"wrong"}))).status,401,
-    "service token still requires application audience");
-  assert.equal((await call("/api/parties",jwt({sub:"",email:"",common_name:"ci-native-b-0001.access"},{kid:"wrong"}))).status,401,
-    "service token still requires trusted signing key");
-  assert.equal((await call("/api/parties",jwt({sub:"",email:"native-a@example.test",common_name:"ci-native-b-0001.access"}))).status,200,
-    "service identity is selected from signed common_name even with an email field");
+ run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
+ run(["d1","execute","crm-rust-party-local","--local","--persist-to",data,
+   "--command","INSERT INTO crm_tenants VALUES('tenant-a','A'),('tenant-b','B');"+
+   "INSERT INTO crm_users(email,tenant_id,role,active) VALUES"+
+   "('native-a@example.test','tenant-a','admin',1),"+
+   "('native-viewer@example.test','tenant-a','viewer',1),"+
+   "('native-b@example.test','tenant-b','admin',1);"]);
+ // This is a fixture row created in isolated D1 before the Worker starts,
+ // not a second implementation of CRM's Party persistence.
+ const state=JSON.stringify({party_id:"binary-rpc-proof-01",kind:"organization",
+   display_name:"Original Rust Party",created_at_unix_nanos:10,
+   updated_at_unix_nanos:10,version:1});
+ run(["d1","execute","crm-rust-party-local","--local","--persist-to",data,
+   "--command","INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id) "+
+     "VALUES('tenant-a','binary-rpc-proof-01','"+state.replaceAll("'","''")+
+     "',1,'fixture-key-01','fixture-digest-01',NULL);"]);
+ // Wrangler's applied-migration ledger must prevent a second reset.
+ run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
+ child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
+  "--var","CRM_NATIVE_CI_JWKS:"+jwks,"--var","GIT_SHA:"+sourceSha],
+  {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
+ let stderr="";
+ child.stderr.on("data",b=>stderr=(stderr+b.toString()).slice(-2500));
+ let ready=false;
+ for(let i=0;i<120;i++){
+   if(child.exitCode!==null)throw Error("native-ci exited "+stderr);
+   try{if((await rpcFetch("/api/parties")).status===401){ready=true;break;}}catch{}
+   await new Promise(resolve=>setTimeout(resolve,250));
+ }
+ assert(ready,"native-ci not ready: "+stderr);
+ async function call(path,token,method="GET"){
+   const response=await rpcFetch(path,{method,
+     headers:{...(token?{"cf-access-jwt-assertion":token}:{}),"content-type":"application/json"},
+     ...(method==="POST"?{body:"{}"}:{})});
+   return {status:response.status,body:await response.json()};
+ }
+ assert.equal((await call("/api/parties",null)).status,401);
+ const admin=jwt("native-a@example.test"),viewer=jwt("native-viewer@example.test");
+ const version=await rpcFetch("/api/version",{headers:{"cf-access-jwt-assertion":admin}});
+ assert.equal(version.status,200);
+ assert.equal(version.headers.get("x-crm-source-sha"),sourceSha,"Worker must receive the tested checkout SHA");
+ assert.equal((await version.json()).source,sourceSha);
+ const compiled=await call("/api/_ci/original-domain-check",admin);
+ assert.equal(compiled.status,200,JSON.stringify(compiled.body));
+ assert.equal(compiled.body.result,"PASS");
+ const rpc=compiled.body.rpc;
+ assert.equal(rpc.compiled_policy_check,true);
+ assert.ok(rpc.registered_methods.length>0);
+ assert.equal(new Set(rpc.registered_methods).size,rpc.registered_methods.length);
+ assert.equal(new Map(rpc.policies).size,rpc.policies.length,"duplicate compiled policy");
+ assert.deepEqual(rpc.policies.map(([path])=>path).sort(),[...rpc.registered_methods].sort());
+ const unauthenticatedDenials=[],viewerDenials=[];
+ for(const [path,rule] of rpc.policies){
+   const unauthenticated=await rpcFetch(path,{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1"},
+     body:new Uint8Array()});
+   assert.equal(unauthenticated.status,401,"missing identity must deny "+path);
+   assert.equal((await unauthenticated.json()).code,"unauthenticated",path);
+   unauthenticatedDenials.push(path);
+   if(rule.permission==="Write"||rule.permission==="AdminRead"){
+     const denied=await rpcFetch(path,{method:"POST",
+       headers:{"content-type":"application/proto","connect-protocol-version":"1",
+         "cf-access-jwt-assertion":viewer},body:new Uint8Array()});
+     assert.equal(denied.status,403,"viewer must not access admin RPC "+path);
+     assert.equal((await denied.json()).code,"permission_denied",path);
+     viewerDenials.push(path);
+   }
+ }
 
-  const parts=a.split(".");
-  parts[1]=Buffer.from(JSON.stringify({iss,aud,exp:now+3600,sub:"forged",email:"native-b@example.test"})).toString("base64url");
-  assert.equal((await call("/api/parties",parts.join("."))).status,401,
-    "modified claims must fail signature");
-  assert.equal((await call("/api/parties",a)).status,200,"signed A accepted");
-  assert.equal((await call("/api/parties",viewer)).status,200,
-    "verified read-only principal can query records in its tenant");
-  const viewerCreate=await call("/api/parties",viewer,{method:"POST",headers:{
-    "content-type":"application/json","idempotency-key":"viewer-create-must-deny"},
-    body:JSON.stringify({id:"viewer-must-not-create",kind:"person",name:"Denied"})});
-  assert.equal(viewerCreate.status,403,"a non-admin cannot mutate original Parties");
-  assert.equal(viewerCreate.body.code,"FORBIDDEN");
-  assert.match(viewerCreate.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
-  const correlation=await call("/api/parties",a);
-  assert.match(correlation.headers["x-request-id"]||"",/^[0-9a-f-]{36}$/i);
-  assert.equal(correlation.headers["x-crm-module"],"crm.parties");
-  const forbidden=await call("/api/parties",null);
-  assert.match(forbidden.headers["x-request-id"]||"",/^[0-9a-f-]{36}$/i);
-  assert.equal(forbidden.headers["x-crm-error-code"],"AUTH_REQUIRED");
-  assert.equal((await call("/api/parties",b)).status,200,"signed B accepted");
-  // Execute original Account, ContactPoint, Sales and Activities domain code
-  // INSIDE this same native workerd, after the signed Access identity boundary.
-  assert.equal((await call("/api/_ci/original-domain-check",null)).status,401,
-    "CI-only owner probe is not accessible without verified Access");
-  const ownerProof=await call("/api/_ci/original-domain-check",a);
-  assert.equal(ownerProof.status,200,JSON.stringify(ownerProof));
-  assert.equal(ownerProof.body.result,"PASS");
-  assert.equal(ownerProof.body.code,0);
-  assert.equal(ownerProof.body.owners_executed.length,4);
-  assert.equal(ownerProof.body.d1_owner_persistence,"NOT_TESTED");
-  assert.equal((await call("/api/_ci/original-domain-check",b)).status,200,
-    "CI-only in-memory proof is tenant-independent but still Access-gated");
-  console.log(JSON.stringify({event:"crm.native-original-owners-workerd",result:"PASS",
-    owners_executed:ownerProof.body.owners_executed,
-    cloudflare_live_d1:"NOT_TESTED",remaining_owners:"NOT_TESTED"}));
-  const id="native-jwt-"+randomUUID();
-  const created=await call("/api/parties",a,{method:"POST",headers:{
-    "content-type":"application/json","idempotency-key":"native-signed-create",
-    "x-crm-native-tenant":"tenant-b","x-crm-ci-tenant":"tenant-b"},
-    body:JSON.stringify({id,kind:"organization",name:"  Original  Native  Rust  "})});
-  assert.equal(created.status,201,JSON.stringify(created));
-  assert.equal(created.body.item.name,"Original Native Rust");
-  assert.equal((await call("/api/parties/"+id,a)).status,200);
-  // Generated v2 Connect -> same original Rust Party aggregate -> one D1.
-  const partyV2RpcPath="/crm.parties.v2.PartyService/GetParty";
-  const partyV2RpcGet=(token,partyId)=>call(partyV2RpcPath,token,{method:"POST",
-    headers:{"content-type":"application/json"},
-    body:JSON.stringify({partyId})});
-  const partyV2RpcResult=await partyV2RpcGet(a,id);
-  assert.equal(partyV2RpcResult.status,200,JSON.stringify(partyV2RpcResult));
-  assert.equal(partyV2RpcResult.headers["x-crm-module"],"crm.parties");
-  assert.equal(partyV2RpcResult.body.party.partyId,id);
-  assert.equal(partyV2RpcResult.body.party.kind,"PARTY_KIND_ORGANIZATION");
-  assert.equal(partyV2RpcResult.body.party.displayName,"Original Native Rust");
-  assert.equal(partyV2RpcResult.body.party.version,"1");
-  assert.equal((await partyV2RpcGet(viewer,id)).status,200);
-  assert.equal((await partyV2RpcGet(b,id)).status,404,"cross-tenant data must be invisible");
-  assert.equal((await partyV2RpcGet(a,"nonexistent-party")).status,404);
-  assert.equal((await partyV2RpcGet(a,"invalid/party")).status,400);
-  assert.equal((await partyV2RpcGet(null,id)).status,401);
-  assert.equal((await call(partyV2RpcPath,a)).status,404);
-  console.log(JSON.stringify({event:"crm.native-parties-v2-connect",
-    result:"PASS",access:true,tenant_scope:true,owner:"crm.parties"}));
+ for(const path of ["/api/parties","/api/accounts"]){
+   assert.equal((await call(path,admin)).status,404,path);
+ }
+ for(const path of ["/crm.parties.v2.PartyService/GetParty",
+     "/crm.sales.v1.DealService/GetDeal","/crm.sales.v2.DealService/NotRegistered",
+     "/crm.future.v9.FutureService/NotRegistered"]){
+   const denied=await call(path,admin,"POST");
+   assert.equal(denied.status,501,path);
+   assert.equal(denied.body.code,"unimplemented");
+ }
+ const tenantB=jwt("native-b@example.test");
+ const describeProtobuf=value=>JSON.stringify(value,
+   (_key,item)=>typeof item==="bigint"?item.toString():item);
+ const v3=async(method,token,payload)=>{
+   const response=await rpcFetch(partyV3Path(method),{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+       ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:binaryPartyV3(method,payload)});
+   return {status:response.status,headers:response.headers,
+     body:response.status<400
+       ?decodePartyV3(method,new Uint8Array(await response.arrayBuffer()))
+       :await response.json()};
+ };
+ // A real binary Connect paginated scan: every nonfinal cursor must carry a
+ // matching record. A filtered empty page with a cursor is a data-loss bug.
+ const collectPages=async(rpc,method,field,filter={})=>{
+   let token="",items=[];
+   const cursors=new Set();
+   for(let attempt=0;attempt<16;attempt++){
+     const result=await rpc(method,viewer,{...filter,page:{pageSize:1,pageToken:token}});
+     assert.equal(result.status,200,describeProtobuf(result.body));
+     const found=result.body[field]??[];
+     assert.ok(found.length<=1,"page_size=1 must bound the filtered result");
+     const next=result.body.pageInfo?.nextPageToken??"";
+     if(next){
+       assert.equal(found.length,1,"filtered cursor skipped a matching row");
+       assert(!cursors.has(next),"cursor cycle in filtered pagination");
+       cursors.add(next);
+     }
+     items.push(...found);
+     if(!next)return items;
+     token=next;
+   }
+   throw Error("filtered pagination never reached its last page");
+ };
+ const id="native-v3-"+randomUUID();
+ const creation={partyId:id,kind:2,displayName:"  Connect   Native  Rust ",
+   precondition:{idempotencyKey:"candidate-v3-create-001"}};
+ assert.equal((await v3("CreateParty",null,creation)).status,401);
+ assert.equal((await v3("CreateParty",viewer,creation)).status,403);
+ assert.equal((await v3("CreateParty",admin,{...creation,kind:0,
+   precondition:{idempotencyKey:"candidate-v3-invalid-kind"}})).status,400);
+ assert.equal((await v3("CreateParty",admin,{...creation,
+   precondition:{idempotencyKey:"candidate-v3-invalid-pre",
+     expectedVersion:1n}})).status,400);
+ const created=await v3("CreateParty",admin,creation);
+ assert.equal(created.status,200,describeProtobuf(created.body));
+ assert.equal(created.body.party?.partyId,id);
+ assert.equal(created.body.party?.displayName,"Connect Native Rust");
+ assert.equal(created.body.receipt?.resourceVersion,1n);
+ assert.equal(created.body.receipt?.replayed,false);
+ assert.equal(created.body.receipt?.requestId,created.headers.get("x-request-id"));
+ const replay=await v3("CreateParty",admin,creation);
+ assert.equal(replay.status,200);
+ assert.equal(replay.body.receipt?.replayed,true);
+ assert.equal((await v3("CreateParty",admin,{...creation,
+   displayName:"different replay"})).status,409);
+ assert.equal((await v3("GetParty",tenantB,{partyId:id})).status,404);
+ const read=await v3("GetParty",viewer,{partyId:id});
+ assert.equal(read.status,200);
+ assert.equal(read.body.party?.displayName,"Connect Native Rust");
+ const listing=await v3("ListParties",viewer,{page:{pageSize:1}});
+ assert.equal(listing.status,200,describeProtobuf(listing.body));
+ assert.equal(listing.body.parties.length,1);
+ assert.ok(listing.body.pageInfo?.nextPageToken);
+ assert.equal((await v3("ListParties",viewer,{page:{pageSize:101}})).status,400);
+ const updatedInput={partyId:id,displayName:"Updated via native v3",
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-v3-update-001"}};
+ assert.equal((await v3("UpdateParty",viewer,updatedInput)).status,403);
+ const updated=await v3("UpdateParty",admin,updatedInput);
+ assert.equal(updated.status,200,describeProtobuf(updated.body));
+ assert.equal(updated.body.party?.version,2n);
+ assert.equal(updated.body.party?.displayName,"Updated via native v3");
+ assert.equal(updated.body.receipt?.resourceVersion,2n);
+ assert.equal(updated.body.receipt?.replayed,false);
+ const again=await v3("UpdateParty",admin,updatedInput);
+ assert.equal(again.status,200);
+ assert.equal(again.body.receipt?.replayed,true);
+ assert.equal((await v3("UpdateParty",admin,{...updatedInput,
+   precondition:{expectedVersion:1n,
+      idempotencyKey:"candidate-v3-stale-version"}})).status,409);
+ const sql=(query)=>JSON.parse(run(["d1","execute","crm-rust-party-local","--local",
+   "--persist-to",data,"--json","--command",query]))[0].results;
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE id='binary-rpc-proof-01'")[0].n,1,
+   "Repeated migrations apply must preserve existing business data");
+ assert.equal(sql("SELECT COUNT(*) AS n FROM d1_migrations WHERE name='0002_hard_cutover.sql'")[0].n,1);
+ assert.equal(sql("SELECT version FROM crm_party_records WHERE id='"+id+"'")[0].version,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_receipts WHERE tenant='tenant-a' "+
+   "AND key IN ('candidate-v3-create-001','candidate-v3-update-001')")[0].n,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+id+"'")[0].n,2);
+ assert.equal((await v3("GetParty",admin,{partyId:id})).body.party?.version,2n);
 
-  // Original Customer Privacy: only intake lifecycle, no subject verification.
-  const privacyPath="/api/customer-privacy/cases";
-  const privacyId="native-privacy-"+randomUUID();
-  const privacyInput={id:privacyId,kind:"erasure"};
-  assert.equal((await call(privacyPath,null)).status,401);
-  assert.equal((await call(privacyPath,viewer)).status,200);
-  assert.equal((await call(privacyPath,viewer,{method:"POST",
-    headers:{"content-type":"application/json","idempotency-key":"viewer-privacy-denied"},
-    body:JSON.stringify(privacyInput)})).status,403);
-  const privacyCreate=await call(privacyPath,a,{method:"POST",
-    headers:{"content-type":"application/json","idempotency-key":"native-privacy-create"},
-    body:JSON.stringify(privacyInput)});
-  assert.equal(privacyCreate.status,201,JSON.stringify(privacyCreate));
-  assert.equal(privacyCreate.headers["x-crm-module"],"crm.customer-privacy");
-  assert.equal(privacyCreate.body.item.status,"draft");
-  assert.equal(privacyCreate.body.item.subject_verified,false);
-  assert.equal(privacyCreate.body.item.execution,"NOT_CONNECTED");
-  assert.equal((await call(privacyPath+"/"+privacyId,b)).status,404);
-  assert.equal((await call(privacyPath+"/"+privacyId,a)).body.item.status,"draft");
-  const replayPrivacy=await call(privacyPath,a,{method:"POST",
-    headers:{"content-type":"application/json","idempotency-key":"native-privacy-create"},
-    body:JSON.stringify(privacyInput)});
-  assert.equal(replayPrivacy.status,200);
-  assert.equal(replayPrivacy.body.replayed,true);
-  assert.equal((await call(privacyPath+"/"+privacyId+"/submit",a,{method:"POST",
-    headers:{"content-type":"application/json","idempotency-key":"native-privacy-stale"},
-    body:JSON.stringify({expected_version:50})})).status,409);
-  const privacySubmit=await call(privacyPath+"/"+privacyId+"/submit",a,{
-    method:"POST",headers:{"content-type":"application/json",
-      "idempotency-key":"native-privacy-submit"},
-    body:JSON.stringify({expected_version:1})});
-  assert.equal(privacySubmit.status,200,JSON.stringify(privacySubmit));
-  assert.equal(privacySubmit.body.item.status,"submitted");
-  assert.equal(privacySubmit.body.item.subject_verified,false);
-  assert.equal((await call(privacyPath+"/"+privacyId+"/submit",a,{
-    method:"POST",headers:{"content-type":"application/json",
-      "idempotency-key":"native-privacy-double-submit"},
-    body:JSON.stringify({expected_version:2})})).status,409);
-  const privacyCancel=await call(privacyPath+"/"+privacyId+"/cancel",a,{
-    method:"POST",headers:{"content-type":"application/json",
-      "idempotency-key":"native-privacy-cancel"},
-    body:JSON.stringify({expected_version:2})});
-  assert.equal(privacyCancel.status,200,JSON.stringify(privacyCancel));
-  assert.equal(privacyCancel.body.item.status,"cancelled");
-  assert.equal((await call(privacyPath+"/"+privacyId,a)).body.item.version,3);
-  assert.equal((await call(privacyPath,b)).body.items.some(x=>x.id===privacyId),false);
-  const audit=d1Rows("SELECT action FROM crm_audit WHERE subject_id='"+privacyId+"'");
-  assert.deepEqual(audit.map(x=>x.action).sort(),
-    ["customer_privacy.cancel","customer_privacy.create","customer_privacy.submit"]);
-  console.log(JSON.stringify({event:"crm.original-privacy-case-intake",
-    result:"PASS",mutations:3,identity_verified:false,execution:false}));
-  // Original immutable Enrichment definitions: source-owned Rust publication,
-  // canonical strict persisted state and tenant-scoped D1, not provider execution.
-  const ep="/api/customer-enrichment/profiles",em="/api/customer-enrichment/mappings";
-  const edata={provider_key:"ci-native-provider",adapter_kind:"manual",
-    adapter_contract_version:"1.0.0",purpose_codes:["research"],
-    license_id:"synthetic test license not a provider authorization",
-    permitted_use_class:"test",residency_region:"eu",retention_days:0,
-    raw_payload_policy:"digest_only",credential_handle_aliases:[],
-    effective_at_unix_ms:0,expires_at_unix_ms:null};
-  const eh={"content-type":"application/json","idempotency-key":"native-enrich-profile-v1"};
-  assert.equal((await call(ep,null)).status,401);
-  assert.equal((await call(ep,viewer)).status,200);
-  assert.equal((await call(ep,viewer,{method:"POST",headers:eh,
-    body:JSON.stringify(edata)})).status,403);
-  const epublished=await call(ep,a,{method:"POST",headers:eh,body:JSON.stringify(edata)});
-  assert.equal(epublished.status,201,JSON.stringify(epublished));
-  assert.equal(epublished.headers["x-crm-module"],"crm.customer-enrichment");
-  const eid=epublished.body.item.id;
-  assert.match(eid,/^enrichment-provider-profile-[a-f0-9]{64}$/);
-  assert.equal(epublished.body.item.execution,"NOT_CONNECTED");
-  assert.deepEqual(epublished.body.item.supported_target_fields,["party_display_name"]);
-  assert.equal((await call(ep+"/"+eid,b)).status,404);
-  assert.equal((await call(ep+"/"+eid,a)).body.item.provider_key,edata.provider_key);
-  assert.equal((await call(ep,a,{method:"POST",headers:eh,body:JSON.stringify(edata)}))
-    .body.replayed,true);
-  assert.equal((await call(ep,a,{method:"POST",headers:eh,
-    body:JSON.stringify({...edata,residency_region:"us"})})).status,409);
-  assert.equal((await call(ep,a,{method:"POST",headers:{"content-type":"application/json",
-    "idempotency-key":"native-enrich-invalid-profile"},
-    body:JSON.stringify({...edata,purpose_codes:[]})})).status,422);
-  assert.equal((await call(ep,b)).body.items.some(x=>x.id===eid),false);
-  const mappingData={mapping_key:"ci-native-name-mapping",
-    provider_profile_version_id:eid,provider_response_field_path:"company.name",
-    maximum_suggestions_per_response:1,confidence_required:true};
-  const mh={"content-type":"application/json","idempotency-key":"native-enrich-mapping-v1"};
-  const mpublished=await call(em,a,{method:"POST",headers:mh,
-    body:JSON.stringify(mappingData)});
-  assert.equal(mpublished.status,201,JSON.stringify(mpublished));
-  const mid=mpublished.body.item.id;
-  assert.match(mid,/^enrichment-mapping-[a-f0-9]{64}$/);
-  assert.equal(mpublished.body.item.target_field,"party_display_name");
-  assert.equal(mpublished.body.item.execution,"NOT_CONNECTED");
-  assert.equal((await call(em+"/"+mid,a)).body.item.provider_profile_version_id,eid);
-  assert.equal((await call(em+"/"+mid,b)).status,404);
-  assert.equal((await call(em,b)).body.items.some(x=>x.id===mid),false);
-  assert.equal((await call(em,a,{method:"POST",headers:mh,
-    body:JSON.stringify(mappingData)})).body.replayed,true);
-  assert.equal((await call(em,viewer,{method:"POST",headers:mh,
-    body:JSON.stringify(mappingData)})).status,403);
-  assert.equal((await call(em,a,{method:"POST",
-    headers:{"content-type":"application/json","idempotency-key":"native-enrich-missing"},
-    body:JSON.stringify({...mappingData,provider_profile_version_id:"foreign"})})).status,404);
-  assert.equal((await call(em,a,{method:"POST",
-    headers:{"content-type":"application/json","idempotency-key":"native-enrich-invalid"},
-    body:JSON.stringify({...mappingData,provider_response_field_path:"bad path"})})).status,422);
-  assert.equal((await call(em,a,{method:"POST",
-    headers:{"content-type":"application/json","idempotency-key":"native-enrich-too-many"},
-    body:JSON.stringify({...mappingData,maximum_suggestions_per_response:33})})).status,422);
-  const eAudit=d1Rows("SELECT action,subject_id FROM crm_audit WHERE subject_id IN ('"+
-    eid+"','"+mid+"') ORDER BY action");
-  assert.deepEqual(eAudit.map(x=>x.action),
-    ["customer_enrichment.mapping_publish","customer_enrichment.profile_publish"]);
-  assert.equal(d1Rows("SELECT COUNT(*) AS count FROM crm_enrichment_receipts")[0].count,2);
-  console.log(JSON.stringify({event:"crm.original-enrichment-definitions",
-    result:"PASS",provider_calls:false,party_writes:false,
-    tested:["original-domain-publication","strict-codecs","D1-receipts-audit",
-      "tenant A/B","viewer","replay","invalid-input"]}));
-  // Full bounded original Rust Party CSV export via the existing D1.
-  // Not a persisted export job; no private Party names may escape tenant A.
-  const previewPath="/api/customer-data-operations/preview?kind=all";
-  const exportPath="/api/customer-data-operations/parties.csv?kind=all";
-  assert.equal((await call(previewPath,null)).status,401);
-  assert.equal((await call(previewPath,viewer)).status,403,
-    "bulk data export requires admin, even though it is HTTP GET");
-  assert.equal((await call(exportPath,viewer)).status,403);
-  const pre=await call(previewPath,a);
-  assert.equal(pre.status,200,JSON.stringify(pre));
-  assert.equal(pre.headers["x-crm-module"],"crm.customer-data-operations");
-  assert.equal(pre.body.count,1);
-  assert.equal(pre.body.import,"BOUNDED_CREATE_ONLY");
-  assert.equal(pre.body.persisted_export_job,"NOT_CONNECTED");
-  assert.equal(pre.body.fields.join(","),"party_id,kind,display_name,resource_version");
-  assert.match(pre.body.csv_sha256,/^[a-f0-9]{64}$/);
-  const fileResponse=await fetch(origin+exportPath,{headers:{
-    "cf-access-jwt-assertion":a
-  }});
-  assert.equal(fileResponse.status,200);
-  assert.match(fileResponse.headers.get("content-type"),/^text\/csv/);
-  assert.match(fileResponse.headers.get("content-disposition"),/attachment/);
-  assert.equal(fileResponse.headers.get("cache-control"),"private, no-store");
-  const fileBytes=Buffer.from(await fileResponse.arrayBuffer());
-  const exported=fileBytes.toString("utf8");
-  assert.equal(fileResponse.headers.get("x-crm-export-count"),"1");
-  assert.equal(createHash("sha256").update(fileBytes).digest("hex"),pre.body.csv_sha256);
-  assert.equal(fileResponse.headers.get("x-crm-export-sha256"),pre.body.csv_sha256);
-  assert.ok(exported.startsWith("party_id,kind,display_name,resource_version\n"));
-  assert.ok(exported.includes(id+",organization,Original Native Rust,1\n"));
-  assert.ok(!exported.includes("\r\n"));
-  const filtered=await call("/api/customer-data-operations/preview?kind=person",a);
-  assert.equal(filtered.status,200);
-  assert.equal(filtered.body.count,0);
-  assert.equal((await call("/api/customer-data-operations/preview?kind=bad",a)).status,422);
-  assert.equal((await call("/api/customer-data-operations/preview?kind=all&extra=1",a)).status,422);
-  assert.equal((await call(exportPath,a,{method:"POST"})).status,404);
-  const tenantBPreview=await call(previewPath,b);
-  assert.equal(tenantBPreview.status,200);
-  assert.equal(tenantBPreview.body.count,0);
-  assert.notEqual(tenantBPreview.body.csv_sha256,pre.body.csv_sha256);
-  const formulaId="native-formula-"+randomUUID();
-  const formulaCreate=await call("/api/parties",a,{method:"POST",
-    headers:{"content-type":"application/json","idempotency-key":"native-export-formula"},
-    body:JSON.stringify({id:formulaId,kind:"person",name:"=2+3"})});
-  assert.equal(formulaCreate.status,201,JSON.stringify(formulaCreate));
-  const formulaExport=await fetch(origin+exportPath,{headers:{"cf-access-jwt-assertion":a}});
-  assert.equal(formulaExport.status,200);
-  const formulaCsv=await formulaExport.text();
-  assert.ok(formulaCsv.includes(",'=2+3,"),
-    "original CSV canonicalization must neutralize spreadsheet formulas");
-  // Atomic CSV create-only import, original parser + Party owner + one D1.
-  const importRows="party_id,kind,display_name,resource_version\n"+
-    "native-import-"+randomUUID()+",person,CSV Imported Person,1\n";
-  const importHeaders={"content-type":"text/csv"};
-  const importPreview=await call("/api/customer-data-operations/import-preview",a,{
-    method:"POST",headers:importHeaders,body:importRows});
-  assert.equal(importPreview.status,200,JSON.stringify(importPreview));
-  assert.equal(importPreview.body.count,1);
-  assert.equal(importPreview.body.mode,"CREATE_ONLY");
-  assert.equal(importPreview.body.target_ids,"DERIVED_NOT_EXTERNAL");
-  assert.equal(importPreview.body.target_party_ids.length,1);
-  const sourceId=importRows.split("\n")[1].split(",")[0];
-  const targetId=importPreview.body.target_party_ids[0];
-  assert.notEqual(sourceId,targetId);
-  assert.equal((await call("/api/customer-data-operations/import-preview",viewer,{
-    method:"POST",headers:importHeaders,body:importRows})).status,403);
-  const importApply=await call("/api/customer-data-operations/import-apply",a,{
-    method:"POST",headers:{...importHeaders,
-      "x-crm-import-sha256":importPreview.body.file_sha256},body:importRows});
-  assert.equal(importApply.status,201,JSON.stringify(importApply));
-  assert.equal(importApply.body.created,1);
-  assert.deepEqual(importApply.body.target_party_ids,[targetId]);
-  assert.equal((await call("/api/parties/"+targetId,a)).status,200);
-  assert.equal((await call("/api/parties/"+sourceId,a)).status,404);
-  const importReplay=await call("/api/customer-data-operations/import-apply",a,{
-    method:"POST",headers:{...importHeaders,
-      "x-crm-import-sha256":importPreview.body.file_sha256},body:importRows});
-  assert.equal(importReplay.status,200,JSON.stringify(importReplay));
-  assert.equal(importReplay.body.replayed,1);
-  const replayPreview=await call("/api/customer-data-operations/import-preview",a,{
-    method:"POST",headers:importHeaders,body:importRows});
-  assert.equal(replayPreview.status,200);
-  assert.equal(replayPreview.body.previously_imported,1);
-  assert.equal((await call("/api/customer-data-operations/import-apply",b,{
-    method:"POST",headers:importHeaders,body:importRows})).status,409);
-  assert.equal((await call("/api/customer-data-operations/import-preview",a,{
-    method:"POST",headers:importHeaders,body:"party_id,kind,display_name,resource_version\nx,invalid,Name,1\n"})).status,422);
-  assert.equal((await call("/api/customer-data-operations/import-preview",a,{
-    method:"POST",headers:importHeaders,
-    body:"party_id,kind,display_name,resource_version\nx,person,Name,2\n"})).status,200);
-  console.log(JSON.stringify({event:"crm.native-original-party-csv-import",
-    result:"PASS",mode:"CREATE_ONLY",atomic:true,replay:true}));
-  console.log(JSON.stringify({event:"crm.native-original-party-csv-export",
-    result:"PASS",role:"admin",scope:"verified_tenant",csv_sha256:true,
-    spreadsheet_formula:"neutralized",cross_tenant:"PASS",read_only:true}));
-  // Original Data Quality: tenant-scoped read, immutable built-in rules,
-  // one actual Party state, no client-side or Worker scoring.
-  const qualityPath="/api/data-quality/parties/"+id+"/evaluate";
-  const quality=await call(qualityPath,a);
-  assert.equal(quality.status,200,JSON.stringify(quality));
-  assert.equal(quality.headers["x-crm-module"],"crm.data-quality");
-  assert.equal(quality.body.party.id,id);
-  assert.equal(quality.body.checked,2);
-  assert.equal(quality.body.failed,0);
-  assert.equal(quality.body.completeness_score,"NOT_COMPUTED");
-  assert.equal(quality.body.persisted_findings,"NOT_CONNECTED");
-  assert.equal(quality.body.checks.every(c=>c.passed),true);
-  assert.equal((await call(qualityPath,viewer)).status,200);
-  assert.equal((await call(qualityPath,b)).status,404);
-  assert.equal((await call(qualityPath,null)).status,401);
-  assert.equal((await call("/api/data-quality/parties/does-not-exist/evaluate",a)).status,404);
-  assert.equal((await call(qualityPath,a,{method:"POST"})).status,404);
-  const qualityShortId="native-quality-short-"+randomUUID();
-  const shortCreate=await call("/api/parties",a,{method:"POST",
-    headers:{"content-type":"application/json","idempotency-key":"native-quality-short"},
-    body:JSON.stringify({id:qualityShortId,kind:"person",name:"A"})});
-  assert.equal(shortCreate.status,201,JSON.stringify(shortCreate));
-  const shortResult=await call("/api/data-quality/parties/"+qualityShortId+"/evaluate",a);
-  assert.equal(shortResult.status,200);
-  assert.ok(shortResult.body.checks.some(c=>
-    !c.passed&&c.reason_code==="DATA_QUALITY_PARTY_DISPLAY_NAME_TOO_SHORT"));
-  const qualityPlaceholderId="native-quality-placeholder-"+randomUUID();
-  const placeholderCreate=await call("/api/parties",a,{method:"POST",
-    headers:{"content-type":"application/json","idempotency-key":"native-quality-placeholder"},
-    body:JSON.stringify({id:qualityPlaceholderId,kind:"person",name:"unknown"})});
-  assert.equal(placeholderCreate.status,201);
-  const placeholderResult=await call("/api/data-quality/parties/"+qualityPlaceholderId+"/evaluate",a);
-  assert.equal(placeholderResult.status,200);
-  assert.ok(placeholderResult.body.checks.some(c=>
-    !c.passed&&c.reason_code==="DATA_QUALITY_PARTY_DISPLAY_NAME_PLACEHOLDER"));
-  console.log(JSON.stringify({event:"crm.native-original-data-quality-party",
-    result:"PASS",read_only:true,checked:2,score:"NOT_COMPUTED",
-    tenant_isolation:"PASS",negative_rules:"PASS"}));
-  assert.equal((await call("/api/parties/"+id,b)).status,404,"B cannot read A");
-  assert.equal((await call("/api/parties/"+id,serviceB)).status,404,
-    "Cloudflare service token B cannot read Party belonging to human A");
-  assert.equal((await call("/api/parties/"+id,serviceB,{headers:{
-    "x-crm-native-tenant":"tenant-a","x-crm-ci-tenant":"tenant-a"}})).status,404,
-    "service-token identity cannot be overridden by forged tenant headers");
+ // Interleave nonmatching person rows between matching organizations.
+ // The old Rust post-LIMIT filter produced an empty middle page here.
+ const pagingPersonId="native-page-person-a-"+randomUUID();
+ for(const [index,personId] of [pagingPersonId,"native-page-person-b-"+randomUUID()].entries()){
+   const made=await v3("CreateParty",admin,{
+     partyId:personId,kind:1,displayName:"Paging Person "+index,
+     precondition:{idempotencyKey:"page-person-create-"+index}});
+   assert.equal(made.status,200,describeProtobuf(made.body));
+ }
+ const organizations=await collectPages(v3,"ListParties","parties",{kind:2});
+ assert.deepEqual(organizations.map(p=>p.partyId),["binary-rpc-proof-01",id]);
+ const personPages=await collectPages(v3,"ListParties","parties",{kind:1});
+ assert.equal(personPages.length,2);
+ assert.deepEqual(personPages.map(p=>p.partyId),
+   [...personPages.map(p=>p.partyId)].sort());
+ assert.ok(personPages.some(p=>p.partyId===pagingPersonId));
+ const beyondParty=await v3("ListParties",viewer,{kind:2,page:{pageSize:1,pageToken:id}});
+ assert.equal(beyondParty.status,200);
+ assert.equal(beyondParty.body.parties.length,0);
+ assert.ok(!beyondParty.body.pageInfo?.nextPageToken);
+ assert.equal((await v3("ListParties",tenantB,{kind:2,page:{pageSize:1}}))
+   .body.parties.length,0);
+ console.log(JSON.stringify({event:"crm.native-g3-party-filtered-pagination",result:"PASS"}));
+ // Accounts v2: original Account aggregate and D1 trigger, not a pilot record.
+ const accountV2=async(method,token,payload)=>{
+   const response=await rpcFetch(accountV2Path(method),{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+       ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:binaryAccountV2(method,payload)});
+   return {status:response.status,headers:response.headers,
+     body:response.status<400
+       ?decodeAccountV2(method,new Uint8Array(await response.arrayBuffer()))
+       :await response.json()};
+ };
+ const accountId="account-native-"+randomUUID();
+ const accountInput={accountId,name:"  Connected   Account  ",primaryPartyId:id,
+   precondition:{idempotencyKey:"candidate-v2-account-create-001"}};
+ assert.equal((await accountV2("CreateAccount",null,accountInput)).status,401);
+ assert.equal((await accountV2("CreateAccount",viewer,accountInput)).status,403);
+ assert.equal((await accountV2("CreateAccount",admin,{...accountInput,
+   precondition:{idempotencyKey:"candidate-v2-account-version",expectedVersion:1n}})).status,400);
+ assert.equal((await accountV2("CreateAccount",admin,{...accountInput,
+   primaryPartyId:"no-such-party",
+   precondition:{idempotencyKey:"candidate-v2-account-fk"}})).status,400);
+ const accountCreated=await accountV2("CreateAccount",admin,accountInput);
+ assert.equal(accountCreated.status,200,describeProtobuf(accountCreated.body));
+ assert.equal(accountCreated.body.account?.accountId,accountId);
+ assert.equal(accountCreated.body.account?.name,"Connected Account");
+ assert.equal(accountCreated.body.account?.parties?.[0]?.partyId,id);
+ assert.equal(accountCreated.body.account?.parties?.[0]?.role,1);
+ assert.equal(accountCreated.body.receipt?.resourceVersion,1n);
+ assert.equal(accountCreated.body.receipt?.replayed,false);
+ assert.equal(accountCreated.body.receipt?.requestId,accountCreated.headers.get("x-request-id"));
+ const accountReplay=await accountV2("CreateAccount",admin,accountInput);
+ assert.equal(accountReplay.status,200,describeProtobuf(accountReplay.body));
+ assert.equal(accountReplay.body.receipt?.replayed,true);
+ assert.equal((await accountV2("CreateAccount",admin,{...accountInput,
+   name:"different idempotent body"})).status,409);
+ assert.equal((await accountV2("GetAccount",tenantB,{accountId})).status,404);
+ assert.equal((await accountV2("GetAccount",viewer,{accountId})).body.account?.name,"Connected Account");
+ const accountList=await accountV2("ListAccounts",viewer,{page:{pageSize:1}});
+ assert.equal(accountList.status,200,describeProtobuf(accountList.body));
+ assert.equal(accountList.body.accounts.length,1);
+ assert.equal(accountList.body.accounts[0].accountId,accountId);
+ assert.equal((await accountV2("ListAccounts",viewer,{page:{pageSize:101}})).status,400);
+ const accountUpdate={accountId,name:"Updated Account",status:2,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-v2-account-update-001"}};
+ assert.equal((await accountV2("UpdateAccount",viewer,accountUpdate)).status,403);
+ assert.equal((await accountV2("UpdateAccount",admin,{...accountUpdate,status:0,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-v2-account-invalid"}})).status,400);
+ const accountUpdated=await accountV2("UpdateAccount",admin,accountUpdate);
+ assert.equal(accountUpdated.status,200,describeProtobuf(accountUpdated.body));
+ assert.equal(accountUpdated.body.account?.status,2);
+ assert.equal(accountUpdated.body.account?.version,2n);
+ assert.equal(accountUpdated.body.receipt?.replayed,false);
+ const accountReupdate=await accountV2("UpdateAccount",admin,accountUpdate);
+ assert.equal(accountReupdate.status,200,describeProtobuf(accountReupdate.body));
+ assert.equal(accountReupdate.body.receipt?.replayed,true);
+ assert.equal((await accountV2("UpdateAccount",admin,{...accountUpdate,
+   precondition:{expectedVersion:1n,
+     idempotencyKey:"candidate-v2-account-stale"}})).status,409);
+ assert.equal((await accountV2("ListAccounts",viewer,{page:{pageSize:1},status:1}))
+   .body.accounts.length,0);
+ assert.equal((await accountV2("ListAccounts",viewer,{page:{pageSize:1},status:2}))
+   .body.accounts.length,1);
+ assert.equal(sql("SELECT version FROM crm_account_records WHERE tenant='tenant-a' "+
+   "AND id='"+accountId+"'")[0].version,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_account_receipts WHERE tenant='tenant-a' "+
+   "AND key IN ('candidate-v2-account-create-001','candidate-v2-account-update-001')")[0].n,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+accountId+"' AND action LIKE 'accounts.%'")[0].n,2);
+ console.log(JSON.stringify({event:"crm.native-g3-account-v2",result:"PASS",
+   generated_binary:true,owner:"crm.customer-accounts",
+   rpc_methods:["CreateAccount","UpdateAccount","GetAccount","ListAccounts"],
+   signed_access:true,tenant_ab:true,viewer_write_denied:true,
+   d1_cas:true,d1_receipts:true,d1_audit:true,published_active:true}));
 
-  assert.equal((await call("/api/parties/"+id,b,{headers:{
-    "x-crm-native-tenant":"tenant-a","x-crm-ci-tenant":"tenant-a"}})).status,404);
 
-  // Original Account owner real D1 lifecycle. Separate from legacy pilot customer.
-  assert.equal((await call("/api/accounts",null)).status,401);
-  assert.deepEqual((await call("/api/accounts",b)).body.items,[]);
-  const accountId="native-account-"+randomUUID();
-  const accountData={id:accountId,name:"  Original    Account  ",party_id:id};
-  const accountHeaders={"content-type":"application/json","idempotency-key":"signed-account-create"};
-  const missing=await call("/api/accounts",b,{method:"POST",headers:accountHeaders,
-    body:JSON.stringify(accountData)});
-  assert.equal(missing.status,422,"cross-tenant Party reference must fail");
-  assert.equal(missing.body.code,"CUSTOMER_ACCOUNTS_PARTY_NOT_FOUND");
-  const accountExtra=await call("/api/accounts",a,{method:"POST",headers:{
-    ...accountHeaders,"idempotency-key":"account-unknown-field"},
-    body:JSON.stringify({...accountData,legacy_customer_id:"spoof"})});
-  assert.equal(accountExtra.status,422,"Account rejects old pilot fields, not silently ignore");
-  const accountCreate=await call("/api/accounts",a,{method:"POST",headers:{
-    ...accountHeaders,"x-crm-native-tenant":"tenant-b"},
-    body:JSON.stringify(accountData)});
-  assert.equal(accountCreate.status,201,JSON.stringify(accountCreate));
-  assert.equal(accountCreate.body.item.name,"Original Account");
-  assert.equal(accountCreate.body.item.version,1);
-  assert.equal(accountCreate.body.item.parties[0].id,id);
-  assert.equal(accountCreate.headers["x-crm-module"],"crm.customer-accounts");
-  assert.match(accountCreate.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
-  assert.equal((await call("/api/accounts/"+accountId,b)).status,404);
-  assert.equal((await call("/api/accounts/"+accountId,serviceB)).status,404);
-  const accountRead=await call("/api/accounts/"+accountId,a);
-  assert.equal(accountRead.status,200);
-  assert.deepEqual(accountRead.body.item,accountCreate.body.item,
-    "original Account encode -> D1 -> decode preserves state");
-  const accountReplay=await call("/api/accounts",a,{method:"POST",headers:accountHeaders,
-    body:JSON.stringify(accountData)});
-  assert.equal(accountReplay.status,200);
-  assert.equal(accountReplay.body.replayed,true,"Account create replay cannot duplicate");
-  const reused=await call("/api/accounts",a,{method:"POST",headers:accountHeaders,
-    body:JSON.stringify({...accountData,name:"Other"})});
-  assert.equal(reused.status,409);
-  assert.equal(reused.body.code,"IDEMPOTENCY_CONFLICT");
-  const accountUpdate={name:"  Original Updated Account ",status:"inactive",expected_version:1};
-  const accountUpdateInit={method:"PATCH",headers:{"content-type":"application/json",
-    "idempotency-key":"signed-account-update"},body:JSON.stringify(accountUpdate)};
-  const savedAccount=await call("/api/accounts/"+accountId,a,accountUpdateInit);
-  assert.equal(savedAccount.status,200,JSON.stringify(savedAccount));
-  assert.equal(savedAccount.body.item.version,2);
-  assert.equal(savedAccount.body.item.status,"inactive");
-  assert.equal(savedAccount.body.item.name,"Original Updated Account");
-  const savedReplay=await call("/api/accounts/"+accountId,a,accountUpdateInit);
-  assert.equal(savedReplay.status,200);
-  assert.equal(savedReplay.body.replayed,true);
-  const staleAccount=await call("/api/accounts/"+accountId,a,{...accountUpdateInit,
-    headers:{...accountUpdateInit.headers,"idempotency-key":"stale-account-version"}});
-  assert.equal(staleAccount.status,409);
-  assert.equal(staleAccount.body.code,"CUSTOMER_ACCOUNTS_VERSION_CONFLICT");
-  const accountList=await call("/api/accounts",a);
-  assert.equal(accountList.status,200);
-  assert.ok(accountList.body.items.some(x=>x.id===accountId&&x.version===2));
-  assert.deepEqual((await call("/api/accounts",b)).body.items,[]);
-  console.log(JSON.stringify({event:"crm.native-original-account-d1",result:"PASS",
-    owner:"crm.customer-accounts",
-    proven:["signed Access A/B","Party foreign key","original domain create/update",
-      "strict codec roundtrip","D1 durable state","idempotent receipts",
-      "optimistic version","tenant isolation","request correlation"],
-    published_live:"NOT_TESTED"}));
-  // Original Activities Task: belongs to ORIGINAL Account; actor is verified
-  // Access identity, NEVER owner submitted by the client.
-  assert.equal((await call("/api/activity-tasks",null)).status,401);
-  assert.deepEqual((await call("/api/activity-tasks",b)).body.items,[]);
-  const taskId="native-activity-task-"+randomUUID();
-  const taskData={id:taskId,subject:"Call account owner",
-    description:"Follow up",account_id:accountId,priority:"normal",
-    due_at_unix_nanos:null,reminder_at_unix_nanos:null};
-  const taskHeaders={"content-type":"application/json",
-    "idempotency-key":"signed-original-activity-task-create"};
-  const taskWrongTenant=await call("/api/activity-tasks",b,{
-    method:"POST",headers:taskHeaders,body:JSON.stringify(taskData)});
-  assert.equal(taskWrongTenant.status,422,"Task cannot link to another tenant's Account");
-  assert.equal(taskWrongTenant.body.code,"ACTIVITIES_ACCOUNT_NOT_FOUND");
-  const taskInvalid=await call("/api/activity-tasks",a,{
-    method:"POST",headers:{...taskHeaders,"idempotency-key":"activity-invalid-subject"},
-    body:JSON.stringify({...taskData,subject:""})});
-  assert.equal(taskInvalid.status,422,"original Task domain rejects blank subject");
-  const taskOwnerForgery=await call("/api/activity-tasks",a,{
-    method:"POST",headers:{...taskHeaders,"idempotency-key":"activity-owner-forgery"},
-    body:JSON.stringify({...taskData,owner:"admin"})});
-  assert.equal(taskOwnerForgery.status,422,"caller must not supply trusted Task owner");
-  const taskCreated=await call("/api/activity-tasks",a,{
-    method:"POST",headers:taskHeaders,body:JSON.stringify(taskData)});
-  assert.equal(taskCreated.status,201,JSON.stringify(taskCreated));
-  assert.equal(taskCreated.body.item.id,taskId);
-  assert.equal(taskCreated.body.item.status,"open");
-  assert.equal(taskCreated.body.item.version,1);
-  assert.equal(taskCreated.body.item.owner.actor,"native-a@example.test");
-  assert.equal(taskCreated.body.item.related_resources[0].resource_id,accountId);
-  assert.equal(taskCreated.body.item.related_resources[0].resource_type,"crm.customer-accounts");
-  assert.equal(taskCreated.headers["x-crm-module"],"crm.activities");
-  assert.match(taskCreated.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
-  assert.equal((await call("/api/activity-tasks/"+taskId,b)).status,404);
-  assert.equal((await call("/api/activity-tasks/"+taskId,serviceB)).status,404);
-  const taskRead=await call("/api/activity-tasks/"+taskId,a);
-  assert.equal(taskRead.status,200);
-  assert.deepEqual(taskRead.body.item,taskCreated.body.item,
-    "original Task codec must survive D1 roundtrip");
-  const taskReplay=await call("/api/activity-tasks",a,{
-    method:"POST",headers:taskHeaders,body:JSON.stringify(taskData)});
-  assert.equal(taskReplay.status,200);
-  assert.equal(taskReplay.body.replayed,true);
-  const taskIdemConflict=await call("/api/activity-tasks",a,{
-    method:"POST",headers:taskHeaders,
-    body:JSON.stringify({...taskData,subject:"Change subject"})});
-  assert.equal(taskIdemConflict.status,409);
-  assert.equal(taskIdemConflict.body.code,"IDEMPOTENCY_CONFLICT");
-  const completeInit={method:"POST",headers:{"content-type":"application/json",
-    "idempotency-key":"signed-original-activity-task-complete"},
-    body:JSON.stringify({expected_version:1})};
-  const taskComplete=await call("/api/activity-tasks/"+taskId+"/complete",a,completeInit);
-  assert.equal(taskComplete.status,200,JSON.stringify(taskComplete));
-  assert.equal(taskComplete.body.item.status,"completed");
-  assert.equal(taskComplete.body.item.version,2);
-  assert.equal(taskComplete.body.item.reminder_at_unix_nanos,null);
-  assert.ok(taskComplete.body.item.completed_at_unix_nanos>0);
-  const completeReplay=await call("/api/activity-tasks/"+taskId+"/complete",a,completeInit);
-  assert.equal(completeReplay.status,200);
-  assert.equal(completeReplay.body.replayed,true);
-  const taskStale=await call("/api/activity-tasks/"+taskId+"/complete",a,{
-    ...completeInit,headers:{...completeInit.headers,
-      "idempotency-key":"original-activity-task-stale"}});
-  assert.equal(taskStale.status,409);
-  assert.equal(taskStale.body.code,"ACTIVITIES_TASK_VERSION_CONFLICT");
-  assert.deepEqual((await call("/api/activity-tasks/"+taskId,a)).body.item,
-    taskComplete.body.item,"completed original aggregate persisted in D1");
-  assert.ok((await call("/api/activity-tasks",a)).body.items
-    .some(x=>x.id===taskId&&x.status==="completed"));
-  assert.deepEqual((await call("/api/activity-tasks",b)).body.items,[]);
-  console.log(JSON.stringify({event:"crm.native-original-activities-d1",result:"PASS",
-    owner:"crm.activities",proven:["signed actor provenance","Account FK",
-      "original Task create/complete","strict codec D1 roundtrip",
-      "Access A/B isolation","idempotency receipts","version CAS",
-      "forged owner rejected","request correlation"],
-    ui:"TESTED_IN_BROWSER_BELOW",published_live:"NOT_TESTED"}));
+ // Account filter must run BEFORE LIMIT: active records sort before inactive.
+ const accountNextId="account-zzz-inactive-"+randomUUID();
+ for(const [index,accountToCreate] of [
+   "account-aaa-active-"+randomUUID(),"account-aab-active-"+randomUUID(),accountNextId
+ ].entries()){
+   const made=await accountV2("CreateAccount",admin,{
+     accountId:accountToCreate,name:"Paging Account "+index,primaryPartyId:id,
+     precondition:{idempotencyKey:"page-account-create-"+index}});
+   assert.equal(made.status,200,describeProtobuf(made.body));
+ }
+ const inactiveLater=await accountV2("UpdateAccount",admin,{
+   accountId:accountNextId,name:"Later Inactive Account",status:2,
+   precondition:{expectedVersion:1n,idempotencyKey:"page-account-inactive"}});
+ assert.equal(inactiveLater.status,200,describeProtobuf(inactiveLater.body));
+ const inactiveAccounts=await collectPages(accountV2,"ListAccounts","accounts",{status:2});
+ assert.deepEqual(inactiveAccounts.map(a=>a.accountId),[accountId,accountNextId]);
+ assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{status:1})).length,2);
+ assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{status:2})).length,2);
+ const afterAccounts=await accountV2("ListAccounts",viewer,{
+   page:{pageSize:1,pageToken:accountNextId},status:2});
+ assert.equal(afterAccounts.status,200);
+ assert.equal(afterAccounts.body.accounts.length,0);
+ assert.ok(!afterAccounts.body.pageInfo?.nextPageToken);
+ assert.equal((await accountV2("ListAccounts",tenantB,{page:{pageSize:1},status:2}))
+   .body.accounts.length,0);
+ console.log(JSON.stringify({event:"crm.native-g3-account-filtered-pagination",result:"PASS"}));
 
-  // Original Sales Deal: native exact money, Access actor, domain stage policy,
-  // Account FK and original state codec, never legacy pilot crm_deals.
-  assert.equal((await call("/api/sales-deals",null)).status,401);
-  assert.deepEqual((await call("/api/sales-deals",b)).body.items,[]);
-  const dealId="native-sales-deal-"+randomUUID();
-  const stageAudit=()=>d1Rows("SELECT action,request_id FROM crm_audit"+
-    " WHERE tenant_id='tenant-a' AND subject_id='"+dealId+"' ORDER BY rowid");
-  const dealData={id:dealId,name:"Enterprise renewal",account_id:accountId,
-    pipeline_id:"pipeline.enterprise",stage_id:"lead",ordinal:1,
-    probability_bps:2500,amount_minor_units:12500,currency:"USD"};
-  const dealHeaders={"content-type":"application/json",
-    "idempotency-key":"signed-original-sales-deal-create"};
-  const dealWrongTenant=await call("/api/sales-deals",b,{
-    method:"POST",headers:dealHeaders,body:JSON.stringify(dealData)});
-  assert.equal(dealWrongTenant.status,422,"no foreign tenant Account reference");
-  assert.equal(dealWrongTenant.body.code,"SALES_ACCOUNT_NOT_FOUND");
-  const dealSpoof=await call("/api/sales-deals",a,{
-    method:"POST",headers:{...dealHeaders,"idempotency-key":"sales-owner-spoof"},
-    body:JSON.stringify({...dealData,owner:"attacker"})});
-  assert.equal(dealSpoof.status,422,"signed actor cannot be overwritten by request");
-  const dealNegative=await call("/api/sales-deals",a,{
-    method:"POST",headers:{...dealHeaders,"idempotency-key":"sales-negative-money"},
-    body:JSON.stringify({...dealData,amount_minor_units:-1})});
-  assert.equal(dealNegative.status,422);
-  assert.equal(dealNegative.body.code,"SALES_DEAL_AMOUNT_NEGATIVE");
-  const dealCurrency=await call("/api/sales-deals",a,{
-    method:"POST",headers:{...dealHeaders,"idempotency-key":"sales-invalid-currency"},
-    body:JSON.stringify({...dealData,currency:"usd"})});
-  assert.equal(dealCurrency.status,422);
-  assert.equal(dealCurrency.body.code,"CONTRACT_CURRENCY_INVALID");
-  const dealCreated=await call("/api/sales-deals",a,{
-    method:"POST",headers:dealHeaders,body:JSON.stringify(dealData)});
-  assert.equal(dealCreated.status,201,JSON.stringify(dealCreated));
-  assert.equal(dealCreated.body.item.id,dealId);
-  assert.equal(dealCreated.body.item.account_id,accountId);
-  assert.equal(dealCreated.body.item.owner.actor,"native-a@example.test");
-  assert.equal(dealCreated.body.item.stage.stage_id,"lead");
-  assert.equal(dealCreated.body.item.stage.ordinal,1);
-  assert.equal(dealCreated.body.item.amount.minor_units,"12500");
-  assert.equal(dealCreated.body.item.amount.currency,"USD");
-  assert.equal(dealCreated.body.item.status,"open");
-  assert.equal(dealCreated.body.item.probability_bps,2500);
-  assert.equal(dealCreated.body.item.version,1);
-  assert.deepEqual(stageAudit(),[{action:"sales_deals.create",
-    request_id:dealCreated.headers["x-request-id"]}],
-    "deal create must create a correlated D1 audit row");
-  assert.equal(dealCreated.headers["x-crm-module"],"crm.sales");
-  assert.match(dealCreated.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
-  assert.equal((await call("/api/sales-deals/"+dealId,b)).status,404);
-  assert.equal((await call("/api/sales-deals/"+dealId,serviceB)).status,404);
-  const dealRead=await call("/api/sales-deals/"+dealId,a);
-  assert.equal(dealRead.status,200);
-  assert.deepEqual(dealRead.body.item,dealCreated.body.item,
-    "original strict Deal codec -> D1 -> decode preserves exact Money");
-  // Real Connect JSON RPC through the SINGLE authenticated native Worker.
-  // The response is generated from the published crm.sales.v1 Deal schema
-  // and the SAME persisted original crm-sales aggregate.
-  const rpc=async(op,token,data)=>call("/crm.sales.v1.DealService/"+op,token,{
-    method:"POST",headers:{"content-type":"application/json",
-      "connect-protocol-version":"1"},
-    body:JSON.stringify(data)});
-  assert.equal((await rpc("GetDeal",null,{dealId})).status,401,
-    "Connect must not bypass signed Cloudflare Access");
-  const rpcGet=await rpc("GetDeal",a,{dealId});
-  assert.equal(rpcGet.status,200,JSON.stringify(rpcGet));
-  assert.equal(rpcGet.headers["x-crm-module"],"crm.sales");
-  assert.match(rpcGet.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
-  assert.equal(rpcGet.body.deal.dealId,dealId);
-  assert.equal(rpcGet.body.deal.tenantId,"tenant-a");
-  assert.equal(rpcGet.body.deal.name,"Enterprise renewal");
-  assert.equal(rpcGet.body.deal.stageDetails.stageId,"lead");
-  assert.equal(rpcGet.body.deal.amount.minorUnits,"12500");
-  assert.equal(rpcGet.body.deal.version,"1");
-  assert.equal((await rpc("GetDeal",b,{dealId})).status,404,
-    "real Access tenant B must not read tenant A Deal via Connect");
-  assert.equal((await rpc("GetDeal",viewer,{dealId})).status,200,
-    "read-only Connect RPC is available to enrolled tenant viewer");
-  const rpcList=await rpc("ListDeals",a,{});
-  assert.equal(rpcList.status,200,JSON.stringify(rpcList));
-  assert.ok(rpcList.body.deals.some(x=>x.dealId===dealId));
-  const rpcOther=await rpc("ListDeals",b,{});
-  assert.equal(rpcOther.status,200);
-  assert.deepEqual(rpcOther.body.deals||[],[]);
-  assert.deepEqual(stageAudit(),[{action:"sales_deals.create",
-    request_id:dealCreated.headers["x-request-id"]}],
-    "Connect reads must not create D1 mutation audit records");
-  console.log(JSON.stringify({event:"crm.native-original-sales-connect-read",
-    result:"PASS",owner:"crm-sales",tenant_isolation:true,
-    viewer_read:true,native_d1:true,protobuf:true}));
-  // Real Connect CreateDeal must use the SAME original Rust owner + D1 write,
-  // with signed Access actor, tenant isolation and cross-transport replay.
-  const connectDealId="native-connect-sales-"+randomUUID();
-  const connectDealData={dealId:connectDealId,name:"Native Connect deal",
-    account:{tenantId:"tenant-a",resourceType:"crm.customer-accounts",resourceId:accountId},
-    stage:{pipelineId:"pipeline.enterprise",stageId:"lead",ordinal:1},
-    amount:{minorUnits:"12500",currencyCode:"USD"},probabilityBasisPoints:2500};
-  const rpcCreate=async(token,body,keyName="native-connect-sales-create")=>
-    call("/crm.sales.v1.DealService/CreateDeal",token,{
-      method:"POST",headers:{"content-type":"application/json",
-        "connect-protocol-version":"1","idempotency-key":keyName},
-      body:JSON.stringify(body)});
-  assert.equal((await rpcCreate(null,connectDealData)).status,401);
-  assert.equal((await rpcCreate(viewer,connectDealData)).status,403);
-  assert.equal((await rpcCreate(a,{...connectDealData,
-    owner:{actorId:"attacker@example.test"}},"native-connect-owner-forgery")).status,403);
-  assert.equal((await rpcCreate(a,{...connectDealData,
-    account:{...connectDealData.account,tenantId:"tenant-b"}},
-    "native-connect-tenant-forgery")).status,400);
-  assert.equal((await rpcCreate(b,connectDealData,
-    "native-connect-tenant-b")).status,400);
-  const connectCreated=await rpcCreate(a,connectDealData);
-  assert.equal(connectCreated.status,200,JSON.stringify(connectCreated));
-  assert.equal(connectCreated.body.deal.dealId,connectDealId);
-  assert.equal(connectCreated.body.deal.amount.minorUnits,"12500");
-  assert.equal(connectCreated.body.deal.owner.actorId,"native-a@example.test");
-  assert.equal(connectCreated.body.deal.version,"1");
-  assert.match(connectCreated.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
-  const connectStored=await call("/api/sales-deals/"+connectDealId,a);
-  assert.equal(connectStored.status,200,JSON.stringify(connectStored));
-  assert.equal(connectStored.body.item.name,"Native Connect deal");
-  assert.equal(connectStored.body.item.version,1);
-  assert.equal((await rpcCreate(a,connectDealData)).status,200,
-    "Connect replay must not create a second Deal");
-  assert.equal((await rpcCreate(a,{...connectDealData,name:"Conflicting"},
-    "native-connect-sales-create")).status,409);
-  assert.equal((await call("/api/sales-deals/"+connectDealId,b)).status,404);
-  console.log(JSON.stringify({event:"crm.native-original-sales-connect-create",
-    result:"PASS",owner:"crm-sales",native_d1:true,actor_verified:true,
-    tenant_isolation:true,idempotent:true,original_rest_readback:true}));
+ // ContactPoints v2 uses the original Party-owned contact aggregate, NEVER
+ // the removed pilot crm_contacts table. No browser-written verified=true.
+ const contactV2=async(method,token,payload)=>{
+   const response=await rpcFetch(contactV2Path(method),{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+       ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:binaryContactV2(method,payload)});
+   return {status:response.status,headers:response.headers,
+     body:response.status<400
+       ?decodeContactV2(method,new Uint8Array(await response.arrayBuffer()))
+       :await response.json()};
+ };
+ const contactId="contact-native-"+randomUUID();
+ const contactInput={contactPointId:contactId,partyId:id,kind:1,
+   value:"  contact@example.com  ",preferred:true,
+   validFrom:{seconds:1700000000n,nanos:123000000},
+   validUntil:{seconds:1800000000n,nanos:456000000},
+   precondition:{idempotencyKey:"candidate-v2-contact-create-001"}};
+ assert.equal((await contactV2("CreateContactPoint",null,contactInput)).status,401);
+ assert.equal((await contactV2("CreateContactPoint",viewer,contactInput)).status,403);
+ assert.equal((await contactV2("CreateContactPoint",admin,{
+   ...contactInput,kind:0,
+   precondition:{idempotencyKey:"candidate-v2-contact-invalid-kind"}})).status,400);
+ assert.equal((await contactV2("CreateContactPoint",admin,{
+   ...contactInput,partyId:"missing-party",
+   precondition:{idempotencyKey:"candidate-v2-contact-invalid-party"}})).status,400);
+ const contactCreated=await contactV2("CreateContactPoint",admin,contactInput);
+ assert.equal(contactCreated.status,200,describeProtobuf(contactCreated.body));
+ assert.equal(contactCreated.body.contactPoint?.contactPointId,contactId);
+ assert.equal(contactCreated.body.contactPoint?.partyId,id);
+ assert.equal(contactCreated.body.contactPoint?.verified,false);
+ assert.equal(contactCreated.body.contactPoint?.normalizedValue,"contact@example.com");
+ assert.equal(contactCreated.body.contactPoint?.validFrom?.seconds,1700000000n);
+ assert.equal(contactCreated.body.contactPoint?.validFrom?.nanos,123000000);
+ assert.equal(contactCreated.body.contactPoint?.validUntil?.seconds,1800000000n);
+ assert.equal(contactCreated.body.contactPoint?.validUntil?.nanos,456000000);
+ assert.equal(contactCreated.body.receipt?.resourceVersion,1n);
+ assert.equal(contactCreated.body.receipt?.replayed,false);
+ assert.equal(contactCreated.body.receipt?.requestId,contactCreated.headers.get("x-request-id"));
+ const contactReplay=await contactV2("CreateContactPoint",admin,contactInput);
+ assert.equal(contactReplay.status,200,describeProtobuf(contactReplay.body));
+ assert.equal(contactReplay.body.receipt?.replayed,true);
+ assert.equal((await contactV2("CreateContactPoint",admin,{...contactInput,
+   value:"different@example.com"})).status,409);
+ assert.equal((await contactV2("GetContactPoint",tenantB,{contactPointId:contactId})).status,404);
+ assert.equal((await contactV2("GetContactPoint",viewer,{contactPointId:contactId}))
+   .body.contactPoint?.verified,false);
+ const contactList=await contactV2("ListContactPoints",viewer,{page:{pageSize:1},partyId:id});
+ assert.equal(contactList.status,200,describeProtobuf(contactList.body));
+ assert.equal(contactList.body.contactPoints?.[0]?.contactPointId,contactId);
+ assert.equal((await contactV2("ListContactPoints",viewer,{page:{pageSize:101}})).status,400);
+ assert.equal((await contactV2("ListContactPoints",viewer,{partyId:"missing"}))
+   .body.contactPoints.length,0);
+ const contactUpdate={contactPointId:contactId,value:"next@example.org",status:1,
+   preferred:false,
+   validFrom:{operation:{case:"set",value:{seconds:1760000000n,nanos:987654321}}},
+   validUntil:{operation:{case:"clear",value:true}},
+   precondition:{
+     expectedVersion:1n,idempotencyKey:"candidate-v2-contact-update-001"}};
+ assert.equal((await contactV2("UpdateContactPoint",viewer,contactUpdate)).status,403);
+ assert.equal((await contactV2("UpdateContactPoint",admin,{...contactUpdate,status:0,
+   precondition:{expectedVersion:1n,
+     idempotencyKey:"candidate-v2-contact-invalid-status"}})).status,400);
+ const contactUpdated=await contactV2("UpdateContactPoint",admin,contactUpdate);
+ assert.equal(contactUpdated.status,200,describeProtobuf(contactUpdated.body));
+ assert.equal(contactUpdated.body.contactPoint?.version,2n);
+ assert.equal(contactUpdated.body.contactPoint?.verified,false);
+ assert.equal(contactUpdated.body.contactPoint?.normalizedValue,"next@example.org");
+ assert.equal(contactUpdated.body.contactPoint?.validFrom?.seconds,1760000000n);
+ assert.equal(contactUpdated.body.contactPoint?.validFrom?.nanos,987654321);
+ assert.equal(contactUpdated.body.contactPoint?.validUntil,undefined,
+   "explicit clear timestamp patch must remove validUntil");
+ assert.equal(contactUpdated.body.receipt?.resourceVersion,2n);
+ const contactReupdate=await contactV2("UpdateContactPoint",admin,contactUpdate);
+ assert.equal(contactReupdate.status,200,describeProtobuf(contactReupdate.body));
+ assert.equal(contactReupdate.body.receipt?.replayed,true);
+ assert.equal((await contactV2("UpdateContactPoint",admin,{...contactUpdate,
+   precondition:{expectedVersion:1n,
+     idempotencyKey:"candidate-v2-contact-stale"}})).status,409);
+ assert.equal(sql("SELECT version FROM crm_contact_point_records WHERE tenant='tenant-a' "+
+   "AND id='"+contactId+"'")[0].version,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_contact_point_receipts WHERE tenant='tenant-a' "+
+   "AND key IN ('candidate-v2-contact-create-001','candidate-v2-contact-update-001')")[0].n,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+contactId+"' AND action LIKE 'contact_points.%'")[0].n,2);
+ // Filtered ContactPoint list uses the EXISTING D1 party_id column.
+ // Nonmatches sort before our two matches, exposing the old LIMIT bug.
+ const contactLastId="contact-zzz-ours-"+randomUUID();
+ for(const [index,pointToCreate] of [
+   ["contact-aaa-other-"+randomUUID(),pagingPersonId],
+   ["contact-aab-other-"+randomUUID(),pagingPersonId],
+   [contactLastId,id]
+ ].entries()){
+   const made=await contactV2("CreateContactPoint",admin,{
+     contactPointId:pointToCreate[0],partyId:pointToCreate[1],kind:1,
+     value:"page-"+index+"@example.org",preferred:false,
+     precondition:{idempotencyKey:"page-contact-create-"+index}});
+   assert.equal(made.status,200,describeProtobuf(made.body));
+ }
+ const filteredContacts=await collectPages(contactV2,"ListContactPoints",
+   "contactPoints",{partyId:id});
+ assert.deepEqual(filteredContacts.map(p=>p.contactPointId),[contactId,contactLastId]);
+ assert.equal((await collectPages(contactV2,"ListContactPoints",
+   "contactPoints",{partyId:"missing-party"})).length,0);
+ assert.equal((await contactV2("ListContactPoints",tenantB,{
+   page:{pageSize:1},partyId:id})).body.contactPoints.length,0);
+ const beyondContact=await contactV2("ListContactPoints",viewer,{
+   partyId:id,page:{pageSize:1,pageToken:contactLastId}});
+ assert.equal(beyondContact.status,200);
+ assert.equal(beyondContact.body.contactPoints.length,0);
+ assert.ok(!beyondContact.body.pageInfo?.nextPageToken);
 
-  const dealReplay=await call("/api/sales-deals",a,{
-    method:"POST",headers:dealHeaders,body:JSON.stringify(dealData)});
-  assert.equal(dealReplay.status,200);
-  assert.equal(dealReplay.body.replayed,true);
-  const dealConflict=await call("/api/sales-deals",a,{
-    method:"POST",headers:dealHeaders,
-    body:JSON.stringify({...dealData,name:"Fake"})});
-  assert.equal(dealConflict.status,409);
-  assert.equal(dealConflict.body.code,"IDEMPOTENCY_CONFLICT");
-  const advanceData={expected_version:1,pipeline_id:"pipeline.enterprise",
-    stage_id:"qualified",ordinal:2,status:"open",close_reason_code:null};
-  const advanceHeaders={"content-type":"application/json",
-    "idempotency-key":"signed-original-sales-advance"};
-  const advanceInit={method:"POST",headers:advanceHeaders,
-    body:JSON.stringify(advanceData)};
-  const dealAdvanced=await call("/api/sales-deals/"+dealId+"/advance",a,advanceInit);
-  assert.equal(dealAdvanced.status,200,JSON.stringify(dealAdvanced));
-  assert.equal(dealAdvanced.body.item.version,2);
-  assert.equal(dealAdvanced.body.item.stage.stage_id,"qualified");
-  assert.equal(dealAdvanced.body.item.status,"open");
-  const stageAuditAfterAdvance=[{action:"sales_deals.create",
-    request_id:dealCreated.headers["x-request-id"]},
-    {action:"sales_deals.advance",request_id:dealAdvanced.headers["x-request-id"]}];
-  assert.deepEqual(stageAudit(),stageAuditAfterAdvance,
-    "stage transition must audit advance, not update");
-  // Original SalesActivitiesLink::handle, original Protobuf contract adapter,
-  // and original crm-activities Task::create in ONE atomic D1 transition.
-  assert.equal(dealAdvanced.body.link.disposition,"applied");
-  assert.match(dealAdvanced.body.link.delivery_id,/^delivery-[0-9a-f]{40}$/);
-  assert.equal(dealAdvanced.body.link.task_id,dealAdvanced.body.link.delivery_id);
-  const linkedId=dealAdvanced.body.link.task_id;
-  const linked=await call("/api/activity-tasks/"+linkedId,a);
-  assert.equal(linked.status,200,JSON.stringify(linked));
-  assert.equal(linked.body.item.subject,"Follow up deal after stage change");
-  assert.equal(linked.body.item.owner.actor,"native-a@example.test");
-  assert.deepEqual(linked.body.item.related_resources,[{
-    resource_type:"sales.deal",resource_id:dealId,version:2}]);
-  assert.equal(linked.body.item.status,"open");
-  assert.equal((await call("/api/activity-tasks/"+linkedId,b)).status,404);
-  assert.equal((await call("/api/activity-tasks/"+linkedId,serviceB)).status,404);
+ // Omitted timestamp patches mean KEEP. Replay the SAME request after a
+ // later successful update which changes both current timestamp fields.
+ const keepRequest={contactPointId:contactId,value:"keep-timestamps@example.org",
+   status:1,preferred:false,
+   precondition:{expectedVersion:2n,idempotencyKey:"candidate-v2-contact-keep-001"}};
+ const keep=await contactV2("UpdateContactPoint",admin,keepRequest);
+ assert.equal(keep.status,200,describeProtobuf(keep.body));
+ assert.equal(keep.body.contactPoint?.version,3n);
+ assert.equal(keep.body.contactPoint?.validFrom?.seconds,1760000000n);
+ assert.equal(keep.body.contactPoint?.validUntil,undefined);
+ const later=await contactV2("UpdateContactPoint",admin,{
+   ...keepRequest,value:"later-timestamps@example.org",
+   validFrom:{operation:{case:"set",value:{seconds:1770000000n,nanos:3}}},
+   validUntil:{operation:{case:"set",value:{seconds:1870000000n,nanos:9}}},
+   precondition:{expectedVersion:3n,idempotencyKey:"candidate-v2-contact-later-001"}});
+ assert.equal(later.status,200,describeProtobuf(later.body));
+ assert.equal(later.body.contactPoint?.version,4n);
+ const beforeReplay=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+contactId+"'")[0].n;
+ const restoredReceipt=await contactV2("UpdateContactPoint",admin,keepRequest);
+ assert.equal(restoredReceipt.status,200,describeProtobuf(restoredReceipt.body));
+ assert.equal(restoredReceipt.body.receipt?.replayed,true);
+ assert.equal(restoredReceipt.body.receipt?.resourceVersion,3n);
+ assert.equal(restoredReceipt.body.contactPoint?.version,3n);
+ assert.equal(restoredReceipt.body.contactPoint?.validFrom?.seconds,1760000000n);
+ assert.equal(restoredReceipt.body.contactPoint?.validUntil,undefined);
+ assert.equal((await contactV2("UpdateContactPoint",admin,{
+   ...keepRequest,value:"not-the-same-request@example.org"})).status,409);
+ assert.equal((await contactV2("UpdateContactPoint",admin,{
+   ...keepRequest,precondition:{expectedVersion:2n,
+     idempotencyKey:"candidate-v2-contact-stale-after-later"}})).status,409);
+ const currentPoint=await contactV2("GetContactPoint",viewer,{contactPointId:contactId});
+ assert.equal(currentPoint.body.contactPoint?.version,4n);
+ assert.equal(currentPoint.body.contactPoint?.validFrom?.seconds,1770000000n);
+ assert.equal(currentPoint.body.contactPoint?.validUntil?.seconds,1870000000n);
+ assert.equal(sql("SELECT version FROM crm_contact_point_records WHERE tenant='tenant-a' "+
+   "AND id='"+contactId+"'")[0].version,4);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+contactId+"'")[0].n,beforeReplay);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_contact_point_receipts "+
+   "WHERE tenant='tenant-a' AND key IN ("+
+   "'candidate-v2-contact-keep-001','candidate-v2-contact-later-001')")[0].n,2);
+ console.log(JSON.stringify({event:"crm.native-g3-contact-pagination-interleaved-replay",
+   result:"PASS",same_original_receipt:true,no_extra_write:true,tenant_isolated:true}));
 
-  const advanceReplay=await call("/api/sales-deals/"+dealId+"/advance",a,advanceInit);
-  assert.equal(advanceReplay.status,200);
-  assert.equal(advanceReplay.body.replayed,true);
-  assert.deepEqual(stageAudit(),stageAuditAfterAdvance,
-    "replayed stage transition must not duplicate advance audit");
-  const linkedAgain=await call("/api/activity-tasks/"+linkedId,a);
-  assert.deepEqual(linkedAgain.body.item,linked.body.item,
-    "Sales replay must not create a second task or mutate the original Task");
-  assert.equal((await call("/api/activity-tasks",a)).body.items
-    .filter(x=>x.id===linkedId).length,1,
-    "one linked task per original stage change");
+ console.log(JSON.stringify({event:"crm.native-g3-contact-points-v2",result:"PASS",
+   generated_binary:true,owner:"crm.contact-points",
+   rpc_methods:["CreateContactPoint","UpdateContactPoint","GetContactPoint","ListContactPoints"],
+   signed_access:true,tenant_ab:true,viewer_write_denied:true,
+   no_browser_verification:true,d1_cas:true,d1_receipts:true,d1_audit:true,
+   published_active:true}));
 
-  const stageRegression=await call("/api/sales-deals/"+dealId+"/advance",a,{
-    method:"POST",headers:{...advanceHeaders,
-      "idempotency-key":"signed-original-sales-regression"},
-    body:JSON.stringify({...advanceData,expected_version:2,
-      stage_id:"lead",ordinal:1})});
-  assert.equal(stageRegression.status,409,"original domain rejects stage regression");
-  assert.equal(stageRegression.body.code,"SALES_STAGE_REGRESSION_FORBIDDEN");
-  const missingReason=await call("/api/sales-deals/"+dealId+"/advance",a,{
-    method:"POST",headers:{...advanceHeaders,
-      "idempotency-key":"signed-original-sales-missing-reason"},
-    body:JSON.stringify({...advanceData,expected_version:2,
-      stage_id:"won",ordinal:3,status:"won"})});
-  assert.equal(missingReason.status,422,"original domain requires close reason");
-  assert.equal(missingReason.body.code,"SALES_CLOSE_REASON_REQUIRED");
-  const closeInput={...advanceData,expected_version:2,
-    stage_id:"won",ordinal:3,status:"won",close_reason_code:"contract-signed"};
-  const closeHeaders={...advanceHeaders,
-    "idempotency-key":"signed-original-sales-close"};
-  const closed=await call("/api/sales-deals/"+dealId+"/advance",a,{
-    method:"POST",headers:closeHeaders,body:JSON.stringify(closeInput)});
-  assert.equal(closed.status,200,JSON.stringify(closed));
-  assert.equal(closed.body.item.version,3);
-  assert.equal(closed.body.item.status,"won");
-  assert.equal(closed.body.item.close_outcome.reason_code,"contract-signed");
-  assert.equal(closed.body.item.amount.minor_units,"12500");
-  const stageAuditAfterClose=[...stageAuditAfterAdvance,{
-    action:"sales_deals.advance",request_id:closed.headers["x-request-id"]
-  }];
-  assert.deepEqual(stageAudit(),stageAuditAfterClose,
-    "closing a Deal also audits advance rather than update");
-  assert.equal(closed.body.link.disposition,"ignored",
-    "original link ignores closed Sales events");
-  assert.equal(closed.body.link.task_id,null);
-  assert.notEqual(closed.body.link.delivery_id,dealAdvanced.body.link.delivery_id);
-  assert.deepEqual((await call("/api/activity-tasks/"+linkedId,a)).body.item,
-    linked.body.item,"close must not modify earlier original linked Task");
+ // G3 Relationships v2: original Rust domain owner and one D1, binary
+ // Protobuf descriptor, signed JWT + tenant A/B + viewer rights.
+ const relationV2=async(method,token,payload)=>{
+   const response=await rpcFetch(relationshipV2Path(method),{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+       ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:binaryRelationshipV2(method,payload)});
+   return {status:response.status,headers:response.headers,
+     body:response.status<400
+       ?decodeRelationshipV2(method,new Uint8Array(await response.arrayBuffer()))
+       :await response.json()};
+ };
+ const rOther="relationship-aaa-other-"+randomUUID();
+ const rMid="relationship-mid-ours-"+randomUUID();
+ const rLast="relationship-zzz-ours-"+randomUUID();
+ const relType={code:"employment",directionality:1,fromRole:"employer",toRole:"employee"};
+ const relationInput=(relationshipId,fromPartyId,toPartyId,seq)=>({
+   relationshipId,fromPartyId,toPartyId,type:relType,
+   validFrom:{seconds:1700000000n,nanos:1000},
+   validUntil:{seconds:1800000000n,nanos:2000},
+   precondition:{idempotencyKey:"candidate-rel-create-"+seq}
+ });
+ const otherRelation=relationInput(rOther,"binary-rpc-proof-01",pagingPersonId,"other");
+ const midRelation=relationInput(rMid,id,pagingPersonId,"mid");
+ const lastRelation=relationInput(rLast,pagingPersonId,id,"last");
+ assert.equal((await relationV2("CreatePartyRelationship",null,midRelation)).status,401);
+ assert.equal((await relationV2("CreatePartyRelationship",viewer,midRelation)).status,403);
+ assert.equal((await relationV2("CreatePartyRelationship",admin,{
+   ...midRelation,fromPartyId:id,toPartyId:id,
+   precondition:{idempotencyKey:"candidate-rel-self"}})).status,400);
+ assert.equal((await relationV2("CreatePartyRelationship",admin,{
+   ...midRelation,fromPartyId:"missing-party",
+   precondition:{idempotencyKey:"candidate-rel-missing"}})).status,400);
+ assert.equal((await relationV2("CreatePartyRelationship",admin,{
+   ...midRelation,type:{...relType,directionality:0},
+   precondition:{idempotencyKey:"candidate-rel-invalid-type"}})).status,400);
+ const otherCreated=await relationV2("CreatePartyRelationship",admin,otherRelation);
+ assert.equal(otherCreated.status,200,describeProtobuf(otherCreated.body));
+ const midCreated=await relationV2("CreatePartyRelationship",admin,midRelation);
+ assert.equal(midCreated.status,200,describeProtobuf(midCreated.body));
+ assert.equal(midCreated.body.relationship?.relationshipId,rMid);
+ assert.equal(midCreated.body.relationship?.type?.code,"employment");
+ assert.equal(midCreated.body.relationship?.validFrom?.nanos,1000);
+ assert.equal(midCreated.body.receipt?.resourceVersion,1n);
+ assert.equal(midCreated.body.receipt?.requestId,midCreated.headers.get("x-request-id"));
+ const lastCreated=await relationV2("CreatePartyRelationship",admin,lastRelation);
+ assert.equal(lastCreated.status,200,describeProtobuf(lastCreated.body));
+ const midReplay=await relationV2("CreatePartyRelationship",admin,midRelation);
+ assert.equal(midReplay.status,200,describeProtobuf(midReplay.body));
+ assert.equal(midReplay.body.receipt?.replayed,true);
+ assert.equal((await relationV2("CreatePartyRelationship",admin,{
+   ...midRelation,toPartyId:"binary-rpc-proof-01"})).status,409);
+ assert.equal((await relationV2("GetPartyRelationship",tenantB,{relationshipId:rMid})).status,404);
+ assert.equal((await relationV2("GetPartyRelationship",viewer,{relationshipId:rMid}))
+   .body.relationship?.fromPartyId,id);
+ const relList=await collectPages(relationV2,"ListPartyRelationships","relationships",{partyId:id});
+ assert.deepEqual(relList.map(r=>r.relationshipId),[rMid,rLast]);
+ assert.equal((await collectPages(relationV2,"ListPartyRelationships","relationships",
+   {partyId:"missing-party"})).length,0);
+ assert.equal((await relationV2("ListPartyRelationships",tenantB,{
+   partyId:id,page:{pageSize:1}})).body.relationships.length,0);
+ assert.equal((await relationV2("ListPartyRelationships",viewer,{
+   partyId:id,page:{pageSize:101}})).status,400);
+ const afterRel=await relationV2("ListPartyRelationships",viewer,{
+   partyId:id,page:{pageSize:1,pageToken:rLast}});
+ assert.equal(afterRel.status,200,describeProtobuf(afterRel.body));
+ assert.equal(afterRel.body.relationships.length,0);
+ assert.ok(!afterRel.body.pageInfo?.nextPageToken);
+ const relUpdate={relationshipId:rMid,status:2,
+   validFrom:{operation:{case:"set",value:{seconds:1710000000n,nanos:123}}},
+   validUntil:{operation:{case:"clear",value:true}},
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-rel-update-01"}};
+ assert.equal((await relationV2("UpdatePartyRelationship",viewer,relUpdate)).status,403);
+ assert.equal((await relationV2("UpdatePartyRelationship",admin,{
+   ...relUpdate,status:0,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-rel-invalid-status"}})).status,400);
+ const updatedRel=await relationV2("UpdatePartyRelationship",admin,relUpdate);
+ assert.equal(updatedRel.status,200,describeProtobuf(updatedRel.body));
+ assert.equal(updatedRel.body.relationship?.version,2n);
+ assert.equal(updatedRel.body.relationship?.status,2);
+ assert.equal(updatedRel.body.relationship?.validFrom?.seconds,1710000000n);
+ assert.equal(updatedRel.body.relationship?.validUntil,undefined);
+ const relFirstReplay=await relationV2("UpdatePartyRelationship",admin,relUpdate);
+ assert.equal(relFirstReplay.status,200);
+ assert.equal(relFirstReplay.body.receipt?.replayed,true);
+ const relKeep={relationshipId:rMid,status:1,
+   precondition:{expectedVersion:2n,idempotencyKey:"candidate-rel-keep-02"}};
+ const relKeepApplied=await relationV2("UpdatePartyRelationship",admin,relKeep);
+ assert.equal(relKeepApplied.status,200,describeProtobuf(relKeepApplied.body));
+ assert.equal(relKeepApplied.body.relationship?.version,3n);
+ assert.equal(relKeepApplied.body.relationship?.validFrom?.seconds,1710000000n);
+ assert.equal(relKeepApplied.body.relationship?.validUntil,undefined);
+ const relLater=await relationV2("UpdatePartyRelationship",admin,{
+   ...relKeep,status:2,validFrom:{operation:{case:"set",
+     value:{seconds:1720000000n,nanos:987}}},
+   validUntil:{operation:{case:"set",value:{seconds:1820000000n,nanos:654}}},
+   precondition:{expectedVersion:3n,idempotencyKey:"candidate-rel-later-03"}});
+ assert.equal(relLater.status,200,describeProtobuf(relLater.body));
+ assert.equal(relLater.body.relationship?.version,4n);
+ const relAuditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"+
+   " AND subject_id='"+rMid+"'")[0].n;
+ const relKeepReplay=await relationV2("UpdatePartyRelationship",admin,relKeep);
+ assert.equal(relKeepReplay.status,200,describeProtobuf(relKeepReplay.body));
+ assert.equal(relKeepReplay.body.receipt?.replayed,true);
+ assert.equal(relKeepReplay.body.receipt?.resourceVersion,3n);
+ assert.equal(relKeepReplay.body.relationship?.validFrom?.seconds,1710000000n);
+ assert.equal(relKeepReplay.body.relationship?.validUntil,undefined);
+ assert.equal((await relationV2("UpdatePartyRelationship",admin,{
+   ...relKeep,status:2})).status,409,"same key with different intent rejected");
+ assert.equal((await relationV2("UpdatePartyRelationship",admin,{
+   ...relKeep,precondition:{expectedVersion:2n,
+     idempotencyKey:"candidate-rel-stale-04"}})).status,409);
+ const currentRel=await relationV2("GetPartyRelationship",viewer,{relationshipId:rMid});
+ assert.equal(currentRel.body.relationship?.version,4n);
+ assert.equal(currentRel.body.relationship?.validFrom?.seconds,1720000000n);
+ assert.equal(currentRel.body.relationship?.validUntil?.seconds,1820000000n);
+ assert.equal(sql("SELECT version FROM crm_party_relationship_records WHERE tenant='tenant-a'"+
+   " AND id='"+rMid+"'")[0].version,4);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"+
+   " AND subject_id='"+rMid+"'")[0].n,relAuditBefore);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_relationship_receipts WHERE tenant='tenant-a'"+
+   " AND key IN ('candidate-rel-create-mid','candidate-rel-update-01',"+
+   " 'candidate-rel-keep-02','candidate-rel-later-03')")[0].n,4);
+ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
+   result:"PASS",rpc_methods:["CreatePartyRelationship","UpdatePartyRelationship",
+     "GetPartyRelationship","ListPartyRelationships"],
+   generated_binary:true,original_owner:"crm.party-relationships",
+   signed_access:true,tenant_ab:true,viewer_write_denied:true,
+   filtered_pagination:true,temporal_patch:true,replay_after_interleaving:true,
+   no_extra_audit:true,published_active:true}));
 
-  const closeReplay=await call("/api/sales-deals/"+dealId+"/advance",a,{
-    method:"POST",headers:closeHeaders,body:JSON.stringify(closeInput)});
-  assert.equal(closeReplay.status,200);
-  assert.equal(closeReplay.body.replayed,true);
-  const closedAgain=await call("/api/sales-deals/"+dealId+"/advance",a,{
-    method:"POST",headers:{...advanceHeaders,
-      "idempotency-key":"signed-original-sales-already-closed"},
-    body:JSON.stringify({...closeInput,expected_version:3,
-      stage_id:"after-won",ordinal:4})});
-  assert.equal(closedAgain.status,409);
-  assert.equal(closedAgain.body.code,"SALES_DEAL_ALREADY_CLOSED");
-  const staleDeal=await call("/api/sales-deals/"+dealId+"/advance",a,{
-    method:"POST",headers:{...advanceHeaders,
-      "idempotency-key":"signed-original-sales-stale"},
-    body:JSON.stringify({...advanceData,expected_version:1,ordinal:4,
-      stage_id:"unknown"})});
-  assert.equal(staleDeal.status,409);
-  assert.equal(staleDeal.body.code,"SALES_DEAL_VERSION_CONFLICT");
-  assert.deepEqual(stageAudit(),stageAuditAfterClose,
-    "negative or replayed transitions must not emit another D1 audit");
-  assert.deepEqual((await call("/api/sales-deals/"+dealId,a)).body.item,
-    closed.body.item,"closed original deal persisted after all negative calls");
-  assert.ok((await call("/api/sales-deals",a)).body.items
-    .some(x=>x.id===dealId&&x.status==="won"));
-  assert.deepEqual((await call("/api/sales-deals",b)).body.items,[]);
-  // Physical D1 transaction rollback: a caller-created Task deliberately
-  // occupies the immutable ORIGINAL delivery ID before a Sales stage update.
-  // The linked Task INSERT must fail, rolling back Deal UPDATE, receipts
-  // and link delivery together; no half-updated Deal may escape.
-  const rollbackDealId="native-link-rollback-"+randomUUID();
-  const rollbackCreate=await call("/api/sales-deals",a,{method:"POST",
-    headers:{"content-type":"application/json",
-      "idempotency-key":"signed-link-rollback-create"},
-    body:JSON.stringify({...dealData,id:rollbackDealId})});
-  assert.equal(rollbackCreate.status,201,JSON.stringify(rollbackCreate));
-  const v2=Buffer.alloc(8);v2.writeBigInt64BE(2n);
-  const hash=createHash("sha256").update("tenant-a").update(Buffer.from([0]))
-    .update(rollbackDealId).update(Buffer.from([0])).update(v2)
-    .digest("hex").slice(0,40);
-  const blockedId="delivery-"+hash;
-  const occupied=await call("/api/activity-tasks",a,{method:"POST",
-    headers:{"content-type":"application/json",
-      "idempotency-key":"signed-link-rollback-occupied"},
-    body:JSON.stringify({...taskData,id:blockedId,subject:"Existing unrelated Task"})});
-  assert.equal(occupied.status,201,JSON.stringify(occupied));
-  const rollbackInit={method:"POST",headers:{"content-type":"application/json",
-    "idempotency-key":"signed-link-rollback-advance"},
-    body:JSON.stringify(advanceData)};
-  const rollback=await call("/api/sales-deals/"+rollbackDealId+"/advance",a,rollbackInit);
-  assert.equal(rollback.status,409,JSON.stringify(rollback));
-  assert.equal(rollback.body.code,"SALES_LINK_ATOMIC_COMMIT_CONFLICT");
-  const unchanged=await call("/api/sales-deals/"+rollbackDealId,a);
-  assert.equal(unchanged.status,200);
-  assert.deepEqual(unchanged.body.item,rollbackCreate.body.item,
-    "failed Task creation must roll back the original Deal stage/version");
-  assert.deepEqual((await call("/api/activity-tasks/"+blockedId,a)).body.item,
-    occupied.body.item,"rollback must not rewrite the colliding existing Task");
-  const secondRollback=await call("/api/sales-deals/"+rollbackDealId+"/advance",a,rollbackInit);
-  assert.equal(secondRollback.status,409,
-    "failed stage change must not have written an idempotency receipt");
-  assert.equal(secondRollback.body.code,"SALES_LINK_ATOMIC_COMMIT_CONFLICT");
-  assert.deepEqual((await call("/api/sales-deals/"+rollbackDealId,a)).body.item,
-    rollbackCreate.body.item,"retry after failure must still preserve original Deal");
-  console.log(JSON.stringify({event:"crm.native-original-sales-activities-link-d1",
-    result:"PASS",owner:"crm.sales-activities-link",proven:[
-      "original SalesActivitiesLink::handle",
-      "original ProtobufSalesActivitiesLinkContractAdapter",
-      "original crm-activities Task::create",
-      "same D1 transaction Deal+Task+immutable delivery",
-      "exact account/tenant binding","closed stage ignored",
-      "replay does not duplicate Task","signed Access owner",
-      "A/B tenant Task denial","durable original Task codec",
-      "D1 injected conflict rolls back Deal+Task+receipt atomically"],
-    ui:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
-  console.log(JSON.stringify({event:"crm.native-original-sales-d1",result:"PASS",
-    owner:"crm.sales",proven:["verified Access actor","original Account FK",
-      "domain stage transition and close reason","exact integer currency",
-      "strict codec D1 roundtrip","tenant isolation A/B",
-      "idempotency receipts","optimistic version","forged owner rejected",
-      "request correlation"],
-    primary_contact:"NOT_CONNECTED",ui:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
+ // Activities v2: real signed workerd binary Protobuf against the ORIGINAL
+ // crm-activities Task state, native one-D1 account FK, receipt and audit.
+ const taskV2=async(method,token,payload)=>{
+   const response=await rpcFetch(taskV2Path(method),{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+       ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:binaryTaskV2(method,payload)});
+   return {status:response.status,headers:response.headers,
+     body:response.status<400
+       ?decodeTaskV2(method,new Uint8Array(await response.arrayBuffer()))
+       :await response.json()};
+ };
+ const taskOther="task-aaa-other-"+randomUUID();
+ const taskMid="task-mid-ours-"+randomUUID();
+ const taskLast="task-zzz-ours-"+randomUUID();
+ const taskInput=(taskId,accountId,sequence)=>({
+   taskId,accountId,subject:"Check original Account "+sequence,
+   description:"Signed actor task "+sequence,priority:2,
+   dueAt:{seconds:1860000000n,nanos:987654321},
+   reminderAt:{seconds:1850000000n,nanos:123456789},
+   precondition:{idempotencyKey:"candidate-task-create-"+sequence}
+ });
+ const taskOtherInput={...taskInput(taskOther,accountNextId,"other"),description:undefined};
+ const taskMidInput=taskInput(taskMid,accountId,"mid");
+ const taskLastInput=taskInput(taskLast,accountId,"last");
+ assert.equal((await taskV2("CreateTask",null,taskMidInput)).status,401);
+ assert.equal((await taskV2("CreateTask",viewer,taskMidInput)).status,403);
+ assert.equal((await taskV2("CreateTask",admin,{...taskMidInput,
+   priority:0,precondition:{idempotencyKey:"candidate-task-invalid-priority"}})).status,400);
+ assert.equal((await taskV2("CreateTask",admin,{...taskMidInput,
+   accountId:"missing-account",
+   precondition:{idempotencyKey:"candidate-task-missing-account"}})).status,400);
+ assert.equal((await taskV2("CreateTask",tenantB,{...taskMidInput,
+   precondition:{idempotencyKey:"candidate-task-foreign-account"}})).status,400);
+ assert.equal((await taskV2("CreateTask",admin,{...taskMidInput,
+   reminderAt:{seconds:1700000000n,nanos:0},
+   precondition:{idempotencyKey:"candidate-task-past-reminder"}})).status,400);
+ const taskCreated=await taskV2("CreateTask",admin,taskMidInput);
+ assert.equal(taskCreated.status,200,describeProtobuf(taskCreated.body));
+ assert.equal(taskCreated.body.task?.taskId,taskMid);
+ assert.equal(taskCreated.body.task?.accountId,accountId);
+ assert.equal(taskCreated.body.task?.status,1);
+ assert.equal(taskCreated.body.task?.priority,2);
+ assert.equal(taskCreated.body.task?.description,"Signed actor task mid");
+ assert.equal(taskCreated.body.task?.dueAt?.nanos,987654321);
+ assert.equal(taskCreated.body.task?.reminderAt?.nanos,123456789);
+ assert.equal(taskCreated.body.receipt?.resourceVersion,1n);
+ assert.equal(taskCreated.body.receipt?.requestId,taskCreated.headers.get("x-request-id"));
+ const taskReplay=await taskV2("CreateTask",admin,taskMidInput);
+ assert.equal(taskReplay.status,200);
+ assert.equal(taskReplay.body.receipt?.replayed,true);
+ assert.equal((await taskV2("CreateTask",admin,{
+   ...taskMidInput,subject:"Different same key"})).status,409);
+ assert.equal((await taskV2("GetTask",tenantB,{taskId:taskMid})).status,404);
+ assert.equal((await taskV2("GetTask",viewer,{taskId:taskMid}))
+   .body.task?.accountId,accountId);
+ const taskOtherCreated=await taskV2("CreateTask",admin,taskOtherInput);
+ assert.equal(taskOtherCreated.status,200,describeProtobuf(taskOtherCreated.body));
+ assert.equal(taskOtherCreated.body.task?.description,"",
+   "optional CreateTask.description absent is canonical empty Task.description");
+ assert.equal((await taskV2("CreateTask",admin,taskLastInput)).status,200);
+ const taskFilter=await collectPages(taskV2,"ListTasks","tasks",
+   {accountId,status:1});
+ assert.deepEqual(taskFilter.map(t=>t.taskId),[taskMid,taskLast]);
+ assert.equal((await collectPages(taskV2,"ListTasks","tasks",
+   {accountId:"missing-account"})).length,0);
+ assert.equal((await taskV2("ListTasks",tenantB,{
+   accountId,page:{pageSize:1}})).body.tasks.length,0);
+ assert.equal((await taskV2("ListTasks",viewer,{
+   page:{pageSize:101}})).status,400);
+ const taskComplete={taskId:taskMid,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-task-complete-mid"}};
+ assert.equal((await taskV2("CompleteTask",viewer,taskComplete)).status,403);
+ assert.equal((await taskV2("CompleteTask",admin,{
+   ...taskComplete,precondition:{expectedVersion:0n,
+     idempotencyKey:"candidate-task-invalid-version"}})).status,400);
+ const completed=await taskV2("CompleteTask",admin,taskComplete);
+ assert.equal(completed.status,200,describeProtobuf(completed.body));
+ assert.equal(completed.body.changed,true);
+ assert.equal(completed.body.task?.status,2);
+ assert.equal(completed.body.task?.version,2n);
+ assert.ok(completed.body.task?.completedAt?.seconds>0n);
+ assert.equal(completed.body.task?.reminderAt,undefined);
+ assert.equal(completed.body.receipt?.resourceVersion,2n);
+ const completedReplay=await taskV2("CompleteTask",admin,taskComplete);
+ assert.equal(completedReplay.status,200,describeProtobuf(completedReplay.body));
+ assert.equal(completedReplay.body.receipt?.replayed,true);
+ assert.equal(completedReplay.body.task?.version,2n);
+ const beforeNoop=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+taskMid+"'")[0].n;
+ const unchangedTask=await taskV2("CompleteTask",admin,{
+   taskId:taskMid,
+   precondition:{expectedVersion:2n,idempotencyKey:"candidate-task-unchanged"}});
+ assert.equal(unchangedTask.status,200,describeProtobuf(unchangedTask.body));
+ assert.equal(unchangedTask.body.changed,false);
+ assert.equal(unchangedTask.body.receipt,undefined,
+   "unchanged completion must not claim persisted D1 receipt");
+ assert.equal((await taskV2("CompleteTask",admin,{
+   ...taskComplete,precondition:{expectedVersion:1n,
+     idempotencyKey:"candidate-task-stale"}})).status,409);
+ const lastComplete=await taskV2("CompleteTask",admin,{
+   taskId:taskLast,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-task-complete-last"}});
+ assert.equal(lastComplete.status,200,describeProtobuf(lastComplete.body));
+ assert.equal(lastComplete.body.changed,true);
+ const completedTasks=await collectPages(taskV2,"ListTasks","tasks",
+   {accountId,status:2});
+ assert.deepEqual(completedTasks.map(t=>t.taskId),[taskMid,taskLast]);
+ assert.equal((await collectPages(taskV2,"ListTasks","tasks",
+   {accountId,status:1})).length,0);
+ assert.equal((await collectPages(taskV2,"ListTasks","tasks",
+   {accountId:accountNextId,status:1})).length,1);
+ assert.equal(sql("SELECT version FROM crm_activity_task_records WHERE tenant='tenant-a' "+
+   "AND id='"+taskMid+"'")[0].version,2);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+taskMid+"'")[0].n,beforeNoop);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts "+
+   "WHERE tenant='tenant-a' AND key IN ('candidate-task-create-mid',"+
+   "'candidate-task-complete-mid')")[0].n,2);
+ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
+   result:"PASS",rpc_methods:["CreateTask","CompleteTask","GetTask","ListTasks"],
+   generated_binary:true,original_owner:"crm.activities",signed_access:true,
+   tenant_ab:true,viewer_write_denied:true,
+   filtered_pagination:true,account_fk:true,d1_cas:true,
+   no_op_without_write:true,replay:true,d1_receipts:true,d1_audit:true,
+   published_active:true}));
 
-  // Original Sales editor: signed actor, typed Money, domain validation,
-  // atomic D1 version/receipt/audit. No pilot Deal rules or extra service.
-  const editDealId="native-edit-deal-"+randomUUID();
-  const editPath="/api/sales-deals/"+editDealId;
-  const sqlLiteral=value=>"'"+value.replaceAll("'","''")+"'";
-  const editAudit=()=>d1Rows("SELECT action,request_id FROM crm_audit"+
-    " WHERE tenant_id='tenant-a' AND subject_id="+sqlLiteral(editDealId)+
-    " ORDER BY rowid");
-  const editCreated=await call("/api/sales-deals",a,{method:"POST",
-    headers:{"content-type":"application/json","idempotency-key":"signed-edit-deal-create"},
-    body:JSON.stringify({...dealData,id:editDealId})});
-  assert.equal(editCreated.status,201,JSON.stringify(editCreated));
-  assert.deepEqual(editAudit(),[{
-    action:"sales_deals.create",request_id:editCreated.headers["x-request-id"]
-  }],"create trigger must commit exactly one correlated D1 audit row");
-  assert.equal((await call(editPath,viewer)).status,200,
-    "viewer may read an original Deal in its own tenant");
-  const editBody={expected_version:1,name:"Updated deal",
-    amount_minor_units:98765,currency:"USD",probability_bps:6750};
-  const headers={"content-type":"application/json","idempotency-key":"signed-edit-deal-update"};
-  assert.equal((await call(editPath,b,{method:"PATCH",headers,
-    body:JSON.stringify(editBody)})).status,404,"tenant B cannot edit A Deal");
-  assert.equal((await call(editPath,a,{method:"PATCH",headers:{
-    ...headers,"idempotency-key":"sales-forged-actor"},
-    body:JSON.stringify({...editBody,owner:"forged"})})).status,422);
-  assert.equal((await call(editPath,a,{method:"PATCH",headers:{
-    ...headers,"idempotency-key":"sales-forged-account"},
-    body:JSON.stringify({...editBody,account_id:"fake"})})).status,422);
-  assert.equal((await call(editPath,a,{method:"PATCH",headers:{
-    ...headers,"idempotency-key":"sales-float-amount"},
-    body:JSON.stringify({...editBody,amount_minor_units:12.5})})).status,422);
-  const viewerEdit=await call(editPath,viewer,{
-    method:"PATCH",headers:{...headers,"idempotency-key":"viewer-edit-must-deny"},
-    body:JSON.stringify(editBody)});
-  assert.equal(viewerEdit.status,403,"verified non-admin cannot update a Deal");
-  assert.equal(viewerEdit.body.code,"FORBIDDEN");
-  assert.deepEqual(editAudit(),[{
-    action:"sales_deals.create",request_id:editCreated.headers["x-request-id"]
-  }],"forbidden mutation must not create a D1 audit record");
-  const edited=await call(editPath,a,{method:"PATCH",headers,body:JSON.stringify(editBody)});
-  assert.equal(edited.status,200,JSON.stringify(edited));
-  assert.equal(edited.body.item.version,2);
-  assert.equal(edited.body.item.name,"Updated deal");
-  assert.equal(edited.body.item.amount.minor_units,"98765");
-  assert.equal(edited.body.item.amount.currency,"USD");
-  assert.equal(edited.body.item.probability_bps,6750);
-  assert.equal(edited.body.item.owner.actor,"native-a@example.test");
-  assert.equal(edited.body.item.account_id,accountId);
-  assert.equal(edited.body.item.stage.stage_id,"lead");
-  assert.equal(edited.headers["x-crm-module"],"crm.sales");
-  assert.match(edited.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
-  const expectedAudit=[{
-    action:"sales_deals.create",request_id:editCreated.headers["x-request-id"]
-  },{
-    action:"sales_deals.update",request_id:edited.headers["x-request-id"]
-  }];
-  assert.deepEqual(editAudit(),expectedAudit,
-    "UPDATE trigger must commit sales_deals.update using exact HTTP request_id");
-  const editReplay=await call(editPath,a,{method:"PATCH",headers,body:JSON.stringify(editBody)});
-  assert.equal(editReplay.status,200);assert.equal(editReplay.body.replayed,true);
-  assert.deepEqual(editReplay.body.item,edited.body.item);
-  assert.deepEqual(editAudit(),expectedAudit,
-    "successful idempotent replay must not emit another business audit event");
-  const reuse=await call(editPath,a,{method:"PATCH",headers,
-    body:JSON.stringify({...editBody,name:"Wrong"})});
-  assert.equal(reuse.status,409);assert.equal(reuse.body.code,"IDEMPOTENCY_CONFLICT");
-  const stale=await call(editPath,a,{method:"PATCH",headers:{
-    ...headers,"idempotency-key":"sales-stale-version"},
-    body:JSON.stringify(editBody)});
-  assert.equal(stale.status,409);
-  assert.equal(stale.body.code,"SALES_DEAL_VERSION_CONFLICT");
-  assert.deepEqual(editAudit(),expectedAudit,
-    "conflicting and stale mutations must leave the D1 audit unchanged");
-  const pair=await call(editPath,a,{method:"PATCH",headers:{
-    ...headers,"idempotency-key":"sales-incomplete-money"},
-    body:JSON.stringify({expected_version:2,amount_minor_units:42})});
-  assert.equal(pair.status,422);
-  assert.equal(pair.body.code,"SALES_AMOUNT_CURRENCY_PAIR_REQUIRED");
-  assert.equal((await call(editPath,a,{method:"PATCH",headers:{
-    ...headers,"idempotency-key":"sales-clear-set"},
-    body:JSON.stringify({expected_version:2,amount_minor_units:1,
-      currency:"USD",clear_amount:true})})).status,422);
-  assert.equal((await call(editPath,a,{method:"PATCH",headers:{
-    ...headers,"idempotency-key":"sales-empty-edit"},
-    body:JSON.stringify({expected_version:2})})).status,422);
-  assert.deepEqual(editAudit(),expectedAudit,
-    "all invalid update requests must leave the actual D1 audit unchanged");
-  const cleared=await call(editPath,a,{method:"PATCH",headers:{
-    ...headers,"idempotency-key":"signed-edit-deal-clear"},
-    body:JSON.stringify({expected_version:2,clear_amount:true})});
-  assert.equal(cleared.status,200,JSON.stringify(cleared));
-  assert.equal(cleared.body.item.amount,null);
-  assert.equal(cleared.body.item.version,3);
-  assert.deepEqual(editAudit(),[...expectedAudit,{
-    action:"sales_deals.update",request_id:cleared.headers["x-request-id"]
-  }],"clear-amount must emit exactly one additional sales_deals.update event");
-  assert.deepEqual((await call(editPath,a)).body.item,cleared.body.item,
-    "original Deal codec must persist clear amount via one D1");
-  assert.equal((await call(editPath,b)).status,404);
-  console.log(JSON.stringify({event:"crm.native-original-sales-update-d1",
-    result:"PASS",owner:"crm.sales",exact_money:true,
-    audit:"D1_TRIGGER_REQUEST_ID_PROVEN",
-    denied_role:"viewer_403_NO_D1_SIDE_EFFECT",
-    replay:"NO_EXTRA_AUDIT",failed_update:"NO_AUDIT",
-    actor:"verified Access",ui:"NOT_CONNECTED",live:"NOT_TESTED"}));
 
-  // Original Contact Point lifecycle under real JWT and production migration.
-  assert.equal((await call("/api/contact-points",null)).status,401);
-  assert.deepEqual((await call("/api/contact-points",b)).body.items,[]);
-  const contactPointId="native-contact-point-"+randomUUID();
-  const pointData={id:contactPointId,party_id:id,kind:"email",
-    value:"contact@example.org",preferred:true,
-    valid_from_unix_nanos:null,valid_until_unix_nanos:null};
-  const cpHeaders={"content-type":"application/json",
-    "idempotency-key":"signed-contact-point-create"};
-  const cpNotOwned=await call("/api/contact-points",b,
-    {method:"POST",headers:cpHeaders,body:JSON.stringify(pointData)});
-  assert.equal(cpNotOwned.status,422,"cross-tenant Party reference denied");
-  assert.equal(cpNotOwned.body.code,"CONTACT_POINTS_PARTY_NOT_FOUND");
-  const invalidPoint=await call("/api/contact-points",a,
-    {method:"POST",headers:{...cpHeaders,"idempotency-key":"contact-point-invalid"},
-      body:JSON.stringify({...pointData,value:"not-an-email"})});
-  assert.equal(invalidPoint.status,422,"original domain rejects malformed email");
-  const pointConsentSpoof=await call("/api/contact-points",a,{method:"POST",
-    headers:{...cpHeaders,"idempotency-key":"contact-point-consent-spoof"},
-    body:JSON.stringify({...pointData,consent:true})});
-  assert.equal(pointConsentSpoof.status,422,"Contact Point cannot accept forged consent");
-  const pointCreate=await call("/api/contact-points",a,
-    {method:"POST",headers:cpHeaders,body:JSON.stringify(pointData)});
-  assert.equal(pointCreate.status,201,JSON.stringify(pointCreate));
-  assert.equal(pointCreate.body.item.party_id,id);
-  assert.equal(pointCreate.body.item.kind,"email");
-  assert.equal(pointCreate.body.item.normalized_value,"contact@example.org");
-  assert.equal(pointCreate.body.item.verified,false,
-    "record creation is not verification or communication consent");
-  assert.equal(pointCreate.body.item.version,1);
-  assert.equal(pointCreate.headers["x-crm-module"],"crm.contact-points");
-  assert.match(pointCreate.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
-  assert.equal((await call("/api/contact-points/"+contactPointId,b)).status,404);
-  assert.equal((await call("/api/contact-points/"+contactPointId,serviceB)).status,404);
-  const pointRead=await call("/api/contact-points/"+contactPointId,a);
-  assert.equal(pointRead.status,200);
-  assert.deepEqual(pointRead.body.item,pointCreate.body.item,
-    "original strict ContactPoint codec must survive D1 roundtrip");
-  const pointReplay=await call("/api/contact-points",a,
-    {method:"POST",headers:cpHeaders,body:JSON.stringify(pointData)});
-  assert.equal(pointReplay.status,200);
-  assert.equal(pointReplay.body.replayed,true);
-  const keyConflict=await call("/api/contact-points",a,
-    {method:"POST",headers:cpHeaders,
-      body:JSON.stringify({...pointData,value:"different@example.org"})});
-  assert.equal(keyConflict.status,409);
-  assert.equal(keyConflict.body.code,"IDEMPOTENCY_CONFLICT");
-  const pointUpdate={expected_version:1,value:"new@example.org",status:"active",
-    preferred:false,valid_from_unix_nanos:null,valid_until_unix_nanos:null};
-  const pointUpdateInit={method:"PATCH",headers:{"content-type":"application/json",
-    "idempotency-key":"signed-contact-point-update"},
-    body:JSON.stringify(pointUpdate)};
-  const changedPoint=await call("/api/contact-points/"+contactPointId,a,pointUpdateInit);
-  assert.equal(changedPoint.status,200,JSON.stringify(changedPoint));
-  assert.equal(changedPoint.body.item.version,2);
-  assert.equal(changedPoint.body.item.normalized_value,"new@example.org");
-  assert.equal(changedPoint.body.item.verified,false);
-  const changedReplay=await call("/api/contact-points/"+contactPointId,a,pointUpdateInit);
-  assert.equal(changedReplay.status,200);
-  assert.equal(changedReplay.body.replayed,true);
-  const pointStale=await call("/api/contact-points/"+contactPointId,a,
-    {...pointUpdateInit,headers:{...pointUpdateInit.headers,
-      "idempotency-key":"signed-contact-point-stale"}});
-  assert.equal(pointStale.status,409);
-  assert.equal(pointStale.body.code,"CONTACT_POINTS_VERSION_CONFLICT");
-  assert.equal((await call("/api/contact-points/"+contactPointId+"/verify",a,
-    {method:"POST",headers:{"content-type":"application/json"},
-      body:JSON.stringify({evidence_ref:"user-claims-verified"})})).status,404,
-    "untrusted HTTP evidence must never create verified state");
-  assert.equal((await call("/api/contact-points/"+contactPointId,a)).body.item.verified,false);
-  const pointList=await call("/api/contact-points",a);
-  assert.equal(pointList.status,200);
-  assert.ok(pointList.body.items.some(x=>x.id===contactPointId&&x.version===2));
-  assert.deepEqual((await call("/api/contact-points",b)).body.items,[]);
-  console.log(JSON.stringify({event:"crm.native-original-contact-point-d1",result:"PASS",
-    owner:"crm.contact-points",
-    proven:["signed Access A/B","Party FK","domain email normalization and rejection",
-      "strict codec D1 roundtrip","tenant isolation","idempotency","version",
-      "no self-attested verification","request correlation"],
-    consent:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
-  // Two ORIGINAL Party records are the ONLY valid relationship endpoints.
-  assert.equal((await call("/api/party-relationships",null)).status,401);
-  const otherPartyId="native-rel-party-"+randomUUID();
-  const secondParty=await call("/api/parties",a,{method:"POST",headers:{
-    "content-type":"application/json","idempotency-key":"signed-second-party"},
-    body:JSON.stringify({id:otherPartyId,kind:"person",name:"Native Related Person"})});
-  assert.equal(secondParty.status,201,JSON.stringify(secondParty));
-  // Original normalized ContactPoint states, not client-generated evidence,
-  // produce a single unverified shared-email observation.
-  const beforeCandidates=await call("/api/identity-resolution/candidates",a);
-  assert.equal(beforeCandidates.status,200);
-  assert.deepEqual(beforeCandidates.body.items,[]);
-  const sameEmail=await call("/api/contact-points",a,{method:"POST",
-    headers:{"content-type":"application/json","idempotency-key":"identity-shared-email"},
-    body:JSON.stringify({...pointData,id:"identity-email-"+randomUUID(),
-      party_id:otherPartyId,value:"new@example.org",preferred:false})});
-  assert.equal(sameEmail.status,201,JSON.stringify(sameEmail));
-  assert.equal(sameEmail.body.item.verified,false);
-  const found=await call("/api/identity-resolution/candidates",a);
-  assert.equal(found.status,200,JSON.stringify(found));
-  assert.equal(found.headers["x-crm-module"],"crm.identity-resolution");
-  assert.equal(found.body.match_score,"NOT_COMPUTED");
-  assert.equal(found.body.candidate_cases,"NOT_CONNECTED");
-  assert.equal(found.body.items.length,1);
-  assert.deepEqual([found.body.items[0].first.id,found.body.items[0].second.id].sort(),
-    [id,otherPartyId].sort());
-  assert.equal(found.body.items[0].both_contacts_verified,false);
-  assert.equal(found.body.items[0].identity_confirmed,false);
-  assert.equal((await call("/api/identity-resolution/candidates",viewer)).status,200);
-  assert.deepEqual((await call("/api/identity-resolution/candidates",b)).body.items,[]);
-  assert.equal((await call("/api/identity-resolution/candidates",null)).status,401);
-  assert.equal((await call("/api/identity-resolution/candidates",a,{method:"POST"}))
-    .status,404,"candidate discovery is read-only");
-  // Safe original Identity Resolution pair validation and tenant-bound Party
-  // readback. This does NOT claim matcher evidence or persisted duplicate cases.
-  const comparePath="/api/identity-resolution/compare/"+id+"/"+otherPartyId;
-  const compared=await call(comparePath,a);
-  assert.equal(compared.status,200,JSON.stringify(compared));
-  assert.equal(compared.headers["x-crm-module"],"crm.identity-resolution");
-  assert.equal(compared.body.read_only,true);
-  assert.equal(compared.body.candidate_cases,"NOT_CONNECTED");
-  assert.equal(compared.body.match_evidence,"NOT_ASSESSED");
-  assert.equal(compared.body.first.id,id,"first result follows first selection");
-  assert.equal(compared.body.second.id,otherPartyId,
-    "second result follows second selection");
-  assert.deepEqual([compared.body.canonical_pair.left_id,
-    compared.body.canonical_pair.right_id].sort(),[id,otherPartyId].sort(),
-    "original Rust domain establishes the canonical pair");
-  const reverse=await call("/api/identity-resolution/compare/"+otherPartyId+"/"+id,a);
-  assert.equal(reverse.status,200);
-  assert.equal(reverse.body.first.id,otherPartyId,
-    "swapping the selected order swaps the displayed rows");
-  assert.equal(reverse.body.second.id,id);
-  assert.deepEqual(reverse.body.canonical_pair,compared.body.canonical_pair);
-  assert.equal((await call(comparePath,viewer)).status,200,
-    "verified viewer may compare two records without mutation");
-  assert.equal((await call(comparePath,b)).status,404,
-    "tenant B cannot compare tenant A records");
-  assert.equal((await call(comparePath,null)).status,401);
-  assert.equal((await call("/api/identity-resolution/compare/"+id+"/"+id,a))
-    .body.code,"IDENTITY_RESOLUTION_SELF_PAIR_INVALID");
-  assert.equal((await call("/api/identity-resolution/compare/"+id+"/missing-party",a))
-    .status,404);
-  assert.equal((await call(comparePath,a,{method:"POST"})).status,404,
-    "no mutation endpoint exists for unsupported evidence or merge");
-  console.log(JSON.stringify({event:"crm.native-original-identity-comparison",
-    result:"PASS",source:"crm.identity-resolution",read_only:true,
-    candidate_cases:"NOT_CONNECTED",merge:"NOT_CONNECTED"}));
-  const relationshipId="native-relationship-"+randomUUID();
-  const relationshipData={id:relationshipId,from_party_id:id,to_party_id:otherPartyId,
-    code:"employment",directionality:"directional",from_role:"employer",to_role:"employee",
-    valid_from_unix_nanos:null,valid_until_unix_nanos:null};
-  const relationshipHeader={"content-type":"application/json",
-    "idempotency-key":"signed-relationship-create"};
-  const otherTenantRelationship=await call("/api/party-relationships",b,{
-    method:"POST",headers:relationshipHeader,body:JSON.stringify(relationshipData)});
-  assert.equal(otherTenantRelationship.status,422);
-  assert.equal(otherTenantRelationship.body.code,"PARTY_RELATIONSHIPS_PARTY_NOT_FOUND");
-  const invalidRelation=await call("/api/party-relationships",a,{
-    method:"POST",headers:{...relationshipHeader,
-      "idempotency-key":"signed-relationship-invalid"},
-    body:JSON.stringify({...relationshipData,to_party_id:id})});
-  assert.equal(invalidRelation.status,422,"original domain forbids self relationship");
-  const relSpoof=await call("/api/party-relationships",a,{
-    method:"POST",headers:{...relationshipHeader,
-      "idempotency-key":"relationship-unknown-field"},
-    body:JSON.stringify({...relationshipData,owner:"attacker"})});
-  assert.equal(relSpoof.status,422,"Relationship rejects unknown owner field");
-  const relCreated=await call("/api/party-relationships",a,{
-    method:"POST",headers:relationshipHeader,body:JSON.stringify(relationshipData)});
-  assert.equal(relCreated.status,201,JSON.stringify(relCreated));
-  assert.equal(relCreated.body.item.id,relationshipId);
-  assert.equal(relCreated.body.item.from_party_id,id);
-  assert.equal(relCreated.body.item.to_party_id,otherPartyId);
-  assert.equal(relCreated.body.item.type.code,"employment");
-  assert.equal(relCreated.body.item.version,1);
-  assert.equal(relCreated.headers["x-crm-module"],"crm.party-relationships");
-  assert.match(relCreated.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
-  const relRead=await call("/api/party-relationships/"+relationshipId,a);
-  assert.equal(relRead.status,200);
-  assert.deepEqual(relRead.body.item,relCreated.body.item,
-    "original relationship encode -> D1 -> decode must preserve type and roles");
-  assert.equal((await call("/api/party-relationships/"+relationshipId,b)).status,404);
-  assert.equal((await call("/api/party-relationships/"+relationshipId,serviceB)).status,404);
-  const relReplay=await call("/api/party-relationships",a,{
-    method:"POST",headers:relationshipHeader,body:JSON.stringify(relationshipData)});
-  assert.equal(relReplay.status,200);
-  assert.equal(relReplay.body.replayed,true);
-  const relKeyConflict=await call("/api/party-relationships",a,{
-    method:"POST",headers:relationshipHeader,
-    body:JSON.stringify({...relationshipData,code:"other-code"})});
-  assert.equal(relKeyConflict.status,409);
-  assert.equal(relKeyConflict.body.code,"IDEMPOTENCY_CONFLICT");
-  const relUpdate={expected_version:1,status:"inactive",
-    valid_from_unix_nanos:null,valid_until_unix_nanos:null};
-  const relInit={method:"PATCH",headers:{"content-type":"application/json",
-    "idempotency-key":"signed-relationship-update"},body:JSON.stringify(relUpdate)};
-  const relChanged=await call("/api/party-relationships/"+relationshipId,a,relInit);
-  assert.equal(relChanged.status,200,JSON.stringify(relChanged));
-  assert.equal(relChanged.body.item.version,2);
-  assert.equal(relChanged.body.item.status,"inactive");
-  const relUpdateReplay=await call("/api/party-relationships/"+relationshipId,a,relInit);
-  assert.equal(relUpdateReplay.status,200);
-  assert.equal(relUpdateReplay.body.replayed,true);
-  const relStale=await call("/api/party-relationships/"+relationshipId,a,{
-    ...relInit,headers:{...relInit.headers,
-      "idempotency-key":"signed-relationship-stale"}});
-  assert.equal(relStale.status,409);
-  assert.equal(relStale.body.code,"PARTY_RELATIONSHIPS_VERSION_CONFLICT");
-  assert.ok((await call("/api/party-relationships",a)).body.items
-    .some(x=>x.id===relationshipId&&x.version===2));
-  assert.deepEqual((await call("/api/party-relationships",b)).body.items,[]);
-  console.log(JSON.stringify({event:"crm.native-original-party-relationships-d1",
-    result:"PASS",owner:"crm.party-relationships",
-    proven:["two Party FK in one tenant","original domain lifecycle",
-      "strict codec/D1 roundtrip","Access A/B","idempotency receipts",
-      "stale version","no reflexive relationship","request correlation"],
-    published_live:"NOT_TESTED",ui:"TESTED_IN_BROWSER_BELOW"}));
+ // Original read-only DataQuality and Identity Resolution, signed binary
+ // Connect from the exact generated descriptor, with tenant A/B and viewer.
+ const signedReadOnly=(path,encode,decode)=>async(method,token,payload)=>{
+   const r=await rpcFetch(path(method),{method:"POST",headers:{
+     "content-type":"application/proto","connect-protocol-version":"1",
+     ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:encode(method,payload)});
+   return {status:r.status,headers:r.headers,
+     body:r.status<400?decode(method,new Uint8Array(await r.arrayBuffer())):await r.json()};
+ };
+ const qualityV2=signedReadOnly(qualityV2Path,binaryQualityV2,decodeQualityV2);
+ const identityV2=signedReadOnly(identityV2Path,binaryIdentityV2,decodeIdentityV2);
+ assert.equal((await qualityV2("EvaluatePartyName",null,{partyId:id})).status,401);
+ assert.equal((await qualityV2("EvaluatePartyName",tenantB,{partyId:id})).status,404);
+ assert.equal((await qualityV2("EvaluatePartyName",viewer,{partyId:""})).status,400);
+ assert.equal((await qualityV2("EvaluatePartyName",viewer,{partyId:"missing-party"})).status,404);
+ const quality=await qualityV2("EvaluatePartyName",viewer,{partyId:id});
+ assert.equal(quality.status,200,describeProtobuf(quality.body));
+ assert.equal(quality.body.party?.partyId,id);
+ assert.ok(quality.body.ruleSetVersion);
+ assert.equal(quality.body.checks.length,2);
+ assert.equal(quality.body.failedCount,0);
+ assert.ok(quality.body.checks.every(c=>c.passed));
+ const shortQualityId="quality-short-"+randomUUID();
+ const shortCreated=await v3("CreateParty",admin,{
+   partyId:shortQualityId,kind:1,displayName:"A",
+   precondition:{idempotencyKey:"quality-short-create"}});
+ assert.equal(shortCreated.status,200,describeProtobuf(shortCreated.body));
+ const poorQuality=await qualityV2("EvaluatePartyName",viewer,{partyId:shortQualityId});
+ assert.equal(poorQuality.status,200,describeProtobuf(poorQuality.body));
+ assert.equal(poorQuality.body.failedCount,1);
+ assert.equal(poorQuality.body.checks.filter(x=>!x.passed).length,1);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+shortQualityId+"'")[0].n,1,
+   "quality read must not append audit or finding");
+ console.log(JSON.stringify({event:"crm.native-g3-data-quality-v2",
+   result:"PASS",rpc_methods:["EvaluatePartyName"],generated_binary:true,
+   original_owner:"crm.data-quality",tenant_ab:true,viewer_read:true,
+   no_duplicate_rules:true,no_writes:true,published_active:true}));
 
-  // Original Consent authority: fail closed until trusted subject grant evidence
-  // exists. A signed operator can record a suppression, never a self-grant.
-  assert.equal((await call("/api/consents",null)).status,401);
-  assert.deepEqual((await call("/api/consents",b)).body.items,[]);
-  const evalScope={party_id:id,contact_point_id:contactPointId,
-    purpose:"marketing.newsletter",channel:"email"};
-  const evalInit={method:"POST",headers:{"content-type":"application/json"},
-    body:JSON.stringify(evalScope)};
-  const ungranted=await call("/api/consents/evaluate",a,evalInit);
-  assert.equal(ungranted.status,200,JSON.stringify(ungranted));
-  assert.equal((await call("/api/consents/evaluate",viewer,evalInit)).status,200,
-    "Consent evaluation is a read-only query even when transported via POST");
-  assert.equal(ungranted.body.allowed,false);
-  assert.equal(ungranted.body.reason,"no_applicable_grant");
-  assert.equal(ungranted.body.grant_ingress,"NOT_CONNECTED");
-  const noGrant=await call("/api/consents",a,{
-    method:"POST",headers:{"content-type":"application/json"},
-    body:JSON.stringify({effect:"grant",evidence_ref:"i-consent"})});
-  assert.equal(noGrant.status,404,"untrusted consent grant ingress absent");
-  const forgedGrant=await call("/api/consents/suppress",a,{
-    method:"POST",headers:{"content-type":"application/json",
-      "idempotency-key":"forged-consent-grant"},
-    body:JSON.stringify({id:"spoof",...evalScope,jurisdiction:"eu",
-      effect:"grant",evidence_ref:"unverified"})});
-  assert.equal(forgedGrant.status,422,"strict API denies forged Grant and evidence");
-  const suppressionId="native-consent-suppression-"+randomUUID();
-  const suppression={id:suppressionId,...evalScope,jurisdiction:"eu"};
-  const supHeaders={"content-type":"application/json",
-    "idempotency-key":"signed-original-consent-suppression"};
-  const crossTenantSuppression=await call("/api/consents/suppress",b,{
-    method:"POST",headers:supHeaders,body:JSON.stringify(suppression)});
-  assert.equal(crossTenantSuppression.status,422);
-  assert.equal(crossTenantSuppression.body.code,"CONSENTS_PARTY_NOT_FOUND");
-  const wrongPartySuppression=await call("/api/consents/suppress",a,{
-    method:"POST",headers:{...supHeaders,
-      "idempotency-key":"consent-wrong-contact-party"},
-    body:JSON.stringify({...suppression,party_id:otherPartyId})});
-  assert.equal(wrongPartySuppression.status,422);
-  assert.equal(wrongPartySuppression.body.code,"CONSENTS_CONTACT_POINT_PARTY_MISMATCH");
-  const viewerSuppress=await call("/api/consents/suppress",viewer,{
-    method:"POST",headers:{...supHeaders,"idempotency-key":"viewer-denied-suppress"},
-    body:JSON.stringify(suppression)});
-  assert.equal(viewerSuppress.status,403,
-    "Consent operator suppression must reject a non-admin in the same tenant");
-  assert.equal(viewerSuppress.body.code,"FORBIDDEN");
-  const suppressed=await call("/api/consents/suppress",a,{
-    method:"POST",headers:supHeaders,body:JSON.stringify(suppression)});
-  assert.equal(suppressed.status,201,JSON.stringify(suppressed));
-  assert.equal(suppressed.body.item.id,suppressionId);
-  assert.equal(suppressed.body.item.effect,"deny");
-  assert.equal(suppressed.body.item.status,"active");
-  assert.equal(suppressed.body.item.source,"crm.access.operator");
-  assert.match(suppressed.body.item.evidence_ref,/^operator-action:[0-9a-f-]{36}$/i);
-  assert.equal(suppressed.body.operator_action,true);
-  assert.equal(suppressed.body.subject_consent_evidence,false);
-  assert.equal(suppressed.body.item.version,1);
-  assert.equal(suppressed.headers["x-crm-module"],"crm.consents");
-  const suppressionReplay=await call("/api/consents/suppress",a,{
-    method:"POST",headers:supHeaders,body:JSON.stringify(suppression)});
-  assert.equal(suppressionReplay.status,200);
-  assert.equal(suppressionReplay.body.replayed,true);
-  const suppressionIdemConflict=await call("/api/consents/suppress",a,{
-    method:"POST",headers:supHeaders,
-    body:JSON.stringify({...suppression,purpose:"other"})});
-  assert.equal(suppressionIdemConflict.status,409);
-  assert.equal(suppressionIdemConflict.body.code,"IDEMPOTENCY_CONFLICT");
-  const denied=await call("/api/consents/evaluate",a,evalInit);
-  assert.equal(denied.status,200,JSON.stringify(denied));
-  assert.equal(denied.body.allowed,false);
-  assert.equal(denied.body.reason,"active_deny");
-  assert.deepEqual(denied.body.determining_authorization_ids,[suppressionId]);
-  const unscoped=await call("/api/consents/evaluate",a,{
-    ...evalInit,body:JSON.stringify({...evalScope,purpose:"nonmarketing"})});
-  assert.equal(unscoped.status,200);
-  assert.equal(unscoped.body.reason,"no_applicable_grant");
-  const afterDenied=await call("/api/consents",a);
-  assert.equal(afterDenied.status,200);
-  assert.ok(afterDenied.body.items.some(x=>x.id===suppressionId&&x.effect==="deny"));
-  assert.deepEqual((await call("/api/consents",b)).body.items,[]);
-  assert.equal((await call("/api/consents/"+suppressionId+"/withdraw",a,
-    {method:"POST",headers:{"content-type":"application/json"},
-      body:JSON.stringify({expected_version:1})})).status,404,
-    "operator suppression cannot be reinterpreted as subject consent withdrawal");
-  console.log(JSON.stringify({event:"crm.native-original-consents-d1",result:"PASS",
-    owner:"crm.consents",proven:["original Consent Authorization deny aggregate",
-      "original evaluate_communication_authorization fail-closed",
-      "signed Access operator provenance","Party + ContactPoint tenant integrity",
-      "strict codec D1 roundtrip","no client-issued grant or forged evidence",
-      "A/B tenant isolation","idempotency","request correlation"],
-    grant_ingress:"NOT_CONNECTED",subject_consent_evidence:"NOT_CONNECTED",
-    ui:"NOT_CONNECTED",published_live:"NOT_TESTED"}));
+ const beforeCandidates=await identityV2("FindSharedEmailCandidates",viewer,{page:{pageSize:1}});
+ assert.equal(beforeCandidates.status,200,describeProtobuf(beforeCandidates.body));
+ assert.equal(beforeCandidates.body.candidates.length,0);
+ const auditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n;
+ for(const [index,partyId] of [pagingPersonId,"binary-rpc-proof-01"].entries()){
+   const contact=await contactV2("CreateContactPoint",admin,{
+     contactPointId:"shared-email-"+index+"-"+randomUUID(),
+     partyId,kind:1,value:"later-timestamps@example.org",preferred:false,
+     precondition:{idempotencyKey:"shared-email-create-"+index}});
+   assert.equal(contact.status,200,describeProtobuf(contact.body));
+   assert.equal(contact.body.contactPoint?.verified,false);
+ }
+ const auditAfter=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n;
+ assert.equal(auditAfter,auditBefore+2);
+ assert.equal((await identityV2("FindSharedEmailCandidates",null,{})).status,401);
+ assert.equal((await identityV2("FindSharedEmailCandidates",viewer,{page:{pageSize:101}})).status,400);
+ assert.equal((await identityV2("FindSharedEmailCandidates",viewer,{
+   page:{pageSize:1,pageToken:"invalid"}})).status,400);
+ assert.equal((await identityV2("FindSharedEmailCandidates",tenantB,{
+   page:{pageSize:1}})).body.candidates.length,0);
+ const matches=await collectPages(identityV2,"FindSharedEmailCandidates","candidates");
+ assert.equal(matches.length,3,"three canonical pair observations");
+ assert.ok(matches.every(c=>!c.bothContactsVerified));
+ const pairs=matches.map(c=>[c.firstParty?.partyId,c.secondParty?.partyId].join("|"));
+ assert.equal(new Set(pairs).size,3);
+ assert.ok(matches.every(c=>c.firstParty.partyId<c.secondParty.partyId));
+ const compare={firstPartyId:pagingPersonId,secondPartyId:id};
+ assert.equal((await identityV2("CompareParties",null,compare)).status,401);
+ assert.equal((await identityV2("CompareParties",tenantB,compare)).status,404);
+ assert.equal((await identityV2("CompareParties",viewer,{
+   firstPartyId:id,secondPartyId:id})).status,400);
+ assert.equal((await identityV2("CompareParties",viewer,{
+   firstPartyId:id,secondPartyId:"missing-party"})).status,404);
+ const compared=await identityV2("CompareParties",viewer,compare);
+ assert.equal(compared.status,200,describeProtobuf(compared.body));
+ assert.equal(compared.body.firstParty?.partyId,pagingPersonId);
+ assert.equal(compared.body.secondParty?.partyId,id);
+ assert.equal(compared.body.samePartyId,false);
+ assert.equal(compared.body.identityConfirmed,false);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n,
+   auditAfter,"read-only identity operations must not write audit");
+ console.log(JSON.stringify({event:"crm.native-g3-identity-resolution-v2",
+   result:"PASS",rpc_methods:["FindSharedEmailCandidates","CompareParties"],
+   generated_binary:true,original_owner:"crm.identity-resolution",
+   tenant_ab:true,viewer_read:true,pagination:true,no_identity_verdict:true,
+   no_writes:true,published_active:true}));
 
-  // One native read-only Account card: reuse the ORIGINAL owner codecs and
-  // existing D1, never legacy crm_customers/customer360 pilot tables.
-  const overviewPath="/api/accounts/"+accountId+"/overview";
-  assert.equal((await call(overviewPath,null)).status,401);
-  assert.equal((await call(overviewPath,b)).status,404,
-    "foreign Access tenant cannot see an original Account card");
-  assert.equal((await call(overviewPath,serviceB)).status,404);
-  assert.equal((await call("/api/accounts/does-not-exist/overview",a)).status,404);
-  assert.equal((await call(overviewPath,a,{method:"POST"})).status,404,
-    "native original Account card must remain read-only");
-  const overview=await call(overviewPath,a);
-  assert.equal(overview.status,200,JSON.stringify(overview));
-  assert.equal(overview.headers["x-crm-module"],"crm.customer-accounts");
-  assert.match(overview.headers["x-request-id"],/^[0-9a-f-]{36}$/i);
-  assert.deepEqual(overview.body.account,savedAccount.body.item,
-    "projection must reuse original Account state and view");
-  assert.equal(overview.body.primary_party.id,id);
-  assert.ok(overview.body.contact_points.some(x=>x.id===contactPointId &&
-    x.normalized_value==="new@example.org" && x.verified===false));
-  assert.ok(overview.body.party_relationships.some(x=>x.id===relationshipId &&
-    x.status==="inactive"));
-  assert.ok(overview.body.deals.some(x=>x.id===dealId &&
-    x.status==="won" && x.amount.minor_units==="12500"));
-  assert.ok(overview.body.tasks.some(x=>x.id===taskId &&
-    x.status==="completed"));
-  assert.ok(overview.body.tasks.some(x=>x.id===linkedId &&
-    x.related_resources[0].resource_id===dealId));
-  assert.equal(overview.body.scope.contact_points,"primary_party_only");
-  assert.equal(overview.body.scope.limit_per_collection,100);
-  assert.deepEqual(overview.body.truncated,{
-    contact_points:false,party_relationships:false,deals:false,tasks:false});
-  const overviewAgain=await call(overviewPath,a);
-  assert.deepEqual(overviewAgain.body,overview.body,"read-only D1 projection is stable");
-  console.log(JSON.stringify({event:"crm.native-original-account-overview-d1",
-    result:"PASS",original_owners:["crm.customer-accounts","crm.parties",
-      "crm.contact-points","crm.party-relationships","crm.sales","crm.activities"],
-    persistence:"one native D1",writes:"none",ui:"NOT_CONNECTED",
-    cloudflare_live:"NOT_TESTED"}));
 
-  const init={method:"PATCH",headers:{"content-type":"application/json",
-    "idempotency-key":"native-signed-update"},
-    body:JSON.stringify({expected_version:1,name:"Native Updated"})};
-  const changed=await call("/api/parties/"+id,a,init);
-  assert.equal(changed.status,200,JSON.stringify(changed));
-  assert.equal(changed.body.item.version,2);
-  const replay=await call("/api/parties/"+id,a,init);
-  assert.equal(replay.status,200);
-  assert.equal(replay.body.replayed,true);
-  // Browser proof: the EXISTING React Parties screen talks directly to this
-  // single native workers-rs Worker, no JS API handler or internal Worker RPC.
-  // The other pilot React tabs are intentionally not in scope for this gate.
-  const evidenceDir="e2e-evidence-native";
-  mkdirSync(join(cwd,"..",evidenceDir),{recursive:true});
-  const browser=await chromium.launch({headless:true});
-  const browserErrors=[];
-  const marker="NativeRust-"+randomUUID().slice(0,8);
-  const screenshot=join(cwd,"..",evidenceDir,"native-party-desktop.png");
-  const manifest=join(cwd,"..",evidenceDir,"manifest.json");
-  let uiSteps=[];
-  try{
-    const context=await browser.newContext({viewport:{width:1280,height:850},
-      extraHTTPHeaders:{"cf-access-jwt-assertion":a}});
-    const page=await context.newPage();
-    page.on("pageerror",error=>browserErrors.push(error.message));
-    const index=await page.goto(origin,{waitUntil:"domcontentloaded"});
-    assert.equal(index.status(),200,"the SAME native Rust Worker serves React Static Assets");
-    await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",
-      {name:/Лица и организации/}).click();
-    const area=page.locator('section[aria-label="Лица и организации (Rust)"]');
-    await area.waitFor();
-    uiSteps.push("React existing Parties screen rendered from native Worker assets");
-    await area.getByRole("button",{name:/Добавить лицо/}).click();
-    await page.getByLabel("Имя / название").fill(marker);
-    await page.getByRole("button",{name:"Сохранить",exact:true}).click();
-    await area.getByRole("status").getByText("Сохранено через Rust / D1").waitFor();
-    await area.getByRole("row").filter({hasText:marker}).waitFor();
-    uiSteps.push("React click -> original Rust Party create -> D1 persistence -> UI");
-    const persisted=await call("/api/parties",a);
-    assert.equal(persisted.status,200);
-    assert.ok(persisted.body.items.some(x=>x.name===marker),
-      "Native API must read the exact browser-created Party from D1");
-    const row=area.getByRole("row").filter({hasText:marker});
-    await row.getByRole("button",{name:"Изменить"}).click();
-    const updatedName=marker+"-updated";
-    await page.getByLabel("Имя / название").fill(updatedName);
-    await page.getByRole("button",{name:"Сохранить",exact:true}).click();
-    await area.getByRole("row").filter({hasText:updatedName}).waitFor();
-    await area.getByRole("status").getByText("Сохранено через Rust / D1").waitFor();
-    // Same-page cross-module readback: Party save is not accepted until the
-    // Account selector has the updated Party. No reload to hide stale UI state.
-    await page.getByRole("navigation",{name:"Разделы"})
-      .getByRole("button",{name:/Клиенты/}).click();
-    await page.getByRole("button",{name:"+ Добавить клиента"}).click();
-    await page.getByLabel("Лицо / организация",{exact:true})
-      .selectOption({label:updatedName},{timeout:5000});
-    await page.getByRole("button",{name:"Отмена"}).click();
-    uiSteps.push("Party update -> Account selector updated without browser reload");
-    await page.reload({waitUntil:"domcontentloaded"});
-    await page.getByRole("navigation",{name:"Разделы"}).getByRole("button",
-      {name:/Лица и организации/}).click();
-    await page.locator('section[aria-label="Лица и организации (Rust)"]')
-      .getByRole("row").filter({hasText:updatedName}).waitFor();
-    uiSteps.push("Browser reload -> persisted D1 state available");
-    // The visible client/contact/deal/task React screens must use ORIGINAL
-    // owner APIs, not the retired /api/customers|contacts|deals|tasks pilot.
-    const navigation=page.getByRole("navigation",{name:"Разделы"});
-    const selectTab=async title=>navigation.getByRole("button",{name:new RegExp(title)}).click();
-    const submitForm=async()=>{
-      await page.getByRole("button",{name:"Сохранить",exact:true}).click();
-      await page.getByRole("status").getByText("Сохранено").waitFor();
-    };
-    // The previously API-tested relationship owner is now physically reachable
-    // from React, using the same signed Access identity and D1.
-    await selectTab("Связи");
-    await page.getByRole("button",{name:"+ Добавить связь"}).click();
-    await page.getByRole("button",{name:"Отмена"}).click();
-    assert.equal(await page.getByLabel("От кого").count(),0);
-    await page.getByRole("button",{name:"+ Добавить связь"}).click();
-    await page.getByLabel("От кого").selectOption({label:updatedName});
-    await page.getByLabel("К кому").selectOption({label:"Native Related Person"});
-    await submitForm();
-    const related=await call("/api/party-relationships",a);
-    const relationshipUI=related.body.items.find(x=>
-      x.from_party_id===persisted.body.items.find(p=>p.name===marker)?.id&&
-      x.to_party_id===otherPartyId);
-    assert.equal(relationshipUI?.version,1,"UI relationship must persist through original Rust");
-    const relationRow=page.getByRole("row").filter({hasText:updatedName})
-      .filter({hasText:"Native Related Person"});
-    await relationRow.getByRole("button",{name:"Изменить"}).click();
-    await page.getByLabel("Статус связи").selectOption("inactive");
-    await submitForm();
-    const relationRead=await call("/api/party-relationships/"+relationshipUI.id,a);
-    assert.equal(relationRead.body.item.version,2);
-    assert.equal(relationRead.body.item.status,"inactive");
-    uiSteps.push("React PartyRelationships create/update -> original Rust D1");
-    const customer="Native customer "+marker;
-    await selectTab("Клиенты");
-    await page.getByRole("button",{name:"+ Добавить клиента"}).click();
-    await page.getByLabel("Название",{exact:true}).fill(customer);
-    await page.getByLabel("Лицо / организация",{exact:true}).selectOption({label:updatedName});
-    await submitForm();
-    await page.getByRole("row").filter({hasText:customer}).waitFor();
-    const accounts=await call("/api/accounts",a);
-    const saved=accounts.body.items.find(x=>x.name===customer);
-    assert.ok(saved?.id,"React created a real original Account");
-    assert.equal(saved.parties[0]?.id,persisted.body.items.find(x=>x.name===marker)?.id,
-      "original Account primary Party must be the exact browser-created identity");
-    assert.equal((await call("/api/accounts/"+saved.id,b)).status,404);
-    const customerRow=page.getByRole("row").filter({hasText:customer});
-    await customerRow.getByRole("button",{name:"Изменить"}).click();
-    await page.getByLabel("Название",{exact:true}).fill(customer+" Updated");
-    // Simulate a readback failure AFTER the Worker has committed the update.
-    // The UI must report success and preserve old rows, never imply write failure.
-    let failReadOnce=true;
-    await page.route("**/api/accounts",async route=>{
-      if(failReadOnce&&route.request().method()==="GET"){
-        failReadOnce=false;
-        await route.fulfill({status:503,contentType:"application/json",
-          headers:{"x-crm-error-code":"TEST_READ_FAILURE"},
-          body:JSON.stringify({code:"TEST_READ_FAILURE",error:"Injected read-only failure"})});
-      }else await route.continue();
-    });
-    await submitForm();
-    await page.getByRole("alert").getByText(/Изменение сохранено, но повторное чтение не удалось/).waitFor();
-    assert.equal(await page.locator("form.dialog").count(),0,
-      "saved Account form must close even when the next read fails");
-    const committed=await call("/api/accounts/"+saved.id,a);
-    assert.equal(committed.status,200);
-    assert.equal(committed.body.item.name,customer+" Updated",
-      "real Rust/D1 write must be visible despite failed UI readback");
-    assert.equal(await page.getByRole("row").filter({hasText:customer+" Updated"}).count(),0,
-      "failed readback must preserve previous list, not claim it is fresh");
-    await page.unroute("**/api/accounts");
-    await page.getByRole("button",{name:"Обновить",exact:true}).click();
-    await page.getByRole("row").filter({hasText:customer+" Updated"}).waitFor();
-    await page.getByRole("status").getByText("Обновлено").waitFor();
-    assert.equal(await page.getByRole("alert").count(),0,
-      "successful retry must clear the stale-data warning");
-    uiSteps.push("Committed Account update + failed readback -> truthful UI + retry");
-    uiSteps.push("React Account create/update -> original crm-customer-accounts -> tenant D1");
-    const email="native-"+marker.toLowerCase()+"@example.test";
-    await selectTab("Контакты");
-    await page.getByRole("button",{name:"+ Добавить контакт"}).click();
-    await page.getByLabel("Лицо / организация",{exact:true}).selectOption({label:updatedName});
-    await page.getByLabel("Значение").fill(email);
-    await submitForm();
-    await page.getByRole("row").filter({hasText:email}).waitFor();
-    const points=await call("/api/contact-points",a);
-    assert.ok(points.body.items.some(x=>x.value===email&&x.verified===false));
-    uiSteps.push("React Contact create -> original ContactPoint + no forged verification");
-    // Consent UI: evaluation is read-only; operator can only record DENY.
-    await selectTab("Разрешения");
-    assert.equal(await page.getByRole("button",{name:/выдать согласие/i}).count(),0);
-    await page.getByLabel("Лицо / организация").selectOption({label:updatedName});
-    await page.getByLabel("Контакт (необязательно)").selectOption({label:email});
-    await page.getByRole("button",{name:"Проверить разрешение"}).click();
-    await page.getByRole("status").getByText(/Нет подтверждённого согласия/).waitFor();
-    await page.getByRole("button",{name:"Запретить коммуникацию"}).click();
-    await page.getByRole("button",{name:"Отмена"}).click();
-    assert.equal(await page.getByRole("button",{name:"Подтвердить запрет"}).count(),0);
-    await page.getByRole("button",{name:"Запретить коммуникацию"}).click();
-    await page.getByRole("button",{name:"Подтвердить запрет"}).click();
-    await page.getByRole("status").getByText("Запрет сохранён").waitFor();
-    await page.getByRole("status").getByText(/Есть действующий запрет/).waitFor();
-    const consentRows=(await call("/api/consents",a)).body.items;
-    const uiConsent=consentRows.find(x=>x.party_id===persisted.body.items
-      .find(p=>p.name===marker)?.id&&x.contact_point_id===points.body.items
-      .find(p=>p.value===email)?.id);
-    assert.equal(uiConsent?.effect,"deny");
-    assert.equal(uiConsent.status,"active");
-    assert.equal((await call("/api/consents",b)).body.items.some(x=>x.id===uiConsent.id),false);
-    const consentDecision=await call("/api/consents/evaluate",a,{method:"POST",
-      headers:{"content-type":"application/json"},
-      body:JSON.stringify({party_id:uiConsent.party_id,contact_point_id:uiConsent.contact_point_id,
-        purpose:"marketing.newsletter",channel:"email"})});
-    assert.equal(consentDecision.body.reason,"active_deny");
-    uiSteps.push("React Consents Evaluate -> Deny operator only -> original Rust D1");
-    const dealName=marker+" Deal";
-    await selectTab("Сделки");
-    await page.getByRole("button",{name:"+ Добавить сделку"}).click();
-    await page.getByLabel("Название сделки").fill(dealName);
-    await page.getByLabel("Клиент",{exact:true}).selectOption({label:customer+" Updated"});
-    await page.getByLabel("Сумма").fill("75,00");
-    await page.getByLabel("Вероятность, %").fill("62,5");
-    await submitForm();
-    await page.getByRole("row").filter({hasText:dealName}).waitFor();
-    await page.getByRole("row").filter({hasText:dealName}).getByText("75,00 USD").waitFor();
-    const deals=await call("/api/sales-deals",a);
-    const actualDeal=deals.body.items.find(x=>x.name===dealName);
-    assert.equal(actualDeal?.amount.minor_units,"7500");
-    assert.equal(actualDeal?.probability_bps,6250);
-    await page.getByRole("row").filter({hasText:dealName})
-      .getByRole("button",{name:"Этап сделки"}).click();
-    await page.getByLabel("Новый этап").selectOption("qualified");
-    await submitForm();
-    const promoted=await call("/api/sales-deals/"+actualDeal.id,a);
-    assert.equal(promoted.body.item.stage.stage_id,"qualified");
-    uiSteps.push("React Deal create/advance -> original Sales and atomic Activities link");
-    const taskName=marker+" Task";
-    await selectTab("Задачи");
-    await page.getByRole("button",{name:"+ Добавить задачу"}).click();
-    await page.getByLabel("Что сделать").waitFor();
-    await page.getByRole("button",{name:"Отмена"}).click();
-    assert.equal(await page.getByLabel("Что сделать").count(),0,
-      "cancel a new original Task must close its dialog without writing D1");
-    await page.getByRole("button",{name:"+ Добавить задачу"}).click();
-    await page.getByLabel("Что сделать").fill(taskName);
-    await page.getByLabel("Клиент",{exact:true}).selectOption({label:customer+" Updated"});
-    await submitForm();
-    await page.getByRole("row").filter({hasText:taskName}).waitFor();
-    await page.getByRole("row").filter({hasText:taskName})
-      .getByRole("button",{name:"Выполнить"}).click();
-    await submitForm();
-    const tasks=await call("/api/activity-tasks",a);
-    assert.equal(tasks.body.items.find(x=>x.subject===taskName)?.status,"completed");
-    uiSteps.push("React Task create/complete -> original Activities");
-    await selectTab("Клиенты");
-    await page.getByRole("row").filter({hasText:customer+" Updated"})
-      .getByRole("button",{name:"Карточка"}).click();
-    await page.getByRole("heading",{name:customer+" Updated"}).waitFor();
-    await page.getByRole("region",{name:"Контакты клиента"}).getByText(email).waitFor();
-    await page.getByRole("region",{name:"Сделки клиента"}).getByText(dealName).waitFor();
-    await page.getByRole("region",{name:"Задачи клиента"}).getByText(taskName).waitFor();
-    await page.getByRole("button",{name:"← К списку клиентов"}).click();
-    uiSteps.push("React original Account Overview -> one tenant D1, no Customer360 pilot");
-    await page.reload({waitUntil:"domcontentloaded"});
-    await page.getByRole("row").filter({hasText:customer+" Updated"}).waitFor();
-    uiSteps.push("Native React reload preserves original Account/Deal/Contact/Task state");
-    const readonly=await browser.newContext({viewport:{width:1200,height:800},
-      extraHTTPHeaders:{"cf-access-jwt-assertion":viewer}});
-    try{
-      const readPage=await readonly.newPage();
-      await readPage.goto(origin,{waitUntil:"domcontentloaded"});
-      await readPage.getByRole("navigation",{name:"Разделы"}).waitFor();
-      await readPage.getByRole("navigation",{name:"Разделы"})
-        .getByRole("button",{name:/Связи/}).click();
-      assert.equal(await readPage.getByRole("button",{name:"+ Добавить связь"}).count(),0,
-        "viewer cannot create relationship from React");
-      assert.equal(await readPage.getByRole("button",{name:"Изменить"}).count(),0,
-        "viewer cannot update relationship from React");
-      await readPage.getByRole("navigation",{name:"Разделы"})
-        .getByRole("button",{name:/Разрешения/}).click();
-      assert.equal(await readPage.getByRole("button",{name:"Запретить коммуникацию"}).count(),0,
-        "viewer cannot record Deny from React");
-      assert.equal(await readPage.getByRole("button",{name:"Проверить разрешение"}).count(),1,
-        "viewer can run a read-only Consent evaluation");
-      await readPage.getByRole("navigation",{name:"Разделы"})
-        .getByRole("button",{name:/Клиенты/}).click();
-      assert.equal(await readPage.getByRole("button",{name:"+ Добавить клиента"}).count(),0,
-        "viewer must not see a mutating button");
-      await readPage.getByRole("row").filter({hasText:customer+" Updated"})
-        .getByRole("button",{name:"Карточка"}).click();
-      await readPage.getByRole("heading",{name:customer+" Updated"}).waitFor();
-      assert.equal(await readPage.getByRole("button",{name:"Изменить"}).count(),0,
-        "original Account read-only card must hide edit actions from viewer");
-    }finally{await readonly.close();}
-    uiSteps.push("Read-only enrolled role cannot mutate through React");
-    const session=await call("/api/session",a);
-    assert.equal(session.status,200);
-    assert.equal(session.body.role,"admin");
-    uiSteps.push("Original native Accounts/ContactPoints/Sales/Activities/Overview and Access A/B");
-    assert.deepEqual(browserErrors,[],"React browser has no uncaught JS errors");
-    await page.screenshot({path:screenshot,fullPage:true,animations:"disabled"});
-    const result={git_sha:process.env.CRM_SOURCE_SHA||"unknown",result:"PASS",
-      runtime:"one native workers-rs workerd + Cloudflare Static Assets + isolated D1",
-      auth:"real self-signed RS256 verified in Rust WebCrypto (CI-only JWKS)",
-      frontend:"original React owners",module:"crm.customer-accounts",
-      checks:uiSteps, screenshot:"native-party-desktop.png",
-      cloudflare_access_live:"NOT_TESTED",published_cloudflare_url:"NOT_TESTED",
-      other_crm_modules:"original Accounts/ContactPoints/Sales/Activities/Account Overview tested on native"};
-    writeFileSync(manifest,JSON.stringify(result,null,2)+"\n");
-    console.log(JSON.stringify({event:"crm.native-react-chromium",result:"PASS",checks:uiSteps}));
-    await context.close();
-  }finally{
-    await browser.close();
-  }
-  console.log(JSON.stringify({event:"crm.native-jwt-workerd",result:"PASS",
-    proven:["host WebCrypto RS256 verified","Access service-token empty-sub identity and forged-header negatives",
-      "issuer/audience/expiry/alg/kid/forged denied",
-      "A/B D1 tenant isolation","untrusted tenant headers denied",
-      "original Rust Party create/update/replay"]}));
+// Original crm-consents v2: operator may DENY, never self-attest GRANT.
+// Every RPC is generated binary Protobuf through signed native workerd/D1.
+const consentV2=signedReadOnly(consentV2Path,binaryConsentV2,decodeConsentV2);
+const consentScope={partyId:id,contactPointId:contactId,
+  purpose:"marketing.newsletter",channel:1};
+assert.equal((await consentV2("EvaluateConsent",null,consentScope)).status,401);
+assert.equal((await consentV2("EvaluateConsent",viewer,{
+  ...consentScope,channel:0})).status,400);
+assert.equal((await consentV2("EvaluateConsent",tenantB,consentScope)).status,400);
+const noGrant=await consentV2("EvaluateConsent",viewer,consentScope);
+assert.equal(noGrant.status,200,describeProtobuf(noGrant.body));
+assert.equal(noGrant.body.allowed,false,"no source-backed GRANT is available");
+assert.equal(noGrant.body.reason,4,"NO_APPLICABLE_GRANT");
+const denyInput={authorizationId:"consent-mid-"+randomUUID(),
+  ...consentScope,jurisdiction:"eu",
+  precondition:{idempotencyKey:"connect-consent-deny-mid"}};
+assert.equal((await consentV2("SuppressCommunication",null,denyInput)).status,401);
+assert.equal((await consentV2("SuppressCommunication",viewer,denyInput)).status,403);
+assert.equal((await consentV2("SuppressCommunication",tenantB,denyInput)).status,400);
+assert.equal((await consentV2("SuppressCommunication",admin,{
+  ...denyInput,channel:0,
+  precondition:{idempotencyKey:"connect-consent-invalid-channel"}})).status,400);
+const suppressed=await consentV2("SuppressCommunication",admin,denyInput);
+assert.equal(suppressed.status,200,describeProtobuf(suppressed.body));
+assert.equal(suppressed.body.authorization?.effect,2,"DENY only");
+assert.equal(suppressed.body.authorization?.status,1,"ACTIVE");
+assert.equal(suppressed.body.authorization?.partyId,id);
+assert.equal(suppressed.body.receipt?.resourceVersion,1n);
+assert.equal(suppressed.body.receipt?.replayed,false);
+assert.equal(suppressed.body.receipt?.requestId,suppressed.headers.get("x-request-id"));
+const consentReplay=await consentV2("SuppressCommunication",admin,denyInput);
+assert.equal(consentReplay.status,200,describeProtobuf(consentReplay.body));
+assert.equal(consentReplay.body.receipt?.replayed,true);
+assert.equal((await consentV2("SuppressCommunication",admin,{
+  ...denyInput,purpose:"marketing.different"})).status,409);
+const consentDenied=await consentV2("EvaluateConsent",viewer,consentScope);
+assert.equal(consentDenied.status,200,describeProtobuf(consentDenied.body));
+assert.equal(consentDenied.body.allowed,false);
+assert.equal(consentDenied.body.reason,2,"ACTIVE_DENY");
+const otherScope=await consentV2("EvaluateConsent",admin,{
+  ...consentScope,purpose:"marketing.unrelated"});
+assert.equal(otherScope.status,200);
+assert.equal(otherScope.body.allowed,false);
+assert.equal(otherScope.body.reason,4);
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+denyInput.authorizationId+"'")[0].n,1,
+  "repeat suppression and consent evaluation must not duplicate audit");
+const originalList=await consentV2("ListConsentAuthorizations",viewer,{page:{pageSize:1}});
+assert.equal(originalList.status,200,describeProtobuf(originalList.body));
+assert.equal(originalList.body.authorizations.length,1);
+assert.equal((await consentV2("ListConsentAuthorizations",tenantB,{page:{pageSize:1}}))
+  .body.authorizations.length,0);
+assert.equal((await consentV2("ListConsentAuthorizations",viewer,{page:{pageSize:101}}))
+  .status,400);
+const otherId="consent-aaa-other-"+randomUUID();
+const lastId="consent-zzz-own-"+randomUUID();
+for(const [index,authorizationId,partyId] of [
+  [0,otherId,pagingPersonId],[1,lastId,id]
+]){
+  const inserted=await consentV2("SuppressCommunication",admin,{
+    authorizationId,partyId,purpose:"marketing.other",channel:1,jurisdiction:"eu",
+    precondition:{idempotencyKey:"connect-consent-additional-"+index}});
+  assert.equal(inserted.status,200,describeProtobuf(inserted.body));
+}
+const filteredConsents=await collectPages(consentV2,"ListConsentAuthorizations",
+  "authorizations",{partyId:id});
+assert.deepEqual(filteredConsents.map(x=>x.authorizationId),
+  [denyInput.authorizationId,lastId]);
+const allConsents=await collectPages(consentV2,"ListConsentAuthorizations","authorizations");
+assert.equal(allConsents.length,3);
+assert.equal((await consentV2("ListConsentAuthorizations",viewer,{
+  page:{pageSize:1,pageToken:lastId},partyId:id})).body.authorizations.length,0);
+assert.equal((await consentV2("ListConsentAuthorizations",viewer,{
+  page:{pageSize:1},partyId:"missing-party"})).body.authorizations.length,0);
+console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
+  rpc_methods:["EvaluateConsent","SuppressCommunication","ListConsentAuthorizations"],
+  generated_binary:true,original_owner:"crm.consents",signed_access:true,
+  tenant_ab:true,viewer_read:true,viewer_write_denied:true,operator_deny_only:true,
+  no_grant_ingress:true,before_limit_filtered_pagination:true,
+  d1_receipts:true,no_extra_audit:true,published_active:true}));
+
+// Original crm-sales v2: generated binary Connect, original Deal aggregate,
+// one tenant D1, exact money, CAS, receipt replay, and atomic stage->Activity.
+const salesV2=signedReadOnly(salesV2Path,binarySalesV2,decodeSalesV2);
+const dealId="sales-mid-"+randomUUID();
+const stageLead={pipelineId:"pipeline.enterprise",stageId:"lead",ordinal:1};
+const stageQualified={pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:2};
+const saleCreate={dealId,name:"Connect Deal",accountId,
+  stage:stageLead,amount:{minorUnits:12500n,currencyCode:"USD"},
+  probabilityBasisPoints:2500,
+  precondition:{idempotencyKey:"connect-sales-create-main"}};
+assert.equal((await salesV2("CreateDeal",null,saleCreate)).status,401);
+assert.equal((await salesV2("CreateDeal",viewer,saleCreate)).status,403);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,stage:undefined,
+  precondition:{idempotencyKey:"connect-sales-no-stage"}})).status,400);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,accountId:"missing-account",
+  precondition:{idempotencyKey:"connect-sales-no-account"}})).status,400);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,probabilityBasisPoints:10001,
+  precondition:{idempotencyKey:"connect-sales-invalid-probability"}})).status,400);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,precondition:{idempotencyKey:"connect-sales-create-invalid-version",
+    expectedVersion:1n}})).status,400);
+const salesCreated=await salesV2("CreateDeal",admin,saleCreate);
+assert.equal(salesCreated.status,200,describeProtobuf(salesCreated.body));
+assert.equal(salesCreated.body.deal?.dealId,dealId);
+assert.equal(salesCreated.body.deal?.name,"Connect Deal");
+assert.equal(salesCreated.body.deal?.amount?.minorUnits,12500n);
+assert.equal(salesCreated.body.deal?.amount?.currencyCode,"USD");
+assert.equal(salesCreated.body.deal?.status,1);
+assert.equal(salesCreated.body.receipt?.resourceVersion,1n);
+assert.equal(salesCreated.body.receipt?.replayed,false);
+assert.equal(salesCreated.body.receipt?.requestId,salesCreated.headers.get("x-request-id"));
+const saleReplayed=await salesV2("CreateDeal",admin,saleCreate);
+assert.equal(saleReplayed.status,200);
+assert.equal(saleReplayed.body.receipt?.replayed,true);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,name:"changed idempotency payload"})).status,409);
+assert.equal((await salesV2("GetDeal",tenantB,{dealId})).status,404);
+assert.equal((await salesV2("GetDeal",viewer,{dealId})).body.deal?.dealId,dealId);
+assert.equal((await salesV2("GetDeal",viewer,{dealId:"bad/invalid"})).status,400);
+const updateSale={dealId,
+  name:{operation:{case:"set",value:"Updated Connect Deal"}},
+  amount:{operation:{case:"set",value:{minorUnits:98765n,currencyCode:"PLN"}}},
+  probabilityBasisPoints:6750,
+  precondition:{expectedVersion:1n,idempotencyKey:"connect-sales-update-main"}};
+assert.equal((await salesV2("UpdateDeal",viewer,updateSale)).status,403);
+assert.equal((await salesV2("UpdateDeal",admin,{
+  ...updateSale,precondition:{expectedVersion:100n,
+    idempotencyKey:"connect-sales-stale-version"}})).status,409);
+const saleUpdated=await salesV2("UpdateDeal",admin,updateSale);
+assert.equal(saleUpdated.status,200,describeProtobuf(saleUpdated.body));
+assert.equal(saleUpdated.body.deal?.name,"Updated Connect Deal");
+assert.equal(saleUpdated.body.deal?.amount?.minorUnits,98765n);
+assert.equal(saleUpdated.body.deal?.amount?.currencyCode,"PLN");
+assert.equal(saleUpdated.body.deal?.probabilityBasisPoints,6750);
+assert.equal(saleUpdated.body.receipt?.resourceVersion,2n);
+assert.equal(saleUpdated.body.receipt?.replayed,false);
+const saleUpdateReplayed=await salesV2("UpdateDeal",admin,updateSale);
+assert.equal(saleUpdateReplayed.status,200);
+assert.equal(saleUpdateReplayed.body.receipt?.replayed,true);
+assert.equal((await salesV2("UpdateDeal",admin,{
+  ...updateSale,probabilityBasisPoints:100})).status,409);
+const advanceSale={dealId,targetStage:stageQualified,targetStatus:1,
+  precondition:{expectedVersion:2n,idempotencyKey:"connect-sales-advance-main"}};
+assert.equal((await salesV2("AdvanceStage",viewer,advanceSale)).status,403);
+assert.equal((await salesV2("AdvanceStage",admin,{
+  ...advanceSale,targetStage:stageLead,
+  precondition:{expectedVersion:2n,idempotencyKey:"connect-sales-regress"}})).status,400);
+const taskCountBefore=sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
+  "WHERE tenant='tenant-a'")[0].n;
+const advancedSale=await salesV2("AdvanceStage",admin,advanceSale);
+assert.equal(advancedSale.status,200,describeProtobuf(advancedSale.body));
+assert.equal(advancedSale.body.deal?.stage?.stageId,"qualified");
+assert.equal(advancedSale.body.deal?.version,3n);
+assert.equal(advancedSale.body.receipt?.resourceVersion,3n);
+assert.equal(advancedSale.body.receipt?.replayed,false);
+const taskCountAfter=sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
+  "WHERE tenant='tenant-a'")[0].n;
+assert.equal(taskCountAfter,taskCountBefore+1,
+  "original Sales stage event must create one Activities Task atomically");
+const advanceReplayed=await salesV2("AdvanceStage",admin,advanceSale);
+assert.equal(advanceReplayed.status,200);
+assert.equal(advanceReplayed.body.receipt?.replayed,true);
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
+  "WHERE tenant='tenant-a'")[0].n,taskCountAfter);
+const closeSale={dealId,targetStage:{pipelineId:"pipeline.enterprise",
+  stageId:"won",ordinal:3},targetStatus:2,closeReasonCode:"contract-signed",
+  precondition:{expectedVersion:3n,idempotencyKey:"connect-sales-close-main"}};
+const closedSale=await salesV2("AdvanceStage",admin,closeSale);
+assert.equal(closedSale.status,200,describeProtobuf(closedSale.body));
+assert.equal(closedSale.body.deal?.status,2);
+assert.equal(closedSale.body.deal?.version,4n);
+assert.ok(closedSale.body.deal?.closedAt);
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
+  "WHERE tenant='tenant-a'")[0].n,taskCountAfter,
+  "Won closure must not create a second follow-up Task");
+assert.equal((await salesV2("AdvanceStage",admin,closeSale))
+  .body.receipt?.replayed,true);
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
+  "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'")[0].n,2,
+  "two original one-batch Sales->Activities delivery receipts");
+const dealOther="sales-aaa-other-"+randomUUID();
+const dealLast="sales-zzz-ours-"+randomUUID();
+for(const [index,nextId,pipe] of [
+  [0,dealOther,"pipeline.other"],[1,dealLast,"pipeline.enterprise"]
+]){
+  const created=await salesV2("CreateDeal",admin,{
+    dealId:nextId,name:"Sales page "+index,accountId,
+    stage:{pipelineId:pipe,stageId:"lead",ordinal:1},
+    probabilityBasisPoints:1000,
+    precondition:{idempotencyKey:"connect-sales-paging-"+index}});
+  assert.equal(created.status,200,describeProtobuf(created.body));
+}
+assert.equal((await salesV2("ListDeals",viewer,{page:{pageSize:101}})).status,400);
+assert.equal((await salesV2("ListDeals",viewer,{status:0})).status,400);
+assert.equal((await salesV2("ListDeals",tenantB,{page:{pageSize:1}}))
+  .body.deals.length,0);
+const wonList=await collectPages(salesV2,"ListDeals","deals",{status:2});
+assert.deepEqual(wonList.map(x=>x.dealId),[dealId]);
+const filteredSales=await collectPages(salesV2,"ListDeals","deals",{
+  pipelineId:"pipeline.enterprise"});
+assert.deepEqual(filteredSales.map(x=>x.dealId),[dealId,dealLast]);
+assert.equal((await collectPages(salesV2,"ListDeals","deals",{
+  pipelineId:"pipeline.other"})).length,1);
+assert.equal((await salesV2("ListDeals",viewer,{
+  page:{pageSize:1,pageToken:dealLast},pipelineId:"pipeline.enterprise"})
+  ).body.deals.length,0);
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
+  "WHERE tenant='tenant-a' AND key IN ('connect-sales-create-main',"+
+  "'connect-sales-update-main','connect-sales-advance-main','connect-sales-close-main')"
+  )[0].n,4,"original Deal receipt owners and D1 triggers remain singular");
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+dealId+"'")[0].n,4,
+  "create + update + two stage transitions each write exactly one audit");
+console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
+  rpc_methods:["CreateDeal","UpdateDeal","AdvanceStage","GetDeal","ListDeals"],
+  generated_binary:true,original_owner:"crm.sales",signed_access:true,tenant_ab:true,
+  viewer_read:true,viewer_write_denied:true,exact_money:true,
+  before_limit_filters:true,cas:true,idempotent_receipts:true,
+  atomic_sales_activities:true,no_extra_audit:true,published_active:true}));
+
+ console.log(JSON.stringify({event:"crm.native-g3-party-v3",
+   result:"PASS",generated_binary:true,owner:"crm.parties",
+   rpc_methods:["CreateParty","UpdateParty","GetParty","ListParties"],
+   signed_access:true,tenant_ab:true,viewer_mutation_denied:true,
+   original_d1_cas:true,d1_receipts:true,d1_audit:true,
+   published_active:true}));
+
+ assert.equal((await call("/crm.future.v9.FutureService/NotRegistered",viewer,"POST")).status,501);
+
+ // Privacy intake: execute original domain transitions through binary Connect.
+ const privacy=signedReadOnly(privacyV2Path,binaryPrivacyV2,decodePrivacyV2);
+ const caseId="privacy-case-"+randomUUID();
+ const draftInput={caseId,kind:1,precondition:{idempotencyKey:"privacy-create-main"}};
+ assert.equal((await privacy("CreatePrivacyCase",admin,{...draftInput,kind:0})).body.code,"invalid_argument");
+ assert.equal((await privacy("CreatePrivacyCase",admin,{...draftInput,kind:999})).body.code,"invalid_argument");
+ assert.equal((await privacy("CreatePrivacyCase",admin,{...draftInput,
+   precondition:{idempotencyKey:"privacy-create-invalid",expectedVersion:1n}})).body.code,"invalid_argument");
+ const draft=await privacy("CreatePrivacyCase",admin,draftInput);
+ assert.equal(draft.status,200,describeProtobuf(draft.body));
+ assert.equal(draft.body.privacyCase?.caseId,caseId);
+ assert.equal(draft.body.privacyCase?.status,1);
+ assert.equal(draft.body.privacyCase?.version,1n);
+ assert.equal(draft.body.privacyCase?.subjectVerified,false);
+ assert.equal(draft.body.receipt?.requestId,draft.headers.get("x-request-id"));
+ assert.equal(draft.body.receipt?.replayed,false);
+ const originalAudit=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'")[0].n;
+ assert.equal(originalAudit,1);
+ assert.equal((await privacy("CreatePrivacyCase",admin,draftInput)).body.receipt?.replayed,true);
+ assert.equal((await privacy("CreatePrivacyCase",admin,{...draftInput,kind:4})).body.code,"aborted");
+ assert.equal((await privacy("GetPrivacyCase",viewer,{caseId})).body.privacyCase?.version,1n);
+ assert.equal((await privacy("GetPrivacyCase",tenantB,{caseId})).body.code,"not_found");
+ assert.equal((await privacy("GetPrivacyCase",viewer,{caseId:"bad/id"})).body.code,"invalid_argument");
+ const submit={caseId,precondition:{expectedVersion:1n,idempotencyKey:"privacy-submit-main"}};
+ assert.equal((await privacy("SubmitPrivacyCase",tenantB,submit)).body.code,"not_found");
+ assert.equal((await privacy("SubmitPrivacyCase",admin,{...submit,
+   precondition:{expectedVersion:9n,idempotencyKey:"privacy-submit-stale"}})).body.code,"aborted");
+ const submitted=await privacy("SubmitPrivacyCase",admin,submit);
+ assert.equal(submitted.status,200,describeProtobuf(submitted.body));
+ assert.equal(submitted.body.privacyCase?.status,2);
+ assert.equal(submitted.body.receipt?.resourceVersion,2n);
+ assert.equal((await privacy("SubmitPrivacyCase",admin,submit)).body.receipt?.replayed,true);
+ assert.equal((await privacy("SubmitPrivacyCase",admin,{...submit,
+   precondition:{expectedVersion:2n,idempotencyKey:"privacy-submit-again"}})).body.code,"failed_precondition");
+ const cancel={caseId,precondition:{expectedVersion:2n,idempotencyKey:"privacy-cancel-main"}};
+ assert.equal((await privacy("CancelPrivacyCase",tenantB,cancel)).body.code,"not_found");
+ const cancelled=await privacy("CancelPrivacyCase",admin,cancel);
+ assert.equal(cancelled.status,200,describeProtobuf(cancelled.body));
+ assert.equal(cancelled.body.privacyCase?.status,15);
+ assert.equal(cancelled.body.receipt?.resourceVersion,3n);
+ assert.equal((await privacy("CancelPrivacyCase",admin,cancel)).body.receipt?.replayed,true);
+ // Replaying the earlier submit returns its original receipt, not latest state.
+ const submitReplay=await privacy("SubmitPrivacyCase",admin,submit);
+ assert.equal(submitReplay.body.receipt?.replayed,true);
+ assert.equal(submitReplay.body.privacyCase?.status,2);
+ assert.equal((await privacy("GetPrivacyCase",viewer,{caseId})).body.privacyCase?.status,15);
+ assert.equal(sql("SELECT version FROM crm_privacy_case_records WHERE tenant='tenant-a' AND id='"+caseId+"'")[0].version,3);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_privacy_case_receipts WHERE tenant='tenant-a'")[0].n,3);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'")[0].n,3);
+ for(const suffix of ["aaa","zzz"]){
+   const result=await privacy("CreatePrivacyCase",admin,{caseId:"privacy-"+suffix,kind:4,
+     precondition:{idempotencyKey:"privacy-page-"+suffix}});
+   assert.equal(result.status,200,describeProtobuf(result.body));
+ }
+ assert.equal((await privacy("ListPrivacyCases",viewer,{page:{pageSize:101}})).body.code,"invalid_argument");
+ const allCases=await collectPages(privacy,"ListPrivacyCases","cases");
+ assert.equal(allCases.length,3);
+ assert.deepEqual(allCases.map(x=>x.caseId),["privacy-aaa",caseId,"privacy-zzz"].sort());
+ assert.equal((await privacy("ListPrivacyCases",tenantB,{page:{pageSize:1}})).body.cases.length,0);
+ assert.equal((await privacy("ListPrivacyCases",viewer,{page:{pageSize:1,pageToken:"privacy-zzz"}})).body.cases.length,0);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'")[0].n,3,
+   "read and denied requests must not write audit for the case");
+ console.log(JSON.stringify({event:"crm.native-privacy-v2",result:"PASS",
+   original_owner:"crm.customer-privacy",tenant_ab:true,cas:true,replay:true,
+   page_bounds:true,d1_audit:true,subject_verification:"NOT_CONNECTED"}));
+
+ // Immutable configuration only: no provider I/O or Party mutation.
+ const enrichment=signedReadOnly(enrichmentV2Path,binaryEnrichmentV2,decodeEnrichmentV2);
+ const profileInput={
+   providerKey:"company_registry",adapterKind:"registry_http_v1",adapterContractVersion:"1.0.0",
+   purposeCodes:["customer_profile_enrichment","due_diligence"],
+   licenseId:"Registry commercial data licence v3",permittedUseClass:"customer_master_review",
+   residencyRegion:"eu",retentionDays:30,rawPayloadPolicy:1,
+   credentialHandleAliases:["registry_primary"],
+   effectiveAt:{seconds:1n,nanos:123000000},expiresAt:{seconds:2n},
+   precondition:{idempotencyKey:"enrichment-profile-main"}
+ };
+ const enrichmentAuditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ const partyCountBefore=sql("SELECT COUNT(*) AS n FROM crm_party_records")[0].n;
+ for(const bad of [
+   {rawPayloadPolicy:0},{rawPayloadPolicy:999},{effectiveAt:undefined},
+   {effectiveAt:{seconds:1n,nanos:1}},{effectiveAt:{seconds:-1n}},
+   {effectiveAt:{seconds:253402300800n}},{effectiveAt:{seconds:1n,nanos:1000000000}},
+   {retentionDays:3651},{expiresAt:{seconds:0n}},
+   {precondition:{idempotencyKey:"enrichment-invalid-version",expectedVersion:1n}}
+ ]){
+   const result=await enrichment("PublishProviderProfile",admin,{...profileInput,...bad});
+   assert.equal(result.body.code,"invalid_argument",describeProtobuf(result.body));
+ }
+ const profileResult=await enrichment("PublishProviderProfile",admin,profileInput);
+ assert.equal(profileResult.status,200,describeProtobuf(profileResult.body));
+ const profileId=profileResult.body.profile.profileVersionId;
+ assert.ok(profileId);
+ assert.equal(profileResult.body.profile.effectiveAt.nanos,123000000);
+ assert.equal(profileResult.body.receipt.resourceVersion,1n);
+ assert.equal(profileResult.body.receipt.requestId,profileResult.headers.get("x-request-id"));
+ assert.equal(profileResult.body.receipt.replayed,false);
+ assert.equal((await enrichment("PublishProviderProfile",admin,profileInput)).body.receipt.replayed,true);
+ assert.equal((await enrichment("PublishProviderProfile",admin,{...profileInput,retentionDays:31})).body.code,"aborted");
+ assert.equal((await enrichment("GetProviderProfile",viewer,{profileVersionId:profileId})).body.profile.profileVersionId,profileId);
+ assert.equal((await enrichment("GetProviderProfile",tenantB,{profileVersionId:profileId})).body.code,"not_found");
+ const mappingInput={
+   mappingKey:"party_display_name",providerProfileVersionId:profileId,
+   providerResponseFieldPath:"organization.legal_name",maximumSuggestionsPerResponse:1,
+   confidenceRequired:true,precondition:{idempotencyKey:"enrichment-mapping-main"}
+ };
+ assert.equal((await enrichment("PublishMapping",tenantB,mappingInput)).body.code,"not_found");
+ assert.equal((await enrichment("PublishMapping",admin,{...mappingInput,maximumSuggestionsPerResponse:0})).body.code,"invalid_argument");
+ const mappingResult=await enrichment("PublishMapping",admin,mappingInput);
+ assert.equal(mappingResult.status,200,describeProtobuf(mappingResult.body));
+ const mappingId=mappingResult.body.mapping.mappingVersionId;
+ assert.equal(mappingResult.body.mapping.providerProfileVersionId,profileId);
+ assert.equal(mappingResult.body.receipt.replayed,false);
+ assert.equal((await enrichment("PublishMapping",admin,mappingInput)).body.receipt.replayed,true);
+ assert.equal((await enrichment("PublishMapping",admin,{...mappingInput,confidenceRequired:false})).body.code,"aborted");
+ assert.equal((await enrichment("PublishMapping",admin,{...mappingInput,
+   precondition:{idempotencyKey:"enrichment-profile-main"}})).body.code,"aborted");
+ assert.equal((await enrichment("GetMapping",viewer,{mappingVersionId:mappingId})).body.mapping.mappingVersionId,mappingId);
+ assert.equal((await enrichment("GetMapping",tenantB,{mappingVersionId:mappingId})).body.code,"not_found");
+ for(const index of [1,2]){
+   const published=await enrichment("PublishProviderProfile",admin,{
+     ...profileInput,retentionDays:30+index,
+     precondition:{idempotencyKey:"enrichment-profile-page-"+index}});
+   assert.equal(published.status,200,describeProtobuf(published.body));
+   const mapped=await enrichment("PublishMapping",admin,{
+     ...mappingInput,providerProfileVersionId:published.body.profile.profileVersionId,
+     precondition:{idempotencyKey:"enrichment-mapping-page-"+index}});
+   assert.equal(mapped.status,200,describeProtobuf(mapped.body));
+ }
+ const profiles=await collectPages(enrichment,"ListProviderProfiles","profiles");
+ const mappings=await collectPages(enrichment,"ListMappings","mappings");
+ assert.equal(profiles.length,3);assert.equal(mappings.length,3);
+ assert.equal(new Set(profiles.map(x=>x.profileVersionId)).size,3);
+ assert.equal(new Set(mappings.map(x=>x.mappingVersionId)).size,3);
+ for(const [method,field] of [["ListProviderProfiles","profiles"],["ListMappings","mappings"]]){
+   assert.equal((await enrichment(method,viewer,{page:{pageSize:101}})).body.code,"invalid_argument");
+   assert.equal((await enrichment(method,tenantB,{page:{pageSize:1}})).body[field].length,0);
+   assert.equal((await enrichment(method,viewer,{page:{pageToken:"bad/id"}})).body.code,"invalid_argument");
+ }
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_receipts WHERE tenant='tenant-a'")[0].n,6);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_profiles WHERE tenant='tenant-a'")[0].n,3);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_mappings WHERE tenant='tenant-a'")[0].n,3);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,enrichmentAuditBefore+6,
+   "only six immutable publishes write audit; replay, read and denials never write");
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_records")[0].n,partyCountBefore);
+ console.log(JSON.stringify({event:"crm.native-enrichment-v2",result:"PASS",
+   original_owner:"crm.customer-enrichment",immutable:true,tenant_ab:true,replay:true,
+   page_bounds:true,d1_audit:true,timestamp_precision:true,provider_execution:"NOT_CONNECTED"}));
+
+
+ // Account-rooted composition uses the original owner values and never writes.
+ const overviewCall=signedReadOnly(overviewV2Path,binaryOverviewV2,decodeOverviewV2);
+ const overviewAudit=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ assert.equal((await overviewCall("GetAccountOverview",tenantB,{accountId})).body.code,"not_found");
+ assert.equal((await overviewCall("GetAccountOverview",viewer,{accountId:"bad/id"})).body.code,"invalid_argument");
+ assert.equal((await overviewCall("GetAccountOverview",viewer,{accountId:"missing-account"})).body.code,"not_found");
+ const overviewResult=await overviewCall("GetAccountOverview",viewer,{accountId});
+ assert.equal(overviewResult.status,200,describeProtobuf(overviewResult.body));
+ const card=overviewResult.body.overview;
+ assert.equal(card.account.accountId,accountId);
+ assert.equal(card.primaryParty.partyId,id);
+ assert.equal(card.perCollectionLimit,100);
+ assert.equal(card.truncated.contactPoints,false);
+ assert.equal(card.truncated.relationships,false);
+ assert.equal(card.truncated.deals,false);
+ assert.equal(card.truncated.tasks,false);
+ assert.deepEqual(card.primaryParty,(await v3("GetParty",viewer,{partyId:id})).body.party);
+ assert.deepEqual(card.contactPoints,await collectPages(contactV2,"ListContactPoints","contactPoints",{partyId:id}));
+ assert.deepEqual(card.relationships,await collectPages(relationV2,"ListPartyRelationships","relationships",{partyId:id}));
+ assert.deepEqual(card.deals,(await collectPages(salesV2,"ListDeals","deals")).filter(item=>item.accountId===accountId));
+ assert.deepEqual(card.tasks,await collectPages(taskV2,"ListTasks","tasks",{accountId}));
+ assert.ok(card.contactPoints.some(item=>item.contactPointId===contactId));
+ assert.ok(card.relationships.some(item=>item.relationshipId===rMid));
+ assert.ok(card.deals.some(item=>item.dealId===dealId));
+ assert.ok(card.tasks.some(item=>item.taskId===taskMid));
+ assert.ok(card.tasks.every(item=>item.taskId!==taskOther));
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,overviewAudit);
+ // Sales-created tasks retain their original Deal reference, and their D1 Account.
+ const linkedTaskId=sql("SELECT task_id FROM crm_sales_link_delivery_records WHERE tenant='tenant-a' AND deal_id='"+
+   dealId+"' AND task_id IS NOT NULL ORDER BY task_id LIMIT 1")[0]?.task_id;
+ assert.ok(linkedTaskId,"Sales fixture must create a linked Task");
+ const linkedTask=await taskV2("GetTask",viewer,{taskId:linkedTaskId});
+ assert.equal(linkedTask.status,200,describeProtobuf(linkedTask.body));
+ assert.equal(linkedTask.body.task.accountId,accountId);
+ assert.ok(card.tasks.some(task=>task.taskId===linkedTaskId));
+ assert.equal((await taskV2("GetTask",tenantB,{taskId:linkedTaskId})).status,404);
+ const completeLinked=await taskV2("CompleteTask",admin,{taskId:linkedTaskId,
+   precondition:{idempotencyKey:"overview-linked-task-complete",expectedVersion:linkedTask.body.task.version}});
+ assert.equal(completeLinked.status,200,describeProtobuf(completeLinked.body));
+ assert.equal(completeLinked.body.task.accountId,accountId);
+ assert.equal(completeLinked.body.task.status,2);
+ // Exercise the composition bound with real original ContactPoint mutations.
+ for(let index=0;index<101-card.contactPoints.length;index++){
+   const created=await contactV2("CreateContactPoint",admin,{
+     contactPointId:"overview-boundary-"+String(index).padStart(3,"0"),partyId:id,kind:1,
+     value:"overview-"+index+"@example.org",
+     precondition:{idempotencyKey:"overview-contact-"+String(index).padStart(3,"0")}});
+   assert.equal(created.status,200,describeProtobuf(created.body));
+ }
+ const boundedAudit=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ const boundedCard=(await overviewCall("GetAccountOverview",viewer,{accountId})).body.overview;
+ assert.equal(boundedCard.contactPoints.length,100);
+ assert.equal(boundedCard.truncated.contactPoints,true);
+ assert.equal(boundedCard.truncated.tasks,false);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,boundedAudit);
+ console.log(JSON.stringify({event:"crm.native-account-overview-v2",result:"PASS",
+   owner:"crm.customer360",account_rooted:true,original_owners:true,
+   tenant_ab:true,read_only:true,bounded:true}));
+ // CSV operations use the original parser/Party owner, explicit admin permissions,
+ // atomic D1 writes and a per-operation receipt in that same database.
+ const csv=signedReadOnly(csvV2Path,binaryCsvV2,decodeCsvV2);
+ const csvBytes=new TextEncoder().encode(
+   'party_id,kind,display_name,resource_version\r\nexternal-one,person,CSV One,1\r\nexternal-two,organization,CSV Two,1\r\n');
+ const importAuditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ const importPreview=await csv("PreviewPartyImport",admin,{csv:csvBytes});
+ assert.equal(importPreview.status,200,describeProtobuf(importPreview.body));
+ assert.equal(importPreview.body.count,2);
+ assert.equal(importPreview.body.previouslyImported,0);
+ assert.equal(importPreview.body.csvSha256Hex,createHash("sha256").update(csvBytes).digest("hex"));
+ assert.equal(new Set(importPreview.body.targetPartyIds).size,2);
+ assert.ok(importPreview.body.targetPartyIds.every(id=>!id.startsWith("external-")));
+ const otherPreview=await csv("PreviewPartyImport",tenantB,{csv:csvBytes});
+ assert.equal(otherPreview.status,200,describeProtobuf(otherPreview.body));
+ assert.ok(otherPreview.body.targetPartyIds.every(id=>!importPreview.body.targetPartyIds.includes(id)));
+ const applyInput={csv:csvBytes,expectedSha256Hex:importPreview.body.csvSha256Hex,
+   precondition:{idempotencyKey:"csv-import-operation-main"}};
+ assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,expectedSha256Hex:"0".repeat(64)})).body.code,"aborted");
+ assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,
+   precondition:{idempotencyKey:"csv-import-invalid-version",expectedVersion:1n}})).body.code,"invalid_argument");
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,importAuditBefore,"previews and invalid input are read-only");
+ const applied=await csv("ApplyPartyImport",admin,applyInput);
+ assert.equal(applied.status,200,describeProtobuf(applied.body));
+ assert.equal(applied.body.createdCount,2);assert.equal(applied.body.replayedCount,0);
+ assert.equal(applied.body.receipt.replayed,false);
+ assert.equal(applied.body.receipt.requestId,applied.headers.get("x-request-id"));
+ assert.equal(applied.body.receipt.resourceVersion,1n);
+ const importReplay=await csv("ApplyPartyImport",admin,applyInput);
+ assert.equal(importReplay.body.createdCount,0);assert.equal(importReplay.body.replayedCount,2);
+ assert.equal(importReplay.body.receipt.replayed,true);
+ assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,
+   precondition:{idempotencyKey:"csv-import-another-operation"}})).body.replayedCount,2);
+ assert.equal((await csv("PreviewPartyImport",admin,{csv:csvBytes})).body.previouslyImported,2);
+ for(const target of importPreview.body.targetPartyIds){
+   assert.equal((await v3("GetParty",viewer,{partyId:target})).status,200);
+   assert.equal((await v3("GetParty",tenantB,{partyId:target})).body.code,"not_found");
+ }
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,importAuditBefore+2,"replays never duplicate Party audit");
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE tenant='tenant-a'")[0].n,2);
+ const changedBytes=new TextEncoder().encode(new TextDecoder().decode(csvBytes).replace("CSV One","CSV Changed"));
+ assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,csv:changedBytes,
+   expectedSha256Hex:createHash("sha256").update(changedBytes).digest("hex")})).body.code,"aborted");
+ for(const invalid of [
+   new Uint8Array(),new Uint8Array(16385),new TextEncoder().encode("invalid,csv"),
+   new TextEncoder().encode("party_id,kind,display_name,resource_version\r\n"),
+   new TextEncoder().encode("party_id,kind,display_name,resource_version\r\nx,invalid,Name,1\r\n"),
+   new TextEncoder().encode("party_id,kind,display_name,resource_version\r\nx,person,Name,0\r\n"),
+   new TextEncoder().encode("party_id,kind,display_name,resource_version\r\nx,person,One,1\r\nx,person,Two,1\r\n"),
+   new TextEncoder().encode("party_id,kind,display_name,resource_version\r\n"+
+     Array.from({length:21},(_,i)=>"source-"+i+",person,Name "+i+",1\r\n").join(""))
+ ]){
+   assert.equal((await csv("PreviewPartyImport",admin,{csv:invalid})).body.code,"invalid_argument");
+ }
+ // A conflict on the second target must leave the first target absent.
+ const conflictBytes=new TextEncoder().encode(
+   "party_id,kind,display_name,resource_version\r\nconflict-one,person,First,1\r\nconflict-two,person,Second,1\r\n");
+ const conflictPreview=await csv("PreviewPartyImport",admin,{csv:conflictBytes});
+ assert.equal(conflictPreview.status,200,describeProtobuf(conflictPreview.body));
+ const [firstTarget,secondTarget]=conflictPreview.body.targetPartyIds;
+ assert.equal((await v3("CreateParty",admin,{partyId:secondTarget,kind:1,displayName:"Existing target",
+   precondition:{idempotencyKey:"csv-target-conflict-create"}})).status,200);
+ const failedImport=await csv("ApplyPartyImport",admin,{csv:conflictBytes,
+   expectedSha256Hex:conflictPreview.body.csvSha256Hex,precondition:{idempotencyKey:"csv-conflict-operation"}});
+ assert.equal(failedImport.body.code,"aborted");
+ assert.equal((await v3("GetParty",viewer,{partyId:firstTarget})).body.code,"not_found");
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE key='csv-conflict-operation'")[0].n,0);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,importAuditBefore+3);
+ assert.equal((await csv("PreviewPartyExport",admin,{kind:0})).body.code,"invalid_argument");
+ assert.equal((await csv("PreviewPartyExport",admin,{kind:999})).body.code,"invalid_argument");
+ const exportBefore=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ const exported=await csv("PreviewPartyExport",admin,{});
+ assert.equal(exported.status,200,describeProtobuf(exported.body));
+ assert.equal(exported.body.maximumTenantParties,100);
+ assert.deepEqual(exported.body.fields,["party_id","kind","display_name","resource_version"]);
+ const download=await rpcFetch("/api/customer-data-operations/parties.csv",{
+   headers:{"cf-access-jwt-assertion":admin}});
+ assert.equal(download.status,200);
+ assert.match(download.headers.get("content-type"),/^text\/csv/);
+ const downloaded=new Uint8Array(await download.arrayBuffer());
+ assert.equal(createHash("sha256").update(downloaded).digest("hex"),exported.body.csvSha256Hex);
+ assert.equal(download.headers.get("x-crm-export-count"),String(exported.body.count));
+ assert.equal(download.headers.get("cache-control"),"private, no-store");
+ assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv")).status,401);
+ assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv",{
+   headers:{"cf-access-jwt-assertion":viewer}})).status,403);
+ const filteredExport=await csv("PreviewPartyExport",admin,{kind:1});
+ assert.equal(filteredExport.status,200,describeProtobuf(filteredExport.body));
+ assert.ok(filteredExport.body.count<exported.body.count);
+ assert.equal((await csv("PreviewPartyExport",tenantB,{})).body.count,0);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,exportBefore);
+ // Explicit boundary fixture in tenant B: the 101st row must prevent partial export,
+ // even when a filter would reduce the returned data below the limit.
+ const boundaryRows=Array.from({length:101},(_,i)=>{
+   const state=JSON.stringify({party_id:"csv-boundary-"+i,kind:"person",display_name:"Boundary "+i,
+     created_at_unix_nanos:10,updated_at_unix_nanos:10,version:1});
+   return "('tenant-b','csv-boundary-"+i+"','"+state+"',1,'csv-boundary-key-"+i+"','fixture','fixture')";
+ }).join(",");
+ sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id) VALUES "+boundaryRows);
+ assert.equal((await csv("PreviewPartyExport",tenantB,{kind:2})).body.code,"failed_precondition");
+ assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv?kind=organization",{
+   headers:{"cf-access-jwt-assertion":tenantB}})).status,409);
+ console.log(JSON.stringify({event:"crm.native-party-csv-v2",result:"PASS",admin_read:true,
+   original_owner:"crm.customer-data-operations",party_owner:"crm.parties",
+   tenant_ab:true,atomic:true,replay:true,audit:true,csv_bytes_sha256:true,bounded:true}));
+ await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha});
+ // Write evidence only after every scenario assertion above has completed.
+ // A successful call is transport exercise coverage, not proof of all possible
+ // business states. Domain/CAS/tenant assertions remain independently explicit.
+ assert.deepEqual([...successfulCalls].sort(),[...rpc.registered_methods].sort(),
+   "every compiled RPC must have a successful executed binary call");
+ writeFileSync(process.env.CRM_RPC_RUNTIME_PROOF,JSON.stringify({
+   source_sha:sourceSha,result:"PASS",features:["native-ci"],rpc,
+   successful_rpc_calls:[...successfulCalls].sort(),
+   unauthenticated_denials:unauthenticatedDenials.sort(),
+   viewer_denials:viewerDenials.sort(),
+   scenarios:"existing signed workerd assertions completed"
+ },null,2)+"\n");
+ console.log(JSON.stringify({event:"crm.signed-connect-acceptance",
+   result:"PASS",admin:true,viewer:true,unauthenticated_denied:true,
+   legacy_mutations:0,verified_auth:true}));
 }finally{
-  if(child){
-    try{process.kill(-child.pid,"SIGTERM");}catch(e){if(e.code!=="ESRCH")throw e;}
-    if(child.exitCode===null)await Promise.race([
-      new Promise(r=>child.once("exit",r)),new Promise(r=>setTimeout(r,1500))]);
-    try{process.kill(-child.pid,"SIGKILL");}catch(e){if(e.code!=="ESRCH")throw e;}
-    child.stderr.destroy();child.unref();
-  }
-  rmSync(data,{recursive:true,force:true});
+ if(child){
+   try{process.kill(-child.pid,"SIGTERM");}catch(e){if(e.code!=="ESRCH")throw e;}
+   if(child.exitCode===null)await Promise.race([new Promise(resolve=>child.once("exit",resolve)),
+     new Promise(resolve=>setTimeout(resolve,1400))]);
+   try{process.kill(-child.pid,"SIGKILL");}catch(e){if(e.code!=="ESRCH")throw e;}
+   child.stderr.destroy();child.unref();
+ }
+ rmSync(data,{recursive:true,force:true});
 }

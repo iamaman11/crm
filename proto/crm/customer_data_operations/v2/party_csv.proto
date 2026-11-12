@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package crm.customer_data_operations.v2;
+
+import "crm/core/v2/operation.proto";
+import "crm/parties/v3/party.proto";
+
+// Admin-only bounded transient preview, create-only CSV import and download.
+// The actual CSV download remains the single explicit non-RPC HTTP exception.
+// No persisted export/import jobs or extra storage services.
+message PreviewPartyExportRequest {
+  optional crm.parties.v3.PartyKind kind = 1;
+}
+
+message PreviewPartyExportResponse {
+  uint32 count = 1;
+  string csv_sha256_hex = 2;
+  string specification_version = 3;
+  repeated string fields = 4;
+  uint32 maximum_tenant_parties = 5;
+}
+
+message PreviewPartyImportRequest {
+  bytes csv = 1;
+}
+
+message PreviewPartyImportResponse {
+  uint32 count = 1;
+  string csv_sha256_hex = 2;
+  uint32 previously_imported = 3;
+  repeated string target_party_ids = 4;
+}
+
+message ApplyPartyImportRequest {
+  bytes csv = 1;
+  string expected_sha256_hex = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message ApplyPartyImportResponse {
+  uint32 created_count = 1;
+  uint32 replayed_count = 2;
+  string source_sha256_hex = 3;
+  crm.core.v2.MutationReceipt receipt = 4;
+}
+
+service PartyCsvService {
+  rpc PreviewPartyExport(PreviewPartyExportRequest) returns (PreviewPartyExportResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc PreviewPartyImport(PreviewPartyImportRequest) returns (PreviewPartyImportResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ApplyPartyImport(ApplyPartyImportRequest) returns (ApplyPartyImportResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+}

@@ -67,17 +67,33 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
     event_start, event_end = events
     has_push = _contains_event(lines, event_start, event_end, "push")
     has_pull_request = _contains_event(lines, event_start, event_end, "pull_request")
-    if not (has_push and has_pull_request):
-        return WorkflowPolicyResult(path, ())
-
-    push_section = _event_section(lines, event_start, event_end, "push")
-    # A single, explicit exception for the one CRM development release job.
-    # All unrelated workflows retain their main-only policy.
     crm_dev_workflow = (
         path.name == "cloudflare-crm-spike.yml"
         and path.parent.name == "workflows"
         and path.parent.parent.name == ".github"
     )
+    if has_pull_request:
+        pr_section = _event_section(lines, event_start, event_end, "pull_request")
+        expected_pr = "dev" if crm_dev_workflow else "main"
+        branch_lines: list[str] = []
+        if "    branches:" in pr_section:
+            start = pr_section.index("    branches:") + 1
+            for line in pr_section[start:]:
+                if line.startswith("      - "):
+                    branch_lines.append(line.strip())
+                elif line.strip():
+                    break
+        # These branch filters are explicit, exact, and exclusive.
+        if ("    branches:" not in pr_section
+                or branch_lines != [f"- {expected_pr}"]
+                or "    branches-ignore:" in pr_section):
+            errors.append(f"pull_request must be restricted to branch {expected_pr}")
+    if not (has_push and has_pull_request):
+        return WorkflowPolicyResult(path, tuple(errors))
+
+    push_section = _event_section(lines, event_start, event_end, "push")
+    # A single, explicit exception for the one CRM development release job.
+    # All unrelated workflows retain their main-only policy.
     expected = "dev" if crm_dev_workflow else "main"
     forbidden = "main" if crm_dev_workflow else "dev"
     if (

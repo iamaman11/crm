@@ -34,7 +34,14 @@
         "crates/crm-proto-contracts/**",
         "packages/client/src/contract_hashes.ts",
         "scripts/contract_bindings.py",
-        "scripts/generate_contract_bindings.py"
+        "scripts/generate_contract_bindings.py",
+        "scripts/crm-rpc-descriptors.mjs",
+        "scripts/crm-rpc-descriptors.test.mjs",
+        "scripts/crm-connect-binary-fixture.mjs",
+        "scripts/crm-core-v2.test.mjs",
+        "scripts/crm-cutover-contracts.test.mjs",
+        "scripts/crm-module-coverage.py",
+        "tests/test_crm_module_coverage.py"
       ],
       "required_workflows": [
         "Contract CI",
@@ -95,7 +102,19 @@
         "packages/client/**",
         "packages/ui/**",
         "scripts/run_e2e.sh",
-        "apps/cloudflare-crm/**"
+        "scripts/crm-clean-schema.test.mjs",
+        "scripts/crm-rpc-descriptors.test.mjs",
+        "scripts/crm-connect-binary-fixture.mjs",
+        "scripts/crm-core-v2.test.mjs",
+        "scripts/crm-cutover-contracts.test.mjs",
+        "apps/cloudflare-crm/**",
+        "scripts/crm-architecture-ast.mjs",
+        "scripts/crm-architecture-ast.test.mjs",
+        "scripts/crm-rpc-descriptors.mjs",
+        "scripts/crm-module-coverage.py",
+        "scripts/crm-active-rust-surface.py",
+        "tests/test_crm_module_coverage.py",
+        "tests/test_crm_active_rust_surface.py"
       ],
       "required_workflows": [
         "Product Plane CI"
@@ -109,7 +128,10 @@
         "packages/client/**",
         "packages/ui/**",
         "buf.gen.web.yaml",
-        "apps/cloudflare-crm/**"
+        "apps/cloudflare-crm/**",
+        "scripts/crm-architecture-ast.mjs",
+        "scripts/crm-architecture-ast.test.mjs",
+        "scripts/crm-rpc-descriptors.mjs"
       ],
       "required_workflows": [
         "Product Plane CI"
@@ -149,7 +171,15 @@
         "step13-suppression-baseline.json",
         "step22-architecture-inventory.json",
         "step22-runtime-fanin-decisions.json",
-        "tests/test_customer_privacy_operations.py"
+        "tests/test_customer_privacy_operations.py",
+        "affected-scope-policy.json",
+        "scripts/crm-architecture-ast.mjs",
+        "scripts/crm-architecture-ast.test.mjs",
+        "scripts/crm-rpc-descriptors.mjs",
+        "scripts/crm-module-coverage.py",
+        "scripts/crm-active-rust-surface.py",
+        "tests/test_crm_module_coverage.py",
+        "tests/test_crm_active_rust_surface.py"
       ],
       "required_workflows": [
         "Governance CI"

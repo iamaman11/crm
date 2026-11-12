@@ -1,173 +1,231 @@
-//! Safe original crm-customer-privacy intake adapter. Only the original
-//! PrivacyCase domain owns state transitions and persisted canonical encoding.
-//! Subject identity verification and all privacy execution are NOT connected.
+//! D1 operations for the original PrivacyCase domain. No HTTP/JSON business API.
+//! Verification and privacy execution remain outside this intake capability.
+use super::{bind, now_nanos};
 use crm_customer_privacy::{
-    PrivacyCase,PrivacyCaseKind,PrivacyDomainError,
-    encode_privacy_case_state,decode_privacy_case_state,
+    PrivacyCase, PrivacyCaseKind, PrivacyDomainError, decode_privacy_case_state,
+    encode_privacy_case_state,
 };
-use crm_module_sdk::{RecordId,TenantId,SchemaVersion};
+use crm_module_sdk::{RecordId, SchemaVersion, TenantId};
 use serde::Deserialize;
-use serde_json::{json,Value};
-use sha2::{Digest,Sha256};
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use wasm_bindgen::JsValue;
-use worker::{D1Database,Method,Request,Response,Result};
-use super::{bind,error,now_nanos,response};
-
+use worker::{D1Database, Result};
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CreateInput{id:String,kind:String}
+struct StateRow {
+    state: String,
+}
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct TransitionInput{expected_version:u64}
+struct Receipt {
+    digest: String,
+    state: String,
+}
 #[derive(Deserialize)]
-struct StateRow{state:String}
-#[derive(Deserialize)]
-struct Receipt{digest:String,state:String}
-
-fn view(c:&PrivacyCase)->Value{
-    let kind=match c.kind(){
-        PrivacyCaseKind::Access=>"access",
-        PrivacyCaseKind::PortabilityExport=>"portability_export",
-        PrivacyCaseKind::RestrictProcessing=>"restrict_processing",
-        PrivacyCaseKind::Erasure=>"erasure",
-    };
-    json!({"id":c.case_id().as_str(),"kind":kind,"status":c.status().label(),
-        "version":c.version(),"subject_verified":c.subject_binding().is_some(),
-        "execution":"NOT_CONNECTED"})
+struct PageRow {
+    id: String,
+    state: String,
 }
-fn encode(c:&PrivacyCase)->Result<String>{
-    String::from_utf8(encode_privacy_case_state(c)
-        .map_err(|e|worker::Error::RustError(e.code))?)
-        .map_err(|e|worker::Error::RustError(e.to_string()))
+pub(super) struct Saved {
+    pub(super) case: PrivacyCase,
+    pub(super) replayed: bool,
 }
-fn decode(s:&str)->Result<PrivacyCase>{
-    decode_privacy_case_state(s.as_bytes()).map_err(|e|worker::Error::RustError(e.code))
+pub(super) struct Failure {
+    pub(super) code: String,
+    pub(super) status: u16,
 }
-fn digest(op:&str,id:&str,payload:&Value)->String{
-    format!("{:x}",Sha256::digest(serde_json::to_vec(&json!([op,id,payload]))
-        .expect("static digest serialization")))
+pub(super) enum Transition {
+    Submit,
+    Cancel,
 }
-fn key(req:&Request)->Result<Option<String>>{
-    Ok(req.headers().get("idempotency-key")?
-        .filter(|x|(8..=120).contains(&x.len())))
-}
-async fn receipt(db:&D1Database,tenant:&str,k:&str)->Result<Option<Receipt>>{
-    bind(db,"SELECT digest,state FROM crm_privacy_case_receipts WHERE tenant=? AND key=?",
-        &[JsValue::from_str(tenant),JsValue::from_str(k)])?
-        .first::<Receipt>(None).await
-}
-async fn stored(db:&D1Database,tenant:&str,id:&str)->Result<Option<PrivacyCase>>{
-    let row=bind(db,"SELECT state FROM crm_privacy_case_records WHERE tenant=? AND id=?",
-        &[JsValue::from_str(tenant),JsValue::from_str(id)])?
-        .first::<StateRow>(None).await?;
-    row.map(|x|decode(&x.state)).transpose()
-}
-async fn list(db:&D1Database,tenant:&str)->Result<Response>{
-    let rows=bind(db,"SELECT state FROM crm_privacy_case_records WHERE tenant=? ORDER BY id LIMIT 101",
-        &[JsValue::from_str(tenant)])?.all().await?.results::<StateRow>()?;
-    if rows.len()>100{return error("PRIVACY_CASE_LIST_LIMIT_REACHED",503);}
-    let items=rows.iter().map(|row|decode(&row.state).map(|c|view(&c)))
-        .collect::<Result<Vec<_>>>()?;
-    response(json!({"items":items,"subject_verification":"NOT_CONNECTED",
-        "privacy_execution":"NOT_CONNECTED"}),200)
-}
-async fn create(mut req:Request,db:&D1Database,tenant:&str,actor:&str,trace:&str)
-    ->Result<Response>{
-    let Some(k)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
-    let input=match req.json::<CreateInput>().await{
-        Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422)
-    };
-    let kind=match input.kind.as_str(){
-        "access"=>PrivacyCaseKind::Access,
-        "portability_export"=>PrivacyCaseKind::PortabilityExport,
-        "restrict_processing"=>PrivacyCaseKind::RestrictProcessing,
-        "erasure"=>PrivacyCaseKind::Erasure,
-        _=>return error("PRIVACY_CASE_KIND_INVALID",422),
-    };
-    let hash=digest("create",&input.id,&json!([input.kind]));
-    if let Some(saved)=receipt(db,tenant,&k).await?{
-        if saved.digest!=hash{return error("IDEMPOTENCY_CONFLICT",409);}
-        return response(json!({"item":view(&decode(&saved.state)?),"replayed":true}),200);
+fn fail(code: impl Into<String>, status: u16) -> Failure {
+    Failure {
+        code: code.into(),
+        status,
     }
-    let id=match RecordId::try_new(input.id){
-        Ok(id)=>id,Err(_)=>return error("PRIVACY_CASE_ID_INVALID",422),
+}
+fn encode(c: &PrivacyCase) -> Result<String> {
+    String::from_utf8(encode_privacy_case_state(c).map_err(|e| worker::Error::RustError(e.code))?)
+        .map_err(|e| worker::Error::RustError(e.to_string()))
+}
+fn decode(s: &str) -> Result<PrivacyCase> {
+    decode_privacy_case_state(s.as_bytes()).map_err(|e| worker::Error::RustError(e.code))
+}
+fn digest(op: &str, id: &str, payload: &Value) -> String {
+    format!(
+        "{:x}",
+        Sha256::digest(
+            serde_json::to_vec(&json!([op, id, payload])).expect("static digest serialization")
+        )
+    )
+}
+
+async fn receipt(db: &D1Database, tenant: &str, k: &str) -> Result<Option<Receipt>> {
+    bind(
+        db,
+        "SELECT digest,state FROM crm_privacy_case_receipts WHERE tenant=? AND key=?",
+        &[JsValue::from_str(tenant), JsValue::from_str(k)],
+    )?
+    .first::<Receipt>(None)
+    .await
+}
+pub(super) async fn stored(db: &D1Database, tenant: &str, id: &str) -> Result<Option<PrivacyCase>> {
+    let row = bind(
+        db,
+        "SELECT state FROM crm_privacy_case_records WHERE tenant=? AND id=?",
+        &[JsValue::from_str(tenant), JsValue::from_str(id)],
+    )?
+    .first::<StateRow>(None)
+    .await?;
+    row.map(|x| decode(&x.state)).transpose()
+}
+
+async fn replay(
+    db: &D1Database,
+    tenant: &str,
+    key: &str,
+    hash: &str,
+) -> Result<Option<std::result::Result<Saved, Failure>>> {
+    receipt(db, tenant, key)
+        .await?
+        .map(|r| -> Result<std::result::Result<Saved, Failure>> {
+            if r.digest != hash {
+                return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            }
+            Ok(Ok(Saved {
+                case: decode(&r.state)?,
+                replayed: true,
+            }))
+        })
+        .transpose()
+}
+pub(super) async fn create_typed(
+    id: RecordId,
+    kind: PrivacyCaseKind,
+    key: &str,
+    db: &D1Database,
+    tenant: &str,
+    actor: &str,
+    trace: &str,
+) -> Result<std::result::Result<Saved, Failure>> {
+    if !(8..=120).contains(&key.len()) {
+        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+    }
+    let hash = digest("create", id.as_str(), &json!([kind]));
+    if let Some(saved) = replay(db, tenant, key, &hash).await? {
+        return Ok(saved);
+    }
+    let tenant_id =
+        TenantId::try_new(tenant).map_err(|e| worker::Error::RustError(e.to_string()))?;
+    let policy =
+        SchemaVersion::try_new("1.0.0").map_err(|e| worker::Error::RustError(e.to_string()))?;
+    let case = match PrivacyCase::new(id, tenant_id, kind, policy, now_nanos(), None) {
+        Ok(case) => case,
+        Err(e) => return Ok(Err(fail(e.code(), 422))),
     };
-    let tenant_id=TenantId::try_new(tenant)
-        .map_err(|e|worker::Error::RustError(e.to_string()))?;
-    let policy=SchemaVersion::try_new("1.0.0")
-        .map_err(|e|worker::Error::RustError(e.to_string()))?;
-    let case=PrivacyCase::new(id,tenant_id,kind,policy,now_nanos(),None)
-        .map_err(|e|worker::Error::RustError(e.code().into()))?;
-    let state=encode(&case)?;
-    if bind(db,"INSERT INTO crm_privacy_case_records(tenant,id,state,version,idem_key,idem_digest,request_id,created_by) VALUES(?,?,?,?,?,?,?,?)",
+    let state = encode(&case)?;
+    let inserted=bind(db,
+        "INSERT INTO crm_privacy_case_records(tenant,id,state,version,idem_key,idem_digest,request_id,created_by) VALUES(?,?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant),JsValue::from_str(case.case_id().as_str()),
-          JsValue::from_str(&state),JsValue::from_f64(case.version() as f64),
-          JsValue::from_str(&k),JsValue::from_str(&hash),JsValue::from_str(trace),
-          JsValue::from_str(actor)])?.run().await.is_err(){
-        return error("PRIVACY_CASE_CREATE_CONFLICT",409);
+          JsValue::from_str(&state),JsValue::from_str(&case.version().to_string()),
+          JsValue::from_str(key),JsValue::from_str(&hash),JsValue::from_str(trace),
+          JsValue::from_str(actor)])?.run().await;
+    if inserted.is_err() {
+        if let Some(saved) = replay(db, tenant, key, &hash).await? {
+            return Ok(saved);
+        }
+        return Ok(Err(fail("PRIVACY_CASE_CREATE_CONFLICT", 409)));
     }
-    response(json!({"item":view(&case),"replayed":false}),201)
+    Ok(Ok(Saved {
+        case,
+        replayed: false,
+    }))
 }
-async fn transition(mut req:Request,db:&D1Database,tenant:&str,
-    id:&str,action:&str,trace:&str)->Result<Response>{
-    let Some(k)=key(&req)? else{return error("IDEMPOTENCY_KEY_REQUIRED",422)};
-    let input=match req.json::<TransitionInput>().await{
-        Ok(x)=>x,Err(_)=>return error("INVALID_INPUT",422)
-    };
-    let hash=digest(action,id,&json!([input.expected_version]));
-    if let Some(saved)=receipt(db,tenant,&k).await?{
-        if saved.digest!=hash{return error("IDEMPOTENCY_CONFLICT",409);}
-        return response(json!({"item":view(&decode(&saved.state)?),"replayed":true}),200);
+pub(super) async fn transition_typed(
+    id: &str,
+    action: Transition,
+    expected_version: u64,
+    key: &str,
+    db: &D1Database,
+    tenant: &str,
+    trace: &str,
+) -> Result<std::result::Result<Saved, Failure>> {
+    if !(8..=120).contains(&key.len()) {
+        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
-    let Some(mut case)=stored(db,tenant,id).await? else{return error("NOT_FOUND",404)};
-    let result=match action{
-        "submit"=>case.submit(input.expected_version,now_nanos()),
-        "cancel"=>case.cancel(input.expected_version,now_nanos()),
-        _=>return error("NOT_FOUND",404),
+    let operation = match action {
+        Transition::Submit => "submit",
+        Transition::Cancel => "cancel",
     };
-    if let Err(e)=result{
-        return error(e.code(),match e{
-            PrivacyDomainError::InvalidArgument{..}=>422,_=>409
-        });
+    let hash = digest(operation, id, &json!([expected_version]));
+    if let Some(saved) = replay(db, tenant, key, &hash).await? {
+        return Ok(saved);
     }
-    let state=encode(&case)?;
-    let result=bind(db,"UPDATE crm_privacy_case_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?",
-        &[JsValue::from_str(&state),JsValue::from_f64(case.version() as f64),
-          JsValue::from_str(&k),JsValue::from_str(&hash),JsValue::from_str(trace),
+    let Some(mut case) = stored(db, tenant, id).await? else {
+        return Ok(Err(fail("NOT_FOUND", 404)));
+    };
+    let result = match action {
+        Transition::Submit => case.submit(expected_version, now_nanos()),
+        Transition::Cancel => case.cancel(expected_version, now_nanos()),
+    };
+    if let Err(e) = result {
+        return Ok(Err(fail(
+            e.code(),
+            match e {
+                PrivacyDomainError::InvalidArgument { .. } => 422,
+                PrivacyDomainError::InvalidTransition { .. } => 412,
+                PrivacyDomainError::VersionConflict { .. } => 409,
+            },
+        )));
+    }
+    let state = encode(&case)?;
+    let result=bind(db,
+        "UPDATE crm_privacy_case_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?",
+        &[JsValue::from_str(&state),JsValue::from_str(&case.version().to_string()),
+          JsValue::from_str(key),JsValue::from_str(&hash),JsValue::from_str(trace),
           JsValue::from_str(tenant),JsValue::from_str(id),
-          JsValue::from_f64(input.expected_version as f64)])?.run().await;
-    let Ok(updated)=result else{return error("PRIVACY_CASE_TRANSITION_CONFLICT",409)};
-    if updated.meta()?.and_then(|m|m.changes).unwrap_or(0)==0{
-        return error("PRIVACY_CASE_VERSION_CONFLICT",409);
-    }
-    response(json!({"item":view(&case),"replayed":false}),200)
-}
-pub(super) async fn route(req:Request,db:D1Database,tenant:&str,
-    actor:&str,role:&str,trace:&str)->Result<Response>{
-    let path=req.path();let method=req.method();
-    if path=="/api/customer-privacy/cases"{
-        return match method{
-            Method::Get=>list(&db,tenant).await,
-            Method::Post if role=="admin"=>create(req,&db,tenant,actor,trace).await,
-            Method::Post=>error("FORBIDDEN",403),
-            _=>error("NOT_FOUND",404)
-        };
-    }
-    let Some(tail)=path.strip_prefix("/api/customer-privacy/cases/") else{
-        return error("NOT_FOUND",404)
+          JsValue::from_str(&expected_version.to_string())])?.run().await;
+    let changed = match result {
+        Ok(result) => result.meta()?.and_then(|m| m.changes).unwrap_or(0) > 0,
+        Err(_) => false,
     };
-    let (id,action)=if let Some(id)=tail.strip_suffix("/submit"){(id,"submit")}
-        else if let Some(id)=tail.strip_suffix("/cancel"){(id,"cancel")}
-        else{(tail,"")};
-    if id.is_empty()||id.contains('/'){return error("NOT_FOUND",404);}
-    match (action,method){
-        ("",Method::Get)=>match stored(&db,tenant,id).await?{
-            Some(case)=>response(json!({"item":view(&case)}),200),
-            None=>error("NOT_FOUND",404)
-        },
-        ("submit"|"cancel",Method::Post) if role=="admin"=>
-            transition(req,&db,tenant,id,action,trace).await,
-        ("submit"|"cancel",Method::Post)=>error("FORBIDDEN",403),
-        _=>error("NOT_FOUND",404)
+    if !changed {
+        if let Some(saved) = replay(db, tenant, key, &hash).await? {
+            return Ok(saved);
+        }
+        return Ok(Err(fail("PRIVACY_CASE_VERSION_CONFLICT", 409)));
     }
+    Ok(Ok(Saved {
+        case,
+        replayed: false,
+    }))
+}
+pub(super) async fn list_page_typed(
+    db: &D1Database,
+    tenant: &str,
+    after: &str,
+    size: usize,
+) -> Result<(Vec<PrivacyCase>, Option<String>)> {
+    let mut rows = bind(
+        db,
+        "SELECT id,state FROM crm_privacy_case_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?",
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(after),
+            JsValue::from_f64((size + 1) as f64),
+        ],
+    )?
+    .all()
+    .await?
+    .results::<PageRow>()?;
+    let next = if rows.len() > size {
+        rows.truncate(size);
+        rows.last().map(|r| r.id.clone())
+    } else {
+        None
+    };
+    let cases = rows
+        .into_iter()
+        .map(|row| decode(&row.state))
+        .collect::<Result<Vec<_>>>()?;
+    Ok((cases, next))
 }

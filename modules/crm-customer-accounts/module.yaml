@@ -56,6 +56,34 @@ provides:
         rpc: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionService.CustomerAccountsPrivacyScopeContribution
         request: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionRequest
         response: crm.customer_privacy.v1.CustomerAccountsPrivacyScopeContributionResponse
+    - id: accounts.account.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.accounts.v2.AccountService.CreateAccount
+        request: crm.accounts.v2.CreateAccountRequest
+        response: crm.accounts.v2.CreateAccountResponse
+    - id: accounts.account.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.accounts.v2.AccountService.UpdateAccount
+        request: crm.accounts.v2.UpdateAccountRequest
+        response: crm.accounts.v2.UpdateAccountResponse
+    - id: accounts.account.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.accounts.v2.AccountService.GetAccount
+        request: crm.accounts.v2.GetAccountRequest
+        response: crm.accounts.v2.GetAccountResponse
+    - id: accounts.account.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.accounts.v2.AccountService.ListAccounts
+        request: crm.accounts.v2.ListAccountsRequest
+        response: crm.accounts.v2.ListAccountsResponse
   events:
     - id: accounts.account.created
       version: 1.0.0

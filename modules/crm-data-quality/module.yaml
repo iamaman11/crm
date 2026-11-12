@@ -126,6 +126,13 @@ provides:
         rpc: crm.customer_privacy.v1.DataQualityPrivacyScopeContributionService.DataQualityPrivacyScopeContribution
         request: crm.customer_privacy.v1.DataQualityPrivacyScopeContributionRequest
         response: crm.customer_privacy.v1.DataQualityPrivacyScopeContributionResponse
+    - id: data_quality.party.name.evaluate
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.data_quality.v2.DataQualityService.EvaluatePartyName
+        request: crm.data_quality.v2.EvaluatePartyNameRequest
+        response: crm.data_quality.v2.EvaluatePartyNameResponse
   events:
     - id: data_quality.party.rule_set.published
       version: 1.0.0
