@@ -74,6 +74,7 @@ try{
  const admin=jwt("native-a@example.test"),viewer=jwt("native-viewer@example.test");
  for(const [path,method] of [["/api/parties","GET"],["/api/parties","POST"],
      ["/api/accounts","GET"],["/crm.sales.v1.DealService/GetDeal","POST"],
+      ["/crm.sales.v2.DealService/NotRegistered","POST"],
      ["/crm.future.v9.FutureService/NotRegistered","POST"]]){
    const r=await call(path,admin,method);
    assert.equal(r.status,410,path);
