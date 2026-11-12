@@ -12,8 +12,5 @@
     "/api/customer-data-operations/parties.csv"
   ],
   "note": "Historical ADR-031 limits (112 PostgreSQL-workspace crates, 5389 pub, 91 suppressions) remain scoped to main; CRM dev checks deployed native Worker and original Rust owner exceptions against pinned accepted runtime/owner source, plus generated contracts, Rust compiler/Clippy and physical E2E.",
-  "contract_only_rpc_methods": [
-    "/crm.parties.v2.PartyService/GetParty"
-  ],
   "accepted_owner_source_sha": "90a352be2a70b74a64e5a774c9a76b7f02c86a5f"
 }
