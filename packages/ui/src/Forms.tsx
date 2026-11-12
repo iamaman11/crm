@@ -8,7 +8,7 @@ export function TextField({label,...props}:ComponentProps<"input">&{label:string
 }
 export function SelectField({label,children,...props}:ComponentProps<"select">&{label:string}) {
   const id=useId();
-  return <label className={styles.field} htmlFor={id}><span>{label}</span><select {...props} id={id}>{children}</select></label>;
+  return <div className={styles.field}><label htmlFor={id}>{label}</label><select {...props} id={id}>{children}</select></div>;
 }
 export function FormGrid({children}: {children:ReactNode}) {
   return <div className={styles.grid}>{children}</div>;

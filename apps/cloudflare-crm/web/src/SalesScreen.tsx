@@ -57,10 +57,10 @@ export function SalesScreen() {
         e.preventDefault();const data=new FormData(e.currentTarget);
         void mutation.run(()=>{
           const currencyCode=field(data,"currency"),amountText=field(data,"amount");
-          const amount=amountText?{minorUnits:minorUnits(amountText,currencyCode),currencyCode}:undefined;
+          const mode=selected?field(data,"amountMode"):"set";
+          const amount=mode==="set"&&amountText?{minorUnits:minorUnits(amountText,currencyCode),currencyCode}:undefined;
           const common={probabilityBasisPoints:basisPoints(field(data,"probability"))};
           if(selected){
-            const mode=field(data,"amountMode");
             return api.deals.updateDeal({dealId:selected.dealId,
               name:{operation:{case:"set",value:field(data,"name")}},...common,
               ...(mode==="clear"?{amount:{operation:{case:"clear" as const,value:true}}}:

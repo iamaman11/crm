@@ -125,6 +125,49 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha}) {
    assert.ok(firstId("crm_party_records","display_name","Browser Import "+runId));
    steps.push("CSV preview/confirmed import through generated client");
 
+   // Two actual browser forms hold the same version. Only one may commit.
+   await navigate("parties","Люди и организации");
+   const stalePage=await context.newPage();
+   await stalePage.goto(base+"/#parties");
+   const editParty=async(target)=>{
+     await target.locator("section").filter({has:target.getByRole("heading",{name:"Browser Updated "+runId,exact:true})})
+       .getByRole("button",{name:"Редактировать",exact:true}).click();
+     await target.getByRole("heading",{name:"Изменить участника",exact:true}).waitFor();
+   };
+   await editParty(stalePage);await editParty(page);
+   await page.getByLabel("Имя или название",{exact:true}).fill("Browser Winner "+runId);
+   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"UpdateParty");
+   await stalePage.getByLabel("Имя или название",{exact:true}).fill("Browser Lost Update "+runId);
+   const conflict=stalePage.waitForResponse(r=>r.url().endsWith("/UpdateParty"));
+   await stalePage.getByRole("button",{name:"Сохранить участника",exact:true}).click();
+   assert.equal((await conflict).status(),409);
+   await stalePage.getByRole("heading",{name:/Конфликт изменения/}).waitFor();
+   assert.equal(firstId("crm_party_records","display_name","Browser Winner "+runId),partyId);
+   assert.equal(sql("SELECT version FROM crm_party_records WHERE tenant='tenant-a' AND id='"+partyId+"'")[0].version,3);
+   await stalePage.close();
+   steps.push("Two browser forms enforce CAS and show generated-client conflict");
+
+   // Lose the response AFTER the server commits; retry the unchanged form.
+   await navigate("parties","Люди и организации");
+   await page.getByLabel("Имя или название",{exact:true}).fill("Browser Retry "+runId);
+   let dropped=false;
+   await page.route("**/crm.parties.v3.PartyService/CreateParty",async route=>{
+     if(dropped){await route.continue();return;}
+     dropped=true;
+     const committed=await route.fetch();
+     assert.equal(committed.status(),200);
+     await route.abort("failed");
+   });
+   await page.getByRole("button",{name:"Сохранить участника",exact:true}).click();
+   await page.getByRole("heading",{name:/Ошибка сервиса|Сервис временно недоступен/}).waitFor();
+   const retryId=firstId("crm_party_records","display_name","Browser Retry "+runId);
+   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty");
+   await page.getByRole("heading",{name:/Сохранено ранее/}).waitFor();
+   assert.equal(firstId("crm_party_records","display_name","Browser Retry "+runId),retryId);
+   assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+retryId+"'")[0].n,1);
+   await page.unroute("**/crm.parties.v3.PartyService/CreateParty");
+   steps.push("Committed response loss and same-form retry replay without duplicate audit");
+
    // Commit succeeds but only the following list refresh fails.
    await navigate("parties","Люди и организации");
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Saved Stale "+runId);

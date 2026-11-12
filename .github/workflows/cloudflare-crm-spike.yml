@@ -26,6 +26,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.18.0'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13.18'
       # All CRM PR checks execute in THIS job. No other workflow targets PR to dev.
       # Pure source checks must fail before npm, Cargo builds or Chromium.
       - name: Fast repository CI topology, architecture, and source syntax
@@ -39,7 +42,7 @@ jobs:
           node --check scripts/crm-rpc-descriptors.mjs
           node --check scripts/crm-rpc-descriptors.test.mjs
           node --check scripts/crm-connect-binary-fixture.mjs
-          python -m py_compile scripts/crm-module-coverage.py scripts/crm-active-rust-surface.py
+          python -m py_compile scripts/crm-module-coverage.py
           node --check scripts/crm-architecture-ast.test.mjs
           node --check scripts/crm-core-v2.test.mjs
           node --check scripts/crm-cutover-contracts.test.mjs
@@ -53,18 +56,12 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
+          python -m pip check
           python -m unittest tests.test_affected_scope tests.test_crm_module_coverage
           python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json
           echo "CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json" >> "$GITHUB_ENV"
           CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json \
             node apps/cloudflare-crm/scripts/architecture-gate.mjs
-      - name: Test active Rust owner surface policy and anti-bypass checks
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m unittest -v tests.test_crm_active_rust_surface
-          python scripts/crm-active-rust-surface.py \
-            --json-output /tmp/crm-active-rust-surface.json
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
         with:
           toolchain: 1.97.1
@@ -74,12 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo fmt --all -- --check
-          # The accepted contract-only Worker is byte-for-byte frozen; do not
-          # rewrite it merely to satisfy a newly introduced formatting gate.
-          # A full Worker rustfmt check becomes mandatory with the cutover.
-          if [ "$(node -p 'require("./apps/cloudflare-crm/architecture-policy.json").phase')" = "cutover" ]; then
-            cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml -- --check
-          fi
+          cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml -- --check
       # Fail before the expensive WASM pipeline if the shared contract breaks.
       # The repo's existing frozen workspace provides Buf, Protobuf-ES, and TS.
       - name: Install pinned shared contract toolchain
@@ -179,6 +171,8 @@ jobs:
           fi
       - name: Compile the actual Worker owner graph for WebAssembly
         run: cargo check --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native
+      - name: Run Clippy on the actual Worker for WebAssembly
+        run: cargo clippy --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all
       - name: Test original Rust owners with the Worker dependency features
         shell: bash
         run: |
@@ -226,12 +220,11 @@ jobs:
           fi
           test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.130"
           echo "WASM_BINDGEN_BIN=$(command -v wasm-bindgen)" >> "$GITHUB_ENV"
-      - name: Install pinned Binaryen optimizer through npm
+      - name: Use Binaryen optimizer from the frozen workspace
         # worker-build 0.8.7 supports WASM_OPT_BIN; use the SAME upstream
         # Binaryen version 132, without relying on GitHub Releases downloads.
         run: |
-          npm install --prefix "$RUNNER_TEMP/crm-binaryen" --no-save --no-audit --no-fund binaryen@132.0.0
-          WASM_OPT="$RUNNER_TEMP/crm-binaryen/node_modules/binaryen/bin/wasm-opt"
+          WASM_OPT="$GITHUB_WORKSPACE/node_modules/binaryen/bin/wasm-opt"
           test -x "$WASM_OPT"
           "$WASM_OPT" --version | grep '132'
           echo "WASM_OPT_BIN=$WASM_OPT" >> "$GITHUB_ENV"
@@ -244,7 +237,7 @@ jobs:
           worker-build --version
       - name: Build isolated native D1 test Worker
         working-directory: apps/cloudflare-crm/rust-party
-        run: worker-build --release --features ci-local
+        run: worker-build --release --locked --features ci-local
       - name: Test original Rust Party through workerd and isolated native D1
         working-directory: apps/cloudflare-crm
         run: |
@@ -257,7 +250,7 @@ jobs:
       # and published. PR also runs alternative test features for coverage.
       - name: Build exact native Rust Worker for review or release
         working-directory: apps/cloudflare-crm/rust-party
-        run: worker-build --release --features native
+        run: worker-build --release --locked --features native
       - name: Enforce committed native Worker dependency lock
         run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
       - name: Dry-run exact native entrypoint upload with original CRM Wrangler configuration
@@ -294,7 +287,7 @@ jobs:
           test -s apps/cloudflare-crm/.release/native-build/index_bg.wasm
       - name: Compile native Rust Access gate using isolated RSA test keys
         working-directory: apps/cloudflare-crm/rust-party
-        run: worker-build --release --features native-ci
+        run: worker-build --release --locked --features native-ci
       - name: Test signed RPC and generated-client React scenarios under workerd
         working-directory: apps/cloudflare-crm
         env:

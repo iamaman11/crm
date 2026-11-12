@@ -10,7 +10,8 @@ export function timestamp(value:string) {
   if(!value)return undefined;
   const ms=Date.parse(value);
   if(!Number.isFinite(ms))throw Error("Некорректная дата");
-  return {seconds:BigInt(Math.floor(ms/1000)),nanos:(ms%1000)*1000000};
+  const seconds=Math.floor(ms/1000);
+  return {seconds:BigInt(seconds),nanos:(ms-seconds*1000)*1000000};
 }
 export function dateText(value:{seconds:bigint;nanos:number}|undefined):string {
   if(!value)return "—";

@@ -19,7 +19,9 @@ fn main() {
         "../../../proto/crm/customer_360/v2/customer_360.proto",
     ];
     let protoc = protoc_bin_vendored::protoc_bin_path().expect("vendored protoc");
-    unsafe { std::env::set_var("PROTOC", protoc); }
+    unsafe {
+        std::env::set_var("PROTOC", protoc);
+    }
     for file in CONNECT_PROTOS {
         println!("cargo:rerun-if-changed={file}");
     }
