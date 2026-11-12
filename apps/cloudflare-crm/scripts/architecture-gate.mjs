@@ -273,17 +273,10 @@ if(policy.phase!=="cutover"){
     .map(([path])=>path).sort();
   check(JSON.stringify(reported)===JSON.stringify(proven),
     "generated module report differs from exact Rust RPC publication policy");
-  const protoFiles=treeFiles("proto/crm").filter(p=>p.endsWith(".proto"));
-  const protoText=protoFiles.map(read).join("\n");
-  for(const method of moduleReport.active_rpc_paths){
-    const slash=method.lastIndexOf("/");
-    check(slash>0,"expected canonical Connect route: "+method);
-    const service=method.slice(0,slash).split(".").pop();
-    const rpc=method.slice(slash+1);
-    check(new RegExp("service\\s+"+service+"\\s*\\{").test(protoText) &&
-      new RegExp("rpc\\s+"+rpc+"\\s*\\(").test(protoText),
-      "active RPC must exist in canonical Protobuf: "+method);
-  }
+  // Canonical RPC existence and exact request/response signatures are checked
+  // once by crm-rpc-descriptors.mjs against Buf's FileDescriptorSet.
+  // A second source-text scan cannot establish package/service/method identity.
+
 }
 console.log(JSON.stringify({event:"crm.architecture-gate",result:"PASS",
   phase:policy.phase,baseline,router_count:routerCount,
