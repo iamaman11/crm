@@ -9,7 +9,7 @@ impl account_wire::AccountService for AccountV2Service{
     )->ServiceResult<account_wire::CreateAccountResponse>{
         let input=req.to_owned_message();
         let id=Self::valid_id(&input.account_id)?;
-        let (key,_)=Self::precondition(input.precondition.as_option(),true)?;
+        let (key,_)=wire_precondition(input.precondition.as_option(),true)?;
         let saved=accounts::create_typed(accounts::CreateInput{
             id,name:input.name,party_id:input.primary_party_id,
         },&key,&self.d1()?,&self.tenant,&self.request_id).await
@@ -26,7 +26,7 @@ impl account_wire::AccountService for AccountV2Service{
     )->ServiceResult<account_wire::UpdateAccountResponse>{
         let input=req.to_owned_message();
         let id=Self::valid_id(&input.account_id)?;
-        let (key,version)=Self::precondition(input.precondition.as_option(),false)?;
+        let (key,version)=wire_precondition(input.precondition.as_option(),false)?;
         let status=match input.status{
             x if x==account_wire::AccountStatus::ACCOUNT_STATUS_ACTIVE=>
                 accounts::AccountStatusInput::Active,
