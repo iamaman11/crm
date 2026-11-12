@@ -131,6 +131,17 @@ use proto::crm::data_quality::v2 as quality_wire;
 use proto::crm::identity_resolution::v2 as identity_wire;
 use proto::crm::consents::v2 as consent_wire;
 
+// Domain Connect traits live in native Rust submodules; one router below.
+mod party_handlers;
+mod account_handlers;
+mod contact_handlers;
+mod relationship_handlers;
+mod task_handlers;
+mod quality_handlers;
+mod identity_handlers;
+mod consent_handlers;
+mod sales_handlers;
+
 struct PartyService {
     env: Arc<Env>,
     tenant: String,
@@ -223,95 +234,7 @@ impl PartyV3Service {
         }
     }
 }
-impl party_v3::PartyService for PartyV3Service {
-    #[worker::send]
-    async fn create_party(
-        &self,_ctx:RequestContext,req:ServiceRequest<'_,party_v3::CreatePartyRequest>,
-    )->ServiceResult<party_v3::CreatePartyResponse>{
-        let input=req.to_owned_message();
-        let id=Self::valid_id(&input.party_id)?;
-        let kind=match input.kind {
-            x if x==party_v3::PartyKind::PARTY_KIND_PERSON=>DomainPartyKind::Person,
-            x if x==party_v3::PartyKind::PARTY_KIND_ORGANIZATION=>DomainPartyKind::Organization,
-            _=>return Err(ConnectError::invalid_argument("INVALID_KIND")),
-        };
-        let pre=input.precondition.as_option()
-            .ok_or_else(||ConnectError::invalid_argument("mutation precondition required"))?;
-        if pre.expected_version.is_some() {
-            return Err(ConnectError::invalid_argument("create must not specify expected_version"));
-        }
-        let saved=parties::create_typed(&self.d1()?,&self.tenant,
-            id.as_str().to_owned(),kind,input.display_name,
-            &pre.idempotency_key,&self.request_id).await
-            .map_err(|_|ConnectError::internal("Party D1 create failed"))?
-            .map_err(Self::mutation_error)?;
-        RpcResponse::ok(party_v3::CreatePartyResponse {
-            party:Some(Self::convert(&saved.party)?).into(),
-            receipt:Some(self.receipt(&saved)?).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn update_party(
-        &self,_ctx:RequestContext,req:ServiceRequest<'_,party_v3::UpdatePartyRequest>,
-    )->ServiceResult<party_v3::UpdatePartyResponse>{
-        let input=req.to_owned_message();
-        let id=Self::valid_id(&input.party_id)?;
-        let pre=input.precondition.as_option()
-            .ok_or_else(||ConnectError::invalid_argument("mutation precondition required"))?;
-        let version=pre.expected_version
-            .ok_or_else(||ConnectError::invalid_argument("expected_version required"))?;
-        if version<1 {return Err(ConnectError::invalid_argument("invalid expected_version"));}
-        let saved=parties::update_typed(&self.d1()?,&self.tenant,
-            id.as_str(),input.display_name,version,&pre.idempotency_key,
-            &self.request_id).await
-            .map_err(|_|ConnectError::internal("Party D1 update failed"))?
-            .map_err(Self::mutation_error)?;
-        RpcResponse::ok(party_v3::UpdatePartyResponse {
-            party:Some(Self::convert(&saved.party)?).into(),
-            receipt:Some(self.receipt(&saved)?).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn get_party(
-        &self,_ctx:RequestContext,req:ServiceRequest<'_,party_v3::GetPartyRequest>,
-    )->ServiceResult<party_v3::GetPartyResponse>{
-        let id=Self::valid_id(&req.party_id)?;
-        let party=parties::stored(&self.d1()?,&self.tenant,id.as_str()).await
-            .map_err(|_|ConnectError::internal("Party D1 get failed"))?
-            .ok_or_else(||ConnectError::not_found("PARTIES_NOT_FOUND"))?;
-        RpcResponse::ok(party_v3::GetPartyResponse {
-            party:Some(Self::convert(&party)?).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn list_parties(
-        &self,_ctx:RequestContext,req:ServiceRequest<'_,party_v3::ListPartiesRequest>,
-    )->ServiceResult<party_v3::ListPartiesResponse>{
-        let size=if req.page.page_size==0 {25} else {req.page.page_size};
-        if size>100 {return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
-        let after=&req.page.page_token;
-        if !after.is_empty(){Self::valid_id(after)?;}
-        let filter=match req.kind {
-            None=>None,
-            Some(x) if x==party_v3::PartyKind::PARTY_KIND_PERSON=>Some(DomainPartyKind::Person),
-            Some(x) if x==party_v3::PartyKind::PARTY_KIND_ORGANIZATION=>
-                Some(DomainPartyKind::Organization),
-            _=>return Err(ConnectError::invalid_argument("invalid PartyKind filter")),
-        };
-        let (parties,next)=parties::list_page_typed(&self.d1()?,&self.tenant,
-            after,size as usize,filter).await
-            .map_err(|_|ConnectError::internal("Party D1 list failed"))?;
-        let mut items=Vec::with_capacity(parties.len());
-        for party in &parties {items.push(Self::convert(party)?);}
-        RpcResponse::ok(party_v3::ListPartiesResponse {
-            parties:items,
-            page_info:Some(core_v2::PageInfo {
-                next_page_token:next.unwrap_or_default(),..Default::default()
-            }).into(),
-            ..Default::default()
-        })
-    }
-}
+
 
 // One new Connect surface for the EXISTING customer-accounts Rust owner.
 // All commands and D1 writes reside in accounts.rs; no parallel JSON handler.
@@ -387,89 +310,7 @@ impl AccountV2Service {
         }
     }
 }
-impl account_wire::AccountService for AccountV2Service{
-    #[worker::send]
-    async fn create_account(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,account_wire::CreateAccountRequest>,
-    )->ServiceResult<account_wire::CreateAccountResponse>{
-        let input=req.to_owned_message();
-        let id=Self::valid_id(&input.account_id)?;
-        let (key,_)=Self::precondition(input.precondition.as_option(),true)?;
-        let saved=accounts::create_typed(accounts::CreateInput{
-            id,name:input.name,party_id:input.primary_party_id,
-        },&key,&self.d1()?,&self.tenant,&self.request_id).await
-            .map_err(|_|ConnectError::internal("Account D1 create failed"))?
-            .map_err(Self::failed)?;
-        RpcResponse::ok(account_wire::CreateAccountResponse{
-            account:Some(Self::convert(&saved.account)?).into(),
-            receipt:Some(self.receipt(&saved)?).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn update_account(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,account_wire::UpdateAccountRequest>,
-    )->ServiceResult<account_wire::UpdateAccountResponse>{
-        let input=req.to_owned_message();
-        let id=Self::valid_id(&input.account_id)?;
-        let (key,version)=Self::precondition(input.precondition.as_option(),false)?;
-        let status=match input.status{
-            x if x==account_wire::AccountStatus::ACCOUNT_STATUS_ACTIVE=>
-                accounts::AccountStatusInput::Active,
-            x if x==account_wire::AccountStatus::ACCOUNT_STATUS_INACTIVE=>
-                accounts::AccountStatusInput::Inactive,
-            _=>return Err(ConnectError::invalid_argument("invalid AccountStatus")),
-        };
-        let saved=accounts::update_typed(accounts::UpdateInput{
-            name:input.name,status,expected_version:version.unwrap_or_default(),
-        },&key,&self.d1()?,&self.tenant,&id,&self.request_id).await
-            .map_err(|_|ConnectError::internal("Account D1 update failed"))?
-            .map_err(Self::failed)?;
-        RpcResponse::ok(account_wire::UpdateAccountResponse{
-            account:Some(Self::convert(&saved.account)?).into(),
-            receipt:Some(self.receipt(&saved)?).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn get_account(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,account_wire::GetAccountRequest>,
-    )->ServiceResult<account_wire::GetAccountResponse>{
-        let id=Self::valid_id(&req.account_id)?;
-        let account=accounts::load(&self.d1()?,&self.tenant,&id).await
-            .map_err(|_|ConnectError::internal("Account D1 read failed"))?
-            .ok_or_else(||ConnectError::not_found("CUSTOMER_ACCOUNTS_NOT_FOUND"))?;
-        RpcResponse::ok(account_wire::GetAccountResponse{
-            account:Some(Self::convert(&account)?).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn list_accounts(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,account_wire::ListAccountsRequest>,
-    )->ServiceResult<account_wire::ListAccountsResponse>{
-        let size=if req.page.page_size==0{25}else{req.page.page_size};
-        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
-        let after=&req.page.page_token;
-        if !after.is_empty(){Self::valid_id(after)?;}
-        let status=match req.status{
-            None=>None,
-            Some(x) if x==account_wire::AccountStatus::ACCOUNT_STATUS_ACTIVE=>
-                Some(DomainAccountStatus::Active),
-            Some(x) if x==account_wire::AccountStatus::ACCOUNT_STATUS_INACTIVE=>
-                Some(DomainAccountStatus::Inactive),
-            _=>return Err(ConnectError::invalid_argument("invalid AccountStatus filter")),
-        };
-        let (list,next)=accounts::list_page_typed(&self.d1()?,&self.tenant,
-            after,size as usize,status).await
-            .map_err(|_|ConnectError::internal("Account D1 list failed"))?;
-        let mut result=Vec::new();
-        for account in &list{result.push(Self::convert(account)?);}
-        RpcResponse::ok(account_wire::ListAccountsResponse{
-            accounts:result,
-            page_info:Some(core_v2::PageInfo{
-                next_page_token:next.unwrap_or_default(),..Default::default()
-            }).into(),..Default::default()
-        })
-    }
-}
+
 
 // Connect wire for ORIGINAL crm-contact-points (no browser verification claim).
 struct ContactPointV2Service{
@@ -565,110 +406,7 @@ impl ContactPointV2Service{
         AccountV2Service::precondition(pre,create)
     }
 }
-impl contact_wire::ContactPointService for ContactPointV2Service{
-    #[worker::send]
-    async fn create_contact_point(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,contact_wire::CreateContactPointRequest>,
-    )->ServiceResult<contact_wire::CreateContactPointResponse>{
-        let input=req.to_owned_message();
-        let id=Self::valid_id(&input.contact_point_id)?;
-        let kind=match input.kind{
-            x if x==contact_wire::ContactPointKind::CONTACT_POINT_KIND_EMAIL=>
-                contact_points::KindInput::Email,
-            x if x==contact_wire::ContactPointKind::CONTACT_POINT_KIND_PHONE=>
-                contact_points::KindInput::Phone,
-            x if x==contact_wire::ContactPointKind::CONTACT_POINT_KIND_POSTAL=>
-                contact_points::KindInput::Postal,
-            x if x==contact_wire::ContactPointKind::CONTACT_POINT_KIND_WEB=>
-                contact_points::KindInput::Web,
-            x if x==contact_wire::ContactPointKind::CONTACT_POINT_KIND_MESSAGING=>
-                contact_points::KindInput::Messaging,
-            _=>return Err(ConnectError::invalid_argument("invalid ContactPointKind")),
-        };
-        let (key,_)=Self::precondition(input.precondition.as_option(),true)?;
-        let from=input.valid_from.as_option().map(Self::nanos).transpose()?;
-        let until=input.valid_until.as_option().map(Self::nanos).transpose()?;
-        let saved=contact_points::create_typed(contact_points::CreateInput{
-            id,party_id:input.party_id,kind,value:input.value,
-            preferred:input.preferred,valid_from_unix_nanos:from,
-            valid_until_unix_nanos:until,
-        },&key,&self.d1()?,&self.tenant,&self.request_id).await
-            .map_err(|_|ConnectError::internal("ContactPoint D1 create failed"))?
-            .map_err(Self::failed)?;
-        RpcResponse::ok(contact_wire::CreateContactPointResponse{
-            contact_point:Some(Self::convert(&saved.contact_point)?).into(),
-            receipt:Some(self.receipt(&saved)?).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn update_contact_point(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,contact_wire::UpdateContactPointRequest>,
-    )->ServiceResult<contact_wire::UpdateContactPointResponse>{
-        let input=req.to_owned_message();
-        let id=Self::valid_id(&input.contact_point_id)?;
-        let (key,version)=Self::precondition(input.precondition.as_option(),false)?;
-        let status=match input.status{
-            x if x==contact_wire::ContactPointStatus::CONTACT_POINT_STATUS_ACTIVE=>
-                contact_points::StatusInput::Active,
-            x if x==contact_wire::ContactPointStatus::CONTACT_POINT_STATUS_INACTIVE=>
-                contact_points::StatusInput::Inactive,
-            _=>return Err(ConnectError::invalid_argument("invalid ContactPointStatus")),
-        };
-        let db=self.d1()?;
-        // Hash the unchanged wire patch intent before reading current D1 state;
-        // the existing owner checks its receipt first, even after later updates.
-        let from=Self::time_patch(input.valid_from.as_option())?;
-        let until=Self::time_patch(input.valid_until.as_option())?;
-        let saved=contact_points::update_typed(contact_points::UpdateInput{
-            expected_version:version.unwrap_or_default(),value:input.value,
-            status,preferred:input.preferred,valid_from_unix_nanos:from,
-            valid_until_unix_nanos:until,
-        },&key,&db,&self.tenant,&id,&self.request_id).await
-            .map_err(|_|ConnectError::internal("ContactPoint D1 update failed"))?
-            .map_err(Self::failed)?;
-        RpcResponse::ok(contact_wire::UpdateContactPointResponse{
-            contact_point:Some(Self::convert(&saved.contact_point)?).into(),
-            receipt:Some(self.receipt(&saved)?).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn get_contact_point(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,contact_wire::GetContactPointRequest>,
-    )->ServiceResult<contact_wire::GetContactPointResponse>{
-        let id=Self::valid_id(&req.contact_point_id)?;
-        let point=contact_points::load(&self.d1()?,&self.tenant,&id).await
-            .map_err(|_|ConnectError::internal("ContactPoint D1 read failed"))?
-            .ok_or_else(||ConnectError::not_found("CONTACT_POINTS_NOT_FOUND"))?;
-        RpcResponse::ok(contact_wire::GetContactPointResponse{
-            contact_point:Some(Self::convert(&point)?).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn list_contact_points(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,contact_wire::ListContactPointsRequest>,
-    )->ServiceResult<contact_wire::ListContactPointsResponse>{
-        let size=if req.page.page_size==0{25}else{req.page.page_size};
-        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
-        let after=&req.page.page_token;
-        if !after.is_empty(){Self::valid_id(after)?;}
-        let filter=req.party_id.as_deref();
-        if let Some(party)=filter{
-            crm_contact_points::PartyReference::try_new(party)
-                .map_err(|_|ConnectError::invalid_argument("invalid party_id filter"))?;
-        }
-        let (list,next)=contact_points::list_page_typed(&self.d1()?,&self.tenant,
-            after,size as usize,filter).await
-            .map_err(|_|ConnectError::internal("ContactPoint D1 list failed"))?;
-        let mut results=Vec::new();
-        for point in &list{results.push(Self::convert(point)?);}
-        RpcResponse::ok(contact_wire::ListContactPointsResponse{
-            contact_points:results,
-            page_info:Some(core_v2::PageInfo{
-                next_page_token:next.unwrap_or_default(),..Default::default()
-            }).into(),..Default::default()
-        })
-    }
-}
+
 
 // Generated Connect wire for ORIGINAL crm-party-relationships. No second
 // persistence path: party_relationships.rs owns D1, domain invariants and
@@ -747,105 +485,7 @@ impl RelationshipV2Service {
         }
     }
 }
-impl rel_wire::PartyRelationshipService for RelationshipV2Service {
-    #[worker::send]
-    async fn create_party_relationship(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,rel_wire::CreatePartyRelationshipRequest>,
-    )->ServiceResult<rel_wire::CreatePartyRelationshipResponse>{
-        let input=req.to_owned_message();
-        let id=Self::valid_id(&input.relationship_id)?;
-        let (key,_)=AccountV2Service::precondition(input.precondition.as_option(),true)?;
-        let typ=input.r#type.as_option()
-            .ok_or_else(||ConnectError::invalid_argument("relationship type required"))?;
-        let directionality=match typ.directionality {
-            x if x==rel_wire::RelationshipDirectionality::RELATIONSHIP_DIRECTIONALITY_DIRECTIONAL=>
-                party_relationships::DirectionalityInput::Directional,
-            x if x==rel_wire::RelationshipDirectionality::RELATIONSHIP_DIRECTIONALITY_RECIPROCAL=>
-                party_relationships::DirectionalityInput::Reciprocal,
-            _=>return Err(ConnectError::invalid_argument("invalid RelationshipDirectionality")),
-        };
-        let from=input.valid_from.as_option()
-            .map(ContactPointV2Service::nanos).transpose()?;
-        let until=input.valid_until.as_option()
-            .map(ContactPointV2Service::nanos).transpose()?;
-        let saved=party_relationships::create_typed(party_relationships::CreateInput{
-            id,from_party_id:input.from_party_id,to_party_id:input.to_party_id,
-            code:typ.code.clone(),directionality,from_role:typ.from_role.clone(),
-            to_role:typ.to_role.clone(),valid_from_unix_nanos:from,
-            valid_until_unix_nanos:until,
-        },&key,&self.d1()?,&self.tenant,&self.request_id).await
-            .map_err(|_|ConnectError::internal("Relationship D1 create failed"))?
-            .map_err(Self::failed)?;
-        RpcResponse::ok(rel_wire::CreatePartyRelationshipResponse{
-            relationship:Some(Self::convert(&saved.relationship)?).into(),
-            receipt:Some(self.receipt(&saved)).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn update_party_relationship(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,rel_wire::UpdatePartyRelationshipRequest>,
-    )->ServiceResult<rel_wire::UpdatePartyRelationshipResponse>{
-        let input=req.to_owned_message();
-        let id=Self::valid_id(&input.relationship_id)?;
-        let (key,version)=AccountV2Service::precondition(input.precondition.as_option(),false)?;
-        let status=match input.status{
-            x if x==rel_wire::RelationshipStatus::RELATIONSHIP_STATUS_ACTIVE=>
-                party_relationships::StatusInput::Active,
-            x if x==rel_wire::RelationshipStatus::RELATIONSHIP_STATUS_INACTIVE=>
-                party_relationships::StatusInput::Inactive,
-            _=>return Err(ConnectError::invalid_argument("invalid RelationshipStatus")),
-        };
-        let from=Self::patch(input.valid_from.as_option())?;
-        let until=Self::patch(input.valid_until.as_option())?;
-        let saved=party_relationships::update_typed(party_relationships::UpdateCommand{
-            expected_version:version.unwrap_or_default(),status,
-            valid_from:from,valid_until:until,
-        },&key,&self.d1()?,&self.tenant,&id,&self.request_id).await
-            .map_err(|_|ConnectError::internal("Relationship D1 update failed"))?
-            .map_err(Self::failed)?;
-        RpcResponse::ok(rel_wire::UpdatePartyRelationshipResponse{
-            relationship:Some(Self::convert(&saved.relationship)?).into(),
-            receipt:Some(self.receipt(&saved)).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn get_party_relationship(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,rel_wire::GetPartyRelationshipRequest>,
-    )->ServiceResult<rel_wire::GetPartyRelationshipResponse>{
-        let id=Self::valid_id(&req.relationship_id)?;
-        let relationship=party_relationships::load(&self.d1()?,&self.tenant,&id).await
-            .map_err(|_|ConnectError::internal("Relationship D1 read failed"))?
-            .ok_or_else(||ConnectError::not_found("PARTY_RELATIONSHIPS_NOT_FOUND"))?;
-        RpcResponse::ok(rel_wire::GetPartyRelationshipResponse{
-            relationship:Some(Self::convert(&relationship)?).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn list_party_relationships(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,rel_wire::ListPartyRelationshipsRequest>,
-    )->ServiceResult<rel_wire::ListPartyRelationshipsResponse>{
-        let size=if req.page.page_size==0{25}else{req.page.page_size};
-        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
-        let after=&req.page.page_token;
-        if !after.is_empty(){Self::valid_id(after)?;}
-        let party=req.party_id.as_deref();
-        if let Some(id)=party{
-            crm_party_relationships::PartyReference::try_new(id.to_owned())
-                .map_err(|_|ConnectError::invalid_argument("invalid Party filter"))?;
-        }
-        let (list,next)=party_relationships::list_page_typed(
-            &self.d1()?,&self.tenant,after,size as usize,party).await
-            .map_err(|_|ConnectError::internal("Relationship D1 list failed"))?;
-        let mut results=Vec::with_capacity(list.len());
-        for relationship in &list{results.push(Self::convert(relationship)?);}
-        RpcResponse::ok(rel_wire::ListPartyRelationshipsResponse{
-            relationships:results,
-            page_info:Some(core_v2::PageInfo{
-                next_page_token:next.unwrap_or_default(),..Default::default()
-            }).into(),..Default::default()
-        })
-    }
-}
+
 
 // Native generated Connect service for the ORIGINAL crm-activities Task.
 // Same Task codec, D1 table, CAS and receipts as the blocked historical HTTP.
@@ -908,107 +548,7 @@ impl TaskV2Service {
         }
     }
 }
-impl task_wire::TaskService for TaskV2Service {
-    #[worker::send]
-    async fn create_task(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,task_wire::CreateTaskRequest>,
-    )->ServiceResult<task_wire::CreateTaskResponse>{
-        let input=req.to_owned_message();
-        let id=Self::valid_id(&input.task_id)?;
-        let (key,_)=AccountV2Service::precondition(input.precondition.as_option(),true)?;
-        let priority=match input.priority{
-            x if x==task_wire::TaskPriority::TASK_PRIORITY_LOW=>
-                activity_tasks::Priority::Low,
-            x if x==task_wire::TaskPriority::TASK_PRIORITY_NORMAL=>
-                activity_tasks::Priority::Normal,
-            x if x==task_wire::TaskPriority::TASK_PRIORITY_HIGH=>
-                activity_tasks::Priority::High,
-            x if x==task_wire::TaskPriority::TASK_PRIORITY_URGENT=>
-                activity_tasks::Priority::Urgent,
-            _=>return Err(ConnectError::invalid_argument("invalid TaskPriority")),
-        };
-        let due=input.due_at.as_option()
-            .map(ContactPointV2Service::nanos).transpose()?;
-        let reminder=input.reminder_at.as_option()
-            .map(ContactPointV2Service::nanos).transpose()?;
-        let saved=activity_tasks::create_typed(activity_tasks::CreateInput{
-            id,subject:input.subject,description:input.description,
-            account_id:input.account_id,priority,
-            due_at_unix_nanos:due,reminder_at_unix_nanos:reminder,
-        },&key,&self.d1()?,&self.tenant,&self.actor,&self.request_id).await
-            .map_err(|_|ConnectError::internal("Task D1 create failed"))?
-            .map_err(Self::failed)?;
-        RpcResponse::ok(task_wire::CreateTaskResponse{
-            task:Some(Self::convert(&saved.task)?).into(),
-            receipt:Some(self.receipt(&saved)).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn complete_task(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,task_wire::CompleteTaskRequest>,
-    )->ServiceResult<task_wire::CompleteTaskResponse>{
-        let input=req.to_owned_message();
-        let id=Self::valid_id(&input.task_id)?;
-        let (key,version)=AccountV2Service::precondition(input.precondition.as_option(),false)?;
-        let saved=activity_tasks::complete_typed(activity_tasks::CompleteInput{
-            expected_version:version.unwrap_or_default(),
-        },&key,&self.d1()?,&self.tenant,&id,&self.request_id).await
-            .map_err(|_|ConnectError::internal("Task D1 complete failed"))?
-            .map_err(Self::failed)?;
-        RpcResponse::ok(task_wire::CompleteTaskResponse{
-            task:Some(Self::convert(&saved.task)?).into(),
-            changed:saved.changed,
-            receipt:if saved.changed||saved.replayed{
-                Some(self.receipt(&saved)).into()
-            }else{None.into()},
-            ..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn get_task(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,task_wire::GetTaskRequest>,
-    )->ServiceResult<task_wire::GetTaskResponse>{
-        let id=Self::valid_id(&req.task_id)?;
-        let task=activity_tasks::stored(&self.d1()?,&self.tenant,&id).await
-            .map_err(|_|ConnectError::internal("Task D1 get failed"))?
-            .ok_or_else(||ConnectError::not_found("ACTIVITIES_TASK_NOT_FOUND"))?;
-        RpcResponse::ok(task_wire::GetTaskResponse{
-            task:Some(Self::convert(&task)?).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn list_tasks(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,task_wire::ListTasksRequest>,
-    )->ServiceResult<task_wire::ListTasksResponse>{
-        let size=if req.page.page_size==0{25}else{req.page.page_size};
-        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
-        let after=&req.page.page_token;
-        if !after.is_empty(){Self::valid_id(after)?;}
-        let status=match req.status{
-            None=>None,
-            Some(x) if x==task_wire::TaskStatus::TASK_STATUS_OPEN=>
-                Some(DomainTaskStatus::Open),
-            Some(x) if x==task_wire::TaskStatus::TASK_STATUS_COMPLETED=>
-                Some(DomainTaskStatus::Completed),
-            _=>return Err(ConnectError::invalid_argument("invalid TaskStatus filter")),
-        };
-        let account=req.account_id.as_deref();
-        if let Some(id)=account {
-            crm_module_sdk::RecordId::try_new(id.to_owned())
-                .map_err(|_|ConnectError::invalid_argument("invalid Account filter"))?;
-        }
-        let (list,next)=activity_tasks::list_page_typed(
-            &self.d1()?,&self.tenant,after,size as usize,status,account).await
-            .map_err(|_|ConnectError::internal("Task D1 list failed"))?;
-        let mut tasks=Vec::with_capacity(list.len());
-        for task in &list{tasks.push(Self::convert(task)?);}
-        RpcResponse::ok(task_wire::ListTasksResponse{
-            tasks,page_info:Some(core_v2::PageInfo{
-                next_page_token:next.unwrap_or_default(),..Default::default()
-            }).into(),..Default::default()
-        })
-    }
-}
+
 
 
 // Original read-only crm-data-quality: generated Protobuf, original rule set,
@@ -1017,35 +557,7 @@ struct DataQualityV2Service{
     env:Arc<Env>,
     tenant:String,
 }
-impl quality_wire::DataQualityService for DataQualityV2Service{
-    #[worker::send]
-    async fn evaluate_party_name(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,quality_wire::EvaluatePartyNameRequest>,
-    )->ServiceResult<quality_wire::EvaluatePartyNameResponse>{
-        let id=PartyV3Service::valid_id(&req.party_id)?;
-        let db=self.env.d1("DB")
-            .map_err(|_|ConnectError::internal("D1 unavailable"))?;
-        let evaluation=data_quality::evaluate_typed(&db,&self.tenant,id.as_str()).await
-            .map_err(|_|ConnectError::internal("DataQuality original owner D1 read failed"))?
-            .ok_or_else(||ConnectError::not_found("PARTIES_NOT_FOUND"))?;
-        let mut checks=Vec::with_capacity(evaluation.checks.len());
-        for check in &evaluation.checks{
-            checks.push(quality_wire::QualityRuleResult{
-                rule_key:check.rule_key.clone(),title:check.title.clone(),
-                remediation:check.remediation.clone(),passed:check.passed,
-                reason_code:check.reason_code.clone(),
-                severity_code:check.severity_code.to_owned(),
-                ..Default::default()
-            });
-        }
-        RpcResponse::ok(quality_wire::EvaluatePartyNameResponse{
-            party:Some(PartyV3Service::convert(&evaluation.party)?).into(),
-            rule_set_version:evaluation.rule_set_version,
-            checks,failed_count:evaluation.failed_count,
-            ..Default::default()
-        })
-    }
-}
+
 
 // Read-only crm-identity-resolution. Same original discovered observations,
 // same tenant-bound D1. Identical email does NOT confirm identity.
@@ -1053,82 +565,7 @@ struct IdentityV2Service{
     env:Arc<Env>,
     tenant:String,
 }
-impl identity_wire::IdentityResolutionService for IdentityV2Service{
-    #[worker::send]
-    async fn find_shared_email_candidates(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,identity_wire::FindSharedEmailCandidatesRequest>,
-    )->ServiceResult<identity_wire::FindSharedEmailCandidatesResponse>{
-        let size=if req.page.page_size==0{25}else{req.page.page_size};
-        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
-        // Numeric offset is an opaque cursor over the bounded, deterministic
-        // canonical pair order. Never LIMIT raw contacts before domain filtering.
-        let after=&req.page.page_token;
-        let offset=if after.is_empty(){0}else{
-            let parsed=after.parse::<usize>()
-                .map_err(|_|ConnectError::invalid_argument("invalid page_token"))?;
-            if parsed==0 || parsed.to_string()!=*after{
-                return Err(ConnectError::invalid_argument("invalid page_token"));
-            }
-            parsed
-        };
-        let db=self.env.d1("DB")
-            .map_err(|_|ConnectError::internal("D1 unavailable"))?;
-        let candidates=match identity_resolution::candidates_typed(&db,&self.tenant).await
-            .map_err(|_|ConnectError::internal("Identity original owner read failed"))? {
-            Ok(items)=>items,
-            Err(identity_resolution::CandidateError::ScanLimit)=>
-                return Err(ConnectError::unavailable("IDENTITY_RESOLUTION_SCAN_LIMIT_REACHED")),
-            Err(identity_resolution::CandidateError::SourceChanged)=>
-                return Err(ConnectError::aborted("IDENTITY_RESOLUTION_SOURCE_CHANGED")),
-        };
-        let mut items=Vec::new();
-        for candidate in candidates.iter().skip(offset).take(size as usize){
-            items.push(identity_wire::SharedEmailCandidate{
-                first_party:Some(PartyV3Service::convert(&candidate.first)?).into(),
-                second_party:Some(PartyV3Service::convert(&candidate.second)?).into(),
-                first_contact_point_id:candidate.first_contact_point_id.clone(),
-                second_contact_point_id:candidate.second_contact_point_id.clone(),
-                both_contacts_verified:candidate.both_verified,
-                ..Default::default()
-            });
-        }
-        let next=if offset.saturating_add(size as usize)<candidates.len(){
-            (offset+size as usize).to_string()
-        }else{String::new()};
-        RpcResponse::ok(identity_wire::FindSharedEmailCandidatesResponse{
-            candidates:items,
-            page_info:Some(core_v2::PageInfo{
-                next_page_token:next,..Default::default()
-            }).into(),
-            ..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn compare_parties(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,identity_wire::ComparePartiesRequest>,
-    )->ServiceResult<identity_wire::ComparePartiesResponse>{
-        let first=PartyV3Service::valid_id(&req.first_party_id)?;
-        let second=PartyV3Service::valid_id(&req.second_party_id)?;
-        let pair=CanonicalPartyPair::try_new(
-            PartyReference::try_new(first.as_str())
-                .map_err(|_|ConnectError::invalid_argument("invalid first_party_id"))?,
-            PartyReference::try_new(second.as_str())
-                .map_err(|_|ConnectError::invalid_argument("invalid second_party_id"))?,
-        ).map_err(|_|ConnectError::invalid_argument("IDENTITY_RESOLUTION_SELF_PAIR_INVALID"))?;
-        let db=self.env.d1("DB")
-            .map_err(|_|ConnectError::internal("D1 unavailable"))?;
-        let comparison=identity_resolution::compare_typed(
-            &db,&self.tenant,&pair,first.as_str()).await
-            .map_err(|_|ConnectError::internal("Identity original Party read failed"))?
-            .ok_or_else(||ConnectError::not_found("PARTIES_NOT_FOUND"))?;
-        RpcResponse::ok(identity_wire::ComparePartiesResponse{
-            first_party:Some(PartyV3Service::convert(&comparison.first)?).into(),
-            second_party:Some(PartyV3Service::convert(&comparison.second)?).into(),
-            same_party_id:false,identity_confirmed:false,
-            ..Default::default()
-        })
-    }
-}
+
 
 
 // The original crm-consents domain owns communication decisions and operator
@@ -1196,77 +633,7 @@ impl ConsentV2Service{
         }
     }
 }
-impl consent_wire::ConsentAuthorizationService for ConsentV2Service{
-    #[worker::send]
-    async fn evaluate_consent(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,consent_wire::EvaluateConsentRequest>,
-    )->ServiceResult<consent_wire::EvaluateConsentResponse>{
-        let input=req.to_owned_message();
-        let decision=consents::evaluate_typed(consents::ScopeInput{
-            party_id:input.party_id,contact_point_id:input.contact_point_id,
-            purpose:input.purpose,channel:Self::channel(input.channel)?,
-        },&self.d1()?,&self.tenant).await
-            .map_err(|_|ConnectError::internal("Original Consent evaluation failed"))?
-            .map_err(Self::failed)?;
-        let reason=match decision.reason{
-            DomainConsentReason::ActiveGrant=>consent_wire::EvaluationReason::EVALUATION_REASON_ACTIVE_GRANT,
-            DomainConsentReason::ActiveDeny=>consent_wire::EvaluationReason::EVALUATION_REASON_ACTIVE_DENY,
-            DomainConsentReason::Withdrawn=>consent_wire::EvaluationReason::EVALUATION_REASON_WITHDRAWN,
-            DomainConsentReason::NoApplicableGrant=>consent_wire::EvaluationReason::EVALUATION_REASON_NO_APPLICABLE_GRANT,
-        };
-        RpcResponse::ok(consent_wire::EvaluateConsentResponse{
-            allowed:decision.allowed,reason:reason.into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn suppress_communication(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,consent_wire::SuppressCommunicationRequest>,
-    )->ServiceResult<consent_wire::SuppressCommunicationResponse>{
-        let input=req.to_owned_message();
-        let (key,_)=AccountV2Service::precondition(input.precondition.as_option(),true)?;
-        let saved=consents::suppress_typed(consents::SuppressionInput{
-            id:input.authorization_id,party_id:input.party_id,
-            contact_point_id:input.contact_point_id,purpose:input.purpose,
-            channel:Self::channel(input.channel)?,jurisdiction:input.jurisdiction,
-        },&key,&self.d1()?,&self.tenant,&self.actor,&self.request_id).await
-            .map_err(|_|ConnectError::internal("Original Consent suppression failed"))?
-            .map_err(Self::failed)?;
-        RpcResponse::ok(consent_wire::SuppressCommunicationResponse{
-            authorization:Some(Self::convert(&saved.item)).into(),
-            receipt:Some(core_v2::MutationReceipt{
-                request_id:self.request_id.clone(),
-                resource_version:saved.item.version(),replayed:saved.replayed,
-                ..Default::default()
-            }).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn list_consent_authorizations(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,consent_wire::ListConsentAuthorizationsRequest>,
-    )->ServiceResult<consent_wire::ListConsentAuthorizationsResponse>{
-        let size=if req.page.page_size==0{25}else{req.page.page_size};
-        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
-        let after=&req.page.page_token;
-        if !after.is_empty(){
-            crm_consents::ConsentAuthorizationId::try_new(*after)
-                .map_err(|_|ConnectError::invalid_argument("invalid page_token"))?;
-        }
-        let filter=req.party_id.as_deref();
-        if let Some(party)=filter{
-            crm_consents::PartyReference::try_new(party)
-                .map_err(|_|ConnectError::invalid_argument("invalid party_id filter"))?;
-        }
-        let (list,next)=consents::list_page_typed(
-            &self.d1()?,&self.tenant,after,size as usize,filter).await
-            .map_err(|_|ConnectError::internal("Original Consent D1 list failed"))?;
-        let authorizations=list.iter().map(Self::convert).collect();
-        RpcResponse::ok(consent_wire::ListConsentAuthorizationsResponse{
-            authorizations,page_info:Some(core_v2::PageInfo{
-                next_page_token:next.unwrap_or_default(),..Default::default()
-            }).into(),..Default::default()
-        })
-    }
-}
+
 
 
 // Sales v2 wraps the EXISTING crm-sales aggregate, D1 persistence and atomic
@@ -1357,144 +724,7 @@ impl SalesV2Service {
         }
     }
 }
-impl sale_wire::DealService for SalesV2Service{
-    #[worker::send]
-    async fn create_deal(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,sale_wire::CreateDealRequest>,
-    )->ServiceResult<sale_wire::CreateDealResponse>{
-        let input=req.to_owned_message();
-        let id=Self::id(&input.deal_id)?;
-        let (key,_)=AccountV2Service::precondition(input.precondition.as_option(),true)?;
-        let stage=input.stage.as_option()
-            .ok_or_else(||ConnectError::invalid_argument("stage required"))?;
-        let (pipeline_id,stage_id,ordinal)=Self::stage(stage)?;
-        let probability_bps=u16::try_from(input.probability_basis_points)
-            .map_err(|_|ConnectError::invalid_argument("invalid probability basis points"))?;
-        let (amount_minor_units,currency)=match input.amount.as_option(){
-            Some(money)=>(Some(money.minor_units),Some(money.currency_code.clone())),
-            None=>(None,None),
-        };
-        let db=self.d1()?;
-        let saved=sales_deals::create_typed(sales_deals::CreateInput{
-            id,name:input.name,account_id:input.account_id,pipeline_id,stage_id,
-            ordinal,probability_bps,amount_minor_units,currency,
-        },&key,&db,&self.tenant,&self.actor,&self.request_id).await
-            .map_err(|_|ConnectError::internal("Sales original D1 create failed"))?
-            .map_err(Self::failed)?;
-        RpcResponse::ok(sale_wire::CreateDealResponse{
-            deal:Some(Self::convert(&saved.deal)?).into(),
-            receipt:Some(self.receipt(&saved)).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn update_deal(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,sale_wire::UpdateDealRequest>,
-    )->ServiceResult<sale_wire::UpdateDealResponse>{
-        let input=req.to_owned_message();
-        let id=Self::id(&input.deal_id)?;
-        let (key,version)=AccountV2Service::precondition(input.precondition.as_option(),false)?;
-        let (name,clear_name)=match input.name.as_option(){
-            None=>(None,None),
-            Some(patch)=>match patch.operation.as_ref(){
-                Some(core_v2::string_patch::Operation::Set(name))=>
-                    (Some(name.clone()),None),
-                Some(core_v2::string_patch::Operation::Clear(true))=>(None,Some(true)),
-                _=>return Err(ConnectError::invalid_argument("invalid StringPatch")),
-            }
-        };
-        let (amount_minor_units,currency,clear_amount)=match input.amount.as_option(){
-            None=>(None,None,None),
-            Some(patch)=>match patch.operation.as_ref(){
-                Some(core_v2::money_patch::Operation::Set(money))=>
-                    (Some(money.minor_units),Some(money.currency_code.clone()),None),
-                Some(core_v2::money_patch::Operation::Clear(true))=>
-                    (None,None,Some(true)),
-                _=>return Err(ConnectError::invalid_argument("invalid MoneyPatch")),
-            }
-        };
-        let probability_bps=input.probability_basis_points
-            .map(|v|u16::try_from(v)
-                .map_err(|_|ConnectError::invalid_argument("invalid probability basis points")))
-            .transpose()?;
-        let saved=sales_deals::update_typed(sales_deals::UpdateInput{
-            expected_version:version.unwrap_or_default(),name,clear_name,
-            amount_minor_units,currency,clear_amount,probability_bps,
-        },&key,&self.d1()?,&self.tenant,&id,&self.request_id).await
-            .map_err(|_|ConnectError::internal("Sales original D1 update failed"))?
-            .map_err(Self::failed)?;
-        RpcResponse::ok(sale_wire::UpdateDealResponse{
-            deal:Some(Self::convert(&saved.deal)?).into(),
-            receipt:Some(self.receipt(&saved)).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn advance_stage(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,sale_wire::AdvanceStageRequest>,
-    )->ServiceResult<sale_wire::AdvanceStageResponse>{
-        let input=req.to_owned_message();
-        let id=Self::id(&input.deal_id)?;
-        let (key,version)=AccountV2Service::precondition(input.precondition.as_option(),false)?;
-        let stage=input.target_stage.as_option()
-            .ok_or_else(||ConnectError::invalid_argument("target_stage required"))?;
-        let (pipeline_id,stage_id,ordinal)=Self::stage(stage)?;
-        let status=Self::deal_status(input.target_status)?;
-        let advanced=sales_deals::advance_typed(sales_deals::StageInput{
-            expected_version:version.unwrap_or_default(),
-            pipeline_id,stage_id,ordinal,status,
-            close_reason_code:input.close_reason_code,
-        },&key,&self.d1()?,&self.tenant,&id,&self.actor,&self.request_id).await
-            .map_err(|_|ConnectError::internal("Sales original D1 stage advance failed"))?
-            .map_err(Self::failed)?;
-        RpcResponse::ok(sale_wire::AdvanceStageResponse{
-            deal:Some(Self::convert(&advanced.saved.deal)?).into(),
-            receipt:Some(self.receipt(&advanced.saved)).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn get_deal(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,sale_wire::GetDealRequest>,
-    )->ServiceResult<sale_wire::GetDealResponse>{
-        let id=Self::id(&req.deal_id)?;
-        let deal=sales_deals::load(&self.d1()?,&self.tenant,&id).await
-            .map_err(|_|ConnectError::internal("Sales original D1 read failed"))?
-            .ok_or_else(||ConnectError::not_found("SALES_DEAL_NOT_FOUND"))?;
-        RpcResponse::ok(sale_wire::GetDealResponse{
-            deal:Some(Self::convert(&deal)?).into(),..Default::default()
-        })
-    }
-    #[worker::send]
-    async fn list_deals(&self,_ctx:RequestContext,
-        req:ServiceRequest<'_,sale_wire::ListDealsRequest>,
-    )->ServiceResult<sale_wire::ListDealsResponse>{
-        let size=if req.page.page_size==0{25}else{req.page.page_size};
-        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
-        let after=&req.page.page_token;
-        if !after.is_empty(){Self::id(after)?;}
-        let pipeline=req.pipeline_id.as_deref();
-        if let Some(id)=pipeline{
-            crm_sales::PipelineId::try_new(id)
-                .map_err(|_|ConnectError::invalid_argument("invalid pipeline filter"))?;
-        }
-        let status=match req.status {
-            None=>None,Some(s)=>Some(match s{
-                x if x==sale_wire::DealStatus::DEAL_STATUS_OPEN=>DomainDealStatus::Open,
-                x if x==sale_wire::DealStatus::DEAL_STATUS_WON=>DomainDealStatus::Won,
-                x if x==sale_wire::DealStatus::DEAL_STATUS_LOST=>DomainDealStatus::Lost,
-                _=>return Err(ConnectError::invalid_argument("invalid DealStatus filter")),
-            })
-        };
-        let (list,next)=sales_deals::list_page_typed(
-            &self.d1()?,&self.tenant,after,size as usize,pipeline,status).await
-            .map_err(|_|ConnectError::internal("Sales original D1 list failed"))?;
-        let deals=list.iter().map(Self::convert)
-            .collect::<std::result::Result<Vec<_>,ConnectError>>()?;
-        RpcResponse::ok(sale_wire::ListDealsResponse{
-            deals,page_info:Some(core_v2::PageInfo{
-                next_page_token:next.unwrap_or_default(),..Default::default()
-            }).into(),..Default::default()
-        })
-    }
-}
+
 
 // Called by existing native-only dispatch AFTER signed Access authentication
 // and role decision. No second fetch endpoint, tenant header, or JS route.

@@ -1,6 +1,6 @@
 // Match actual Buf FileDescriptorSet services to Rust trait implementations and
 // physical local/published test fixtures. Do not infer active RPCs from .proto text.
-import {readFileSync,existsSync} from "node:fs";
+import {readFileSync,existsSync,readdirSync} from "node:fs";
 import {resolve,dirname} from "node:path";
 import {createRequire} from "node:module";
 import {fileURLToPath} from "node:url";
@@ -58,7 +58,19 @@ for(const x of proof.methods){
 // Discover EVERY implemented native candidate from the existing generated Rust
 // trait implementations and compiled Buf service descriptors. No second catalog.
 // This runs while unpublished RPCs are still denied by contract-only production.
-const candidateRust=rd("apps/cloudflare-crm/rust-party/src/connect_sales.rs");
+const connectRoot="apps/cloudflare-crm/rust-party/src/connect_sales";
+const candidateFiles=readdirSync(resolve(root,connectRoot),{withFileTypes:true})
+  .filter(entry=>entry.isFile()&&entry.name.endsWith(".rs"))
+  .map(entry=>connectRoot+"/"+entry.name).sort();
+if(!candidateFiles.length)fail("native Connect domain handlers absent");
+const candidateRust=[
+  rd("apps/cloudflare-crm/rust-party/src/connect_sales.rs"),
+  ...candidateFiles.map(rd),
+].join("\n\n");
+for(const file of candidateFiles){
+  if(!/impl\s+\w+::\w+\s+for\s+\w+\s*\{/.test(rd(file)))
+    fail("Connect domain handler has no generated trait implementation "+file);
+}
 const signedNative=rd("apps/cloudflare-crm/rust-party/test/contract-only-native.mjs");
 const fixture=rd("scripts/crm-connect-binary-fixture.mjs");
 const aliases=new Map([...candidateRust.matchAll(

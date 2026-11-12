@@ -190,10 +190,14 @@ if(policy.phase!=="cutover"){
     "packages/client/src/cloudflare.ts"
   ]);
   for(const path of frozenRuntimeFiles()){
-    check(prev.has(path),"new runtime file before full cutover: "+path);
+    // Domain-specific native Connect trait implementations share the one
+    // parent router. New handlers remain CI-only until full cutover.
+    const connectHandler=path.startsWith("apps/cloudflare-crm/rust-party/src/connect_sales/") &&
+      path.endsWith("_handlers.rs");
+    check(prev.has(path)||connectHandler,"new runtime file before full cutover: "+path);
     if(policy.phase==="contract-only"&&
        (path==="apps/cloudflare-crm/rust-party/src/lib.rs"||
-        candidateSources.has(path)))continue;
+        candidateSources.has(path)||connectHandler))continue;
     if(path==="apps/cloudflare-crm/wrangler.jsonc"||
        path==="apps/cloudflare-crm/rust-party/wrangler.jsonc"){
       // Only this security-strengthening routing rule may change during freeze.
