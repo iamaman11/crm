@@ -156,6 +156,11 @@ const rustSources=treeFiles("apps/cloudflare-crm/rust-party/src").filter(x=>x.en
 const routerCount=rustSources.reduce((n,p)=>
   n+([...read(p).matchAll(/ConnectRouter::new\s*\(/g)].length),0);
 check(routerCount===1,"exactly one embedded Connect router required, found "+routerCount);
+check(read("apps/cloudflare-crm/rust-party/src/connect_sales.rs").includes("fn wire_precondition("),
+  "common Connect wire precondition must be defined once");
+check(!rustSources.some(path=>path.includes("/connect_sales/") &&
+    read(path).includes("AccountV2Service::precondition(")),
+  "domain Connect handler must not borrow Account precondition implementation");
 // Candidate and cutover must BOTH reject legacy Protobuf round-trips and
 // unimplemented Connect RPCs. Do not postpone the invariant.
   for(const path of rustSources.filter(x=>/connect.*\.rs$/.test(x))){
