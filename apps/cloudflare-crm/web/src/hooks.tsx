@@ -29,7 +29,7 @@ export function useMutation() {
   const [busy,setBusy]=useState(false);
   const [notice,setNotice]=useState<{tone:"success"|"warning"|"danger";text:string}>();
   const changed=()=>{setKey(newId());};
-  const run=async(write:()=>Promise<{receipt:MutationReceipt|undefined}>,refresh?:()=>Promise<unknown>)=>{
+  const run=async(write:()=>Promise<{receipt?:MutationReceipt|undefined}>,refresh?:()=>Promise<unknown>)=>{
     if(inFlight.current)return;
     inFlight.current=true;setBusy(true);setNotice(undefined);
     try {
