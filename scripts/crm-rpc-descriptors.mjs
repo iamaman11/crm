@@ -122,8 +122,11 @@ for(const match of policies){
 }
 if(!registered.size)fail("no exact-path Rust RPC policy found");
 for(const path of candidatePaths){
-  if(registered.get(path)?.activation!=="Candidate")
-    fail("candidate missing exact Rust activation policy "+path);
+  // The historical published Party v2 implementation is discovered along
+  // with candidates, but must remain Published rather than Candidate.
+  const activation=proof.methods.some(item=>item.path===path)?"Published":"Candidate";
+  if(registered.get(path)?.activation!==activation)
+    fail("implemented RPC missing exact Rust activation policy "+path);
 }
 for(const [path,rule] of registered){
   if(rule.activation==="Candidate" && !candidatePaths.has(path))
