@@ -16,6 +16,8 @@ function fixture(){
  report.runtime_evidence="EXECUTED";
  report.active_rpc_paths=targetMethods(available);
  report.runtime={source_sha:report.source_sha,result:"PASS",features:["native-ci"],
+  unauthenticated_denials:[...report.active_rpc_paths],
+  viewer_denials:report.active_rpc_paths.filter(p=>available.get(p).idempotency===MethodOptions_IdempotencyLevel.IDEMPOTENT),
   successful_rpc_calls:[...report.active_rpc_paths],rpc:{compiled_policy_check:true,
    registered_methods:[...report.active_rpc_paths],
    policies:report.active_rpc_paths.map(p=>[p,{permission:available.get(p).idempotency===MethodOptions_IdempotencyLevel.IDEMPOTENT?"Write":"Read"}])}};
@@ -33,7 +35,7 @@ test("synthetic evidence fixture exercises the validator, not the Worker",()=>{
 });
 reject("missing executed evidence fails",r=>{r.runtime_evidence="NOT_EXECUTED";},/executed workerd evidence required/);
 reject("stale evidence fails",r=>{r.runtime.source_sha="0".repeat(40);},/stale runtime evidence/);
-reject("missing policy fails",r=>{r.runtime.rpc.policies=[];},/missing or invalid compiled policy/);
+reject("missing policy fails",r=>{r.runtime.rpc.policies=[];},/permission denial coverage|missing or invalid compiled policy/);
 reject("unregistered policy fails",r=>{
  r.runtime.rpc.policies.push(["/crm.missing.v1.Service/Method",{permission:"Read"}]);
 },/policy without registered RPC/);
@@ -53,6 +55,16 @@ reject("missing method fails even if policy and calls omit it",r=>{
  r.runtime.rpc.registered_methods=r.runtime.rpc.registered_methods.filter(p=>p!==path);
  r.runtime.rpc.policies=r.runtime.rpc.policies.filter(([p])=>p!==path);
  r.runtime.successful_rpc_calls=r.runtime.successful_rpc_calls.filter(p=>p!==path);
-},/full contract differs/);
+},/authentication denial coverage|full contract differs/);
 
-reject("read method cannot acquire a mutation policy",r=>{r.runtime.rpc.policies.find(([p])=>p===path)[1].permission="Write";},/policy effect differs from Protobuf/);
+reject("read method cannot acquire a mutation policy",r=>{r.runtime.rpc.policies.find(([p])=>p===path)[1].permission="Write";},/permission denial coverage|policy effect differs from Protobuf/);
+reject("missing unauthenticated scenario fails",r=>{r.runtime.unauthenticated_denials.pop();},/authentication denial coverage/);
+reject("missing denied mutation scenario fails",r=>{r.runtime.viewer_denials.pop();},/permission denial coverage/);
+test("future v4 method must enter the required scope without a registry edit",()=>{
+ const extended=new Map(available);
+ const future="/crm.parties.v4.PartyService/GetParty";
+ extended.set(future,{...available.get(path),file:"crm/parties/v4/party.proto",package:"crm.parties.v4"});
+ assert.ok(targetMethods(extended).includes(future));
+ const report=fixture();
+ assert.throws(()=>validateRuntime(report,extended,validateBindings(report,extended)),/full contract differs/);
+});

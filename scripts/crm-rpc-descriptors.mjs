@@ -37,9 +37,12 @@ export function validateBindings(report,available){
 }
 // Select the Cloudflare generation of contracts from compiled file descriptors.
 // Historical v1 and superseded Party v2 remain available to other consumers.
+// Later versions automatically enter the required scope; omission cannot pass.
 export function targetMethods(available){
- return [...available].filter(([,d])=>
-  /^crm\/[^/]+\/v(?:2|3)\/[^/]+\.proto$/.test(d.file)&&d.package!=="crm.parties.v2")
+ return [...available].filter(([,d])=>{
+  const version=/^crm\/[^/]+\/v([1-9][0-9]*)\/[^/]+\.proto$/.exec(d.file)?.[1];
+  return version!==undefined&&Number(version)>=2&&d.package!=="crm.parties.v2";
+ })
   .map(([path])=>path).sort();
 }
 export function validateRuntime(report,available,bound){
@@ -57,6 +60,11 @@ export function validateRuntime(report,available,bound){
  const policies=new Map(rpc.policies);
  if(policies.size!==rpc.policies.length)fail("duplicate compiled policy");
  const success=new Set(evidence.successful_rpc_calls);
+ const equalPaths=(actual,expected,label)=>{
+  if(!Array.isArray(actual)||actual.length!==new Set(actual).size||
+     JSON.stringify([...actual].sort())!==JSON.stringify([...expected].sort()))
+   fail(label+" differs from compiled methods/policy");
+ };
  for(const path of registered){
   if(!available.has(path))fail("registered RPC absent from Buf descriptor "+path);
   if(!bound.has(path))fail("registered RPC absent from canonical module.yaml binding "+path);
@@ -76,6 +84,9 @@ export function validateRuntime(report,available,bound){
  const expected=targetMethods(available);
  if(expected.length!==registered.size||expected.some(path=>!registered.has(path)))
   fail("full contract differs from registered methods");
+ equalPaths(evidence.unauthenticated_denials,registered,"authentication denial coverage");
+ equalPaths(evidence.viewer_denials,[...policies].filter(([,rule])=>
+   rule.permission==="Write"||rule.permission==="AdminRead").map(([path])=>path),"permission denial coverage");
  if(JSON.stringify([...registered].sort())!==JSON.stringify([...report.active_rpc_paths].sort()))
   fail("active methods differ from executed policy");
 

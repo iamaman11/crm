@@ -93,7 +93,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"CreateAccount");
    accountId=await firstId("crm_account_records","name","Browser Account "+runId);
    await page.getByRole("heading",{name:"Browser Account "+runId,exact:true}).waitFor();
-   const accountCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,exact:true})});
+   const accountCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,level:2,exact:true})});
    const overviewResponse=page.waitForResponse(r=>r.url().endsWith("/GetAccountOverview"));
    await accountCard.getByRole("button",{name:"Открыть карточку",exact:true}).click();
    assert.equal((await overviewResponse).status(),200);
@@ -145,7 +145,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    await mutation(page.getByRole("button",{name:"Сохранить этап",exact:true}),"AdvanceStage");
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,1);
    await navigate("accounts","Клиенты");
-   await page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,exact:true})})
+   await page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,level:2,exact:true})})
      .getByRole("button",{name:"Открыть карточку",exact:true}).click();
    await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    steps.push("Exact bigint Deal and atomic Sales–Activities flow visible in Account");
@@ -333,4 +333,3 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    try {await restoreViewer();}finally{await browser.close();}
  }
 }
-

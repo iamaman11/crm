@@ -15,3 +15,8 @@ test("wrong account or database cannot be a release target",()=>{
  assert.throws(()=>validateWorkerConfig({...config,account_id:"another-account"},local),/unexpected Cloudflare account/);
  assert.throws(()=>validateWorkerConfig({...config,d1_databases:[{...config.d1_databases[0],database_id:"another-database"}]},local),/unexpected D1/);
 });
+test("Wrangler cannot publish a public or preview URL before release verification",()=>{
+ assert.throws(()=>validateWorkerConfig({...config,workers_dev:true},local),/explicitly enable/);
+ assert.throws(()=>validateWorkerConfig({...config,preview_urls:true},local),/explicitly enable/);
+ assert.throws(()=>validateWorkerConfig({...config,routes:["example.org/*"]},local),/explicitly enable/);
+});

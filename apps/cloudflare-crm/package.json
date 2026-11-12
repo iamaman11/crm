@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "test": "node --test test/native-runtime.test.mjs test/typed-presentation.test.mjs",
+    "test": "node --test test/native-runtime.test.mjs test/typed-presentation.test.mjs test/release.test.mjs",
     "doctor": "node scripts/doctor.mjs",
     "locate": "node scripts/doctor.mjs",
     "architecture:check": "node scripts/architecture-gate.mjs",

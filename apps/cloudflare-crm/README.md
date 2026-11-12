@@ -1,67 +1,54 @@
-# CRM Dev — нативное приложение Cloudflare
+# Cloudflare CRM
 
-Единственный источник кода и состояния разработки — [iamaman11/crm](https://github.com/iamaman11/crm), актуальный план — [Issue #338](https://github.com/iamaman11/crm/issues/338).
-
-## Как устроено приложение
+Канонический репозиторий — [iamaman11/crm](https://github.com/iamaman11/crm).
+Норма — [ARCHITECTURE.md](ARCHITECTURE.md), текущая работа и проверенное состояние —
+[Issue #350](https://github.com/iamaman11/crm/issues/350). Пока полный cutover не принят, статус **NO-GO**.
 
 ```text
-React 19 / Vite (Cloudflare Static Assets)
-  → Cloudflare Access (подписанная личность)
-  → один Worker workers-rs (Rust/WASM; один HTTP entrypoint)
-  → исходные Rust-модули из modules/ (единственные владельцы бизнес-правил)
-  → нативный D1 binding DB → одна база crm-dev
+Protobuf → Buf → generated Rust/TypeScript
+React strict TSX + packages/ui → packages/client/cloudflare
+→ binary Connect → Rust Access verification/policy
+→ оригинальные Rust owners → owner SQL/CAS/receipts/audit → одна D1
 ```
 
-Без JS API-маршрутизатора, отдельного Worker, PostgreSQL, Docker и дополнительной базы данных. Worker проверяет подписанный Access JWT, сопоставляет пользователя с tenant/ролью в D1, маршрутизирует запросы и вызывает исходный Rust-домен. Только оператор с ролью admin изменяет данные, прочие зарегистрированные пользователи читают данные своего tenant. Никогда не доверяем клиентским заголовкам tenant или пользователя.
+Один workers-rs Worker `crm-dev`, один встроенный Connect router, одна существующая D1.
+Frontend: `web/src/app.tsx` и feature screens. Wire/domain mappings и D1 adapters:
+`rust-party/src/connect_sales.rs`, его handler modules и существующие owner-файлы.
+Бизнес-правила принадлежат исходным `modules/crm-*`.
+Customer360 читает Account-rooted композицию; Sales–Activities сохраняет связанные изменения атомарно.
 
-### Границы ответственности
+Контракты проверяет Buf, Rust — компилятор/Clippy/domain tests, границы TypeScript —
+compiler/AST. Скомпилированные router/policy сверяются с descriptors и выполненными
+workerd-сценариями. Нет второго ручного каталога покрытия и source-text доказательств тестов.
+Количество RPC не является процентом готовности приложения.
 
-- **UI** — `web/src/main.jsx`, `Parties.jsx`, `Customer360.jsx`. `App` владеет списками Party/Account/ContactPoint/Deal/Task; дочерние экраны получают данные через props. Формы передают идентификаторы, версии и параметры API, но не выбирают конечный результат доменных переходов.
-- **HTTP, Access, диагностика** — `rust-party/src/lib.rs`, `access.rs`; **Party HTTP/D1** — `rust-party/src/parties.rs`. Стабильные `x-request-id`, `x-crm-module`, `x-crm-error-code` и `x-crm-source-sha`; облачные структурированные Logs без токенов и пользовательских данных.
-- **Адаптеры оригинальных модулей к D1** — `rust-party/src/accounts.rs`, `contact_points.rs`, `sales_deals.rs`, `activity_tasks.rs`, `party_relationships.rs`, `consents.rs`. Это **не второй бизнес-домен**: обработчики разбирают JSON в Rust-типы, вызывают исходные агрегаты и сохраняют их штатными D1-запросами.
-- **Оригинальные бизнес-правила** — `modules/crm-*`. Межмодульный `sales_activities_link.rs` использует исходный Rust link-модуль и типизированный Protobuf-адаптер, коммит Deal/Task/receipt выполняется одной атомарной операцией D1.
-- **Карточка клиента** — `account_overview.rs`, read-only композиция состояний владельцев; не отдельная клиентская таблица и не владелец изменений.
-- **База** — одна D1 из `wrangler.jsonc`; отдельные таблицы состояний и квитанций по владельцам, общая таблица аудита. Миграции `migrations/0001_*.sql`–`0012_*.sql`.
+Разработка ведётся в существующем PR #351 → dev; сборки и тесты выполняет
+`.github/workflows/cloudflare-crm-spike.yml`. Зависимости устанавливаются через
+`pnpm install --frozen-lockfile`, Rust собирается с `--locked`.
+CI проверяет contracts/types, formatting/Clippy/domain, WASM/workerd/D1, затем Chromium.
 
-## Что реализовано и что пока отсутствует
+`rust-party/test/typed-browser.mjs` выполняет реальные UI действия через generated client.
+`e2e/live.mjs` запускает те же сценарии через настоящий Access с D1 readback.
+Test-only `native-ci` и production `native` явно различаются в evidence.
+Live verification связывает HTTP request_id, D1 audit и Cloudflare Logs с точной Worker version.
+Отсутствие обязательного evidence означает FAIL; скриншот ошибки не является browser PASS.
+Doctor — read-only диагностика доступности D1/runtime, не приёмка приложения.
 
-В пользовательском интерфейсе: Parties (создать, изменить), **PartyRelationships (создать связь двух лиц/организаций, изменить статус)**, **Consents (проверить разрешение и записать операторский запрет, без выдачи Grant)**, Accounts (создать, изменить, карточка), ContactPoints (создать, изменить; пользователь не может присвоить себе `verified`), Sales Deals (создать, изменить, продвинуть этап, таблица/воронка), Activities Tasks (создать и завершить). Поиск и обновление списка; данные переживают перезагрузку. Действуют Access, tenant-разделение и контроль версии. **Универсального Delete для этих оригинальных агрегатов нет.**
+`migrations/0001_initial.sql` создаёт схему с нуля.
+`0002_hard_cutover.sql` один раз удаляет тестовые бизнес-данные и пересоздаёт их схему,
+сохраняя `crm_users` и `crm_tenants`. Повторное применение предотвращает стандартный
+Wrangler migration ledger. Новые изменения схемы оформляются следующими миграциями.
+Миграции и fixtures проверяются в CI; live reset разрешён только после проверки кандидата.
 
-В **Identity Resolution** добавлено только безопасное чтение двух Party через оригинальный `CanonicalPartyPair` и tenant-bound D1: React → GET `/api/identity-resolution/compare/:left/:right` → один Rust Worker → оригинальные Party. Результат показывает имена, типы и версии; **это не поиск кандидатов, не доказательство совпадения и не объединение**. Дополнительно доступен read-only поиск **наблюдаемых совпадений email**: оригинальный `crm-contact-points` декодирует и нормализует действующие контакты, оригинальный `crm-identity-resolution::discover_shared_recorded_emails` находит пары Party с одинаковым записанным email. Указано, подтверждены ли оба контакта. Это **не верификация личности, не score, не Consent и не решение о дубликате**. При более 300 контактах или более 100 парах сканирование завершается ошибкой, а не выдаёт неполный результат. Достоверный scored matcher, MatchEvidenceSnapshot и состояние дела по-прежнему **NOT_CONNECTED**; D1-таблица для несуществующего дела не создаётся. **Data Quality**: `GET /api/data-quality/parties/:id/evaluate` выполняет read-only проверку текущей Party из D1 по двум встроенным правилам оригинального `crm-data-quality`: имя не короче 3 байт UTF-8 и не равно точной ASCII-заглушке unknown/n/a/tbd (без подмены правил JavaScript). Версия набора вычисляется оригинальным `PartyRuleSetVersion::publish` и показывается в ответе; результаты отображаются в React. Это **предопределённые проверочные правила**, ещё не настроенная/сохранённая tenant-политика. Персистентные findings, оценки полноты, definition/profile publication и job lifecycle **NOT_CONNECTED**. Без новых D1 tables или записей при чтении. **Customer Data Operations / CSV Party export**: оператор `admin` может в разделе «Экспорт данных» выбрать all/person/organization, запросить `GET /api/customer-data-operations/preview?kind=...`, увидеть реальное количество, поля, versioned original Rust `PartyExportSpecification` и SHA-256 файла, затем скачать `GET /api/customer-data-operations/parties.csv?kind=...`. Для CSV используется только оригинальный `crm-customer-data-operations::canonical_party_export_csv_record` с защитой от spreadsheet formula injection; Party берутся из исходного `crm-parties` на единственной D1 в проверенном Access tenant. Только admin, `Cache-Control: private, no-store`, не больше 100 **всех Party tenant** за один запрос; свыше лимита fail closed без неполной выгрузки. Экспорт только текущего снимка, предварительный просмотр не замораживает данные; при изменении SHA до скачивания UI предложит обновить просмотр. **Это не полная долгоживущая экспортная job-модель**: persisted export jobs, checkpoint, durable storage, long-running export **NOT_CONNECTED**; bounded create-only CSV import **CONNECTED** (см. принятое описание ниже). Новых таблиц/сервисов нет. `crm-customer-enrichment` подключён в честном режиме **настроек**: admin создаёт immutable ProviderProfileVersion и MappingVersion через оригинальные `publish`/strict codecs, одну D1, idempotency receipts и request_id audit. UI показывает профили и правила для Party.display_name, но не вызывает провайдеров, не проверяет факт наличия лицензии и не изменяет Party. Dispatch, response receipts, suggestion materialization/review/application пока **NOT_CONNECTED**. `crm-customer-privacy` подключён в режиме регистрации заявок; остальные privacy-операции пока не подключены. **Consent Evaluate и operator Deny** подключены к оригинальному `crm-consents`: проверка разрешения только читает состояние, операторский запрет записывается в D1 через Access, показывается в UI и подтверждается физическим Chromium/D1/Logs-тестом. Consent Grant (достоверное согласие субъекта) и доверенная верификация ContactPoint пока **не подключены**; UI не имеет кнопки выдачи согласия.
+Release использует проверенный artifact без повторной сборки. До миграций проверяет
+account/DB/SHA, checksum и D1 Time Travel bookmark, останавливает workers.dev вход.
+Wrangler загружает Worker с выключенными public/preview URL; release включает единственный
+public URL после проверки version/binding. Далее обязательна live-приёмка.
+При её ошибке публичный вход выключается штатным Cloudflare API, старый несовместимый
+Worker автоматически не возвращается. D1/Access не удаляются. Исправленный кандидат
+проходит тот же CI и release-путь; failed acceptance остаётся NO-GO.
 
-`pilot.rs`, JS backend и дублированный JS Customer360 удалены. Старые тестовые таблицы могут оставаться в единой D1 ради отката прежнего Worker; активные Rust API их не используют. Обратная совместимость тестовых сущностей не требуется.
-
-## Разработка, диагностика и публикация
-
-- `npm run locate -- deals` / `contacts` / `INVALID_INPUT` определяет владеющий модуль и файлы по `shared/catalog.mjs`.
-- `npm run doctor` — быстрая локальная **проверка кода**, не доказательство живого браузера или D1.
-- Авторизованный `GET /api/doctor` — реальная версия Worker, источник сборки, Access, таблицы и tenant-readback. Внешнюю браузерную/Logs-приёмку он честно помечает как `EXTERNAL_PROTECTED_CI_CHECK_REQUIRED`.
-- **Ежедневная работа:** постоянная ветка `dev`. Один `push dev` запускает штатный `Cloudflare CRM Spike CI`: проверки оригинальных Rust-модулей и Access/JWT, D1/`workerd`, React/Chromium, одну production-feature Rust/WASM + React сборку и SHA-256 готового артефакта. Не нужно создавать PR или объединять `main` для каждого исправления.
-- **Публикация:** после полного PASS тот же workflow отправляет **те же файлы** в защищённый GitHub Environment `crm-dev` (один раз разрешаем постоянную ветку `dev`), через Wrangler обновляет один существующий Worker и выполняет физическую Chromium-проверку сайта, Access A/B, D1 audit и Cloudflare Logs по `request_id`. При FAIL прежний Worker восстанавливается; D1-миграции автоматически не откатываются.
-- **`main` — принятые этапы:** по завершении проверенного функционального этапа PR `dev → main` запускает общие монорепозиторные проверки. `main` никогда автоматически не публикует `crm-dev`. В PR действуют CI проверки, но никакого второго deployment.
-- **При потере контекста:** открыть `AGENTS.md`, Issue #338, текущий `dev` HEAD, последний CI для `dev`, Cloudflare active `crm-dev` GIT_SHA и единственную D1 binding. Если SHA кода и сайта различаются, это **не принятый релиз** до физического PASS.
-- `wasm-bindgen-cli` и `worker-build` закреплены; GitHub Actions кеширует инструменты, но не случайные compiled outputs. Тестовый `native-ci` Worker после проверки заменяется сохранёнными точными production-byte файлами `native`, без повторной сборки.
-
-Результат публикации определяется проверкой **активной версии, exact SHA и полной live-приёмкой**, а не названием ветки, локальным PASS или компиляцией всех 13 модулей.
-
-Общие принципы оригинального модульного Rust-монолита изложены в `docs/APPLICATION_ARCHITECTURE.md`: описанные там `services/crm-api` / PostgreSQL относятся к другому историческому runtime репозитория, **не** к развёрнутому `apps/cloudflare-crm`. Для текущего Cloudflare-приложения руководствоваться этим README и `AGENTS.md`, не строить параллельный runtime.
-
-
-**CSV import create-only (проверен физически, Actions #42702977831):** исходный `parse_import_source` читает CSV UTF-8 с заголовком `party_id,kind,display_name,resource_version`, максимум 20 строк / 16 KiB. Бэкенд перепроверяет исходный файл при подтверждении и SHA-256, валидирует через оригинальный `crm-parties::Party::create`, не переносит внешние Party IDs в canonical CRM, а выводит новые ID и idempotency-key по оригинальному ImportRow, запрещает дубли source IDs и конфликты target IDs, выполняет атомарный D1 batch через оригинальный Party persistence owner. Источник не может менять существующие Party, UPDATE и настоящая persisted ImportJob модель пока NOT_CONNECTED. Повтор того же исходного файла в том же tenant определяется по receipt, а не повторным созданием. Только admin; новый Worker, DB или R2 не нужны.
-
-
-**Customer Privacy (первый сценарий):** оператор регистрирует заявку `access/portability_export/restrict_processing/erasure`, переводит черновик в submitted или отменяет допустимую заявку через оригинальные `PrivacyCase::new/submit/cancel`. Каноническое состояние кодируется `encode_privacy_case_state` и хранится в той же D1 с receipts, audit и `request_id`. GET ограничен tenant, изменения — admin. **Ни создание, ни отправка заявки не подтверждают личность субъекта, не применяют ограничения, не запускают экспорт или удаление.** Verification, planning, hold и execution — `NOT_CONNECTED`.
-
-
-**Customer Enrichment — provider-neutral definitions:** `GET/POST /api/customer-enrichment/profiles`, `GET/POST /api/customer-enrichment/mappings` и `GET /api/customer-enrichment/{profiles|mappings}/:id` работают через оригинальные `ProviderProfileVersion::publish`, `MappingVersion::publish` и строгие persisted codecs. Реальные HTTP вызовы провайдеров отсутствуют, а поля `credential_handle_aliases` содержат только имена ссылок, не сами секреты. Существующие Access, tenant, request_id и D1 audit сохраняются. Профиль не подтверждает юридическую допустимость обработки; настройка не разрешает отправлять/применять сведения. Дополнительная инфраструктура не создаётся.
-
-**Упрощённое создание клиента (новый путь UI):** на экране «Клиенты» добавлена кнопка «Новый клиент с новой организацией». Она открывает штатную форму Party и после успешного Rust/D1-сохранения сразу открывает форму Account с выбранной Party. В списке существующих Party можно нажать «Добавить клиента» и открыть ту же форму Account. Это **две существующие независимые команды оригинальных доменов**, не новая атомарная операция: если Account сохранить не удалось, Party остаётся в D1, повтор не создаёт её заново. Live Chromium проверяет отмену, создание и фактическую связь двух записей.
-
-**Суммы и вероятность сделок (UI):** оператор видит и вводит `127,50 USD` и `37,5%` вместо `12750` минимальных единиц и `3750` базисных пунктов. Конвертация на границе React использует только строковые целые значения/BigInt; Rust `crm-sales` по-прежнему принимает `amount_minor_units` и `probability_bps`, единолично проверяет доменные правила. Допускаются `.` и `,` как десятичные разделители, не больше двух дробных знаков. Пустая сумма сохраняет/сбрасывает отсутствие суммы согласно существующему контракту; 0 отличается от отсутствия. Новых API, миграций или таблиц не добавлено. Browser E2E проверяет ошибки ввода, точное сохранение, повторное редактирование и отображение в воронке.
-
-## Инвентаризация действий и физическая проверка UI
-
-- `e2e/ui-inventory.mjs` — явная карта 10 React-компонентов (12 разделов, 60 кнопочных JSX-шаблонов, 93 обязательный тип действия/состояния). Каждая запись привязана к исходному тексту UI и конкретному ID проверки. `npm test` обнаруживает добавление/удаление контролов без обновления карты, а реальный `e2e/live.mjs` не принимает релиз, если любое обязательное действие не прошло в Chromium.
-- Среди проверок: все 12 кнопок навигации; поиск и обновление списков; создание/отмена/редактирование; отрицательные данные для Enrichment и CSV; разрыв сети при чтении с повтором; все четыре «Все …» из карточки клиента; точная конвертация суммы и вероятности. Снимки браузера и request_id/D1/Logs остаются в прежней цепочке GitHub Actions.
-- **Важно:** 93 записанный сценарий — покрытие **инвентаризированных классов действий**, а не всех комбинаций, всех пользовательских состояний или 100% кода. Тестовые настройки и записи создаются в `crm-dev`, реальные внешние провайдеры и необоснованные согласия не вызываются. Если проверка провалена, версия не принимается и действует штатный rollback.
-- Исправлено назначение «Все связи» в карточке клиента: кнопка открывает раздел **«Связи»**, а кнопка «Изменить» предлагается только для контакта или сделки, которым соответствует поддерживаемый оригинальный Rust-обработчик редактирования.
+Privacy verification/execution, Enrichment provider dispatch, автоматическое объединение
+личностей и необоснованные consent grants не подключены и не имитируются.
+Новый immutable API/schema baseline фиксируется после общей CI + live приёмки.
+Побайтовая воспроизводимость независимых сборок не заявляется без отдельного сравнения.

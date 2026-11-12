@@ -1,8 +1,10 @@
-// One protected GitHub Actions release owner: deploy, verify-data, rollback.
+// One protected GitHub Actions release owner: deploy, verify-data, fail closed.
 import {existsSync,mkdirSync,readFileSync,writeFileSync,readdirSync,statSync} from "node:fs";
+import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {join,relative} from "node:path";
 import {spawnSync} from "node:child_process";
+import {DatabaseSync} from "node:sqlite";
 const required=n=>{if(!process.env[n])throw Error("Missing "+n);return process.env[n];};
 const sha=required("GITHUB_SHA");
 if(!/^[0-9a-f]{40}$/.test(sha)||process.env.GITHUB_REF!=="refs/heads/dev"||process.env.GITHUB_EVENT_NAME!=="push")throw Error("Untrusted deployment");
@@ -39,7 +41,7 @@ async function bindings(deployedVersion){
 }
 // Cloudflare deployments, version metadata and the public edge can converge
 // separately after Wrangler deploy. Never treat the first old-version read
-// as a failed release or a reason to skip rollback.
+// as a final release result; read back the exact source and binding.
 async function waitForDeployment(expectedVersion,expectedSha,stage){
   const start=Date.now(),deadline=start+60000;
   let observed={version:null,sha:null,db:null},attempts=0;
@@ -108,15 +110,14 @@ async function waitForPublicSha(expected,stage){
 }
 
 async function deploy(){
+  const startedAt=Date.now();
   const config=JSON.parse(readFileSync("apps/cloudflare-crm/wrangler.jsonc","utf8"));
-  if(config.main!=="./rust-party/build/index.js")
+  if(config.main!=="./rust-party/build/index.js"||config.workers_dev!==false||config.preview_urls!==false||config.routes?.length)
     throw Error("Refusing release: public Worker is not native workers-rs");
   const rust=builtRust(), oldVersion=await version(), before=await bindings(oldVersion);
   if(before.db!==database||!/^[a-f0-9]{40}$/.test(before.sha||""))throw Error("Previous CRM binding/SHA mismatch");
   const bookmark=(await cf("/d1/database/"+database+"/time_travel/bookmark")).bookmark;
   if(!bookmark)throw Error("D1 Time Travel bookmark missing");
-  record("checkpoint.json",{git_sha:sha,previous_sha:before.sha,previous_version:oldVersion,d1_database:database,pre_migration_bookmark:bookmark,rust});
-  console.log(JSON.stringify({event:"crm.release.checkpoint",git_sha:sha,previous_sha:before.sha,previous_version:oldVersion,bookmark_present:true,rust}));
   // Fail closed before migrations: the deploy job must use exactly the CI-built files.
   const source=readFileSync(join(out,"source-sha.txt"),"utf8").trim();
   if(source!==sha)throw Error("Compiled CRM bundle source SHA mismatch");
@@ -125,17 +126,60 @@ async function deploy(){
   });
   if(checked.status!==0||!existsSync("apps/cloudflare-crm/dist/index.html"))
     throw Error("Compiled CRM release artifact integrity failed");
+  const query=async(sql)=>{
+    const result=await cf("/d1/database/"+database+"/query","POST",{sql});
+    assert.equal(result?.[0]?.success,true);return result[0].results;
+  };
+  const applied=await query("SELECT name FROM d1_migrations WHERE name='0002_hard_cutover.sql'");
+  if(applied.length===0)assert.equal(before.sha,"90a352be2a70b74a64e5a774c9a76b7f02c86a5f",
+    "One-time reset requires the audited frozen predecessor");
+  const principals=await query("SELECT * FROM crm_users ORDER BY email");
+  const tenants=await query("SELECT * FROM crm_tenants ORDER BY id");
+  record("checkpoint.json",{git_sha:sha,previous_sha:before.sha,previous_version:oldVersion,
+    d1_database:database,pre_migration_bookmark:bookmark,reset_pending:applied.length===0,rust});
+  await cf(worker+"/subdomain","POST",{enabled:false,previews_enabled:false});
+  await confirmClosed();
   cmd("wrangler","d1","migrations","apply","crm-dev","--remote");
+  assert.equal((await query("SELECT name FROM d1_migrations WHERE name='0002_hard_cutover.sql'")).length,1);
+  assert.deepEqual(await query("SELECT * FROM crm_users ORDER BY email"),principals);
+  assert.deepEqual(await query("SELECT * FROM crm_tenants ORDER BY id"),tenants);
+  assert.deepEqual(await query("PRAGMA foreign_key_check"),[]);
+  // SQLite compiles the committed schema; no SQL source parser or second table registry.
+  const canonical=new DatabaseSync(":memory:");
+  let expected;
+  const inventory="SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND tbl_name LIKE 'crm_%' ORDER BY type,name";
+  try{
+    for(const name of readdirSync("apps/cloudflare-crm/migrations").filter(name=>name.endsWith(".sql")).sort())
+      canonical.exec(readFileSync("apps/cloudflare-crm/migrations/"+name,"utf8"));
+    expected=canonical.prepare(inventory).all().map(row=>({...row}));
+  }finally{canonical.close();}
+  assert.deepEqual(await query(inventory),expected,"Live D1 must have the exact canonical schema");
+  if(applied.length===0)for(const table of expected.filter(x=>x.type==="table"&&!['crm_users','crm_tenants'].includes(x.name))){
+    assert.match(table.name,/^[a-z_][a-z0-9_]*$/);
+    assert.equal((await query("SELECT COUNT(*) AS n FROM "+table.name))[0].n,0,"Reset left business data");
+  }
   cmd("wrangler","deploy","--var","GIT_SHA:"+sha);
   const newVersion=await waitForDeployment(null,sha,"deploy");
   if(newVersion===oldVersion)throw Error("Worker version did not advance");
+  await cf(worker+"/subdomain","POST",{enabled:true,previews_enabled:false});
   const anonymous=await fetch(url+"/api/health",{redirect:"manual"});
   if(anonymous.status===200||anonymous.status>=500)throw Error("Cloudflare Access denied check failed");
   const authorized=await fetch(url+"/api/health",{headers:auth(),redirect:"manual"});
   if(authorized.status!==200)throw Error("Cloudflare Access authorized health failed");
   await waitForPublicSha(sha,"deploy");
-  record("deployed.json",{git_sha:sha,worker_version:newVersion,d1_database:database,rust,result:"E2E_PENDING"});
+  record("deployed.json",{git_sha:sha,worker_version:newVersion,d1_database:database,rust,started_at:startedAt,result:"E2E_PENDING"});
   console.log(JSON.stringify({event:"crm.deploy",sha,result:"E2E_PENDING",version:newVersion}));
+}
+async function confirmClosed(){
+  const state=await cf(worker+"/subdomain");
+  assert.equal(state.enabled,false);assert.equal(state.previews_enabled,false);
+  let stopped=0;
+  for(let attempt=0;attempt<30&&stopped<3;attempt++){
+    const response=await fetch(url+"/api/version?closed="+Date.now(),{headers:auth(),redirect:"manual"});
+    stopped=response.status===404&&!response.headers.get("x-crm-runtime")?stopped+1:0;
+    if(stopped<3)await new Promise(resolve=>setTimeout(resolve,2000));
+  }
+  assert.equal(stopped,3,"Public Worker entry did not stop; no schema change is allowed");
 }
 // Each release tests two freshly enrolled signed-Access service principals
 // in isolated tenants of the SAME clean CRM D1. Existing CRM records are
@@ -196,328 +240,97 @@ async function prepareE2e(){
     "SELECT COUNT(*) AS existing FROM crm_party_records WHERE tenant IN (?,?)",[ta,tb]);
   if(readback[0]?.assigned!==2||clean[0]?.existing!==0)
     throw Error("E2E tenant assignment/readback failed or contains old Party data");
+  record("e2e-tenants.json",{source_sha:sha,database,run_id:run,attempt,actor_a:a,tenant_a:ta,tenant_b:tb});
   console.log(JSON.stringify({event:"crm.e2e-tenant-isolation",
     result:"PASS",database:"existing D1",actors:2,tenants:2,previous_data_deleted:false}));
 }
 
-async function verifyContractOnly(){
-  const liveVersion=await version();
-  const b=await bindings(liveVersion);
-  if(b.sha!==sha||b.db!==database)throw Error("Contract-only live SHA/D1 mismatch");
-  const e=load("contract-only-evidence.json");
-  if(e.git_sha!==sha||e.phase!=="contract-only"||
-    e.result!=="BROWSER_FAIL_CLOSED_PASS_LOGS_PENDING"||
-    !Array.isArray(e.requests)||e.requests.length<12||
-    e.requests.some(r=>r.status!==410||!/^[0-9a-f-]{36}$/i.test(r.request_id||""))||
-    e.rpc_read?.method!=="/crm.parties.v2.PartyService/GetParty"||
-    e.rpc_read?.status!==404)
-    throw Error("Contract-only physical browser/Access/Connect evidence invalid");
-  const run=required("GITHUB_RUN_ID"),attempt=required("GITHUB_RUN_ATTEMPT");
-  if(!/^\d+$/.test(run)||!/^\d+$/.test(attempt))throw Error("E2E tenant names unsafe");
-  const ta="crm-e2e-"+run+"-"+attempt+"-a";
-  const tb="crm-e2e-"+run+"-"+attempt+"-b";
-  const audited=await cf("/d1/database/"+database+"/query","POST",{
-    sql:"SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id IN (?,?)",
-    params:[ta,tb]
-  });
-  const persisted=await cf("/d1/database/"+database+"/query","POST",{
-    sql:"SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant IN (?,?)",
-    params:[ta,tb]
-  });
-  if(audited?.[0]?.results?.[0]?.n!==0||persisted?.[0]?.results?.[0]?.n!==0)
-    throw Error("DISABLED legacy API created real D1 mutation");
-  const samples=e.requests.filter(r=>r.operation).slice(0,2);
-  if(samples.length!==2)throw Error("no distinct verified operations for Logs");
-  const pending=[...samples];
-  const start=Date.now();
-  for(let attemptNo=0;attemptNo<60&&pending.length;attemptNo++){
-    const data=await cf("/workers/observability/telemetry/query","POST",{
-      queryId:"crm-350-contract-only-no-legacy",
-      view:"events",timeframe:{from:start-20*60*1000,to:Date.now()+1000},limit:100,
-      parameters:{needle:{value:"crm.native.request"},
-        filters:[{key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
-    });
-    const events=data.events?.events||[];
-    for(let i=pending.length-1;i>=0;i--){
-      const item=pending[i];
-      if(events.some(x=>x.source?.event==="crm.native.request"&&
-          x.source?.request_id===item.request_id&&
-          x.source?.operation===item.operation&&
-          x.source?.status===410&&x.$workers?.scriptVersion?.id===liveVersion))
-        pending.splice(i,1);
-    }
-    if(pending.length&&attemptNo<59)
-      await new Promise(resolve=>setTimeout(resolve,2500));
-  }
-  if(pending.length)throw Error("Contract-only Cloudflare Logs exact denied request IDs missing "+
-    JSON.stringify(pending));
-  await waitForPublicSha(sha,"final");
-  record("accepted.json",{git_sha:sha,result:"PASS",phase:"contract-only",
-    active_worker_version:liveVersion,legacy_writes:0,denied_calls:e.requests.length,
-    traces:2,d1_database:database});
-  console.log(JSON.stringify({event:"crm.contract-only-live-acceptance",result:"PASS",
-    source:sha,worker_version:liveVersion,legacy_writes:0,
-    blocked:e.requests.length,verified_d1:true,verified_cloudflare_logs:true}));
-}
-
 async function verifyData(){
-  if(JSON.parse(readFileSync("apps/cloudflare-crm/architecture-policy.json","utf8")).phase==="contract-only")return verifyContractOnly();
-  const main=await cf(worker+"/deployments");
-  const versions=main.deployments?.[0]?.versions||[];
-  if(versions.length!==1||versions[0].percentage!==100)
-    throw Error("Native release requires exactly 100% normal traffic");
-  const liveVersion=versions[0].version_id;
-  const nativeBindings=await bindings(liveVersion);
-  if(nativeBindings.sha!==sha||nativeBindings.db!==database)
-    throw Error("Live native version SHA/D1 mismatch");
-  const click=load("native-click.json");
-  if(click.git_sha!==sha||click.action!=="parties.create"||click.status!==201||
-    !/^[0-9a-f-]{36}$/i.test(click.request_id||""))
-    throw Error("Native browser click evidence missing");
-  const check=await cf("/d1/database/"+database+"/query","POST",{
-    sql:"SELECT action, request_id FROM crm_audit WHERE subject_id = ? AND action = 'parties.create' ORDER BY created_at DESC LIMIT 1",
-    params:[click.party_id]});
-  const saved=check?.[0]?.results?.[0];
-  if(saved?.request_id!==click.request_id)
-    throw Error("D1 Party create audit does not match the real browser response request_id");
-  const start=Date.now();
-  let observed=false;
-  for(let attempt=0;attempt<12&&!observed;attempt++){
-    const data=await cf("/workers/observability/telemetry/query","POST",{
-      queryId:"crm-338-native-main-cutover",
-      view:"events",timeframe:{from:start-10*60*1000,to:Date.now()+1000},limit:20,
-      parameters:{needle:{value:click.request_id},
-        filters:[{key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
-    });
-    observed=(data.events?.events||[]).some(e=>e.source?.event==="crm.native.request"&&
-      e.source?.request_id===click.request_id&&e.source?.operation==="parties.create"&&
-      e.source?.status===201&&e.$workers?.scriptVersion?.id===liveVersion);
-    if(!observed)await new Promise(resolve=>setTimeout(resolve,2500));
+  const deployed=load("deployed.json");
+  assert.equal(deployed.git_sha,sha);
+  const liveVersion=await version(),liveBindings=await bindings(liveVersion);
+  assert.equal(liveVersion,deployed.worker_version);
+  assert.deepEqual(liveBindings,{sha,db:database});
+  const evidence=JSON.parse(readFileSync("apps/cloudflare-crm/e2e-evidence/typed-browser.json","utf8"));
+  assert.equal(evidence.result,"PASS");assert.equal(evidence.source_sha,sha);
+  assert.deepEqual(evidence.features,["native"]);
+  assert.ok(evidence.started_at>=deployed.started_at);
+  const setup=load("e2e-tenants.json");
+  assert.equal(evidence.tenant,setup.tenant_a);
+  assert.ok(evidence.writes.length>0&&evidence.requests.length>0);
+  const requests=new Map();
+  for(const request of evidence.requests){
+    assert.equal(request.source_sha,sha);assert.equal(request.runtime,"native-workers-rs");
+    assert.match(request.request_id,/^[a-f0-9-]{36}$/i);
+    const prior=requests.get(request.request_id);
+    if(prior)assert.deepEqual(prior,request);
+    requests.set(request.request_id,request);
   }
-  if(!observed)throw Error("Live native Chromium -> response -> D1 -> Cloudflare Logs correlation FAILED");
-  console.log(JSON.stringify({event:"crm.native-live-trace",result:"PASS",
-    source:sha,worker_version:liveVersion,request_id:click.request_id}));
-
-  // Real user click evidence across ALL current React modules, not just Party.
-  // A green infrastructure doctor alone must never approve this release.
-  const cycle=load("native-functional-cycle.json");
-  if(cycle.git_sha!==sha||cycle.runtime!=="native-workers-rs"||
-    cycle.result!=="BROWSER_PASS_D1_LOGS_PENDING"||!Array.isArray(cycle.writes)||
-    !Array.isArray(cycle.ui_coverage)||cycle.ui_coverage.length<18)
-    throw Error("Exact-source native UI functional-cycle evidence missing");
-  const writes=cycle.writes,expected=["customer-enrichment","customer-privacy","parties","party-relationships","consents",
-    "accounts","contact-points","sales-deals","activity-tasks"];
-  const required=["customer-enrichment.profile_publish","customer-enrichment.mapping_publish",
-    "customer-privacy.create","customer-privacy.submit",
-    "customer-privacy.cancel","parties.create","parties.update",
-    "party-relationships.create","party-relationships.update","consents.suppress",
-    "accounts.create","accounts.update","contact-points.create","contact-points.update",
-    "sales-deals.create","sales-deals.update","sales-deals.advance",
-    "activity-tasks.create","activity-tasks.complete"];
-  if(writes.length<required.length)throw Error("Original native UI mutation proof incomplete");
-  for(const action of required){
-    if(!writes.some(w=>w.operation===action)||!cycle.ui_coverage.includes(action))
-      throw Error("Missing original Rust owner browser operation "+action);
+  const mutationIds=new Set();
+  for(const write of evidence.writes){
+    assert.ok(!mutationIds.has(write.request_id),"Duplicate mutation evidence");
+    mutationIds.add(write.request_id);
+    assert.equal(requests.get(write.request_id)?.path,write.path);
+    assert.equal(requests.get(write.request_id)?.status,200);
+    const result=await cf("/d1/database/"+database+"/query","POST",{
+      sql:"SELECT action,subject_id FROM crm_audit WHERE tenant_id=? AND request_id=? ORDER BY action,subject_id",
+      params:[evidence.tenant,write.request_id]});
+    assert.equal(result?.[0]?.success,true);
+    const sort=rows=>rows.map(r=>[r.action,r.subject_id]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+    assert.ok(write.audit.length>0);
+    assert.deepEqual(sort(result[0].results),sort(write.audit),"D1 changed since browser assertion");
   }
-  const seen=new Set();
-  for(const entry of writes){
-    if(entry.source_sha!==sha||!expected.includes(entry.module)||
-      !["create","update","advance","complete","suppress","submit","cancel","profile_publish","mapping_publish"].includes(entry.operation.split(".")[1])||
-      !entry.subject_id||
-      !/^[0-9a-f-]{36}$/i.test(entry.request_id||"")||
-      seen.has(entry.request_id))throw Error("Invalid or duplicated native UI mutation evidence");
-    seen.add(entry.request_id);
-  }
-  // The read-only Identity Resolution click must be traced in Cloudflare
-  // Logs, but must NOT be fabricated as a D1 mutation/audit record.
-  const enrichProfileRead=cycle.requests?.find(r=>r.operation==="customer-enrichment.profiles_list"&&
-    r.method==="GET"&&r.status===200&&r.module==="customer-enrichment");
-  const enrichMappingRead=cycle.requests?.find(r=>r.operation==="customer-enrichment.mappings_list"&&
-    r.method==="GET"&&r.status===200&&r.module==="customer-enrichment");
-  if(!cycle.ui_coverage.includes("customer-enrichment.profile_publish")||
-    !cycle.ui_coverage.includes("customer-enrichment.mapping_publish")||
-    !enrichProfileRead||!enrichMappingRead||
-    ![enrichProfileRead,enrichMappingRead].every(r=>r.source_sha===sha&&
-      /^[0-9a-f-]{36}$/i.test(r.request_id||"")))
-    throw Error("Customer Enrichment provider/mapping readback missing");
-  const readOnly=cycle.requests?.filter(r=>
-    r.operation==="identity-resolution.compare"&&r.method==="GET"&&
-    r.status===200&&r.module==="identity-resolution")||[];
-  const compareRead=readOnly[0];
-  const importPreview=cycle.requests?.find(r=>
-    r.operation==="customer-data-operations.import-preview"&&r.method==="POST"&&
-    r.status===200&&r.module==="customer-data-operations");
-  const importApply=cycle.requests?.find(r=>
-    r.operation==="customer-data-operations.import-apply"&&r.method==="POST"&&
-    r.status===201&&r.module==="customer-data-operations");
-  const exportPreview=cycle.requests?.find(r=>
-    r.operation==="customer-data-operations.preview"&&r.method==="GET"&&
-    r.status===200&&r.module==="customer-data-operations");
-  const exportDownload=cycle.requests?.find(r=>
-    r.operation==="customer-data-operations.export"&&r.method==="GET"&&
-    r.status===200&&r.module==="customer-data-operations");
-  const qualityRead=cycle.requests?.find(r=>
-    r.operation==="data-quality.evaluate"&&r.method==="GET"&&
-    r.status===200&&r.module==="data-quality");
-  const candidateRead=cycle.requests?.find(r=>
-    r.operation==="identity-resolution.candidates"&&r.method==="GET"&&
-    r.status===200&&r.module==="identity-resolution");
-  if(!cycle.ui_coverage.includes("identity-resolution.compare")||
-    !compareRead||compareRead.source_sha!==sha||
-    !/^[0-9a-f-]{36}$/i.test(compareRead.request_id||""))
-    throw Error("Identity Resolution read-only Chromium trace missing");
-  if(!cycle.ui_coverage.includes("identity-resolution.candidates")||
-    !candidateRead||candidateRead.source_sha!==sha||
-    !/^[0-9a-f-]{36}$/i.test(candidateRead.request_id||""))
-    throw Error("Identity Resolution candidates live Chromium trace missing");
-
-  if(!cycle.ui_coverage.includes("data-quality.evaluate.pass")||
-    !cycle.ui_coverage.includes("data-quality.evaluate.placeholder")||
-    !qualityRead||qualityRead.source_sha!==sha||
-    !/^[0-9a-f-]{36}$/i.test(qualityRead.request_id||""))
-    throw Error("Data Quality original Rust Chromium review trace missing");
-
-  if(!cycle.ui_coverage.includes("customer-data-operations.preview")||
-    !cycle.ui_coverage.includes("customer-data-operations.export.download")||
-    !exportPreview||!exportDownload||
-    ![exportPreview,exportDownload].every(r=>r.source_sha===sha&&
-      /^[0-9a-f-]{36}$/i.test(r.request_id||"")))
-    throw Error("Original Rust Party CSV export physical Chromium trace missing");
-
-  if(!cycle.ui_coverage.includes("customer-data-operations.import-preview")||
-    !cycle.ui_coverage.includes("customer-data-operations.import-apply")||
-    !importPreview||!importApply||
-    ![importPreview,importApply].every(r=>r.source_sha===sha&&
-      /^[0-9a-f-]{36}$/i.test(r.request_id||"")))
-    throw Error("Native Party CSV import browser trace missing");
-
-  // Import-apply is a genuine D1 mutation with potentially many audit rows,
-  // never count it as a read-only operation. One-row Chromium fixture must
-  // have exactly one committed original Party create for the same request_id.
-  const importedRows=await cf("/d1/database/"+database+"/query","POST",{
-    sql:"SELECT action,subject_id FROM crm_audit WHERE request_id = ?",
-    params:[importApply.request_id]});
-  const importedAudit=importedRows?.[0]?.results||[];
-  if(!cycle.imported_party_id||importedAudit.filter(r=>
-    r.action==="parties.create"&&r.subject_id===cycle.imported_party_id).length!==1)
-    throw Error("Original Party import D1 audit missing for exact browser request");
-
-  // D1's audit is transactionally written by the same native mutation and
-  // uses the exact x-request-id the real Chromium click received.
-  const ids=writes.map(w=>w.request_id);
-  const query=await cf("/d1/database/"+database+"/query","POST",{
-    sql:"SELECT request_id,action,subject_id FROM crm_audit WHERE request_id IN ("+
-      ids.map(()=>"?").join(",")+")",params:ids});
-  const audit=query?.[0]?.results||[];
-  for(const entry of writes){
-    // An original Sales advance may atomically create a linked Activity and
-    // thus more than one audit row for a single request_id. Match exact
-    // owner/action/subject without hiding the additional original event.
-    // Rust Consent records audit "operator_suppress", not a fictitious Grant.
-    const action=entry.operation==="consents.suppress"?
-      "consents.operator_suppress":entry.operation.replaceAll("-","_");
-    const matched=audit.filter(row=>row.request_id===entry.request_id&&
-      row.action===action&&row.subject_id===entry.subject_id);
-    if(matched.length!==1)
-      throw Error("Native D1 audit mismatch for "+action+" request "+entry.request_id+
-        " matches="+matched.length);
-  }
-  record("native-functional-d1.json",{git_sha:sha,worker_version:liveVersion,
-    result:"PASS",writes:writes.length,audit_rows:writes.length,
-    ui_buttons:cycle.ui_coverage.length});
-  // Query existing native structured Cloudflare Logs; no new monitoring
-  // infrastructure. Probe each exact original owner mutation,
-  // and require the version serving 100% of ordinary traffic.
-  let pending=[...writes,compareRead,candidateRead,qualityRead,exportPreview,exportDownload,
-    importPreview,enrichProfileRead,enrichMappingRead,importApply];
-  const from=Date.now()-15*60*1000;
-  // Workers Observability delivery is eventually consistent. Preserve the
-  // exact all-request_id gate; only allow bounded ingestion time after E2E.
-  // Previous 12 * 2.5s polls rejected a valid 24/24 D1 run when one
-  // accounts.create event arrived in Logs after the 30s window.
-  const telemetryAttempts=60;
-  for(let attempt=0;attempt<telemetryAttempts&&pending.length;attempt++){
+  // Observe every exact browser request, including rejected requests and read-only RPCs.
+  // Audit rows are required only for committed mutations, never invented for reads.
+  let pending=[...requests.values()];
+  const from=evidence.started_at-1000;
+  for(let attempt=0;attempt<60&&pending.length;attempt++){
     const missing=[];
     for(let i=0;i<pending.length;i+=4){
       const batch=pending.slice(i,i+4);
-      const results=await Promise.all(batch.map(async entry=>{
+      const found=await Promise.all(batch.map(async entry=>{
         const data=await cf("/workers/observability/telemetry/query","POST",{
-          queryId:"crm-338-full-native-browser-cycle",view:"events",
+          queryId:"crm-350-typed-browser",view:"events",
           timeframe:{from,to:Date.now()+1000},limit:20,
-          parameters:{needle:{value:entry.request_id},
-            filters:[{key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
+          parameters:{needle:{value:entry.request_id},filters:[
+            {key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
         });
         return (data.events?.events||[]).some(event=>
-          event.source?.event==="crm.native.request"&&
-          event.source?.request_id===entry.request_id&&
-          event.source?.operation===entry.operation&&
-          event.source?.status===entry.status&&
+          event.source?.event==="crm.native.request"&&event.source?.request_id===entry.request_id&&
+          event.source?.operation===entry.path&&event.source?.status===entry.status&&
           event.$workers?.scriptVersion?.id===liveVersion);
       }));
-      for(let n=0;n<batch.length;n++)if(!results[n])missing.push(batch[n]);
+      batch.forEach((entry,index)=>{if(!found[index])missing.push(entry);});
     }
     pending=missing;
-    if(pending.length && attempt+1<telemetryAttempts)
-      await new Promise(resolve=>setTimeout(resolve,2500));
+    if(pending.length&&attempt<59)await new Promise(resolve=>setTimeout(resolve,2500));
   }
-  if(pending.length)throw Error("Native Cloudflare Logs missing "+pending.length+
-    " exact browser request(s): "+pending.map(x=>x.operation).join(","));
-  record("native-functional-accepted.json",{git_sha:sha,runtime:"native-workers-rs",
-    worker_version:liveVersion,database,ui_buttons:cycle.ui_coverage,
-    mutations:writes.length,d1_correlated:writes.length,logs_correlated:writes.length,
-    request_ids:ids,read_only_log_correlated:8,
-    read_only_request_ids:[compareRead.request_id,candidateRead.request_id,
-      qualityRead.request_id,exportPreview.request_id,exportDownload.request_id,
-      importPreview.request_id,enrichProfileRead.request_id,enrichMappingRead.request_id],
-    import_request_id:importApply.request_id,import_d1_correlated:1,import_log_correlated:1,
-    result:"PASS"});
-  console.log(JSON.stringify({event:"crm.native-full-functional-cycle",result:"PASS",
-    sha,worker_version:liveVersion,ui_buttons:cycle.ui_coverage.length,
-    mutations:writes.length,d1_correlated:writes.length,
-    logs_correlated:writes.length,read_only_log_correlated:8,import_write_log_correlated:1}));
-
-  const p=load("parties-e2e.json");
-  if(p.git_sha!==sha||p.parties?.length!==2||p.keys?.length!==3)throw Error("Missing native Party A/B browser proof");
-  const [a,b]=p.parties,[ka,ku,kb]=p.keys;
-  const sql="SELECT (SELECT COUNT(*) FROM crm_party_records WHERE id IN (?,?)) AS records, "+
-    "(SELECT COUNT(*) FROM crm_party_receipts WHERE key IN (?,?,?)) AS receipts, "+
-    "(SELECT COUNT(*) FROM crm_audit WHERE subject_id IN (?,?) AND action LIKE 'parties.%') AS audits, "+
-    "(SELECT COUNT(*) FROM d1_migrations WHERE name='0001_initial.sql') AS migration";
-  const result=await cf("/d1/database/"+database+"/query","POST",{sql,params:[a,b,ka,ku,kb,a,b]});
-  const row=result?.[0]?.results?.[0];
-  if(!row||row.records!==2||row.receipts!==3||row.audits!==3||row.migration!==1)throw Error("Rust Party D1 audit/receipt/schema mismatch "+JSON.stringify(row));
-  const v=await cf("/d1/database/"+database+"/query","POST",{sql:"SELECT id,version FROM crm_party_records WHERE id IN (?,?)",params:[a,b]});
-  const values=v?.[0]?.results||[];
-  if(values.length!==2||values.find(x=>x.id===a)?.version!==2||values.find(x=>x.id===b)?.version!==1)throw Error("Rust Party D1 persisted versions mismatch");
+  assert.equal(pending.length,0,"Missing Cloudflare request traces: "+pending.map(x=>x.path).join(","));
+  assert.equal(await version(),liveVersion,"Deployment changed during acceptance");
+  assert.deepEqual(await bindings(liveVersion),{sha,db:database});
   await waitForPublicSha(sha,"final");
-  record("accepted.json",{git_sha:sha,d1_database:database,runtime:"native-workers-rs",
-    active_worker_version:liveVersion,trace_request_id:click.request_id,
-    records:2,receipts:3,audits:3,migration:1,versions:"A=2 B=1",result:"PASS"});
-  console.log(JSON.stringify({event:"crm.native-party-live-d1",sha,result:"PASS",records:2,receipts:3,audits:3,migration:1}));
+  record("accepted.json",{result:"PASS",git_sha:sha,worker_version:liveVersion,
+    d1_database:database,features:["native"],traffic_percentage:100,
+    mutations:mutationIds.size,logs_correlated:requests.size,steps:evidence.steps,
+    request_ids:[...requests.keys()]});
 }
-async function rollback(){
-  if(!existsSync(join(out,"checkpoint.json"))){console.log(JSON.stringify({event:"crm.rollback",result:"SKIP_NO_CHECKPOINT"}));return;}
-  const p=load("checkpoint.json");
-  if(p.git_sha!==sha||p.d1_database!==database)throw Error("Rollback checkpoint mismatch");
-  const live=await version();
-  const now=await bindings(live);
-  // After a failed readback the first deployment response may still be stale
-  // and report the *old* Worker even though the new upload is propagating.
-  // Explicitly redeploy the checkpointed old version in both cases.
-  if(now.db!==database||
-      !((live===p.previous_version&&now.sha===p.previous_sha)||now.sha===sha))
-    throw Error("Refusing rollback over unrelated deployment");
-  await cf(worker+"/deployments","POST",{strategy:"percentage",
-    versions:[{version_id:p.previous_version,percentage:100}],
-    annotations:{"workers/message":"CRM failed-release rollback "+sha.slice(0,12)}});
-  await waitForDeployment(p.previous_version,p.previous_sha,"rollback");
-  await waitForPublicSha(p.previous_sha,"rollback");
-  record("rollback.json",{git_sha:sha,result:"WORKER_RESTORED",previous_sha:p.previous_sha,previous_version:p.previous_version,d1_restored:false});
-  console.log(JSON.stringify({event:"crm.rollback",result:"WORKER_RESTORED",old_sha:p.previous_sha,d1_restored:false}));
+async function failClosed(){
+  // Never switch an old Worker onto a new D1 schema.
+  if(!existsSync(join(out,"checkpoint.json")))return;
+  const checkpoint=load("checkpoint.json");
+  assert.equal(checkpoint.git_sha,sha);assert.equal(checkpoint.d1_database,database);
+  const current=await bindings(await version());
+  assert.equal(current.db,database);
+  assert.ok(current.sha===sha||current.sha===checkpoint.previous_sha,
+    "Refusing to stop an unrelated deployment");
+  await cf(worker+"/subdomain","POST",{enabled:false,previews_enabled:false});
+  await confirmClosed();
+  record("failed-release.json",{result:"NO_GO_PUBLIC_ENTRY_DISABLED",git_sha:sha,
+    d1_database:database,worker_restored:false,d1_restored:false});
 }
 const mode=process.argv[2]||"deploy";
 if(mode==="deploy")await deploy();
 else if(mode==="prepare-e2e")await prepareE2e();
 else if(mode==="verify-data")await verifyData();
-else if(mode==="rollback")await rollback();
+else if(mode==="fail-closed")await failClosed();
 else throw Error("Unknown CRM deploy operation "+mode);

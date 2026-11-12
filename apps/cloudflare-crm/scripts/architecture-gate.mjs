@@ -56,6 +56,8 @@ function validateModuleReport(report){
 export function validateWorkerConfig(production,local){
  check(production.name==="crm-dev","unexpected Worker");
  check(production.main==="./rust-party/build/index.js","Worker must be native workers-rs");
+ check(production.workers_dev===false&&production.preview_urls===false&&!production.routes?.length,
+   "release must explicitly enable only the verified workers.dev entry");
  check(production.account_id==="5bd5e1e1e813f061afc259e91334262d","unexpected Cloudflare account");
  check(production.d1_databases?.length===1&&production.d1_databases[0].binding==="DB",
    "exactly one native D1 binding");

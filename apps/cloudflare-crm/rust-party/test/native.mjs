@@ -48,8 +48,7 @@ function jwt(email){
 }
 let child;
 try{
- run(["d1","execute","crm-rust-party-local","--local",
-   "--file","../migrations/0001_initial.sql","--persist-to",data]);
+ run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
  run(["d1","execute","crm-rust-party-local","--local","--persist-to",data,
    "--command","INSERT INTO crm_tenants VALUES('tenant-a','A'),('tenant-b','B');"+
    "INSERT INTO crm_users(email,tenant_id,role,active) VALUES"+
@@ -65,6 +64,8 @@ try{
    "--command","INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id) "+
      "VALUES('tenant-a','binary-rpc-proof-01','"+state.replaceAll("'","''")+
      "',1,'fixture-key-01','fixture-digest-01',NULL);"]);
+ // Wrangler's applied-migration ledger must prevent a second reset.
+ run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
  child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
   "--var","CRM_NATIVE_CI_JWKS:"+jwks],
   {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
@@ -94,16 +95,21 @@ try{
  assert.equal(new Set(rpc.registered_methods).size,rpc.registered_methods.length);
  assert.equal(new Map(rpc.policies).size,rpc.policies.length,"duplicate compiled policy");
  assert.deepEqual(rpc.policies.map(([path])=>path).sort(),[...rpc.registered_methods].sort());
+ const unauthenticatedDenials=[],viewerDenials=[];
  for(const [path,rule] of rpc.policies){
    const unauthenticated=await rpcFetch(path,{method:"POST",
      headers:{"content-type":"application/proto","connect-protocol-version":"1"},
      body:new Uint8Array()});
    assert.equal(unauthenticated.status,401,"missing identity must deny "+path);
+   assert.equal((await unauthenticated.json()).code,"unauthenticated",path);
+   unauthenticatedDenials.push(path);
    if(rule.permission==="Write"||rule.permission==="AdminRead"){
      const denied=await rpcFetch(path,{method:"POST",
        headers:{"content-type":"application/proto","connect-protocol-version":"1",
          "cf-access-jwt-assertion":viewer},body:new Uint8Array()});
      assert.equal(denied.status,403,"viewer must not access admin RPC "+path);
+     assert.equal((await denied.json()).code,"permission_denied",path);
+     viewerDenials.push(path);
    }
  }
 
@@ -200,6 +206,9 @@ try{
       idempotencyKey:"candidate-v3-stale-version"}})).status,409);
  const sql=(query)=>JSON.parse(run(["d1","execute","crm-rust-party-local","--local",
    "--persist-to",data,"--json","--command",query]))[0].results;
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE id='binary-rpc-proof-01'")[0].n,1,
+   "Repeated migrations apply must preserve existing business data");
+ assert.equal(sql("SELECT COUNT(*) AS n FROM d1_migrations WHERE name='0002_hard_cutover.sql'")[0].n,1);
  assert.equal(sql("SELECT version FROM crm_party_records WHERE id='"+id+"'")[0].version,2);
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_receipts WHERE tenant='tenant-a' "+
    "AND key IN ('candidate-v3-create-001','candidate-v3-update-001')")[0].n,2);
@@ -1398,6 +1407,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  writeFileSync(process.env.CRM_RPC_RUNTIME_PROOF,JSON.stringify({
    source_sha:sourceSha,result:"PASS",features:["native-ci"],rpc,
    successful_rpc_calls:[...successfulCalls].sort(),
+   unauthenticated_denials:unauthenticatedDenials.sort(),
+   viewer_denials:viewerDenials.sort(),
    scenarios:"existing signed workerd assertions completed"
  },null,2)+"\n");
  console.log(JSON.stringify({event:"crm.signed-connect-acceptance",
