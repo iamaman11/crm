@@ -29,7 +29,7 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service{
         req:ServiceRequest<'_,consent_wire::SuppressCommunicationRequest>,
     )->ServiceResult<consent_wire::SuppressCommunicationResponse>{
         let input=req.to_owned_message();
-        let (key,_)=AccountV2Service::precondition(input.precondition.as_option(),true)?;
+        let (key,_)=wire_precondition(input.precondition.as_option(),true)?;
         let saved=consents::suppress_typed(consents::SuppressionInput{
             id:input.authorization_id,party_id:input.party_id,
             contact_point_id:input.contact_point_id,purpose:input.purpose,
