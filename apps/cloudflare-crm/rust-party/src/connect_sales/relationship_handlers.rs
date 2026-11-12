@@ -9,7 +9,7 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
     )->ServiceResult<rel_wire::CreatePartyRelationshipResponse>{
         let input=req.to_owned_message();
         let id=Self::valid_id(&input.relationship_id)?;
-        let (key,_)=AccountV2Service::precondition(input.precondition.as_option(),true)?;
+        let (key,_)=wire_precondition(input.precondition.as_option(),true)?;
         let typ=input.r#type.as_option()
             .ok_or_else(||ConnectError::invalid_argument("relationship type required"))?;
         let directionality=match typ.directionality {
@@ -42,7 +42,7 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
     )->ServiceResult<rel_wire::UpdatePartyRelationshipResponse>{
         let input=req.to_owned_message();
         let id=Self::valid_id(&input.relationship_id)?;
-        let (key,version)=AccountV2Service::precondition(input.precondition.as_option(),false)?;
+        let (key,version)=wire_precondition(input.precondition.as_option(),false)?;
         let status=match input.status{
             x if x==rel_wire::RelationshipStatus::RELATIONSHIP_STATUS_ACTIVE=>
                 party_relationships::StatusInput::Active,
