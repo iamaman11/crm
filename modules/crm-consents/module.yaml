@@ -65,6 +65,27 @@ provides:
         rpc: crm.customer_privacy.v1.ConsentsPrivacyScopeContributionService.ConsentsPrivacyScopeContribution
         request: crm.customer_privacy.v1.ConsentsPrivacyScopeContributionRequest
         response: crm.customer_privacy.v1.ConsentsPrivacyScopeContributionResponse
+    - id: consents.communication.evaluate
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.consents.v2.ConsentAuthorizationService.EvaluateConsent
+        request: crm.consents.v2.EvaluateConsentRequest
+        response: crm.consents.v2.EvaluateConsentResponse
+    - id: consents.communication.suppress
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.consents.v2.ConsentAuthorizationService.SuppressCommunication
+        request: crm.consents.v2.SuppressCommunicationRequest
+        response: crm.consents.v2.SuppressCommunicationResponse
+    - id: consents.authorization.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.consents.v2.ConsentAuthorizationService.ListConsentAuthorizations
+        request: crm.consents.v2.ListConsentAuthorizationsRequest
+        response: crm.consents.v2.ListConsentAuthorizationsResponse
   events:
     - id: consents.authorization.created
       version: 1.0.0

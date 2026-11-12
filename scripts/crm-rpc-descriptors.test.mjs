@@ -1,73 +1,51 @@
-// Real FileDescriptorSet conformance: mutate the CI-derived module evidence.
-// A grep match in Rust/proto or an invented test marker cannot pass these cases.
 import test from "node:test";
 import assert from "node:assert/strict";
-import {spawnSync} from "node:child_process";
-import {readFileSync,writeFileSync,mkdtempSync,rmSync} from "node:fs";
-import {tmpdir} from "node:os";
-import {join,resolve,dirname} from "node:path";
-import {fileURLToPath} from "node:url";
-
-const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
+import {readFileSync} from "node:fs";
+import {descriptorMethods,validateBindings,validateRuntime} from "./crm-rpc-descriptors.mjs";
 const descriptor=process.env.CRM_PROTO_DESCRIPTOR_FILE;
 const source=process.env.CRM_MODULE_COVERAGE_REPORT;
-if(!descriptor||!source)throw Error("compiled Buf descriptor and CI module report required");
-const accepted=JSON.parse(readFileSync(source,"utf8"));
-const active="/crm.parties.v2.PartyService/GetParty";
-const original=accepted.modules.find(x=>x.module_id==="crm.parties");
-if(!original?.rpc_bindings?.some(x=>x.path===active))
- throw Error("active Party v2 canonical manifest binding missing");
-const directory=mkdtempSync(join(tmpdir(),"crm-rpc-conformance-"));
-const script=resolve(root,"scripts/crm-rpc-descriptors.mjs");
-const run=report=>{
- const file=join(directory,"candidate.json");
- writeFileSync(file,JSON.stringify(report));
- return spawnSync(process.execPath,[script,descriptor],{
-   cwd:root,encoding:"utf8",env:{...process.env,CRM_MODULE_COVERAGE_REPORT:file},
+if(!descriptor||!source)throw Error("compiled Buf descriptor and module report required");
+const available=descriptorMethods(readFileSync(descriptor));
+const actual=JSON.parse(readFileSync(source,"utf8"));
+test("canonical manifest signatures match compiled Buf descriptors",()=>{
+ assert.ok(validateBindings(actual,available).size>0);
+});
+const path="/crm.parties.v2.PartyService/GetParty";
+function fixture(){
+ const report=structuredClone(actual);
+ report.runtime_evidence="EXECUTED";
+ report.active_rpc_paths=[path];
+ report.runtime={source_sha:report.source_sha,result:"PASS",features:["native-ci"],
+  successful_rpc_calls:[path],rpc:{compiled_policy_check:true,
+   registered_methods:[path],policies:[[path,{permission:"Read",activation:"Published"}]]}};
+ return report;
+}
+function reject(name,mutate,pattern){
+ test(name,()=>{
+  const report=fixture();mutate(report);
+  assert.throws(()=>validateRuntime(report,available,validateBindings(report,available)),pattern);
  });
-};
-const mutate=change=>{
- const candidate=structuredClone(accepted);
- const party=candidate.modules.find(x=>x.module_id==="crm.parties");
- const binding=party.rpc_bindings.find(x=>x.path===active);
- change({candidate,party,binding});
- return run(candidate);
-};
-const reject=(label,change,pattern)=>test(label,()=>{
- const result=mutate(change);
- assert.notEqual(result.status,0,result.stdout);
- assert.match(result.stderr+result.stdout,pattern);
+}
+test("synthetic evidence fixture exercises the validator, not the Worker",()=>{
+ const report=fixture();
+ assert.deepEqual(validateRuntime(report,available,validateBindings(report,available)).registered,[path]);
 });
-test("actual canonical active Party v2 types match compiled descriptor",()=>{
- const result=run(accepted);
- assert.equal(result.status,0,result.stderr);
- assert.match(result.stdout,/crm\.protobuf-descriptor-coverage/);
- const evidence=result.stdout.split(String.fromCharCode(10)).map(line=>{
-   try{return JSON.parse(line);}catch{return null;}
- }).find(item=>item?.event==="crm.protobuf-descriptor-coverage");
- assert.ok(evidence?.candidate_count>evidence.active.length,
-   "all staged RPCs should be discovered from compiled Rust and Buf, not a list");
- assert.ok(evidence.candidate_methods.includes(
-   "/crm.parties.v3.PartyService/CreateParty"));
-});
-reject("wrong request type fails",({binding})=>{
- binding.request="crm.parties.v2.NotARealRequest";
+reject("missing executed evidence fails",r=>{r.runtime_evidence="NOT_EXECUTED";},/executed workerd evidence required/);
+reject("stale evidence fails",r=>{r.runtime.source_sha="0".repeat(40);},/stale runtime evidence/);
+reject("missing policy fails",r=>{r.runtime.rpc.policies=[];},/missing or invalid compiled policy/);
+reject("unregistered policy fails",r=>{
+ r.runtime.rpc.policies.push(["/crm.missing.v1.Service/Method",{permission:"Read",activation:"Published"}]);
+},/policy without registered RPC/);
+reject("missing successful call fails",r=>{r.runtime.successful_rpc_calls=[];},/missing successful executed call/);
+reject("wrong request type fails",r=>{
+ r.modules.find(m=>m.module_id==="crm.parties").rpc_bindings.find(b=>b.path===path).request="wrong";
 },/request\/response type mismatch/);
-reject("wrong response type fails",({binding})=>{
- binding.response="crm.parties.v2.NotARealResponse";
-},/request\/response type mismatch/);
-reject("no Rust ownership activation fails",({party})=>{
- party.linked=false;
-},/owner is not linked into Worker/);
-reject("no canonical RPC capability binding fails",({party})=>{
- party.rpc_bindings=party.rpc_bindings.filter(x=>x.path!==active);
+reject("missing exact owner binding fails",r=>{
+ const m=r.modules.find(m=>m.module_id==="crm.parties");
+ m.rpc_bindings=m.rpc_bindings.filter(b=>b.path!==path);
 },/absent from canonical module.yaml binding/);
-reject("invented extra active RPC fails",({candidate})=>{
- candidate.active_rpc_paths.push("/crm.parties.v2.PartyService/NotAnActiveMethod");
-},/published RPC absent from Buf descriptor|compiled active RPCs differ from generated module inventory/);
-reject("candidate lacks linked original Rust domain owner",({candidate})=>{
- const owner=candidate.modules.find(x=>x.module_id==="crm.sales");
- assert.ok(owner,"canonical crm.sales module missing");
- owner.linked=false;
-},/candidate has no linked original Rust owner/);
-test.after(()=>rmSync(directory,{recursive:true,force:true}));
+reject("unlinked owner fails",r=>{
+ r.modules.find(m=>m.module_id==="crm.parties").linked=false;
+},/owner is not linked/);
+reject("duplicate registration fails",r=>{r.runtime.rpc.registered_methods.push(path);},/duplicate registered/);
+reject("incomplete final cutover fails",r=>{r.phase="cutover";},/full cutover contract differs/);

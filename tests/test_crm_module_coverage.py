@@ -73,24 +73,30 @@ lifecycle:
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
-    def test_current_active_party_v2_is_declared_and_owned_by_linked_rust(self) -> None:
-        current = coverage.build_report(phase="contract-only")
-        route = "/crm.parties.v2.PartyService/GetParty"
-        self.assertIn(route, current["active_rpc_paths"])
-        self.assertNotIn(route, current["unclaimed_active_rpc_paths"])
-        party = next(row for row in current["modules"]
-                     if row["module_id"] == "crm.parties")
+    def test_static_inventory_never_claims_runtime_activation(self) -> None:
+        report = coverage.build_report()
+        self.assertEqual(report["runtime_evidence"], "NOT_EXECUTED")
+        self.assertEqual(report["active_rpc_paths"], [])
+        self.assertEqual(report["rpc_policy"], {})
+        party = next(row for row in report["modules"] if row["module_id"] == "crm.parties")
         self.assertTrue(party["linked"])
-        self.assertEqual(party["active_rpc_paths"], [route])
-        binding = next(b for b in party["rpc_bindings"] if b["path"] == route)
-        self.assertEqual(binding["request"], "crm.parties.v2.GetPartyRequest")
-        self.assertEqual(binding["response"], "crm.parties.v2.GetPartyResponse")
-        self.assertEqual(binding["capability_version"], "2.0.0")
-        # The original v1 contract remains declared for its own consumers.
-        self.assertIn("/crm.parties.v1.PartyService/GetParty",
-                      party["declared_rpc_paths"])
-        self.assertNotIn("/crm.parties.v1.PartyService/GetParty",
-                         current["active_rpc_paths"])
+        self.assertIn("/crm.parties.v2.PartyService/GetParty", party["declared_rpc_paths"])
+
+    def test_runtime_evidence_is_required_to_claim_active_methods(self) -> None:
+        current = coverage.build_report()
+        path = "/crm.parties.v2.PartyService/GetParty"
+        proof = {"source_sha": current["source_sha"], "result": "PASS", "features": ["native-ci"],
+                 "successful_rpc_calls": [path],
+                 "rpc": {"compiled_policy_check": True, "registered_methods": [path],
+                         "policies": [[path, {"permission": "Read", "activation": "Published"}]]}}
+        self.assertEqual(coverage.build_report(runtime=proof)["active_rpc_paths"], [path])
+        proof["successful_rpc_calls"] = []
+        with self.assertRaisesRegex(ValueError, "missing successful executed call"):
+            coverage.build_report(runtime=proof)
+        proof["successful_rpc_calls"] = [path]
+        proof["source_sha"] = "0" * 40
+        with self.assertRaisesRegex(ValueError, "stale or unsuccessful"):
+            coverage.build_report(runtime=proof)
 
     def test_active_rpc_without_manifest_binding_is_not_accepted(self) -> None:
         self.assertEqual(

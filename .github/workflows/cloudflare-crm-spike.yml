@@ -415,12 +415,27 @@ jobs:
         working-directory: apps/cloudflare-crm
         env:
           CRM_SOURCE_SHA: ${{ github.sha }}
+          CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
         run: |
           if [ "$(node -p 'require("./architecture-policy.json").phase')" = "contract-only" ]; then
             node rust-party/test/contract-only-native.mjs
           else
             node rust-party/test/native.mjs
           fi
+      - name: Verify compiled router, executed policy and RPC calls against Buf
+        run: |
+          set -euo pipefail
+          python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json --runtime-proof /tmp/crm-rpc-runtime.json
+          node scripts/crm-rpc-descriptors.mjs /tmp/crm-proto-descriptors.binpb --require-runtime
+      - name: Preserve executed RPC evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: crm-rpc-runtime-${{ github.sha }}
+          path: |
+            /tmp/crm-rpc-runtime.json
+            /tmp/crm-module-coverage.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Preserve native Rust browser proof and screenshot
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

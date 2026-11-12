@@ -227,13 +227,8 @@ if(policy.phase!=="cutover"){
       "missing fail-closed legacy runtime router");
     check(runtime.includes('error("LEGACY_TRANSPORT_DISABLED", 410)'),
       "legacy business endpoints must return HTTP 410");
-    check(runtime.includes('fn rpc_policy(path: &str)') &&
-      runtime.includes('match rpc_policy(path)') &&
-      runtime.includes('rule.permission == RpcPermission::Write') &&
-      runtime.includes('cfg!(feature = "native-ci")'),
-      "exact RPC permissions and phase must be enforced before the Connect router");
-    check(moduleReport!==null && moduleReport.active_rpc_paths.length===1,
-      "contract-only must expose exactly one verified published RPC");
+    // Publication and policy are checked after the real workerd suite.
+    // The early manifest inventory deliberately claims no runtime evidence.
     check(read("apps/cloudflare-crm/web/contract-only.tsx").includes("CRM: переход на Connect"),
       "read-only transition UI must be visible");
   }

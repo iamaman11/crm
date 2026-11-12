@@ -727,13 +727,11 @@ impl SalesV2Service {
 }
 
 
-// Called by existing native-only dispatch AFTER signed Access authentication
-// and role decision. No second fetch endpoint, tenant header, or JS route.
-pub(super) async fn route(
-    req:Request,env:Env,tenant:&str,actor:&str,request_id:&str,
-)->Result<Response> {
+// One constructor serves dispatch and the existing signed workerd diagnostic.
+// Router::methods() inspects the registered compiled handlers.
+pub(super) fn router(env:Env,tenant:&str,actor:&str,request_id:&str)->ConnectRouter {
     let env = Arc::new(env);
-    let mut app:Router=ConnectRouter::new()
+    ConnectRouter::new()
         .add_service(Arc::new(PartyService {
             env: Arc::clone(&env), tenant: tenant.to_owned(),
         }))
@@ -771,7 +769,13 @@ pub(super) async fn route(
             env:Arc::clone(&env),tenant:tenant.to_owned(),
             actor:actor.to_owned(),request_id:request_id.to_owned(),
         }))
-        .into_axum_router();
+
+}
+
+pub(super) async fn route(
+    req:Request,env:Env,tenant:&str,actor:&str,request_id:&str,
+)->Result<Response> {
+    let mut app:Router=router(env,tenant,actor,request_id).into_axum_router();
     let http=HttpRequest::try_from(req)?;
     Ok(Response::try_from(app.call(http).await?)?)
 }

@@ -260,60 +260,59 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
 // CI compares this table against compiled Buf descriptors, registered Rust traits
 // and signed workerd evidence. HTTP POST does not imply write permission.
 #[cfg(feature = "native")]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, serde::Serialize)]
 enum RpcPermission { Read, Write }
 
 #[cfg(feature = "native")]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, serde::Serialize)]
 enum RpcActivation { Published, Candidate }
 
 #[cfg(feature = "native")]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, serde::Serialize)]
 struct RpcPolicy {
     permission: RpcPermission,
     activation: RpcActivation,
 }
 
 #[cfg(feature = "native")]
+const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
+    ("/crm.parties.v2.PartyService/GetParty", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Published }),
+    ("/crm.parties.v3.PartyService/CreateParty", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.parties.v3.PartyService/UpdateParty", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.parties.v3.PartyService/GetParty", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.parties.v3.PartyService/ListParties", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.accounts.v2.AccountService/CreateAccount", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.accounts.v2.AccountService/UpdateAccount", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.accounts.v2.AccountService/GetAccount", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.accounts.v2.AccountService/ListAccounts", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.contact_points.v2.ContactPointService/CreateContactPoint", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.contact_points.v2.ContactPointService/UpdateContactPoint", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.contact_points.v2.ContactPointService/GetContactPoint", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.contact_points.v2.ContactPointService/ListContactPoints", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.party_relationships.v2.PartyRelationshipService/CreatePartyRelationship", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.party_relationships.v2.PartyRelationshipService/UpdatePartyRelationship", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.party_relationships.v2.PartyRelationshipService/GetPartyRelationship", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.party_relationships.v2.PartyRelationshipService/ListPartyRelationships", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.activities.v2.TaskService/CreateTask", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.activities.v2.TaskService/CompleteTask", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.activities.v2.TaskService/GetTask", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.activities.v2.TaskService/ListTasks", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.data_quality.v2.DataQualityService/EvaluatePartyName", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.identity_resolution.v2.IdentityResolutionService/FindSharedEmailCandidates", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.identity_resolution.v2.IdentityResolutionService/CompareParties", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.consents.v2.ConsentAuthorizationService/EvaluateConsent", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.consents.v2.ConsentAuthorizationService/SuppressCommunication", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.consents.v2.ConsentAuthorizationService/ListConsentAuthorizations", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.sales.v2.DealService/CreateDeal", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.sales.v2.DealService/UpdateDeal", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.sales.v2.DealService/AdvanceStage", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.sales.v2.DealService/GetDeal", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.sales.v2.DealService/ListDeals", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+];
+
+#[cfg(feature = "native")]
 fn rpc_policy(path: &str) -> Option<RpcPolicy> {
-    use RpcActivation::{Candidate, Published};
-    use RpcPermission::{Read, Write};
-    let (permission, activation) = match path {
-        "/crm.parties.v2.PartyService/GetParty" => (Read, Published),
-        "/crm.parties.v3.PartyService/CreateParty" => (Write, Candidate),
-        "/crm.parties.v3.PartyService/UpdateParty" => (Write, Candidate),
-        "/crm.parties.v3.PartyService/GetParty" => (Read, Candidate),
-        "/crm.parties.v3.PartyService/ListParties" => (Read, Candidate),
-        "/crm.accounts.v2.AccountService/CreateAccount" => (Write, Candidate),
-        "/crm.accounts.v2.AccountService/UpdateAccount" => (Write, Candidate),
-        "/crm.accounts.v2.AccountService/GetAccount" => (Read, Candidate),
-        "/crm.accounts.v2.AccountService/ListAccounts" => (Read, Candidate),
-        "/crm.contact_points.v2.ContactPointService/CreateContactPoint" => (Write, Candidate),
-        "/crm.contact_points.v2.ContactPointService/UpdateContactPoint" => (Write, Candidate),
-        "/crm.contact_points.v2.ContactPointService/GetContactPoint" => (Read, Candidate),
-        "/crm.contact_points.v2.ContactPointService/ListContactPoints" => (Read, Candidate),
-        "/crm.party_relationships.v2.PartyRelationshipService/CreatePartyRelationship" => (Write, Candidate),
-        "/crm.party_relationships.v2.PartyRelationshipService/UpdatePartyRelationship" => (Write, Candidate),
-        "/crm.party_relationships.v2.PartyRelationshipService/GetPartyRelationship" => (Read, Candidate),
-        "/crm.party_relationships.v2.PartyRelationshipService/ListPartyRelationships" => (Read, Candidate),
-        "/crm.activities.v2.TaskService/CreateTask" => (Write, Candidate),
-        "/crm.activities.v2.TaskService/CompleteTask" => (Write, Candidate),
-        "/crm.activities.v2.TaskService/GetTask" => (Read, Candidate),
-        "/crm.activities.v2.TaskService/ListTasks" => (Read, Candidate),
-        "/crm.data_quality.v2.DataQualityService/EvaluatePartyName" => (Read, Candidate),
-        "/crm.identity_resolution.v2.IdentityResolutionService/FindSharedEmailCandidates" => (Read, Candidate),
-        "/crm.identity_resolution.v2.IdentityResolutionService/CompareParties" => (Read, Candidate),
-        "/crm.consents.v2.ConsentAuthorizationService/EvaluateConsent" => (Read, Candidate),
-        "/crm.consents.v2.ConsentAuthorizationService/SuppressCommunication" => (Write, Candidate),
-        "/crm.consents.v2.ConsentAuthorizationService/ListConsentAuthorizations" => (Read, Candidate),
-        "/crm.sales.v2.DealService/CreateDeal" => (Write, Candidate),
-        "/crm.sales.v2.DealService/UpdateDeal" => (Write, Candidate),
-        "/crm.sales.v2.DealService/AdvanceStage" => (Write, Candidate),
-        "/crm.sales.v2.DealService/GetDeal" => (Read, Candidate),
-        "/crm.sales.v2.DealService/ListDeals" => (Read, Candidate),
-        _ => return None,
-    };
-    Some(RpcPolicy { permission, activation })
+    RPC_POLICIES.iter().find(|(method, _)| *method == path).map(|(_, rule)| *rule)
 }
 
 fn legacy_transport_disabled(path: &str) -> bool {
@@ -371,16 +370,32 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     #[cfg(feature = "native-ci")]
     if path == "/api/_ci/original-domain-check" && method == Method::Get {
         let code = original_domain_probe::check();
+        let router = connect_sales::router(env, tenant,
+            verified_actor.ok_or_else(|| worker::Error::RustError("verified actor missing".into()))?,
+            &request_id);
+        let mut methods: Vec<String> = router.methods()
+            .map(|path| format!("/{}", path.trim_start_matches('/'))).collect();
+        methods.sort();
+        let mut policy_paths = std::collections::BTreeSet::new();
+        let policy_ok = RPC_POLICIES.iter().all(|(path, rule)|
+            policy_paths.insert(*path) && router.has_method(path) &&
+            rpc_policy(path).is_some_and(|found|
+                found.permission == rule.permission && found.activation == rule.activation))
+            && methods.iter().all(|path| rpc_policy(path).is_some())
+            && rpc_policy("/crm.unregistered.v1.Service/Unknown").is_none();
+        let checked = code == 0 && policy_ok;
         return response(json!({
-            "result": if code == 0 { "PASS" } else { "FAIL" },
+            "result": if checked { "PASS" } else { "FAIL" },
             "code": code,
+            "rpc": {"registered_methods": methods, "policies": RPC_POLICIES,
+                "compiled_policy_check": policy_ok},
             "scope": "in-memory original owner domain contracts",
             "owners_executed": ["crm.customer-accounts", "crm.contact-points",
                 "crm.sales", "crm.activities"],
             "original_modules_compiled": 13,
             "d1_owner_persistence": "NOT_TESTED",
             "remaining_owners": "NOT_TESTED"
-        }), if code == 0 { 200 } else { 503 });
+        }), if checked { 200 } else { 503 });
     }
     #[cfg(feature = "native")]
     if path == "/api/consents" || path.starts_with("/api/consents/") {

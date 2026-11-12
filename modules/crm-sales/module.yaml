@@ -54,6 +54,41 @@ provides:
         rpc: crm.sales.v1.DealService.ListDeals
         request: crm.sales.v1.ListDealsRequest
         response: crm.sales.v1.ListDealsResponse
+    - id: sales.deal.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CreateDeal
+        request: crm.sales.v2.CreateDealRequest
+        response: crm.sales.v2.CreateDealResponse
+    - id: sales.deal.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.UpdateDeal
+        request: crm.sales.v2.UpdateDealRequest
+        response: crm.sales.v2.UpdateDealResponse
+    - id: sales.deal.advance_stage
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.AdvanceStage
+        request: crm.sales.v2.AdvanceStageRequest
+        response: crm.sales.v2.AdvanceStageResponse
+    - id: sales.deal.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetDeal
+        request: crm.sales.v2.GetDealRequest
+        response: crm.sales.v2.GetDealResponse
+    - id: sales.deal.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListDeals
+        request: crm.sales.v2.ListDealsRequest
+        response: crm.sales.v2.ListDealsResponse
   events:
     - id: sales.deal.created
       version: 1.0.0

@@ -1,7 +1,7 @@
 // Isolated native-ci RSA-signed Access proof of intentional contract-only shutdown.
 import {spawn,execFileSync} from "node:child_process";
 import {generateKeyPairSync,createSign,randomUUID} from "node:crypto";
-import {mkdtempSync,rmSync} from "node:fs";
+import {mkdtempSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -19,6 +19,15 @@ import {binaryPartyGet,decodePartyGet,partyGetPath,
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-contract-only-"));
 const base="http://127.0.0.1:18789";
+const successfulCalls=new Set();
+const rpcFetch=async(path,options)=>{
+ const response=await globalThis.fetch(base+path,options);
+ if(path.startsWith("/crm.")&&response.ok)successfulCalls.add(path);
+ return response;
+};
+const sourceSha=execFileSync("git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
+assert.equal(process.env.CRM_SOURCE_SHA,sourceSha,"runtime evidence must identify tested checkout");
+assert.ok(process.env.CRM_RPC_RUNTIME_PROOF,"CI runtime output path required");
 const run=(args)=>execFileSync("npx",["wrangler",...args],{cwd,encoding:"utf8"});
 const {privateKey,publicKey}=generateKeyPairSync("rsa",{modulusLength:2048});
 const kid="local-signed-rsa-fixture";
@@ -60,18 +69,40 @@ try{
  let ready=false;
  for(let i=0;i<120;i++){
    if(child.exitCode!==null)throw Error("native-ci exited "+stderr);
-   try{if((await fetch(base+"/api/parties")).status===401){ready=true;break;}}catch{}
+   try{if((await rpcFetch("/api/parties")).status===401){ready=true;break;}}catch{}
    await new Promise(resolve=>setTimeout(resolve,250));
  }
  assert(ready,"native-ci not ready: "+stderr);
  async function call(path,token,method="GET"){
-   const response=await fetch(base+path,{method,
+   const response=await rpcFetch(path,{method,
      headers:{...(token?{"cf-access-jwt-assertion":token}:{}),"content-type":"application/json"},
      ...(method==="POST"?{body:"{}"}:{})});
    return {status:response.status,body:await response.json()};
  }
  assert.equal((await call("/api/parties",null)).status,401);
  const admin=jwt("native-a@example.test"),viewer=jwt("native-viewer@example.test");
+ const compiled=await call("/api/_ci/original-domain-check",admin);
+ assert.equal(compiled.status,200,JSON.stringify(compiled.body));
+ assert.equal(compiled.body.result,"PASS");
+ const rpc=compiled.body.rpc;
+ assert.equal(rpc.compiled_policy_check,true);
+ assert.ok(rpc.registered_methods.length>0);
+ assert.equal(new Set(rpc.registered_methods).size,rpc.registered_methods.length);
+ assert.equal(new Map(rpc.policies).size,rpc.policies.length,"duplicate compiled policy");
+ assert.deepEqual(rpc.policies.map(([path])=>path).sort(),[...rpc.registered_methods].sort());
+ for(const [path,rule] of rpc.policies){
+   const unauthenticated=await rpcFetch(path,{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1"},
+     body:new Uint8Array()});
+   assert.equal(unauthenticated.status,401,"missing identity must deny "+path);
+   if(rule.permission==="Write"){
+     const denied=await rpcFetch(path,{method:"POST",
+       headers:{"content-type":"application/proto","connect-protocol-version":"1",
+         "cf-access-jwt-assertion":viewer},body:new Uint8Array()});
+     assert.equal(denied.status,403,"viewer must not write "+path);
+   }
+ }
+
  for(const [path,method] of [["/api/parties","GET"],["/api/parties","POST"],
      ["/api/accounts","GET"],["/crm.sales.v1.DealService/GetDeal","POST"],
       ["/crm.sales.v2.DealService/NotRegistered","POST"],
@@ -85,7 +116,7 @@ try{
  // tenant A/B read isolation, and read-only D1 persistence in workerd.
  assert.equal(partyGetPath,"/crm.parties.v2.PartyService/GetParty");
  const binaryCall=async(token,id)=>{
-   const r=await fetch(base+partyGetPath,{method:"POST",headers:{
+   const r=await rpcFetch(partyGetPath,{method:"POST",headers:{
      "cf-access-jwt-assertion":token,"content-type":"application/proto",
      "connect-protocol-version":"1"},body:binaryPartyGet(id)});
    return r;
@@ -117,7 +148,7 @@ try{
  const describeProtobuf=value=>JSON.stringify(value,
    (_key,item)=>typeof item==="bigint"?item.toString():item);
  const v3=async(method,token,payload)=>{
-   const response=await fetch(base+partyV3Path(method),{method:"POST",
+   const response=await rpcFetch(partyV3Path(method),{method:"POST",
      headers:{"content-type":"application/proto","connect-protocol-version":"1",
        ...(token?{"cf-access-jwt-assertion":token}:{})},
      body:binaryPartyV3(method,payload)});
@@ -228,7 +259,7 @@ try{
  console.log(JSON.stringify({event:"crm.native-g3-party-filtered-pagination",result:"PASS"}));
  // Accounts v2: original Account aggregate and D1 trigger, not a pilot record.
  const accountV2=async(method,token,payload)=>{
-   const response=await fetch(base+accountV2Path(method),{method:"POST",
+   const response=await rpcFetch(accountV2Path(method),{method:"POST",
      headers:{"content-type":"application/proto","connect-protocol-version":"1",
        ...(token?{"cf-access-jwt-assertion":token}:{})},
      body:binaryAccountV2(method,payload)});
@@ -331,7 +362,7 @@ try{
  // ContactPoints v2 uses the original Party-owned contact aggregate, NEVER
  // the removed pilot crm_contacts table. No browser-written verified=true.
  const contactV2=async(method,token,payload)=>{
-   const response=await fetch(base+contactV2Path(method),{method:"POST",
+   const response=await rpcFetch(contactV2Path(method),{method:"POST",
      headers:{"content-type":"application/proto","connect-protocol-version":"1",
        ...(token?{"cf-access-jwt-assertion":token}:{})},
      body:binaryContactV2(method,payload)});
@@ -495,7 +526,7 @@ try{
  // G3 Relationships v2: original Rust domain owner and one D1, binary
  // Protobuf descriptor, signed JWT + tenant A/B + viewer rights.
  const relationV2=async(method,token,payload)=>{
-   const response=await fetch(base+relationshipV2Path(method),{method:"POST",
+   const response=await rpcFetch(relationshipV2Path(method),{method:"POST",
      headers:{"content-type":"application/proto","connect-protocol-version":"1",
        ...(token?{"cf-access-jwt-assertion":token}:{})},
      body:binaryRelationshipV2(method,payload)});
@@ -626,7 +657,7 @@ try{
  // Activities v2: real signed workerd binary Protobuf against the ORIGINAL
  // crm-activities Task state, native one-D1 account FK, receipt and audit.
  const taskV2=async(method,token,payload)=>{
-   const response=await fetch(base+taskV2Path(method),{method:"POST",
+   const response=await rpcFetch(taskV2Path(method),{method:"POST",
      headers:{"content-type":"application/proto","connect-protocol-version":"1",
        ...(token?{"cf-access-jwt-assertion":token}:{})},
      body:binaryTaskV2(method,payload)});
@@ -754,7 +785,7 @@ try{
  // Original read-only DataQuality and Identity Resolution, signed binary
  // Connect from the exact generated descriptor, with tenant A/B and viewer.
  const signedReadOnly=(path,encode,decode)=>async(method,token,payload)=>{
-   const r=await fetch(base+path(method),{method:"POST",headers:{
+   const r=await rpcFetch(path(method),{method:"POST",headers:{
      "content-type":"application/proto","connect-protocol-version":"1",
      ...(token?{"cf-access-jwt-assertion":token}:{})},
      body:encode(method,payload)});
@@ -1071,6 +1102,16 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2-candidate",result:"PAS
    published_active:false}));
 
  assert.equal((await call("/crm.future.v9.FutureService/NotRegistered",viewer,"POST")).status,410);
+ // Write evidence only after every scenario assertion above has completed.
+ // A successful call is transport exercise coverage, not proof of all possible
+ // business states. Domain/CAS/tenant assertions remain independently explicit.
+ assert.deepEqual([...successfulCalls].sort(),[...rpc.registered_methods].sort(),
+   "every compiled RPC must have a successful executed binary call");
+ writeFileSync(process.env.CRM_RPC_RUNTIME_PROOF,JSON.stringify({
+   source_sha:sourceSha,result:"PASS",features:["native-ci"],rpc,
+   successful_rpc_calls:[...successfulCalls].sort(),
+   scenarios:"existing signed workerd assertions completed"
+ },null,2)+"\n");
  console.log(JSON.stringify({event:"crm.contract-only-signed-access",
    result:"PASS",admin:true,viewer:true,unauthenticated_denied:true,
    legacy_mutations:0,verified_auth:true}));
