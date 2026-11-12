@@ -570,7 +570,9 @@ test("real TypeScript AST and compiled descriptor controls run in the same CI",(
   const workflow=read("../../.github/workflows/cloudflare-crm-spike.yml");
   const ast=read("../../scripts/crm-architecture-ast.mjs");
   const descriptor=read("../../scripts/crm-rpc-descriptors.mjs");
-  const proof=JSON.parse(read("active-connect.json"));
+  // Published RPCs are derived from the Rust policy in the CI-generated report.
+  assert.ok(generatedReportPath,"compiled Rust policy report missing");
+  const proof=JSON.parse(readFileSync(generatedReportPath,"utf8"));
   assert.match(workflow,/node scripts\/crm-architecture-ast\.mjs/);
   assert.match(workflow,/buf build proto --as-file-descriptor-set -o \/tmp\/crm-proto-descriptors\.binpb/);
   assert.match(workflow,/node scripts\/crm-rpc-descriptors\.mjs \/tmp\/crm-proto-descriptors\.binpb/);
@@ -579,8 +581,9 @@ test("real TypeScript AST and compiled descriptor controls run in the same CI",(
   assert.match(ast,/ts\.isCallExpression\(/);
   assert.match(descriptor,/fromBinary\(FileDescriptorSetSchema/);
   assert.match(descriptor,/async\\\\s\+fn/);
-  assert.equal(proof.methods.length,1);
-  assert.equal(proof.methods[0].path,"/crm.parties.v2.PartyService/GetParty");
+  assert.equal(proof.active_rpc_paths.length,1);
+  assert.equal(proof.active_rpc_paths[0],"/crm.parties.v2.PartyService/GetParty");
+  assert.equal(proof.rpc_policy?.[proof.active_rpc_paths[0]]?.activation,"Published");
 });
 
 test("contract-only disables obsolete endpoints and requires negative browser, D1 and Logs acceptance",()=>{
