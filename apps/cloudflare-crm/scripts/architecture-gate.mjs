@@ -222,18 +222,11 @@ if(policy.phase!=="cutover"){
       "missing fail-closed legacy runtime router");
     check(runtime.includes('error("LEGACY_TRANSPORT_DISABLED", 410)'),
       "legacy business endpoints must return HTTP 410");
-    check(runtime.includes('cfg!(feature = "native-ci")') &&
-      runtime.includes('path.starts_with("/crm.parties.v3.PartyService/")') &&
-      runtime.includes('path.starts_with("/crm.accounts.v2.AccountService/")') &&
-      runtime.includes('path.starts_with("/crm.contact_points.v2.ContactPointService/")') &&
-      runtime.includes('path.starts_with("/crm.party_relationships.v2.PartyRelationshipService/")') &&
-      runtime.includes('path.starts_with("/crm.activities.v2.TaskService/")') &&
-      runtime.includes('path.starts_with("/crm.data_quality.v2.DataQualityService/")') &&
-      runtime.includes('path.starts_with("/crm.identity_resolution.v2.IdentityResolutionService/")') &&
-      runtime.includes('path.starts_with("/crm.consents.v2.ConsentAuthorizationService/")') &&
-      runtime.includes('path.starts_with("/crm.sales.v2.DealService/")') &&
-      runtime.includes('path != "/crm.parties.v2.PartyService/GetParty" && !ci_candidate'),
-      "Party v3 candidate MUST remain inaccessible in production contract-only");
+    check(runtime.includes('fn rpc_policy(path: &str)') &&
+      runtime.includes('match rpc_policy(path)') &&
+      runtime.includes('rule.permission == RpcPermission::Write') &&
+      runtime.includes('cfg!(feature = "native-ci")'),
+      "exact RPC permissions and phase must be enforced before the Connect router");
     check(JSON.stringify(policy.contract_only_rpc_methods)===
       JSON.stringify(["/crm.parties.v2.PartyService/GetParty"]),
       "only physically proven Party GetParty RPC may remain live");
