@@ -83,14 +83,14 @@ def build_report(root: Path = ROOT, *, phase: str | None = None) -> dict:
     rust = (WORKER / "src/lib.rs").read_text(encoding="utf-8")
     if "fn rpc_policy(path: &str)" not in rust:
         raise ValueError("native Rust RPC policy is missing")
-    entries = re.findall(
+    policy_entries = re.findall(
         r'^\s*"(\/crm\.[^"]+)"\s*=>\s*\((Read|Write),\s*(Published|Candidate)\),?\s*$',
         rust, re.MULTILINE,
     )
-    if not entries:
+    if not policy_entries:
         raise ValueError("no exact-path Rust RPC policy entries")
     runtime_policy = {}
-    for route, permission, activation in entries:
+    for route, permission, activation in policy_entries:
         if route in runtime_policy:
             raise ValueError(f"duplicate Rust RPC policy: {route}")
         runtime_policy[route] = {"permission": permission, "activation": activation}
