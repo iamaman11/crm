@@ -9,7 +9,7 @@ impl task_wire::TaskService for TaskV2Service {
     )->ServiceResult<task_wire::CreateTaskResponse>{
         let input=req.to_owned_message();
         let id=Self::valid_id(&input.task_id)?;
-        let (key,_)=AccountV2Service::precondition(input.precondition.as_option(),true)?;
+        let (key,_)=wire_precondition(input.precondition.as_option(),true)?;
         let priority=match input.priority{
             x if x==task_wire::TaskPriority::TASK_PRIORITY_LOW=>
                 activity_tasks::Priority::Low,
@@ -43,7 +43,7 @@ impl task_wire::TaskService for TaskV2Service {
     )->ServiceResult<task_wire::CompleteTaskResponse>{
         let input=req.to_owned_message();
         let id=Self::valid_id(&input.task_id)?;
-        let (key,version)=AccountV2Service::precondition(input.precondition.as_option(),false)?;
+        let (key,version)=wire_precondition(input.precondition.as_option(),false)?;
         let saved=activity_tasks::complete_typed(activity_tasks::CompleteInput{
             expected_version:version.unwrap_or_default(),
         },&key,&self.d1()?,&self.tenant,&id,&self.request_id).await
