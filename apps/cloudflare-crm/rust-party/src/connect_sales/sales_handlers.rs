@@ -9,7 +9,7 @@ impl sale_wire::DealService for SalesV2Service{
     )->ServiceResult<sale_wire::CreateDealResponse>{
         let input=req.to_owned_message();
         let id=Self::id(&input.deal_id)?;
-        let (key,_)=AccountV2Service::precondition(input.precondition.as_option(),true)?;
+        let (key,_)=wire_precondition(input.precondition.as_option(),true)?;
         let stage=input.stage.as_option()
             .ok_or_else(||ConnectError::invalid_argument("stage required"))?;
         let (pipeline_id,stage_id,ordinal)=Self::stage(stage)?;
@@ -37,7 +37,7 @@ impl sale_wire::DealService for SalesV2Service{
     )->ServiceResult<sale_wire::UpdateDealResponse>{
         let input=req.to_owned_message();
         let id=Self::id(&input.deal_id)?;
-        let (key,version)=AccountV2Service::precondition(input.precondition.as_option(),false)?;
+        let (key,version)=wire_precondition(input.precondition.as_option(),false)?;
         let (name,clear_name)=match input.name.as_option(){
             None=>(None,None),
             Some(patch)=>match patch.operation.as_ref(){
@@ -78,7 +78,7 @@ impl sale_wire::DealService for SalesV2Service{
     )->ServiceResult<sale_wire::AdvanceStageResponse>{
         let input=req.to_owned_message();
         let id=Self::id(&input.deal_id)?;
-        let (key,version)=AccountV2Service::precondition(input.precondition.as_option(),false)?;
+        let (key,version)=wire_precondition(input.precondition.as_option(),false)?;
         let stage=input.target_stage.as_option()
             .ok_or_else(||ConnectError::invalid_argument("target_stage required"))?;
         let (pipeline_id,stage_id,ordinal)=Self::stage(stage)?;
