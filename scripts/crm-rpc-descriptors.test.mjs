@@ -42,6 +42,13 @@ test("actual canonical active Party v2 types match compiled descriptor",()=>{
  const result=run(accepted);
  assert.equal(result.status,0,result.stderr);
  assert.match(result.stdout,/crm\.protobuf-descriptor-coverage/);
+ const evidence=result.stdout.split(String.fromCharCode(10)).map(line=>{
+   try{return JSON.parse(line);}catch{return null;}
+ }).find(item=>item?.event==="crm.protobuf-descriptor-coverage");
+ assert.ok(evidence?.candidate_count>evidence.active.length,
+   "all staged RPCs should be discovered from compiled Rust and Buf, not a list");
+ assert.ok(evidence.candidate_methods.includes(
+   "/crm.parties.v3.PartyService/CreateParty"));
 });
 reject("wrong request type fails",({binding})=>{
  binding.request="crm.parties.v2.NotARealRequest";
@@ -58,4 +65,9 @@ reject("no canonical RPC capability binding fails",({party})=>{
 reject("invented extra active RPC fails",({candidate})=>{
  candidate.active_rpc_paths.push("/crm.parties.v2.PartyService/NotAnActiveMethod");
 },/compiled active RPCs differ from generated module inventory/);
+reject("candidate lacks linked original Rust domain owner",({candidate})=>{
+ const owner=candidate.modules.find(x=>x.module_id==="crm.sales");
+ assert.ok(owner,"canonical crm.sales module missing");
+ owner.linked=false;
+},/candidate has no linked original Rust owner/);
 test.after(()=>rmSync(directory,{recursive:true,force:true}));

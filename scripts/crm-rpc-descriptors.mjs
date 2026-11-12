@@ -55,6 +55,52 @@ for(const x of proof.methods){
     JSON.stringify(local.assets?.run_worker_first)!==JSON.stringify(workerFirst))
    fail("RPC not routed through universal Worker-first CRM namespace "+route);
 }
+// Discover EVERY implemented native candidate from the existing generated Rust
+// trait implementations and compiled Buf service descriptors. No second catalog.
+// This runs while unpublished RPCs are still denied by contract-only production.
+const candidateRust=rd("apps/cloudflare-crm/rust-party/src/connect_sales.rs");
+const signedNative=rd("apps/cloudflare-crm/rust-party/test/contract-only-native.mjs");
+const fixture=rd("scripts/crm-connect-binary-fixture.mjs");
+const aliases=new Map([...candidateRust.matchAll(
+  /use\s+proto::crm::([a-z0-9_]+)::(v[0-9]+)\s+as\s+(\w+)\s*;/g
+)].map(x=>[x[3],"crm."+x[1]+"."+x[2]]));
+const candidatePaths=new Set();
+for(const impl of candidateRust.matchAll(
+  /impl\s+(\w+)::(\w+)\s+for\s+(\w+)\s*\{/g
+)){
+  const [,alias,service,rustStruct]=impl;
+  const pkg=aliases.get(alias);
+  if(!pkg||pkg.endsWith(".v1"))continue; // published legacy v1 is not a cutover candidate
+  const qualified=pkg+"."+service;
+  const methods=[...available].filter(([path])=>path.startsWith("/"+qualified+"/"));
+  if(!methods.length)fail("candidate Rust service absent from Buf descriptor "+qualified);
+  if(!candidateRust.includes(".add_service(Arc::new("+rustStruct))
+    fail("candidate service absent from the one Rust Connect router "+qualified);
+  if(!fixture.includes('registry.getService("'+qualified+'")'))
+    fail("candidate lacks a compiled-descriptor binary test fixture "+qualified);
+  const end=candidateRust.indexOf("\n}\n",impl.index);
+  if(end<0)fail("candidate Rust trait block is not closed "+qualified);
+  const body=candidateRust.slice(impl.index,end+2);
+  for(const [path,info] of methods){
+    if(candidatePaths.has(path))fail("duplicate candidate implementation "+path);
+    candidatePaths.add(path);
+    if(!new RegExp("async\\s+fn\\s+"+snake(info.method)+"\\s*\\(").test(body))
+      fail("candidate RPC missing in Rust trait block "+path);
+    if(!proof.methods.some(m=>m.path===path)&&
+       !signedNative.includes('"'+info.method+'"'))
+      fail("candidate RPC missing signed binary native E2E "+path);
+  }
+}
+// Every candidate service must remain behind the signed native-ci gate,
+// yet also reach the one embedded Rust router. No handwritten service catalog.
+const runtimeRust=rd("apps/cloudflare-crm/rust-party/src/lib.rs");
+for(const path of candidatePaths){
+  if(proof.methods.some(item=>item.path===path))continue;
+  const prefix=path.slice(0,path.lastIndexOf("/")+1);
+  const expected='path.starts_with("'+prefix+'")';
+  if(runtimeRust.split(expected).length<3)
+    fail("candidate not CI-gated and dispatched by the same Worker "+path);
+}
 const allowed=new Set(proof.methods.map(x=>x.path));
 if(policy.phase==="contract-only"){
  const expected=new Set(policy.contract_only_rpc_methods||[]);
@@ -81,6 +127,21 @@ for(const module of report.modules){
     bound.set(route,{...binding,module_id:module.module_id,linked:module.linked});
   }
 }
+// Original v1 module.yaml bindings and Cargo links prove the linked owner.
+// Versioned v2/v3 RPCs do not need another manually maintained owner manifest.
+const linkedOwnerPackages=new Set();
+for(const module of report.modules){
+  if(!module.linked)continue;
+  for(const binding of module.rpc_bindings||[]){
+    const match=/^\/(crm\.[a-z0-9_]+)\.v[0-9]+\.[^/]+\//.exec(binding.path);
+    if(match)linkedOwnerPackages.add(match[1]);
+  }
+}
+for(const path of candidatePaths){
+  const match=/^\/(crm\.[a-z0-9_]+)\.v[0-9]+\.[^/]+\//.exec(path);
+  if(!match||!linkedOwnerPackages.has(match[1]))
+    fail("candidate has no linked original Rust owner "+path);
+}
 for(const route of allowed){
  const spec=bound.get(route);
  if(!spec)fail("active RPC absent from canonical module.yaml binding "+route);
@@ -97,5 +158,6 @@ for(const route of allowed){
 if(policy.phase==="cutover" && report.unclaimed_active_rpc_paths?.length)
  fail("unclaimed active RPCs in final cutover");
 console.log(JSON.stringify({event:"crm.protobuf-descriptor-coverage",result:"PASS",
- active:proof.methods.map(x=>x.path),total_schema_methods:available.size,phase:policy.phase}));
+ active:proof.methods.map(x=>x.path),candidate_methods:[...candidatePaths].sort(),
+  candidate_count:candidatePaths.size,total_schema_methods:available.size,phase:policy.phase}));
 export {snake};
