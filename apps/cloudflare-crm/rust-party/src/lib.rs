@@ -255,25 +255,88 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     }), if healthy {200} else {503})
 }
 
+// The only handwritten RPC activation and authorization table.
+// Paths are exact: a newly generated method is denied until explicitly classified.
+// CI compares this table against compiled Buf descriptors, registered Rust traits
+// and signed workerd evidence. HTTP POST does not imply write permission.
+#[cfg(feature = "native")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RpcPermission { Read, Write }
+
+#[cfg(feature = "native")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RpcActivation { Published, Candidate }
+
+#[cfg(feature = "native")]
+#[derive(Clone, Copy)]
+struct RpcPolicy {
+    permission: RpcPermission,
+    activation: RpcActivation,
+}
+
+#[cfg(feature = "native")]
+fn rpc_policy(path: &str) -> Option<RpcPolicy> {
+    use RpcActivation::{Candidate, Published};
+    use RpcPermission::{Read, Write};
+    let (permission, activation) = match path {
+        "/crm.parties.v2.PartyService/GetParty" => (Read, Published),
+        "/crm.parties.v3.PartyService/CreateParty" => (Write, Candidate),
+        "/crm.parties.v3.PartyService/UpdateParty" => (Write, Candidate),
+        "/crm.parties.v3.PartyService/GetParty" => (Read, Candidate),
+        "/crm.parties.v3.PartyService/ListParties" => (Read, Candidate),
+        "/crm.accounts.v2.AccountService/CreateAccount" => (Write, Candidate),
+        "/crm.accounts.v2.AccountService/UpdateAccount" => (Write, Candidate),
+        "/crm.accounts.v2.AccountService/GetAccount" => (Read, Candidate),
+        "/crm.accounts.v2.AccountService/ListAccounts" => (Read, Candidate),
+        "/crm.contact_points.v2.ContactPointService/CreateContactPoint" => (Write, Candidate),
+        "/crm.contact_points.v2.ContactPointService/UpdateContactPoint" => (Write, Candidate),
+        "/crm.contact_points.v2.ContactPointService/GetContactPoint" => (Read, Candidate),
+        "/crm.contact_points.v2.ContactPointService/ListContactPoints" => (Read, Candidate),
+        "/crm.party_relationships.v2.PartyRelationshipService/CreatePartyRelationship" => (Write, Candidate),
+        "/crm.party_relationships.v2.PartyRelationshipService/UpdatePartyRelationship" => (Write, Candidate),
+        "/crm.party_relationships.v2.PartyRelationshipService/GetPartyRelationship" => (Read, Candidate),
+        "/crm.party_relationships.v2.PartyRelationshipService/ListPartyRelationships" => (Read, Candidate),
+        "/crm.activities.v2.TaskService/CreateTask" => (Write, Candidate),
+        "/crm.activities.v2.TaskService/CompleteTask" => (Write, Candidate),
+        "/crm.activities.v2.TaskService/GetTask" => (Read, Candidate),
+        "/crm.activities.v2.TaskService/ListTasks" => (Read, Candidate),
+        "/crm.data_quality.v2.DataQualityService/EvaluatePartyName" => (Read, Candidate),
+        "/crm.identity_resolution.v2.IdentityResolutionService/FindSharedEmailCandidates" => (Read, Candidate),
+        "/crm.identity_resolution.v2.IdentityResolutionService/CompareParties" => (Read, Candidate),
+        "/crm.consents.v2.ConsentAuthorizationService/EvaluateConsent" => (Read, Candidate),
+        "/crm.consents.v2.ConsentAuthorizationService/SuppressCommunication" => (Write, Candidate),
+        "/crm.consents.v2.ConsentAuthorizationService/ListConsentAuthorizations" => (Read, Candidate),
+        "/crm.sales.v2.DealService/CreateDeal" => (Write, Candidate),
+        "/crm.sales.v2.DealService/UpdateDeal" => (Write, Candidate),
+        "/crm.sales.v2.DealService/AdvanceStage" => (Write, Candidate),
+        "/crm.sales.v2.DealService/GetDeal" => (Read, Candidate),
+        "/crm.sales.v2.DealService/ListDeals" => (Read, Candidate),
+        _ => return None,
+    };
+    Some(RpcPolicy { permission, activation })
+}
+
 fn legacy_transport_disabled(path: &str) -> bool {
     let diagnostic = matches!(path, "/api/health" | "/api/doctor" |
         "/api/session" | "/api/version");
     let ci_only = cfg!(feature = "native-ci") && path == "/api/_ci/original-domain-check";
-    // G3 candidate is physically testable under signed native-ci JWT only.
-    // Production contract-only continues returning HTTP 410 for ALL v3 RPCs.
-    let ci_candidate = cfg!(feature = "native-ci") &&
-        (path.starts_with("/crm.parties.v3.PartyService/") ||
-         path.starts_with("/crm.accounts.v2.AccountService/") ||
-         path.starts_with("/crm.contact_points.v2.ContactPointService/") ||
-         path.starts_with("/crm.party_relationships.v2.PartyRelationshipService/") ||
-         path.starts_with("/crm.activities.v2.TaskService/") ||
-         path.starts_with("/crm.data_quality.v2.DataQualityService/") ||
-         path.starts_with("/crm.identity_resolution.v2.IdentityResolutionService/") ||
-         path.starts_with("/crm.consents.v2.ConsentAuthorizationService/") ||
-         path.starts_with("/crm.sales.v2.DealService/"));
-    (path.starts_with("/api/") && !diagnostic && !ci_only) ||
-        (path.starts_with("/crm.") &&
-            path != "/crm.parties.v2.PartyService/GetParty" && !ci_candidate)
+    if path.starts_with("/api/") {
+        return !diagnostic && !ci_only;
+    }
+    if !path.starts_with("/crm.") { return false; }
+    #[cfg(feature = "native")]
+    {
+        return match rpc_policy(path) {
+            Some(rule) if rule.activation == RpcActivation::Published => false,
+            Some(rule) if rule.activation == RpcActivation::Candidate &&
+                cfg!(feature = "native-ci") => false,
+            _ => true,
+        };
+    }
+    #[cfg(not(feature = "native"))]
+    {
+        path != "/crm.parties.v2.PartyService/GetParty"
+    }
 }
 
 async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>,
@@ -287,40 +350,18 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     if legacy_transport_disabled(&path) {
         return error("LEGACY_TRANSPORT_DISABLED", 410);
     }
-    // Minimal existing-role rule for the test CRM: an enrolled admin can write;
-    // other verified tenant members may only read. Consent evaluation is a
-    // non-mutating query despite its POST transport. Do not silently grant
-    // business mutation rights merely because Access verified a JWT.
-    #[cfg(feature = "native")]
-    if role != Some("admin")
-        && method != Method::Get
-        && !(path == "/crm.parties.v2.PartyService/GetParty" ||
-             path == "/crm.parties.v3.PartyService/GetParty" ||
-             path == "/crm.parties.v3.PartyService/ListParties" ||
-             path == "/crm.accounts.v2.AccountService/GetAccount" ||
-             path == "/crm.accounts.v2.AccountService/ListAccounts" ||
-             path == "/crm.contact_points.v2.ContactPointService/GetContactPoint" ||
-             path == "/crm.contact_points.v2.ContactPointService/ListContactPoints" ||
-             path == "/crm.party_relationships.v2.PartyRelationshipService/GetPartyRelationship" ||
-             path == "/crm.party_relationships.v2.PartyRelationshipService/ListPartyRelationships" ||
-             path == "/crm.activities.v2.TaskService/GetTask" ||
-             path == "/crm.activities.v2.TaskService/ListTasks" ||
-             path == "/crm.data_quality.v2.DataQualityService/EvaluatePartyName" ||
-             path == "/crm.identity_resolution.v2.IdentityResolutionService/FindSharedEmailCandidates" ||
-             path == "/crm.identity_resolution.v2.IdentityResolutionService/CompareParties" ||
-             path == "/crm.consents.v2.ConsentAuthorizationService/EvaluateConsent" ||
-             path == "/crm.consents.v2.ConsentAuthorizationService/ListConsentAuthorizations" ||
-             path == "/crm.sales.v2.DealService/GetDeal" ||
-             path == "/crm.sales.v2.DealService/ListDeals")
-        && !(path == "/api/consents/evaluate" && method == Method::Post)
-    {
-        return error("FORBIDDEN", 403);
-    }
     // The fail-closed gate above owns activation; this is the ONLY native
     // Connect dispatch path, not a second manually synchronized service list.
     #[cfg(feature = "native")]
     if path.starts_with("/crm.") {
         if method != Method::Post { return error("NOT_FOUND",404); }
+        // The same exact-path policy owns both activation and authorization.
+        let Some(rule) = rpc_policy(&path) else {
+            return error("LEGACY_TRANSPORT_DISABLED",410);
+        };
+        if rule.permission == RpcPermission::Write && role != Some("admin") {
+            return error("FORBIDDEN",403);
+        }
         let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
         return connect_sales::route(req,env,tenant,actor,&request_id).await;
     }
@@ -474,19 +515,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             ("/api/consents", Method::Get) => "consents.list",
             ("/api/consents/evaluate", Method::Post) => "consents.evaluate",
             ("/api/consents/suppress", Method::Post) => "consents.suppress",
-            ("/crm.parties.v2.PartyService/GetParty", Method::Post) => "parties.rpc.get",
-            ("/crm.parties.v3.PartyService/CreateParty", Method::Post) => "parties.rpc.create",
-            ("/crm.parties.v3.PartyService/UpdateParty", Method::Post) => "parties.rpc.update",
-            ("/crm.parties.v3.PartyService/GetParty", Method::Post) => "parties.rpc.get",
-            ("/crm.parties.v3.PartyService/ListParties", Method::Post) => "parties.rpc.list",
-            ("/crm.accounts.v2.AccountService/CreateAccount", Method::Post) => "accounts.rpc.create",
-            ("/crm.accounts.v2.AccountService/UpdateAccount", Method::Post) => "accounts.rpc.update",
-            ("/crm.accounts.v2.AccountService/GetAccount", Method::Post) => "accounts.rpc.get",
-            ("/crm.accounts.v2.AccountService/ListAccounts", Method::Post) => "accounts.rpc.list",
-            ("/crm.contact_points.v2.ContactPointService/CreateContactPoint", Method::Post) => "contact-points.rpc.create",
-            ("/crm.contact_points.v2.ContactPointService/UpdateContactPoint", Method::Post) => "contact-points.rpc.update",
-            ("/crm.contact_points.v2.ContactPointService/GetContactPoint", Method::Post) => "contact-points.rpc.get",
-            ("/crm.contact_points.v2.ContactPointService/ListContactPoints", Method::Post) => "contact-points.rpc.list",
+            (p, Method::Post) if p.starts_with("/crm.") => p,
             ("/api/sales-deals", Method::Get) => "sales-deals.list",
             ("/api/sales-deals", Method::Post) => "sales-deals.create",
             (p, Method::Get) if p.starts_with("/api/sales-deals/") => "sales-deals.read",
