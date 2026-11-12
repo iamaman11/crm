@@ -13,7 +13,15 @@ const forbiddenSource=/(^|\/)(gateway|transport)(\.[cm]?[jt]sx?)?$|\/gen\/crm\/g
 const forbiddenSymbols=new Set(["createGrpcWebTransport","createGrpcTransport","ApplicationGatewayService","GovernedClient","GovernedCrmClient"]);
 const directHttp=new Set(["fetch","XMLHttpRequest","WebSocket","EventSource"]);
 const forbiddenHttpPath=/^\/api\/(?!health(?:$|\/)|doctor(?:$|\/)|session(?:$|\/)|version(?:$|\/))/;
-const exts=["",".ts",".tsx",".js",".jsx",".mjs","/index.ts","/index.tsx","/index.js"];
+// Read exactly the configuration used by the app's tsc invocation.
+const configPath=resolve(root,"apps/cloudflare-crm/tsconfig.json");
+const configFile=ts.readConfigFile(configPath,ts.sys.readFile);
+if(configFile.error)throw Error(ts.flattenDiagnosticMessageText(configFile.error.messageText,"\n"));
+const config=ts.parseJsonConfigFileContent(configFile.config,ts.sys,dirname(configPath));
+if(config.errors.length)throw Error(ts.formatDiagnosticsWithColorAndContext(config.errors,{
+ getCanonicalFileName:file=>file,getCurrentDirectory:()=>root,getNewLine:()=>"\n",
+}));
+const allowedBrowserPackages=new Set(["react","react-dom","@ultimate-crm/ui","@ultimate-crm/client"]);
 const insideRepo=path=>{
  const rel=relative(root,path);
  return rel && rel!==".." && !rel.startsWith(".."+sep) && !rel.startsWith("/") ? rel.replaceAll("\\","/") : null;
@@ -55,8 +63,10 @@ function inspect(file,source,strict=true){
    if(!ts.isImportDeclaration(node)||!node.importClause||
       !ts.isNamedImports(node.importClause.namedBindings))
     fail(file,"CRM client imports must be explicit named imports");
-   const names=node.importClause.namedBindings.elements.map(x=>x.propertyName?.text||x.name.text);
-   if(!names.length||names.some(x=>x!=="createCloudflareCrmClient"))
+   const names=node.importClause.namedBindings.elements
+    .filter(x=>!node.importClause.isTypeOnly&&!x.isTypeOnly)
+    .map(x=>x.propertyName?.text||x.name.text);
+   if(names.some(x=>x!=="createCloudflareCrmClient"))
     fail(file,"only the generated Connect CRM client is allowed");
   }
  }
@@ -126,22 +136,23 @@ if(activeTyped)entries.push(...collect("apps/cloudflare-crm/web/src"));
 const visited=new Set();
 function resolveInternal(spec,parent){
  if(/\.(?:css|scss|sass|svg|png|jpe?g|webp|woff2?|ico)(?:\?.*)?$/.test(spec))return null;
- if(spec==="@ultimate-crm/client/cloudflare")return "packages/client/src/cloudflare.ts";
- if(spec==="@ultimate-crm/ui")return "packages/ui/src/index.ts";
- if(!spec.startsWith(".")){
-   if(parent.startsWith("apps/cloudflare-crm/web/") &&
-      spec.startsWith("@ultimate-crm/"))fail(parent,"unapproved workspace import "+spec);
-   return null;
- }
  const from=resolve(root,parent);
- const settings={module:ts.ModuleKind.ESNext,moduleResolution:ts.ModuleResolutionKind.Bundler,
-                 allowJs:true,resolveJsonModule:true};
- const resolved=ts.resolveModuleName(spec,from,settings,ts.sys).resolvedModule?.resolvedFileName;
- const abs=resolve(root,dirname(parent),spec);
- const result=resolved || exts.map(s=>abs+s).find(x=>existsSync(x));
- if(!result)fail(parent,"unresolved internal import "+spec);
- const rel=insideRepo(result);
- if(!rel)fail(parent,"import escapes repository "+spec);
+ const resolved=ts.resolveModuleName(spec,from,config.options,ts.sys).resolvedModule;
+ if(!resolved)fail(parent,"unresolved import "+spec);
+ const actual=ts.sys.realpath ? ts.sys.realpath(resolved.resolvedFileName) : resolved.resolvedFileName;
+ const rel=insideRepo(actual);
+ // External declarations are checked by tsc. Runtime package boundaries are
+ // explicit; workspace exports are resolved by TypeScript, never a path table.
+ const workspace=rel&&!rel.split("/").includes("node_modules");
+ if(!spec.startsWith(".")&&parent.startsWith("apps/cloudflare-crm/web/")){
+  const packageName=spec.startsWith("@")?spec.split("/").slice(0,2).join("/"):spec.split("/")[0];
+  if(!allowedBrowserPackages.has(packageName))
+   fail(parent,"unapproved browser dependency "+spec);
+ }
+ if(!workspace){
+  if(spec.startsWith("."))fail(parent,"internal import escapes repository "+spec);
+  return null;
+ }
  return rel;
 }
 function follow(file){
@@ -162,4 +173,4 @@ function follow(file){
 entries.forEach(follow);
 console.log(JSON.stringify({event:"crm.ts-ast-architecture",result:"PASS",
  phase:policy.phase,inspected:[...visited].sort()}));
-export {inspect};
+export {inspect,resolveInternal};

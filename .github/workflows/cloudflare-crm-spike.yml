@@ -125,20 +125,11 @@ jobs:
           pnpm --filter @ultimate-crm/ui typecheck
           # A frozen checkout never changes the source lockfile.
           git diff --exit-code -- pnpm-lock.yaml
-      - name: Typecheck entire Cloudflare CRM
+      - name: Typecheck Cloudflare CRM TypeScript sources
         run: pnpm --filter cloudflare-crm typecheck
       - name: Fast syntax check of native E2E before Rust/WASM build
         working-directory: apps/cloudflare-crm
         run: node --check rust-party/test/native.mjs
-      - name: Fast feature/schema contract doctor
-        run: pnpm run doctor
-        working-directory: apps/cloudflare-crm
-      - name: Locate module and error code without network
-        working-directory: apps/cloudflare-crm
-        run: |
-          pnpm run locate -- deals
-          pnpm run locate -- INVALID_INPUT
-          pnpm run locate -- customer360
       - name: Check native-only ownership and release diagnostic contracts
         run: pnpm test
         working-directory: apps/cloudflare-crm

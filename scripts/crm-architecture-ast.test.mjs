@@ -1,7 +1,7 @@
 // Mutation-style self-tests: the gate must reject real prohibited code.
 import test from "node:test";
 import assert from "node:assert/strict";
-import {inspect} from "./crm-architecture-ast.mjs";
+import {inspect,resolveInternal} from "./crm-architecture-ast.mjs";
 
 const web="apps/cloudflare-crm/web/src/Check.tsx";
 const client="packages/client/src/cloudflare.ts";
@@ -29,3 +29,15 @@ rejects("legacy transport in client package", 'import {createGrpcWebTransport} f
 permits("generated Cloudflare client", 'import {createCloudflareCrmClient} from "@ultimate-crm/client/cloudflare";\nimport {useState} from "react";\nconst x = useState(1);');
 permits("UI presentation only", 'import {Button} from "@ultimate-crm/ui";\nexport function Example(){return <Button>Save</Button>;}');
 permits("Connect transport in the client package only", 'import {createConnectTransport} from "@connectrpc/connect-web";\nexport const transport=createConnectTransport({baseUrl:"/",useBinaryFormat:true});',client);
+
+permits("generated client type imports", 'import type {CloudflareCrmClient} from "@ultimate-crm/client/cloudflare";');
+test("workspace exports resolve through the installed TypeScript module resolver",()=>{
+ assert.equal(resolveInternal("@ultimate-crm/client/cloudflare",web),"packages/client/src/cloudflare.ts");
+ assert.equal(resolveInternal("@ultimate-crm/ui",web),"packages/ui/src/index.ts");
+});
+test("non-exported workspace subpath is rejected by package exports",()=>{
+ assert.throws(()=>resolveInternal("@ultimate-crm/client/src/cloudflare",web),/unresolved import/);
+});
+test("missing relative import cannot pass by source-name guessing",()=>{
+ assert.throws(()=>resolveInternal("./this-module-does-not-exist.js",web),/unresolved import/);
+});
