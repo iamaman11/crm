@@ -73,6 +73,9 @@ fn rpc_error(error: connectrpc::ConnectError) -> Result<Response> {
     reply
         .headers_mut()
         .set("content-type", "application/json")?;
+    reply
+        .headers_mut()
+        .set("x-crm-error-code", error.code.as_str())?;
     Ok(reply)
 }
 fn now_nanos() -> i64 {

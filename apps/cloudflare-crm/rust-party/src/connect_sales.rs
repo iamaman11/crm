@@ -824,7 +824,21 @@ pub(super) async fn route(
     actor: &str,
     request_id: &str,
 ) -> Result<Response> {
-    let mut app: Router = router(env, tenant, actor, request_id).into_axum_router();
+    // Preserve the typed Connect code for the existing request log; never log payloads.
+    let service = router(env, tenant, actor, request_id)
+        .into_axum_service()
+        .with_interceptor(connectrpc::unary_interceptor(|req, next| {
+            Box::pin(async move {
+                next.run(req).await.map_err(|mut error| {
+                    let code = axum::http::HeaderValue::from_static(error.code.as_str());
+                    error
+                        .response_headers_mut()
+                        .insert("x-crm-error-code", code);
+                    error
+                })
+            })
+        }));
+    let mut app: Router = Router::new().fallback_service(service);
     let http = HttpRequest::try_from(req)?;
     Response::try_from(app.call(http).await?)
 }

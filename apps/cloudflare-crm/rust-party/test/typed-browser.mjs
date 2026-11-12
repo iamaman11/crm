@@ -21,6 +21,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    if(!path.startsWith("/crm.")&&!path.endsWith("/parties.csv"))return;
    const headers=response.headers();
    requests.push({path,status:response.status(),request_id:headers["x-request-id"],
+     error_code:headers["x-crm-error-code"]??null,
      source_sha:headers["x-crm-source-sha"],runtime:headers["x-crm-runtime"]});
  };
  const watch=context=>{
@@ -276,6 +277,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    await stalePage.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    const conflictResponse=await conflict;
    assert.equal(conflictResponse.status(),409);
+   assert.equal(conflictResponse.headers()["x-crm-error-code"],"aborted");
    const conflictRequestId=conflictResponse.headers()["x-request-id"];
    assert.match(conflictRequestId??"",/^[a-f0-9-]{36}$/i);
    await stalePage.getByRole("heading",{name:new RegExp("Конфликт изменения.*"+conflictRequestId)}).waitFor();

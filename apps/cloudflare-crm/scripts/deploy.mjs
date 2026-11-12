@@ -298,6 +298,7 @@ async function verifyData(){
         return (data.events?.events||[]).some(event=>
           event.source?.event==="crm.native.request"&&event.source?.request_id===entry.request_id&&
           event.source?.operation===entry.path&&event.source?.status===entry.status&&
+          (event.source?.error_code??null)===(entry.error_code??null)&&
           event.$workers?.scriptVersion?.id===liveVersion);
       }));
       batch.forEach((entry,index)=>{if(!found[index])missing.push(entry);});

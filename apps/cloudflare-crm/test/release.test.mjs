@@ -78,7 +78,8 @@ async function subprocessEntry(){
      return wrap({enabled:false,previews_enabled:false});
    }
    if(path.endsWith("/telemetry/query"))return wrap({events:{events:variant==="missing-logs"?[]:[{
-     source:{event:"crm.native.request",request_id:requestId,operation:rpcPath,status:200},$workers:{scriptVersion:{id:"version-new"}}
+     source:{event:"crm.native.request",request_id:requestId,operation:rpcPath,status:200,
+       error_code:variant==="wrong-error-code"?"aborted":null},$workers:{scriptVersion:{id:"version-new"}}
    }]}});
    if(path.endsWith("/query")){
      if(mode==="fail-closed"&&variant==="restore-role"){
@@ -164,7 +165,7 @@ test("matching browser, D1 and version-specific Logs evidence passes the release
  const result=run("verify-data");
  assert.equal(result.status,0,result.error);assert.equal(result.accepted,true);
 });
-for(const variant of ["wrong-features","missing-audit","missing-logs"])test("release rejects "+variant,()=>{
+for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-error-code"])test("release rejects "+variant,()=>{
  const result=run("verify-data",variant);
  assert.notEqual(result.status,0);assert.equal(result.accepted,false);
 });

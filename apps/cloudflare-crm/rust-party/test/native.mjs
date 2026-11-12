@@ -27,6 +27,11 @@ const successfulCalls=new Set();
 const rpcFetch=async(path,options)=>{
  const response=await globalThis.fetch(base+path,options);
  if(path.startsWith("/crm.")&&response.ok)successfulCalls.add(path);
+ if(path.startsWith("/crm.")&&!response.ok){
+   const error=await response.clone().json();
+   assert.equal(response.headers.get("x-crm-error-code"),error.code,
+     "RPC diagnostics must preserve the actual Connect error code");
+ }
  return response;
 };
 const sourceSha=execFileSync("git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
