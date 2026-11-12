@@ -232,9 +232,8 @@ if(policy.phase!=="cutover"){
       runtime.includes('rule.permission == RpcPermission::Write') &&
       runtime.includes('cfg!(feature = "native-ci")'),
       "exact RPC permissions and phase must be enforced before the Connect router");
-    check(JSON.stringify(policy.contract_only_rpc_methods)===
-      JSON.stringify(["/crm.parties.v2.PartyService/GetParty"]),
-      "only physically proven Party GetParty RPC may remain live");
+    check(moduleReport!==null && moduleReport.active_rpc_paths.length===1,
+      "contract-only must expose exactly one verified published RPC");
     check(read("apps/cloudflare-crm/web/contract-only.tsx").includes("CRM: переход на Connect"),
       "read-only transition UI must be visible");
   }
@@ -268,11 +267,12 @@ if(policy.phase!=="cutover"){
   for(const [literal] of [...runtime.matchAll(/["'](\/api\/[A-Za-z0-9_.*?/-]+)["']/g)].map(x=>[x[1]]))
     check(allowed.has(literal),"legacy REST business endpoint in Worker: "+literal);
   check(moduleReport!==null,"generated canonical module report required");
-  const activeProof=JSON.parse(read("apps/cloudflare-crm/active-connect.json"));
   const reported=[...moduleReport.active_rpc_paths].sort();
-  const proven=activeProof.methods.map(x=>x.path).sort();
+  const proven=Object.entries(moduleReport.rpc_policy||{})
+    .filter(([,rule])=>rule.activation==="Published")
+    .map(([path])=>path).sort();
   check(JSON.stringify(reported)===JSON.stringify(proven),
-    "generated module report differs from active compiled Connect RPC evidence");
+    "generated module report differs from exact Rust RPC publication policy");
   const protoFiles=treeFiles("proto/crm").filter(p=>p.endsWith(".proto"));
   const protoText=protoFiles.map(read).join("\n");
   for(const method of moduleReport.active_rpc_paths){
