@@ -16,7 +16,8 @@ import {binaryPartyGet,decodePartyGet,partyGetPath,
   binaryIdentityV2,decodeIdentityV2,identityV2Path,
   binaryConsentV2,decodeConsentV2,consentV2Path,
   binarySalesV2,decodeSalesV2,salesV2Path,
-  binaryPrivacyV2,decodePrivacyV2,privacyV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  binaryPrivacyV2,decodePrivacyV2,privacyV2Path,
+  binaryEnrichmentV2,decodeEnrichmentV2,enrichmentV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-contract-only-"));
 const base="http://127.0.0.1:18789";
@@ -1169,6 +1170,89 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2-candidate",result:"PAS
  console.log(JSON.stringify({event:"crm.native-privacy-v2",result:"PASS",
    original_owner:"crm.customer-privacy",tenant_ab:true,cas:true,replay:true,
    page_bounds:true,d1_audit:true,subject_verification:"NOT_CONNECTED"}));
+
+ // Immutable configuration only: no provider I/O or Party mutation.
+ const enrichment=signedReadOnly(enrichmentV2Path,binaryEnrichmentV2,decodeEnrichmentV2);
+ const profileInput={
+   providerKey:"company_registry",adapterKind:"registry_http_v1",adapterContractVersion:"1.0.0",
+   purposeCodes:["customer_profile_enrichment","due_diligence"],
+   licenseId:"Registry commercial data licence v3",permittedUseClass:"customer_master_review",
+   residencyRegion:"eu",retentionDays:30,rawPayloadPolicy:1,
+   credentialHandleAliases:["registry_primary"],
+   effectiveAt:{seconds:1n,nanos:123000000},expiresAt:{seconds:2n},
+   precondition:{idempotencyKey:"enrichment-profile-main"}
+ };
+ const enrichmentAuditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ const partyCountBefore=sql("SELECT COUNT(*) AS n FROM crm_party_records")[0].n;
+ for(const bad of [
+   {rawPayloadPolicy:0},{rawPayloadPolicy:999},{effectiveAt:undefined},
+   {effectiveAt:{seconds:1n,nanos:1}},{effectiveAt:{seconds:-1n}},
+   {effectiveAt:{seconds:253402300800n}},{effectiveAt:{seconds:1n,nanos:1000000000}},
+   {retentionDays:3651},{expiresAt:{seconds:0n}},
+   {precondition:{idempotencyKey:"enrichment-invalid-version",expectedVersion:1n}}
+ ]){
+   const result=await enrichment("PublishProviderProfile",admin,{...profileInput,...bad});
+   assert.equal(result.body.code,"invalid_argument",describeProtobuf(result.body));
+ }
+ const profileResult=await enrichment("PublishProviderProfile",admin,profileInput);
+ assert.equal(profileResult.status,200,describeProtobuf(profileResult.body));
+ const profileId=profileResult.body.profile.profileVersionId;
+ assert.ok(profileId);
+ assert.equal(profileResult.body.profile.effectiveAt.nanos,123000000);
+ assert.equal(profileResult.body.receipt.resourceVersion,1n);
+ assert.equal(profileResult.body.receipt.requestId,profileResult.headers.get("x-request-id"));
+ assert.equal(profileResult.body.receipt.replayed,false);
+ assert.equal((await enrichment("PublishProviderProfile",admin,profileInput)).body.receipt.replayed,true);
+ assert.equal((await enrichment("PublishProviderProfile",admin,{...profileInput,retentionDays:31})).body.code,"aborted");
+ assert.equal((await enrichment("GetProviderProfile",viewer,{profileVersionId:profileId})).body.profile.profileVersionId,profileId);
+ assert.equal((await enrichment("GetProviderProfile",tenantB,{profileVersionId:profileId})).body.code,"not_found");
+ const mappingInput={
+   mappingKey:"party_display_name",providerProfileVersionId:profileId,
+   providerResponseFieldPath:"organization.legal_name",maximumSuggestionsPerResponse:1,
+   confidenceRequired:true,precondition:{idempotencyKey:"enrichment-mapping-main"}
+ };
+ assert.equal((await enrichment("PublishMapping",tenantB,mappingInput)).body.code,"not_found");
+ assert.equal((await enrichment("PublishMapping",admin,{...mappingInput,maximumSuggestionsPerResponse:0})).body.code,"invalid_argument");
+ const mappingResult=await enrichment("PublishMapping",admin,mappingInput);
+ assert.equal(mappingResult.status,200,describeProtobuf(mappingResult.body));
+ const mappingId=mappingResult.body.mapping.mappingVersionId;
+ assert.equal(mappingResult.body.mapping.providerProfileVersionId,profileId);
+ assert.equal(mappingResult.body.receipt.replayed,false);
+ assert.equal((await enrichment("PublishMapping",admin,mappingInput)).body.receipt.replayed,true);
+ assert.equal((await enrichment("PublishMapping",admin,{...mappingInput,confidenceRequired:false})).body.code,"aborted");
+ assert.equal((await enrichment("PublishMapping",admin,{...mappingInput,
+   precondition:{idempotencyKey:"enrichment-profile-main"}})).body.code,"aborted");
+ assert.equal((await enrichment("GetMapping",viewer,{mappingVersionId:mappingId})).body.mapping.mappingVersionId,mappingId);
+ assert.equal((await enrichment("GetMapping",tenantB,{mappingVersionId:mappingId})).body.code,"not_found");
+ for(const index of [1,2]){
+   const published=await enrichment("PublishProviderProfile",admin,{
+     ...profileInput,retentionDays:30+index,
+     precondition:{idempotencyKey:"enrichment-profile-page-"+index}});
+   assert.equal(published.status,200,describeProtobuf(published.body));
+   const mapped=await enrichment("PublishMapping",admin,{
+     ...mappingInput,providerProfileVersionId:published.body.profile.profileVersionId,
+     precondition:{idempotencyKey:"enrichment-mapping-page-"+index}});
+   assert.equal(mapped.status,200,describeProtobuf(mapped.body));
+ }
+ const profiles=await collectPages(enrichment,"ListProviderProfiles","profiles");
+ const mappings=await collectPages(enrichment,"ListMappings","mappings");
+ assert.equal(profiles.length,3);assert.equal(mappings.length,3);
+ assert.equal(new Set(profiles.map(x=>x.profileVersionId)).size,3);
+ assert.equal(new Set(mappings.map(x=>x.mappingVersionId)).size,3);
+ for(const [method,field] of [["ListProviderProfiles","profiles"],["ListMappings","mappings"]]){
+   assert.equal((await enrichment(method,viewer,{page:{pageSize:101}})).body.code,"invalid_argument");
+   assert.equal((await enrichment(method,tenantB,{page:{pageSize:1}})).body[field].length,0);
+   assert.equal((await enrichment(method,viewer,{page:{pageToken:"bad/id"}})).body.code,"invalid_argument");
+ }
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_receipts WHERE tenant='tenant-a'")[0].n,6);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_profiles WHERE tenant='tenant-a'")[0].n,3);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_mappings WHERE tenant='tenant-a'")[0].n,3);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,enrichmentAuditBefore+6,
+   "only six immutable publishes write audit; replay, read and denials never write");
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_records")[0].n,partyCountBefore);
+ console.log(JSON.stringify({event:"crm.native-enrichment-v2",result:"PASS",
+   original_owner:"crm.customer-enrichment",immutable:true,tenant_ab:true,replay:true,
+   page_bounds:true,d1_audit:true,timestamp_precision:true,provider_execution:"NOT_CONNECTED"}));
  // Write evidence only after every scenario assertion above has completed.
  // A successful call is transport exercise coverage, not proof of all possible
  // business states. Domain/CAS/tenant assertions remain independently explicit.

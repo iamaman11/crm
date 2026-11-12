@@ -173,3 +173,17 @@ export const binaryPrivacyV2=(name,payload)=>{
  return toBinary(method.input,create(method.input,payload));
 };
 export const decodePrivacyV2=(name,bytes)=>fromBinary(privacyMethod(name).output,bytes);
+
+const enrichmentService=registry.getService("crm.customer_enrichment.v2.EnrichmentConfigurationService");
+if(!enrichmentService)throw Error("compiled EnrichmentConfiguration v2 service missing");
+const enrichmentMethod=name=>{
+ const method=enrichmentService.methods.find(item=>item.name===name);
+ if(!method)throw Error("compiled EnrichmentConfiguration v2 RPC missing "+name);
+ return method;
+};
+export const enrichmentV2Path=name=>"/crm.customer_enrichment.v2.EnrichmentConfigurationService/"+enrichmentMethod(name).name;
+export const binaryEnrichmentV2=(name,payload)=>{
+ const method=enrichmentMethod(name);
+ return toBinary(method.input,create(method.input,payload));
+};
+export const decodeEnrichmentV2=(name,bytes)=>fromBinary(enrichmentMethod(name).output,bytes);

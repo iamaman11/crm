@@ -276,6 +276,12 @@ struct RpcPolicy {
 
 #[cfg(feature = "native")]
 const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
+    ("/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishProviderProfile", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishMapping", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.customer_enrichment.v2.EnrichmentConfigurationService/GetProviderProfile", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.customer_enrichment.v2.EnrichmentConfigurationService/GetMapping", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.customer_enrichment.v2.EnrichmentConfigurationService/ListProviderProfiles", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.customer_enrichment.v2.EnrichmentConfigurationService/ListMappings", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
     ("/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
     ("/crm.customer_privacy.v2.PrivacyCaseService/SubmitPrivacyCase", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
     ("/crm.customer_privacy.v2.PrivacyCaseService/CancelPrivacyCase", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
@@ -407,12 +413,6 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
         let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
         let Some(role)=role else{return error("AUTH_REQUIRED",401)};
         return consents::route(req,db,tenant,actor,role,&request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if path.starts_with("/api/customer-enrichment/") {
-        let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
-        let Some(role)=role else{return error("AUTH_REQUIRED",401)};
-        return customer_enrichment::route(req,db,tenant,actor,role,&request_id).await;
     }
     #[cfg(feature = "native")]
     if path.starts_with("/api/customer-data-operations/") {
