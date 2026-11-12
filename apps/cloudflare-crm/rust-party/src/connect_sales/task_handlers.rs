@@ -146,6 +146,26 @@ impl task_wire::TaskService for TaskV2Service {
             _ => return Err(ConnectError::invalid_argument("invalid TaskStatus filter")),
         };
         let account = req.account_id;
+        let priority = match req.priority {
+            None => None,
+            Some(x) if x == task_wire::TaskPriority::TASK_PRIORITY_LOW => {
+                Some(DomainTaskPriority::Low)
+            }
+            Some(x) if x == task_wire::TaskPriority::TASK_PRIORITY_NORMAL => {
+                Some(DomainTaskPriority::Normal)
+            }
+            Some(x) if x == task_wire::TaskPriority::TASK_PRIORITY_HIGH => {
+                Some(DomainTaskPriority::High)
+            }
+            Some(x) if x == task_wire::TaskPriority::TASK_PRIORITY_URGENT => {
+                Some(DomainTaskPriority::Urgent)
+            }
+            _ => {
+                return Err(ConnectError::invalid_argument(
+                    "invalid TaskPriority filter",
+                ));
+            }
+        };
         if let Some(id) = account {
             crm_module_sdk::RecordId::try_new(id.to_owned())
                 .map_err(|_| ConnectError::invalid_argument("invalid Account filter"))?;
@@ -157,6 +177,7 @@ impl task_wire::TaskService for TaskV2Service {
             size as usize,
             status,
             account,
+            priority,
         )
         .await
         .map_err(|_| ConnectError::internal("Task D1 list failed"))?;

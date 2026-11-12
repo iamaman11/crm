@@ -274,12 +274,13 @@ pub(super) async fn list_page_typed(
     size: usize,
     status: Option<TaskStatus>,
     account_id: Option<&str>,
+    priority: Option<TaskPriority>,
 ) -> Result<(Vec<(Task, String)>, Option<String>)> {
     let mut query = String::from(
         "SELECT id,state,account_id FROM crm_activity_task_records WHERE tenant=? AND id>?",
     );
     let mut params = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
-    // Both filters are checked in native SQL BEFORE LIMIT/cursor calculation.
+    // Filters are checked in native SQL BEFORE LIMIT/cursor calculation.
     if let Some(status) = status {
         query.push_str(" AND json_extract(state,'$.status')=?");
         params.push(JsValue::from_str(match status {
@@ -290,6 +291,15 @@ pub(super) async fn list_page_typed(
     if let Some(id) = account_id {
         query.push_str(" AND account_id=?");
         params.push(JsValue::from_str(id));
+    }
+    if let Some(priority) = priority {
+        query.push_str(" AND json_extract(state,'$.priority')=?");
+        params.push(JsValue::from_str(match priority {
+            TaskPriority::Low => "low",
+            TaskPriority::Normal => "normal",
+            TaskPriority::High => "high",
+            TaskPriority::Urgent => "urgent",
+        }));
     }
     query.push_str(" ORDER BY id LIMIT ?");
     params.push(JsValue::from_f64((size + 1) as f64));

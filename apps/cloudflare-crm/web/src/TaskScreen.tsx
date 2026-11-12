@@ -7,14 +7,18 @@ import {AccountPicker} from "./Pickers";
 export function TaskScreen() {
   const [cursor,setCursor]=useState("");
   const [status,setStatus]=useState("");
+  const [priority,setPriority]=useState("");
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
   const query=useQuery(useCallback(()=>api.tasks.listTasks({page:{pageSize:25,pageToken:cursor},
-    ...(status?{status:Number(status)}:{})}),[cursor,status]));
+    ...(status?{status:Number(status)}:{}),...(priority?{priority:Number(priority)}:{})}),[cursor,status,priority]));
   return <>
     <PageHeader title="Задачи" description="Работа по клиентам и задачи, созданные из сделок."/>
     <SelectField label="Статус задачи" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>
       <option value="">Все</option><option value="1">Открытые</option><option value="2">Выполненные</option>
+    </SelectField>
+    <SelectField label="Приоритет задач" value={priority} onChange={e=>{setPriority(e.target.value);setCursor("");}}>
+      <option value="">Все приоритеты</option><option value="1">Низкий</option><option value="2">Обычный</option><option value="3">Высокий</option><option value="4">Срочный</option>
     </SelectField><QueryNotice query={query}/>
     {query.data?.tasks.map(t=><Card title={t.subject} key={t.taskId}>
       <p>{t.description}</p><p>Клиент: {t.accountId}</p>

@@ -72,6 +72,8 @@ message ListTasksRequest {
   crm.core.v2.PageRequest page = 1;
   optional TaskStatus status = 2;
   optional string account_id = 3;
+  // Absent means all priorities. UNSPECIFIED and unknown values are invalid.
+  optional TaskPriority priority = 4;
 }
 
 message ListTasksResponse {

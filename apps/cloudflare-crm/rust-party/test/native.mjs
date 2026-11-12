@@ -662,7 +662,7 @@ try{
    reminderAt:{seconds:1850000000n,nanos:123456789},
    precondition:{idempotencyKey:"candidate-task-create-"+sequence}
  });
- const taskOtherInput={...taskInput(taskOther,accountNextId,"other"),description:undefined};
+ const taskOtherInput={...taskInput(taskOther,accountNextId,"other"),description:undefined,priority:4};
  const taskMidInput=taskInput(taskMid,accountId,"mid");
  const taskLastInput=taskInput(taskLast,accountId,"last");
  assert.equal((await taskV2("CreateTask",null,taskMidInput)).status,401);
@@ -701,6 +701,20 @@ try{
  assert.equal(taskOtherCreated.body.task?.description,"",
    "optional CreateTask.description absent is canonical empty Task.description");
  assert.equal((await taskV2("CreateTask",admin,taskLastInput)).status,200);
+ const taskAuditBeforeFilters=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n;
+ assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{priority:2})).map(t=>t.taskId),[taskMid,taskLast]);
+ assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{priority:4})).map(t=>t.taskId),[taskOther]);
+ assert.equal((await collectPages(taskV2,"ListTasks","tasks",{priority:4,accountId})).length,0);
+ assert.equal((await taskV2("ListTasks",tenantB,{priority:4})).body.tasks.length,0);
+ assert.equal((await taskV2("ListTasks",viewer,{priority:4})).body.tasks[0].taskId,taskOther);
+ for(const priority of [0,99]){
+   const invalid=await taskV2("ListTasks",viewer,{priority});
+   assert.equal(invalid.status,400);assert.equal(invalid.body.code,"invalid_argument");
+   assert.equal(invalid.body.message,"invalid TaskPriority filter");
+   assert.ok(invalid.headers.get("x-request-id"));
+ }
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n,taskAuditBeforeFilters,
+   "Priority filters and invalid read requests must not create audit writes");
  const taskFilter=await collectPages(taskV2,"ListTasks","tasks",
    {accountId,status:1});
  assert.deepEqual(taskFilter.map(t=>t.taskId),[taskMid,taskLast]);
@@ -748,6 +762,7 @@ try{
  const completedTasks=await collectPages(taskV2,"ListTasks","tasks",
    {accountId,status:2});
  assert.deepEqual(completedTasks.map(t=>t.taskId),[taskMid,taskLast]);
+ assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{accountId,status:2,priority:2})).map(t=>t.taskId),[taskMid,taskLast]);
  assert.equal((await collectPages(taskV2,"ListTasks","tasks",
    {accountId,status:1})).length,0);
  assert.equal((await collectPages(taskV2,"ListTasks","tasks",
