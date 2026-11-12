@@ -38,5 +38,7 @@ message GetAccountOverviewResponse {
 }
 
 service Customer360Service {
-  rpc GetAccountOverview(GetAccountOverviewRequest) returns (GetAccountOverviewResponse);
+  rpc GetAccountOverview(GetAccountOverviewRequest) returns (GetAccountOverviewResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }

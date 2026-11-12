@@ -80,8 +80,16 @@ message ListTasksResponse {
 }
 
 service TaskService {
-  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
-  rpc CompleteTask(CompleteTaskRequest) returns (CompleteTaskResponse);
-  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
-  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc CompleteTask(CompleteTaskRequest) returns (CompleteTaskResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }

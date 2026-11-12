@@ -144,37 +144,18 @@ export function deriveMatrix({files,modules,descriptors,phase,sha}){
    fail("active RPC not backed by a linked owner and matching compiled types "+path);
   return {...compiled,module_id:binding.module_id};
  });
- // Derive owner matching from existing canonical v1 module RPC bindings.
- // New v2/v3 proposals are NEVER activated by this inventory. Their
- // presence in a compiled descriptor is contract evidence, not execution.
- const ownerCandidates=new Map();
- for(const [path,binding] of bindings){
-  const match=/^\/(.+)\.v\d+\.[^/]+\/[^/]+$/.exec(path);
-  if(!match)fail("invalid canonical RPC path "+path);
-  const candidates=ownerCandidates.get(match[1])||new Set();
-  candidates.add(binding.module_id);
-  ownerCandidates.set(match[1],candidates);
- }
- // Contribution services live under other domain packages in historical v1;
- // they do not take ownership from the matching canonical domain manifest.
- const normalize=name=>name.replace(/[-_.]/g,"").toLowerCase();
- const originalOwner=domain=>{
-  const candidates=[...(ownerCandidates.get(domain)||[])];
-  const direct=candidates.filter(name=>normalize(name)===normalize(domain));
-  if(direct.length===1)return direct[0];
-  if(direct.length>1||candidates.length!==1)
-   fail("ambiguous or missing original Rust owner for "+domain);
-  return candidates[0];
- };
+ // Exact versioned manifest bindings own RPCs; package similarity is not evidence.
  const target=descriptors.filter(x=>
   /^crm\/[^/]+\/v(?:2|3)\/[^/]+\.proto$/.test(x.file)&&
-  !modules.active_rpc_paths.includes(x.path)).map(method=>{
-   const match=/^\/(.+)\.v\d+\.[^/]+\/[^/]+$/.exec(method.path);
-   if(!match)fail("unversioned proposed RPC "+method.path);
-   const owner=originalOwner(match[1]);
-   if(!owner)fail("new contract lacks original module owner "+method.path);
-   return {...method,module_id:owner,
-    activation:"CONTRACT_ONLY_NOT_IMPLEMENTED",
+  !x.path.startsWith("/crm.parties.v2.")).map(method=>{
+   const binding=bindings.get(method.path);
+   if(!binding)fail("cutover RPC lacks exact canonical binding "+method.path);
+   if(binding.request!==method.input||binding.response!==method.output)
+    fail("cutover RPC signature differs from exact binding "+method.path);
+   return {...method,module_id:binding.module_id,
+    activation:modules.runtime_evidence==="EXECUTED"&&
+      modules.runtime?.rpc.registered_methods.includes(method.path)
+      ?"EXECUTED_NATIVE_CI":"NOT_EXECUTED",
     permission_proof:"REQUIRES_NATIVE_ACCESS_TEST",
     d1_proof:"REQUIRES_EXECUTABLE_TEST",
     ui_proof:"REQUIRES_BROWSER_RPC_TRACE"};

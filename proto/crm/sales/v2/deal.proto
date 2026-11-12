@@ -93,9 +93,19 @@ message ListDealsResponse {
 }
 
 service DealService {
-  rpc CreateDeal(CreateDealRequest) returns (CreateDealResponse);
-  rpc UpdateDeal(UpdateDealRequest) returns (UpdateDealResponse);
-  rpc AdvanceStage(AdvanceStageRequest) returns (AdvanceStageResponse);
-  rpc GetDeal(GetDealRequest) returns (GetDealResponse);
-  rpc ListDeals(ListDealsRequest) returns (ListDealsResponse);
+  rpc CreateDeal(CreateDealRequest) returns (CreateDealResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateDeal(UpdateDealRequest) returns (UpdateDealResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc AdvanceStage(AdvanceStageRequest) returns (AdvanceStageResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetDeal(GetDealRequest) returns (GetDealResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListDeals(ListDealsRequest) returns (ListDealsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }

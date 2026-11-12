@@ -74,8 +74,16 @@ message ListAccountsResponse {
 }
 
 service AccountService {
-  rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
-  rpc UpdateAccount(UpdateAccountRequest) returns (UpdateAccountResponse);
-  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
-  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+  rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateAccount(UpdateAccountRequest) returns (UpdateAccountResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }

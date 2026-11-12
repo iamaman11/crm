@@ -36,10 +36,10 @@ test("real React source is analyzed without a fixed component count",()=>{
  assert.ok(result.controls.some(x=>x.element==="button"));
 });
 
-test("new versioned contract resolves its owner from canonical bindings, never from a hand catalog",()=>{
+test("new versioned contract requires its exact canonical binding",()=>{
  const owner={module_id:"crm.example",linked:true,
-  rpc_bindings:[{path:"/crm.example.v1.ExampleService/GetExample",
-    request:"crm.example.v1.GetExampleRequest",response:"crm.example.v1.GetExampleResponse"}]};
+  rpc_bindings:[{path:"/crm.example.v2.ExampleService/CreateExample",
+    request:"crm.example.v2.CreateExampleRequest",response:"crm.example.v2.CreateExampleResponse"}]};
  const proposed={file:"crm/example/v2/example.proto",
   path:"/crm.example.v2.ExampleService/CreateExample",
   input:"crm.example.v2.CreateExampleRequest",
@@ -48,7 +48,7 @@ test("new versioned contract resolves its owner from canonical bindings, never f
   descriptors:[proposed],phase:"contract-only",sha:"a"});
  assert.equal(report.protobuf.proposed_cutover_contracts[0].module_id,"crm.example");
  assert.equal(report.protobuf.proposed_cutover_contracts[0].activation,
-  "CONTRACT_ONLY_NOT_IMPLEMENTED");
+  "NOT_EXECUTED");
  assert.equal(report.summary.active_rpc_methods,0);
 });
 test("orphan new RPC proposal fails closed without an original Rust owner",()=>{
@@ -56,5 +56,15 @@ test("orphan new RPC proposal fails closed without an original Rust owner",()=>{
   modules:{modules:[],active_rpc_paths:[]},
   descriptors:[{file:"crm/ghost/v2/ghost.proto",
    path:"/crm.ghost.v2.GhostService/GetGhost"}],
-  phase:"contract-only",sha:"a"}),/ambiguous or missing original Rust owner/);
+  phase:"contract-only",sha:"a"}),/lacks exact canonical binding/);
+});
+
+test("historical binding never grants ownership of a new version implicitly",()=>{
+ const owner={module_id:"crm.example",linked:true,
+  rpc_bindings:[{path:"/crm.example.v1.ExampleService/GetExample",
+    request:"crm.example.v1.GetExampleRequest",response:"crm.example.v1.GetExampleResponse"}]};
+ assert.throws(()=>deriveMatrix({files:[],modules:{modules:[owner],active_rpc_paths:[]},
+  descriptors:[{file:"crm/example/v2/example.proto",path:"/crm.example.v2.ExampleService/GetExample",
+   input:"crm.example.v2.GetExampleRequest",output:"crm.example.v2.GetExampleResponse"}],
+  phase:"contract-only",sha:"a"}),/lacks exact canonical binding/);
 });

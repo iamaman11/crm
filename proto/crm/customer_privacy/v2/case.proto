@@ -91,9 +91,19 @@ message ListPrivacyCasesResponse {
 }
 
 service PrivacyCaseService {
-  rpc CreatePrivacyCase(CreatePrivacyCaseRequest) returns (CreatePrivacyCaseResponse);
-  rpc SubmitPrivacyCase(SubmitPrivacyCaseRequest) returns (SubmitPrivacyCaseResponse);
-  rpc CancelPrivacyCase(CancelPrivacyCaseRequest) returns (CancelPrivacyCaseResponse);
-  rpc GetPrivacyCase(GetPrivacyCaseRequest) returns (GetPrivacyCaseResponse);
-  rpc ListPrivacyCases(ListPrivacyCasesRequest) returns (ListPrivacyCasesResponse);
+  rpc CreatePrivacyCase(CreatePrivacyCaseRequest) returns (CreatePrivacyCaseResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc SubmitPrivacyCase(SubmitPrivacyCaseRequest) returns (SubmitPrivacyCaseResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc CancelPrivacyCase(CancelPrivacyCaseRequest) returns (CancelPrivacyCaseResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetPrivacyCase(GetPrivacyCaseRequest) returns (GetPrivacyCaseResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListPrivacyCases(ListPrivacyCasesRequest) returns (ListPrivacyCasesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }

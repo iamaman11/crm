@@ -7,7 +7,7 @@ import {readFileSync} from "node:fs";
 import {createRequire} from "node:module";
 const clientRequire=createRequire(new URL("../packages/client/package.json",import.meta.url));
 const {fromBinary}=clientRequire("@bufbuild/protobuf");
-const {FileDescriptorSetSchema}=clientRequire("@bufbuild/protobuf/wkt");
+const {FileDescriptorSetSchema,MethodOptions_IdempotencyLevel}=clientRequire("@bufbuild/protobuf/wkt");
 const descriptor=process.env.CRM_PROTO_DESCRIPTOR_FILE;
 if(!descriptor)throw Error("compiled Buf FileDescriptorSet required");
 const compiled=fromBinary(FileDescriptorSetSchema,readFileSync(descriptor));
@@ -27,8 +27,7 @@ const namedField=(message,name)=>{
  assert.ok(found,"missing "+message.name+"."+name);
  return found;
 };
-const isMutation=name=>/^(?:Create|Update|Advance|Complete|Suppress|Publish|Submit|Cancel|Apply)/.test(name);
-const isList=name=>/^(?:List|FindShared)/.test(name);
+const {NO_SIDE_EFFECTS,IDEMPOTENT}=MethodOptions_IdempotencyLevel;
 test("all future Connect RPCs have canonical generated request/response types",()=>{
  for(const {file,service} of allServices){
   assert.match(file.package,/^crm\.[a-z0-9_]+\.(v2|v3)$/);
@@ -45,10 +44,22 @@ test("all future Connect RPCs have canonical generated request/response types",(
   }
  }
 });
+test("every RPC declares side-effect semantics using standard Protobuf options",()=>{
+ for(const {file,service} of allServices)for(const method of service.method){
+  const level=method.options?.idempotencyLevel;
+  assert.ok(level===NO_SIDE_EFFECTS||level===IDEMPOTENT,"explicit semantics required: "+method.name);
+  if(level===NO_SIDE_EFFECTS){
+   assert.ok(!findMessage(file,method.inputType).field.some(f=>f.typeName===".crm.core.v2.MutationPrecondition"),
+     "read-only RPC must not require mutation precondition: "+method.name);
+   assert.ok(!findMessage(file,method.outputType).field.some(f=>f.typeName===".crm.core.v2.MutationReceipt"),
+     "read-only RPC must not return a mutation receipt: "+method.name);
+  }
+ }
+});
 test("all actual mutating RPC contracts require CAS/idempotency and receipts",()=>{
  let total=0;
  for(const {file,service} of allServices)for(const method of service.method){
-  if(!isMutation(method.name))continue;
+  if(method.options?.idempotencyLevel!==IDEMPOTENT)continue;
   total++;
   const request=findMessage(file,method.inputType);
   const response=findMessage(file,method.outputType);
@@ -59,13 +70,16 @@ test("all actual mutating RPC contracts require CAS/idempotency and receipts",()
  }
  assert.ok(total>0,"no mutation proof");
 });
-test("all list RPCs require bounded page request and explicit continuation",()=>{
+test("paginated RPCs pair typed bounds with explicit continuation",()=>{
  let total=0;
  for(const {file,service} of allServices)for(const method of service.method){
-  if(!isList(method.name))continue;
-  total++;
   const request=findMessage(file,method.inputType);
   const response=findMessage(file,method.outputType);
+  const paginated=request.field.some(f=>f.typeName===".crm.core.v2.PageRequest");
+  const continuation=response.field.some(f=>f.typeName===".crm.core.v2.PageInfo");
+  assert.equal(paginated,continuation,"page request/continuation must be paired: "+method.name);
+  if(!paginated)continue;
+  total++;
   assert.equal(namedField(request,"page").typeName,".crm.core.v2.PageRequest");
   assert.equal(namedField(response,"page_info").typeName,".crm.core.v2.PageInfo");
  }

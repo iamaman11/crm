@@ -61,8 +61,16 @@ message ListPartiesResponse {
 }
 
 service PartyService {
-  rpc CreateParty(CreatePartyRequest) returns (CreatePartyResponse);
-  rpc UpdateParty(UpdatePartyRequest) returns (UpdatePartyResponse);
-  rpc GetParty(GetPartyRequest) returns (GetPartyResponse);
-  rpc ListParties(ListPartiesRequest) returns (ListPartiesResponse);
+  rpc CreateParty(CreatePartyRequest) returns (CreatePartyResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateParty(UpdatePartyRequest) returns (UpdatePartyResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetParty(GetPartyRequest) returns (GetPartyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListParties(ListPartiesRequest) returns (ListPartiesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }

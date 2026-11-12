@@ -108,10 +108,22 @@ message ListMappingsResponse {
 }
 
 service EnrichmentConfigurationService {
-  rpc PublishProviderProfile(PublishProviderProfileRequest) returns (PublishProviderProfileResponse);
-  rpc PublishMapping(PublishMappingRequest) returns (PublishMappingResponse);
-  rpc GetProviderProfile(GetProviderProfileRequest) returns (GetProviderProfileResponse);
-  rpc GetMapping(GetMappingRequest) returns (GetMappingResponse);
-  rpc ListProviderProfiles(ListProviderProfilesRequest) returns (ListProviderProfilesResponse);
-  rpc ListMappings(ListMappingsRequest) returns (ListMappingsResponse);
+  rpc PublishProviderProfile(PublishProviderProfileRequest) returns (PublishProviderProfileResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc PublishMapping(PublishMappingRequest) returns (PublishMappingResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetProviderProfile(GetProviderProfileRequest) returns (GetProviderProfileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetMapping(GetMappingRequest) returns (GetMappingResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListProviderProfiles(ListProviderProfilesRequest) returns (ListProviderProfilesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListMappings(ListMappingsRequest) returns (ListMappingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }

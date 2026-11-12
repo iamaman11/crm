@@ -37,6 +37,10 @@ message ComparePartiesResponse {
 }
 
 service IdentityResolutionService {
-  rpc FindSharedEmailCandidates(FindSharedEmailCandidatesRequest) returns (FindSharedEmailCandidatesResponse);
-  rpc CompareParties(ComparePartiesRequest) returns (ComparePartiesResponse);
+  rpc FindSharedEmailCandidates(FindSharedEmailCandidatesRequest) returns (FindSharedEmailCandidatesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CompareParties(ComparePartiesRequest) returns (ComparePartiesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }

@@ -45,7 +45,13 @@ message ApplyPartyImportResponse {
 }
 
 service PartyCsvService {
-  rpc PreviewPartyExport(PreviewPartyExportRequest) returns (PreviewPartyExportResponse);
-  rpc PreviewPartyImport(PreviewPartyImportRequest) returns (PreviewPartyImportResponse);
-  rpc ApplyPartyImport(ApplyPartyImportRequest) returns (ApplyPartyImportResponse);
+  rpc PreviewPartyExport(PreviewPartyExportRequest) returns (PreviewPartyExportResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc PreviewPartyImport(PreviewPartyImportRequest) returns (PreviewPartyImportResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ApplyPartyImport(ApplyPartyImportRequest) returns (ApplyPartyImportResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }

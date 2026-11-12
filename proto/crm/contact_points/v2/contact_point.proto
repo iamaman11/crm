@@ -86,8 +86,16 @@ message ListContactPointsResponse {
 }
 
 service ContactPointService {
-  rpc CreateContactPoint(CreateContactPointRequest) returns (CreateContactPointResponse);
-  rpc UpdateContactPoint(UpdateContactPointRequest) returns (UpdateContactPointResponse);
-  rpc GetContactPoint(GetContactPointRequest) returns (GetContactPointResponse);
-  rpc ListContactPoints(ListContactPointsRequest) returns (ListContactPointsResponse);
+  rpc CreateContactPoint(CreateContactPointRequest) returns (CreateContactPointResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateContactPoint(UpdateContactPointRequest) returns (UpdateContactPointResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetContactPoint(GetContactPointRequest) returns (GetContactPointResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListContactPoints(ListContactPointsRequest) returns (ListContactPointsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }

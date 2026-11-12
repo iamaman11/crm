@@ -154,6 +154,27 @@ provides:
         rpc: crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionService.CustomerDataPrivacyScopeContribution
         request: crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionRequest
         response: crm.customer_privacy.v1.CustomerDataPrivacyScopeContributionResponse
+    - id: customer_data.csv.export.preview
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_data_operations.v2.PartyCsvService.PreviewPartyExport
+        request: crm.customer_data_operations.v2.PreviewPartyExportRequest
+        response: crm.customer_data_operations.v2.PreviewPartyExportResponse
+    - id: customer_data.csv.import.preview
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_data_operations.v2.PartyCsvService.PreviewPartyImport
+        request: crm.customer_data_operations.v2.PreviewPartyImportRequest
+        response: crm.customer_data_operations.v2.PreviewPartyImportResponse
+    - id: customer_data.csv.import.apply
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_data_operations.v2.PartyCsvService.ApplyPartyImport
+        request: crm.customer_data_operations.v2.ApplyPartyImportRequest
+        response: crm.customer_data_operations.v2.ApplyPartyImportResponse
   events:
     - id: customer_data.import.party.source.created
       version: 1.0.0

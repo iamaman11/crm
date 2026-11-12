@@ -86,7 +86,13 @@ message ListConsentAuthorizationsResponse {
 }
 
 service ConsentAuthorizationService {
-  rpc EvaluateConsent(EvaluateConsentRequest) returns (EvaluateConsentResponse);
-  rpc SuppressCommunication(SuppressCommunicationRequest) returns (SuppressCommunicationResponse);
-  rpc ListConsentAuthorizations(ListConsentAuthorizationsRequest) returns (ListConsentAuthorizationsResponse);
+  rpc EvaluateConsent(EvaluateConsentRequest) returns (EvaluateConsentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc SuppressCommunication(SuppressCommunicationRequest) returns (SuppressCommunicationResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc ListConsentAuthorizations(ListConsentAuthorizationsRequest) returns (ListConsentAuthorizationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }

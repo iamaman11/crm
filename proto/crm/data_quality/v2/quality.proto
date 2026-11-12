@@ -27,5 +27,7 @@ message EvaluatePartyNameResponse {
 }
 
 service DataQualityService {
-  rpc EvaluatePartyName(EvaluatePartyNameRequest) returns (EvaluatePartyNameResponse);
+  rpc EvaluatePartyName(EvaluatePartyNameRequest) returns (EvaluatePartyNameResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }

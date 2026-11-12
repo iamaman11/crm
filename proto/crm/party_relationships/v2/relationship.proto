@@ -82,8 +82,16 @@ message ListPartyRelationshipsResponse {
 }
 
 service PartyRelationshipService {
-  rpc CreatePartyRelationship(CreatePartyRelationshipRequest) returns (CreatePartyRelationshipResponse);
-  rpc UpdatePartyRelationship(UpdatePartyRelationshipRequest) returns (UpdatePartyRelationshipResponse);
-  rpc GetPartyRelationship(GetPartyRelationshipRequest) returns (GetPartyRelationshipResponse);
-  rpc ListPartyRelationships(ListPartyRelationshipsRequest) returns (ListPartyRelationshipsResponse);
+  rpc CreatePartyRelationship(CreatePartyRelationshipRequest) returns (CreatePartyRelationshipResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdatePartyRelationship(UpdatePartyRelationshipRequest) returns (UpdatePartyRelationshipResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetPartyRelationship(GetPartyRelationshipRequest) returns (GetPartyRelationshipResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListPartyRelationships(ListPartyRelationshipsRequest) returns (ListPartyRelationshipsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
