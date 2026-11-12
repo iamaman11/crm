@@ -22,7 +22,7 @@ impl contact_wire::ContactPointService for ContactPointV2Service{
                 contact_points::KindInput::Messaging,
             _=>return Err(ConnectError::invalid_argument("invalid ContactPointKind")),
         };
-        let (key,_)=Self::precondition(input.precondition.as_option(),true)?;
+        let (key,_)=wire_precondition(input.precondition.as_option(),true)?;
         let from=input.valid_from.as_option().map(Self::nanos).transpose()?;
         let until=input.valid_until.as_option().map(Self::nanos).transpose()?;
         let saved=contact_points::create_typed(contact_points::CreateInput{
@@ -43,7 +43,7 @@ impl contact_wire::ContactPointService for ContactPointV2Service{
     )->ServiceResult<contact_wire::UpdateContactPointResponse>{
         let input=req.to_owned_message();
         let id=Self::valid_id(&input.contact_point_id)?;
-        let (key,version)=Self::precondition(input.precondition.as_option(),false)?;
+        let (key,version)=wire_precondition(input.precondition.as_option(),false)?;
         let status=match input.status{
             x if x==contact_wire::ContactPointStatus::CONTACT_POINT_STATUS_ACTIVE=>
                 contact_points::StatusInput::Active,
