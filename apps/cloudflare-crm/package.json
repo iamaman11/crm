@@ -7,15 +7,20 @@
     "test": "node --test test/native-runtime.test.mjs",
     "doctor": "node scripts/doctor.mjs",
     "locate": "node scripts/doctor.mjs",
-    "architecture:check": "node scripts/architecture-gate.mjs"
+    "architecture:check": "node scripts/architecture-gate.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "@ultimate-crm/client": "workspace:*",
+    "@ultimate-crm/ui": "workspace:*"
   },
   "devDependencies": {
     "vite": "7.2.2",
     "wrangler": "4.45.3",
-    "playwright": "1.57.0"
+    "playwright": "1.57.0",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3"
   }
 }

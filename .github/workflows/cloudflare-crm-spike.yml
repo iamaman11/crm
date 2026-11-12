@@ -25,7 +25,23 @@ jobs:
           fetch-depth: 0 # immutable Protobuf baseline is a historical accepted commit
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24'
+          node-version: '24.18.0'
+      # One-time lock preparation on the canonical Actions runner. The unchanged
+      # frozen-lockfile gate below MUST fail until this artifact is committed.
+      # Remove these two preparation steps when the generated lock is committed.
+      - name: Generate workspace lock candidate for hard cutover
+        run: |
+          npm install --global pnpm@11.13.1
+          pnpm install --lockfile-only --ignore-scripts
+          cp pnpm-lock.yaml /tmp/crm-pnpm-lock.yaml
+          git restore -- pnpm-lock.yaml
+      - name: Preserve generated workspace lock candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: crm-workspace-lock-candidate
+          path: /tmp/crm-pnpm-lock.yaml
+          if-no-files-found: error
+          retention-days: 7
       # All CRM PR checks execute in THIS job. No other workflow targets PR to dev.
       # Pure source checks must fail before npm, Cargo builds or Chromium.
       - name: Fast repository CI topology, architecture, and source syntax
@@ -125,9 +141,6 @@ jobs:
           pnpm --filter @ultimate-crm/ui typecheck
           # A frozen checkout never changes the source lockfile.
           git diff --exit-code -- pnpm-lock.yaml
-      - name: Enforce canonical architecture and freeze obsolete runtime
-        shell: bash
-        run: node apps/cloudflare-crm/scripts/architecture-gate.mjs
       - name: Typecheck entire Cloudflare CRM on full cutover
         shell: bash
         run: |
@@ -477,6 +490,14 @@ jobs:
             echo 'FAIL: JS dispatcher must not be published' >&2
             exit 1
           fi
+      - name: Require complete hard cutover before accepting any artifact
+        run: |
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            import {readFileSync} from "node:fs";
+            const policy = JSON.parse(readFileSync("apps/cloudflare-crm/architecture-policy.json", "utf8"));
+            assert.equal(policy.phase, "cutover", "NO-GO: legacy transition is not the accepted application");
+          '
       - name: Seal exactly tested development bundle
         shell: bash
         env:
@@ -526,7 +547,7 @@ jobs:
           ref: ${{ github.sha }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '24'
+          node-version: '24.18.0'
       - name: Install CRM dependencies
         run: npm install --no-audit --no-fund
         working-directory: apps/cloudflare-crm
