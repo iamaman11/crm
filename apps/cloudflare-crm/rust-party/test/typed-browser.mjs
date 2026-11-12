@@ -16,15 +16,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
  const startedAt=Date.now();
  const requests=[],writes=[],pageErrors=[],steps=[];
  let restoreViewer=async()=>{};
+ const recordResponse=response=>{
+   const path=new URL(response.url()).pathname;
+   if(!path.startsWith("/crm.")&&!path.endsWith("/parties.csv"))return;
+   const headers=response.headers();
+   requests.push({path,status:response.status(),request_id:headers["x-request-id"],
+     source_sha:headers["x-crm-source-sha"],runtime:headers["x-crm-runtime"]});
+ };
  const watch=context=>{
    context.on("page",p=>p.on("pageerror",error=>pageErrors.push(error.message)));
-   context.on("response",response=>{
-     const path=new URL(response.url()).pathname;
-     if(!path.startsWith("/crm.")&&!path.endsWith("/parties.csv"))return;
-     const headers=response.headers();
-     requests.push({path,status:response.status(),request_id:headers["x-request-id"],
-       source_sha:headers["x-crm-source-sha"],runtime:headers["x-crm-runtime"]});
-   });
+   context.on("response",recordResponse);
  };
  mkdirSync(directory,{recursive:true});
  const browser=await chromium.launch({headless:true});
@@ -36,11 +37,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    await page.goto(base+"/#"+hash);
    await page.getByRole("heading",{name:title,exact:true}).waitFor();
  };
- const mutation=async(button,method,{replay=false}={})=>{
-   const pending=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
-   await button.click();const response=await pending;
+ const assertMutation=async(response,method,{replay=false}={})=>{
    assert.equal(response.status(),200,method+" "+await response.text());
-   await page.getByRole("heading",{name:/^Сохранено/}).last().waitFor();
    const requestId=response.headers()["x-request-id"];
    assert.match(requestId??"",/^[a-f0-9-]{36}$/i);
    const audit=await sql("SELECT action,subject_id FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND request_id='"+requestId+"'");
@@ -49,6 +47,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
      assert.ok(audit.length>0,method+" must commit audit for the browser request");
      writes.push({path:new URL(response.url()).pathname,request_id:requestId,audit});
    }
+ };
+ const mutation=async(button,method,options)=>{
+   const pending=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
+   await button.click();const response=await pending;
+   await assertMutation(response,method,options);
+   await page.getByRole("heading",{name:/^Сохранено/}).last().waitFor();
  };
  const firstId=async(table,column,value)=>{
    const escaped=value.replaceAll("'","''");
@@ -260,7 +264,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
      if(dropped){await route.continue();return;}
      dropped=true;
      const committed=await route.fetch();
-     assert.equal(committed.status(),200);
+     // route.fetch receives the committed response which the browser will lose.
+     recordResponse(committed);
+     await assertMutation(committed,"CreateParty");
      await route.abort("failed");
    });
    await page.getByRole("button",{name:"Сохранить участника",exact:true}).click();
@@ -279,7 +285,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    await page.route("**/crm.parties.v3.PartyService/ListParties",route=>route.abort("failed"));
    const created=page.waitForResponse(r=>r.url().endsWith("/CreateParty"));
    await page.getByRole("button",{name:"Сохранить участника",exact:true}).click();
-   assert.equal((await created).status(),200);
+   await assertMutation(await created,"CreateParty");
    await page.getByRole("heading",{name:/Сохранено.*Список устарел/}).waitFor();
    assert.ok(await firstId("crm_party_records","display_name","Browser Saved Stale "+runId));
    await page.unroute("**/crm.parties.v3.PartyService/ListParties");
@@ -315,8 +321,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    const anonymous=await browser.newContext();
    const anonymousPage=await anonymous.newPage();
    if(features.includes("native-ci")){
+     const refused=anonymousPage.waitForResponse(r=>r.url().endsWith("/ListAccounts"));
      await anonymousPage.goto(base+"/#accounts");
-     await anonymousPage.getByRole("heading",{name:/Сессия завершена/}).waitFor();
+     assert.equal((await refused).status(),401);
+     // Both the account list and its Party picker can report expired access.
+     await anonymousPage.getByRole("heading",{name:/Сессия завершена/}).first().waitFor();
    }else{
      const response=await anonymous.request.get(base+"/api/session",{maxRedirects:0});
      assert.equal(response.status(),302,"Anonymous production request must stop at Access");

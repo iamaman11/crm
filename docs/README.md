@@ -24,6 +24,7 @@ Do not reconstruct current status from historical packet documents, old PR descr
 
 | Task | Read first | Then inspect |
 |---|---|---|
+| Develop or review Cloudflare CRM hard cutover | [`../apps/cloudflare-crm/AGENTS.md`](../apps/cloudflare-crm/AGENTS.md), [`../apps/cloudflare-crm/ARCHITECTURE.md`](../apps/cloudflare-crm/ARCHITECTURE.md) | [Issue #350](https://github.com/iamaman11/crm/issues/350), PR #351 to `dev`, existing Cloudflare CRM CI; full CI and live acceptance before DONE |
 | Understand what is being built now | `PROJECT_STATUS.md`, `ACTIVE_PACKET.md` | `IMPLEMENTATION_ROADMAP.md`, `PHASE8_DELIVERY_PLAN.md`, active issue |
 | First usable closed-pilot CRM and modular developer path | [`FIRST_USABLE_CRM_PILOT.md`](FIRST_USABLE_CRM_PILOT.md) | #310 (G0–G5), #311–#316; ADR-033 and active packet determine allowed work |
 | Understand the complete future CRM product | `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md` | `CRM_CAPABILITY_COVERAGE.md`, `IMPLEMENTATION_ROADMAP.md`, `MODULE_CATALOG.md` |

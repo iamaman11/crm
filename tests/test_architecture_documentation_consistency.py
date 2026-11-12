@@ -230,87 +230,18 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_active_cloudflare_crm_is_strict_and_preserves_step22(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "repository-step-23-cloudflare-native-experiment")
-        self.assertEqual(self.packet["baseline"], {"ref": "main"})
-        self.assertEqual(self.packet["tracking_issues"], [321, 322, 310, 338])
-        self.assertEqual(set(self.packet["allowed_paths"]), {
-            "repository-packet.json",
-            "docs/ACTIVE_PACKET.md",
-            "apps/cloudflare-crm/shared/catalog.mjs",
-            "apps/cloudflare-crm/migrations/0001_initial.sql",
-            "apps/cloudflare-crm/cloudflare.config.ts",
-            "apps/cloudflare-crm/web/index.html",
-            "apps/cloudflare-crm/web/src/main.jsx",
-            "apps/cloudflare-crm/web/src/styles.css",
-            "apps/cloudflare-crm/package.json",
-            "apps/cloudflare-crm/vite.config.mjs",
-            "apps/cloudflare-crm/wrangler.jsonc",
-            "pnpm-workspace.yaml",
-            "apps/cloudflare-crm/e2e/live.mjs",
-            "apps/cloudflare-crm/web/src/Customer360.jsx",
-            "apps/cloudflare-crm/README.md",
-            "apps/cloudflare-crm/AGENTS.md",
-            "apps/cloudflare-crm/migrations/0002_rust_party.sql",
-            "apps/cloudflare-crm/migrations/0003_party_request_trace.sql",
-            "apps/cloudflare-crm/web/src/Parties.jsx",
-            "apps/cloudflare-crm/web/src/Relationships.jsx",
-            "apps/cloudflare-crm/web/src/Consents.jsx",
-            "apps/cloudflare-crm/rust-party/Cargo.toml",
-            "apps/cloudflare-crm/rust-party/Cargo.lock",
-            "apps/cloudflare-crm/rust-party/src/lib.rs",
-            "apps/cloudflare-crm/rust-party/src/parties.rs",
-            "apps/cloudflare-crm/rust-party/src/original_domain_probe.rs",
-            "apps/cloudflare-crm/rust-party/src/accounts.rs",
-            "apps/cloudflare-crm/rust-party/src/account_overview.rs",
-            "apps/cloudflare-crm/migrations/0004_original_customer_accounts.sql",
-            "apps/cloudflare-crm/rust-party/src/contact_points.rs",
-            "apps/cloudflare-crm/migrations/0005_original_contact_points.sql",
-            "apps/cloudflare-crm/rust-party/src/party_relationships.rs",
-            "apps/cloudflare-crm/migrations/0006_original_party_relationships.sql",
-            "apps/cloudflare-crm/rust-party/src/activity_tasks.rs",
-            "apps/cloudflare-crm/migrations/0007_original_activity_tasks.sql",
-            "apps/cloudflare-crm/rust-party/src/sales_deals.rs",
-            "apps/cloudflare-crm/migrations/0008_original_sales_deals.sql",
-            "apps/cloudflare-crm/rust-party/src/consents.rs",
-            "apps/cloudflare-crm/migrations/0009_original_consents.sql",
-            "apps/cloudflare-crm/rust-party/src/sales_activities_link.rs",
-            "apps/cloudflare-crm/migrations/0010_original_sales_activities_link.sql",
-            "apps/cloudflare-crm/rust-party/src/pilot.rs",
-            "apps/cloudflare-crm/test/native-runtime.test.mjs",
-            "apps/cloudflare-crm/worker/index.mjs",
-            "apps/cloudflare-crm/worker/unified.mjs",
-            "apps/cloudflare-crm/features/customer360/query.mjs",
-            "apps/cloudflare-crm/test/worker.test.mjs",
-            "apps/cloudflare-crm/test/customer360.test.mjs",
-            "apps/cloudflare-crm/rust-party/wrangler.unified.jsonc",
-            "apps/cloudflare-crm/rust-party/test/unified.mjs",
-            "apps/cloudflare-crm/scripts/native-cloud-proof.mjs",
-            "apps/cloudflare-crm/rust-party/src/access.rs",
-            "apps/cloudflare-crm/rust-party/test/native.mjs",
-            "apps/cloudflare-crm/rust-party/migrations/0001_local.sql",
-            "apps/cloudflare-crm/rust-party/wrangler.jsonc",
-            "apps/cloudflare-crm/rust-party/README.md",
-            "apps/cloudflare-crm/rust-party/test/local.mjs",
-            ".github/workflows/cloudflare-crm-spike.yml",
-            ".github/workflows/governance.yml",
-            ".github/workflows/customer-privacy-owner-execution.yml",
-            "scripts/check_ci_event_policy.py",
-            "tests/test_ci_event_policy.py",
-            "scripts/affected_scope.py",
-            "tests/test_affected_scope.py",
-            "affected-scope-policy.json",
-            ".github/workflows/product-plane.yml",
-            "tests/test_workspace_analysis.py",
-            "tests/test_repository_navigation.py",
-            "scripts/repository_navigation.py",
-            "apps/cloudflare-crm/scripts/deploy.mjs",
-            "apps/cloudflare-crm/scripts/doctor.mjs",
-            "tests/test_architecture_documentation_consistency.py",
-        })
+        self.assertEqual(self.packet["packet_id"], "cloudflare-crm-connect-hard-cutover")
+        self.assertEqual(self.packet["baseline"], {"ref": "dev"})
+        self.assertEqual(self.packet["tracking_issues"], [338, 350])
+        self.assertIn("apps/cloudflare-crm/**", self.packet["allowed_paths"])
+        self.assertIn(".github/workflows/cloudflare-crm-spike.yml", self.packet["allowed_paths"])
+        self.assertNotIn("modules/**", self.packet["allowed_paths"])
+        self.assertNotIn("crates/**", self.packet["allowed_paths"])
+        self.assertNotIn("**", self.packet["allowed_paths"])
         self.assertIn("Cloudflare CRM Spike CI", self.packet["required_checks"])
-        self.assertIn("Product Plane CI", self.packet["required_checks"])
+        self.assertEqual(self.packet["required_checks"], ["Cloudflare CRM Spike CI"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
-        self.assertIn("- **Baseline:** `main` (live PR base)", self.active_packet)
+        self.assertIn("- **Baseline:** `dev` (live PR base)", self.active_packet)
         self.assertIn("ADR-033", self.plan)
         self.assertIn("ADR-033", self.roadmap)
         self.assertIn("ADR-033", self.status)

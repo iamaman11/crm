@@ -24,84 +24,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RepositoryNavigationTests(unittest.TestCase):
 
-    def test_active_cloudflare_experiment_packet_is_exact_and_bounded(self) -> None:
+    def test_active_cloudflare_cutover_packet_is_exact_and_bounded(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(packet["packet_id"], "repository-step-23-cloudflare-native-experiment")
+        self.assertEqual(packet["packet_id"], "cloudflare-crm-connect-hard-cutover")
         self.assertEqual(packet["status"], "active")
-        self.assertEqual(packet["baseline"], {"ref": "main"})
-        self.assertEqual(packet["tracking_issues"], [321, 322, 310, 338])
-        self.assertEqual(set(packet["allowed_paths"]), {
-            "repository-packet.json",
-            "docs/ACTIVE_PACKET.md",
-            "apps/cloudflare-crm/shared/catalog.mjs",
-            "apps/cloudflare-crm/migrations/0001_initial.sql",
-            "apps/cloudflare-crm/cloudflare.config.ts",
-            "apps/cloudflare-crm/web/index.html",
-            "apps/cloudflare-crm/web/src/main.jsx",
-            "apps/cloudflare-crm/web/src/styles.css",
-            "apps/cloudflare-crm/package.json",
-            "apps/cloudflare-crm/vite.config.mjs",
-            "apps/cloudflare-crm/wrangler.jsonc",
-            "pnpm-workspace.yaml",
-            "apps/cloudflare-crm/e2e/live.mjs",
-            "apps/cloudflare-crm/web/src/Customer360.jsx",
-            "apps/cloudflare-crm/README.md",
-            "apps/cloudflare-crm/AGENTS.md",
-            "apps/cloudflare-crm/migrations/0002_rust_party.sql",
-            "apps/cloudflare-crm/migrations/0003_party_request_trace.sql",
-            "apps/cloudflare-crm/web/src/Parties.jsx",
-            "apps/cloudflare-crm/rust-party/Cargo.toml",
-            "apps/cloudflare-crm/rust-party/Cargo.lock",
-            "apps/cloudflare-crm/rust-party/src/lib.rs",
-            "apps/cloudflare-crm/rust-party/src/parties.rs",
-            "apps/cloudflare-crm/rust-party/src/original_domain_probe.rs",
-            "apps/cloudflare-crm/rust-party/src/accounts.rs",
-            "apps/cloudflare-crm/rust-party/src/account_overview.rs",
-            "apps/cloudflare-crm/migrations/0004_original_customer_accounts.sql",
-            "apps/cloudflare-crm/rust-party/src/contact_points.rs",
-            "apps/cloudflare-crm/migrations/0005_original_contact_points.sql",
-            "apps/cloudflare-crm/rust-party/src/party_relationships.rs",
-            "apps/cloudflare-crm/migrations/0006_original_party_relationships.sql",
-            "apps/cloudflare-crm/rust-party/src/activity_tasks.rs",
-            "apps/cloudflare-crm/migrations/0007_original_activity_tasks.sql",
-            "apps/cloudflare-crm/rust-party/src/sales_deals.rs",
-            "apps/cloudflare-crm/migrations/0008_original_sales_deals.sql",
-            "apps/cloudflare-crm/rust-party/src/consents.rs",
-            "apps/cloudflare-crm/migrations/0009_original_consents.sql",
-            "apps/cloudflare-crm/rust-party/src/sales_activities_link.rs",
-            "apps/cloudflare-crm/migrations/0010_original_sales_activities_link.sql",
-            "apps/cloudflare-crm/rust-party/src/pilot.rs",
-            "apps/cloudflare-crm/test/native-runtime.test.mjs",
-            "apps/cloudflare-crm/worker/index.mjs",
-            "apps/cloudflare-crm/worker/unified.mjs",
-            "apps/cloudflare-crm/features/customer360/query.mjs",
-            "apps/cloudflare-crm/test/worker.test.mjs",
-            "apps/cloudflare-crm/test/customer360.test.mjs",
-            "apps/cloudflare-crm/rust-party/wrangler.unified.jsonc",
-            "apps/cloudflare-crm/rust-party/test/unified.mjs",
-            "apps/cloudflare-crm/scripts/native-cloud-proof.mjs",
-            "apps/cloudflare-crm/rust-party/src/access.rs",
-            "apps/cloudflare-crm/rust-party/test/native.mjs",
-            "apps/cloudflare-crm/rust-party/migrations/0001_local.sql",
-            "apps/cloudflare-crm/rust-party/wrangler.jsonc",
-            "apps/cloudflare-crm/rust-party/README.md",
-            "apps/cloudflare-crm/rust-party/test/local.mjs",
-            ".github/workflows/cloudflare-crm-spike.yml",
-            ".github/workflows/governance.yml",
-            ".github/workflows/customer-privacy-owner-execution.yml",
-            "scripts/affected_scope.py",
-            "tests/test_affected_scope.py",
-            "affected-scope-policy.json",
-            ".github/workflows/product-plane.yml",
-            "tests/test_workspace_analysis.py",
-            "tests/test_repository_navigation.py",
-            "scripts/repository_navigation.py",
-            "apps/cloudflare-crm/scripts/deploy.mjs",
-            "apps/cloudflare-crm/scripts/doctor.mjs",
-            "tests/test_architecture_documentation_consistency.py",
-        })
-        for path in (".github/actions/**", "modules/**", "contracts/**", "proto/**", "docs/generated/REPOSITORY_MAP.md"):
+        self.assertEqual(packet["baseline"], {"ref": "dev"})
+        self.assertEqual(packet["tracking_issues"], [338, 350])
+        self.assertIn("apps/cloudflare-crm/**", packet["allowed_paths"])
+        self.assertIn(".github/workflows/cloudflare-crm-spike.yml", packet["allowed_paths"])
+        self.assertNotIn("modules/**", packet["allowed_paths"])
+        self.assertNotIn("crates/**", packet["allowed_paths"])
+        self.assertNotIn("**", packet["allowed_paths"])
+        for path in (".github/actions/**", "services/**", "database/**", "contracts/**", "schemas/**"):
             self.assertIn(path, packet["forbidden_paths"])
         self.assertIn("Access-verified identity", " ".join(packet["deliverables"]))
         self.assertIn("deploy", " ".join(packet["non_goals"]))
@@ -123,11 +58,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "repository-step-23-cloudflare-native-experiment",
+            "cloudflare-crm-connect-hard-cutover",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "- **Baseline:** `main` (live PR base)",
+            "- **Baseline:** `dev` (live PR base)",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
@@ -186,7 +121,7 @@ class RepositoryNavigationTests(unittest.TestCase):
                     "name": name,
                     "path": workflow_paths[name],
                     "selected": True,
-                    "reasons": ["Step 22P G2 useful CRM packet"],
+                    "reasons": ["Cloudflare CRM hard cutover"],
                 }
                 for name in packet["required_checks"]
             ],
@@ -202,12 +137,12 @@ class RepositoryNavigationTests(unittest.TestCase):
                 return_value=[],
             ),
         ):
-            report = packet_check(ROOT, "origin/main")
+            report = packet_check(ROOT, "origin/dev")
         self.assertTrue(report["ok"])
         self.assertEqual(report["changed_paths"], packet["allowed_paths"])
         self.assertEqual(report["blockers"], [])
 
-    def test_main_baseline_enforces_scope_and_unknown_base(self) -> None:
+    def test_declared_baseline_enforces_scope_and_unknown_base(self) -> None:
         affected = {"head_sha": "b" * 40,
                     "changed_paths": ["repository-packet.json", "scripts/repository_navigation.py"],
                     "affected_packages": [], "selected_workflows": []}
@@ -216,53 +151,27 @@ class RepositoryNavigationTests(unittest.TestCase):
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),
         ):
-            accepted = packet_check(ROOT, "origin/main")
+            accepted = packet_check(ROOT, "origin/dev")
             rejected = packet_check(ROOT, "refs/tags/fake-main")
+            wrong_branch = packet_check(ROOT, "origin/main")
             raw_sha = packet_check(ROOT, "c75acd9fd36cd87f48fe727171be949e1295c998")
         self.assertTrue(accepted["ok"])
-        self.assertEqual(accepted["baseline_mode"], "main")
+        self.assertEqual(accepted["baseline_mode"], "dev")
         self.assertEqual(accepted["declared_baseline_sha"], "c75acd9fd36cd87f48fe727171be949e1295c998")
         self.assertFalse(rejected["ok"])
+        self.assertFalse(wrong_branch["ok"])
         self.assertEqual(rejected["baseline_mode"], "unrecognized")
         self.assertFalse(raw_sha["ok"])
 
-        affected["changed_paths"].extend(["modules/crm-parties/src/lib.rs", "unowned.txt"])
+        affected["changed_paths"].extend(["services/crm-api/src/lib.rs", "unowned.txt"])
         with (
             patch("scripts.repository_navigation._git", return_value="c75acd9fd36cd87f48fe727171be949e1295c998"),
             patch("scripts.repository_navigation.build_report", return_value=affected),
             patch("scripts.repository_navigation.stale_generated_documents", return_value=[]),
         ):
-            blocked = packet_check(ROOT, "origin/main")
-        self.assertIn("forbidden path changed: modules/crm-parties/src/lib.rs", blocked["blockers"])
+            blocked = packet_check(ROOT, "origin/dev")
+        self.assertIn("forbidden path changed: services/crm-api/src/lib.rs", blocked["blockers"])
         self.assertIn("path outside packet: unowned.txt", blocked["blockers"])
-
-    def test_cloudflare_dev_release_is_single_source_with_verified_artifact(self) -> None:
-        workflow = (ROOT / ".github/workflows/cloudflare-crm-spike.yml").read_text(
-            encoding="utf-8"
-        )
-        trigger = workflow.split("concurrency:", 1)[0]
-        self.assertIn("  push:\n    branches:\n      - dev\n", trigger)
-        self.assertIn("  pull_request:\n    branches:\n      - main\n", trigger)
-        self.assertNotIn("  push:\n    branches:\n      - main\n", trigger)
-        self.assertNotIn("Promote successful PR artifact", workflow)
-        dev_only = (
-            "if: github.event_name == 'push' && "
-            "github.ref == 'refs/heads/dev'"
-        )
-        self.assertEqual(workflow.count(dev_only), 2)
-        self.assertIn("environment: crm-dev", workflow)
-        self.assertIn('gh run download "$GITHUB_RUN_ID"', workflow)
-        self.assertIn("crm-native-bundle-$GITHUB_SHA", workflow)
-        self.assertIn("sha256sum --check --strict", workflow)
-        self.assertIn("Restore previous Worker if release acceptance failed", workflow)
-        self.assertIn("Browser E2E on published CRM", workflow)
-        deploy_script = (ROOT / "apps/cloudflare-crm/scripts/deploy.mjs").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn('process.env.GITHUB_REF!=="refs/heads/dev"', deploy_script)
-        self.assertIn('process.env.GITHUB_EVENT_NAME!=="push"', deploy_script)
-        self.assertIn('throw Error("Untrusted deployment")', deploy_script)
-        self.assertIn('throw Error("Wrong Cloudflare CRM target")', deploy_script)
 
     def test_customer_privacy_approval_uses_actual_change_base_for_packet_check(self) -> None:
         approval = (

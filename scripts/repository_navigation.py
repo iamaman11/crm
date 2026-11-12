@@ -79,8 +79,9 @@ def load_packet(root: Path) -> dict[str, Any]:
     baseline = packet.get("baseline")
     if not isinstance(baseline, dict):
         raise NavigationError("baseline must be an object")
-    if baseline != {"ref": "main"} or "promotion_baseline" in packet:
-        raise NavigationError("only canonical main baseline is permitted")
+    expected_base = "dev" if packet["packet_id"] == "cloudflare-crm-connect-hard-cutover" else "main"
+    if baseline != {"ref": expected_base} or "promotion_baseline" in packet:
+        raise NavigationError(f"only canonical {expected_base} baseline is permitted")
     issues = packet.get("tracking_issues")
     if not isinstance(issues, list) or not issues or any(
         not isinstance(issue, int) or issue <= 0 for issue in issues
@@ -544,12 +545,13 @@ def packet_check(root: Path, base_ref: str) -> dict[str, Any]:
         paths, packet["allowed_paths"], packet["forbidden_paths"]
     )
     stale = stale_generated_documents(root)
-    # One canonical PR target: actual main, never a stale promotion SHA.
-    accepted = base_ref in ("main", "origin/main", "refs/heads/main")
-    mode = "main" if accepted else "unrecognized"
+    # Packet declares the actual PR target, never a stale promotion SHA.
+    target = packet["baseline"]["ref"]
+    accepted = base_ref in (target, "origin/" + target, "refs/heads/" + target)
+    mode = target if accepted else "unrecognized"
     blockers = []
     if not accepted:
-        blockers.append(f"unrecognized packet base {base_ref}; expected main or origin/main")
+        blockers.append(f"unrecognized packet base {base_ref}; expected {target} or origin/{target}")
     blockers.extend(f"forbidden path changed: {path}" for path in forbidden)
     blockers.extend(f"path outside packet: {path}" for path in disallowed)
     blockers.extend(f"generated navigation is stale: {path}" for path in stale)

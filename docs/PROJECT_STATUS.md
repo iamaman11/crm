@@ -4,6 +4,12 @@ Status date: 2026-11-06
 
 This document is the concise authoritative current-state snapshot. Product dependencies remain normative in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`; the single repository execution order remains normative in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4; module readiness remains normative in `MODULE_CATALOG.md`.
 
+## Active Cloudflare CRM packet — 2026-11-12
+
+Issue [#350](https://github.com/iamaman11/crm/issues/350) and draft PR [#351](https://github.com/iamaman11/crm/pull/351) to `dev` define the active hard cutover. The app-specific [architecture](../apps/cloudflare-crm/ARCHITECTURE.md) and [contributor rules](../apps/cloudflare-crm/AGENTS.md) govern this Worker/D1 application. Historical PostgreSQL pilot and Step 22 statements below remain historical repository evidence; they do not replace the Cloudflare execution plan.
+
+Status: **IN PROGRESS / NO-GO**. The new Connect/strict TSX implementation, one-time business-data reset and release checks are candidates. Full CI on one unchanged SHA, independent review, and real Access/browser/D1/Logs/deployed-version acceptance are required before acceptance. No completed deployment or new compatibility baseline is claimed here. Exact ongoing SHA/run evidence belongs in #350. Historical Step 22 decisions remain unchanged.
+
 ## Authoritative references
 
 - `SYSTEM_INVARIANTS.md`, `APPLICATION_ARCHITECTURE.md`, `DELIVERY_GOVERNANCE.md`;
