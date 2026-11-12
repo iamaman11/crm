@@ -67,7 +67,7 @@ try{
  // Wrangler's applied-migration ledger must prevent a second reset.
  run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
  child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
-  "--var","CRM_NATIVE_CI_JWKS:"+jwks],
+  "--var","CRM_NATIVE_CI_JWKS:"+jwks,"--var","GIT_SHA:"+sourceSha],
   {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
  let stderr="";
  child.stderr.on("data",b=>stderr=(stderr+b.toString()).slice(-2500));
@@ -86,6 +86,10 @@ try{
  }
  assert.equal((await call("/api/parties",null)).status,401);
  const admin=jwt("native-a@example.test"),viewer=jwt("native-viewer@example.test");
+ const version=await rpcFetch("/api/version",{headers:{"cf-access-jwt-assertion":admin}});
+ assert.equal(version.status,200);
+ assert.equal(version.headers.get("x-crm-source-sha"),sourceSha,"Worker must receive the tested checkout SHA");
+ assert.equal((await version.json()).source,sourceSha);
  const compiled=await call("/api/_ci/original-domain-check",admin);
  assert.equal(compiled.status,200,JSON.stringify(compiled.body));
  assert.equal(compiled.body.result,"PASS");
