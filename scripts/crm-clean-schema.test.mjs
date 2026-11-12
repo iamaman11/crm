@@ -6,7 +6,7 @@ import {readFileSync} from "node:fs";
 const migration = readFileSync("apps/cloudflare-crm/migrations/0001_initial.sql","utf8");
 const expected = [
  "crm_tenants","crm_users","crm_audit",
- "crm_party_records","crm_party_receipts",
+ "crm_party_records","crm_party_receipts","crm_party_import_receipts",
  "crm_account_records","crm_account_receipts",
  "crm_contact_point_records","crm_contact_point_receipts",
  "crm_party_relationship_records","crm_party_relationship_receipts",

@@ -89,7 +89,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     // A truthful live, read-only diagnostic: this probes the active Rust
     // runtime and current D1 tables. CI/browser/Logs proof remains a separate
     // protected release artifact, never an invented live health result.
-    const EXPECTED: [&str; 23] = [
+    const EXPECTED: &[&str] = &[
         "crm_tenants", "crm_users", "crm_audit", "crm_party_records", "crm_party_receipts",
         "crm_account_records", "crm_account_receipts",
         "crm_contact_point_records", "crm_contact_point_receipts",
@@ -104,9 +104,12 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
     ];
     let db = env.d1("DB")?;
     let bindings: Vec<JsValue> = EXPECTED.iter().map(|name| JsValue::from_str(name)).collect();
-    let row = bind(&db,
-        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        &bindings)?.first::<SchemaCount>(None).await?;
+    let placeholders = EXPECTED.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let schema_query = format!(
+        "SELECT COUNT(*) AS present FROM sqlite_master WHERE type='table' AND name IN ({placeholders})"
+    );
+    let row = bind(&db, &schema_query, &bindings)?
+        .first::<SchemaCount>(None).await?;
     let present = row.map_or(0, |value| value.present);
     let schema_ok = present == EXPECTED.len() as i64;
     let mut read_checks = serde_json::Map::new();
