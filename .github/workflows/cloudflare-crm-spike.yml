@@ -309,7 +309,7 @@ jobs:
       - name: Restore compiled production Worker after JWT test
         run: |
           cp -a apps/cloudflare-crm/.release/native-build/. apps/cloudflare-crm/rust-party/build/
-          diff --recursive --quiet apps/cloudflare-crm/.release/native-build apps/cloudflare-crm/rust-party/build
+          diff --recursive --brief apps/cloudflare-crm/.release/native-build apps/cloudflare-crm/rust-party/build
       - name: Validate release and E2E scripts
         run: |
           node --check apps/cloudflare-crm/scripts/deploy.mjs
