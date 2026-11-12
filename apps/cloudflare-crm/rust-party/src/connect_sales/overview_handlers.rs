@@ -29,7 +29,7 @@ impl overview_wire::Customer360Service for Customer360V2Service {
                     .collect::<std::result::Result<Vec<_>,_>>()?,
                 deals:values.deals.iter().map(SalesV2Service::convert)
                     .collect::<std::result::Result<Vec<_>,_>>()?,
-                tasks:values.tasks.iter().map(TaskV2Service::convert)
+                tasks:values.tasks.iter().map(|(task,account)|TaskV2Service::convert(task,account))
                     .collect::<std::result::Result<Vec<_>,_>>()?,
                 truncated:Some(overview_wire::CollectionTruncation{
                     contact_points:truncated.contact_points,relationships:truncated.relationships,

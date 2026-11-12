@@ -534,6 +534,11 @@ struct TaskV2Service {
     env:Arc<Env>,tenant:String,actor:String,request_id:String,
 }
 impl TaskV2Service {
+    async fn persisted_account(&self,id:&str)->std::result::Result<String,ConnectError>{
+        activity_tasks::account_id(&self.d1()?,&self.tenant,id).await
+            .map_err(|_|ConnectError::internal("Task Account read failed"))?
+            .ok_or_else(||ConnectError::internal("Task Account missing"))
+    }
     fn d1(&self)->std::result::Result<D1Database,ConnectError>{
         self.env.d1("DB").map_err(|_|ConnectError::internal("D1 unavailable"))
     }
@@ -545,7 +550,7 @@ impl TaskV2Service {
             .map(|x|x.as_str().to_owned())
             .map_err(|_|ConnectError::invalid_argument("ACTIVITIES_TASK_ID_INVALID"))
     }
-    fn convert(task:&DomainTask)->std::result::Result<task_wire::Task,ConnectError>{
+    fn convert(task:&DomainTask,account_id:&str)->std::result::Result<task_wire::Task,ConnectError>{
         let priority=match task.priority(){
             DomainTaskPriority::Low=>task_wire::TaskPriority::TASK_PRIORITY_LOW,
             DomainTaskPriority::Normal=>task_wire::TaskPriority::TASK_PRIORITY_NORMAL,
@@ -556,15 +561,11 @@ impl TaskV2Service {
             DomainTaskStatus::Open=>task_wire::TaskStatus::TASK_STATUS_OPEN,
             DomainTaskStatus::Completed=>task_wire::TaskStatus::TASK_STATUS_COMPLETED,
         };
-        let account_id=task.related_resources().iter().find(
-            |item|item.resource_type=="crm.customer-accounts")
-            .ok_or_else(||ConnectError::internal("original Task missing Account reference"))?
-            .resource_id.clone();
         Ok(task_wire::Task{
             task_id:task.task_id().as_str().to_owned(),
             subject:task.subject().to_owned(),
             description:task.description().unwrap_or_default().to_owned(),
-            account_id,priority:priority.into(),status:status.into(),
+            account_id:account_id.to_owned(),priority:priority.into(),status:status.into(),
             due_at:task.due_at_unix_nanos()
                 .map(ContactPointV2Service::timestamp).into(),
             reminder_at:task.reminder_at_unix_nanos()

@@ -12,7 +12,7 @@ const fail=(file,message)=>{throw Error("CRM_AST_VIOLATION "+file+": "+message);
 const forbiddenSource=/(^|\/)(gateway|transport)(\.[cm]?[jt]sx?)?$|\/gen\/crm\/gateway\/|^@connectrpc\/connect-node(?:\/|$)/;
 const forbiddenSymbols=new Set(["createGrpcWebTransport","createGrpcTransport","ApplicationGatewayService","GovernedClient","GovernedCrmClient"]);
 const directHttp=new Set(["fetch","XMLHttpRequest","WebSocket","EventSource"]);
-const forbiddenHttpPath=/^\/api\/(?!health(?:$|\/)|doctor(?:$|\/)|session(?:$|\/)|version(?:$|\/))/;
+const forbiddenHttpPath=/^\/api\/(?!health(?:$|\/)|doctor(?:$|\/)|session(?:$|\/)|version(?:$|\/)|customer-data-operations\/parties\.csv$)/;
 // Read exactly the configuration used by the app's tsc invocation.
 const configPath=resolve(root,"apps/cloudflare-crm/tsconfig.json");
 const configFile=ts.readConfigFile(configPath,ts.sys.readFile);
@@ -131,7 +131,8 @@ function inspect(file,source,strict=true){
  return imports;
 }
 const entries=["packages/client/src/cloudflare.ts"];
-if(policy.phase==="contract-only")entries.push("apps/cloudflare-crm/web/contract-only.tsx");
+if(existsSync(resolve(root,"apps/cloudflare-crm/web/src/app.tsx")))entries.push("apps/cloudflare-crm/web/src/app.tsx");
+else if(policy.phase==="contract-only")entries.push("apps/cloudflare-crm/web/contract-only.tsx");
 if(activeTyped)entries.push(...collect("apps/cloudflare-crm/web/src"));
 const visited=new Set();
 function resolveInternal(spec,parent){

@@ -58,7 +58,7 @@ pub(super) async fn overview(db: &D1Database, tenant: &str, id: &str) -> Result<
         super::sales_deals::decode(state))
         .collect::<Result<Vec<_>>>()?;
     let tasks = task_states.iter().map(|state|
-        super::activity_tasks::decode(state))
+        super::activity_tasks::decode(state).map(|task|(task,id.to_owned())))
         .collect::<Result<Vec<_>>>()?;
     AccountOverview::compose(Sources{account,primary_party:party,contact_points,relationships,deals,tasks})
         .map(Some).map_err(|e|worker::Error::RustError(e.code))

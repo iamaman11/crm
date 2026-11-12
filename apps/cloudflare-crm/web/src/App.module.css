@@ -1,0 +1,4 @@
+.board {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));gap:1rem;align-items:start;}
+.sections {display:grid;gap:1rem;}
+.actions {display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;}
+.output {white-space:pre-wrap;overflow-wrap:anywhere;}

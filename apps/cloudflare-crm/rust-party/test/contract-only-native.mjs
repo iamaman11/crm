@@ -1284,6 +1284,20 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2-candidate",result:"PAS
  assert.ok(card.tasks.some(item=>item.taskId===taskMid));
  assert.ok(card.tasks.every(item=>item.taskId!==taskOther));
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,overviewAudit);
+ // Sales-created tasks retain their original Deal reference, and their D1 Account.
+ const linkedTaskId=sql("SELECT task_id FROM crm_sales_link_delivery_records WHERE tenant='tenant-a' AND deal_id='"+
+   dealId+"' AND task_id IS NOT NULL ORDER BY task_id LIMIT 1")[0]?.task_id;
+ assert.ok(linkedTaskId,"Sales fixture must create a linked Task");
+ const linkedTask=await taskV2("GetTask",viewer,{taskId:linkedTaskId});
+ assert.equal(linkedTask.status,200,describeProtobuf(linkedTask.body));
+ assert.equal(linkedTask.body.task.accountId,accountId);
+ assert.ok(card.tasks.some(task=>task.taskId===linkedTaskId));
+ assert.equal((await taskV2("GetTask",tenantB,{taskId:linkedTaskId})).status,404);
+ const completeLinked=await taskV2("CompleteTask",admin,{taskId:linkedTaskId,
+   precondition:{idempotencyKey:"overview-linked-task-complete",expectedVersion:linkedTask.body.task.version}});
+ assert.equal(completeLinked.status,200,describeProtobuf(completeLinked.body));
+ assert.equal(completeLinked.body.task.accountId,accountId);
+ assert.equal(completeLinked.body.task.status,2);
  // Exercise the composition bound with real original ContactPoint mutations.
  for(let index=0;index<101-card.contactPoints.length;index++){
    const created=await contactV2("CreateContactPoint",admin,{

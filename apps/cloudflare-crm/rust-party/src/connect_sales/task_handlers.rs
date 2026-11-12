@@ -33,7 +33,7 @@ impl task_wire::TaskService for TaskV2Service {
             .map_err(|_|ConnectError::internal("Task D1 create failed"))?
             .map_err(Self::failed)?;
         RpcResponse::ok(task_wire::CreateTaskResponse{
-            task:Some(Self::convert(&saved.task)?).into(),
+            task:Some(Self::convert(&saved.task,&self.persisted_account(saved.task.task_id().as_str()).await?)?).into(),
             receipt:Some(self.receipt(&saved)).into(),..Default::default()
         })
     }
@@ -50,7 +50,7 @@ impl task_wire::TaskService for TaskV2Service {
             .map_err(|_|ConnectError::internal("Task D1 complete failed"))?
             .map_err(Self::failed)?;
         RpcResponse::ok(task_wire::CompleteTaskResponse{
-            task:Some(Self::convert(&saved.task)?).into(),
+            task:Some(Self::convert(&saved.task,&self.persisted_account(saved.task.task_id().as_str()).await?)?).into(),
             changed:saved.changed,
             receipt:if saved.changed||saved.replayed{
                 Some(self.receipt(&saved)).into()
@@ -67,7 +67,7 @@ impl task_wire::TaskService for TaskV2Service {
             .map_err(|_|ConnectError::internal("Task D1 get failed"))?
             .ok_or_else(||ConnectError::not_found("ACTIVITIES_TASK_NOT_FOUND"))?;
         RpcResponse::ok(task_wire::GetTaskResponse{
-            task:Some(Self::convert(&task)?).into(),..Default::default()
+            task:Some(Self::convert(&task,&self.persisted_account(&id).await?)?).into(),..Default::default()
         })
     }
     #[worker::send]
@@ -95,7 +95,7 @@ impl task_wire::TaskService for TaskV2Service {
             &self.d1()?,&self.tenant,after,size as usize,status,account).await
             .map_err(|_|ConnectError::internal("Task D1 list failed"))?;
         let mut tasks=Vec::with_capacity(list.len());
-        for task in &list{tasks.push(Self::convert(task)?);}
+        for (task,account_id) in &list{tasks.push(Self::convert(task,account_id)?);}
         RpcResponse::ok(task_wire::ListTasksResponse{
             tasks,page_info:Some(core_v2::PageInfo{
                 next_page_token:next.unwrap_or_default(),..Default::default()

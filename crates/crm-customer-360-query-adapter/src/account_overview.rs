@@ -15,7 +15,8 @@ pub struct Sources {
     pub contact_points: Vec<ContactPoint>,
     pub relationships: Vec<PartyRelationship>,
     pub deals: Vec<Deal>,
-    pub tasks: Vec<Task>,
+    /// Original Task plus its persisted Account association (also for Sales tasks).
+    pub tasks: Vec<(Task, String)>,
 }
 
 pub struct Truncation {
@@ -54,12 +55,10 @@ impl AccountOverview {
                 item.account()
                     .is_none_or(|reference| reference.resource_id != account_id)
             })
-            || sources.tasks.iter().any(|item| {
-                !item.related_resources().iter().any(|reference| {
-                    reference.resource_type == "crm.customer-accounts"
-                        && reference.resource_id == account_id
-                })
-            })
+            || sources
+                .tasks
+                .iter()
+                .any(|(_, task_account)| task_account != account_id)
         {
             return Err(SdkError::invalid_argument(
                 "customer_360.sources",

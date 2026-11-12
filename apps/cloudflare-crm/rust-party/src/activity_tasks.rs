@@ -42,7 +42,7 @@ fn fail(code:impl Into<String>,status:u16)->MutationFailure{
 #[derive(Deserialize)]
 struct Row { state:String }
 #[derive(Deserialize)]
-struct PagedRow{id:String,state:String}
+struct PagedRow{id:String,state:String,account_id:String}
 #[derive(Deserialize)]
 struct Receipt {digest:String,state:String}
 fn hash<T:Serialize>(operation:&str,id:&str,payload:&T)->Result<String>{
@@ -181,9 +181,9 @@ pub(super) async fn complete_typed(input:CompleteInput,key:&str,db:&D1Database,
 }
 pub(super) async fn list_page_typed(db:&D1Database,tenant:&str,after:&str,
     size:usize,status:Option<TaskStatus>,account_id:Option<&str>,
-)->Result<(Vec<Task>,Option<String>)>{
+)->Result<(Vec<(Task,String)>,Option<String>)>{
     let mut query=String::from(
-        "SELECT id,state FROM crm_activity_task_records WHERE tenant=? AND id>?");
+        "SELECT id,state,account_id FROM crm_activity_task_records WHERE tenant=? AND id>?");
     let mut params=vec![JsValue::from_str(tenant),JsValue::from_str(after)];
     // Both filters are checked in native SQL BEFORE LIMIT/cursor calculation.
     if let Some(status)=status{
@@ -201,7 +201,7 @@ pub(super) async fn list_page_typed(db:&D1Database,tenant:&str,after:&str,
     let rows=bind(db,&query,&params)?.all().await?.results::<PagedRow>()?;
     let has_more=rows.len()>size;
     let next=if has_more{rows.get(size-1).map(|x|x.id.clone())}else{None};
-    let tasks=rows.iter().take(size).map(|row|decode(&row.state))
+    let tasks=rows.iter().take(size).map(|row|decode(&row.state).map(|task|(task,row.account_id.clone())))
         .collect::<Result<Vec<_>>>()?;
     Ok((tasks,next))
 }
@@ -229,7 +229,7 @@ async fn complete(mut req:Request,db:&D1Database,tenant:&str,id:&str,trace:&str)
 }
 async fn list(db:&D1Database,tenant:&str)->Result<Response>{
     let (items,_)=list_page_typed(db,tenant,"",300,None,None).await?;
-    response(json!({"items":items.iter().map(view).collect::<Vec<_>>()}),200)
+    response(json!({"items":items.iter().map(|(task,_)|view(task)).collect::<Vec<_>>()}),200)
 }
 pub(super) async fn route(req:Request,db:D1Database,tenant:&str,actor:&str,trace:&str)->Result<Response>{
     let path=req.path();let method=req.method();
@@ -255,4 +255,14 @@ pub(super) async fn route(req:Request,db:D1Database,tenant:&str,actor:&str,trace
         },
         _=>error("NOT_FOUND",404),
     }
+}
+
+#[derive(Deserialize)]
+struct TaskAccountRow { account_id:String }
+pub(super) async fn account_id(db:&D1Database,tenant:&str,id:&str)->Result<Option<String>>{
+    // Sales-linked tasks refer to the Deal in their original domain state.
+    // Their Account association is the tenant-scoped D1 foreign key.
+    Ok(bind(db,"SELECT account_id FROM crm_activity_task_records WHERE tenant=? AND id=?",
+        &[JsValue::from_str(tenant),JsValue::from_str(id)])?
+        .first::<TaskAccountRow>(None).await?.map(|row|row.account_id))
 }
