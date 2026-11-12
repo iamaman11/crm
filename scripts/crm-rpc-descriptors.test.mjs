@@ -64,7 +64,7 @@ reject("no canonical RPC capability binding fails",({party})=>{
 },/absent from canonical module.yaml binding/);
 reject("invented extra active RPC fails",({candidate})=>{
  candidate.active_rpc_paths.push("/crm.parties.v2.PartyService/NotAnActiveMethod");
-},/compiled active RPCs differ from generated module inventory/);
+},/published RPC absent from Buf descriptor|compiled active RPCs differ from generated module inventory/);
 reject("candidate lacks linked original Rust domain owner",({candidate})=>{
  const owner=candidate.modules.find(x=>x.module_id==="crm.sales");
  assert.ok(owner,"canonical crm.sales module missing");
