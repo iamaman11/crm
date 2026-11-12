@@ -25,6 +25,8 @@ rejects("double unknown cast", 'const input = {} as unknown as Account;');
 rejects("typescript diagnostic suppression", '// @ts-ignore\nconst input = 1;');
 rejects("legacy business REST path", 'const endpoint="/api/parties";');
 rejects("legacy transport in client package", 'import {createGrpcWebTransport} from "@connectrpc/connect-web";',client);
+rejects("second Connect transport in workspace helper", 'import {createConnectTransport as transport} from "@connectrpc/connect-web";',"packages/client/src/alternate.ts");
+rejects("Connect transport through shared UI", 'export {createConnectTransport} from "@connectrpc/connect-web";',"packages/ui/src/alternate.ts");
 
 permits("generated Cloudflare client", 'import {createCloudflareCrmClient} from "@ultimate-crm/client/cloudflare";\nimport {useState} from "react";\nconst x = useState(1);');
 permits("UI presentation only", 'import {Button} from "@ultimate-crm/ui";\nexport function Example(){return <Button>Save</Button>;}');
@@ -40,4 +42,8 @@ test("non-exported workspace subpath is rejected by package exports",()=>{
 });
 test("missing relative import cannot pass by source-name guessing",()=>{
  assert.throws(()=>resolveInternal("./this-module-does-not-exist.js",web),/unresolved import/);
+});
+test("relative paths cannot bypass the public client or UI export",()=>{
+ for(const path of ["../../../../packages/client/src/cloudflare.ts","../../../../packages/ui/src/Forms.tsx"])
+  assert.throws(()=>resolveInternal(path,web),/relative import bypasses public workspace exports/);
 });

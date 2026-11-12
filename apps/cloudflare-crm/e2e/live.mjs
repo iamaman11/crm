@@ -29,6 +29,14 @@ async function query(sql,params=[]){
 }
 const directory="apps/cloudflare-crm/e2e-evidence";
 mkdirSync(directory,{recursive:true});
+let roleMayHaveChanged=false;
+async function restoreRole(){
+ if(!roleMayHaveChanged)return;
+ await query("UPDATE crm_users SET role='admin' WHERE email=? AND tenant_id=? AND active=1 AND role='viewer'",[principal,setup.tenant_a]);
+ const rows=(await query("SELECT role FROM crm_users WHERE email=? AND tenant_id=? AND active=1",[principal,setup.tenant_a])).results;
+ assert.deepEqual(rows,[{role:"admin"}],"E2E administrator role must be restored");
+ roleMayHaveChanged=false;
+}
 try{
  let stable=0;
  for(let attempt=0;attempt<40&&stable<3;attempt++){
@@ -43,16 +51,16 @@ try{
    sql:async sql=>(await query(sql)).results,
    beforeViewer:async()=>{
      // Signed/enrolled test actor, real persisted role; no JWT fabrication or role header.
+     // Register cleanup before UPDATE: its response can be lost after commit.
+     roleMayHaveChanged=true;
      const changed=await query("UPDATE crm_users SET role='viewer' WHERE email=? AND tenant_id=? AND active=1 AND role='admin'",[principal,setup.tenant_a]);
      assert.equal(changed.meta.changes,1,"Only the isolated E2E actor may change role");
-     return async()=>{
-       await query("UPDATE crm_users SET role='admin' WHERE email=? AND tenant_id=? AND active=1 AND role='viewer'",[principal,setup.tenant_a]);
-       const rows=(await query("SELECT role FROM crm_users WHERE email=? AND tenant_id=? AND active=1",[principal,setup.tenant_a])).results;
-       assert.deepEqual(rows,[{role:"admin"}],"E2E administrator role must be restored");
-     };
+     return restoreRole;
    }
  });
 }catch(error){
  writeFileSync(directory+"/failure.json",JSON.stringify({result:"FAIL",source_sha:sha,error:String(error.message)},null,2)+"\n");
  throw error;
+}finally{
+ await restoreRole();
 }

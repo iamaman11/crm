@@ -162,11 +162,11 @@ async function deploy(){
   const newVersion=await waitForDeployment(null,sha,"deploy");
   if(newVersion===oldVersion)throw Error("Worker version did not advance");
   await cf(worker+"/subdomain","POST",{enabled:true,previews_enabled:false});
+  await waitForPublicSha(sha,"deploy");
   const anonymous=await fetch(url+"/api/health",{redirect:"manual"});
   if(anonymous.status===200||anonymous.status>=500)throw Error("Cloudflare Access denied check failed");
   const authorized=await fetch(url+"/api/health",{headers:auth(),redirect:"manual"});
   if(authorized.status!==200)throw Error("Cloudflare Access authorized health failed");
-  await waitForPublicSha(sha,"deploy");
   record("deployed.json",{git_sha:sha,worker_version:newVersion,d1_database:database,rust,started_at:startedAt,result:"E2E_PENDING"});
   console.log(JSON.stringify({event:"crm.deploy",sha,result:"E2E_PENDING",version:newVersion}));
 }
@@ -327,6 +327,22 @@ async function failClosed(){
   await confirmClosed();
   record("failed-release.json",{result:"NO_GO_PUBLIC_ENTRY_DISABLED",git_sha:sha,
     d1_database:database,worker_restored:false,d1_restored:false});
+  // Also recover after a cancelled browser process, whose finally cannot run.
+  if(existsSync(join(out,"e2e-tenants.json"))){
+    const setup=load("e2e-tenants.json");
+    assert.equal(setup.source_sha,sha);assert.equal(setup.database,database);
+    assert.equal(setup.run_id,required("GITHUB_RUN_ID"));
+    assert.equal(setup.attempt,required("GITHUB_RUN_ATTEMPT"));
+    assert.equal(setup.tenant_a,"crm-e2e-"+setup.run_id+"-"+setup.attempt+"-a");
+    assert.equal(setup.actor_a,"service:"+required("CRM_E2E_A_CLIENT_ID").toLowerCase());
+    const query=async(sql)=>{
+      const rows=await cf("/d1/database/"+database+"/query","POST",{
+        sql,params:[setup.actor_a,setup.tenant_a]});
+      assert.equal(rows?.[0]?.success,true);return rows[0].results;
+    };
+    await query("UPDATE crm_users SET role='admin' WHERE email=? AND tenant_id=? AND active=1 AND role='viewer'");
+    assert.deepEqual(await query("SELECT role FROM crm_users WHERE email=? AND tenant_id=? AND active=1"),[{role:"admin"}]);
+  }
 }
 const mode=process.argv[2]||"deploy";
 if(mode==="deploy")await deploy();

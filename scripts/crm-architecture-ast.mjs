@@ -50,6 +50,8 @@ function inspect(file,source,strict=true){
  const inBrowser=file.startsWith("apps/cloudflare-crm/web/");
  function importedName(spec,node){
   if(forbiddenSource.test(spec))fail(file,"legacy transport import "+spec);
+  if(spec.startsWith("@connectrpc/")&&file!=="packages/client/src/cloudflare.ts")
+   fail(file,"Connect transport belongs only to packages/client/src/cloudflare.ts");
   if(!inBrowser)return;
   if(spec.startsWith("@connectrpc/")||spec.startsWith("@bufbuild/"))
    fail(file,"UI must import generated client, not protocol libraries: "+spec);
@@ -139,6 +141,9 @@ function resolveInternal(spec,parent){
  if(!resolved)fail(parent,"unresolved import "+spec);
  const actual=ts.sys.realpath ? ts.sys.realpath(resolved.resolvedFileName) : resolved.resolvedFileName;
  const rel=insideRepo(actual);
+ if(parent.startsWith("apps/cloudflare-crm/web/")&&spec.startsWith(".")&&
+    !rel?.startsWith("apps/cloudflare-crm/web/src/"))
+  fail(parent,"relative import bypasses public workspace exports: "+spec);
  // External declarations are checked by tsc. Runtime package boundaries are
  // explicit; workspace exports are resolved by TypeScript, never a path table.
  const workspace=rel&&!rel.split("/").includes("node_modules");
