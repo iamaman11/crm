@@ -5,14 +5,14 @@
 Применяется к apps/cloudflare-crm/**. Канонический source — только iamaman11/crm.
 [ARCHITECTURE.md](ARCHITECTURE.md) задаёт конечную схему; [Issue #350](https://github.com/iamaman11/crm/issues/350) — единственный подробный план жёсткого cutover; #338 — верхний план.
 
-Решение владельца 12.11.2026 заменяет прежние freeze/compatibility инструкции: приложение и бизнес-данные тестовые, сохранять старые API/UI/данные не требуется. До полного cutover NO-GO. Пользовательские инструкции имеют приоритет.
+Решение владельца 12.11.2026 заменило прежние freeze/compatibility инструкции для одноразового cutover. Cutover принят на `272aba214114f3db6247cad115f86d54312e3030`, CI/live 43302137364 PASS. Теперь сохранять принятые контракты и историю migrations; несовместимая эволюция требует явного решения. Не повторять reset тестовых данных при обычной разработке. Пользовательские инструкции имеют приоритет.
 
 Root AGENTS.md регулирует общие domain invariants и repository practices. Исторические PostgreSQL/gateway runtime instructions не предписывают Cloudflare runtime. Не добавлять PostgreSQL или второй backend для примирения старых документов.
 
 ## Рабочий процесс
 
 1. Читать актуальный #350, этот файл, ARCHITECTURE.md, текущие PR/head и CI. Проверять реальный deployed SHA перед утверждениями о live.
-2. Работать в существующей cutover/complete-connect-tsx-20261110 и PR #351 → dev. Без новых branches/plans/workflows/Environment.
+2. PR #351 завершён. Продолжать в постоянной dev по #338, без новых branches/plans/workflows/Environment на каждый шаг. Принятая API/schema baseline фиксирована в существующем CI; не заменять её автоматически на HEAD.
 3. Разработка через канонический GitHub; builds/tests выполняет GitHub Actions. Не поручать обычную работу локальному Windows агенту и не просить пользователя запускать команды.
 4. Определить existing owner и точную capability до изменения UI/transport. Не угадывать ownership по имени пакета.
 5. Неполные implementation commits допустимы, но конечные checks не ослабляются и не заменяются migration-phase PASS. Не публиковать частичные RPC.

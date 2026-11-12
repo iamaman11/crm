@@ -28,7 +28,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
         self.assertEqual(packet["packet_id"], "cloudflare-crm-connect-hard-cutover")
-        self.assertEqual(packet["status"], "active")
+        self.assertEqual(packet["status"], "accepted")
         self.assertEqual(packet["baseline"], {"ref": "dev"})
         self.assertEqual(packet["tracking_issues"], [338, 350])
         self.assertIn("apps/cloudflare-crm/**", packet["allowed_paths"])

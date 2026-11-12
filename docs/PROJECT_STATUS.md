@@ -4,11 +4,11 @@ Status date: 2026-11-06
 
 This document is the concise authoritative current-state snapshot. Product dependencies remain normative in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`; the single repository execution order remains normative in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4; module readiness remains normative in `MODULE_CATALOG.md`.
 
-## Active Cloudflare CRM packet — 2026-11-12
+## Accepted Cloudflare CRM baseline — 2026-11-12
 
-Issue [#350](https://github.com/iamaman11/crm/issues/350) and draft PR [#351](https://github.com/iamaman11/crm/pull/351) to `dev` define the active hard cutover. The app-specific [architecture](../apps/cloudflare-crm/ARCHITECTURE.md) and [contributor rules](../apps/cloudflare-crm/AGENTS.md) govern this Worker/D1 application. Historical PostgreSQL pilot and Step 22 statements below remain historical repository evidence; they do not replace the Cloudflare execution plan.
+[PR #351](https://github.com/iamaman11/crm/pull/351) is merged to dev. The hard cutover baseline is 272aba214114f3db6247cad115f86d54312e3030: [CI and live acceptance 43302137364](https://github.com/iamaman11/crm/actions/runs/43302137364) PASS, native Worker 08e73b33-da86-44e2-bb68-48855be214b1 at 100% traffic, existing D1 35fc7ee9-9710-485f-8fb3-f5a398b229b4. Signed workerd, Chromium, real Access A/B, 24 audited writes and 117 correlated Cloudflare requests were verified. Migration 0002 ran once; normal development appends migrations and preserves the accepted API.
 
-Status: **IN PROGRESS / NO-GO**. The new Connect/strict TSX implementation, one-time business-data reset and release checks are candidates. Full CI on one unchanged SHA, independent review, and real Access/browser/D1/Logs/deployed-version acceptance are required before acceptance. No completed deployment or new compatibility baseline is claimed here. Exact ongoing SHA/run evidence belongs in #350. Historical Step 22 decisions remain unchanged.
+The app-specific [architecture](../apps/cloudflare-crm/ARCHITECTURE.md) and [contributor rules](../apps/cloudflare-crm/AGENTS.md) govern this Worker/D1 app. Issue #350 records acceptance; #338 governs subsequent product work. Acceptance covers the scoped API/UI, not all future CRM features. Historical PostgreSQL pilot and Step 22 decisions below remain historical evidence and do not prescribe this runtime. Two CI builds of the same source tree produced identical UI/Worker files; broader reproducibility is not claimed.
 
 ## Authoritative references
 

@@ -2,8 +2,8 @@
   "schema_version": "crm.repository-packet/v1",
   "packet_id": "cloudflare-crm-connect-hard-cutover",
   "title": "Cloudflare CRM: typed Connect/TSX hard cutover",
-  "status": "active",
-  "objective": "Complete Issue #350 on existing PR #351 to dev: one Protobuf contract, generated Rust/TS, original owners, one Worker and D1, strict executable CI and live acceptance. NO-GO until all mandatory evidence passes.",
+  "status": "accepted",
+  "objective": "Accepted Cloudflare hard cutover at 272aba214114f3db6247cad115f86d54312e3030, PR #351, CI/live 43302137364 PASS. Maintain one Protobuf contract, generated Rust/TS, original owners, one Worker/D1 and the immutable API/schema baseline; future product work follows Issue #338.",
   "baseline": {
     "ref": "dev"
   },

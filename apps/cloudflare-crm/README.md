@@ -2,7 +2,8 @@
 
 Канонический репозиторий — [iamaman11/crm](https://github.com/iamaman11/crm).
 Норма — [ARCHITECTURE.md](ARCHITECTURE.md), текущая работа и проверенное состояние —
-[Issue #350](https://github.com/iamaman11/crm/issues/350). Пока полный cutover не принят, статус **NO-GO**.
+[Issue #350](https://github.com/iamaman11/crm/issues/350). Cutover принят на
+`272aba214114f3db6247cad115f86d54312e3030`: [CI + live PASS](https://github.com/iamaman11/crm/actions/runs/43302137364).
 
 ```text
 Protobuf → Buf → generated Rust/TypeScript
@@ -22,7 +23,7 @@ compiler/AST. Скомпилированные router/policy сверяются 
 workerd-сценариями. Нет второго ручного каталога покрытия и source-text доказательств тестов.
 Количество RPC не является процентом готовности приложения.
 
-Разработка ведётся в существующем PR #351 → dev; сборки и тесты выполняет
+PR #351 завершён; дальнейшая разработка ведётся в постоянной dev по #338. Сборки и тесты выполняет
 `.github/workflows/cloudflare-crm-spike.yml`. Зависимости устанавливаются через
 `pnpm install --frozen-lockfile`, Rust собирается с `--locked`.
 CI проверяет contracts/types, formatting/Clippy/domain, WASM/workerd/D1, затем Chromium.
@@ -50,5 +51,8 @@ Worker автоматически не возвращается. D1/Access не 
 
 Privacy verification/execution, Enrichment provider dispatch, автоматическое объединение
 личностей и необоснованные consent grants не подключены и не имитируются.
-Новый immutable API/schema baseline фиксируется после общей CI + live приёмки.
-Побайтовая воспроизводимость независимых сборок не заявляется без отдельного сравнения.
+Immutable API/schema baseline — указанный принятый commit. Buf и git diff проверяют
+контракты и миграции относительно него и предыдущего dev (PR base SHA / push event.before).
+Это защищает и последующие добавления. Новые миграции добавляются отдельно.
+UI/Worker файлы совпали побайтово между PR CI 43298969184 и dev CI 43302137364 одного дерева.
+Это подтверждает повторяемость данной пары сборок, не любых будущих окружений.

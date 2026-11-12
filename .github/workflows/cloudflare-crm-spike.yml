@@ -84,15 +84,26 @@ jobs:
           pnpm install --frozen-lockfile
       - name: Enforce canonical Protobuf compatibility and typed packages
         shell: bash
+        env:
+          CRM_PREVIOUS_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
-          # This SHA is the physically accepted Cloudflare release, NOT dev HEAD.
-          accepted=e1ac0cd341d6ffdea4986f37a96e11f50e4b5fff
+          # Accepted hard cutover: CI 43302137364 + real Access/browser/D1/Logs.
+          # Immutable API/schema baseline, never automatically replaced by HEAD.
+          accepted=272aba214114f3db6247cad115f86d54312e3030
           git cat-file -e "${accepted}^{commit}"
+          # Also protect contracts/migrations added after the initial baseline.
+          # PR: exact target SHA; push: dev immediately before this change.
+          git cat-file -e "${CRM_PREVIOUS_SHA}^{commit}"
+          for baseline in "$accepted" "$CRM_PREVIOUS_SHA"; do
+            mapfile -t migrations < <(git ls-tree -r --name-only "$baseline" -- apps/cloudflare-crm/migrations/)
+            test "${#migrations[@]}" -gt 0
+            git diff --exit-code "$baseline" HEAD -- "${migrations[@]}"
+            pnpm exec buf breaking proto --against ".git#ref=${baseline}"
+          done
           pnpm exec buf build proto --output /tmp/crm-cloudflare-accepted-schema.binpb
           pnpm exec buf format -d --exit-code proto
           pnpm exec buf lint proto
-          pnpm exec buf breaking proto --against ".git#ref=${accepted}"
           # checkout of dev need not contain a local main branch.
           # Fetch the exact main commit, then compare by immutable SHA.
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
