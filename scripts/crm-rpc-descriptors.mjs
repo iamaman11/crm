@@ -132,6 +132,19 @@ for(const module of report.modules){
     bound.set(route,{...binding,module_id:module.module_id,linked:module.linked});
   }
 }
+for(const route of allowed){
+ const spec=bound.get(route);
+ if(!spec)fail("active RPC absent from canonical module.yaml binding "+route);
+ if(!spec.linked)fail("active RPC owner is not linked into Worker "+route);
+ const descriptor=available.get(route);
+ if(!descriptor)fail("active RPC absent from compiled protobuf descriptor "+route);
+ const input=(descriptor.inputType||"").replace(/^\./,"");
+ const output=(descriptor.outputType||"").replace(/^\./,"");
+ if(input!==spec.request||output!==spec.response)
+   fail("active RPC request/response type mismatch "+route+
+     " manifest="+spec.request+" -> "+spec.response+
+     " descriptor="+input+" -> "+output);
+}
 // Original v1 module.yaml bindings and Cargo links prove the linked owner.
 // Versioned v2/v3 RPCs do not need another manually maintained owner manifest.
 const linkedOwnerPackages=new Set();
@@ -146,19 +159,6 @@ for(const path of candidatePaths){
   const match=/^\/(crm\.[a-z0-9_]+)\.v[0-9]+\.[^/]+\//.exec(path);
   if(!match||!linkedOwnerPackages.has(match[1]))
     fail("candidate has no linked original Rust owner "+path);
-}
-for(const route of allowed){
- const spec=bound.get(route);
- if(!spec)fail("active RPC absent from canonical module.yaml binding "+route);
- if(!spec.linked)fail("active RPC owner is not linked into Worker "+route);
- const descriptor=available.get(route);
- if(!descriptor)fail("active RPC absent from compiled protobuf descriptor "+route);
- const input=(descriptor.inputType||"").replace(/^\./,"");
- const output=(descriptor.outputType||"").replace(/^\./,"");
- if(input!==spec.request||output!==spec.response)
-   fail("active RPC request/response type mismatch "+route+
-     " manifest="+spec.request+" -> "+spec.response+
-     " descriptor="+input+" -> "+output);
 }
 if(policy.phase==="cutover" && report.unclaimed_active_rpc_paths?.length)
  fail("unclaimed active RPCs in final cutover");
