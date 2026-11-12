@@ -111,7 +111,7 @@ if(!runtimeRust.includes('fn rpc_policy(path: &str)') ||
    !runtimeRust.includes('cfg!(feature = "native-ci")'))
   fail("single fail-closed Rust RPC policy is missing");
 const policies=[...runtimeRust.matchAll(
-  /^\\s*"(\\/crm\\.[^"]+)"\\s*=>\\s*\\((Read|Write),\\s*(Published|Candidate)\\),?\\s*$/gm
+  /^\s*"(\/crm\.[^"]+)"\s*=>\s*\((Read|Write),\s*(Published|Candidate)\),?\s*$/gm
 )];
 const registered=new Map();
 for(const match of policies){
