@@ -100,7 +100,7 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
             crm_consents::ConsentAuthorizationId::try_new(*after)
                 .map_err(|_| ConnectError::invalid_argument("invalid page_token"))?;
         }
-        let filter = req.party_id.as_deref();
+        let filter = req.party_id;
         if let Some(party) = filter {
             crm_consents::PartyReference::try_new(party)
                 .map_err(|_| ConnectError::invalid_argument("invalid party_id filter"))?;

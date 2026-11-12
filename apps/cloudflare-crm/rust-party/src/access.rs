@@ -80,7 +80,7 @@ fn decoded(segment: &str) -> Option<Vec<u8>> {
     if padded.len() % 4 == 1 {
         return None;
     }
-    while padded.len() % 4 != 0 {
+    while !padded.len().is_multiple_of(4) {
         padded.push('=');
     }
     let function = prop(&js_sys::global(), "atob")

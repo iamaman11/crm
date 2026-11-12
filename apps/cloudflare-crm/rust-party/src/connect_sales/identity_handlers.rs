@@ -81,8 +81,8 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, identity_wire::ComparePartiesRequest>,
     ) -> ServiceResult<identity_wire::ComparePartiesResponse> {
-        let first = PartyV3Service::valid_id(&req.first_party_id)?;
-        let second = PartyV3Service::valid_id(&req.second_party_id)?;
+        let first = PartyV3Service::valid_id(req.first_party_id)?;
+        let second = PartyV3Service::valid_id(req.second_party_id)?;
         let pair = CanonicalPartyPair::try_new(
             PartyReference::try_new(first.as_str())
                 .map_err(|_| ConnectError::invalid_argument("invalid first_party_id"))?,

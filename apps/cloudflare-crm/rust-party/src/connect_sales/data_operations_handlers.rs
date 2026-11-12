@@ -58,7 +58,7 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, csv_wire::PreviewPartyImportRequest>,
     ) -> ServiceResult<csv_wire::PreviewPartyImportResponse> {
-        let preview = owner::preview_import(&req.csv, &self.d1()?, &self.tenant)
+        let preview = owner::preview_import(req.csv, &self.d1()?, &self.tenant)
             .await
             .map_err(|_| ConnectError::internal("import preview D1 read failed"))?
             .map_err(PartyV3Service::mutation_error)?;

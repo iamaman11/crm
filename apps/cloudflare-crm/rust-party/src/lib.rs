@@ -733,7 +733,7 @@ fn legacy_transport_disabled(path: &str) -> bool {
     }
     #[cfg(feature = "native")]
     {
-        return match rpc_policy(path) {
+        match rpc_policy(path) {
             Some(rule) if rule.activation == RpcActivation::Published => false,
             Some(rule)
                 if rule.activation == RpcActivation::Candidate && cfg!(feature = "native-ci") =>
@@ -741,7 +741,7 @@ fn legacy_transport_disabled(path: &str) -> bool {
                 false
             }
             _ => true,
-        };
+        }
     }
     #[cfg(not(feature = "native"))]
     {
@@ -1116,10 +1116,11 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         reply
             .headers_mut()
             .set("x-crm-runtime", "native-workers-rs")?;
-        if let Some(value) = source_sha {
-            if value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-                reply.headers_mut().set("x-crm-source-sha", &value)?;
-            }
+        if let Some(value) = source_sha
+            && value.len() == 40
+            && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            reply.headers_mut().set("x-crm-source-sha", &value)?;
         }
         let elapsed = Date::now().as_millis().saturating_sub(started);
         let error_code = reply.headers().get("x-crm-error-code").ok().flatten();
@@ -1132,7 +1133,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 "status":reply.status_code(), "error_code":error_code, "duration_ms":elapsed
             })
         );
-        return Ok(reply);
+        Ok(reply)
     }
 
     #[cfg(not(any(feature = "ci-local", feature = "native")))]

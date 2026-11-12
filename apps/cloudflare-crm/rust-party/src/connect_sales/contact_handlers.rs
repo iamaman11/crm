@@ -109,7 +109,7 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, contact_wire::GetContactPointRequest>,
     ) -> ServiceResult<contact_wire::GetContactPointResponse> {
-        let id = Self::valid_id(&req.contact_point_id)?;
+        let id = Self::valid_id(req.contact_point_id)?;
         let point = contact_points::load(&self.d1()?, &self.tenant, &id)
             .await
             .map_err(|_| ConnectError::internal("ContactPoint D1 read failed"))?
@@ -137,7 +137,7 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
         if !after.is_empty() {
             Self::valid_id(after)?;
         }
-        let filter = req.party_id.as_deref();
+        let filter = req.party_id;
         if let Some(party) = filter {
             crm_contact_points::PartyReference::try_new(party)
                 .map_err(|_| ConnectError::invalid_argument("invalid party_id filter"))?;

@@ -109,7 +109,7 @@ impl task_wire::TaskService for TaskV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, task_wire::GetTaskRequest>,
     ) -> ServiceResult<task_wire::GetTaskResponse> {
-        let id = Self::valid_id(&req.task_id)?;
+        let id = Self::valid_id(req.task_id)?;
         let task = activity_tasks::stored(&self.d1()?, &self.tenant, &id)
             .await
             .map_err(|_| ConnectError::internal("Task D1 get failed"))?
@@ -145,7 +145,7 @@ impl task_wire::TaskService for TaskV2Service {
             }
             _ => return Err(ConnectError::invalid_argument("invalid TaskStatus filter")),
         };
-        let account = req.account_id.as_deref();
+        let account = req.account_id;
         if let Some(id) = account {
             crm_module_sdk::RecordId::try_new(id.to_owned())
                 .map_err(|_| ConnectError::invalid_argument("invalid Account filter"))?;

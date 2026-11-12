@@ -107,7 +107,7 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, rel_wire::GetPartyRelationshipRequest>,
     ) -> ServiceResult<rel_wire::GetPartyRelationshipResponse> {
-        let id = Self::valid_id(&req.relationship_id)?;
+        let id = Self::valid_id(req.relationship_id)?;
         let relationship = party_relationships::load(&self.d1()?, &self.tenant, &id)
             .await
             .map_err(|_| ConnectError::internal("Relationship D1 read failed"))?
@@ -135,7 +135,7 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
         if !after.is_empty() {
             Self::valid_id(after)?;
         }
-        let party = req.party_id.as_deref();
+        let party = req.party_id;
         if let Some(id) = party {
             crm_party_relationships::PartyReference::try_new(id.to_owned())
                 .map_err(|_| ConnectError::invalid_argument("invalid Party filter"))?;

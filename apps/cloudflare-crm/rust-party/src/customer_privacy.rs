@@ -85,7 +85,7 @@ async fn replay(
     key: &str,
     hash: &str,
 ) -> Result<Option<std::result::Result<Saved, Failure>>> {
-    Ok(receipt(db, tenant, key)
+    receipt(db, tenant, key)
         .await?
         .map(|r| -> Result<std::result::Result<Saved, Failure>> {
             if r.digest != hash {
@@ -96,7 +96,7 @@ async fn replay(
                 replayed: true,
             }))
         })
-        .transpose()?)
+        .transpose()
 }
 pub(super) async fn create_typed(
     id: RecordId,

@@ -112,7 +112,7 @@ pub(super) async fn publish_profile(
         return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
     let hash = digest("profile", &input);
-    if let Some(r) = receipt(db, tenant, &k).await? {
+    if let Some(r) = receipt(db, tenant, k).await? {
         if r.kind != "profile" || r.digest != hash {
             return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
         }
@@ -145,18 +145,19 @@ pub(super) async fn publish_profile(
     let inserted=bind(db,"INSERT INTO crm_enrichment_profiles (tenant,id,state,idem_key,idem_digest,request_id,created_by) VALUES(?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant),
           JsValue::from_str(profile.version_id().as_str()),
-          JsValue::from_str(&saved),JsValue::from_str(&k),
+          JsValue::from_str(&saved),JsValue::from_str(k),
           JsValue::from_str(&hash),JsValue::from_str(trace),
           JsValue::from_str(actor)])?.run().await;
     if inserted.is_err() {
         // A race on the same key may have committed while we were inserting.
-        if let Some(r) = receipt(db, tenant, &k).await? {
-            if r.kind == "profile" && r.digest == hash {
-                return Ok(Ok(Saved {
-                    value: decode_profile(&r.state)?,
-                    replayed: true,
-                }));
-            }
+        if let Some(r) = receipt(db, tenant, k).await?
+            && r.kind == "profile"
+            && r.digest == hash
+        {
+            return Ok(Ok(Saved {
+                value: decode_profile(&r.state)?,
+                replayed: true,
+            }));
         }
         return Ok(Err(fail("ENRICHMENT_PROFILE_CREATE_CONFLICT", 409)));
     }
@@ -177,7 +178,7 @@ pub(super) async fn publish_mapping(
         return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
     let hash = digest("mapping", &input);
-    if let Some(r) = receipt(db, tenant, &k).await? {
+    if let Some(r) = receipt(db, tenant, k).await? {
         if r.kind != "mapping" || r.digest != hash {
             return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
         }
@@ -216,17 +217,18 @@ pub(super) async fn publish_mapping(
         &[JsValue::from_str(tenant),
           JsValue::from_str(mapping.version_id().as_str()),
           JsValue::from_str(&input.provider_profile_version_id),
-          JsValue::from_str(&saved),JsValue::from_str(&k),
+          JsValue::from_str(&saved),JsValue::from_str(k),
           JsValue::from_str(&hash),JsValue::from_str(trace),
           JsValue::from_str(actor)])?.run().await;
     if inserted.is_err() {
-        if let Some(r) = receipt(db, tenant, &k).await? {
-            if r.kind == "mapping" && r.digest == hash {
-                return Ok(Ok(Saved {
-                    value: decode_mapping(&r.state)?,
-                    replayed: true,
-                }));
-            }
+        if let Some(r) = receipt(db, tenant, k).await?
+            && r.kind == "mapping"
+            && r.digest == hash
+        {
+            return Ok(Ok(Saved {
+                value: decode_mapping(&r.state)?,
+                replayed: true,
+            }));
         }
         return Ok(Err(fail("ENRICHMENT_MAPPING_CREATE_CONFLICT", 409)));
     }

@@ -38,130 +38,12 @@ use std::sync::Arc;
 use tower_service::Service;
 use worker::{D1Database, Env, HttpRequest, Request, Response, Result};
 
-// The published crm.core.v1 package shadows Rust's 'core' crate name.
-// Mount the UNMODIFIED generated Buffa package stitchers and expose the
-// standard library fmt at the enclosing package. No runtime adapter/codegen
-// rewrite is required; all message and service code remains generated.
+// Use the standard generated package tree, including generator-owned lint
+// attributes. The root import is inherited by its generated `use super::*`
+// statements so the crm.core package also resolves Rust's fmt traits.
 pub mod proto {
-    #[allow(unused_imports)]
-    pub mod crm {
-        use super::*;
-        pub mod core {
-            use super::*;
-            pub use ::core::fmt;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(env!("OUT_DIR"), "/crm.core.v2.mod.rs"));
-            }
-        }
-        pub mod sales {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(env!("OUT_DIR"), "/crm.sales.v2.mod.rs"));
-            }
-        }
-        pub mod accounts {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(env!("OUT_DIR"), "/crm.accounts.v2.mod.rs"));
-            }
-        }
-        pub mod contact_points {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(env!("OUT_DIR"), "/crm.contact_points.v2.mod.rs"));
-            }
-        }
-        pub mod party_relationships {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(
-                    env!("OUT_DIR"),
-                    "/crm.party_relationships.v2.mod.rs"
-                ));
-            }
-        }
-        pub mod activities {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(env!("OUT_DIR"), "/crm.activities.v2.mod.rs"));
-            }
-        }
-        pub mod data_quality {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(env!("OUT_DIR"), "/crm.data_quality.v2.mod.rs"));
-            }
-        }
-        pub mod identity_resolution {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(
-                    env!("OUT_DIR"),
-                    "/crm.identity_resolution.v2.mod.rs"
-                ));
-            }
-        }
-        pub mod customer_360 {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(env!("OUT_DIR"), "/crm.customer_360.v2.mod.rs"));
-            }
-        }
-        pub mod customer_data_operations {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(
-                    env!("OUT_DIR"),
-                    "/crm.customer_data_operations.v2.mod.rs"
-                ));
-            }
-        }
-        pub mod customer_enrichment {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(
-                    env!("OUT_DIR"),
-                    "/crm.customer_enrichment.v2.mod.rs"
-                ));
-            }
-        }
-        pub mod customer_privacy {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(env!("OUT_DIR"), "/crm.customer_privacy.v2.mod.rs"));
-            }
-        }
-        pub mod consents {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(env!("OUT_DIR"), "/crm.consents.v2.mod.rs"));
-            }
-        }
-        pub mod parties {
-            use super::*;
-            pub mod v2 {
-                use super::*;
-                include!(concat!(env!("OUT_DIR"), "/crm.parties.v2.mod.rs"));
-            }
-            pub mod v3 {
-                use super::*;
-                include!(concat!(env!("OUT_DIR"), "/crm.parties.v3.mod.rs"));
-            }
-        }
-    }
+    use ::core::fmt;
+    include!(concat!(env!("OUT_DIR"), "/_connectrpc.rs"));
 }
 use proto::crm::accounts::v2 as account_wire;
 use proto::crm::activities::v2 as task_wire;
@@ -225,8 +107,7 @@ impl party_wire::PartyService for PartyService {
             .await
             .map_err(|_| ConnectError::internal("Party D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("PARTIES_NOT_FOUND"))?;
-        let version = i64::try_from(party.version())
-            .map_err(|_| ConnectError::internal("invalid Party version"))?;
+        let version = party.version();
         let kind = match party.kind() {
             DomainPartyKind::Person => party_wire::PartyKind::PARTY_KIND_PERSON,
             DomainPartyKind::Organization => party_wire::PartyKind::PARTY_KIND_ORGANIZATION,
@@ -284,8 +165,7 @@ impl PartyV3Service {
             .map_err(|_| ConnectError::invalid_argument("PARTIES_PARTY_ID_INVALID"))
     }
     fn convert(party: &crm_parties::Party) -> std::result::Result<party_v3::Party, ConnectError> {
-        let version = i64::try_from(party.version())
-            .map_err(|_| ConnectError::internal("invalid Party version"))?;
+        let version = party.version();
         let kind = match party.kind() {
             DomainPartyKind::Person => party_v3::PartyKind::PARTY_KIND_PERSON,
             DomainPartyKind::Organization => party_v3::PartyKind::PARTY_KIND_ORGANIZATION,
@@ -304,8 +184,7 @@ impl PartyV3Service {
     ) -> std::result::Result<core_v2::MutationReceipt, ConnectError> {
         Ok(core_v2::MutationReceipt {
             request_id: self.request_id.clone(),
-            resource_version: i64::try_from(outcome.party.version())
-                .map_err(|_| ConnectError::internal("invalid Party version"))?,
+            resource_version: outcome.party.version(),
             replayed: outcome.replayed,
             ..Default::default()
         })
@@ -374,8 +253,7 @@ impl AccountV2Service {
             name: account.name().to_owned(),
             status: status.into(),
             parties,
-            version: i64::try_from(account.version())
-                .map_err(|_| ConnectError::internal("invalid Account version"))?,
+            version: account.version(),
             ..Default::default()
         })
     }
@@ -385,8 +263,7 @@ impl AccountV2Service {
     ) -> std::result::Result<core_v2::MutationReceipt, ConnectError> {
         Ok(core_v2::MutationReceipt {
             request_id: self.request_id.clone(),
-            resource_version: i64::try_from(outcome.account.version())
-                .map_err(|_| ConnectError::internal("invalid Account version"))?,
+            resource_version: outcome.account.version(),
             replayed: outcome.replayed,
             ..Default::default()
         })
@@ -489,8 +366,7 @@ impl ContactPointV2Service {
             verified: point.verification().is_verified(),
             valid_from: point.valid_from_unix_nanos().map(Self::timestamp).into(),
             valid_until: point.valid_until_unix_nanos().map(Self::timestamp).into(),
-            version: i64::try_from(point.version())
-                .map_err(|_| ConnectError::internal("invalid ContactPoint version"))?,
+            version: point.version(),
             ..Default::default()
         })
     }
@@ -500,8 +376,7 @@ impl ContactPointV2Service {
     ) -> std::result::Result<core_v2::MutationReceipt, ConnectError> {
         Ok(core_v2::MutationReceipt {
             request_id: self.request_id.clone(),
-            resource_version: i64::try_from(outcome.contact_point.version())
-                .map_err(|_| ConnectError::internal("invalid ContactPoint version"))?,
+            resource_version: outcome.contact_point.version(),
             replayed: outcome.replayed,
             ..Default::default()
         })
@@ -999,5 +874,5 @@ pub(super) async fn route(
 ) -> Result<Response> {
     let mut app: Router = router(env, tenant, actor, request_id).into_axum_router();
     let http = HttpRequest::try_from(req)?;
-    Ok(Response::try_from(app.call(http).await?)?)
+    Response::try_from(app.call(http).await?)
 }

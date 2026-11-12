@@ -9,7 +9,7 @@ impl quality_wire::DataQualityService for DataQualityV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, quality_wire::EvaluatePartyNameRequest>,
     ) -> ServiceResult<quality_wire::EvaluatePartyNameResponse> {
-        let id = PartyV3Service::valid_id(&req.party_id)?;
+        let id = PartyV3Service::valid_id(req.party_id)?;
         let db = self
             .env
             .d1("DB")

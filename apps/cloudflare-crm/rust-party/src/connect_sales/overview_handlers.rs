@@ -14,7 +14,7 @@ impl overview_wire::Customer360Service for Customer360V2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, overview_wire::GetAccountOverviewRequest>,
     ) -> ServiceResult<overview_wire::GetAccountOverviewResponse> {
-        let id = AccountV2Service::valid_id(&req.account_id)?;
+        let id = AccountV2Service::valid_id(req.account_id)?;
         let db = self
             .env
             .d1("DB")

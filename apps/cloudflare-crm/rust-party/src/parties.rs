@@ -181,14 +181,15 @@ pub(super) async fn import_batch(
           JsValue::from_str(source_hash),JsValue::from_f64(rows.len() as f64),
           JsValue::from_str(trace)])?);
     if db.batch(statements).await.is_err() {
-        if let Some(old) = import_operation(db, tenant, operation_key).await? {
-            if old.source_sha256 == source_hash && old.row_count == rows.len() {
-                return Ok(Ok(ImportSaved {
-                    created: 0,
-                    replayed: old.row_count,
-                    operation_replayed: true,
-                }));
-            }
+        if let Some(old) = import_operation(db, tenant, operation_key).await?
+            && old.source_sha256 == source_hash
+            && old.row_count == rows.len()
+        {
+            return Ok(Ok(ImportSaved {
+                created: 0,
+                replayed: old.row_count,
+                operation_replayed: true,
+            }));
         }
         return Ok(Err(failed("IMPORT_ATOMIC_WRITE_CONFLICT", 409)));
     }

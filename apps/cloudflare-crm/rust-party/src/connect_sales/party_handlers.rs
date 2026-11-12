@@ -85,7 +85,7 @@ impl party_v3::PartyService for PartyV3Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, party_v3::GetPartyRequest>,
     ) -> ServiceResult<party_v3::GetPartyResponse> {
-        let id = Self::valid_id(&req.party_id)?;
+        let id = Self::valid_id(req.party_id)?;
         let party = parties::stored(&self.d1()?, &self.tenant, id.as_str())
             .await
             .map_err(|_| ConnectError::internal("Party D1 get failed"))?

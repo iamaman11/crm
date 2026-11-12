@@ -77,7 +77,7 @@ impl account_wire::AccountService for AccountV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, account_wire::GetAccountRequest>,
     ) -> ServiceResult<account_wire::GetAccountResponse> {
-        let id = Self::valid_id(&req.account_id)?;
+        let id = Self::valid_id(req.account_id)?;
         let account = accounts::load(&self.d1()?, &self.tenant, &id)
             .await
             .map_err(|_| ConnectError::internal("Account D1 read failed"))?

@@ -158,7 +158,7 @@ impl sale_wire::DealService for SalesV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, sale_wire::GetDealRequest>,
     ) -> ServiceResult<sale_wire::GetDealResponse> {
-        let id = Self::id(&req.deal_id)?;
+        let id = Self::id(req.deal_id)?;
         let deal = sales_deals::load(&self.d1()?, &self.tenant, &id)
             .await
             .map_err(|_| ConnectError::internal("Sales original D1 read failed"))?
@@ -186,7 +186,7 @@ impl sale_wire::DealService for SalesV2Service {
         if !after.is_empty() {
             Self::id(after)?;
         }
-        let pipeline = req.pipeline_id.as_deref();
+        let pipeline = req.pipeline_id;
         if let Some(id) = pipeline {
             crm_sales::PipelineId::try_new(id)
                 .map_err(|_| ConnectError::invalid_argument("invalid pipeline filter"))?;

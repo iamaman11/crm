@@ -225,7 +225,7 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, privacy_wire::GetPrivacyCaseRequest>,
     ) -> ServiceResult<privacy_wire::GetPrivacyCaseResponse> {
-        let id = Self::id(&req.case_id)?;
+        let id = Self::id(req.case_id)?;
         let case = customer_privacy::stored(&self.d1()?, &self.tenant, id.as_str())
             .await
             .map_err(|_| ConnectError::internal("PrivacyCase D1 read failed"))?
