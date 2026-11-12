@@ -156,6 +156,14 @@ const rustSources=treeFiles("apps/cloudflare-crm/rust-party/src").filter(x=>x.en
 const routerCount=rustSources.reduce((n,p)=>
   n+([...read(p).matchAll(/ConnectRouter::new\s*\(/g)].length),0);
 check(routerCount===1,"exactly one embedded Connect router required, found "+routerCount);
+// Candidate and cutover must BOTH reject legacy Protobuf round-trips and
+// unimplemented Connect RPCs. Do not postpone the invariant.
+  for(const path of rustSources.filter(x=>/connect.*\.rs$/.test(x))){
+    const code=read(path);
+    check(!/ConnectError::unimplemented|\.encode_to_vec\s*\(|::decode_from_slice\s*\(/.test(code),
+      "unimplemented RPC / Buffa-Prost binary bridge remains: "+path);
+  }
+
 
 if(policy.phase!=="cutover"){
   const prev=new Set(baselineFiles("apps/cloudflare-crm"));
@@ -257,11 +265,6 @@ if(policy.phase!=="cutover"){
   const allowed=new Set(policy.allowed_non_rpc_http);
   for(const [literal] of [...runtime.matchAll(/["'](\/api\/[A-Za-z0-9_.*?/-]+)["']/g)].map(x=>[x[1]]))
     check(allowed.has(literal),"legacy REST business endpoint in Worker: "+literal);
-  for(const path of rustSources.filter(x=>/connect.*\.rs$/.test(x))){
-    const code=read(path);
-    check(!/ConnectError::unimplemented|\.encode_to_vec\s*\(|::decode_from_slice\s*\(/.test(code),
-      "unimplemented RPC / Buffa-Prost binary bridge remains: "+path);
-  }
   check(moduleReport!==null,"generated canonical module report required");
   const activeProof=JSON.parse(read("apps/cloudflare-crm/active-connect.json"));
   const reported=[...moduleReport.active_rpc_paths].sort();

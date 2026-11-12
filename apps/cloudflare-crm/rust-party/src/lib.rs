@@ -294,9 +294,7 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     #[cfg(feature = "native")]
     if role != Some("admin")
         && method != Method::Get
-        && !(path == "/crm.sales.v1.DealService/GetDeal" ||
-             path == "/crm.sales.v1.DealService/ListDeals" ||
-             path == "/crm.parties.v2.PartyService/GetParty" ||
+        && !(path == "/crm.parties.v2.PartyService/GetParty" ||
              path == "/crm.parties.v3.PartyService/GetParty" ||
              path == "/crm.parties.v3.PartyService/ListParties" ||
              path == "/crm.accounts.v2.AccountService/GetAccount" ||
@@ -318,18 +316,10 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     {
         return error("FORBIDDEN", 403);
     }
+    // The fail-closed gate above owns activation; this is the ONLY native
+    // Connect dispatch path, not a second manually synchronized service list.
     #[cfg(feature = "native")]
-    if path.starts_with("/crm.sales.v1.DealService/") ||
-       path.starts_with("/crm.parties.v2.PartyService/") ||
-       path.starts_with("/crm.parties.v3.PartyService/") ||
-       path.starts_with("/crm.accounts.v2.AccountService/") ||
-       path.starts_with("/crm.contact_points.v2.ContactPointService/") ||
-       path.starts_with("/crm.party_relationships.v2.PartyRelationshipService/") ||
-       path.starts_with("/crm.activities.v2.TaskService/") ||
-       path.starts_with("/crm.data_quality.v2.DataQualityService/") ||
-       path.starts_with("/crm.identity_resolution.v2.IdentityResolutionService/") ||
-       path.starts_with("/crm.consents.v2.ConsentAuthorizationService/") ||
-       path.starts_with("/crm.sales.v2.DealService/") {
+    if path.starts_with("/crm.") {
         if method != Method::Post { return error("NOT_FOUND",404); }
         let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
         return connect_sales::route(req,env,tenant,actor,&request_id).await;
@@ -497,11 +487,6 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             ("/crm.contact_points.v2.ContactPointService/UpdateContactPoint", Method::Post) => "contact-points.rpc.update",
             ("/crm.contact_points.v2.ContactPointService/GetContactPoint", Method::Post) => "contact-points.rpc.get",
             ("/crm.contact_points.v2.ContactPointService/ListContactPoints", Method::Post) => "contact-points.rpc.list",
-            ("/crm.sales.v1.DealService/GetDeal", Method::Post) => "sales-deals.rpc.get",
-            ("/crm.sales.v1.DealService/ListDeals", Method::Post) => "sales-deals.rpc.list",
-            ("/crm.sales.v1.DealService/CreateDeal", Method::Post) => "sales-deals.rpc.create",
-            ("/crm.sales.v1.DealService/UpdateDeal", Method::Post) => "sales-deals.rpc.update",
-            ("/crm.sales.v1.DealService/AdvanceStage", Method::Post) => "sales-deals.rpc.advance",
             ("/api/sales-deals", Method::Get) => "sales-deals.list",
             ("/api/sales-deals", Method::Post) => "sales-deals.create",
             (p, Method::Get) if p.starts_with("/api/sales-deals/") => "sales-deals.read",
@@ -555,7 +540,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             else if path.starts_with("/api/contact-points") { "crm.contact-points" }
             else if path.starts_with("/api/party-relationships") { "crm.party-relationships" }
             else if path.starts_with("/api/activity-tasks") { "crm.activities" }
-            else if path.starts_with("/api/sales-deals") || path.starts_with("/crm.sales.v1.DealService/") { "crm.sales" }
+            else if path.starts_with("/api/sales-deals") || path.starts_with("/crm.sales.v2.DealService/") { "crm.sales" }
             else if path.starts_with("/api/consents") { "crm.consents" }
             else if path.starts_with("/api/identity-resolution") { "crm.identity-resolution" }
             else if path.starts_with("/api/data-quality") { "crm.data-quality" }

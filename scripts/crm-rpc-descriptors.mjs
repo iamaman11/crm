@@ -94,12 +94,17 @@ for(const impl of candidateRust.matchAll(
 // Every candidate service must remain behind the signed native-ci gate,
 // yet also reach the one embedded Rust router. No handwritten service catalog.
 const runtimeRust=rd("apps/cloudflare-crm/rust-party/src/lib.rs");
+const start=runtimeRust.indexOf("fn legacy_transport_disabled(");
+const stop=runtimeRust.indexOf("async fn dispatch(",start);
+const guard=runtimeRust.slice(start,stop);
+if(start<0||stop<=start||!guard.includes('cfg!(feature = "native-ci")')||
+  !runtimeRust.includes('if path.starts_with("/crm.")'))
+  fail("native Connect routes must pass the fail-closed signed candidate gate");
 for(const path of candidatePaths){
   if(proof.methods.some(item=>item.path===path))continue;
   const prefix=path.slice(0,path.lastIndexOf("/")+1);
-  const expected='path.starts_with("'+prefix+'")';
-  if(runtimeRust.split(expected).length<3)
-    fail("candidate not CI-gated and dispatched by the same Worker "+path);
+  if(!guard.includes('path.starts_with("'+prefix+'")'))
+    fail("candidate missing from the single native-ci activation gate "+path);
 }
 const allowed=new Set(proof.methods.map(x=>x.path));
 if(policy.phase==="contract-only"){
@@ -127,19 +132,6 @@ for(const module of report.modules){
     bound.set(route,{...binding,module_id:module.module_id,linked:module.linked});
   }
 }
-for(const route of allowed){
- const spec=bound.get(route);
- if(!spec)fail("active RPC absent from canonical module.yaml binding "+route);
- if(!spec.linked)fail("active RPC owner is not linked into Worker "+route);
- const descriptor=available.get(route);
- if(!descriptor)fail("active RPC absent from compiled protobuf descriptor "+route);
- const input=(descriptor.inputType||"").replace(/^\./,"");
- const output=(descriptor.outputType||"").replace(/^\./,"");
- if(input!==spec.request||output!==spec.response)
-   fail("active RPC request/response type mismatch "+route+
-     " manifest="+spec.request+" -> "+spec.response+
-     " descriptor="+input+" -> "+output);
-}
 // Original v1 module.yaml bindings and Cargo links prove the linked owner.
 // Versioned v2/v3 RPCs do not need another manually maintained owner manifest.
 const linkedOwnerPackages=new Set();
@@ -154,6 +146,19 @@ for(const path of candidatePaths){
   const match=/^\/(crm\.[a-z0-9_]+)\.v[0-9]+\.[^/]+\//.exec(path);
   if(!match||!linkedOwnerPackages.has(match[1]))
     fail("candidate has no linked original Rust owner "+path);
+}
+for(const route of allowed){
+ const spec=bound.get(route);
+ if(!spec)fail("active RPC absent from canonical module.yaml binding "+route);
+ if(!spec.linked)fail("active RPC owner is not linked into Worker "+route);
+ const descriptor=available.get(route);
+ if(!descriptor)fail("active RPC absent from compiled protobuf descriptor "+route);
+ const input=(descriptor.inputType||"").replace(/^\./,"");
+ const output=(descriptor.outputType||"").replace(/^\./,"");
+ if(input!==spec.request||output!==spec.response)
+   fail("active RPC request/response type mismatch "+route+
+     " manifest="+spec.request+" -> "+spec.response+
+     " descriptor="+input+" -> "+output);
 }
 if(policy.phase==="cutover" && report.unclaimed_active_rpc_paths?.length)
  fail("unclaimed active RPCs in final cutover");
