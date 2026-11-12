@@ -183,6 +183,22 @@ impl party_wire::PartyService for PartyService {
     }
 }
 
+// Shared validation of the wire precondition; domain owners still perform
+// authoritative CAS, idempotent replay and SQL/audit checks.
+fn wire_precondition(
+        pre:Option<&core_v2::MutationPrecondition>,create:bool
+    )->std::result::Result<(String,Option<i64>),ConnectError>{
+        let pre=pre.ok_or_else(||ConnectError::invalid_argument("precondition required"))?;
+        if !(8..=120).contains(&pre.idempotency_key.len()){
+            return Err(ConnectError::invalid_argument("IDEMPOTENCY_KEY_REQUIRED"));
+        }
+        match (create,pre.expected_version){
+            (true,None)=>Ok((pre.idempotency_key.clone(),None)),
+            (false,Some(version)) if version>0=>Ok((pre.idempotency_key.clone(),Some(version))),
+            _=>Err(ConnectError::invalid_argument("invalid mutation version")),
+        }
+    }
+
 // Cutover Party v3: generated Connect wire only. The historical Party owner
 // in parties.rs remains the SOLE state codec, D1 mutation and receipt owner.
 // This service is exposed to signed native-ci workerd only until full cutover.
@@ -296,19 +312,7 @@ impl AccountV2Service {
             _=>ConnectError::internal(f.code),
         }
     }
-    fn precondition(
-        pre:Option<&core_v2::MutationPrecondition>,create:bool
-    )->std::result::Result<(String,Option<i64>),ConnectError>{
-        let pre=pre.ok_or_else(||ConnectError::invalid_argument("precondition required"))?;
-        if !(8..=120).contains(&pre.idempotency_key.len()){
-            return Err(ConnectError::invalid_argument("IDEMPOTENCY_KEY_REQUIRED"));
-        }
-        match (create,pre.expected_version){
-            (true,None)=>Ok((pre.idempotency_key.clone(),None)),
-            (false,Some(version)) if version>0=>Ok((pre.idempotency_key.clone(),Some(version))),
-            _=>Err(ConnectError::invalid_argument("invalid mutation version")),
-        }
-    }
+
 }
 
 
@@ -401,10 +405,7 @@ impl ContactPointV2Service{
             _=>ConnectError::internal(f.code),
         }
     }
-    fn precondition(pre:Option<&core_v2::MutationPrecondition>,create:bool)
-        ->std::result::Result<(String,Option<i64>),ConnectError>{
-        AccountV2Service::precondition(pre,create)
-    }
+
 }
 
 
