@@ -2,7 +2,7 @@
 //! Both Party references must exist within the authenticated tenant.
 //! Business semantics, temporal validity and optimistic versions belong to
 //! crm-party-relationships, never to this HTTP/SQL boundary.
-use super::{bind, error, now_nanos, response};
+use super::{bind, now_nanos};
 use crm_party_relationships::{
     CreatePartyRelationship, PartyReference, PartyRelationship, PartyRelationshipId,
     PartyRelationshipStatus, RelationshipDirectionality, RelationshipType, UpdatePartyRelationship,
@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use wasm_bindgen::JsValue;
-use worker::{D1Database, Method, Request, Response, Result};
+use worker::{D1Database, Result};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -130,34 +130,6 @@ fn encoded(item: &PartyRelationship) -> Result<String> {
 }
 pub(super) fn decoded(state: &str) -> Result<PartyRelationship> {
     decode_party_relationship_state(state.as_bytes()).map_err(|e| worker::Error::RustError(e.code))
-}
-pub(super) fn view(item: &PartyRelationship) -> Value {
-    let typ = item.relationship_type();
-    json!({
-        "id":item.party_relationship_id().as_str(),
-        "from_party_id":item.from_party_ref().as_str(),
-        "to_party_id":item.to_party_ref().as_str(),
-        "type":{
-            "code":typ.code(),"from_role":typ.from_role(),"to_role":typ.to_role(),
-            "directionality":match typ.directionality() {
-                RelationshipDirectionality::Directional=>"directional",
-                RelationshipDirectionality::Reciprocal=>"reciprocal",
-            },
-        },
-        "status":match item.status() {
-            PartyRelationshipStatus::Active=>"active",
-            PartyRelationshipStatus::Inactive=>"inactive",
-        },
-        "valid_from_unix_nanos":item.valid_from_unix_nanos(),
-        "valid_until_unix_nanos":item.valid_until_unix_nanos(),
-        "version":item.version(),
-    })
-}
-fn key(req: &Request) -> Result<Option<String>> {
-    Ok(req
-        .headers()
-        .get("idempotency-key")?
-        .filter(|key| (8..=120).contains(&key.len())))
 }
 async fn prior(db: &D1Database, tenant: &str, k: &str) -> Result<Option<Receipt>> {
     bind(
@@ -376,99 +348,4 @@ pub(super) async fn list_page_typed(
         items.push(decoded(&row.state)?);
     }
     Ok((items, next))
-}
-async fn create(mut req: Request, db: &D1Database, tenant: &str, trace: &str) -> Result<Response> {
-    let Some(k) = key(&req)? else {
-        return error("IDEMPOTENCY_KEY_REQUIRED", 422);
-    };
-    let input = match serde_json::from_str::<CreateInput>(&req.text().await?) {
-        Ok(x) => x,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    match create_typed(input, &k, db, tenant, trace).await? {
-        Ok(out) => response(
-            json!({"item":view(&out.relationship),"replayed":out.replayed}),
-            if out.replayed { 200 } else { 201 },
-        ),
-        Err(f) => error(&f.code, f.status),
-    }
-}
-async fn update(
-    mut req: Request,
-    db: &D1Database,
-    tenant: &str,
-    id: &str,
-    trace: &str,
-) -> Result<Response> {
-    let Some(k) = key(&req)? else {
-        return error("IDEMPOTENCY_KEY_REQUIRED", 422);
-    };
-    let input = match serde_json::from_str::<UpdateInput>(&req.text().await?) {
-        Ok(x) => x,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    // Historical JSON sent the complete optional value; Connect uses an
-    // explicit patch. Both call the same original owner and D1 transition.
-    let command = UpdateCommand {
-        expected_version: input.expected_version,
-        status: input.status,
-        valid_from: input
-            .valid_from_unix_nanos
-            .map_or(TimestampChange::Clear, TimestampChange::Set),
-        valid_until: input
-            .valid_until_unix_nanos
-            .map_or(TimestampChange::Clear, TimestampChange::Set),
-    };
-    match update_typed(command, &k, db, tenant, id, trace).await? {
-        Ok(out) => response(
-            json!({"item":view(&out.relationship),"replayed":out.replayed}),
-            200,
-        ),
-        Err(f) => error(&f.code, f.status),
-    }
-}
-async fn list(db: &D1Database, tenant: &str) -> Result<Response> {
-    let rows = bind(
-        db,
-        "SELECT state FROM crm_party_relationship_records WHERE tenant = ? ORDER BY id LIMIT 300",
-        &[JsValue::from_str(tenant)],
-    )?
-    .all()
-    .await?
-    .results::<Row>()?;
-    let items = rows
-        .iter()
-        .map(|row| decoded(&row.state).map(|v| view(&v)))
-        .collect::<Result<Vec<_>>>()?;
-    response(json!({"items":items}), 200)
-}
-pub(super) async fn route(
-    req: Request,
-    db: D1Database,
-    tenant: &str,
-    trace: &str,
-) -> Result<Response> {
-    let path = req.path();
-    let method = req.method();
-    if path == "/api/party-relationships" {
-        return match method {
-            Method::Get => list(&db, tenant).await,
-            Method::Post => create(req, &db, tenant, trace).await,
-            _ => error("NOT_FOUND", 404),
-        };
-    }
-    let Some(id) = path.strip_prefix("/api/party-relationships/") else {
-        return error("NOT_FOUND", 404);
-    };
-    if id.is_empty() || id.contains('/') {
-        return error("NOT_FOUND", 404);
-    }
-    match method {
-        Method::Get => match load(&db, tenant, id).await? {
-            Some(v) => response(json!({"item":view(&v)}), 200),
-            None => error("NOT_FOUND", 404),
-        },
-        Method::Patch => update(req, &db, tenant, id, trace).await,
-        _ => error("NOT_FOUND", 404),
-    }
 }

@@ -27,7 +27,6 @@ const insideRepo=path=>{
  return rel && rel!==".." && !rel.startsWith(".."+sep) && !rel.startsWith("/") ? rel.replaceAll("\\","/") : null;
 };
 const read=path=>readFileSync(resolve(root,path),"utf8");
-const activeTyped=policy.phase==="cutover";
 function collect(directory){
  const files=[];
  function visit(dir){
@@ -131,9 +130,7 @@ function inspect(file,source,strict=true){
  return imports;
 }
 const entries=["packages/client/src/cloudflare.ts"];
-if(existsSync(resolve(root,"apps/cloudflare-crm/web/src/app.tsx")))entries.push("apps/cloudflare-crm/web/src/app.tsx");
-else if(policy.phase==="contract-only")entries.push("apps/cloudflare-crm/web/contract-only.tsx");
-if(activeTyped)entries.push(...collect("apps/cloudflare-crm/web/src"));
+entries.push("apps/cloudflare-crm/web/src/app.tsx",...collect("apps/cloudflare-crm/web/src"));
 const visited=new Set();
 function resolveInternal(spec,parent){
  if(/\.(?:css|scss|sass|svg|png|jpe?g|webp|woff2?|ico)(?:\?.*)?$/.test(spec))return null;
@@ -160,7 +157,7 @@ function follow(file){
  if(visited.has(file))return;
  visited.add(file);
  if(!existsSync(resolve(root,file)))fail(file,"required active source missing");
- if(activeTyped&&file.startsWith("apps/cloudflare-crm/web/src/")&&
+ if(file.startsWith("apps/cloudflare-crm/web/src/")&&
     !/\.(ts|tsx)$/.test(file))
    fail(file,"legacy JS/JSX reachable after cutover");
  // Generated protobuf source is fully checked by the pinned generation/typecheck.
@@ -173,5 +170,5 @@ function follow(file){
 }
 entries.forEach(follow);
 console.log(JSON.stringify({event:"crm.ts-ast-architecture",result:"PASS",
- phase:policy.phase,inspected:[...visited].sort()}));
+ policy_schema:policy.schema_version,inspected:[...visited].sort()}));
 export {inspect,resolveInternal};

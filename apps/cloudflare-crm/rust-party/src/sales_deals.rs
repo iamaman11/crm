@@ -1,7 +1,7 @@
 //! Cloudflare native HTTP/D1 boundary for the ORIGINAL crm-sales Deal aggregate.
 //! Stage progression, closing rules, money and version invariants belong to
 //! crm-sales and crm-core-contracts, never the test pilot's crm_deals model.
-use super::{bind, error, now_nanos, response};
+use super::{bind, now_nanos};
 use crm_core_contracts::{BasisPoints, CurrencyCode, Money, Patch};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef};
 use crm_sales::{
@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use wasm_bindgen::JsValue;
-use worker::{D1Database, Method, Request, Response, Result};
+use worker::{D1Database, Result};
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -92,43 +92,6 @@ fn encode(deal: &Deal) -> Result<String> {
 }
 pub(super) fn decode(data: &str) -> Result<Deal> {
     decode_deal_state(data.as_bytes()).map_err(|e| worker::Error::RustError(e.code))
-}
-pub(super) fn view(deal: &Deal) -> Value {
-    let stage = deal.stage();
-    json!({
-        "id":deal.deal_id().as_str(),
-        "name":deal.name(),
-        "owner":match deal.owner(){
-            DealOwner::Actor(x)=>json!({"actor":x.as_str()}),
-            DealOwner::Team(x)=>json!({"team":x.as_str()}),
-        },
-        "account_id":deal.account().map(|x|x.resource_id.as_str()),
-        "primary_contact_id":deal.primary_contact().map(|x|x.resource_id.as_str()),
-        "stage":{"pipeline_id":stage.pipeline_id().as_str(),
-                 "stage_id":stage.stage_id().as_str(),"ordinal":stage.ordinal()},
-        "status":match deal.status(){
-            DealStatus::Open=>"open",DealStatus::Won=>"won",DealStatus::Lost=>"lost",
-        },
-        "amount":deal.amount().map(|amount|json!({
-            "minor_units":amount.minor_units().to_string(),
-            "currency":amount.currency().as_str(),
-        })),
-        "probability_bps":deal.probability().get(),
-        "close_outcome":deal.close_outcome().map(|outcome|json!({
-            "status":match outcome.status(){
-                DealStatus::Open=>"open",DealStatus::Won=>"won",DealStatus::Lost=>"lost",
-            },
-            "reason_code":outcome.reason_code().as_str(),
-            "closed_at_unix_nanos":outcome.closed_at_unix_nanos(),
-        })),
-        "version":deal.version(),
-    })
-}
-fn key(req: &Request) -> Result<Option<String>> {
-    Ok(req
-        .headers()
-        .get("idempotency-key")?
-        .filter(|value| (8..=120).contains(&value.len())))
 }
 async fn prior(db: &D1Database, tenant: &str, k: &str) -> Result<Option<Receipt>> {
     bind(
@@ -273,31 +236,6 @@ pub(super) async fn create_typed(
         replayed: false,
     }))
 }
-async fn create(
-    mut req: Request,
-    db: &D1Database,
-    tenant: &str,
-    actor: &str,
-    trace: &str,
-) -> Result<Response> {
-    let Some(k) = key(&req)? else {
-        return error("IDEMPOTENCY_KEY_REQUIRED", 422);
-    };
-    // Preserve the strict JSON REST boundary during the Connect migration.
-    let input = match serde_json::from_str::<CreateInput>(&req.text().await?) {
-        Ok(x) => x,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    match create_typed(input, &k, db, tenant, actor, trace).await? {
-        Ok(saved) => response(
-            json!({"item":view(&saved.deal),
-            "replayed":saved.replayed}),
-            if saved.replayed { 200 } else { 201 },
-        ),
-        Err(failure) => error(&failure.code, failure.status),
-    }
-}
-/// The ORIGINAL owner applies Sales updates, CAS, receipt replay and audit.
 pub(super) async fn update_typed(
     input: UpdateInput,
     key: &str,
@@ -400,30 +338,6 @@ pub(super) async fn update_typed(
         replayed: false,
     }))
 }
-async fn update(
-    mut req: Request,
-    db: &D1Database,
-    tenant: &str,
-    id: &str,
-    trace: &str,
-) -> Result<Response> {
-    let Some(k) = key(&req)? else {
-        return error("IDEMPOTENCY_KEY_REQUIRED", 422);
-    };
-    let input = match serde_json::from_str::<UpdateInput>(&req.text().await?) {
-        Ok(x) => x,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    match update_typed(input, &k, db, tenant, id, trace).await? {
-        Ok(saved) => response(
-            json!({"item":view(&saved.deal),
-            "replayed":saved.replayed}),
-            200,
-        ),
-        Err(f) => error(&f.code, f.status),
-    }
-}
-
 pub(super) struct LinkOutcome {
     pub(super) delivery_id: String,
     pub(super) applied: bool,
@@ -606,40 +520,6 @@ pub(super) async fn advance_typed(
         link,
     }))
 }
-async fn advance(
-    mut req: Request,
-    db: &D1Database,
-    tenant: &str,
-    id: &str,
-    actor: &str,
-    trace: &str,
-) -> Result<Response> {
-    let Some(k) = key(&req)? else {
-        return error("IDEMPOTENCY_KEY_REQUIRED", 422);
-    };
-    let input = match serde_json::from_str::<StageInput>(&req.text().await?) {
-        Ok(x) => x,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    match advance_typed(input, &k, db, tenant, id, actor, trace).await? {
-        Ok(outcome) => response(
-            json!({
-                "item":view(&outcome.saved.deal),"replayed":outcome.saved.replayed,
-                "link":outcome.link.as_ref().map(|link|json!({
-                    "delivery_id":link.delivery_id,
-                    "disposition":if link.applied{"applied"}else{"ignored"},
-                    "task_id":link.task_id,
-                }))
-            }),
-            200,
-        ),
-        Err(f) => error(&f.code, f.status),
-    }
-}
-
-/// Filter BEFORE LIMIT so filtered pagination never drops matching Deals.
-/// State is owned by crm-sales' exact persisted DealStateV1 JSON codec; no
-/// alternate status or pipeline projection table is added.
 pub(super) async fn list_page_typed(
     db: &D1Database,
     tenant: &str,
@@ -678,56 +558,4 @@ pub(super) async fn list_page_typed(
         .map(|x| decode(&x.state))
         .collect::<Result<Vec<_>>>()?;
     Ok((deals, next))
-}
-async fn list(db: &D1Database, tenant: &str) -> Result<Response> {
-    let rows = bind(
-        db,
-        "SELECT state FROM crm_sales_deal_records WHERE tenant=? ORDER BY id LIMIT 300",
-        &[JsValue::from_str(tenant)],
-    )?
-    .all()
-    .await?
-    .results::<Row>()?;
-    let items = rows
-        .iter()
-        .map(|r| decode(&r.state).map(|deal| view(&deal)))
-        .collect::<Result<Vec<_>>>()?;
-    response(json!({"items":items}), 200)
-}
-pub(super) async fn route(
-    req: Request,
-    db: D1Database,
-    tenant: &str,
-    actor: &str,
-    trace: &str,
-) -> Result<Response> {
-    let path = req.path();
-    let method = req.method();
-    if path == "/api/sales-deals" {
-        return match method {
-            Method::Get => list(&db, tenant).await,
-            Method::Post => create(req, &db, tenant, actor, trace).await,
-            _ => error("NOT_FOUND", 404),
-        };
-    }
-    let Some(id) = path.strip_prefix("/api/sales-deals/") else {
-        return error("NOT_FOUND", 404);
-    };
-    if let Some(id) = id.strip_suffix("/advance") {
-        if id.is_empty() || id.contains('/') || method != Method::Post {
-            return error("NOT_FOUND", 404);
-        }
-        return advance(req, &db, tenant, id, actor, trace).await;
-    }
-    if id.is_empty() || id.contains('/') {
-        return error("NOT_FOUND", 404);
-    }
-    match method {
-        Method::Get => match load(&db, tenant, id).await? {
-            Some(item) => response(json!({"item":view(&item)}), 200),
-            None => error("NOT_FOUND", 404),
-        },
-        Method::Patch => update(req, &db, tenant, id, trace).await,
-        _ => error("NOT_FOUND", 404),
-    }
 }

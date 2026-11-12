@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use wasm_bindgen::JsValue;
-use worker::{D1Database, Method, Request, Response, Result};
+use worker::{D1Database, Result};
 
-use super::{bind, error, now_nanos, response};
+use super::{bind, now_nanos};
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -60,23 +60,6 @@ fn state(account: &Account) -> Result<String> {
 fn decoded(bytes: &str) -> Result<Account> {
     decode_account_state(bytes.as_bytes()).map_err(|e| worker::Error::RustError(e.code))
 }
-pub(super) fn view(account: &Account) -> Value {
-    json!({
-        "id": account.account_id().as_str(),
-        "name": account.name(),
-        "status": match account.status() {
-            AccountStatus::Active => "active", AccountStatus::Inactive => "inactive"
-        },
-        "version": account.version(),
-        "parties": account.party_associations().iter().map(|a| json!({
-            "id": a.party().as_str(),
-            "role": match a.role() {
-                AccountPartyRole::Primary => "primary",
-                AccountPartyRole::Member => "member",
-            }
-        })).collect::<Vec<_>>()
-    })
-}
 pub(super) async fn load(db: &D1Database, tenant: &str, id: &str) -> Result<Option<Account>> {
     bind(
         db,
@@ -107,14 +90,6 @@ async fn party_exists(db: &D1Database, tenant: &str, party_id: &str) -> Result<b
     .await?
     .is_some())
 }
-fn required_key(req: &Request) -> Result<Option<String>> {
-    Ok(req
-        .headers()
-        .get("idempotency-key")?
-        .filter(|key| (8..=120).contains(&key.len())))
-}
-// ORIGINAL Account owner. The REST facade (blocked in contract-only) and
-// generated Connect handlers invoke these same typed domain+D1 commands.
 pub(super) struct MutationOutcome {
     pub(super) account: Account,
     pub(super) replayed: bool,
@@ -293,83 +268,4 @@ pub(super) async fn list_page_typed(
         accounts.push(account);
     }
     Ok((accounts, next))
-}
-async fn create(mut req: Request, db: &D1Database, tenant: &str, trace: &str) -> Result<Response> {
-    let Some(key) = required_key(&req)? else {
-        return error("IDEMPOTENCY_KEY_REQUIRED", 422);
-    };
-    let input = match serde_json::from_str::<CreateInput>(&req.text().await?) {
-        Ok(v) => v,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    match create_typed(input, &key, db, tenant, trace).await? {
-        Ok(out) => response(
-            json!({"item":view(&out.account),"replayed":out.replayed}),
-            if out.replayed { 200 } else { 201 },
-        ),
-        Err(f) => error(&f.code, f.status),
-    }
-}
-async fn update(
-    mut req: Request,
-    db: &D1Database,
-    tenant: &str,
-    id: &str,
-    trace: &str,
-) -> Result<Response> {
-    let Some(key) = required_key(&req)? else {
-        return error("IDEMPOTENCY_KEY_REQUIRED", 422);
-    };
-    let input = match serde_json::from_str::<UpdateInput>(&req.text().await?) {
-        Ok(v) => v,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    match update_typed(input, &key, db, tenant, id, trace).await? {
-        Ok(out) => response(
-            json!({"item":view(&out.account),"replayed":out.replayed}),
-            200,
-        ),
-        Err(f) => error(&f.code, f.status),
-    }
-}
-async fn read(db: &D1Database, tenant: &str, id: &str) -> Result<Response> {
-    match load(db, tenant, id).await? {
-        Some(account) => response(json!({"item":view(&account)}), 200),
-        None => error("NOT_FOUND", 404),
-    }
-}
-async fn list(db: &D1Database, tenant: &str) -> Result<Response> {
-    let (accounts, _) = list_page_typed(db, tenant, "", 100, None).await?;
-    response(
-        json!({"items":accounts.iter().map(view).collect::<Vec<_>>()}),
-        200,
-    )
-}
-
-pub(super) async fn route(
-    req: Request,
-    db: D1Database,
-    tenant: &str,
-    trace: &str,
-) -> Result<Response> {
-    let path = req.path();
-    let method = req.method();
-    if path == "/api/accounts" {
-        return match method {
-            Method::Get => list(&db, tenant).await,
-            Method::Post => create(req, &db, tenant, trace).await,
-            _ => error("NOT_FOUND", 404),
-        };
-    }
-    let Some(id) = path.strip_prefix("/api/accounts/") else {
-        return error("NOT_FOUND", 404);
-    };
-    if id.is_empty() || id.contains('/') {
-        return error("NOT_FOUND", 404);
-    }
-    match method {
-        Method::Get => read(&db, tenant, id).await,
-        Method::Patch => update(req, &db, tenant, id, trace).await,
-        _ => error("NOT_FOUND", 404),
-    }
 }

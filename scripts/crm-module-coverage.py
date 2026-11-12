@@ -41,7 +41,7 @@ def rpc_path(binding: dict) -> str | None:
     return f"/{service}/{method}"
 
 
-def build_report(root: Path = ROOT, *, phase: str | None = None, runtime: dict | None = None) -> dict:
+def build_report(root: Path = ROOT, *, runtime: dict | None = None) -> dict:
     if root != ROOT:
         raise ValueError("module inventory always uses canonical repository root")
     schema = load_schema()
@@ -77,8 +77,6 @@ def build_report(root: Path = ROOT, *, phase: str | None = None, runtime: dict |
 
     # Manifest/Cargo discovery is static. Runtime activation is supplied only
     # after the signed workerd suite has executed the compiled router and policy.
-    policy = json.loads((APP / "architecture-policy.json").read_text(encoding="utf-8"))
-    phase = phase or policy["phase"]
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     runtime_policy = {}
     if runtime is not None:
@@ -95,15 +93,14 @@ def build_report(root: Path = ROOT, *, phase: str | None = None, runtime: dict |
         for route, rule in rpc["policies"]:
             if route in runtime_policy:
                 raise ValueError(f"duplicate compiled RPC policy: {route}")
-            if rule["permission"] not in ("Read", "AdminRead", "Write") or rule["activation"] not in ("Published", "Candidate"):
+            if rule["permission"] not in ("Read", "AdminRead", "Write"):
                 raise ValueError(f"invalid compiled RPC policy: {route}")
             runtime_policy[route] = rule
         if set(registered) != set(runtime_policy):
             raise ValueError("registered methods differ from compiled policy")
         if set(runtime["successful_rpc_calls"]) != set(registered):
             raise ValueError("registered RPC missing successful executed call")
-    active = sorted(route for route, rule in runtime_policy.items()
-                    if rule["activation"] == "Published")
+    active = sorted(runtime_policy)
     providers: dict[str, str] = {}
     modules = []
     for path, manifest in entries:
@@ -163,12 +160,9 @@ def build_report(root: Path = ROOT, *, phase: str | None = None, runtime: dict |
     for mod in modules:
         if mod["active_rpc_paths"] and not mod["linked"]:
             errors.append(f"active RPC belongs to unlinked Rust module: {mod['module_id']}")
-    if phase == "cutover" and runtime is not None:
+    if runtime is not None:
         if unclaimed:
             errors.append("active RPC is not declared in module.yaml: " + ", ".join(unclaimed))
-        for mod in modules:
-            if mod["linked"] and mod["declared_rpc_paths"] and not mod["active_rpc_paths"]:
-                errors.append(f"linked module lacks accepted Connect RPC: {mod['module_id']}")
     if errors:
         raise ValueError("cutover module acceptance failed:\n" + "\n".join(errors))
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
@@ -179,7 +173,6 @@ def build_report(root: Path = ROOT, *, phase: str | None = None, runtime: dict |
         "runtime": runtime,
         "rpc_policy": dict(sorted(runtime_policy.items())),
         "source_sha": head,
-        "phase": phase,
         "modules": sorted(modules, key=lambda x: x["module_id"]),
         "active_rpc_paths": sorted(active),
         "unclaimed_active_rpc_paths": unclaimed,

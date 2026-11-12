@@ -1,7 +1,7 @@
 //! Native Worker HTTP/D1 boundary for ORIGINAL crm.contact-points.
 //! Contact Point is a Party-owned endpoint, not a customer or a consent.
 //! Domain invariants and strict persisted codecs remain in crm-contact-points.
-use super::{bind, error, now_nanos, response};
+use super::{bind, now_nanos};
 use crm_contact_points::{
     ContactPoint, ContactPointId, ContactPointKind, ContactPointStatus, CreateContactPoint,
     PartyReference, UpdateContactPoint, decode_contact_point_state, encode_contact_point_state,
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use wasm_bindgen::JsValue;
-use worker::{D1Database, Method, Request, Response, Result};
+use worker::{D1Database, Result};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -114,36 +114,6 @@ fn encode(point: &ContactPoint) -> Result<String> {
 }
 pub(super) fn decode(value: &str) -> Result<ContactPoint> {
     decode_contact_point_state(value.as_bytes()).map_err(|e| worker::Error::RustError(e.code))
-}
-pub(super) fn view(point: &ContactPoint) -> Value {
-    json!({
-        "id": point.contact_point_id().as_str(),
-        "party_id": point.party_ref().as_str(),
-        "kind": match point.kind() {
-            ContactPointKind::Email => "email",
-            ContactPointKind::Phone => "phone",
-            ContactPointKind::Postal => "postal",
-            ContactPointKind::Web => "web",
-            ContactPointKind::Messaging => "messaging",
-        },
-        "value": point.display_value(),
-        "normalized_value": point.normalized_value(),
-        "preferred": point.preferred(),
-        "status": match point.status() {
-            ContactPointStatus::Active => "active",
-            ContactPointStatus::Inactive => "inactive",
-        },
-        "verified": point.verification().is_verified(),
-        "valid_from_unix_nanos": point.valid_from_unix_nanos(),
-        "valid_until_unix_nanos": point.valid_until_unix_nanos(),
-        "version": point.version(),
-    })
-}
-fn key(req: &Request) -> Result<Option<String>> {
-    Ok(req
-        .headers()
-        .get("idempotency-key")?
-        .filter(|k| (8..=120).contains(&k.len())))
 }
 async fn previous(db: &D1Database, tenant: &str, idem: &str) -> Result<Option<Receipt>> {
     bind(
@@ -355,81 +325,4 @@ pub(super) async fn list_page_typed(
         contacts.push(point);
     }
     Ok((contacts, next))
-}
-async fn create(mut req: Request, db: &D1Database, tenant: &str, trace: &str) -> Result<Response> {
-    let Some(idem) = key(&req)? else {
-        return error("IDEMPOTENCY_KEY_REQUIRED", 422);
-    };
-    let input = match serde_json::from_str::<CreateInput>(&req.text().await?) {
-        Ok(x) => x,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    match create_typed(input, &idem, db, tenant, trace).await? {
-        Ok(out) => response(
-            json!({"item":view(&out.contact_point),"replayed":out.replayed}),
-            if out.replayed { 200 } else { 201 },
-        ),
-        Err(f) => error(&f.code, f.status),
-    }
-}
-async fn update(
-    mut req: Request,
-    db: &D1Database,
-    tenant: &str,
-    id: &str,
-    trace: &str,
-) -> Result<Response> {
-    let Some(idem) = key(&req)? else {
-        return error("IDEMPOTENCY_KEY_REQUIRED", 422);
-    };
-    let input = match serde_json::from_str::<UpdateInput>(&req.text().await?) {
-        Ok(x) => x,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    match update_typed(input, &idem, db, tenant, id, trace).await? {
-        Ok(out) => response(
-            json!({"item":view(&out.contact_point),"replayed":out.replayed}),
-            200,
-        ),
-        Err(f) => error(&f.code, f.status),
-    }
-}
-async fn list(db: &D1Database, tenant: &str) -> Result<Response> {
-    let (contacts, _) = list_page_typed(db, tenant, "", 100, None).await?;
-    response(
-        json!({"items":contacts.iter().map(view).collect::<Vec<_>>()}),
-        200,
-    )
-}
-pub(super) async fn route(
-    req: Request,
-    db: D1Database,
-    tenant: &str,
-    trace: &str,
-) -> Result<Response> {
-    let path = req.path();
-    let method = req.method();
-    if path == "/api/contact-points" {
-        return match method {
-            Method::Get => list(&db, tenant).await,
-            Method::Post => create(req, &db, tenant, trace).await,
-            _ => error("NOT_FOUND", 404),
-        };
-    }
-    let Some(id) = path.strip_prefix("/api/contact-points/") else {
-        return error("NOT_FOUND", 404);
-    };
-    if id.is_empty() || id.contains('/') {
-        return error("NOT_FOUND", 404);
-    }
-    match method {
-        Method::Get => match load(&db, tenant, id).await? {
-            Some(point) => response(json!({"item":view(&point)}), 200),
-            None => error("NOT_FOUND", 404),
-        },
-        Method::Patch => update(req, &db, tenant, id, trace).await,
-        // Verification is intentionally not exposed until a trusted evidence
-        // producer is wired; client-submitted arbitrary evidence is NOT proof.
-        _ => error("NOT_FOUND", 404),
-    }
 }

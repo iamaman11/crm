@@ -41,6 +41,10 @@ use worker::{D1Database, Env, HttpRequest, Request, Response, Result};
 // Use the standard generated package tree, including generator-owned lint
 // attributes. The root import is inherited by its generated `use super::*`
 // statements so the crm.core package also resolves Rust's fmt traits.
+#[expect(
+    clippy::wrong_self_convention,
+    reason = "Buffa 0.9.1 generates from_role/from_party_id getters from Protobuf fields; these are not constructors"
+)]
 pub mod proto {
     use ::core::fmt;
     include!(concat!(env!("OUT_DIR"), "/_connectrpc.rs"));
@@ -52,7 +56,6 @@ use proto::crm::contact_points::v2 as contact_wire;
 use proto::crm::core::v2 as core_v2;
 use proto::crm::data_quality::v2 as quality_wire;
 use proto::crm::identity_resolution::v2 as identity_wire;
-use proto::crm::parties::v2 as party_wire;
 use proto::crm::parties::v3 as party_v3;
 use proto::crm::party_relationships::v2 as rel_wire;
 use proto::crm::sales::v2 as sale_wire;
@@ -80,52 +83,6 @@ mod privacy_handlers;
 use privacy_handlers::PrivacyV2Service;
 use proto::crm::customer_privacy::v2 as privacy_wire;
 
-struct PartyService {
-    env: Arc<Env>,
-    tenant: String,
-}
-
-// Generated Connect-Rust + Buffa response, original Party owner + one D1.
-impl party_wire::PartyService for PartyService {
-    #[worker::send]
-    async fn get_party(
-        &self,
-        _ctx: RequestContext,
-        req: ServiceRequest<'_, party_wire::GetPartyRequest>,
-    ) -> ServiceResult<party_wire::GetPartyResponse> {
-        let raw = req.party_id.trim();
-        if raw.is_empty() || raw.len() > 180 || raw != req.party_id || raw.contains('/') {
-            return Err(ConnectError::invalid_argument("PARTIES_PARTY_ID_INVALID"));
-        }
-        let id = crm_parties::PartyId::try_new(raw.to_owned())
-            .map_err(|_| ConnectError::invalid_argument("PARTIES_PARTY_ID_INVALID"))?;
-        let db = self
-            .env
-            .d1("DB")
-            .map_err(|_| ConnectError::internal("D1 binding unavailable"))?;
-        let party = parties::stored(&db, &self.tenant, id.as_str())
-            .await
-            .map_err(|_| ConnectError::internal("Party D1 read failed"))?
-            .ok_or_else(|| ConnectError::not_found("PARTIES_NOT_FOUND"))?;
-        let version = party.version();
-        let kind = match party.kind() {
-            DomainPartyKind::Person => party_wire::PartyKind::PARTY_KIND_PERSON,
-            DomainPartyKind::Organization => party_wire::PartyKind::PARTY_KIND_ORGANIZATION,
-        };
-        RpcResponse::ok(party_wire::GetPartyResponse {
-            party: Some(party_wire::Party {
-                party_id: party.party_id().as_str().to_owned(),
-                kind: kind.into(),
-                display_name: party.display_name().to_owned(),
-                version,
-                ..Default::default()
-            })
-            .into(),
-            ..Default::default()
-        })
-    }
-}
-
 // Shared validation of the wire precondition; domain owners still perform
 // authoritative CAS, idempotent replay and SQL/audit checks.
 fn wire_precondition(
@@ -145,7 +102,6 @@ fn wire_precondition(
 
 // Cutover Party v3: generated Connect wire only. The historical Party owner
 // in parties.rs remains the SOLE state codec, D1 mutation and receipt owner.
-// This service is exposed to signed native-ci workerd only until full cutover.
 struct PartyV3Service {
     env: Arc<Env>,
     tenant: String,
@@ -792,10 +748,6 @@ impl SalesV2Service {
 pub(super) fn router(env: Env, tenant: &str, actor: &str, request_id: &str) -> ConnectRouter {
     let env = Arc::new(env);
     ConnectRouter::new()
-        .add_service(Arc::new(PartyService {
-            env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
-        }))
         .add_service(Arc::new(PartyV3Service {
             env: Arc::clone(&env),
             tenant: tenant.to_owned(),

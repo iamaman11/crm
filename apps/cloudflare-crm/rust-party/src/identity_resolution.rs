@@ -1,17 +1,16 @@
 //! Read-only original crm-identity-resolution boundary. The domain crate
 //! exclusively decides observed same-email pairs; there is NO merge or identity
-//! confirmation. HTTP and Connect share these typed D1 reads.
+//! confirmation. Connect uses these typed D1 reads.
 use crm_contact_points::{ContactPointKind, ContactPointStatus};
 use crm_identity_resolution::{
     CanonicalPartyPair, PartyReference, RecordedEmailContact, discover_shared_recorded_emails,
 };
 use crm_parties::Party;
 use serde::Deserialize;
-use serde_json::json;
 use wasm_bindgen::JsValue;
-use worker::{D1Database, Method, Request, Response, Result};
+use worker::{D1Database, Result};
 
-use super::{bind, contact_points, error, now_nanos, parties, response};
+use super::{bind, contact_points, now_nanos, parties};
 
 #[derive(Deserialize)]
 struct ContactRow {
@@ -113,84 +112,4 @@ pub(super) async fn compare_typed(
         (right, left)
     };
     Ok(Some(PartyComparison { first, second }))
-}
-
-pub(super) async fn route(req: Request, db: D1Database, tenant: &str) -> Result<Response> {
-    if req.method() != Method::Get {
-        return error("NOT_FOUND", 404);
-    }
-    let path = req.path();
-    if path == "/api/identity-resolution/candidates" {
-        let candidates = match candidates_typed(&db, tenant).await? {
-            Ok(items) => items,
-            Err(CandidateError::ScanLimit) => {
-                return error("IDENTITY_RESOLUTION_SCAN_LIMIT_REACHED", 503);
-            }
-            Err(CandidateError::SourceChanged) => {
-                return error("IDENTITY_RESOLUTION_SOURCE_CHANGED", 409);
-            }
-        };
-        let items = candidates
-            .iter()
-            .map(|item| {
-                json!({
-                    "first":parties::view(&item.first),
-                    "second":parties::view(&item.second),
-                    "contact_point_ids":[item.first_contact_point_id,item.second_contact_point_id],
-                    "source_kind":"recorded_exact_normalized_email",
-                    "both_contacts_verified":item.both_verified,
-                    "identity_confirmed":false
-                })
-            })
-            .collect::<Vec<_>>();
-        return response(
-            json!({
-                "items":items,
-                "source":"original_crm_contact_points_and_identity_resolution",
-                "coverage":"all_current_active_email_contacts_up_to_300",
-                "match_score":"NOT_COMPUTED",
-                "candidate_cases": "NOT_CONNECTED",
-                "read_only":true
-            }),
-            200,
-        );
-    }
-    let Some(tail) = path.strip_prefix("/api/identity-resolution/compare/") else {
-        return error("NOT_FOUND", 404);
-    };
-    let mut parts = tail.split('/');
-    let (Some(left_id), Some(right_id), None) = (parts.next(), parts.next(), parts.next()) else {
-        return error("NOT_FOUND", 404);
-    };
-    let left = match PartyReference::try_new(left_id) {
-        Ok(party) => party,
-        Err(e) => return error(&e.code, 422),
-    };
-    let right = match PartyReference::try_new(right_id) {
-        Ok(party) => party,
-        Err(e) => return error(&e.code, 422),
-    };
-    let pair = match CanonicalPartyPair::try_new(left, right) {
-        Ok(pair) => pair,
-        Err(e) => return error(&e.code, 422),
-    };
-    let Some(comparison) = compare_typed(&db, tenant, &pair, left_id).await? else {
-        return error("NOT_FOUND", 404);
-    };
-    response(
-        json!({
-            "first":parties::view(&comparison.first),
-            "second":parties::view(&comparison.second),
-            "canonical_pair":{
-                "left_id":pair.left().as_str(),
-                "right_id":pair.right().as_str(),
-            },
-            "source":"original_crm_parties_d1",
-            "candidate_cases": "NOT_CONNECTED",
-            "match_evidence":"NOT_ASSESSED",
-            "merge":"NOT_PERFORMED",
-            "read_only":true
-        }),
-        200,
-    )
 }

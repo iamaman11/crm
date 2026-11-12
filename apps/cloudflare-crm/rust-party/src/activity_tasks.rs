@@ -1,7 +1,7 @@
 //! Native HTTP + D1 boundary for ORIGINAL crm-activities Task aggregate.
 //! Domain validity/completion rules remain exclusively in crm-activities.
 //! Owner comes from a cryptographically verified Cloudflare Access principal.
-use super::{bind, error, now_nanos, response};
+use super::{bind, now_nanos};
 use crm_activities::{
     CompleteTask, CreateTask, Task, TaskMutation, TaskOwner, TaskPriority, TaskStatus,
     decode_task_state, encode_task_state,
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use wasm_bindgen::JsValue;
-use worker::{D1Database, Method, Request, Response, Result};
+use worker::{D1Database, Result};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -88,34 +88,6 @@ fn state(item: &Task) -> Result<String> {
 }
 pub(super) fn decode(input: &str) -> Result<Task> {
     decode_task_state(input.as_bytes()).map_err(|e| worker::Error::RustError(e.code))
-}
-pub(super) fn view(task: &Task) -> Value {
-    json!({
-        "id":task.task_id().as_str(),"subject":task.subject(),
-        "description":task.description(),
-        "owner":match task.owner(){
-            TaskOwner::Actor(actor)=>json!({"actor":actor.as_str()}),
-            TaskOwner::Team(team)=>json!({"team":team.as_str()}),
-        },
-        "related_resources":task.related_resources(),
-        "priority":match task.priority(){
-            TaskPriority::Low=>"low",TaskPriority::Normal=>"normal",
-            TaskPriority::High=>"high",TaskPriority::Urgent=>"urgent",
-        },
-        "status":match task.status(){
-            TaskStatus::Open=>"open",TaskStatus::Completed=>"completed",
-        },
-        "due_at_unix_nanos":task.due_at_unix_nanos(),
-        "reminder_at_unix_nanos":task.reminder_at_unix_nanos(),
-        "completed_at_unix_nanos":task.completed_at_unix_nanos(),
-        "version":task.version(),
-    })
-}
-fn idempotency_key(req: &Request) -> Result<Option<String>> {
-    Ok(req
-        .headers()
-        .get("idempotency-key")?
-        .filter(|value| (8..=120).contains(&value.len())))
 }
 async fn prior(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receipt>> {
     bind(
@@ -338,97 +310,6 @@ pub(super) async fn list_page_typed(
         .collect::<Result<Vec<_>>>()?;
     Ok((tasks, next))
 }
-async fn create(
-    mut req: Request,
-    db: &D1Database,
-    tenant: &str,
-    actor: &str,
-    trace: &str,
-) -> Result<Response> {
-    let Some(key) = idempotency_key(&req)? else {
-        return error("IDEMPOTENCY_KEY_REQUIRED", 422);
-    };
-    let input = match serde_json::from_str::<CreateInput>(&req.text().await?) {
-        Ok(x) => x,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    match create_typed(input, &key, db, tenant, actor, trace).await? {
-        Ok(out) => response(
-            json!({"item":view(&out.task),"replayed":out.replayed}),
-            if out.replayed { 200 } else { 201 },
-        ),
-        Err(f) => error(&f.code, f.status),
-    }
-}
-async fn complete(
-    mut req: Request,
-    db: &D1Database,
-    tenant: &str,
-    id: &str,
-    trace: &str,
-) -> Result<Response> {
-    let Some(key) = idempotency_key(&req)? else {
-        return error("IDEMPOTENCY_KEY_REQUIRED", 422);
-    };
-    let input = match serde_json::from_str::<CompleteInput>(&req.text().await?) {
-        Ok(x) => x,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    match complete_typed(input, &key, db, tenant, id, trace).await? {
-        Ok(out) => response(
-            json!({"item":view(&out.task),"changed":out.changed,
-            "replayed":out.replayed}),
-            200,
-        ),
-        Err(f) => error(&f.code, f.status),
-    }
-}
-async fn list(db: &D1Database, tenant: &str) -> Result<Response> {
-    let (items, _) = list_page_typed(db, tenant, "", 300, None, None).await?;
-    response(
-        json!({"items":items.iter().map(|(task,_)|view(task)).collect::<Vec<_>>()}),
-        200,
-    )
-}
-pub(super) async fn route(
-    req: Request,
-    db: D1Database,
-    tenant: &str,
-    actor: &str,
-    trace: &str,
-) -> Result<Response> {
-    let path = req.path();
-    let method = req.method();
-    if path == "/api/activity-tasks" {
-        return match method {
-            Method::Get => list(&db, tenant).await,
-            Method::Post => create(req, &db, tenant, actor, trace).await,
-            _ => error("NOT_FOUND", 404),
-        };
-    }
-    let Some(id) = path.strip_prefix("/api/activity-tasks/") else {
-        return error("NOT_FOUND", 404);
-    };
-    // A named action is a two-component route: validate it BEFORE rejecting
-    // slashes in ordinary single-ID reads.
-    if let Some(id) = id.strip_suffix("/complete") {
-        if id.is_empty() || id.contains('/') || method != Method::Post {
-            return error("NOT_FOUND", 404);
-        }
-        return complete(req, &db, tenant, id, trace).await;
-    }
-    if id.is_empty() || id.contains('/') {
-        return error("NOT_FOUND", 404);
-    }
-    match method {
-        Method::Get => match stored(&db, tenant, id).await? {
-            Some(item) => response(json!({"item":view(&item)}), 200),
-            None => error("NOT_FOUND", 404),
-        },
-        _ => error("NOT_FOUND", 404),
-    }
-}
-
 #[derive(Deserialize)]
 struct TaskAccountRow {
     account_id: String,

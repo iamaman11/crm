@@ -1,12 +1,11 @@
 //! Read-only original crm-data-quality Party name review. Evaluation lives
-//! in the ORIGINAL domain crate; both transports call one typed owner boundary.
-use super::{error, parties, response};
+//! in the ORIGINAL domain crate; Connect calls one typed owner boundary.
+use super::parties;
 use crm_data_quality::{
     EvaluatedPartyKind, PartyQualityInput, QualitySeverity, builtin_party_name_review_rules_v1,
 };
 use crm_parties::{Party, PartyKind};
-use serde_json::{Value, json};
-use worker::{D1Database, Method, Request, Response, Result};
+use worker::{D1Database, Result};
 
 pub(super) struct RuleCheck {
     pub(super) rule_key: String,
@@ -23,7 +22,7 @@ pub(super) struct Evaluation {
     pub(super) failed_count: u32,
 }
 
-/// The one owner boundary, shared by Connect and the pre-cutover HTTP route.
+/// The one owner boundary, used by generated Connect handlers.
 /// No new persisted finding, score, or alternate evaluation is introduced.
 pub(super) async fn evaluate_typed(
     db: &D1Database,
@@ -67,47 +66,4 @@ pub(super) async fn evaluate_typed(
         checks,
         failed_count,
     }))
-}
-
-pub(super) async fn route(req: Request, db: D1Database, tenant: &str) -> Result<Response> {
-    if req.method() != Method::Get {
-        return error("NOT_FOUND", 404);
-    }
-    let path = req.path();
-    let Some(id) = path
-        .strip_prefix("/api/data-quality/parties/")
-        .and_then(|tail| tail.strip_suffix("/evaluate"))
-    else {
-        return error("NOT_FOUND", 404);
-    };
-    if id.is_empty() || id.contains('/') {
-        return error("NOT_FOUND", 404);
-    }
-    let Some(evaluation) = evaluate_typed(&db, tenant, id).await? else {
-        return error("NOT_FOUND", 404);
-    };
-    let checks: Vec<Value> = evaluation
-        .checks
-        .iter()
-        .map(|check| {
-            json!({
-                "rule_key":check.rule_key,"title":check.title,
-                "remediation":check.remediation,"severity":check.severity_code,
-                "passed":check.passed,"reason_code":check.reason_code
-            })
-        })
-        .collect();
-    response(
-        json!({
-            "party":parties::view(&evaluation.party),
-            "rule_set_version":evaluation.rule_set_version,
-            "policy":"builtin_party_name_review_v1",
-            "checks":checks,
-            "failed":evaluation.failed_count,"checked":checks.len(),
-            "evaluation":"READ_ONLY_CURRENT_PARTY",
-            "persisted_findings":"NOT_CONNECTED",
-            "completeness_score": "NOT_COMPUTED"
-        }),
-        200,
-    )
 }

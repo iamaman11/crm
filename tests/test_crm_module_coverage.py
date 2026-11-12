@@ -80,15 +80,15 @@ lifecycle:
         self.assertEqual(report["rpc_policy"], {})
         party = next(row for row in report["modules"] if row["module_id"] == "crm.parties")
         self.assertTrue(party["linked"])
-        self.assertIn("/crm.parties.v2.PartyService/GetParty", party["declared_rpc_paths"])
+        self.assertIn("/crm.parties.v3.PartyService/GetParty", party["declared_rpc_paths"])
 
     def test_runtime_evidence_is_required_to_claim_active_methods(self) -> None:
         current = coverage.build_report()
-        path = "/crm.parties.v2.PartyService/GetParty"
+        path = "/crm.parties.v3.PartyService/GetParty"
         proof = {"source_sha": current["source_sha"], "result": "PASS", "features": ["native-ci"],
                  "successful_rpc_calls": [path],
                  "rpc": {"compiled_policy_check": True, "registered_methods": [path],
-                         "policies": [[path, {"permission": "Read", "activation": "Published"}]]}}
+                         "policies": [[path, {"permission": "Read"}]]}}
         self.assertEqual(coverage.build_report(runtime=proof)["active_rpc_paths"], [path])
         proof["successful_rpc_calls"] = []
         with self.assertRaisesRegex(ValueError, "missing successful executed call"):
@@ -101,8 +101,8 @@ lifecycle:
     def test_active_rpc_without_manifest_binding_is_not_accepted(self) -> None:
         self.assertEqual(
             coverage.rpc_path({"kind": "protobuf_rpc",
-                               "rpc": "crm.parties.v2.PartyService.GetParty"}),
-            "/crm.parties.v2.PartyService/GetParty")
+                               "rpc": "crm.parties.v3.PartyService.GetParty"}),
+            "/crm.parties.v3.PartyService/GetParty")
         self.assertIsNone(coverage.rpc_path({"kind": "internal"}))
 
 

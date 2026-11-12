@@ -2,7 +2,6 @@ fn main() {
     // A single source list drives both code generation and Cargo dependency tracking.
     // Buf's canonical Protobuf remains the source of truth; no second registry.
     const CONNECT_PROTOS: &[&str] = &[
-        "../../../proto/crm/parties/v2/party.proto",
         "../../../proto/crm/core/v2/operation.proto",
         "../../../proto/crm/parties/v3/party.proto",
         "../../../proto/crm/accounts/v2/account.proto",

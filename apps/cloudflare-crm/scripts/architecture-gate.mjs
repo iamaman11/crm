@@ -9,11 +9,9 @@ const read=path=>readFileSync(resolve(repo,path),"utf8");
 const check=(ok,message)=>{if(!ok)throw Error("CRM_ARCHITECTURE_VIOLATION: "+message);};
 const policy=JSON.parse(read("apps/cloudflare-crm/architecture-policy.json"));
 check(policy.schema_version===1,"unknown policy schema");
-check(["contract-only","cutover"].includes(policy.phase),"unknown phase");
 check(policy.browser_wire_format==="Connect binary Protobuf","binary Connect wire choice changed");
-function validateModuleReport(report,phase){
+function validateModuleReport(report){
   check(report?.schema_version===1,"generated module report schema must be 1");
-  check(report?.phase===phase,"module report must match architecture phase");
   check(/^[a-f0-9]{40}$/.test(report?.source_sha||""),
     "module report must identify one immutable source SHA");
   check(Array.isArray(report.modules)&&report.modules.length>0,
@@ -75,7 +73,7 @@ validateWorkerConfig(production,local);
 const reportPath=process.env.CRM_MODULE_COVERAGE_REPORT;
 check(!!reportPath,"canonical manifest/Cargo report required");
 const report=JSON.parse(readFileSync(reportPath,"utf8"));
-validateModuleReport(report,policy.phase);
+validateModuleReport(report);
 check(report.source_sha===execFileSync("git",["rev-parse","HEAD"],{cwd:repo,encoding:"utf8"}).trim(),
  "stale module inventory");
 const appPackage=JSON.parse(read("apps/cloudflare-crm/package.json"));
@@ -85,12 +83,12 @@ const tsconfig=JSON.parse(read("apps/cloudflare-crm/tsconfig.json"));
 for(const key of ["strict","noUncheckedIndexedAccess","exactOptionalPropertyTypes"])
  check(tsconfig.compilerOptions?.[key]===true,"missing TS option "+key);
 check(tsconfig.compilerOptions?.allowJs===false,"allowJs must be false");
-if(policy.phase==="cutover"){
+{
  const sources=readdirSync(resolve(repo,"apps/cloudflare-crm/web/src"),{recursive:true});
  check(sources.some(path=>path.endsWith(".tsx")),"React TSX missing");
  check(!sources.some(path=>/\.(js|jsx|mjs)$/.test(path)),"legacy JS/JSX remains");
 }
 console.log(JSON.stringify({event:"crm.architecture-gate",result:"PASS",
  scope:"configuration and manifest/Cargo inventory",runtime_evidence:report.runtime_evidence,
- phase:policy.phase}));
+ policy_schema:policy.schema_version}));
 export {validateModuleReport};

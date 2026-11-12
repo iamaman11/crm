@@ -1,6 +1,6 @@
 //! Original crm-parties HTTP/D1 adapter. Business invariants belong only to
 //! the existing crm-parties crate; this file owns transport/persistence only.
-use super::{bind, error, now_nanos, response};
+use super::{bind, now_nanos};
 use crm_parties::{
     CreateParty, Party, PartyId, PartyKind, UpdateParty, decode_party_state, encode_party_state,
 };
@@ -9,19 +9,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use wasm_bindgen::JsValue;
-use worker::{D1Database, Method, Request, Response, Result};
+use worker::{D1Database, Result};
 
-#[derive(Deserialize)]
-struct CreateInput {
-    id: String,
-    kind: String,
-    name: String,
-}
-#[derive(Deserialize)]
-struct UpdateInput {
-    expected_version: i64,
-    name: String,
-}
 #[derive(Deserialize)]
 struct Stored {
     state: String,
@@ -35,15 +24,6 @@ struct Receipt {
 struct PartyRow {
     id: String,
     state: String,
-}
-
-pub(super) fn view(party: &Party) -> Value {
-    json!({
-        "id": party.party_id().as_str(),
-        "kind": match party.kind() { PartyKind::Person => "person", PartyKind::Organization => "organization" },
-        "name": party.display_name(),
-        "version": party.version(),
-    })
 }
 
 fn digest(kind: &str, id: &str, name: &str, version: i64) -> String {
@@ -389,96 +369,4 @@ pub(super) async fn list_page_typed(
         items.push(party);
     }
     Ok((items, next))
-}
-async fn create(mut req: Request, db: D1Database, tenant: &str, trace: &str) -> Result<Response> {
-    let key = req.headers().get("idempotency-key")?.unwrap_or_default();
-    let input = match req.json::<CreateInput>().await {
-        Ok(value) => value,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    let kind = match input.kind.as_str() {
-        "person" => PartyKind::Person,
-        "organization" => PartyKind::Organization,
-        _ => return error("INVALID_KIND", 422),
-    };
-    match create_typed(&db, tenant, input.id, kind, input.name, &key, trace).await? {
-        Ok(result) => response(
-            json!({"item":view(&result.party),
-            "replayed":result.replayed}),
-            if result.replayed { 200 } else { 201 },
-        ),
-        Err(failure) => error(&failure.code, failure.status),
-    }
-}
-async fn update(
-    mut req: Request,
-    db: D1Database,
-    tenant: &str,
-    id: &str,
-    trace: &str,
-) -> Result<Response> {
-    let key = req.headers().get("idempotency-key")?.unwrap_or_default();
-    let input = match req.json::<UpdateInput>().await {
-        Ok(value) => value,
-        Err(_) => return error("INVALID_INPUT", 422),
-    };
-    match update_typed(
-        &db,
-        tenant,
-        id,
-        input.name,
-        input.expected_version,
-        &key,
-        trace,
-    )
-    .await?
-    {
-        Ok(result) => response(
-            json!({"item":view(&result.party),
-            "replayed":result.replayed}),
-            200,
-        ),
-        Err(failure) => error(&failure.code, failure.status),
-    }
-}
-async fn read(db: D1Database, tenant: &str, id: &str) -> Result<Response> {
-    match stored(&db, tenant, id).await? {
-        Some(party) => response(json!({"item":view(&party)}), 200),
-        None => error("NOT_FOUND", 404),
-    }
-}
-async fn list(db: D1Database, tenant: &str) -> Result<Response> {
-    let (parties, _) = list_page_typed(&db, tenant, "", 100, None).await?;
-    response(
-        json!({"items":parties.iter().map(view).collect::<Vec<_>>()}),
-        200,
-    )
-}
-
-pub(super) async fn route(
-    req: Request,
-    db: D1Database,
-    tenant: &str,
-    trace: &str,
-) -> Result<Response> {
-    let path = req.path();
-    let method = req.method();
-    if path == "/api/parties" {
-        return match method {
-            Method::Post => create(req, db, tenant, trace).await,
-            Method::Get => list(db, tenant).await,
-            _ => error("NOT_FOUND", 404),
-        };
-    }
-    if let Some(id) = path.strip_prefix("/api/parties/") {
-        if id.is_empty() || id.contains('/') {
-            return error("NOT_FOUND", 404);
-        }
-        return match method {
-            Method::Get => read(db, tenant, id).await,
-            Method::Patch => update(req, db, tenant, id, trace).await,
-            _ => error("NOT_FOUND", 404),
-        };
-    }
-    error("NOT_FOUND", 404)
 }

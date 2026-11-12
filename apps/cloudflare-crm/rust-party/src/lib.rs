@@ -1,6 +1,5 @@
 //! Sole native workers-rs CRM entrypoint, linked to the original crm-parties owner.
-//! ci-local is a strictly isolated workerd acceptance fixture, never a public
-//! authentication mechanism. No JS router, duplicate Party rules or second Worker.
+//! Signed native-ci keys are isolated to CI; production verifies Cloudflare Access.
 use serde::Deserialize;
 use serde_json::{Value, json};
 use wasm_bindgen::JsValue;
@@ -81,27 +80,6 @@ fn now_nanos() -> i64 {
 }
 fn bind(db: &D1Database, sql: &str, values: &[JsValue]) -> Result<worker::d1::D1PreparedStatement> {
     db.prepare(sql).bind(values)
-}
-fn correlation_id(req: &Request, trusted: Option<&str>) -> Result<String> {
-    // Native's independently generated id takes precedence over any client header.
-    if let Some(id) = trusted {
-        return Ok(id.to_owned());
-    }
-    // The public native and integrated entries overwrite this internal header.
-    // The isolated CI build generates its own identifier if the header is absent.
-    let id = req
-        .headers()
-        .get("x-crm-internal-request-id")?
-        .filter(|value| {
-            value.len() == 36
-                && value
-                    .bytes()
-                    .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
-        });
-    match id {
-        Some(id) => Ok(id),
-        None => native_request_id(),
-    }
 }
 #[cfg(feature = "native")]
 #[derive(Deserialize)]
@@ -361,17 +339,9 @@ enum RpcPermission {
 }
 
 #[cfg(feature = "native")]
-#[derive(Clone, Copy, PartialEq, Eq, serde::Serialize)]
-enum RpcActivation {
-    Published,
-    Candidate,
-}
-
-#[cfg(feature = "native")]
 #[derive(Clone, Copy, serde::Serialize)]
 struct RpcPolicy {
     permission: RpcPermission,
-    activation: RpcActivation,
 }
 
 #[cfg(feature = "native")]
@@ -380,329 +350,276 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
         "/crm.customer_360.v2.Customer360Service/GetAccountOverview",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_data_operations.v2.PartyCsvService/PreviewPartyExport",
         RpcPolicy {
             permission: RpcPermission::AdminRead,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_data_operations.v2.PartyCsvService/PreviewPartyImport",
         RpcPolicy {
             permission: RpcPermission::AdminRead,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_data_operations.v2.PartyCsvService/ApplyPartyImport",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishProviderProfile",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishMapping",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_enrichment.v2.EnrichmentConfigurationService/GetProviderProfile",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_enrichment.v2.EnrichmentConfigurationService/GetMapping",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_enrichment.v2.EnrichmentConfigurationService/ListProviderProfiles",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_enrichment.v2.EnrichmentConfigurationService/ListMappings",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_privacy.v2.PrivacyCaseService/SubmitPrivacyCase",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_privacy.v2.PrivacyCaseService/CancelPrivacyCase",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_privacy.v2.PrivacyCaseService/GetPrivacyCase",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.customer_privacy.v2.PrivacyCaseService/ListPrivacyCases",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
-        },
-    ),
-    (
-        "/crm.parties.v2.PartyService/GetParty",
-        RpcPolicy {
-            permission: RpcPermission::Read,
-            activation: RpcActivation::Published,
         },
     ),
     (
         "/crm.parties.v3.PartyService/CreateParty",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.parties.v3.PartyService/UpdateParty",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.parties.v3.PartyService/GetParty",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.parties.v3.PartyService/ListParties",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.accounts.v2.AccountService/CreateAccount",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.accounts.v2.AccountService/UpdateAccount",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.accounts.v2.AccountService/GetAccount",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.accounts.v2.AccountService/ListAccounts",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.contact_points.v2.ContactPointService/CreateContactPoint",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.contact_points.v2.ContactPointService/UpdateContactPoint",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.contact_points.v2.ContactPointService/GetContactPoint",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.contact_points.v2.ContactPointService/ListContactPoints",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.party_relationships.v2.PartyRelationshipService/CreatePartyRelationship",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.party_relationships.v2.PartyRelationshipService/UpdatePartyRelationship",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.party_relationships.v2.PartyRelationshipService/GetPartyRelationship",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.party_relationships.v2.PartyRelationshipService/ListPartyRelationships",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.activities.v2.TaskService/CreateTask",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.activities.v2.TaskService/CompleteTask",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.activities.v2.TaskService/GetTask",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.activities.v2.TaskService/ListTasks",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.data_quality.v2.DataQualityService/EvaluatePartyName",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.identity_resolution.v2.IdentityResolutionService/FindSharedEmailCandidates",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.identity_resolution.v2.IdentityResolutionService/CompareParties",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.consents.v2.ConsentAuthorizationService/EvaluateConsent",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.consents.v2.ConsentAuthorizationService/SuppressCommunication",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.consents.v2.ConsentAuthorizationService/ListConsentAuthorizations",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.sales.v2.DealService/CreateDeal",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.sales.v2.DealService/UpdateDeal",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.sales.v2.DealService/AdvanceStage",
         RpcPolicy {
             permission: RpcPermission::Write,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.sales.v2.DealService/GetDeal",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
     (
         "/crm.sales.v2.DealService/ListDeals",
         RpcPolicy {
             permission: RpcPermission::Read,
-            activation: RpcActivation::Candidate,
         },
     ),
 ];
@@ -715,79 +632,32 @@ fn rpc_policy(path: &str) -> Option<RpcPolicy> {
         .map(|(_, rule)| *rule)
 }
 
-fn legacy_transport_disabled(path: &str) -> bool {
-    let diagnostic = matches!(
-        path,
-        "/api/health" | "/api/doctor" | "/api/session" | "/api/version"
-    );
-    let ci_only = cfg!(feature = "native-ci")
-        && matches!(
-            path,
-            "/api/_ci/original-domain-check" | "/api/customer-data-operations/parties.csv"
-        );
-    if path.starts_with("/api/") {
-        return !diagnostic && !ci_only;
-    }
-    if !path.starts_with("/crm.") {
-        return false;
-    }
-    #[cfg(feature = "native")]
-    {
-        match rpc_policy(path) {
-            Some(rule) if rule.activation == RpcActivation::Published => false,
-            Some(rule)
-                if rule.activation == RpcActivation::Candidate && cfg!(feature = "native-ci") =>
-            {
-                false
-            }
-            _ => true,
-        }
-    }
-    #[cfg(not(feature = "native"))]
-    {
-        path != "/crm.parties.v2.PartyService/GetParty"
-    }
-}
-
+#[cfg(feature = "native")]
 async fn dispatch(
     req: Request,
     env: Env,
     tenant: &str,
-    trusted_id: Option<&str>,
-    role: Option<&str>,
-    verified_actor: Option<&str>,
+    request_id: &str,
+    actor: &access::Actor,
 ) -> Result<Response> {
-    let request_id = correlation_id(&req, trusted_id)?;
     let path = req.path();
     let method = req.method();
-    // Contract-only transition: legacy CRUD and partial Sales RPC are not
-    // callable even by authenticated admins. No secondary transport or fallback.
-    // This guard is compiled into the Worker; it is not a mutable browser flag.
-    if legacy_transport_disabled(&path) {
-        return error("LEGACY_TRANSPORT_DISABLED", 410);
-    }
-    // The fail-closed gate above owns activation; this is the ONLY native
-    // Connect dispatch path, not a second manually synchronized service list.
-    #[cfg(feature = "native")]
     if path.starts_with("/crm.") {
         if method != Method::Post {
-            return error("NOT_FOUND", 404);
+            return rpc_error(connectrpc::ConnectError::unimplemented("POST required"));
         }
-        // The same exact-path policy owns both activation and authorization.
+        // One explicit policy authorizes every registered RPC.
         let Some(rule) = rpc_policy(&path) else {
-            return error("LEGACY_TRANSPORT_DISABLED", 410);
+            return rpc_error(connectrpc::ConnectError::unimplemented("Unknown RPC"));
         };
         if matches!(
             rule.permission,
             RpcPermission::Write | RpcPermission::AdminRead
-        ) && role != Some("admin")
+        ) && actor.role != "admin"
         {
             return rpc_error(connectrpc::ConnectError::permission_denied("FORBIDDEN"));
         }
-        let Some(actor) = verified_actor else {
-            return rpc_error(connectrpc::ConnectError::unauthenticated("AUTH_REQUIRED"));
-        };
-        return connect_sales::route(req, env, tenant, actor, &request_id).await;
+        return connect_sales::route(req, env, tenant, &actor.identity, request_id).await;
     }
     let db = env.d1("DB")?;
     // Explicitly CI-only, signed-Access-gated native workerd proof. This gate
@@ -795,13 +665,7 @@ async fn dispatch(
     #[cfg(feature = "native-ci")]
     if path == "/api/_ci/original-domain-check" && method == Method::Get {
         let code = original_domain_probe::check();
-        let router = connect_sales::router(
-            env,
-            tenant,
-            verified_actor
-                .ok_or_else(|| worker::Error::RustError("verified actor missing".into()))?,
-            &request_id,
-        );
+        let router = connect_sales::router(env, tenant, &actor.identity, request_id);
         let mut methods: Vec<String> = router
             .methods()
             .map(|path| format!("/{}", path.trim_start_matches('/')))
@@ -811,9 +675,7 @@ async fn dispatch(
         let policy_ok = RPC_POLICIES.iter().all(|(path, rule)| {
             policy_paths.insert(*path)
                 && router.has_method(path)
-                && rpc_policy(path).is_some_and(|found| {
-                    found.permission == rule.permission && found.activation == rule.activation
-                })
+                && rpc_policy(path).is_some_and(|found| found.permission == rule.permission)
         }) && methods.iter().all(|path| rpc_policy(path).is_some())
             && rpc_policy("/crm.unregistered.v1.Service/Unknown").is_none();
         let checked = code == 0 && policy_ok;
@@ -833,56 +695,8 @@ async fn dispatch(
             if checked { 200 } else { 503 },
         );
     }
-    #[cfg(feature = "native")]
-    if path == "/api/consents" || path.starts_with("/api/consents/") {
-        let Some(actor) = verified_actor else {
-            return error("AUTH_REQUIRED", 401);
-        };
-        let Some(role) = role else {
-            return error("AUTH_REQUIRED", 401);
-        };
-        return consents::route(req, db, tenant, actor, role, &request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if path.starts_with("/api/customer-data-operations/") {
-        return customer_data_operations::route(req, db, tenant, role).await;
-    }
-    #[cfg(feature = "native")]
-    if path.starts_with("/api/data-quality/") {
-        return data_quality::route(req, db, tenant).await;
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/identity-resolution" || path.starts_with("/api/identity-resolution/") {
-        return identity_resolution::route(req, db, tenant).await;
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/sales-deals" || path.starts_with("/api/sales-deals/") {
-        let Some(actor) = verified_actor else {
-            return error("AUTH_REQUIRED", 401);
-        };
-        return sales_deals::route(req, db, tenant, actor, &request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/activity-tasks" || path.starts_with("/api/activity-tasks/") {
-        let Some(actor) = verified_actor else {
-            return error("AUTH_REQUIRED", 401);
-        };
-        return activity_tasks::route(req, db, tenant, actor, &request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/party-relationships" || path.starts_with("/api/party-relationships/") {
-        return party_relationships::route(req, db, tenant, &request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/contact-points" || path.starts_with("/api/contact-points/") {
-        return contact_points::route(req, db, tenant, &request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/accounts" || path.starts_with("/api/accounts/") {
-        return accounts::route(req, db, tenant, &request_id).await;
-    }
-    if path == "/api/parties" || path.starts_with("/api/parties/") {
-        return parties::route(req, db, tenant, &request_id).await;
+    if path == "/api/customer-data-operations/parties.csv" {
+        return customer_data_operations::route(req, db, tenant, Some(&actor.role)).await;
     }
     #[cfg(feature = "native")]
     {
@@ -890,7 +704,7 @@ async fn dispatch(
             return response(json!({"service":"crm-dev","status":"ok"}), 200);
         }
         if path == "/api/session" && method == Method::Get {
-            return response(json!({"authenticated":true,"role":role}), 200);
+            return response(json!({"authenticated":true,"role":actor.role}), 200);
         }
         if path == "/api/version" && method == Method::Get {
             return response(
@@ -901,31 +715,12 @@ async fn dispatch(
             );
         }
     }
-    let _ = (env, role);
+    let _ = env;
     error("NOT_FOUND", 404)
 }
 
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    #[cfg(all(feature = "ci-local", feature = "native"))]
-    compile_error!("ci-local and native are mutually exclusive");
-
-    // Only the compiled-in test mode trusts a loopback CI-only header.
-    #[cfg(feature = "ci-local")]
-    {
-        if env.var("CRM_CI_LOCAL_ONLY").ok().map(|v| v.to_string()) != Some("yes".into()) {
-            return error("AUTH_REQUIRED", 403);
-        }
-        let Some(tenant) = req
-            .headers()
-            .get("x-crm-ci-tenant")?
-            .filter(|s| s == "tenant-a" || s == "tenant-b")
-        else {
-            return error("AUTH_REQUIRED", 403);
-        };
-        return dispatch(req, env, &tenant, None, None, None).await;
-    }
-
     #[cfg(feature = "native")]
     {
         // One correlation boundary, shared by Access, native domain and D1.
@@ -936,125 +731,13 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         let method = req.method();
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
-        let operation = match (path.as_str(), method.clone()) {
-            ("/api/customer-enrichment/profiles", Method::Get) => {
-                "customer-enrichment.profiles_list"
-            }
-            ("/api/customer-enrichment/profiles", Method::Post) => {
-                "customer-enrichment.profile_publish"
-            }
-            ("/api/customer-enrichment/mappings", Method::Get) => {
-                "customer-enrichment.mappings_list"
-            }
-            ("/api/customer-enrichment/mappings", Method::Post) => {
-                "customer-enrichment.mapping_publish"
-            }
-            (p, Method::Get) if p.starts_with("/api/customer-enrichment/profiles/") => {
-                "customer-enrichment.profile_read"
-            }
-            (p, Method::Get) if p.starts_with("/api/customer-enrichment/mappings/") => {
-                "customer-enrichment.mapping_read"
-            }
-            ("/api/customer-privacy/cases", Method::Get) => "customer-privacy.list",
-            ("/api/customer-privacy/cases", Method::Post) => "customer-privacy.create",
-            (p, Method::Get) if p.starts_with("/api/customer-privacy/cases/") => {
-                "customer-privacy.read"
-            }
-            (p, Method::Post)
-                if p.starts_with("/api/customer-privacy/cases/") && p.ends_with("/submit") =>
-            {
-                "customer-privacy.submit"
-            }
-            (p, Method::Post)
-                if p.starts_with("/api/customer-privacy/cases/") && p.ends_with("/cancel") =>
-            {
-                "customer-privacy.cancel"
-            }
-            ("/api/customer-data-operations/import-preview", Method::Post) => {
-                "customer-data-operations.import-preview"
-            }
-            ("/api/customer-data-operations/import-apply", Method::Post) => {
-                "customer-data-operations.import-apply"
-            }
-            ("/api/customer-data-operations/preview", Method::Get) => {
-                "customer-data-operations.preview"
-            }
-            ("/api/customer-data-operations/parties.csv", Method::Get) => {
-                "customer-data-operations.export"
-            }
-            (p, Method::Get)
-                if p.starts_with("/api/data-quality/parties/") && p.ends_with("/evaluate") =>
-            {
-                "data-quality.evaluate"
-            }
-            ("/api/identity-resolution/candidates", Method::Get) => {
-                "identity-resolution.candidates"
-            }
-            (p, Method::Get) if p.starts_with("/api/identity-resolution/compare/") => {
-                "identity-resolution.compare"
-            }
-            ("/api/consents", Method::Get) => "consents.list",
-            ("/api/consents/evaluate", Method::Post) => "consents.evaluate",
-            ("/api/consents/suppress", Method::Post) => "consents.suppress",
-            (p, Method::Post) if p.starts_with("/crm.") => p,
-            ("/api/sales-deals", Method::Get) => "sales-deals.list",
-            ("/api/sales-deals", Method::Post) => "sales-deals.create",
-            (p, Method::Get) if p.starts_with("/api/sales-deals/") => "sales-deals.read",
-            (p, Method::Patch) if p.starts_with("/api/sales-deals/") => "sales-deals.update",
-            (p, Method::Post) if p.starts_with("/api/sales-deals/") && p.ends_with("/advance") => {
-                "sales-deals.advance"
-            }
-            ("/api/activity-tasks", Method::Get) => "activity-tasks.list",
-            ("/api/activity-tasks", Method::Post) => "activity-tasks.create",
-            (p, Method::Get) if p.starts_with("/api/activity-tasks/") => "activity-tasks.read",
-            (p, Method::Post)
-                if p.starts_with("/api/activity-tasks/") && p.ends_with("/complete") =>
-            {
-                "activity-tasks.complete"
-            }
-            ("/api/party-relationships", Method::Get) => "party-relationships.list",
-            ("/api/party-relationships", Method::Post) => "party-relationships.create",
-            (p, Method::Get) if p.starts_with("/api/party-relationships/") => {
-                "party-relationships.read"
-            }
-            (p, Method::Patch) if p.starts_with("/api/party-relationships/") => {
-                "party-relationships.update"
-            }
-            ("/api/contact-points", Method::Get) => "contact-points.list",
-            ("/api/contact-points", Method::Post) => "contact-points.create",
-            (p, Method::Get) if p.starts_with("/api/contact-points/") => "contact-points.read",
-            (p, Method::Patch) if p.starts_with("/api/contact-points/") => "contact-points.update",
-            ("/api/accounts", Method::Get) => "accounts.list",
-            ("/api/accounts", Method::Post) => "accounts.create",
-            (p, Method::Get) if p.starts_with("/api/accounts/") && p.ends_with("/overview") => {
-                "accounts.overview"
-            }
-            (p, Method::Get) if p.starts_with("/api/accounts/") => "accounts.read",
-            (p, Method::Patch) if p.starts_with("/api/accounts/") => "accounts.update",
-            ("/api/parties", Method::Get) => "parties.list",
-            ("/api/parties", Method::Post) => "parties.create",
-            (p, Method::Get) if p.starts_with("/api/parties/") => "parties.read",
-            (p, Method::Patch) if p.starts_with("/api/parties/") => "parties.update",
-            ("/api/doctor", Method::Get) => "doctor.read",
-            ("/api/health", Method::Get) => "health.read",
-            ("/api/session", Method::Get) => "session.read",
-            ("/api/version", Method::Get) => "version.read",
-            _ => "unmatched",
-        };
+        let operation = path.as_str();
         let (result, phase) = match access::actor(&req, &env).await {
             Ok(Some(actor)) if path == "/api/doctor" && method == Method::Get => {
                 (native_doctor(&env, &actor.tenant).await, "diagnostics")
             }
             Ok(Some(actor)) => (
-                dispatch(
-                    req,
-                    env,
-                    &actor.tenant,
-                    Some(&request_id),
-                    Some(&actor.role),
-                    Some(&actor.identity),
-                )
-                .await,
+                dispatch(req, env, &actor.tenant, &request_id, &actor).await,
                 "domain_d1",
             ),
             Ok(None) if path.starts_with("/crm.") => (
@@ -1078,41 +761,6 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             Err(_) => error("INTERNAL_ERROR", 500)?,
         };
         reply.headers_mut().set("x-request-id", &request_id)?;
-        let module = if path == "/api/doctor" {
-            "crm.diagnostics"
-        } else if path.starts_with("/api/parties")
-            || (path.starts_with("/crm.parties.v2.PartyService/")
-                || path.starts_with("/crm.parties.v3.PartyService/"))
-        {
-            "crm.parties"
-        } else if path.starts_with("/api/accounts") {
-            "crm.customer-accounts"
-        } else if path.starts_with("/api/contact-points") {
-            "crm.contact-points"
-        } else if path.starts_with("/api/party-relationships") {
-            "crm.party-relationships"
-        } else if path.starts_with("/api/activity-tasks") {
-            "crm.activities"
-        } else if path.starts_with("/api/sales-deals")
-            || path.starts_with("/crm.sales.v2.DealService/")
-        {
-            "crm.sales"
-        } else if path.starts_with("/api/consents") {
-            "crm.consents"
-        } else if path.starts_with("/api/identity-resolution") {
-            "crm.identity-resolution"
-        } else if path.starts_with("/api/data-quality") {
-            "crm.data-quality"
-        } else if path.starts_with("/api/customer-data-operations") {
-            "crm.customer-data-operations"
-        } else if path.starts_with("/api/customer-privacy") {
-            "crm.customer-privacy"
-        } else if path.starts_with("/api/customer-enrichment") {
-            "crm.customer-enrichment"
-        } else {
-            "crm.platform"
-        };
-        reply.headers_mut().set("x-crm-module", module)?;
         reply
             .headers_mut()
             .set("x-crm-runtime", "native-workers-rs")?;
@@ -1128,7 +776,6 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             "{}",
             json!({
                 "event":"crm.native.request", "request_id":request_id,
-                "module":module,
                 "operation":operation, "phase":phase,
                 "status":reply.status_code(), "error_code":error_code, "duration_ms":elapsed
             })
@@ -1136,7 +783,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         Ok(reply)
     }
 
-    #[cfg(not(any(feature = "ci-local", feature = "native")))]
+    #[cfg(not(feature = "native"))]
     {
         let _ = (req, env);
         error("AUTH_REQUIRED", 403)

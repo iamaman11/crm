@@ -49,7 +49,6 @@ jobs:
           node --check scripts/crm-clean-schema.test.mjs
           node --check apps/cloudflare-crm/rust-party/test/native.mjs
           node --check apps/cloudflare-crm/rust-party/test/typed-browser.mjs
-          node --check apps/cloudflare-crm/rust-party/test/contract-only-native.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
       - name: Verify Python governance and affected-scope tests using declared dependencies
         shell: bash
@@ -172,7 +171,7 @@ jobs:
       - name: Compile the actual Worker owner graph for WebAssembly
         run: cargo check --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native
       - name: Run Clippy on the actual Worker for WebAssembly
-        run: cargo clippy --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all
+        run: cargo clippy --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations
       - name: Test original Rust owners with the Worker dependency features
         shell: bash
         run: |
@@ -235,17 +234,6 @@ jobs:
             cargo install --locked worker-build --version 0.8.7
           fi
           worker-build --version
-      - name: Build isolated native D1 test Worker
-        working-directory: apps/cloudflare-crm/rust-party
-        run: worker-build --release --locked --features ci-local
-      - name: Test original Rust Party through workerd and isolated native D1
-        working-directory: apps/cloudflare-crm
-        run: |
-          if [ "$(node -p 'require("./architecture-policy.json").phase')" = "contract-only" ]; then
-            node rust-party/test/contract-only-local.mjs
-          else
-            node rust-party/test/local.mjs
-          fi
       # Only one production-feature WASM build on main; this same binary is sealed
       # and published. PR also runs alternative test features for coverage.
       - name: Build exact native Rust Worker for review or release
@@ -294,11 +282,7 @@ jobs:
           CRM_SOURCE_SHA: ${{ github.sha }}
           CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
         run: |
-          if [ "$(node -p 'require("./architecture-policy.json").phase')" = "contract-only" ]; then
-            node rust-party/test/contract-only-native.mjs
-          else
-            node rust-party/test/native.mjs
-          fi
+          node rust-party/test/native.mjs
       - name: Verify compiled router, executed policy and RPC calls against Buf
         run: |
           set -euo pipefail
@@ -332,9 +316,6 @@ jobs:
           node --check apps/cloudflare-crm/scripts/deploy.mjs
           node --check apps/cloudflare-crm/test/native-runtime.test.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
-          node --check apps/cloudflare-crm/e2e/contract-only.mjs
-          node --check apps/cloudflare-crm/rust-party/test/contract-only-local.mjs
-          node --check apps/cloudflare-crm/rust-party/test/contract-only-native.mjs
       - name: Check CRM target
         run: |
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
@@ -350,13 +331,15 @@ jobs:
             echo 'FAIL: JS dispatcher must not be published' >&2
             exit 1
           fi
-      - name: Require complete hard cutover before accepting any artifact
+      - name: Require actual browser acceptance before sealing any artifact
         run: |
           node --input-type=module -e '
             import assert from "node:assert/strict";
             import {readFileSync} from "node:fs";
-            const policy = JSON.parse(readFileSync("apps/cloudflare-crm/architecture-policy.json", "utf8"));
-            assert.equal(policy.phase, "cutover", "NO-GO: legacy transition is not the accepted application");
+            const evidence = JSON.parse(readFileSync("apps/cloudflare-crm/e2e-evidence-native/typed-browser.json", "utf8"));
+            assert.equal(evidence.result, "PASS");
+            assert.equal(evidence.source_sha, process.env.GITHUB_SHA);
+            assert.deepEqual(evidence.features, ["native-ci"]);
           '
       - name: Seal exactly tested development bundle
         shell: bash

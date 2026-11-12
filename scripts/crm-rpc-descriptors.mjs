@@ -9,6 +9,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const requireClient=createRequire(resolve(root,"packages/client/package.json"));
 const {fromBinary}=requireClient("@bufbuild/protobuf");
 const {FileDescriptorSetSchema,MethodOptions_IdempotencyLevel}=requireClient("@bufbuild/protobuf/wkt");
+export {MethodOptions_IdempotencyLevel};
 const fail=message=>{throw Error("CRM_RPC_DESCRIPTOR_VIOLATION: "+message);};
 export function descriptorMethods(bytes){
  const set=fromBinary(FileDescriptorSetSchema,bytes);
@@ -34,6 +35,13 @@ export function validateBindings(report,available){
  }
  return bound;
 }
+// Select the Cloudflare generation of contracts from compiled file descriptors.
+// Historical v1 and superseded Party v2 remain available to other consumers.
+export function targetMethods(available){
+ return [...available].filter(([,d])=>
+  /^crm\/[^/]+\/v(?:2|3)\/[^/]+\.proto$/.test(d.file)&&d.package!=="crm.parties.v2")
+  .map(([path])=>path).sort();
+}
 export function validateRuntime(report,available,bound){
  const evidence=report.runtime;
  if(report.runtime_evidence!=="EXECUTED"||evidence?.result!=="PASS")
@@ -54,10 +62,9 @@ export function validateRuntime(report,available,bound){
   if(!bound.has(path))fail("registered RPC absent from canonical module.yaml binding "+path);
   if(!bound.get(path).linked)fail("RPC owner is not linked into Worker "+path);
   const rule=policies.get(path);
-  if(!rule||!["Read","AdminRead","Write"].includes(rule.permission)||
-     !["Published","Candidate"].includes(rule.activation))fail("missing or invalid compiled policy "+path);
+  if(!rule||!["Read","AdminRead","Write"].includes(rule.permission))fail("missing or invalid compiled policy "+path);
   const definition=available.get(path);
-  if(definition.package!=="crm.parties.v2"){
+  {
    const expected=rule.permission==="Write"
     ?MethodOptions_IdempotencyLevel.IDEMPOTENT:MethodOptions_IdempotencyLevel.NO_SIDE_EFFECTS;
    if(definition.idempotency!==expected)fail("compiled policy effect differs from Protobuf "+path);
@@ -66,20 +73,13 @@ export function validateRuntime(report,available,bound){
  }
  for(const path of policies.keys())if(!registered.has(path))fail("policy without registered RPC "+path);
  for(const path of success)if(!registered.has(path))fail("executed RPC without registration "+path);
- const published=[...policies].filter(([,rule])=>rule.activation==="Published").map(([path])=>path).sort();
- if(JSON.stringify(published)!==JSON.stringify([...report.active_rpc_paths].sort()))
-  fail("published methods differ from executed policy");
- if(report.phase==="contract-only"&&published.length!==1)
-  fail("contract-only must expose exactly one verified published RPC");
- if(report.phase==="cutover"){
-  const expected=[...available].filter(([,d])=>
-   /^crm\/[^/]+\/v(?:2|3)\/[^/]+\.proto$/.test(d.file)&&d.package!=="crm.parties.v2")
-   .map(([path])=>path);
-  if(expected.length!==registered.size||expected.some(path=>!registered.has(path)))
-   fail("full cutover contract differs from registered methods");
-  if(published.length!==registered.size)fail("cutover retains unpublished candidates");
- }
- return {registered:[...registered].sort(),published};
+ const expected=targetMethods(available);
+ if(expected.length!==registered.size||expected.some(path=>!registered.has(path)))
+  fail("full contract differs from registered methods");
+ if(JSON.stringify([...registered].sort())!==JSON.stringify([...report.active_rpc_paths].sort()))
+  fail("active methods differ from executed policy");
+
+ return {registered:[...registered].sort()};
 }
 export function run(){
  const descriptor=process.argv[2],reportFile=process.env.CRM_MODULE_COVERAGE_REPORT;
