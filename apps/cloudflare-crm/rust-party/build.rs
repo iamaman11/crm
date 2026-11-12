@@ -13,6 +13,7 @@ fn main() {
         "../../../proto/crm/identity_resolution/v2/identity.proto",
         "../../../proto/crm/consents/v2/consent.proto",
         "../../../proto/crm/sales/v2/deal.proto",
+        "../../../proto/crm/customer_privacy/v2/case.proto",
     ];
     let protoc = protoc_bin_vendored::protoc_bin_path().expect("vendored protoc");
     unsafe { std::env::set_var("PROTOC", protoc); }

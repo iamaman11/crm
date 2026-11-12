@@ -276,6 +276,11 @@ struct RpcPolicy {
 
 #[cfg(feature = "native")]
 const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
+    ("/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.customer_privacy.v2.PrivacyCaseService/SubmitPrivacyCase", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.customer_privacy.v2.PrivacyCaseService/CancelPrivacyCase", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
+    ("/crm.customer_privacy.v2.PrivacyCaseService/GetPrivacyCase", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
+    ("/crm.customer_privacy.v2.PrivacyCaseService/ListPrivacyCases", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
     ("/crm.parties.v2.PartyService/GetParty", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Published }),
     ("/crm.parties.v3.PartyService/CreateParty", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
     ("/crm.parties.v3.PartyService/UpdateParty", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
@@ -408,13 +413,6 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
         let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
         let Some(role)=role else{return error("AUTH_REQUIRED",401)};
         return customer_enrichment::route(req,db,tenant,actor,role,&request_id).await;
-    }
-    #[cfg(feature = "native")]
-    if path == "/api/customer-privacy/cases" ||
-       path.starts_with("/api/customer-privacy/cases/") {
-        let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
-        let Some(role)=role else{return error("AUTH_REQUIRED",401)};
-        return customer_privacy::route(req,db,tenant,actor,role,&request_id).await;
     }
     #[cfg(feature = "native")]
     if path.starts_with("/api/customer-data-operations/") {

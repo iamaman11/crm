@@ -15,7 +15,8 @@ import {binaryPartyGet,decodePartyGet,partyGetPath,
   binaryQualityV2,decodeQualityV2,qualityV2Path,
   binaryIdentityV2,decodeIdentityV2,identityV2Path,
   binaryConsentV2,decodeConsentV2,consentV2Path,
-  binarySalesV2,decodeSalesV2,salesV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  binarySalesV2,decodeSalesV2,salesV2Path,
+  binaryPrivacyV2,decodePrivacyV2,privacyV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-contract-only-"));
 const base="http://127.0.0.1:18789";
@@ -1102,6 +1103,72 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2-candidate",result:"PAS
    published_active:false}));
 
  assert.equal((await call("/crm.future.v9.FutureService/NotRegistered",viewer,"POST")).status,410);
+
+ // Privacy intake: execute original domain transitions through binary Connect.
+ const privacy=signedReadOnly(privacyV2Path,binaryPrivacyV2,decodePrivacyV2);
+ const caseId="privacy-case-"+randomUUID();
+ const draftInput={caseId,kind:1,precondition:{idempotencyKey:"privacy-create-main"}};
+ assert.equal((await privacy("CreatePrivacyCase",admin,{...draftInput,kind:0})).body.code,"invalid_argument");
+ assert.equal((await privacy("CreatePrivacyCase",admin,{...draftInput,kind:999})).body.code,"invalid_argument");
+ assert.equal((await privacy("CreatePrivacyCase",admin,{...draftInput,
+   precondition:{idempotencyKey:"privacy-create-invalid",expectedVersion:1n}})).body.code,"invalid_argument");
+ const draft=await privacy("CreatePrivacyCase",admin,draftInput);
+ assert.equal(draft.status,200,describeProtobuf(draft.body));
+ assert.equal(draft.body.privacyCase?.caseId,caseId);
+ assert.equal(draft.body.privacyCase?.status,1);
+ assert.equal(draft.body.privacyCase?.version,1n);
+ assert.equal(draft.body.privacyCase?.subjectVerified,false);
+ assert.equal(draft.body.receipt?.requestId,draft.headers.get("x-request-id"));
+ assert.equal(draft.body.receipt?.replayed,false);
+ const originalAudit=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'")[0].n;
+ assert.equal(originalAudit,1);
+ assert.equal((await privacy("CreatePrivacyCase",admin,draftInput)).body.receipt?.replayed,true);
+ assert.equal((await privacy("CreatePrivacyCase",admin,{...draftInput,kind:4})).body.code,"aborted");
+ assert.equal((await privacy("GetPrivacyCase",viewer,{caseId})).body.privacyCase?.version,1n);
+ assert.equal((await privacy("GetPrivacyCase",tenantB,{caseId})).body.code,"not_found");
+ assert.equal((await privacy("GetPrivacyCase",viewer,{caseId:"bad/id"})).body.code,"invalid_argument");
+ const submit={caseId,precondition:{expectedVersion:1n,idempotencyKey:"privacy-submit-main"}};
+ assert.equal((await privacy("SubmitPrivacyCase",tenantB,submit)).body.code,"not_found");
+ assert.equal((await privacy("SubmitPrivacyCase",admin,{...submit,
+   precondition:{expectedVersion:9n,idempotencyKey:"privacy-submit-stale"}})).body.code,"aborted");
+ const submitted=await privacy("SubmitPrivacyCase",admin,submit);
+ assert.equal(submitted.status,200,describeProtobuf(submitted.body));
+ assert.equal(submitted.body.privacyCase?.status,2);
+ assert.equal(submitted.body.receipt?.resourceVersion,2n);
+ assert.equal((await privacy("SubmitPrivacyCase",admin,submit)).body.receipt?.replayed,true);
+ assert.equal((await privacy("SubmitPrivacyCase",admin,{...submit,
+   precondition:{expectedVersion:2n,idempotencyKey:"privacy-submit-again"}})).body.code,"failed_precondition");
+ const cancel={caseId,precondition:{expectedVersion:2n,idempotencyKey:"privacy-cancel-main"}};
+ assert.equal((await privacy("CancelPrivacyCase",tenantB,cancel)).body.code,"not_found");
+ const cancelled=await privacy("CancelPrivacyCase",admin,cancel);
+ assert.equal(cancelled.status,200,describeProtobuf(cancelled.body));
+ assert.equal(cancelled.body.privacyCase?.status,15);
+ assert.equal(cancelled.body.receipt?.resourceVersion,3n);
+ assert.equal((await privacy("CancelPrivacyCase",admin,cancel)).body.receipt?.replayed,true);
+ // Replaying the earlier submit returns its original receipt, not latest state.
+ const submitReplay=await privacy("SubmitPrivacyCase",admin,submit);
+ assert.equal(submitReplay.body.receipt?.replayed,true);
+ assert.equal(submitReplay.body.privacyCase?.status,2);
+ assert.equal((await privacy("GetPrivacyCase",viewer,{caseId})).body.privacyCase?.status,15);
+ assert.equal(sql("SELECT version FROM crm_privacy_case_records WHERE tenant='tenant-a' AND id='"+caseId+"'")[0].version,3);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_privacy_case_receipts WHERE tenant='tenant-a'")[0].n,3);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'")[0].n,3);
+ for(const suffix of ["aaa","zzz"]){
+   const result=await privacy("CreatePrivacyCase",admin,{caseId:"privacy-"+suffix,kind:4,
+     precondition:{idempotencyKey:"privacy-page-"+suffix}});
+   assert.equal(result.status,200,describeProtobuf(result.body));
+ }
+ assert.equal((await privacy("ListPrivacyCases",viewer,{page:{pageSize:101}})).body.code,"invalid_argument");
+ const allCases=await collectPages(privacy,"ListPrivacyCases","cases");
+ assert.equal(allCases.length,3);
+ assert.deepEqual(allCases.map(x=>x.caseId),["privacy-aaa",caseId,"privacy-zzz"].sort());
+ assert.equal((await privacy("ListPrivacyCases",tenantB,{page:{pageSize:1}})).body.cases.length,0);
+ assert.equal((await privacy("ListPrivacyCases",viewer,{page:{pageSize:1,pageToken:"privacy-zzz"}})).body.cases.length,0);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'")[0].n,3,
+   "read and denied requests must not write audit for the case");
+ console.log(JSON.stringify({event:"crm.native-privacy-v2",result:"PASS",
+   original_owner:"crm.customer-privacy",tenant_ab:true,cas:true,replay:true,
+   page_bounds:true,d1_audit:true,subject_verification:"NOT_CONNECTED"}));
  // Write evidence only after every scenario assertion above has completed.
  // A successful call is transport exercise coverage, not proof of all possible
  // business states. Domain/CAS/tenant assertions remain independently explicit.

@@ -159,3 +159,17 @@ export const binarySalesV2=(name,payload)=>{
 export const decodeSalesV2=(name,bytes)=>fromBinary(salesV2Method(name).output,bytes);
 
 
+
+const privacyService=registry.getService("crm.customer_privacy.v2.PrivacyCaseService");
+if(!privacyService)throw Error("compiled PrivacyCase v2 service missing");
+const privacyMethod=name=>{
+ const method=privacyService.methods.find(item=>item.name===name);
+ if(!method)throw Error("compiled PrivacyCase v2 RPC missing "+name);
+ return method;
+};
+export const privacyV2Path=name=>"/crm.customer_privacy.v2.PrivacyCaseService/"+privacyMethod(name).name;
+export const binaryPrivacyV2=(name,payload)=>{
+ const method=privacyMethod(name);
+ return toBinary(method.input,create(method.input,payload));
+};
+export const decodePrivacyV2=(name,bytes)=>fromBinary(privacyMethod(name).output,bytes);

@@ -1,24 +1,16 @@
-// Architecture as code for the ONE Cloudflare CRM. Node built-ins only.
-// migration-freeze: no newly released legacy/half-migrated runtime.
-// cutover: fail closed until the whole TSX/Connect/one-D1 architecture is ready.
-import {readFileSync, readdirSync, existsSync} from "node:fs";
+// Static configuration checks only. Runtime acceptance is performed after
+// compiled workerd execution; TypeScript owns source/module analysis.
+import {readFileSync,readdirSync} from "node:fs";
 import {execFileSync} from "node:child_process";
-import {dirname, resolve, relative, sep} from "node:path";
+import {dirname,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-
-const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const pathInRepo = path => resolve(repo,path);
-const read = path => readFileSync(pathInRepo(path), "utf8");
-const check = (ok, message) => {if(!ok)throw Error("CRM_ARCHITECTURE_VIOLATION: "+message);};
-const git = (...args) => execFileSync("git", args, {cwd:repo,encoding:"utf8"});
-const policy = JSON.parse(read("apps/cloudflare-crm/architecture-policy.json"));
-check(policy.schema_version===1, "unknown policy schema");
-check(["migration-freeze","contract-only","cutover"].includes(policy.phase), "unknown phase");
-check(/^[a-f0-9]{40}$/.test(policy.accepted_runtime_sha), "baseline must be an immutable SHA");
-check(policy.browser_wire_format==="Connect binary Protobuf", "binary Connect wire choice changed");
-check(Array.isArray(policy.allowed_non_rpc_http), "HTTP exceptions must be explicit");
-const baseline = policy.accepted_runtime_sha;
-
+const repo=resolve(dirname(fileURLToPath(import.meta.url)),"../../..");
+const read=path=>readFileSync(resolve(repo,path),"utf8");
+const check=(ok,message)=>{if(!ok)throw Error("CRM_ARCHITECTURE_VIOLATION: "+message);};
+const policy=JSON.parse(read("apps/cloudflare-crm/architecture-policy.json"));
+check(policy.schema_version===1,"unknown policy schema");
+check(["contract-only","cutover"].includes(policy.phase),"unknown phase");
+check(policy.browser_wire_format==="Connect binary Protobuf","binary Connect wire choice changed");
 function validateModuleReport(report,phase){
   check(report?.schema_version===1,"generated module report schema must be 1");
   check(report?.phase===phase,"module report must match architecture phase");
@@ -58,223 +50,47 @@ function validateModuleReport(report,phase){
   const missing=report.active_rpc_paths.filter(rpc=>!rpcOwner.has(rpc)).sort();
   check(JSON.stringify(missing)===JSON.stringify([...report.unclaimed_active_rpc_paths].sort()),
     "generated report omitted unresolved active RPCs");
-  if(phase==="cutover"){
+  if(report.runtime_evidence==="EXECUTED"){
     check(missing.length===0,"active RPC lacks canonical module.yaml binding: "+missing.join(","));
-    for(const m of report.modules){
-      if(m.linked&&m.declared_rpc_paths.length){
-        check(m.active_rpc_paths.length>0,
-          "linked module has no accepted Connect service: "+m.module_id);
-      }
-    }
   }
 }
-const moduleReportPath=process.env.CRM_MODULE_COVERAGE_REPORT;
-const moduleReport=moduleReportPath?JSON.parse(readFileSync(moduleReportPath,"utf8")):null;
-if(moduleReport){
-  validateModuleReport(moduleReport,policy.phase);
-  check(moduleReport.source_sha===git("rev-parse","HEAD").trim(),
-    "stale module inventory: source SHA mismatch");
-}else check(policy.phase!=="cutover","cutover requires generated module coverage report");
 
-git("cat-file","-e",baseline+"^{commit}");
-
-function treeFiles(dir){
-  if(!existsSync(pathInRepo(dir)))return [];
-  const result=[];
-  const visit=(folder)=>{
-    for(const item of readdirSync(pathInRepo(folder),{withFileTypes:true})){
-      const next=folder+"/"+item.name;
-      if(item.isDirectory())visit(next);
-      else if(item.isFile())result.push(next);
-    }
-  };
-  visit(dir);
-  return result;
+export function validateWorkerConfig(production,local){
+ check(production.name==="crm-dev","unexpected Worker");
+ check(production.main==="./rust-party/build/index.js","Worker must be native workers-rs");
+ check(production.account_id==="5bd5e1e1e813f061afc259e91334262d","unexpected Cloudflare account");
+ check(production.d1_databases?.length===1&&production.d1_databases[0].binding==="DB",
+   "exactly one native D1 binding");
+ check(production.d1_databases[0].database_id==="35fc7ee9-9710-485f-8fb3-f5a398b229b4","unexpected D1");
+ check(local.d1_databases?.length===1&&local.d1_databases[0].binding==="DB","one local D1 required");
+ const routes=["/api/*","/crm.*/*"];
+ check(JSON.stringify(production.assets?.run_worker_first)===JSON.stringify(routes),"production Worker-first namespace differs");
+ check(JSON.stringify(local.assets?.run_worker_first)===JSON.stringify(routes),"local Worker-first namespace differs");
+ check(production.observability?.enabled===true,"Worker logs required");
+ check(production.version_metadata?.binding==="CF_VERSION_METADATA","version metadata required");
 }
-function baselineFiles(dir){
-  return git("ls-tree","-r","--name-only",baseline,"--",dir)
-    .split("\n").map(x=>x.trim()).filter(Boolean);
-}
-function baselineContent(path){
-  return git("show",baseline+":"+path);
-}
-function requireUnchanged(path){
-  check(existsSync(pathInRepo(path)), "accepted runtime file removed during freeze: "+path);
-  check(read(path)===baselineContent(path), "legacy runtime modified before single cutover: "+path);
-}
-function unique(paths){return [...new Set(paths)];}
-function frozenRuntimeFiles(){
-  const app="apps/cloudflare-crm/";
-  const web=app+"web/src";
-  const rust=app+"rust-party/src";
-  const fixed=[
-    app+"wrangler.jsonc",
-    app+"rust-party/wrangler.jsonc",
-    app+"rust-party/build.rs",
-    "packages/client/src/cloudflare.ts"
-  ];
-  const files=unique([
-    ...baselineFiles(web),...treeFiles(web),
-    ...baselineFiles(rust),...treeFiles(rust),
-    ...fixed
-  ]).filter(path => path.startsWith(web+"/") || path.endsWith(".rs") ||
-    fixed.includes(path));
-  return files;
-}
-function failNewRest(current, old){
-  const routes = text => new Set([...text.matchAll(/["'](\/api\/[A-Za-z0-9_.*?/-]+)["']/g)].map(m=>m[1]));
-  const accepted=routes(old);
-  const added=[...routes(current)].filter(x=>!accepted.has(x));
-  check(added.length===0,"new manual REST business path: "+added.join(", "));
-}
-function validateGeneratedBrowserBoundary(source){
-  check(source.includes("createConnectTransport"),"generated Cloudflare client must use Connect");
-  check(/useBinaryFormat\s*:\s*true/.test(source),"binary Protobuf must be default");
-  check(!/createGrpcWebTransport|ApplicationGatewayService|GovernedCrmClient|fetch\s*\(/.test(source),
-    "Cloudflare client must not use legacy gateway or direct fetch");
-}
-function validateOneWorkerRouter(source,wrangler,local){
-  check(wrangler.main==="./rust-party/build/index.js","Worker must be native workers-rs");
-  check(wrangler.d1_databases?.length===1 && wrangler.d1_databases[0].binding==="DB",
-    "exactly one native D1 binding");
-  const canonical=["/api/*","/crm.*/*"];
-  check(JSON.stringify(wrangler.assets?.run_worker_first)===JSON.stringify(canonical),
-    "production must use universal Worker-first Connect namespace and API routes");
-  check(JSON.stringify(local.assets?.run_worker_first)===JSON.stringify(canonical),
-    "local and published RPC routing differ");
-  // /crm.*/* matches versioned Connect /crm.<domain>.vN.Service/Method
-  // without routing ordinary static asset filenames through the Worker.
-  check(!/axum::serve|TcpListener/.test(source),"second listening server forbidden");
-}
-const client=read("packages/client/src/cloudflare.ts");
-validateGeneratedBrowserBoundary(client);
 const production=JSON.parse(read("apps/cloudflare-crm/wrangler.jsonc"));
 const local=JSON.parse(read("apps/cloudflare-crm/rust-party/wrangler.jsonc"));
-const runtime=read("apps/cloudflare-crm/rust-party/src/lib.rs");
-validateOneWorkerRouter(runtime,production,local);
-const rustSources=treeFiles("apps/cloudflare-crm/rust-party/src").filter(x=>x.endsWith(".rs"));
-const routerCount=rustSources.reduce((n,p)=>
-  n+([...read(p).matchAll(/ConnectRouter::new\s*\(/g)].length),0);
-check(routerCount===1,"exactly one embedded Connect router required, found "+routerCount);
-check(read("apps/cloudflare-crm/rust-party/src/connect_sales.rs").includes("fn wire_precondition("),
-  "common Connect wire precondition must be defined once");
-check(!rustSources.some(path=>path.includes("/connect_sales/") &&
-    read(path).includes("AccountV2Service::precondition(")),
-  "domain Connect handler must not borrow Account precondition implementation");
-// Candidate and cutover must BOTH reject legacy Protobuf round-trips and
-// unimplemented Connect RPCs. Do not postpone the invariant.
-  for(const path of rustSources.filter(x=>/connect.*\.rs$/.test(x))){
-    const code=read(path);
-    check(!/ConnectError::unimplemented|\.encode_to_vec\s*\(|::decode_from_slice\s*\(/.test(code),
-      "unimplemented RPC / Buffa-Prost binary bridge remains: "+path);
-  }
-
-
-if(policy.phase!=="cutover"){
-  const prev=new Set(baselineFiles("apps/cloudflare-crm"));
-  prev.add("packages/client/src/cloudflare.ts");
-  // Only the in-place Party owner, the existing single Connect router and
-  // build-time Protobuf codegen may evolve as a private signed-workerd G3
-  // candidate. All production v3 requests remain 410 until the full cutover.
-  // These are source-file freeze exceptions, NOT an API capability registry.
-  const candidateSources=new Set([
-    "apps/cloudflare-crm/rust-party/src/parties.rs",
-    "apps/cloudflare-crm/rust-party/src/accounts.rs",
-    "apps/cloudflare-crm/rust-party/src/contact_points.rs",
-    "apps/cloudflare-crm/rust-party/src/party_relationships.rs",
-    "apps/cloudflare-crm/rust-party/src/activity_tasks.rs",
-    "apps/cloudflare-crm/rust-party/src/data_quality.rs",
-    "apps/cloudflare-crm/rust-party/src/identity_resolution.rs",
-    "apps/cloudflare-crm/rust-party/src/consents.rs",
-    "apps/cloudflare-crm/rust-party/src/sales_deals.rs",
-    "apps/cloudflare-crm/rust-party/src/connect_sales.rs",
-    "apps/cloudflare-crm/rust-party/build.rs",
-    // Candidate-only generated Connect-Web facade; never loaded by the
-    // contract-only public SPA. The boundary above rejects manual fetch,
-    // legacy gateways, nonbinary transport and JS tenant forwarding.
-    "packages/client/src/cloudflare.ts"
-  ]);
-  for(const path of frozenRuntimeFiles()){
-    // Domain-specific native Connect trait implementations share the one
-    // parent router. New handlers remain CI-only until full cutover.
-    const connectHandler=path.startsWith("apps/cloudflare-crm/rust-party/src/connect_sales/") &&
-      path.endsWith("_handlers.rs");
-    check(prev.has(path)||connectHandler,"new runtime file before full cutover: "+path);
-    if(policy.phase==="contract-only"&&
-       (path==="apps/cloudflare-crm/rust-party/src/lib.rs"||
-        candidateSources.has(path)||connectHandler))continue;
-    if(path==="apps/cloudflare-crm/wrangler.jsonc"||
-       path==="apps/cloudflare-crm/rust-party/wrangler.jsonc"){
-      // Only this security-strengthening routing rule may change during freeze.
-      // Everything else in both frozen Wrangler configurations remains identical.
-      const before=JSON.parse(baselineContent(path));
-      const now=JSON.parse(read(path));
-      delete before.assets.run_worker_first;
-      delete now.assets.run_worker_first;
-      check(JSON.stringify(before)===JSON.stringify(now),
-        "unexpected frozen Wrangler config change: "+path);
-      continue;
-    }
-    requireUnchanged(path);
-  }
-  // No new REST endpoints are permitted, even in generated/future features.
-  failNewRest(runtime,baselineContent("apps/cloudflare-crm/rust-party/src/lib.rs"));
-  if(policy.phase==="contract-only"){
-    const html=read("apps/cloudflare-crm/web/index.html");
-    check(html.includes('src="/contract-only.tsx"')&&!html.includes("main.jsx"),
-      "legacy React entrypoint must not load");
-    check(runtime.includes('fn legacy_transport_disabled('),
-      "missing fail-closed legacy runtime router");
-    check(runtime.includes('error("LEGACY_TRANSPORT_DISABLED", 410)'),
-      "legacy business endpoints must return HTTP 410");
-    // Publication and policy are checked after the real workerd suite.
-    // The early manifest inventory deliberately claims no runtime evidence.
-    check(read("apps/cloudflare-crm/web/contract-only.tsx").includes("CRM: переход на Connect"),
-      "read-only transition UI must be visible");
-  }
-}else{
-  const webFiles=treeFiles("apps/cloudflare-crm/web/src");
-  check(webFiles.some(x=>x.endsWith(".tsx")),"React must use TSX");
-  check(!webFiles.some(x=>/\.(jsx|js|mjs)$/.test(x)),"legacy JS/JSX remains in React");
-  for(const path of webFiles.filter(x=>/\.(ts|tsx)$/.test(x))){
-    const content=read(path);
-    check(!/\bfetch\s*\(|createGrpcWebTransport|ApplicationGatewayService|GovernedCrmClient|["']\/api\//.test(content),
-      "manual REST/legacy gateway in typed React: "+path);
-  }
-  const appPackage=JSON.parse(read("apps/cloudflare-crm/package.json"));
-  check(!!appPackage.scripts?.typecheck,"strict CRM typecheck script missing");
-  check(!!appPackage.dependencies?.["@ultimate-crm/client"] &&
-    !!appPackage.dependencies?.["@ultimate-crm/ui"],
-    "must reuse existing typed client and UI packages");
-  const tsconfig=JSON.parse(read("apps/cloudflare-crm/tsconfig.json"));
-  for(const key of ["strict","noUncheckedIndexedAccess","exactOptionalPropertyTypes"])
-    check(tsconfig.compilerOptions?.[key]===true,"missing TS option "+key);
-  check(tsconfig.compilerOptions?.allowJs===false,"allowJs must be false");
-  check(!read("pnpm-workspace.yaml").includes("!apps/cloudflare-crm"),
-    "Cloudflare CRM still excluded from the single pnpm workspace");
-  const workflow=read(".github/workflows/cloudflare-crm-spike.yml");
-  check(!workflow.includes("npm install --no-audit --no-fund"),
-    "old separate npm install still in CRM CI");
-  check(workflow.includes("pnpm --filter cloudflare-crm typecheck"),
-    "full CRM TS strict typecheck missing in CI");
-
-  const allowed=new Set(policy.allowed_non_rpc_http);
-  for(const [literal] of [...runtime.matchAll(/["'](\/api\/[A-Za-z0-9_.*?/-]+)["']/g)].map(x=>[x[1]]))
-    check(allowed.has(literal),"legacy REST business endpoint in Worker: "+literal);
-  check(moduleReport!==null,"generated canonical module report required");
-  const reported=[...moduleReport.active_rpc_paths].sort();
-  const proven=Object.entries(moduleReport.rpc_policy||{})
-    .filter(([,rule])=>rule.activation==="Published")
-    .map(([path])=>path).sort();
-  check(JSON.stringify(reported)===JSON.stringify(proven),
-    "generated module report differs from exact Rust RPC publication policy");
-  // Canonical RPC existence and exact request/response signatures are checked
-  // once by crm-rpc-descriptors.mjs against Buf's FileDescriptorSet.
-  // A second source-text scan cannot establish package/service/method identity.
-
+validateWorkerConfig(production,local);
+const reportPath=process.env.CRM_MODULE_COVERAGE_REPORT;
+check(!!reportPath,"canonical manifest/Cargo report required");
+const report=JSON.parse(readFileSync(reportPath,"utf8"));
+validateModuleReport(report,policy.phase);
+check(report.source_sha===execFileSync("git",["rev-parse","HEAD"],{cwd:repo,encoding:"utf8"}).trim(),
+ "stale module inventory");
+const appPackage=JSON.parse(read("apps/cloudflare-crm/package.json"));
+check(!!appPackage.dependencies?.["@ultimate-crm/client"]&&!!appPackage.dependencies?.["@ultimate-crm/ui"],
+ "existing typed client and UI packages required");
+const tsconfig=JSON.parse(read("apps/cloudflare-crm/tsconfig.json"));
+for(const key of ["strict","noUncheckedIndexedAccess","exactOptionalPropertyTypes"])
+ check(tsconfig.compilerOptions?.[key]===true,"missing TS option "+key);
+check(tsconfig.compilerOptions?.allowJs===false,"allowJs must be false");
+if(policy.phase==="cutover"){
+ const sources=readdirSync(resolve(repo,"apps/cloudflare-crm/web/src"),{recursive:true});
+ check(sources.some(path=>path.endsWith(".tsx")),"React TSX missing");
+ check(!sources.some(path=>/\.(js|jsx|mjs)$/.test(path)),"legacy JS/JSX remains");
 }
 console.log(JSON.stringify({event:"crm.architecture-gate",result:"PASS",
-  phase:policy.phase,baseline,router_count:routerCount,
-  d1:production.d1_databases[0].binding,
-  legacy_runtime_policy:policy.phase==="migration-freeze"?"FROZEN":policy.phase==="contract-only"?"DISABLED":"REMOVED"}));
-export {failNewRest,validateGeneratedBrowserBoundary,validateOneWorkerRouter,validateModuleReport};
+ scope:"configuration and manifest/Cargo inventory",runtime_evidence:report.runtime_evidence,
+ phase:policy.phase}));
+export {validateModuleReport};

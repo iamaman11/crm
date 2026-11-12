@@ -99,6 +99,13 @@ pub mod proto {
                 include!(concat!(env!("OUT_DIR"), "/crm.identity_resolution.v2.mod.rs"));
             }
         }
+        pub mod customer_privacy {
+            use super::*;
+            pub mod v2 {
+                use super::*;
+                include!(concat!(env!("OUT_DIR"), "/crm.customer_privacy.v2.mod.rs"));
+            }
+        }
         pub mod consents {
             use super::*;
             pub mod v2 {
@@ -141,6 +148,9 @@ mod quality_handlers;
 mod identity_handlers;
 mod consent_handlers;
 mod sales_handlers;
+mod privacy_handlers;
+use privacy_handlers::PrivacyV2Service;
+use proto::crm::customer_privacy::v2 as privacy_wire;
 
 struct PartyService {
     env: Arc<Env>,
@@ -762,6 +772,10 @@ pub(super) fn router(env:Env,tenant:&str,actor:&str,request_id:&str)->ConnectRou
             env:Arc::clone(&env),tenant:tenant.to_owned(),
         }))
         .add_service(Arc::new(ConsentV2Service{
+            env:Arc::clone(&env),tenant:tenant.to_owned(),
+            actor:actor.to_owned(),request_id:request_id.to_owned(),
+        }))
+        .add_service(Arc::new(PrivacyV2Service{
             env:Arc::clone(&env),tenant:tenant.to_owned(),
             actor:actor.to_owned(),request_id:request_id.to_owned(),
         }))
