@@ -1,5 +1,5 @@
 -- Fresh CRM D1 bootstrap; all CRM records are disposable test data.
--- This is the ONLY migration for the new typed Rust owners.
+-- Later migrations evolve this bootstrap through the standard Wrangler ledger.
 -- Apply to an EMPTY D1 after the explicit, one-time dev reset.
 -- No pilot crm_customers/crm_contacts/crm_deals/crm_tasks tables,
 -- no data copying, no legacy compatibility or rehydration.

@@ -82,6 +82,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    await mutation(page.getByRole("button",{name:"Сохранить связь",exact:true}),"CreatePartyRelationship");
    await page.locator("section").filter({has:page.getByRole("heading",{name:"browser_relation_"+runId,exact:true})})
      .getByRole("button",{name:"Редактировать связь",exact:true}).click();
+   await page.getByRole("heading",{name:"Изменить связь",exact:true}).waitFor();
    await page.getByLabel("Статус",{exact:true}).selectOption("2");
    await mutation(page.getByRole("button",{name:"Сохранить связь",exact:true}),"UpdatePartyRelationship");
    const relationship=(await sql("SELECT version,json_extract(state,'$.status') AS status FROM crm_party_relationship_records WHERE tenant='"+tenantSql+"' AND from_party='"+partyId+"' AND to_party='"+otherPartyId+"'"))[0];
@@ -99,6 +100,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    assert.equal((await overviewResponse).status(),200);
    await page.getByText("Основной участник: Browser Updated "+runId,{exact:true}).waitFor();
    await accountCard.getByRole("button",{name:"Редактировать",exact:true}).click();
+   await page.getByRole("heading",{name:"Изменить клиента",exact:true}).waitFor();
    await page.getByLabel("Статус",{exact:true}).selectOption("2");
    await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"UpdateAccount");
    assert.equal((await sql("SELECT version FROM crm_account_records WHERE tenant='"+tenantSql+"' AND id='"+accountId+"'"))[0].version,2);
@@ -114,6 +116,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].n,1);
    await page.locator("section").filter({has:page.getByRole("heading",{name:"browser-"+runId+"@example.org",exact:true})})
      .getByRole("button",{name:"Редактировать контакт",exact:true}).click();
+   await page.getByRole("heading",{name:"Изменить контакт",exact:true}).waitFor();
    await page.getByLabel("Предпочтительный",{exact:true}).check();
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"UpdateContactPoint");
    assert.equal((await sql("SELECT version FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].version,2);
@@ -137,8 +140,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    await page.getByText("90071992547409.93 USD · 37.45%",{exact:true}).waitFor();
    const dealCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Deal "+runId,exact:true})}).last();
    await dealCard.getByRole("button",{name:"Изменить сделку",exact:true}).click();
+   // GetDeal completes asynchronously and replaces the create form. Editing the
+   // old field before this heading appears would lose the entered value.
+   await page.getByRole("heading",{name:"Изменить сделку",exact:true}).waitFor();
+   assert.equal(await page.getByLabel("Вероятность, %",{exact:true}).inputValue(),"37.45");
    await page.getByLabel("Вероятность, %",{exact:true}).fill("38.5");
+   assert.equal(await page.getByLabel("Вероятность, %",{exact:true}).inputValue(),"38.5");
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"UpdateDeal");
+   const savedDeal=(await sql("SELECT version,json_extract(state,'$.probability_basis_points') AS probability FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+   assert.equal(savedDeal.version,2);assert.equal(savedDeal.probability,3850);
    await page.getByText("90071992547409.93 USD · 38.50%",{exact:true}).waitFor();
    await dealCard.getByRole("button",{name:"Изменить этап",exact:true}).click();
    await page.getByLabel("Код следующего этапа",{exact:true}).fill("qualified");

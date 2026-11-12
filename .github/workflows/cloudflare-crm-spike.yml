@@ -234,7 +234,7 @@ jobs:
             cargo install --locked worker-build --version 0.8.7
           fi
           worker-build --version
-      # Only one production-feature WASM build on main; this same binary is sealed
+      # Only one production-feature WASM build on dev; this same binary is sealed
       # and published. PR also runs alternative test features for coverage.
       - name: Build exact native Rust Worker for review or release
         working-directory: apps/cloudflare-crm/rust-party
@@ -266,12 +266,11 @@ jobs:
           grep -F '"main": "./rust-party/build/index.js"' wrangler.jsonc
           grep -F '"binding": "DB"' wrangler.jsonc
           grep -F '"binding": "ASSETS"' wrangler.jsonc
-      - name: Keep the exact native Rust candidate for the existing main-only protected release
+      - name: Keep the complete production Worker for review and release
         run: |
           set -euo pipefail
           mkdir -p apps/cloudflare-crm/.release/native-build
-          cp apps/cloudflare-crm/rust-party/build/index.js apps/cloudflare-crm/.release/native-build/index.js
-          cp apps/cloudflare-crm/rust-party/build/index_bg.wasm apps/cloudflare-crm/.release/native-build/index_bg.wasm
+          cp -a apps/cloudflare-crm/rust-party/build/. apps/cloudflare-crm/.release/native-build/
           test -s apps/cloudflare-crm/.release/native-build/index_bg.wasm
       - name: Compile native Rust Access gate using isolated RSA test keys
         working-directory: apps/cloudflare-crm/rust-party
@@ -307,10 +306,8 @@ jobs:
           retention-days: 7
       - name: Restore compiled production Worker after JWT test
         run: |
-          cp apps/cloudflare-crm/.release/native-build/index.js apps/cloudflare-crm/rust-party/build/index.js
-          cp apps/cloudflare-crm/.release/native-build/index_bg.wasm apps/cloudflare-crm/rust-party/build/index_bg.wasm
-          cmp apps/cloudflare-crm/.release/native-build/index.js apps/cloudflare-crm/rust-party/build/index.js
-          cmp apps/cloudflare-crm/.release/native-build/index_bg.wasm apps/cloudflare-crm/rust-party/build/index_bg.wasm
+          cp -a apps/cloudflare-crm/.release/native-build/. apps/cloudflare-crm/rust-party/build/
+          diff --recursive --quiet apps/cloudflare-crm/.release/native-build apps/cloudflare-crm/rust-party/build
       - name: Validate release and E2E scripts
         run: |
           node --check apps/cloudflare-crm/scripts/deploy.mjs
@@ -345,6 +342,7 @@ jobs:
         shell: bash
         env:
           CRM_BUILD_SHA: ${{ github.sha }}
+          CRM_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           cd apps/cloudflare-crm
@@ -355,12 +353,27 @@ jobs:
           printf '%s\n' "$CRM_BUILD_SHA" > .release/source-sha.txt
           test -s .release/native-build/index.js
           test -s .release/native-build/index_bg.wasm
+          node --input-type=module -e '
+            import {execFileSync} from "node:child_process";
+            import {writeFileSync} from "node:fs";
+            const run=(command,args)=>execFileSync(command,args,{encoding:"utf8"}).trim();
+            writeFileSync(".release/provenance.json",JSON.stringify({
+              tested_sha:process.env.CRM_BUILD_SHA,
+              pr_head_sha:process.env.CRM_PR_HEAD_SHA||null,
+              tree:run("git",["rev-parse","HEAD^{tree}"]),
+              production_features:["native"],runtime_test_features:["native-ci"],
+              tools:{node:process.version,pnpm:run("pnpm",["--version"]),
+                rust:run("rustc",["--version"]),python:run("python",["--version"]),
+                buf:run("pnpm",["exec","buf","--version"])},
+              independent_byte_reproducibility:"NOT_TESTED"
+            },null,2)+"\n");
+          '
           find dist rust-party/build .release/native-build -type f -print0 | LC_ALL=C sort -z |
             xargs -0 sha256sum > .release/compiled-sha256.txt
+          sha256sum .release/provenance.json >> .release/compiled-sha256.txt
           sha256sum --check --strict .release/compiled-sha256.txt
           echo "CRM compiled bundle sealed for $CRM_BUILD_SHA"
-      - name: Preserve exact compiled bundle for the protected deployment
-        if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+      - name: Preserve exact compiled bundle for independent review and deployment
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: crm-native-bundle-${{ github.sha }}
@@ -368,6 +381,7 @@ jobs:
             apps/cloudflare-crm/dist/
             apps/cloudflare-crm/rust-party/build/
             apps/cloudflare-crm/.release/source-sha.txt
+            apps/cloudflare-crm/.release/provenance.json
             apps/cloudflare-crm/.release/compiled-sha256.txt
             apps/cloudflare-crm/.release/native-build/
           if-no-files-found: error
