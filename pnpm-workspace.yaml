@@ -1,5 +1,10 @@
 packages:
   - "apps/*"
   - "packages/*"
+# Install only the pinned native toolchains already used by CRM/Vite/Wrangler.
+# Unknown/new dependency build scripts remain a hard installation failure.
 allowBuilds:
-  '@bufbuild/buf': true
+  '@bufbuild/buf@1.66.1': true
+  'esbuild@0.25.4 || 0.25.12': true
+  'workerd@1.20251011.0': true
+  'sharp@0.33.5': true
