@@ -26,22 +26,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.18.0'
-      # One-time lock preparation on the canonical Actions runner. The unchanged
-      # frozen-lockfile gate below MUST fail until this artifact is committed.
-      # Remove these two preparation steps when the generated lock is committed.
-      - name: Generate workspace lock candidate for hard cutover
-        run: |
-          npm install --global pnpm@11.13.1
-          pnpm install --lockfile-only --ignore-scripts
-          cp pnpm-lock.yaml /tmp/crm-pnpm-lock.yaml
-          git restore -- pnpm-lock.yaml
-      - name: Preserve generated workspace lock candidate
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: crm-workspace-lock-candidate
-          path: /tmp/crm-pnpm-lock.yaml
-          if-no-files-found: error
-          retention-days: 7
       # All CRM PR checks execute in THIS job. No other workflow targets PR to dev.
       # Pure source checks must fail before npm, Cargo builds or Chromium.
       - name: Fast repository CI topology, architecture, and source syntax
@@ -141,32 +125,25 @@ jobs:
           pnpm --filter @ultimate-crm/ui typecheck
           # A frozen checkout never changes the source lockfile.
           git diff --exit-code -- pnpm-lock.yaml
-      - name: Typecheck entire Cloudflare CRM on full cutover
-        shell: bash
-        run: |
-          if [ "$(node -p 'require("./apps/cloudflare-crm/architecture-policy.json").phase')" = "cutover" ]; then
-            pnpm --filter cloudflare-crm typecheck
-          fi
-      - name: Install CRM dependencies
-        run: npm install --no-audit --no-fund
-        working-directory: apps/cloudflare-crm
+      - name: Typecheck entire Cloudflare CRM
+        run: pnpm --filter cloudflare-crm typecheck
       - name: Fast syntax check of native E2E before Rust/WASM build
         working-directory: apps/cloudflare-crm
         run: node --check rust-party/test/native.mjs
       - name: Fast feature/schema contract doctor
-        run: npm run doctor
+        run: pnpm run doctor
         working-directory: apps/cloudflare-crm
       - name: Locate module and error code without network
         working-directory: apps/cloudflare-crm
         run: |
-          npm run locate -- deals
-          npm run locate -- INVALID_INPUT
-          npm run locate -- customer360
+          pnpm run locate -- deals
+          pnpm run locate -- INVALID_INPUT
+          pnpm run locate -- customer360
       - name: Check native-only ownership and release diagnostic contracts
-        run: npm test
+        run: pnpm test
         working-directory: apps/cloudflare-crm
       - name: Build React CRM
-        run: npm run build
+        run: pnpm run build
         working-directory: apps/cloudflare-crm
       - name: Install and launch Chromium before expensive native builds
         working-directory: apps/cloudflare-crm
@@ -548,9 +525,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.18.0'
-      - name: Install CRM dependencies
-        run: npm install --no-audit --no-fund
-        working-directory: apps/cloudflare-crm
+      - name: Install pinned CRM dependencies
+        run: |
+          npm install --global pnpm@11.13.1
+          pnpm install --frozen-lockfile
       - name: Install Chromium for browser test
         run: npx playwright install --with-deps chromium
         working-directory: apps/cloudflare-crm
