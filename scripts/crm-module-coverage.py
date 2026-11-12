@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -75,14 +76,30 @@ def build_report(root: Path = ROOT, *, phase: str | None = None) -> dict:
                 raise ValueError(f"duplicate linked crate path: {alias}, {linked_crates[target]}")
             linked_crates[target] = alias
 
-    proofs = json.loads((APP / "active-connect.json").read_text(encoding="utf-8"))
+    # Single publication source: the exact RPC policy compiled into the Worker.
+    # This report is generated at CI time, never committed as a second registry.
     policy = json.loads((APP / "architecture-policy.json").read_text(encoding="utf-8"))
     phase = phase or policy["phase"]
-    if proofs.get("schema_version") != 1 or not isinstance(proofs.get("methods"), list):
-        raise ValueError("active Connect evidence must be schema version 1")
-    active = [row["path"] for row in proofs["methods"]]
-    if len(set(active)) != len(active):
-        raise ValueError("duplicate active RPC evidence")
+    rust = (WORKER / "src/lib.rs").read_text(encoding="utf-8")
+    if "fn rpc_policy(path: &str)" not in rust:
+        raise ValueError("native Rust RPC policy is missing")
+    entries = re.findall(
+        r'^\s*"(\/crm\.[^"]+)"\s*=>\s*\((Read|Write),\s*(Published|Candidate)\),?\s*$',
+        rust, re.MULTILINE,
+    )
+    if not entries:
+        raise ValueError("no exact-path Rust RPC policy entries")
+    runtime_policy = {}
+    for route, permission, activation in entries:
+        if route in runtime_policy:
+            raise ValueError(f"duplicate Rust RPC policy: {route}")
+        runtime_policy[route] = {"permission": permission, "activation": activation}
+    active = sorted(
+        route for route, value in runtime_policy.items()
+        if value["activation"] == "Published"
+    )
+    if not active:
+        raise ValueError("no published native RPC in Rust policy")
     providers: dict[str, str] = {}
     modules = []
     for path, manifest in entries:
@@ -153,7 +170,8 @@ def build_report(root: Path = ROOT, *, phase: str | None = None) -> dict:
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     return {
         "schema_version": 1,
-        "source": "modules/*/module.yaml + Worker Cargo.toml + active-connect.json",
+        "source": "modules/*/module.yaml + Worker Cargo.toml + Rust rpc_policy",
+        "rpc_policy": dict(sorted(runtime_policy.items())),
         "source_sha": head,
         "phase": phase,
         "modules": sorted(modules, key=lambda x: x["module_id"]),
