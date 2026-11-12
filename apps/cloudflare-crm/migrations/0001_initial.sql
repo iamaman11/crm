@@ -412,3 +412,14 @@ AFTER INSERT ON crm_enrichment_mappings BEGIN
  VALUES(lower(hex(randomblob(16))),NEW.tenant,
         'customer_enrichment.mapping_publish',NEW.id,datetime('now'),NEW.request_id);
 END;
+
+-- Bounded create-only import receipt, committed atomically with original Party rows.
+-- This is business idempotency state in the same D1, not an import-job subsystem.
+CREATE TABLE IF NOT EXISTS crm_party_import_receipts (
+ tenant TEXT NOT NULL REFERENCES crm_tenants(id),
+ key TEXT NOT NULL,
+ source_sha256 TEXT NOT NULL,
+ row_count INTEGER NOT NULL CHECK(row_count BETWEEN 1 AND 20),
+ request_id TEXT NOT NULL,
+ PRIMARY KEY(tenant,key)
+);

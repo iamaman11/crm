@@ -62,34 +62,57 @@ pub(super) async fn stored(db: &D1Database, tenant: &str, id: &str) -> Result<Op
 /// Only this Party adapter persists Party creation, including CSV import.
 /// D1 batch is atomic: all Party states, receipts and audits or none.
 pub(super) async fn import_receipt_matches(
-    db:&D1Database,tenant:&str,key:&str,id:&str,name:&str
+    db:&D1Database,tenant:&str,key:&str,id:&str,kind:PartyKind,name:&str
 )->Result<bool>{
     let Some(old)=previous(db,tenant,key).await? else {return Ok(false);};
     if old.digest!=digest("create",id,name,0){return Ok(false);}
     let party=decode_party_state(old.state.as_bytes())
         .map_err(|e|worker::Error::RustError(e.code))?;
-    Ok(party.party_id().as_str()==id)
+    Ok(party.party_id().as_str()==id&&party.kind()==kind)
+}
+
+pub(super) struct ImportSaved {
+    pub(super) created:usize,
+    pub(super) replayed:usize,
+    pub(super) operation_replayed:bool,
+}
+#[derive(Deserialize)]
+struct ImportReceipt {source_sha256:String,row_count:usize}
+async fn import_operation(db:&D1Database,tenant:&str,key:&str)->Result<Option<ImportReceipt>>{
+    bind(db,"SELECT source_sha256,row_count FROM crm_party_import_receipts WHERE tenant=? AND key=?",
+        &[JsValue::from_str(tenant),JsValue::from_str(key)])?.first::<ImportReceipt>(None).await
 }
 pub(super) async fn import_batch(
-    db:&D1Database,tenant:&str,
-    rows:Vec<(String,PartyKind,String,String)>,trace:&str
-)->Result<Response>{
-    let mut statements=Vec::with_capacity(rows.len());
+    db:&D1Database,tenant:&str,rows:Vec<(String,PartyKind,String,String)>,
+    operation_key:&str,source_hash:&str,trace:&str,
+)->Result<std::result::Result<ImportSaved,MutationFailure>>{
+    if !(8..=120).contains(&operation_key.len())||rows.is_empty(){
+        return Ok(Err(failed("IMPORT_PRECONDITION_INVALID",422)));
+    }
+    if let Some(old)=import_operation(db,tenant,operation_key).await?{
+        if old.source_sha256!=source_hash||old.row_count!=rows.len(){
+            return Ok(Err(failed("IDEMPOTENCY_CONFLICT",409)));
+        }
+        return Ok(Ok(ImportSaved{created:0,replayed:old.row_count,operation_replayed:true}));
+    }
+    let mut statements=Vec::with_capacity(rows.len()+1);
     let mut ids=BTreeSet::new();
     let mut receipts=0;
     for (id,kind,name,key) in &rows{
-        if !ids.insert(id.clone()){return error("IMPORT_DUPLICATE_TARGET_ID",422);}
+        if !ids.insert(id.clone()){return Ok(Err(failed("IMPORT_DUPLICATE_TARGET_ID",422)));}
         let hash=digest("create",id,name,0);
         if let Some(old)=previous(db,tenant,key).await?{
-            if old.digest!=hash{return error("IDEMPOTENCY_CONFLICT",409);}
+            if old.digest!=hash{return Ok(Err(failed("IDEMPOTENCY_CONFLICT",409)));}
             let party=decode_party_state(old.state.as_bytes())
                 .map_err(|e|worker::Error::RustError(e.code))?;
-            if party.party_id().as_str()!=id{return error("IMPORT_RECEIPT_ID_CONFLICT",409);}
+            if party.party_id().as_str()!=id||party.kind()!=*kind{
+                return Ok(Err(failed("IMPORT_RECEIPT_ID_CONFLICT",409)));
+            }
             receipts+=1;
             continue;
         }
         if stored(db,tenant,id).await?.is_some(){
-            return error("IMPORT_TARGET_PARTY_CONFLICT",409);
+            return Ok(Err(failed("IMPORT_TARGET_PARTY_CONFLICT",409)));
         }
         let party=Party::create(CreateParty{
             party_id:PartyId::try_new(id.clone())
@@ -106,17 +129,25 @@ pub(super) async fn import_batch(
               JsValue::from_str(key),JsValue::from_str(&hash),
               JsValue::from_str(trace)])?);
     }
-    if receipts>0{
-        return if receipts==rows.len(){
-            response(json!({"created":0,"replayed":rows.len(),
-                "target_party_ids":rows.iter().map(|r|r.0.as_str()).collect::<Vec<_>>(),
-                "source":"original_crm_parties"}),200)
-        }else{error("IMPORT_PARTIAL_REPLAY_CONFLICT",409)};
+    if receipts>0&&receipts!=rows.len(){
+        return Ok(Err(failed("IMPORT_PARTIAL_REPLAY_CONFLICT",409)));
     }
-    if db.batch(statements).await.is_err(){return error("IMPORT_ATOMIC_WRITE_CONFLICT",409);}
-    response(json!({"created":rows.len(),"replayed":0,
-        "target_party_ids":rows.iter().map(|r|r.0.as_str()).collect::<Vec<_>>(),
-        "source":"original_crm_parties"}),201)
+    // Operation-key receipt and all original Party writes commit in one D1 batch.
+    // The UNIQUE(tenant,key) constraint also serializes concurrent retry attempts.
+    statements.push(bind(db,
+        "INSERT INTO crm_party_import_receipts(tenant,key,source_sha256,row_count,request_id) VALUES(?,?,?,?,?)",
+        &[JsValue::from_str(tenant),JsValue::from_str(operation_key),
+          JsValue::from_str(source_hash),JsValue::from_f64(rows.len() as f64),
+          JsValue::from_str(trace)])?);
+    if db.batch(statements).await.is_err(){
+        if let Some(old)=import_operation(db,tenant,operation_key).await?{
+            if old.source_sha256==source_hash&&old.row_count==rows.len(){
+                return Ok(Ok(ImportSaved{created:0,replayed:old.row_count,operation_replayed:true}));
+            }
+        }
+        return Ok(Err(failed("IMPORT_ATOMIC_WRITE_CONFLICT",409)));
+    }
+    Ok(Ok(ImportSaved{created:rows.len()-receipts,replayed:receipts,operation_replayed:receipts>0}))
 }
 
 async fn previous(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receipt>> {

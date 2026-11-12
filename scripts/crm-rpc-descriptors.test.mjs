@@ -10,7 +10,7 @@ const actual=JSON.parse(readFileSync(source,"utf8"));
 test("canonical manifest signatures match compiled Buf descriptors",()=>{
  assert.ok(validateBindings(actual,available).size>0);
 });
-const path="/crm.parties.v2.PartyService/GetParty";
+const path="/crm.parties.v3.PartyService/GetParty";
 function fixture(){
  const report=structuredClone(actual);
  report.runtime_evidence="EXECUTED";
@@ -49,3 +49,5 @@ reject("unlinked owner fails",r=>{
 },/owner is not linked/);
 reject("duplicate registration fails",r=>{r.runtime.rpc.registered_methods.push(path);},/duplicate registered/);
 reject("incomplete final cutover fails",r=>{r.phase="cutover";},/full cutover contract differs/);
+
+reject("read method cannot acquire a mutation policy",r=>{r.runtime.rpc.policies[0][1].permission="Write";},/policy effect differs from Protobuf/);

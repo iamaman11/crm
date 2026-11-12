@@ -8,7 +8,7 @@ import {fileURLToPath} from "node:url";
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const requireClient=createRequire(resolve(root,"packages/client/package.json"));
 const {fromBinary}=requireClient("@bufbuild/protobuf");
-const {FileDescriptorSetSchema}=requireClient("@bufbuild/protobuf/wkt");
+const {FileDescriptorSetSchema,MethodOptions_IdempotencyLevel}=requireClient("@bufbuild/protobuf/wkt");
 const fail=message=>{throw Error("CRM_RPC_DESCRIPTOR_VIOLATION: "+message);};
 export function descriptorMethods(bytes){
  const set=fromBinary(FileDescriptorSetSchema,bytes);
@@ -17,7 +17,8 @@ export function descriptorMethods(bytes){
   const path="/"+file.package+"."+service.name+"/"+method.name;
   if(methods.has(path))fail("duplicate method descriptor "+path);
   methods.set(path,{file:file.name,package:file.package,
-   request:method.inputType.replace(/^\./,""),response:method.outputType.replace(/^\./,"")});
+   request:method.inputType.replace(/^\./,""),response:method.outputType.replace(/^\./,""),
+   idempotency:method.options?.idempotencyLevel});
  }
  return methods;
 }
@@ -53,8 +54,14 @@ export function validateRuntime(report,available,bound){
   if(!bound.has(path))fail("registered RPC absent from canonical module.yaml binding "+path);
   if(!bound.get(path).linked)fail("RPC owner is not linked into Worker "+path);
   const rule=policies.get(path);
-  if(!rule||!["Read","Write"].includes(rule.permission)||
+  if(!rule||!["Read","AdminRead","Write"].includes(rule.permission)||
      !["Published","Candidate"].includes(rule.activation))fail("missing or invalid compiled policy "+path);
+  const definition=available.get(path);
+  if(definition.package!=="crm.parties.v2"){
+   const expected=rule.permission==="Write"
+    ?MethodOptions_IdempotencyLevel.IDEMPOTENT:MethodOptions_IdempotencyLevel.NO_SIDE_EFFECTS;
+   if(definition.idempotency!==expected)fail("compiled policy effect differs from Protobuf "+path);
+  }
   if(!success.has(path))fail("registered RPC missing successful executed call "+path);
  }
  for(const path of policies.keys())if(!registered.has(path))fail("policy without registered RPC "+path);

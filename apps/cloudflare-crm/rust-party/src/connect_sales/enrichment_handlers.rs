@@ -71,10 +71,10 @@ impl EnrichmentV2Service {
         // Each content-addressed definition is immutable: its resource version is one.
         core_v2::MutationReceipt{request_id:self.request_id.clone(),resource_version:1,replayed,..Default::default()}
     }
-    fn page(page:&core_v2::PageRequest)->std::result::Result<usize,ConnectError>{
-        let size=if page.page_size==0{25}else{page.page_size};
+    fn page(page_size:u32,page_token:&str)->std::result::Result<usize,ConnectError>{
+        let size=if page_size==0{25}else{page_size};
         if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
-        if !page.page_token.is_empty(){Self::id(&page.page_token)?;}
+        if !page_token.is_empty(){Self::id(page_token)?;}
         Ok(size as usize)
     }
 }
@@ -156,7 +156,7 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
     async fn list_provider_profiles(&self,_ctx:RequestContext,
         req:ServiceRequest<'_,enrichment_wire::ListProviderProfilesRequest>)
         ->ServiceResult<enrichment_wire::ListProviderProfilesResponse>{
-        let size=Self::page(&req.page)?;
+        let size=Self::page(req.page.page_size,&req.page.page_token)?;
         let (items,next)=owner::profiles(&self.d1()?,&self.tenant,&req.page.page_token,size).await
             .map_err(|_|ConnectError::internal("profile D1 list failed"))?;
         RpcResponse::ok(enrichment_wire::ListProviderProfilesResponse{
@@ -169,7 +169,7 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
     async fn list_mappings(&self,_ctx:RequestContext,
         req:ServiceRequest<'_,enrichment_wire::ListMappingsRequest>)
         ->ServiceResult<enrichment_wire::ListMappingsResponse>{
-        let size=Self::page(&req.page)?;
+        let size=Self::page(req.page.page_size,&req.page.page_token)?;
         let (items,next)=owner::mappings(&self.d1()?,&self.tenant,&req.page.page_token,size).await
             .map_err(|_|ConnectError::internal("mapping D1 list failed"))?;
         RpcResponse::ok(enrichment_wire::ListMappingsResponse{

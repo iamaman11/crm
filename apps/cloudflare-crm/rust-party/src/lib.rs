@@ -99,6 +99,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
         "crm_consent_records", "crm_consent_receipts",
         "crm_sales_link_delivery_records",
         "crm_privacy_case_records", "crm_privacy_case_receipts",
+        "crm_party_import_receipts",
         "crm_enrichment_profiles", "crm_enrichment_mappings", "crm_enrichment_receipts",
     ];
     let db = env.d1("DB")?;
@@ -261,7 +262,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
 // and signed workerd evidence. HTTP POST does not imply write permission.
 #[cfg(feature = "native")]
 #[derive(Clone, Copy, PartialEq, Eq, serde::Serialize)]
-enum RpcPermission { Read, Write }
+enum RpcPermission { Read, AdminRead, Write }
 
 #[cfg(feature = "native")]
 #[derive(Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -276,6 +277,9 @@ struct RpcPolicy {
 
 #[cfg(feature = "native")]
 const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
+    ("/crm.customer_data_operations.v2.PartyCsvService/PreviewPartyExport", RpcPolicy { permission: RpcPermission::AdminRead, activation: RpcActivation::Candidate }),
+    ("/crm.customer_data_operations.v2.PartyCsvService/PreviewPartyImport", RpcPolicy { permission: RpcPermission::AdminRead, activation: RpcActivation::Candidate }),
+    ("/crm.customer_data_operations.v2.PartyCsvService/ApplyPartyImport", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
     ("/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishProviderProfile", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
     ("/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishMapping", RpcPolicy { permission: RpcPermission::Write, activation: RpcActivation::Candidate }),
     ("/crm.customer_enrichment.v2.EnrichmentConfigurationService/GetProviderProfile", RpcPolicy { permission: RpcPermission::Read, activation: RpcActivation::Candidate }),
@@ -329,7 +333,8 @@ fn rpc_policy(path: &str) -> Option<RpcPolicy> {
 fn legacy_transport_disabled(path: &str) -> bool {
     let diagnostic = matches!(path, "/api/health" | "/api/doctor" |
         "/api/session" | "/api/version");
-    let ci_only = cfg!(feature = "native-ci") && path == "/api/_ci/original-domain-check";
+    let ci_only = cfg!(feature = "native-ci") && matches!(path,
+        "/api/_ci/original-domain-check"|"/api/customer-data-operations/parties.csv");
     if path.starts_with("/api/") {
         return !diagnostic && !ci_only;
     }
@@ -369,7 +374,7 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
         let Some(rule) = rpc_policy(&path) else {
             return error("LEGACY_TRANSPORT_DISABLED",410);
         };
-        if rule.permission == RpcPermission::Write && role != Some("admin") {
+        if matches!(rule.permission,RpcPermission::Write|RpcPermission::AdminRead) && role != Some("admin") {
             return error("FORBIDDEN",403);
         }
         let Some(actor)=verified_actor else{return error("AUTH_REQUIRED",401)};
@@ -416,7 +421,7 @@ async fn dispatch(req: Request, env: Env, tenant: &str, trusted_id: Option<&str>
     }
     #[cfg(feature = "native")]
     if path.starts_with("/api/customer-data-operations/") {
-        return customer_data_operations::route(req, db, tenant, role, &request_id).await;
+        return customer_data_operations::route(req, db, tenant, role).await;
     }
     #[cfg(feature = "native")]
     if path.starts_with("/api/data-quality/") {

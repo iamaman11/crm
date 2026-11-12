@@ -5,7 +5,7 @@
 use crm_customer_data_operations::{
     PartyExportField, PartyExportKindFilter, PartyExportProfile,
     PartyExportScope, PartyExportSpecification, canonical_party_export_csv_record,
-    party_export_hex, party_export_sha256, PARTY_EXPORT_CANONICALIZATION_V1,
+    party_export_hex, party_export_sha256,
     PARTY_EXPORT_CSV_MEDIA_TYPE,
 };
 use crm_parties::{Party, PartyKind, PartyId, CreateParty, decode_party_state};
@@ -16,23 +16,21 @@ use crm_customer_data_operations::{
 };
 use std::collections::BTreeSet;
 use serde::Deserialize;
-use serde_json::json;
 use wasm_bindgen::JsValue;
 use worker::{D1Database, Method, Request, Response, Result};
-use super::{bind, error, response, parties};
+use super::{bind, error, parties};
 
-const LIMIT: usize = 100;
+pub(super) const LIMIT: usize = 100;
 const RETENTION: &str = "crm.dev.transient_csv_download.v1";
 
 #[derive(Deserialize)]
 struct Row { state: String }
 
-struct Export {
-    count: usize,
+pub(super) struct Export {
+    pub(super) count: usize,
     bytes: Vec<u8>,
-    sha256: String,
-    specification: PartyExportSpecification,
-    filter_label: &'static str,
+    pub(super) sha256: String,
+    pub(super) specification: PartyExportSpecification,
 }
 
 fn filter(req: &Request) -> Result<Option<PartyExportKindFilter>> {
@@ -58,7 +56,7 @@ fn matches_kind(p: &Party, kind: Option<PartyExportKindFilter>) -> bool {
         (Some(PartyExportKindFilter::Organization), PartyKind::Organization))
 }
 
-async fn assemble(db: &D1Database, tenant: &str,
+pub(super) async fn assemble(db: &D1Database, tenant: &str,
     kind: Option<PartyExportKindFilter>) -> Result<Option<Export>> {
     let scope = PartyExportScope::try_new(kind, LIMIT as u32)
         .map_err(|e| worker::Error::RustError(e.code))?;
@@ -100,12 +98,7 @@ async fn assemble(db: &D1Database, tenant: &str,
         count+=1;
     }
     let sha256 = party_export_hex(&party_export_sha256(&bytes));
-    let filter_label = match kind {
-        None => "all",
-        Some(PartyExportKindFilter::Person) => "person",
-        Some(PartyExportKindFilter::Organization) => "organization",
-    };
-    Ok(Some(Export {count,bytes,sha256,specification,filter_label}))
+    Ok(Some(Export {count,bytes,sha256,specification}))
 }
 
 // Original parser, PartyImportMapping and ImportRow own CSV interpretation,
@@ -117,7 +110,6 @@ type ImportCommand=(String,PartyKind,String,String); // target ID,kind,name,rece
 struct ImportPlan {
     commands:Vec<ImportCommand>,
     hash:String,
-    mapping_version:String,
 }
 fn parse_import(bytes:&[u8], tenant:&str)->std::result::Result<ImportPlan,&'static str>{
     if bytes.is_empty()||bytes.len()>IMPORT_MAX_BYTES{return Err("IMPORT_FILE_SIZE_INVALID");}
@@ -128,7 +120,7 @@ fn parse_import(bytes:&[u8], tenant:&str)->std::result::Result<ImportPlan,&'stat
     if parsed.headers().iter().map(String::as_str).collect::<Vec<_>>()!=IMPORT_FIELDS{
         return Err("IMPORT_HEADER_INVALID");
     }
-    if parsed.rows().len()>IMPORT_MAX_ROWS{return Err("IMPORT_ROW_LIMIT_REACHED");}
+    if parsed.rows().is_empty()||parsed.rows().len()>IMPORT_MAX_ROWS{return Err("IMPORT_ROW_LIMIT_REACHED");}
     let mapping=PartyImportMapping::try_new(
         None,"kind","display_name",Some("party_id".to_owned()),None)
         .map_err(|_|"IMPORT_MAPPING_INVALID")?;
@@ -181,88 +173,64 @@ fn parse_import(bytes:&[u8], tenant:&str)->std::result::Result<ImportPlan,&'stat
         commands.push((checked.party_id().as_str().to_owned(),kind,
             checked.display_name().to_owned(),row.target_idempotency_key()));
     }
-    Ok(ImportPlan{commands,hash,mapping_version})
-}
-async fn import(mut req:Request,db:D1Database,tenant:&str,trace:&str)->Result<Response>{
-    if req.method()!=Method::Post{return error("NOT_FOUND",404);}
-    let preview=req.path()=="/api/customer-data-operations/import-preview";
-    let expected=if preview{None}else{req.headers().get("x-crm-import-sha256")?};
-    let content_type=req.headers().get("content-type")?.unwrap_or_default();
-    if !content_type.starts_with("text/csv"){return error("IMPORT_CONTENT_TYPE_INVALID",415);}
-    let bytes=req.bytes().await?;
-    let plan=match parse_import(&bytes,tenant){
-        Ok(plan)=>plan,Err(code)=>return error(code,422),
-    };
-    if preview{
-        let mut already=0;
-        for (id,_,name,key) in &plan.commands{
-            if parties::import_receipt_matches(&db,tenant,key,id,name).await?{
-                already+=1;
-            }else if parties::stored(&db,tenant,id).await?.is_some(){
-                return error("IMPORT_TARGET_PARTY_CONFLICT",409);
-            }
-        }
-        return response(json!({
-            "count":plan.commands.len(),"file_sha256":plan.hash,
-            "fields":IMPORT_FIELDS,"max_rows":IMPORT_MAX_ROWS,
-            "mode":"CREATE_ONLY","atomic":true,
-            "target_ids":"DERIVED_NOT_EXTERNAL",
-            "target_party_ids":plan.commands.iter().map(|r|r.0.as_str()).collect::<Vec<_>>(),
-            "previously_imported":already,"mapping_version":plan.mapping_version,
-            "import_jobs":"NOT_CONNECTED","read_only":true,
-        }),200);
-    }
-    if expected.as_deref()!=Some(plan.hash.as_str()){
-        return error("IMPORT_SOURCE_CHANGED",409);
-    }
-    parties::import_batch(&db,tenant,plan.commands,trace).await
+    Ok(ImportPlan{commands,hash})
 }
 
-pub(super) async fn route(req: Request, db: D1Database,
-    tenant: &str, role: Option<&str>, trace:&str) -> Result<Response> {
-    // Export discloses an entire bounded set of personal/business Party names,
-    // so unlike ordinary Party reads it is expressly admin-only.
-    if role != Some("admin") {return error("FORBIDDEN",403);}
-    if req.path()=="/api/customer-data-operations/import-preview" ||
-        req.path()=="/api/customer-data-operations/import-apply" {
-        return import(req,db,tenant,trace).await;
+pub(super) struct ImportPreview {
+    pub(super) count:usize,
+    pub(super) hash:String,
+    pub(super) already:usize,
+    pub(super) target_ids:Vec<String>,
+}
+pub(super) struct ImportApplied {
+    pub(super) saved:parties::ImportSaved,
+    pub(super) hash:String,
+}
+pub(super) async fn preview_import(bytes:&[u8],db:&D1Database,tenant:&str)
+    ->Result<std::result::Result<ImportPreview,parties::MutationFailure>>{
+    let plan=match parse_import(bytes,tenant){
+        Ok(plan)=>plan,Err(code)=>return Ok(Err(parties::MutationFailure{code:code.into(),status:422})),
+    };
+    let mut already=0;
+    for (id,kind,name,key) in &plan.commands{
+        if parties::import_receipt_matches(db,tenant,key,id,*kind,name).await?{
+            already+=1;
+        }else if parties::stored(db,tenant,id).await?.is_some(){
+            return Ok(Err(parties::MutationFailure{code:"IMPORT_TARGET_PARTY_CONFLICT".into(),status:409}));
+        }
     }
-    if req.method()!=Method::Get {return error("NOT_FOUND",404);}
-    let path=req.path();
-    if path!="/api/customer-data-operations/preview"
-        && path!="/api/customer-data-operations/parties.csv" {
+    Ok(Ok(ImportPreview{count:plan.commands.len(),hash:plan.hash,already,
+        target_ids:plan.commands.into_iter().map(|r|r.0).collect()}))
+}
+pub(super) async fn apply_import(bytes:&[u8],expected:&str,key:&str,
+    db:&D1Database,tenant:&str,trace:&str)
+    ->Result<std::result::Result<ImportApplied,parties::MutationFailure>>{
+    let plan=match parse_import(bytes,tenant){
+        Ok(plan)=>plan,Err(code)=>return Ok(Err(parties::MutationFailure{code:code.into(),status:422})),
+    };
+    if expected!=plan.hash{
+        return Ok(Err(parties::MutationFailure{code:"IMPORT_SOURCE_CHANGED".into(),status:409}));
+    }
+    Ok(parties::import_batch(db,tenant,plan.commands,key,&plan.hash,trace).await?
+        .map(|saved|ImportApplied{saved,hash:plan.hash}))
+}
+
+// The only non-RPC business endpoint: bounded CSV attachment bytes.
+pub(super) async fn route(req:Request,db:D1Database,tenant:&str,role:Option<&str>)->Result<Response>{
+    if role!=Some("admin"){return error("FORBIDDEN",403);}
+    if req.method()!=Method::Get||req.path()!="/api/customer-data-operations/parties.csv"{
         return error("NOT_FOUND",404);
     }
-    let kind = match filter(&req) {
-        Ok(kind) => kind,
-        Err(_) => return error("EXPORT_QUERY_INVALID",422),
-    };
-    let Some(export) = assemble(&db,tenant,kind).await? else {
+    let kind=match filter(&req){Ok(kind)=>kind,Err(_)=>return error("EXPORT_QUERY_INVALID",422)};
+    let Some(export)=assemble(&db,tenant,kind).await? else{
         return error("EXPORT_SCOPE_LIMIT_REACHED",409);
     };
-    if path.ends_with("/preview") {
-        return response(json!({
-            "count": export.count,
-            "kind": export.filter_label,
-            "fields": export.specification.profile().fields().iter()
-                .map(|f| f.canonical_name()).collect::<Vec<_>>(),
-            "specification_version": export.specification.version_id().as_str(),
-            "csv_sha256": export.sha256,
-            "canonicalization": PARTY_EXPORT_CANONICALIZATION_V1,
-            "max_tenant_parties": LIMIT,
-            "read_only": true,
-            "persisted_export_job": "NOT_CONNECTED",
-            "import": "BOUNDED_CREATE_ONLY"
-        }),200);
-    }
-    let mut reply = Response::from_bytes(export.bytes)?;
-    reply.headers_mut().set("content-type", PARTY_EXPORT_CSV_MEDIA_TYPE)?;
-    reply.headers_mut().set("content-disposition",
-        "attachment; filename=\"crm-parties.csv\"")?;
-    reply.headers_mut().set("cache-control", "private, no-store")?;
-    reply.headers_mut().set("x-crm-export-count", &export.count.to_string())?;
-    reply.headers_mut().set("x-crm-export-sha256", &export.sha256)?;
-    reply.headers_mut().set("x-crm-export-specification",
-        export.specification.version_id().as_str())?;
+    let mut reply=Response::from_bytes(export.bytes)?;
+    reply.headers_mut().set("content-type",PARTY_EXPORT_CSV_MEDIA_TYPE)?;
+    reply.headers_mut().set("content-disposition","attachment; filename=\"crm-parties.csv\"")?;
+    reply.headers_mut().set("cache-control","private, no-store")?;
+    reply.headers_mut().set("x-crm-export-count",&export.count.to_string())?;
+    reply.headers_mut().set("x-crm-export-sha256",&export.sha256)?;
+    reply.headers_mut().set("x-crm-export-specification",export.specification.version_id().as_str())?;
     Ok(reply)
 }

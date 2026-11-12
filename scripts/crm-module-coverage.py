@@ -95,7 +95,7 @@ def build_report(root: Path = ROOT, *, phase: str | None = None, runtime: dict |
         for route, rule in rpc["policies"]:
             if route in runtime_policy:
                 raise ValueError(f"duplicate compiled RPC policy: {route}")
-            if rule["permission"] not in ("Read", "Write") or rule["activation"] not in ("Published", "Candidate"):
+            if rule["permission"] not in ("Read", "AdminRead", "Write") or rule["activation"] not in ("Published", "Candidate"):
                 raise ValueError(f"invalid compiled RPC policy: {route}")
             runtime_policy[route] = rule
         if set(registered) != set(runtime_policy):

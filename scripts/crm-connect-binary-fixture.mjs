@@ -187,3 +187,16 @@ export const binaryEnrichmentV2=(name,payload)=>{
  return toBinary(method.input,create(method.input,payload));
 };
 export const decodeEnrichmentV2=(name,bytes)=>fromBinary(enrichmentMethod(name).output,bytes);
+
+const csvService=registry.getService("crm.customer_data_operations.v2.PartyCsvService");
+if(!csvService)throw Error("compiled PartyCsv v2 service missing");
+const csvMethod=name=>{
+ const method=csvService.methods.find(item=>item.name===name);
+ if(!method)throw Error("compiled PartyCsv v2 RPC missing "+name);
+ return method;
+};
+export const csvV2Path=name=>"/crm.customer_data_operations.v2.PartyCsvService/"+csvMethod(name).name;
+export const binaryCsvV2=(name,payload)=>{
+ const method=csvMethod(name);return toBinary(method.input,create(method.input,payload));
+};
+export const decodeCsvV2=(name,bytes)=>fromBinary(csvMethod(name).output,bytes);
