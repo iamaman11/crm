@@ -19,10 +19,6 @@ export type Target = {
   value: string;
   name?: string;
   frameIndex?: number;
-  fileAction?: "upload" | "download";
-  fileName?: string;
-  mimeType?: string;
-  base64?: string;
 };
 
 export type Command = {
@@ -45,6 +41,10 @@ export type Command = {
   tabAction?: "list" | "new" | "select" | "close";
   tabId?: string;
   frameIndex?: number;
+  fileAction?: "upload" | "download";
+  fileName?: string;
+  mimeType?: string;
+  base64?: string;
 };
 
 type Result = { ok: true; data: unknown; image?: string } | { ok: false; error: string };
@@ -82,59 +82,6 @@ export class CrmBrowserSession extends DurableObject<Env> {
   // Both browser_open(url) and browser_action(navigate) must really navigate
   // an existing session. This is the single owner of privileged CRM navigation.
   private async navigateTo(destination: string) {
-    if (command.op === "tabs") {
-      if (!this.browser) throw new Error("CRM_BROWSER_NOT_OPEN");
-      if (command.tabAction === "new") {
-        if (!this.context) {
-          this.context = await this.browser.newContext({
-            acceptDownloads: true, serviceWorkers: "block",
-          });
-          await this.installSafetyRouting(this.context);
-        }
-        if (this.context.pages().filter(p => !p.isClosed()).length >= 12) {
-          throw new Error("BROWSER_TAB_LIMIT");
-        }
-        // A new tab belongs to the existing single browser context. Its
-        // requests inherit precisely the same CRM origin/security route.
-        const page = await this.context.newPage();
-        this.attachPage(page);
-        this.page = page;
-        if (command.url) {
-          const url = browserUrl(command.url, CRM_ORIGIN + "/");
-          await this.navigateTo(url);
-        }
-      } else if (command.tabAction === "select" || command.tabAction === "close") {
-        const matched = [...this.tabIds.entries()].find(([page, id]) =>
-          id === command.tabId && !page.isClosed(),
-        );
-        if (!matched) throw new Error("BROWSER_TAB_NOT_FOUND");
-        const [page] = matched;
-        if (command.tabAction === "select") {
-          this.page = page;
-          await page.bringToFront();
-        } else {
-          await page.close();
-          this.tabIds.delete(page);
-          if (this.page === page) {
-            this.page = this.context?.pages().find(p => !p.isClosed()) ?? null;
-          }
-        }
-      } else if (command.tabAction !== "list") {
-        throw new Error("BROWSER_UNKNOWN_TAB_ACTION");
-      }
-      const tabs = await Promise.all(
-        (this.context?.pages() ?? []).filter(p => !p.isClosed()).map(async (page) => {
-          this.attachPage(page);
-          return {
-            tabId: this.tabIds.get(page),
-            active: page === this.page,
-            path: safePagePath(page.url()),
-            title: await page.title(),
-          };
-        }),
-      );
-      return { data: { tabs, count: tabs.length } };
-    }
     const page = this.page;
     if (!page || page.isClosed()) throw new Error("CRM_BROWSER_NOT_OPEN");
     requireCrmAgentIdentity(
@@ -339,6 +286,59 @@ export class CrmBrowserSession extends DurableObject<Env> {
         path: this.page && !this.page.isClosed() ? safePagePath(this.page.url()) : null,
       },
     };
+    if (command.op === "tabs") {
+      if (!this.browser) throw new Error("CRM_BROWSER_NOT_OPEN");
+      if (command.tabAction === "new") {
+        if (!this.context) {
+          this.context = await this.browser.newContext({
+            acceptDownloads: true, serviceWorkers: "block",
+          });
+          await this.installSafetyRouting(this.context);
+        }
+        if (this.context.pages().filter(p => !p.isClosed()).length >= 12) {
+          throw new Error("BROWSER_TAB_LIMIT");
+        }
+        // A new tab belongs to the existing single browser context. Its
+        // requests inherit precisely the same CRM origin/security route.
+        const page = await this.context.newPage();
+        this.attachPage(page);
+        this.page = page;
+        if (command.url) {
+          const url = browserUrl(command.url, CRM_ORIGIN + "/");
+          await this.navigateTo(url);
+        }
+      } else if (command.tabAction === "select" || command.tabAction === "close") {
+        const matched = [...this.tabIds.entries()].find(([page, id]) =>
+          id === command.tabId && !page.isClosed(),
+        );
+        if (!matched) throw new Error("BROWSER_TAB_NOT_FOUND");
+        const [page] = matched;
+        if (command.tabAction === "select") {
+          this.page = page;
+          await page.bringToFront();
+        } else {
+          await page.close();
+          this.tabIds.delete(page);
+          if (this.page === page) {
+            this.page = this.context?.pages().find(p => !p.isClosed()) ?? null;
+          }
+        }
+      } else if (command.tabAction !== "list") {
+        throw new Error("BROWSER_UNKNOWN_TAB_ACTION");
+      }
+      const tabs = await Promise.all(
+        (this.context?.pages() ?? []).filter(p => !p.isClosed()).map(async (page) => {
+          this.attachPage(page);
+          return {
+            tabId: this.tabIds.get(page),
+            active: page === this.page,
+            path: safePagePath(page.url()),
+            title: await page.title(),
+          };
+        }),
+      );
+      return { data: { tabs, count: tabs.length } };
+    }
     const page = this.page;
     if (!page || page.isClosed()) throw new Error("CRM_BROWSER_NOT_OPEN");
 
