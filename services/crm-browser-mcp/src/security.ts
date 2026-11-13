@@ -88,6 +88,16 @@ export function crmCredentialsAllowed(
     (isCrmRequest(initiator) || authorizedMainNavigation);
 }
 
+// A public website can open without CRM credentials. CRM navigation cannot
+// silently create a new Access service principal in a different test tenant.
+export function requireCrmAgentIdentity(
+  destination: string, clientId: string | undefined, clientSecret: string | undefined,
+): void {
+  if (isCrmRequest(destination) && (!clientId || !clientSecret)) {
+    throw new Error("CRM_BROWSER_AGENT_IDENTITY_NOT_PROVISIONED");
+  }
+}
+
 export function safePagePath(input: string): string {
   try {
     const url = new URL(input);
