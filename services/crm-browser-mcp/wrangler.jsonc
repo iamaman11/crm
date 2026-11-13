@@ -2,7 +2,7 @@
   "name": "crm-browser-mcp",
   "main": "./src/index.ts",
   "account_id": "5bd5e1e1e813f061afc259e91334262d",
-  "workers_dev": true,
+  "workers_dev": false,
   "preview_urls": false,
   "compatibility_date": "2026-11-13",
   "compatibility_flags": ["nodejs_compat"],
