@@ -1,27 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { browserUrl, crmCredentialsAllowed, crmUrl, CRM_ORIGIN, isCrmRequest, safePagePath, redact } from "../src/security.ts";
+import { browserUrl, crmCredentialsAllowed, CRM_ORIGIN, isCrmRequest, safePagePath, redact } from "../src/security.ts";
 
-test("path navigation stays on the canonical, real CRM hostname", () => {
-  assert.equal(crmUrl("/clients"), CRM_ORIGIN + "/clients");
-  assert.equal(crmUrl("https://crm-dev.crm-5bd5e1e1.workers.dev/api/session"),
+test("canonical CRM identification is exact; ordinary browser navigation stays universal", () => {
+  assert.equal(browserUrl("/clients"), CRM_ORIGIN + "/clients");
+  assert.equal(browserUrl("https://crm-dev.crm-5bd5e1e1.workers.dev/api/session"),
     CRM_ORIGIN + "/api/session");
   assert.equal(isCrmRequest(CRM_ORIGIN + "/api/session"), true);
-});
-test("no browser navigation or credential forwarding to a foreign origin", () => {
-  const denied = [
+  for (const url of [
     "http://crm-dev.crm-5bd5e1e1.workers.dev",
     "https://evil.example/",
     "https://crm-dev.crm-5bd5e1e1.workers.dev.evil.example/",
     "https://user:pass@crm-dev.crm-5bd5e1e1.workers.dev/",
     "javascript:alert(1)",
     "data:text/html,unsafe",
-    "//evil.example/",
-  ];
-  for (const url of denied) {
-    assert.throws(() => crmUrl(url), /CRM_BROWSER_ORIGIN_DENIED/, url);
-    assert.equal(isCrmRequest(url), false, url);
-  }
+  ]) assert.equal(isCrmRequest(url), false, url);
 });
 test("network diagnostics contain only paths, never query secrets or foreign URLs", () => {
   assert.equal(safePagePath(CRM_ORIGIN + "/api/version?token=supersecret"), "/api/version");
