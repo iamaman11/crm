@@ -29,7 +29,8 @@ Browser writes must pass React -> Connect -> Rust -> D1, like a human user.
 
 ## Available candidate tools
 browser_open, browser_status, browser_session, browser_snapshot,
-browser_screenshot, browser_action, browser_diagnostics, browser_close.
+browser_screenshot, browser_action, browser_diagnostics, browser_live_view,
+browser_close.
 
 Actions: click, double_click, fill, type, select, check, uncheck, hover, press,
 scroll, navigate, reload, back, forward, with Playwright role/text/label/CSS
@@ -63,6 +64,32 @@ must be reported and recovered by an explicit reopen.
    callable in this chat. Deployment is not the same as tool installation.
 
 Until these gates pass, this branch is DRAFT / NO-GO and is not a deployed app.
+
+
+### Physical proof and secure preview boundary (13 Nov 2026)
+- The real Cloudflare Browser Run account opened public `https://example.org/`
+  through Cloudflare's Browser Run REST action and returned "Example Domain"
+  from the rendered HTML. This is a **browser service smoke**, not a deployed
+  MCP/authorized CRM action. Several rapid additional Quick Actions produced
+  HTTP 429; do not spam retries or assume a specific plan/quota without evidence.
+- The Worker validates both the Cloudflare-signed Access **audience** and the
+  unique human owner's email. `CRM_MCP_ACCESS_AUD` is the real Access app
+  audience, stored as public Wrangler configuration; the owner email is a
+  Worker secret. Wrong audience, missing identity, and other users are denied.
+- Native TypeScript and 8 security unit tests **PASS** on Windows: public
+  websites, private/loopback URL rejection (including page-initiated links and
+  redirects), precise CRM credential scope and Access audience/owner checks.
+- The `browser_live_view` command asks the **native BrowserRun binding** for
+  a 60-second **read-only** signed link. This URL must not be recorded in logs.
+  The real command has **not** been exercised on a deployed MCP yet.
+- GitHub Environment `browser-mcp` exists and permits deployment from the
+  `mcp` branch **only**. No Cloudflare deployment token has been provisioned
+  in that Environment; the Windows environment token tested as unauthorized/
+  forbidden and must not be reused. No deployment job is enabled yet.
+- This candidate is **Draft / NO-GO**, pending live MCP OAuth authentication,
+  Browser Run Playwright session operation, redirect safety, service principal
+  enrollment into exactly the existing human owner's CRM tenant, and explicit
+  installation in ChatGPT. The CRM Rust Worker and D1 are unchanged.
 
 ## Official references
 - https://developers.cloudflare.com/browser-run/playwright/
