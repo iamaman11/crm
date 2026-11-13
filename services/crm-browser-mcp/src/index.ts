@@ -16,6 +16,31 @@ const action = z.enum([
   "click", "double_click", "fill", "type", "select", "check",
   "uncheck", "hover", "press", "scroll", "navigate", "reload", "back", "forward",
 ]);
+const assertionKind = z.enum(["url", "title", "visible", "hidden", "text", "count"]);
+const waitState = z.enum(["visible", "hidden", "attached", "detached"]);
+const timeoutMs = z.number().int().min(100).max(30_000).optional();
+const expected = z.union([z.string().max(512), z.number().finite(), z.boolean()]);
+const scenarioStep = z.object({
+  op: z.enum([
+    "click", "double_click", "fill", "type", "select", "check",
+    "uncheck", "hover", "press", "scroll", "navigate", "reload",
+    "back", "forward", "wait", "assert",
+  ]),
+  target: target.optional(),
+  text: z.string().max(16_000).optional(),
+  key: z.string().max(96).optional(),
+  value: z.string().max(1_000).optional(),
+  url: z.string().max(1_024).optional(),
+  x: z.number().finite().min(-5000).max(5000).optional(),
+  y: z.number().finite().min(-5000).max(5000).optional(),
+  acceptDialog: z.boolean().optional(),
+  kind: assertionKind.optional(),
+  expected: expected.optional(),
+  match: z.enum(["exact", "contains"]).optional(),
+  state: waitState.optional(),
+  timeoutMs,
+});
+
 
 function createServer(env: Env, ownerEmail: string) {
   const server = new McpServer({ name: "crm-browser-mcp", version: "0.1.0" });
@@ -90,6 +115,33 @@ function createServer(env: Env, ownerEmail: string) {
     text: params.text, key: params.key, value: params.value,
     url: params.url, x: params.x, y: params.y, acceptDialog: params.acceptDialog,
   }));
+
+  server.registerTool("browser_wait", {
+    description: "Deterministically wait for an element state, a URL, or DOM content load. Always bounded to 30 seconds; no arbitrary sleeps.",
+    inputSchema: {
+      target: target.optional(),
+      state: waitState.optional(),
+      url: z.string().max(1024).optional(),
+      timeoutMs,
+    },
+  }, async params => command({ op: "wait", ...params }));
+
+  server.registerTool("browser_assert", {
+    description: "Read and compare actual DOM, URL, or title values; return a typed pass/fail verdict (no false success on mismatch).",
+    inputSchema: {
+      kind: assertionKind,
+      target: target.optional(),
+      expected,
+      match: z.enum(["exact", "contains"]).optional(),
+    },
+  }, async params => command({ op: "assert", ...params }));
+
+  server.registerTool("browser_run", {
+    description: "Execute up to 12 ordered Playwright actions/waits/assertions and stop on first failure. Return machine-readable results for every executed step.",
+    inputSchema: {
+      steps: z.array(scenarioStep).min(1).max(12),
+    },
+  }, async ({ steps }) => command({ op: "run", steps }));
 
   server.registerTool("browser_diagnostics", {
     description: "Read sanitized cross-site browser console and HTTP statuses. Credential values and URL queries are never exposed.",
