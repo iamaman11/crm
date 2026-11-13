@@ -636,7 +636,12 @@ export class CrmBrowserSession extends DurableObject<Env> {
       }
       case "run": {
         const steps = command.steps;
-        validateScenarioSteps(steps);
+        validateScenarioSteps(steps, url => {
+          const destination = browserUrl(url, page.url() || CRM_ORIGIN);
+          requireCrmAgentIdentity(
+            destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
+          );
+        });
         const startedAt = Date.now();
         const deadline = startedAt + boundedRunTimeout(command.timeoutMs);
         const results: Array<{ index: number; op: string; passed: boolean; data?: unknown; error?: string; outcome?: string }> = [];

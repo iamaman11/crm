@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { SCENARIO_OPERATIONS, validateScenarioSteps, boundedRunTimeout, operationTimeout, isFailedVerdict, boundedWaitTimeout, compareBrowserAssertion, safeAssertionValue } from "../src/browser-checks.ts";
+import { browserUrl } from "../src/security.ts";
 
 test("wait timeout is bounded and has a single stable default", () => {
   assert.equal(boundedWaitTimeout(undefined), 10_000);
@@ -61,4 +62,17 @@ test("negative verdicts are MCP errors, not a successful tool response", () => {
   assert.equal(isFailedVerdict({passed:true}),false);
   assert.equal(isFailedVerdict({completed:true}),false);
   assert.equal(isFailedVerdict(null),false);
+});
+
+test("unsafe later navigation is rejected during preflight (no earlier submit)", () => {
+  const steps = [
+    {op:"click",target:{kind:"role",value:"button",name:"Submit"}},
+    {op:"navigate",url:"http://169.254.169.254/latest/meta-data"},
+  ];
+  assert.throws(() => validateScenarioSteps(steps, url => browserUrl(url)),
+    /BROWSER_UNSAFE_URL/);
+  assert.doesNotThrow(() => validateScenarioSteps([
+    {op:"click",target:{kind:"role",value:"button"}},
+    {op:"navigate",url:"https://example.org/"},
+  ], url => browserUrl(url)));
 });

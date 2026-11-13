@@ -60,7 +60,7 @@ type ScenarioStep = {
 const targetOperations: ReadonlySet<string> = new Set([
   "click", "double_click", "fill", "type", "select", "check", "uncheck", "hover",
 ]);
-export function validateScenarioSteps(steps: readonly ScenarioStep[] | undefined): void {
+export function validateScenarioSteps(steps: readonly ScenarioStep[] | undefined, validateNavigation?: (url: string) => void): void {
   if (!steps || steps.length === 0 || steps.length > 12) {
     throw new Error("BROWSER_RUN_STEPS_OUT_OF_RANGE");
   }
@@ -77,8 +77,13 @@ export function validateScenarioSteps(steps: readonly ScenarioStep[] | undefined
           (!["url", "title"].includes(String(step.kind)) && !step.target))) {
       throw new Error("BROWSER_RUN_INVALID_ASSERTION");
     }
-    if (step.op === "navigate" && (typeof step.url !== "string" || !step.url)) {
-      throw new Error("BROWSER_RUN_URL_REQUIRED");
+    if (step.op === "navigate") {
+      if (typeof step.url !== "string" || !step.url) {
+        throw new Error("BROWSER_RUN_URL_REQUIRED");
+      }
+      // Reject known unsafe network destinations or missing CRM identity
+      // BEFORE an earlier form submit; runtime routes still protect redirects.
+      validateNavigation?.(step.url);
     }
     if (step.op === "press" && (typeof step.key !== "string" || !step.key)) {
       throw new Error("BROWSER_RUN_KEY_REQUIRED");
