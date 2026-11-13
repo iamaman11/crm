@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { browserUrl, crmCredentialsAllowed, CRM_ORIGIN, isCrmRequest, safePagePath, redact } from "../src/security.ts";
+import { browserUrl, crmCredentialsAllowed, CRM_ORIGIN, isCrmRequest, isPermittedBrowserRequest, safePagePath, redact } from "../src/security.ts";
 
 test("canonical CRM identification is exact; ordinary browser navigation stays universal", () => {
   assert.equal(browserUrl("/clients"), CRM_ORIGIN + "/clients");
@@ -62,4 +62,27 @@ test("CRM Access service headers never authorize foreign pages or third-party in
   assert.equal(crmCredentialsAllowed(foreign, CRM_ORIGIN, true), false,
     "a redirect or navigation to a foreign origin never receives CRM credentials");
   assert.equal(crmCredentialsAllowed(CRM_ORIGIN + ".evil.net", CRM_ORIGIN, true), false);
+});
+
+test("all browser requests, including page-initiated redirects and links, reject local/private destinations", () => {
+  const unsafe = [
+    "http://127.0.0.1/private",
+    "http://[::1]/admin",
+    "http://[::ffff:127.0.0.1]/token",
+    "http://[::ffff:10.0.0.1]/token",
+    "http://169.254.169.254/latest/meta-data",
+    "http://192.168.0.1/",
+    "http://172.16.254.1/",
+    "http://10.0.0.10/",
+    "http://localhost:9222/json",
+    "https://internal.local/api",
+    "file:///etc/passwd",
+  ];
+  for (const url of unsafe) assert.equal(isPermittedBrowserRequest(url), false, url);
+  for (const url of [
+    "https://example.org/",
+    "https://example.org/oauth/callback?code=one-time",
+    "https://developers.cloudflare.com/",
+    CRM_ORIGIN + "/api/session",
+  ]) assert.equal(isPermittedBrowserRequest(url), true, url);
 });
