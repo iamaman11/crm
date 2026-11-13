@@ -119,6 +119,21 @@ function createServer(env: Env, ownerEmail: string) {
     },
   }, async params => command({ op: "file", ...params }));
 
+  server.registerTool("browser_inspect", {
+    description: "Read a sanitized network timeline, browser navigation/paint performance timings, basic DOM accessibility heuristics or a capped PDF. No arbitrary code execution or credential-bearing headers.",
+    inputSchema: {
+      inspection: z.enum(["network", "performance", "accessibility", "pdf"]),
+    },
+  }, async params => command({ op: "inspect", ...params }));
+
+  server.registerTool("browser_viewport", {
+    description: "Resize the active tab for responsive layout testing (320-2560 pixels); does not impersonate a physical mobile device.",
+    inputSchema: {
+      width: z.number().int().min(320).max(2560),
+      height: z.number().int().min(320).max(2560),
+    },
+  }, async params => command({ op: "viewport", ...params }));
+
   server.registerTool("browser_screenshot", {
     description: "Capture an actual full-page PNG screenshot of the currently open website.",
     inputSchema: {},
