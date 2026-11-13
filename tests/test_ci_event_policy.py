@@ -140,6 +140,37 @@ jobs:
                 path.write_text(contents, encoding="utf-8")
                 self.assertIn(expected_error, check_workflow(path).errors)
 
+    def test_browser_mcp_is_independent_branch_and_workflow(self) -> None:
+        temporary = TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        path = Path(temporary.name) / ".github/workflows/browser-mcp.yml"
+        path.parent.mkdir(parents=True)
+        source = """name: Browser MCP CI
+on:
+  push:
+    branches:
+      - mcp
+  pull_request:
+    branches:
+      - mcp
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+"""
+        path.write_text(source, encoding="utf-8")
+        self.assertEqual(check_workflow(path).errors, ())
+        path.write_text(source.replace("      - mcp", "      - dev"), encoding="utf-8")
+        self.assertIn("push must be restricted to branch mcp", check_workflow(path).errors)
+        self.assertIn("pull_request must be restricted to branch mcp", check_workflow(path).errors)
+        path.write_text(source.replace("  pull_request:", "  workflow_dispatch:"), encoding="utf-8")
+        self.assertIn(
+            "Browser MCP workflow must validate pushes and PRs to mcp",
+            check_workflow(path).errors,
+        )
+
     def test_rejects_legacy_pr_into_dev_even_for_pr_only_workflows(self) -> None:
         path = self.write_workflow("""name: Legacy
 on:
