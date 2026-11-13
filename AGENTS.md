@@ -2,6 +2,12 @@
 
 This file is the default operating guide for humans and coding agents working in this repository.
 
+For the Cloudflare application and its CI, follow `apps/cloudflare-crm/AGENTS.md` and
+`apps/cloudflare-crm/ARCHITECTURE.md`. Issue #352 owns current scope, checkpoints and
+acceptance. Its direct-dev, single-pipeline, development-API policy supersedes the
+historical PostgreSQL packet/PR/compatibility process below for that application.
+App Markdown contains stable rules only; Markdown-only pushes do not build or deploy CRM.
+
 ## 1. Start with the smallest correct context
 
 Before changing code:

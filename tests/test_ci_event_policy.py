@@ -72,12 +72,11 @@ on:
   push:
     branches:
       - dev
-  pull_request:
-    branches:
-      - dev
+    paths-ignore:
+      - '**/*.md'
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   gate:
     runs-on: ubuntu-latest
@@ -118,6 +117,26 @@ jobs:
             check_workflow(path).errors,
             ("push must be restricted to branch main",),
         )
+
+    def test_crm_actual_workflow_and_regressions(self) -> None:
+        source = Path(__file__).resolve().parents[1] / ".github/workflows/cloudflare-crm-spike.yml"
+        original = source.read_text(encoding="utf-8")
+        self.assertEqual(check_workflow(source).errors, ())
+        temporary = TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        path = Path(temporary.name) / ".github/workflows/cloudflare-crm-spike.yml"
+        path.parent.mkdir(parents=True)
+        cases = (
+            (original.replace("'**/*.md'", "'apps/**'"), "CRM may ignore only **/*.md documentation"),
+            (original.replace("    paths-ignore:\n      - '**/*.md'\n", ""), "CRM may ignore only **/*.md documentation"),
+            (original.replace("cancel-in-progress: false", "cancel-in-progress: true"), "CRM must not cancel an active release"),
+            (original.replace("concurrency:\n", "  pull_request:\n    branches:\n      - dev\nconcurrency:\n", 1), "CRM uses one dev pipeline, not duplicate pull_request builds"),
+            (original.replace("      - dev\n", "      - dev\n      - experimental\n", 1), "push must be restricted to branch dev"),
+        )
+        for contents, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                path.write_text(contents, encoding="utf-8")
+                self.assertIn(expected_error, check_workflow(path).errors)
 
     def test_rejects_legacy_pr_into_dev_even_for_pr_only_workflows(self) -> None:
         path = self.write_workflow("""name: Legacy

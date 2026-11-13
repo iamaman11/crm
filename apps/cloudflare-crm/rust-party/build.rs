@@ -1,5 +1,5 @@
 fn main() {
-    // A single source list drives both code generation and Cargo dependency tracking.
+    // A single source list drives code generation; Cargo tracks all imports below.
     // Buf's canonical Protobuf remains the source of truth; no second registry.
     const CONNECT_PROTOS: &[&str] = &[
         "../../../proto/crm/core/v2/operation.proto",
@@ -21,9 +21,8 @@ fn main() {
     unsafe {
         std::env::set_var("PROTOC", protoc);
     }
-    for file in CONNECT_PROTOS {
-        println!("cargo:rerun-if-changed={file}");
-    }
+    // Track imported schemas too when reusing Cargo outputs across commits.
+    println!("cargo:rerun-if-changed=../../../proto");
     connectrpc_build::Config::new()
         .files(CONNECT_PROTOS)
         .includes(&["../../../proto"])

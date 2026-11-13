@@ -252,10 +252,12 @@ def workflow_decisions(root: Path, paths: list[str]) -> list[WorkflowDecision]:
             events = {events: None}
         elif isinstance(events, list):
             events = {str(event): None for event in events}
-        if not isinstance(events, dict) or "pull_request" not in events:
+        # CRM development has one push pipeline; other products retain PR gates.
+        event = "push" if workflow_path.name == "cloudflare-crm-spike.yml" else "pull_request"
+        if not isinstance(events, dict) or event not in events:
             continue
         relative = workflow_path.relative_to(root).as_posix()
-        pull_request = events["pull_request"]
+        pull_request = events[event]
         if pull_request is None:
             decisions.append(WorkflowDecision(name, relative, True, ("workflow has no pull-request path filter",)))
             continue

@@ -230,9 +230,9 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
 
     def test_active_cloudflare_crm_is_strict_and_preserves_step22(self) -> None:
         self.assertEqual(self.packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(self.packet["packet_id"], "cloudflare-crm-connect-hard-cutover")
+        self.assertEqual(self.packet["packet_id"], "cloudflare-crm-development")
         self.assertEqual(self.packet["baseline"], {"ref": "dev"})
-        self.assertEqual(self.packet["tracking_issues"], [338, 350])
+        self.assertEqual(self.packet["tracking_issues"], [338, 352])
         self.assertIn("apps/cloudflare-crm/**", self.packet["allowed_paths"])
         self.assertIn(".github/workflows/cloudflare-crm-spike.yml", self.packet["allowed_paths"])
         self.assertNotIn("modules/**", self.packet["allowed_paths"])
@@ -241,7 +241,7 @@ class ArchitectureDocumentationConsistencyTests(unittest.TestCase):
         self.assertIn("Cloudflare CRM Spike CI", self.packet["required_checks"])
         self.assertEqual(self.packet["required_checks"], ["Cloudflare CRM Spike CI"])
         self.assertIn(self.packet["packet_id"], self.active_packet)
-        self.assertIn("- **Baseline:** `dev` (live PR base)", self.active_packet)
+        self.assertIn("- **Baseline:** `dev` (development scope reference)", self.active_packet)
         self.assertIn("ADR-033", self.plan)
         self.assertIn("ADR-033", self.roadmap)
         self.assertIn("ADR-033", self.status)

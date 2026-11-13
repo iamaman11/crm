@@ -79,7 +79,7 @@ def load_packet(root: Path) -> dict[str, Any]:
     baseline = packet.get("baseline")
     if not isinstance(baseline, dict):
         raise NavigationError("baseline must be an object")
-    expected_base = "dev" if packet["packet_id"] == "cloudflare-crm-connect-hard-cutover" else "main"
+    expected_base = "dev" if packet["packet_id"] == "cloudflare-crm-development" else "main"
     if baseline != {"ref": expected_base} or "promotion_baseline" in packet:
         raise NavigationError(f"only canonical {expected_base} baseline is permitted")
     issues = packet.get("tracking_issues")
@@ -209,7 +209,7 @@ def render_active_packet(packet: dict[str, Any]) -> str:
         f"- **Packet:** `{packet['packet_id']}` — {packet['title']}",
         f"- **Status:** `{packet['status']}`",
         f"- **Tracking:** {', '.join(f'#{issue}' for issue in packet['tracking_issues'])}",
-        f"- **Baseline:** `{baseline['ref']}` (live PR base)",
+        f"- **Baseline:** `{baseline['ref']}` (development scope reference)",
         f"- **Source digest:** `{source_digest}`", "",
         "## Objective", "", str(packet["objective"]), "",
     ]

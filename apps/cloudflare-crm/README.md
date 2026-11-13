@@ -1,61 +1,44 @@
 # Cloudflare CRM
 
-Канонический репозиторий — [iamaman11/crm](https://github.com/iamaman11/crm).
-Норма — [ARCHITECTURE.md](ARCHITECTURE.md), архитектурная основа —
-[#338](https://github.com/iamaman11/crm/issues/338), текущий план развития —
-[#352](https://github.com/iamaman11/crm/issues/352). Завершённый cutover —
-[#350](https://github.com/iamaman11/crm/issues/350). Он принят на
-`272aba214114f3db6247cad115f86d54312e3030`: [CI + live PASS](https://github.com/iamaman11/crm/actions/runs/43302137364).
+Канонический source — [iamaman11/crm](https://github.com/iamaman11/crm), ветка `dev`.
+[ARCHITECTURE.md](ARCHITECTURE.md) описывает схему, [AGENTS.md](AGENTS.md) — правила разработки.
+Текущие задачи, функциональные ограничения, чекпойнты и доказательства приёмки находятся
+в [Issue #352](https://github.com/iamaman11/crm/issues/352). Архитектурные решения — #338,
+история cutover — #350. Markdown не является журналом релизов.
 
 ```text
-Protobuf → Buf → generated Rust/TypeScript
-React strict TSX + packages/ui → packages/client/cloudflare
-→ binary Connect → Rust Access verification/policy
-→ оригинальные Rust owners → owner SQL/CAS/receipts/audit → одна D1
+Protobuf → generated Rust/TypeScript
+React + packages/ui → packages/client/cloudflare → binary Connect
+→ Rust Access/policy → original Rust owner → owner SQL/CAS/receipt/audit → одна D1
 ```
 
-Один workers-rs Worker `crm-dev`, один встроенный Connect router, одна существующая D1.
-Frontend: `web/src/app.tsx` и feature screens. Wire/domain mappings и D1 adapters:
-`rust-party/src/connect_sales.rs`, его handler modules и существующие owner-файлы.
-Бизнес-правила принадлежат исходным `modules/crm-*`.
-Customer360 читает Account-rooted композицию; Sales–Activities сохраняет связанные изменения атомарно.
+Один workers-rs Worker и встроенный Connect router. Frontend находится в `web/src`;
+wire/domain mappings — в `rust-party/src/connect_sales.rs` и его handler modules;
+бизнес-инварианты — в исходных `modules/crm-*`. Не добавлять параллельные транспорт,
+backend, UI kit или domain model.
 
-Контракты проверяет Buf, Rust — компилятор/Clippy/domain tests, границы TypeScript —
-compiler/AST. Скомпилированные router/policy сверяются с descriptors и выполненными
-workerd-сценариями. Нет второго ручного каталога покрытия и source-text доказательств тестов.
-Количество RPC не является процентом готовности приложения.
+Разработка идёт прямыми commits в `dev`; PR необязателен. Code push запускает один
+существующий GitHub Actions workflow. Изменения только Markdown не собирают и не публикуют
+приложение; code + Markdown проходят полный CI. Выполняющийся запуск заканчивается,
+следующим проверяется последнее ожидающее состояние.
 
-PR #351 завершён; новые срезы разрабатываются в кандидатных GitHub ветках/PR → dev по #352, с архитектурой #338. Прямые экспериментальные push в dev не используются. Сборки и тесты выполняет
-`.github/workflows/cloudflare-crm-spike.yml`. Зависимости устанавливаются через
-`pnpm install --frozen-lockfile`, Rust собирается с `--locked`.
-CI проверяет contracts/types, formatting/Clippy/domain, WASM/workerd/D1, затем Chromium.
+Buf проверяет текущий контракт; генерация и компиляторы — Rust/TS; TypeScript AST — границы
+клиента. Compiled router/policy сверяются с descriptors и исполненными workerd-сценариями.
+Историческая совместимость собственного тестового CRM API не блокирует развитие.
+Контракт, сервер, UI и тесты меняются согласованно. Другие потребители общих контрактов
+сохраняют свои обязательства совместимости.
 
-`rust-party/test/typed-browser.mjs` выполняет реальные UI действия через generated client.
-`e2e/live.mjs` запускает те же сценарии через настоящий Access с D1 readback.
-Test-only `native-ci` и production `native` явно различаются в evidence.
-Live verification связывает HTTP request_id, D1 audit и Cloudflare Logs с точной Worker version.
-Отсутствие обязательного evidence означает FAIL; скриншот ошибки не является browser PASS.
-Doctor — read-only диагностика доступности D1/runtime, не приёмка приложения.
+Зависимости устанавливаются с frozen lockfile; Rust — с --locked и Cargo cache.
+Domain/workerd/D1/Chromium проверяют результат, права, tenant, CAS/replay/audit.
+`rust-party/test/typed-browser.mjs` выполняет реальные действия через generated client;
+`e2e/live.mjs` проверяет опубликованное приложение через Access. Doctor — только read-only
+диагностика, не замена приёмки.
 
-`migrations/0001_initial.sql` создаёт схему с нуля.
-`0002_hard_cutover.sql` один раз удаляет тестовые бизнес-данные и пересоздаёт их схему,
-сохраняя `crm_users` и `crm_tenants`. Повторное применение предотвращает стандартный
-Wrangler migration ledger. Новые изменения схемы оформляются следующими миграциями.
-Миграции и fixtures проверяются в CI; live reset разрешён только после проверки кандидата.
+Release использует artifact этого CI без пересборки. Production `native` и test-only
+`native-ci` различаются. SHA/checksum и live readback подтверждают опубликованную версию.
+Обычная эволюция D1 добавляет миграции через Wrangler ledger; reset тестовых данных выполняется
+явно. Без новых миграций release не останавливает вход ради D1 apply. Ошибка live-приёмки
+оставляет fail-closed; несовместимый старый Worker не откатывается автоматически.
 
-Release использует проверенный artifact без повторной сборки. Сначала проверяет
-account/DB/SHA, checksum, D1 Time Travel bookmark и сравнивает канонические SQL
-с существующим Wrangler migration ledger. **При отсутствии новых миграций** не
-останавливает workers.dev и не повторяет D1 apply. При новых миграциях до изменения
-D1 сначала закрывает вход и проверяет остановку. Далее публикует один Worker,
-проверяет signed Access и точный SHA через `/api/version`, а также отказ
-анонимному запросу к тому же маршруту. Полный live Access/browser/D1/Logs E2E
-обязателен в обоих случаях. Если приёмка не пройдена, остаётся строгий
-fail-closed (публичный вход выключается); никакой слепой rollback несовместимого
-Worker или D1 и автоматического принятия версии нет. D1/Access не удаляются.
-
-Privacy verification/execution, Enrichment provider dispatch, автоматическое объединение
-личностей и необоснованные consent grants не подключены и не имитируются.
-Защищаются два точных принятых состояния: исторический `272aba214114f3db6247cad115f86d54312e3030` и последняя live-принятая версия API/SQL схемы `50370070d2f9bb147baa8cb712ab4f54d174f7b8` ([CI + live](https://github.com/iamaman11/crm/actions/runs/43342945163)). Buf и git diff проверяют контракты и миграции относительно обоих; предыдущий SHA dev/PR base — только диагностика. После новой принятой **схемы** (нового Protobuf или D1 migration) accepted SHA меняется явно вместе с CI+live evidence, а не автоматически по последнему успешному запуску. Metadata-only release не изменяет принятую базу схемы. Новые миграции добавляются отдельно.
-UI/Worker файлы совпали побайтово между PR CI 43298969184 и dev CI 43302137364 одного дерева.
-Это подтверждает повторяемость данной пары сборок, не любых будущих окружений.
+В issue записываются проверенный source, ссылка на CI, live result и остаток работы.
+Принятие функции требует содержательных тестов; строгие типы не доказывают все бизнес-правила.

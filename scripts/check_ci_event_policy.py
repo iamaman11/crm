@@ -72,6 +72,11 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
         and path.parent.name == "workflows"
         and path.parent.parent.name == ".github"
     )
+    if crm_dev_workflow:
+        if not has_push:
+            errors.append("CRM must run on push to dev")
+        if has_pull_request:
+            errors.append("CRM uses one dev pipeline, not duplicate pull_request builds")
     if has_pull_request:
         pr_section = _event_section(lines, event_start, event_end, "pull_request")
         expected_pr = "dev" if crm_dev_workflow else "main"
@@ -88,30 +93,48 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
                 or branch_lines != [f"- {expected_pr}"]
                 or "    branches-ignore:" in pr_section):
             errors.append(f"pull_request must be restricted to branch {expected_pr}")
-    if not (has_push and has_pull_request):
+    if not crm_dev_workflow and not (has_push and has_pull_request):
         return WorkflowPolicyResult(path, tuple(errors))
 
     push_section = _event_section(lines, event_start, event_end, "push")
     # A single, explicit exception for the one CRM development release job.
     # All unrelated workflows retain their main-only policy.
     expected = "dev" if crm_dev_workflow else "main"
-    forbidden = "main" if crm_dev_workflow else "dev"
-    if (
-        "    branches:" not in push_section
-        or f"      - {expected}" not in push_section
-        or f"      - {forbidden}" in push_section
-    ):
+    branch_lines = []
+    if "    branches:" in push_section:
+        for line in push_section[push_section.index("    branches:") + 1:]:
+            if line.startswith("      - "):
+                branch_lines.append(line.strip())
+            elif line.strip():
+                break
+    if branch_lines != [f"- {expected}"] or "    branches-ignore:" in push_section:
         errors.append(f"push must be restricted to branch {expected}")
+
+    if crm_dev_workflow:
+        # Native GitHub path filtering only excludes documentation. YAML/SQL,
+        # tests, source, lockfiles and unknown non-Markdown inputs remain checked.
+        filters = []
+        if "    paths-ignore:" in push_section:
+            for line in push_section[push_section.index("    paths-ignore:") + 1:]:
+                if line.startswith("      - "):
+                    filters.append(line.strip()[2:].strip("\"'"))
+                elif line.strip():
+                    break
+        if filters != ["**/*.md"] or "    paths:" in push_section:
+            errors.append("CRM may ignore only **/*.md documentation")
 
     concurrency = _top_level_block(lines, "concurrency")
     if concurrency is None:
         errors.append("missing top-level concurrency block")
     else:
         concurrency_lines = [line.strip() for line in lines[concurrency[0] + 1 : concurrency[1]]]
-        if EXPECTED_GROUP not in concurrency_lines:
+        group = "group: ${{ github.workflow }}-${{ github.ref }}" if crm_dev_workflow else EXPECTED_GROUP
+        cancel = "cancel-in-progress: false" if crm_dev_workflow else EXPECTED_CANCEL
+        if group not in concurrency_lines:
             errors.append("concurrency group must be workflow + PR number/ref")
-        if EXPECTED_CANCEL not in concurrency_lines:
-            errors.append("cancel-in-progress must be enabled only for pull_request")
+        if cancel not in concurrency_lines:
+            errors.append("CRM must not cancel an active release" if crm_dev_workflow
+                          else "cancel-in-progress must be enabled only for pull_request")
 
     return WorkflowPolicyResult(path, tuple(errors))
 

@@ -1,17 +1,18 @@
 {
   "schema_version": "crm.repository-packet/v1",
-  "packet_id": "cloudflare-crm-connect-hard-cutover",
-  "title": "Cloudflare CRM: typed Connect/TSX hard cutover",
-  "status": "accepted",
-  "objective": "Accepted Cloudflare hard cutover at 272aba214114f3db6247cad115f86d54312e3030, PR #351, CI/live 43302137364 PASS. Maintain one Protobuf contract, generated Rust/TS, original owners, one Worker/D1 and the immutable API/schema baseline; future product work follows Issue #338.",
+  "packet_id": "cloudflare-crm-development",
+  "title": "Cloudflare CRM: typed application development",
+  "status": "active",
+  "objective": "Maintain one Protobuf contract, generated Rust/TS, original owners and one Worker/D1. Issue #352 owns product scope, progress and acceptance checkpoints; Markdown documents only stable architecture and development rules.",
   "baseline": {
     "ref": "dev"
   },
   "tracking_issues": [
     338,
-    350
+    352
   ],
   "allowed_paths": [
+    "AGENTS.md",
     ".github/workflows/affected-scope.yml",
     ".github/workflows/application-runtime.yml",
     ".github/workflows/ci-telemetry-baseline.yml",
@@ -106,6 +107,7 @@
     "repository-packet.json",
     "requirements-dev.txt",
     "scripts/check_ci_event_policy.py",
+    "scripts/affected_scope.py",
     "scripts/crm-architecture-ast.mjs",
     "scripts/crm-architecture-ast.test.mjs",
     "scripts/crm-clean-schema.test.mjs",
@@ -131,25 +133,24 @@
   ],
   "deliverables": [
     "Access-verified identity and one explicit Rust policy; generated binary Connect dispatch",
-    "Original Rust owners, strict React TSX with shared client/UI, scoped API and behavior from Issue #350",
+    "Original Rust owners, strict React TSX, shared client/UI and behavior tests for each feature",
     "Locked builds, compiled descriptors/router/policy, signed workerd/D1 and real Chromium scenarios",
-    "One-time test business data reset in existing D1 preserving users/tenants/Access",
-    "Exact-source artifacts and failed-release public-entry shutdown without incompatible Worker rollback"
+    "Current canonical D1 schema with explicit migrations or intentional test-data reset",
+    "One dev pipeline, Markdown-only build exclusion and deployment of the tested artifact"
   ],
   "required_checks": [
     "Cloudflare CRM Spike CI"
   ],
   "acceptance": [
-    "All changed paths are scoped; generated navigation is current",
-    "Full mandatory CI on one unchanged SHA; absence of evidence fails acceptance",
-    "Independent candidate review before merge/deploy",
-    "Actual Access A/B, browser, D1/audit, Cloudflare Logs and deployed SHA/version/traffic/binding readback",
-    "Immutable accepted API/schema baseline only after CI and live acceptance"
+    "Code changes pass the existing full CI and live acceptance; Markdown-only changes do not build or deploy",
+    "Current contracts compile together with all consumers; no historical compatibility pin for the development CRM API",
+    "Actual Access A/B, browser, D1/audit, Cloudflare Logs and deployed SHA/version/binding readback",
+    "Issue #352 records tested source, CI result, deployed version and remaining work; app Markdown contains no release checkpoints"
   ],
   "non_goals": [
-    "Partial deploy, weakened checks, new Worker/D1/Environment/workflow",
-    "Preserve obsolete test business API/UI/data or delete Access infrastructure",
-    "Invent Delete, consent grants, automatic identity merge, provider dispatch or privacy execution",
-    "Change historical PostgreSQL/service runtime or accepted Step 22 decisions"
+    "Partial deploy, weakened type/auth/owner/behavior checks, new Worker/D1/Environment/workflow",
+    "Mandatory PR, duplicate PR/push builds or preservation of obsolete test CRM API/UI/data",
+    "Fake feature implementations or deleting Access infrastructure as part of test-data reset",
+    "Change historical PostgreSQL/service runtime or compatibility obligations of other consumers"
   ]
 }

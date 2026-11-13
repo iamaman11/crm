@@ -27,10 +27,10 @@ class RepositoryNavigationTests(unittest.TestCase):
     def test_active_cloudflare_cutover_packet_is_exact_and_bounded(self) -> None:
         packet = load_packet(ROOT)
         self.assertEqual(packet["schema_version"], "crm.repository-packet/v1")
-        self.assertEqual(packet["packet_id"], "cloudflare-crm-connect-hard-cutover")
-        self.assertEqual(packet["status"], "accepted")
+        self.assertEqual(packet["packet_id"], "cloudflare-crm-development")
+        self.assertEqual(packet["status"], "active")
         self.assertEqual(packet["baseline"], {"ref": "dev"})
-        self.assertEqual(packet["tracking_issues"], [338, 350])
+        self.assertEqual(packet["tracking_issues"], [338, 352])
         self.assertIn("apps/cloudflare-crm/**", packet["allowed_paths"])
         self.assertIn(".github/workflows/cloudflare-crm-spike.yml", packet["allowed_paths"])
         self.assertNotIn("modules/**", packet["allowed_paths"])
@@ -58,11 +58,11 @@ class RepositoryNavigationTests(unittest.TestCase):
             )
             self.assertRegex(content, r"source-digest: sha256:[0-9a-f]{64}")
         self.assertIn(
-            "cloudflare-crm-connect-hard-cutover",
+            "cloudflare-crm-development",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn(
-            "- **Baseline:** `dev` (live PR base)",
+            "- **Baseline:** `dev` (development scope reference)",
             first[ACTIVE_PACKET_PATH],
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])

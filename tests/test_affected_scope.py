@@ -147,7 +147,7 @@ class AffectedScopeTests(unittest.TestCase):
                     head_sha="abc",
                 )
 
-    def test_packet_only_still_selects_unconditional_crm_ci(self) -> None:
+    def test_crm_builds_packet_config_but_not_generated_markdown(self) -> None:
         root = Path(__file__).resolve().parents[1]
         empty = {"packages": [], "workspace_members": []}
         for changed in (["repository-packet.json"], ["docs/ACTIVE_PACKET.md"],
@@ -161,13 +161,29 @@ class AffectedScopeTests(unittest.TestCase):
                 names = [w["name"] for w in report["selected_workflows"]]
                 self.assertIn("Governance CI", names)
                 self.assertNotIn("Customer Privacy Owner Execution CI", names)
-                # The CRM workflow intentionally has no paths filter: even docs-only PRs run it.
-                self.assertIn("Cloudflare CRM Spike CI", names)
+                self.assertEqual("Cloudflare CRM Spike CI" in names,
+                                 "repository-packet.json" in changed)
         from scripts.repo import affected_clippy_command, affected_test_command
         report = build_report(root, "origin/main", paths=["repository-packet.json"],
                               metadata=empty, head_sha="packet")
         self.assertIsNone(affected_clippy_command(report))
         self.assertIsNone(affected_test_command(report))
+
+    def test_crm_markdown_filter_keeps_all_code_and_mixed_changes(self) -> None:
+        from scripts.affected_scope import workflow_decisions
+        root = Path(__file__).resolve().parents[1]
+        docs = ["README.md", "AGENTS.md", "apps/cloudflare-crm/ARCHITECTURE.md"]
+        cases = [(docs, False)]
+        for path in ("proto/crm/activities/v2/task.proto", "apps/cloudflare-crm/web/src/app.tsx",
+                     "apps/cloudflare-crm/migrations/0004.sql", "Cargo.lock", "pnpm-lock.yaml",
+                     ".github/workflows/cloudflare-crm-spike.yml", "tests/test_ci_event_policy.py",
+                     "unknown/build-input.bin"):
+            cases.extend([([path], True), (docs + [path], True)])
+        for paths, expected in cases:
+            with self.subTest(paths=paths):
+                decision = next(d for d in workflow_decisions(root, paths)
+                                if d.name == "Cloudflare CRM Spike CI")
+                self.assertEqual(decision.selected, expected)
 
     def test_real_source_changes_still_trigger_owner_workflows(self) -> None:
         root = Path(__file__).resolve().parents[1]

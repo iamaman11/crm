@@ -1,96 +1,124 @@
 # Cloudflare CRM — нормативная архитектура
 
-Архитектурная основа и evidence: [#338](https://github.com/iamaman11/crm/issues/338). Текущий план продуктового развития, приёмки и эксплуатации: [#352](https://github.com/iamaman11/crm/issues/352). [#350](https://github.com/iamaman11/crm/issues/350) завершён и не используется как текущий implementation roadmap.
+Здесь находятся устойчивые правила приложения. План, текущая функциональность, чекпойнты и
+приёмка — в [#352](https://github.com/iamaman11/crm/issues/352). Архитектурные решения —
+[#338](https://github.com/iamaman11/crm/issues/338); история cutover — [#350](https://github.com/iamaman11/crm/issues/350).
 
-Решение владельца от 12.11.2026 и [Issue #350](https://github.com/iamaman11/crm/issues/350): **жёсткий cutover тестового приложения**, без сохранения старых CRM API/UI/данных. PR #351 объединён в dev. Принятая исходная версия: `272aba214114f3db6247cad115f86d54312e3030`, [CI и live acceptance](https://github.com/iamaman11/crm/actions/runs/43302137364) PASS. Worker `08e73b33-da86-44e2-bb68-48855be214b1`, 100% traffic, прежняя единственная D1. Это базовая версия, а не автоматически обновляемая ссылка на HEAD.
-
-CI сравнивает Protobuf и защищает SQL migrations штатным git diff относительно двух точных **принятых** commit: исторического `272aba214114f3db6247cad115f86d54312e3030` и последнего live-принятого изменения контрактов/миграций — сейчас `50370070d2f9bb147baa8cb712ab4f54d174f7b8` ([CI + live 43342945163](https://github.com/iamaman11/crm/actions/runs/43342945163), UpdateTask + `0003`). `event.before` и PR base могут быть непроверенными и теперь отражаются только в диагностике. Accepted SHA закрепляется явно после полного CI и live-приёмки; 'последний зелёный CI' не является автоматическим promotion. Следующие изменения D1 оформляются новыми миграциями; reset 0002 повторно не применяется. API/schema evolution требует явного решения и тех же проверок. Реальная приёмка включила 24 записи с audit и 117 запросов, сопоставленных с Cloudflare Logs. Две CI-сборки одного дерева (PR 43298969184 и dev 43302137364) дали одинаковые 13 файлов UI/Worker; это проверенная повторяемость этой пары, не гарантия для любых окружений.
-
-## 1. Состав приложения
+## 1. Состав
 
 ```text
-proto/crm/<owner>/vN
-  → Buf FileDescriptorSet
-  → штатные generated Rust/Buffa и TypeScript/Protobuf-ES
-React strict TSX + packages/ui
-  → packages/client/cloudflare → один binary Connect-Web transport
-Cloudflare Access → один workers-rs Rust/WASM Worker
-  → проверенный request context → явная Rust policy
-  → один embedded Axum/Connect router
-  → typed wire/domain mapping → оригинальный domain owner
-  → owner SQL/CAS/idempotency/audit → одна native D1
+versioned Protobuf → Buf descriptors → generated Rust/Buffa + TypeScript/Protobuf-ES
+React strict TSX + packages/ui → packages/client/cloudflare → binary Connect
+→ Rust Access verification → verified context + explicit policy → Connect router
+→ typed wire/domain mapping → original Rust owner → owner SQL/CAS/receipt/audit → D1
 ```
 
-Axum — встроенный router, не второй сервер. Generated workers-rs JavaScript — сборочная оболочка, не JS backend. Нельзя вводить второй Worker/D1/Environment, business REST, JS gateway, ORM/generic CRUD framework или новый workflow.
+Один workers-rs Worker и встроенный Axum/Connect router. Generated JavaScript — сборочная
+оболочка, не второй backend. Один транспорт и одна D1. Не добавлять business REST, JS gateway,
+ORM/generic CRUD, параллельный UI kit или второй runtime.
 
-Оригинальные crates владеют бизнес-инвариантами. Существующие owner-файлы Worker могут владеть D1 SQL, CAS, receipts и audit и вызывать эти crates. Не переносить SQL в domain crates ради формы. Типизированная конверсия wire/domain законна; копия бизнес-модели/правил, JSON API DTO и Buffa→bytes→Prost bridge — нет.
+Оригинальные crates владеют бизнес-инвариантами. Owner-specific файлы Worker могут содержать
+D1 SQL, CAS, receipts и audit и вызывать domain crates. Typed wire/domain conversion законна;
+дублирование бизнес-модели и Buffa→bytes→Prost bridge — нет.
 
-## 2. Авторитеты и автоматические проверки
+## 2. Авторитеты и проверки
 
-| Сведения | Авторитет | Обязательная проверка |
+| Сведения | Источник | Проверка |
 |---|---|---|
-| RPC, поля, presence, enums | versioned .proto | Buf build/lint, descriptors, generated code, wire tests |
-| Владелец capability/RPC | существующий module.yaml | strict manifest schema, exact binding и Rust package |
-| Зарегистрированные методы | compiled Connect Router | Router::methods()/has_method() |
-| Доступ | одна typed Rust policy | выполнение того же кода и независимые role/tenant tests |
+| RPC, поля, presence, enums | versioned .proto | Buf build/lint/format, генерация, wire tests |
+| Владелец RPC | существующий module.yaml и Cargo | manifest schema, exact binding/linkage |
+| Регистрация | compiled Connect Router | Router::methods()/has_method() против descriptors |
+| Доступ | одна typed Rust policy | compiled policy и реальные role/tenant tests |
 | Семантика | original Rust owner | domain tests, workerd/D1 assertions |
 | Клиент | packages/client/cloudflare | strict TypeScript и AST/module graph |
-| UI | packages/ui и feature TSX | browser actions через generated client |
-| Хранилище | versioned D1 schema | empty-schema fixtures, tenant/CAS/replay/audit checks |
-| Release | tested checkout и artifact | SHA/tree/features/checksums/live readback |
+| UI | packages/ui + feature TSX | Chromium через generated client |
+| Данные | канонические SQL migrations | создание с нуля, CAS/replay/atomicity/audit |
+| Release | проверенный artifact | SHA/checksum и live readback |
 
-Конечный scoped API: согласованные RPC = registered RPC = policy RPC = RPC с выполненными обязательными scenarios. Проверка «у owner есть один RPC» недостаточна. Ожидаемый набор нельзя выводить только из уже реализованных handlers. Исторические proto других потребителей не являются автоматически Cloudflare API.
+Активные RPC из descriptors совпадают с registered RPC, policy RPC и исполненными обязательными
+сценариями. Новый метод расширяет эту область. Отсутствующие owner, handler, policy или evidence —
+FAIL. Исторические proto других потребителей не становятся Cloudflare API автоматически.
+Число модулей/RPC не фиксируется константой.
 
-Количество модулей/RPC не зафиксировано. Новый RPC расширяет область обязательных проверок. Отсутствующий handler, policy, owner binding, scenario или обязательный evidence — FAIL.
+Не использовать semantic regex для Rust/Protobuf, поиск строк как доказательство теста,
+ручной каталог покрытия или второй metadata generator. Использовать компиляторы, descriptors,
+штатный router и TypeScript AST. Временный CI-отчёт является результатом проверки.
 
-Никаких semantic regex для Rust/Protobuf, .includes() доказательств тестов, нового hand-written coverage catalog или генератора метаданных. Buf descriptors, штатный router и скомпилированная policy уже содержат нужные факты. Временный CI-отчёт допустим только как результат проверок.
+## 3. Типы, права и поведение
 
-## 3. Identity, protocol и data semantics
+Access проверяется до dispatch. Tenant/actor/role/server request_id не принимаются на доверии
+от клиента. Один verified context передаётся сервисам. Unknown RPC, missing policy, invalid auth
+и недостаточные права закрыты. Право определяется policy, не названием метода.
 
-Access проверяется до dispatch. Tenant/actor/role/server request_id не принимаются от клиента. Один immutable verified context передаётся сервисам. Unknown RPC, missing policy, invalid auth и недостаточные права закрыты. Право не определяется названием Get/List/Create.
+Ошибки используют стандартные Connect codes и typed domain details. Request_id связывает ответ,
+D1 audit и логи. Generated client проверяет ConnectError.code; одного HTTP status мало.
+Не логировать JWT, secrets или raw business payload.
 
-Стандартные Connect error codes; stable domain details по контракту, request_id сквозь response/D1/Logs. Generated Connect-клиент обязан получить ожидаемый ConnectError.code. HTTP status alone недостаточен. Не логировать JWT, secrets или raw business payload.
+Деньги — int64 minor units/bigint + currency/exponent, без floating point. Timestamp и date-only
+различаются. Patch явно определяет absent/set/clear. Unknown enums, limits, pagination/filter/sort
+и expected_version проверяются. Read-only RPC не получает mutation semantics.
 
-Money — signed int64 minor units/bigint + currency/exponent; без floating point. Timestamp/date-only различаются. Patch явно сохраняет absent/set/clear. Unknown enums, limits, pagination/filter/sort и optional expected_version проверяются. Mutation semantics задаются явно, не префиксом имени.
+Owner обеспечивает CAS, idempotent replay и атомарность state/receipt/audit. Ошибочная команда
+не меняет агрегат частично. UI не копирует domain policy; после успешной записи ошибка refresh
+означает сохранённый результат с устаревшим отображением, а не failed write.
 
-Owner обеспечивает CAS, idempotent replay, atomic state/receipt/audit и авторитетную валидацию. Read-only запрос не получает mutation semantics. UI не копирует domain policy. После успешной записи ошибка последующего чтения означает сохранённое изменение и устаревшее отображение, а не failed write.
+React использует strict TSX, allowJs=false, noUncheckedIndexedAccess и exactOptionalPropertyTypes.
+Не обходить типы через any/as unknown as или suppressed diagnostics. Общий client — единственный
+business transport. Health/session/doctor/version и bounded CSV download — ограниченные исключения.
+Общие controls/tokens принадлежат packages/ui; feature layouts используют CSS Modules.
 
-## 4. Frontend
+## 4. Эволюция тестового приложения
 
-React strict TSX/TS; allowJs=false, strict=true, noUncheckedIndexedAccess=true, exactOptionalPropertyTypes=true. Runtime-generated wire types, без any/as unknown as для обхода проверки и без suppressed diagnostics.
+Принимается целостность текущей версии, а не неизменность всех прошлых API. Собственные CRM
+контракты, handlers, generated client, UI и тесты меняются согласованно. Совместимость старого
+открытого UI не обещана; после несовместимого обновления он может требовать перезагрузки.
+В development CI нет historical/accepted SHA pins, last-green поиска или buf breaking против
+прошлых веток. Buf build/lint/format, генерация и проверки поведения обязательны.
 
-Один packages/client/cloudflare export и binary Connect transport. UI не использует legacy client barrel, прямой business fetch или второй transport. Health/session/doctor/version и обоснованный bounded CSV download — явно ограниченные non-RPC исключения.
+Контракты других приложений сохраняют их требования совместимости и соответствующий CI.
+Появление внешних клиентов или production-обязательств требует отдельного решения о версиях;
+это решение не выводится из зелёного CI.
 
-Единственная общая UI-библиотека — существующий packages/ui. Общие controls и semantic tokens меняются централизованно; CSS Modules для feature layouts, system/light/dark, keyboard/focus/disabled/error/mobile states. Не создавать параллельный web/src/ui design system.
+CI создаёт локальную D1 с нуля. Live D1 использует Wrangler migration ledger: обычная эволюция
+добавляет миграцию, применённый файл не исполняется заново от редактирования. Тестовые данные
+не являются обязательством сохранения. Намеренный reset выполняется явно, не удаляет Access
+infrastructure и не нужен для каждого deploy.
 
-## 5. Hard cutover и данные
+## 5. Разработка, CI и release
 
-До принятия удалить legacy JSX/business REST, временный экран, Published/Candidate и migration-freeze/contract-only, frozen-source exceptions, obsolete clients/stubs/bridges. Несколько implementation commits допустимы в одном PR; единственный принимаемый результат — весь конечный вариант. Неполный кандидат должен давать FAIL/NO-GO.
+Одна постоянная ветка dev, прямые commits, PR по необходимости для обсуждения. Branch protection
+и обязательный двойной PR/push CI не требуются. Единственный Cloudflare workflow запускается
+на code push в dev. Изменения только **/*.md не собирают и не публикуют приложение; Markdown
+содержит документацию, не исполняемую конфигурацию. Смешанный push проверяется полностью.
 
-Тестовые бизнес-данные не мигрируют. CI создаёт одну локальную D1 с нуля по канонической схеме и fixtures. Финальное переключение использует ту же опубликованную D1, явную проверку её binding и одноразовый контролируемый reset. Не удалять Access configuration/service principals под видом удаления business data. Reset не выполняется на каждом deploy.
+Последовательность: topology/format → Buf/types → Rust/WASM/Clippy/domain → сборка →
+workerd/D1/Chromium → mandatory artifacts → deploy → live Access/browser/D1/Logs.
+GitHub concurrency завершает текущий запуск и оставляет последнюю ожидающую версию.
+Deployment не прерывается новым commit. CI блокирует публикацию, но не запись в dev.
 
-Старый Worker не обязан работать на новой схеме; слепой rollback после несовместимого reset запрещён. Failure path финального release должен безопасно прекратить обслуживание/оставить NO-GO и позволить исправить проверяемый кандидат. Новую D1 для этого не создавать.
+Один pnpm workspace/lock, frozen installs и Cargo --locked; toolchain/codegen закреплены.
+Cargo cache использует стандартную проверку freshness; build.rs отслеживает proto и импорты.
+Изменения toolchain/lock/config/codegen начинают отдельное семейство кеша. При изменении этих
+входов проверяется чистая сборка. Кеш не является доказательством приёмки текущего source.
 
-Старые Cloudflare контракты не ограничивают новый тестовый API. Общие contracts/crates других приложений изменять только после проверки потребителей. После полного принятия закрепить новый immutable API/schema baseline; будущие breaking changes требуют явного version/schema evolution, не автоматического baseline=HEAD.
+Production native собирается один раз. Отдельный native-ci содержит изолированные тестовые
+ключи и не публикуется. Release скачивает production artifact этого запуска и проверяет
+SHA/checksum без пересборки. При новых миграциях вход закрывается до применения SQL;
+без новых миграций нет остановки ради D1 apply. Затем выполняется live-приёмка текущего Worker.
+При её провале применяется существующий fail-closed, без слепого отката на несовместимый Worker.
 
-## 6. Воспроизводимость и CI
+Browser preflight доказывает только запуск браузера, Node fetch — RPC integration. Сценарий
+засчитывается после содержательных assertions. Missing mandatory evidence — FAIL.
+Различать locked build, неизменность артефакта и bit-for-bit reproducibility: последнее требует
+независимого сравнения сборок и не обещается автоматически.
 
-Один pnpm workspace/pnpm-lock.yaml для приложения и shared packages; frozen install и локальные pinned tools. Закрепить Node/pnpm/Rust/Buf/codegen/Python dependency graph. Cargo locked распространяется на probes. Явные fmt/clippy/domain tests плюс native WASM/workerd/D1; install Clippy не заменяет его запуск.
+## 6. Расширение и учёт результата
 
-Тот же cloudflare-crm-spike.yml на PR→dev и push dev. Кандидат проверяется только из отдельного PR, исходный `dev` не служит площадкой для промежуточных неуспешных commits; исправляющий срез явно сравнивается с двумя принятыми baseline, а не с неуспешным previous SHA. Порядок: config/topology → форматирование → Buf/types → actual Rust/WASM check + Clippy/owner tests → сборка → реальный Chromium/workerd/D1 → mandatory artifacts. Deployment только из dev после полного CI PASS использует sealed artifact без повторной сборки. Не добавлять workflows/Environment.
+Новая функция: existing owner → proto/manifest → generation → handler/policy/D1 → shared client/UI
+→ domain/runtime/browser tests → тот же CI. Новый crate нужен только при реальной границе.
+Нельзя ослаблять архитектурное требование ради PASS; ошибочную проверку исправляют с сохранением
+инварианта и регрессионным доказательством.
 
-Browser preflight data: URL доказывает только запуск Chromium. Node fetch доказывает RPC integration, не browser E2E. Каждый обязательный сценарий засчитывается после assertions. Артефакты обязательны, отсутствие — FAIL. Negative checks обязаны обнаруживать пропуск policy/method/scenario.
-
-Evidence различает PR head_sha, tested_sha, Git tree, features/tool versions, artifact hash и deployed_sha/version/traffic. В PR tested_sha может быть synthetic merge commit. Test-only native-ci keys/features не выдаются за production artifact.
-
-Различать locked clean build, неизменность передаваемого artifact и bit-for-bit reproducibility. Последнее требует независимых сборок и сравнения; без доказательства NOT_TESTED.
-
-## 7. Поддержка и завершение
-
-Новая capability: owner → manifest/versioned proto → generation → handler/policy/D1 → shared client/UI → обязательные scenarios → тот же CI. Новые framework/crates только при реальной границе, не на каждый RPC. Dependency updates обозримы и проходят те же conformance/E2E checks.
-
-Issue #350 содержит функциональный объём, execution checklist и актуальное evidence; #338 — верхний план. Docs обновляются вместе с кодом. CI доказывает заданные инварианты, не все возможные бизнес-состояния.
-
-Branch protection/required GitHub checks не включать по решению владельца. CI блокирует штатный deploy при FAIL, но не запрещает direct push. Правило процесса: непроверенные commits остаются в PR. Восстановление процесса #353 завершено: предыдущий неуспешный dev не используется как accepted baseline. Принятая схема UpdateTask/`0003` явно закреплена на `50370070…` и подтверждена live; Buf и миграции остаются обязательными. При следующем **изменении принятой схемы** обновлять pin только после live evidence; документационные релизы с той же схемой не изменяют его.
-
-DONE: полный API+UI, удалённый legacy, чистая схема, один окончательный CI PASS с evidence, независимая проверка, единое переключение и реальные Access A/B/browser/D1/Logs/readback. Частичный CI PASS не завершает #350.
+Issue хранит текущий SHA, CI/live result, Worker version, чекпойнты и остаток задач. Markdown
+приложения меняется при изменении общей схемы и правил. CI подтверждает проверенные инварианты,
+не все возможные бизнес-состояния и не промышленную готовность CRM.

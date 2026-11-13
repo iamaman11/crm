@@ -1,16 +1,15 @@
 name: Cloudflare CRM Spike CI
-# Every source change may affect a shared Rust owner, Protobuf schema, generated
-# TypeScript client or deployment policy. Avoid paths filters: they bypass CRM CI.
+# One development pipeline. Markdown is documentation, never an application build input.
+# Mixed documentation/code pushes still run the complete pipeline.
 on:
   push:
     branches:
       - dev
-  pull_request:
-    branches:
-      - dev
+    paths-ignore:
+      - '**/*.md'
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 permissions:
   contents: read
   actions: read
@@ -22,14 +21,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 0 # immutable Protobuf baseline is a historical accepted commit
+          fetch-depth: 0 # repository navigation uses Git; API acceptance does not use historical SHAs
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.18.0'
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13.18'
-      # All CRM PR checks execute in THIS job. No other workflow targets PR to dev.
+      # Code changes execute this pipeline once on dev; PRs are optional discussion.
       # Pure source checks must fail before npm, Cargo builds or Chromium.
       - name: Fast repository CI topology, architecture, and source syntax
         shell: bash
@@ -50,6 +49,8 @@ jobs:
           node --check apps/cloudflare-crm/rust-party/test/native.mjs
           node --check apps/cloudflare-crm/rust-party/test/typed-browser.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
+          node --check apps/cloudflare-crm/scripts/deploy.mjs
+          node --check apps/cloudflare-crm/test/native-runtime.test.mjs
       - name: Verify Python governance and affected-scope tests using declared dependencies
         shell: bash
         run: |
@@ -82,52 +83,18 @@ jobs:
           npm install --global pnpm@11.13.1
           pnpm --version | grep -Fx '11.13.1'
           pnpm install --frozen-lockfile
-      - name: Enforce canonical Protobuf compatibility and typed packages
+      - name: Validate current Protobuf contracts
         shell: bash
-        env:
-          CRM_CANDIDATE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          CRM_DEVELOPMENT_PREVIOUS_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
-          # Immutable hard-cutover baseline and LAST LIVE-ACCEPTED app baseline:
-          # accepted CLI/live 43302137364 and accepted UpdateTask CI/live 43342945163.
-          # Do not infer acceptance from event.before, the PR base or a green
-          # build alone. A newer pin requires explicit live acceptance evidence.
-          # Keep pin unchanged for metadata-only releases with no schema/migration edits.
-          historical=272aba214114f3db6247cad115f86d54312e3030
-          accepted_contracts=50370070d2f9bb147baa8cb712ab4f54d174f7b8
-          echo "::notice title=CRM compatibility bases::candidate=${CRM_CANDIDATE_SOURCE_SHA} tested_checkout=${GITHUB_SHA} historical=${historical} last_accepted_contracts=${accepted_contracts} development_previous_unaccepted=${CRM_DEVELOPMENT_PREVIOUS_SHA}"
-          {
-            echo "### CRM compatibility gate"
-            echo "- Candidate source: \`${CRM_CANDIDATE_SOURCE_SHA}\`"
-            echo "- CI checkout: \`${GITHUB_SHA}\`"
-            echo "- Historical accepted cutover: \`${historical}\`"
-            echo "- Latest live-accepted API/SQL schema: \`${accepted_contracts}\`"
-            echo "- Prior development SHA (diagnostic only): \`${CRM_DEVELOPMENT_PREVIOUS_SHA}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-          crm_contract_failure() {
-            local exit_code="$1" line="$2" command="$3"
-            echo "::error title=CRM contract FAIL::candidate=${CRM_CANDIDATE_SOURCE_SHA} checkout=${GITHUB_SHA} historical=${historical} last_accepted_contracts=${accepted_contracts} development_previous=${CRM_DEVELOPMENT_PREVIOUS_SHA} first_failing_line=${line} exit=${exit_code} command=${command}"
-            echo "- **FAIL** (exit ${exit_code}) at line ${line}: \`${command}\`" >> "$GITHUB_STEP_SUMMARY"
-          }
-          trap 'status=$?; crm_contract_failure "$status" "$LINENO" "$BASH_COMMAND"; exit "$status"' ERR
-          for baseline in "$historical" "$accepted_contracts"; do
-            git cat-file -e "${baseline}^{commit}"
-            git merge-base --is-ancestor "$baseline" HEAD
-            mapfile -t migrations < <(git ls-tree -r --name-only "$baseline" -- apps/cloudflare-crm/migrations/)
-            test "${#migrations[@]}" -gt 0
-            git diff --exit-code "$baseline" HEAD -- "${migrations[@]}"
-            pnpm exec buf breaking proto --against ".git#ref=${baseline}"
-          done
-          pnpm exec buf build proto --output /tmp/crm-cloudflare-accepted-schema.binpb
+          echo "Checking current CRM source $GITHUB_SHA; development API compatibility is not frozen" >> "$GITHUB_STEP_SUMMARY"
+          pnpm exec buf build proto
           pnpm exec buf format -d --exit-code proto
           pnpm exec buf lint proto
-          # checkout of dev need not contain a local main branch.
-          # Fetch the exact main commit, then compare by immutable SHA.
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          main_sha="$(git rev-parse refs/remotes/origin/main)"
-          git cat-file -e "${main_sha}^{commit}"
-          pnpm exec buf breaking proto --against ".git#ref=${main_sha}"
+      - name: Generate types and check descriptors, architecture and TypeScript
+        shell: bash
+        run: |
+          set -euo pipefail
           pnpm exec buf generate --template buf.gen.web.yaml
           pnpm exec buf build proto --as-file-descriptor-set -o /tmp/crm-proto-descriptors.binpb
           node scripts/crm-rpc-descriptors.mjs /tmp/crm-proto-descriptors.binpb
@@ -146,15 +113,25 @@ jobs:
           git diff --exit-code -- pnpm-lock.yaml
       - name: Typecheck Cloudflare CRM TypeScript sources
         run: pnpm --filter cloudflare-crm typecheck
-      - name: Fast syntax check of native E2E before Rust/WASM build
-        working-directory: apps/cloudflare-crm
-        run: node --check rust-party/test/native.mjs
       - name: Check native-only ownership and release diagnostic contracts
         run: pnpm test
         working-directory: apps/cloudflare-crm
       - name: Build React CRM
         run: pnpm run build
         working-directory: apps/cloudflare-crm
+      # Cargo still validates freshness and runs for this exact source. Changing
+      # toolchain/config/lock/codegen inputs starts a new cache family.
+      - name: Restore Cargo compilation cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+            apps/cloudflare-crm/rust-party/target
+          key: ${{ runner.os }}-crm-rust1971-wasm-v1-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/build.rs', '**/.cargo/config*', 'rust-toolchain*', 'proto/**') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-crm-rust1971-wasm-v1-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/build.rs', '**/.cargo/config*', 'rust-toolchain*', 'proto/**') }}-
       - name: Compile the actual Worker owner graph for WebAssembly
         run: cargo check --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native
       - name: Run Clippy on the actual Worker for WebAssembly
@@ -187,8 +164,7 @@ jobs:
                   command.extend(["--features", ",".join(dep["features"])])
               subprocess.run(command, check=True)
           PY
-      # Cache only the pinned installer binaries. No target/ or generated build
-      # output crosses source revisions; main always builds its exact SHA.
+      # Installer binaries are cached separately from Cargo compilation outputs.
       - name: Cache pinned native Rust tool CLIs
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -221,8 +197,8 @@ jobs:
             cargo install --locked worker-build --version 0.8.7
           fi
           worker-build --version
-      # Only one production-feature WASM build on dev; this same binary is sealed
-      # and published. PR also runs alternative test features for coverage.
+      # One production-feature WASM build; native-ci is a separate test-key build.
+      # Deployment restores this production artifact without compiling it again.
       - name: Build exact native Rust Worker for review or release
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --locked --features native
@@ -343,11 +319,6 @@ jobs:
         run: |
           cp -a apps/cloudflare-crm/.release/native-build/. apps/cloudflare-crm/rust-party/build/
           diff --recursive --brief apps/cloudflare-crm/.release/native-build apps/cloudflare-crm/rust-party/build
-      - name: Validate release and E2E scripts
-        run: |
-          node --check apps/cloudflare-crm/scripts/deploy.mjs
-          node --check apps/cloudflare-crm/test/native-runtime.test.mjs
-          node --check apps/cloudflare-crm/e2e/live.mjs
       - name: Check CRM target
         run: |
           grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
@@ -377,7 +348,6 @@ jobs:
         shell: bash
         env:
           CRM_BUILD_SHA: ${{ github.sha }}
-          CRM_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           cd apps/cloudflare-crm
@@ -394,7 +364,6 @@ jobs:
             const run=(command,args)=>execFileSync(command,args,{encoding:"utf8"}).trim();
             writeFileSync(".release/provenance.json",JSON.stringify({
               tested_sha:process.env.CRM_BUILD_SHA,
-              pr_head_sha:process.env.CRM_PR_HEAD_SHA||null,
               tree:run("git",["rev-parse","HEAD^{tree}"]),
               production_features:["native"],runtime_test_features:["native-ci"],
               tools:{node:process.version,pnpm:run("pnpm",["--version"]),
