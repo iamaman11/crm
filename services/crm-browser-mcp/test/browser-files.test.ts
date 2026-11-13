@@ -24,6 +24,6 @@ test("download data stays bounded and checks size before encoding", () => {
   assert.deepEqual(value, { fileName: "report.csv", bytes: 4, base64: Buffer.from("a,b\n").toString("base64") });
   assert.equal(transferDownload("../private/report.csv", [Buffer.from("x")]).fileName, "report.csv");
   assert.equal(transferDownload("C:\\\\logs\\\\report.txt", [Buffer.from("y")]).fileName, "report.txt");
-  assert.equal(transferDownload("report\\u0000.txt", [Buffer.from("z")]).fileName, "report.txt");
+  assert.equal(transferDownload("report" + String.fromCharCode(0) + ".txt", [Buffer.from("z")]).fileName, "report.txt");
   assert.throws(() => transferDownload("huge.csv", [Buffer.alloc(MAX_TRANSFER_BYTES + 1)]), /TOO_LARGE/);
 });
