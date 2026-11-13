@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { launch, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
+import { acquire, connect, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
 import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermittedBrowserRequest, redact, requireCrmAgentIdentity, safePagePath } from "./security";
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, compareBrowserAssertion, safeAssertionValue, type BrowserAssertionKind, type TextMatch, type WaitState } from "./browser-checks";
@@ -46,6 +46,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
+  private browserSessionId: string | null = null;
+  private nextOperation: Promise<void> = Promise.resolve();
+  private pendingOperations = 0;
   private acceptingDialog = false;
   private ownerDirectedCrmNavigation = false;
   private consoleLog: Array<{ level: string; text: string }> = [];
@@ -76,27 +79,45 @@ export class CrmBrowserSession extends DurableObject<Env> {
     );
   }
 
-  private async open(path: string = "/") {
-    const destination = browserUrl(path);
-    requireCrmAgentIdentity(
-      destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
-    );
-    if (this.page && !this.page.isClosed()) {
-      if (this.page.url() === destination) {
-        return { state: "already_open", path: safePagePath(this.page.url()) };
-      }
-      return { state: "navigated", ...(await this.navigateTo(destination)) };
+  // The only browser owner. The DO stores only an opaque Browser Run session
+  // ID; cookies, tabs and browser processes remain in the official runtime.
+  private async restore() {
+    if (this.browser?.isConnected()) return;
+    this.browser = null;
+    this.context = null;
+    this.page = null;
+    const sessionId = await this.ctx.storage.get<string>("browser_session_id");
+    if (!sessionId) return;
+    const session = await this.env.BROWSER.getSession(sessionId);
+    if (!session) {
+      // Expired sessions are not silently replaced; only explicit open starts
+      // another session. No attempt is made to recreate a login/cookie jar.
+      await this.ctx.storage.delete("browser_session_id");
+      this.browserSessionId = null;
+      return;
     }
-    // Never use the owner's real Access cookie or the CI E2E service principals.
-    this.browser = await launch(this.env.BROWSER);
+    let browser: Browser;
     try {
-      this.context = await this.browser.newContext({
-        acceptDownloads: true,
-        serviceWorkers: "block",
-      });
-      // Universal public-web browsing. Never pass CRM's Access credentials to
-      // the whole browser context: that leaks across origins and redirects.
-      await this.context.route("**/*", async route => {
+      browser = await connect(this.env.BROWSER, sessionId);
+    } catch {
+      // Session could still be live. Keep its ID, fail closed and let a later
+      // request retry: do not launch an untracked second browser.
+      throw new Error("BROWSER_SESSION_RECONNECT_FAILED");
+    }
+    this.browser = browser;
+    this.browserSessionId = sessionId;
+    const contexts = browser.contexts();
+    this.context = contexts.find(c => c.pages().some(p => !p.isClosed())) ??
+      contexts[0] ?? null;
+    if (this.context) {
+      await this.installSafetyRouting(this.context);
+      this.page = this.context.pages().find(p => !p.isClosed()) ?? null;
+      if (this.page) this.attachPage(this.page);
+    }
+  }
+
+  private async installSafetyRouting(context: BrowserContext) {
+      await context.route("**/*", async route => {
         const request = route.request();
         if (!isPermittedBrowserRequest(request.url())) {
           await route.abort("blockedbyclient");
@@ -135,16 +156,18 @@ export class CrmBrowserSession extends DurableObject<Env> {
         });
         await route.fulfill({ response });
       });
-      this.page = await this.context.newPage();
-      this.page.on("console", message => {
+  }
+
+  private attachPage(page: Page) {
+      page.on("console", message => {
         this.consoleLog.push({ level: message.type(), text: redact(message.text()) });
         if (this.consoleLog.length > 80) this.consoleLog.shift();
       });
-      this.page.on("pageerror", error => {
+      page.on("pageerror", error => {
         this.consoleLog.push({ level: "pageerror", text: redact(error.message) });
         if (this.consoleLog.length > 80) this.consoleLog.shift();
       });
-      this.page.on("response", response => {
+      page.on("response", response => {
         const url = response.url();
         this.requestLog.push({
           method: response.request().method(),
@@ -153,24 +176,70 @@ export class CrmBrowserSession extends DurableObject<Env> {
         });
         if (this.requestLog.length > 80) this.requestLog.shift();
       });
-      this.page.on("dialog", async dialog => {
+      page.on("dialog", async dialog => {
         const accept = this.acceptingDialog;
         this.acceptingDialog = false;
         if (accept) await dialog.accept();
         else await dialog.dismiss();
       });
+  }
+
+  private async open(path: string = "/") {
+    const destination = browserUrl(path);
+    requireCrmAgentIdentity(
+      destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
+    );
+    await this.restore();
+    if (this.page && !this.page.isClosed()) {
+      if (this.page.url() === destination) {
+        return { state: "already_open", path: safePagePath(this.page.url()) };
+      }
+      return { state: "navigated", ...(await this.navigateTo(destination)) };
+    }
+    let created = false;
+    if (!this.browser) {
+      // Official acquisition + explicit connection allows DO eviction recovery.
+      // Keep-alive is idle time, not an automatic browser polling loop.
+      const { sessionId } = await acquire(this.env.BROWSER, { keep_alive: 600_000 });
+      try {
+        this.browser = await connect(this.env.BROWSER, sessionId);
+        this.browserSessionId = sessionId;
+        await this.ctx.storage.put("browser_session_id", sessionId);
+        created = true;
+      } catch (error) {
+        await this.env.BROWSER.closeSession(sessionId);
+        throw error;
+      }
+    }
+    try {
+      if (!this.context) {
+        this.context = await this.browser.newContext({
+          acceptDownloads: true,
+          serviceWorkers: "block",
+        });
+        await this.installSafetyRouting(this.context);
+      }
+      this.page = await this.context.newPage();
+      this.attachPage(this.page);
       return { state: "open", ...(await this.navigateTo(destination)) };
     } catch (error) {
-      await this.close();
+      if (created) await this.close();
       throw error;
     }
   }
 
   private async close() {
+    const sessionId = this.browserSessionId ??
+      await this.ctx.storage.get<string>("browser_session_id");
     try {
+      // connect().close() disconnects Playwright; closeSession() terminates the
+      // Browser Run session, not just this DO's CDP connection.
       await this.browser?.close();
+      if (sessionId) await this.env.BROWSER.closeSession(sessionId);
+      await this.ctx.storage.delete("browser_session_id");
     } finally {
       this.browser = null;
+      this.browserSessionId = null;
       this.context = null;
       this.page = null;
       this.acceptingDialog = false;
@@ -186,6 +255,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       await this.close();
       return { data: { state: "closed" } };
     }
+    if (command.op !== "close") await this.restore();
     if (command.op === "status") return {
       data: {
         state: this.page && !this.page.isClosed() ? "open" : "closed",
@@ -370,6 +440,16 @@ export class CrmBrowserSession extends DurableObject<Env> {
     if (request.method !== "POST" || new URL(request.url).pathname !== "/internal") {
       return new Response("Not found", { status: 404 });
     }
+    // Commands for one owner share one browser and must not interleave across
+    // await points. A bounded FIFO serializes tab changes and all UI actions.
+    if (this.pendingOperations >= 8) {
+      return Response.json({ ok: false, error: "BROWSER_BUSY" }, { status: 429 });
+    }
+    this.pendingOperations++;
+    const previous = this.nextOperation;
+    let release!: () => void;
+    this.nextOperation = new Promise<void>(resolve => { release = resolve; });
+    await previous;
     let result: Result;
     try {
       const command = await request.json() as Command;
@@ -377,6 +457,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
       result = { ok: true, data, ...(image ? { image } : {}) };
     } catch (error) {
       result = { ok: false, error: redact(error instanceof Error ? error.message : error) };
+    } finally {
+      this.pendingOperations--;
+      release();
     }
     return Response.json(result);
   }
