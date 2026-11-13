@@ -85,7 +85,8 @@ Until these gates pass, this branch is DRAFT / NO-GO and is not a deployed app.
 - GitHub Environment `browser-mcp` exists and permits deployment from the
   `mcp` branch **only**. No Cloudflare deployment token has been provisioned
   in that Environment; the Windows environment token tested as unauthorized/
-  forbidden and must not be reused. No deployment job is enabled yet.
+  forbidden and must not be reused. The release job now exists but is disabled
+  by the repository variable `BROWSER_MCP_RELEASE_ENABLED=false`.
 - This candidate is **Draft / NO-GO**, pending live MCP OAuth authentication,
   Browser Run Playwright session operation, redirect safety, service principal
   enrollment into exactly the existing human owner's CRM tenant, and explicit
@@ -110,8 +111,9 @@ The Browser MCP package has a dedicated pinned `package-lock.json`, generated
 and committed from the independent Browser MCP GitHub Actions run. Its CI
 checks the exact dependency install, strict types, security tests and isolated
 Wrangler dry-run. No CRM Rust build, D1 migration, or crm-dev deployment occurs
-on `mcp`. Actual MCP publication is disabled until the identity/tenant,
+on `mcp`. Actual MCP publication remains disabled until the identity/tenant,
 OAuth, real browser E2E and privacy controls are independently accepted.
 
-The candidate is still Draft / NO-GO: CI build, deployed MCP,
-owner-tenant service principal, and ChatGPT connector remain to prove.
+The candidate is still Draft / NO-GO: the CI build is proven, but deployed MCP,
+owner-tenant service principal, real end-to-end authorization, and ChatGPT
+connector remain to prove.
