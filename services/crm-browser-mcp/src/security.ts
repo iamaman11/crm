@@ -3,15 +3,6 @@
 export const CRM_ORIGIN = "https://crm-dev.crm-5bd5e1e1.workers.dev";
 export const MCP_HOST = "crm-browser-mcp.crm-5bd5e1e1.workers.dev";
 
-export function crmUrl(input: string = "/"): string {
-  const value = new URL(input, CRM_ORIGIN + "/");
-  if (value.protocol !== "https:" || value.origin !== CRM_ORIGIN ||
-      value.username !== "" || value.password !== "") {
-    throw new Error("CRM_BROWSER_ORIGIN_DENIED");
-  }
-  return value.toString();
-}
-
 export function isCrmRequest(input: string): boolean {
   try {
     const url = new URL(input);
