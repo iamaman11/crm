@@ -1,0 +1,132 @@
+// Read-only control plane: every business write goes through the real CRM UI.
+import { McpServer } from "@modelcontextprotocol/server";
+import { createMcpHandler } from "agents/mcp/server";
+import { z } from "zod";
+import type { Env, Command, Target } from "./session";
+import { MCP_HOST } from "./security";
+
+export { CrmBrowserSession } from "./session";
+
+const target = z.object({
+  kind: z.enum(["css", "role", "text", "label"]),
+  value: z.string().min(1).max(512),
+  name: z.string().min(1).max(512).optional(),
+});
+const action = z.enum([
+  "click", "double_click", "fill", "type", "select", "check",
+  "uncheck", "hover", "press", "scroll", "navigate", "reload", "back", "forward",
+]);
+
+function createServer(env: Env, ownerEmail: string) {
+  const server = new McpServer({ name: "crm-browser-mcp", version: "0.1.0" });
+  const sessionId = env.SESSIONS.idFromName("owner:" + ownerEmail.toLowerCase());
+  const stub = env.SESSIONS.get(sessionId);
+
+  async function command(payload: Command) {
+    const reply = await stub.fetch(new Request("https://crm-browser-internal.invalid/internal", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    }));
+    if (!reply.ok) throw new Error("CRM_BROWSER_SESSION_UNAVAILABLE");
+    const result = await reply.json() as {
+      ok: boolean; data?: unknown; image?: string; error?: string;
+    };
+    if (!result.ok) return {
+      isError: true,
+      content: [{ type: "text" as const, text: result.error ?? "CRM_BROWSER_OPERATION_FAILED" }],
+    };
+    if (result.image) return {
+      content: [
+        { type: "text" as const, text: JSON.stringify(result.data) },
+        { type: "image" as const, data: result.image, mimeType: "image/png" },
+      ],
+    };
+    return { content: [{ type: "text" as const, text: JSON.stringify(result.data) }] };
+  }
+
+  server.registerTool("browser_open", {
+    description: "Open the real Cloudflare CRM in a browser using the authorized diagnostic admin; preserve tab state between MCP calls.",
+    inputSchema: {
+      path: z.string().max(1024).default("/"),
+    },
+  }, async ({ path }) => command({ op: "open", url: path }));
+
+  server.registerTool("browser_status", {
+    description: "Inspect whether the CRM browser is open without launching a new browser.",
+    inputSchema: {},
+  }, async () => command({ op: "status" }));
+
+  server.registerTool("browser_session", {
+    description: "Read the real CRM /api/session response as the diagnostic Access principal, with no impersonation.",
+    inputSchema: {},
+  }, async () => command({ op: "session" }));
+
+  server.registerTool("browser_snapshot", {
+    description: "Return the current CRM accessibility tree and page title for reliable element targeting.",
+    inputSchema: {},
+  }, async () => command({ op: "snapshot" }));
+
+  server.registerTool("browser_screenshot", {
+    description: "Capture an actual full-page PNG screenshot of the current CRM browser tab.",
+    inputSchema: {},
+  }, async () => command({ op: "screenshot" }));
+
+  server.registerTool("browser_action", {
+    description: "Perform one real Playwright UI action in the same persistent CRM tab. Never bypass CRM validation, Connect or D1. Navigation is restricted to CRM.",
+    inputSchema: {
+      action,
+      target: target.optional(),
+      text: z.string().max(16000).optional(),
+      key: z.string().max(96).optional(),
+      value: z.string().max(1000).optional(),
+      url: z.string().max(1024).optional(),
+      x: z.number().finite().min(-5000).max(5000).optional(),
+      y: z.number().finite().min(-5000).max(5000).optional(),
+      acceptDialog: z.boolean().optional(),
+    },
+  }, async (params) => command({
+    op: params.action, target: params.target as Target | undefined,
+    text: params.text, key: params.key, value: params.value,
+    url: params.url, x: params.x, y: params.y, acceptDialog: params.acceptDialog,
+  }));
+
+  server.registerTool("browser_diagnostics", {
+    description: "Read sanitized CRM browser console and recent HTTP response statuses. Secrets, query strings and off-domain URLs are not exposed.",
+    inputSchema: {},
+  }, async () => command({ op: "console" }));
+
+  server.registerTool("browser_close", {
+    description: "Close the owner browser session and release Cloudflare Browser Run resources.",
+    inputSchema: {},
+  }, async () => command({ op: "close" }));
+
+  return server;
+}
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    if (new URL(request.url).hostname !== MCP_HOST) return new Response("Not found", { status: 404 });
+    if (new URL(request.url).pathname !== "/mcp") return new Response("Not found", { status: 404 });
+    // Cloudflare Access must authenticate the *human controller*. Its signed
+    // ctx.access is not forwarded from another Worker and cannot be model-supplied.
+    if (!ctx.access || !env.CRM_MCP_OWNER_EMAIL) {
+      return new Response("Access required", { status: 403 });
+    }
+    const identity = await ctx.access.getIdentity();
+    const email = identity?.email?.trim().toLowerCase();
+    if (!email || email !== env.CRM_MCP_OWNER_EMAIL.trim().toLowerCase()) {
+      return new Response("Access forbidden", { status: 403 });
+    }
+    return createMcpHandler(
+      () => createServer(env, email),
+      {
+        route: "/mcp",
+        corsOptions: false,
+        allowedHostnames: [MCP_HOST],
+        allowedOriginHostnames: [MCP_HOST],
+        responseMode: "json",
+      },
+    )(request, env, ctx);
+  },
+} satisfies ExportedHandler<Env>;
