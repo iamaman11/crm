@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { boundedWaitTimeout, compareBrowserAssertion, safeAssertionValue } from "../src/browser-checks.ts";
+import { SCENARIO_OPERATIONS, validateScenarioSteps, boundedRunTimeout, operationTimeout, isFailedVerdict, boundedWaitTimeout, compareBrowserAssertion, safeAssertionValue } from "../src/browser-checks.ts";
+import { browserUrl } from "../src/security.ts";
 
 test("wait timeout is bounded and has a single stable default", () => {
   assert.equal(boundedWaitTimeout(undefined), 10_000);
@@ -25,4 +26,53 @@ test("test reports omit obvious URL credential values", () => {
   assert.equal(safeAssertionValue("/a?token=abc&code=secret"), "/a?token=[REDACTED]&code=[REDACTED]");
   assert.equal(safeAssertionValue(true), true);
   assert.equal(safeAssertionValue(9), 9);
+});
+
+test("scenario preflight refuses any forbidden or malformed step before first browser mutation", () => {
+  assert.ok(SCENARIO_OPERATIONS.includes("assert"));
+  assert.doesNotThrow(() => validateScenarioSteps([
+    {op:"click",target:{kind:"role",value:"button",name:"Submit"}},
+    {op:"assert",kind:"title",expected:"done"},
+  ]));
+  for (const invalid of [
+    [{op:"click",target:{}},{op:"close"}],
+    [{op:"click",target:{}},{op:"run"}],
+    [{op:"fill"}],
+    [{op:"assert",kind:"text",expected:"x"}],
+    [{op:"assert",kind:"title"}],
+    [{op:"navigate"}],
+    [{op:"press"}],
+    [{op:"status"}],
+  ]) assert.throws(() => validateScenarioSteps(invalid), /BROWSER_RUN_/);
+  assert.throws(() => validateScenarioSteps([]), /OUT_OF_RANGE/);
+});
+test("run budget clamps operation timeouts without starting concurrent actions", () => {
+  assert.equal(boundedRunTimeout(undefined),90_000);
+  assert.equal(boundedRunTimeout(1_000),1_000);
+  assert.equal(boundedRunTimeout(120_000),120_000);
+  for (const bad of [0,999,120_001,NaN,Infinity,1000.5]) assert.throws(
+    () => boundedRunTimeout(bad), /OUT_OF_RANGE/,
+  );
+  assert.equal(operationTimeout(12_000,15_000,10_000),5_000);
+  assert.equal(operationTimeout(12_000,15_000,14_999),1);
+  assert.throws(()=>operationTimeout(12_000,15_000,15_000),/DEADLINE_EXCEEDED/);
+});
+test("negative verdicts are MCP errors, not a successful tool response", () => {
+  assert.equal(isFailedVerdict({passed:false,steps:[]}),true);
+  assert.equal(isFailedVerdict({passed:true}),false);
+  assert.equal(isFailedVerdict({completed:true}),false);
+  assert.equal(isFailedVerdict(null),false);
+});
+
+test("unsafe later navigation is rejected during preflight (no earlier submit)", () => {
+  const steps = [
+    {op:"click",target:{kind:"role",value:"button",name:"Submit"}},
+    {op:"navigate",url:"http://169.254.169.254/latest/meta-data"},
+  ];
+  assert.throws(() => validateScenarioSteps(steps, url => browserUrl(url)),
+    /BROWSER_UNSAFE_URL/);
+  assert.doesNotThrow(() => validateScenarioSteps([
+    {op:"click",target:{kind:"role",value:"button"}},
+    {op:"navigate",url:"https://example.org/"},
+  ], url => browserUrl(url)));
 });

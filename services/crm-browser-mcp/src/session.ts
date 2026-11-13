@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { acquire, connect, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
 import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermittedBrowserRequest, redact, requireCrmAgentIdentity, safePagePath } from "./security";
 import { navigatePage } from "./page-navigation";
-import { boundedWaitTimeout, compareBrowserAssertion, safeAssertionValue, type BrowserAssertionKind, type TextMatch, type WaitState } from "./browser-checks";
+import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
 
 export interface Env {
@@ -22,7 +22,7 @@ export type Target = {
 };
 
 export type Command = {
-  op: string;
+  op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "run";
   url?: string;
   target?: Target;
   text?: string;
@@ -93,7 +93,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
 
   // Both browser_open(url) and browser_action(navigate) must really navigate
   // an existing session. This is the single owner of privileged CRM navigation.
-  private async navigateTo(destination: string) {
+  private async navigateTo(destination: string, runDeadline?: number) {
     const page = this.page;
     if (!page || page.isClosed()) throw new Error("CRM_BROWSER_NOT_OPEN");
     requireCrmAgentIdentity(
@@ -101,6 +101,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
     );
     return navigatePage(
       page, destination, enabled => { this.ownerDirectedCrmNavigation = enabled; },
+      operationTimeout(25_000, runDeadline),
     );
   }
 
@@ -183,7 +184,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
             "CF-Access-Client-Secret": this.env.CRM_BROWSER_CLIENT_SECRET,
           },
           maxRedirects: 0,
-          timeout: 25000,
+          timeout: 25_000,
         });
         await route.fulfill({ response });
       });
@@ -330,7 +331,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
     if (failure) throw failure;
   }
 
-  private async execute(command: Command): Promise<{ data: unknown; image?: string }> {
+  private async execute(command: Command, runDeadline?: number): Promise<{ data: unknown; image?: string }> {
     if (command.op === "open") return {
       data: await this.open(command.url, command.recording ?? false),
     };
@@ -338,7 +339,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       await this.close();
       return { data: { state: "closed" } };
     }
-    if (command.op !== "close") await this.restore();
+    await this.restore();
     if (command.op === "status") return {
       data: {
         state: this.page && !this.page.isClosed() ? "open" : "closed",
@@ -584,7 +585,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
         return { data: { url: view.devtoolsFrontendUrl, readonly: true, expires_in_seconds: 60 } };
       }
       case "wait": {
-        const timeout = boundedWaitTimeout(command.timeoutMs);
+        const timeout = operationTimeout(boundedWaitTimeout(command.timeoutMs), runDeadline);
         if (command.target) {
           await this.target(command.target).waitFor({
             state: command.state ?? "visible",
@@ -635,17 +636,22 @@ export class CrmBrowserSession extends DurableObject<Env> {
       }
       case "run": {
         const steps = command.steps;
-        if (!steps || steps.length === 0 || steps.length > 12) {
-          throw new Error("BROWSER_RUN_STEPS_OUT_OF_RANGE");
-        }
-        const results: Array<{ index: number; op: string; passed: boolean; data?: unknown; error?: string }> = [];
+        validateScenarioSteps(steps, url => {
+          const destination = browserUrl(url, page.url() || CRM_ORIGIN);
+          requireCrmAgentIdentity(
+            destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
+          );
+        });
+        const startedAt = Date.now();
+        const deadline = startedAt + boundedRunTimeout(command.timeoutMs);
+        const results: Array<{ index: number; op: string; passed: boolean; data?: unknown; error?: string; outcome?: string }> = [];
         let passed = true;
-        for (const [index, step] of steps.entries()) {
-          if (step.op === "run" || step.op === "open" || step.op === "close" || step.op === "session" || step.op === "live_view") {
-            throw new Error("BROWSER_RUN_UNSAFE_STEP");
-          }
+        for (const [index, step] of steps!.entries()) {
           try {
-            const response = await this.execute(step);
+            operationTimeout(1, deadline);
+            const response = await this.execute(step, deadline);
+            // A late provider ACK must never count as PASS.
+            operationTimeout(1, deadline);
             const data = response.data as { passed?: boolean };
             const ok = data.passed !== false;
             results.push({ index, op: step.op, passed: ok, data });
@@ -655,14 +661,15 @@ export class CrmBrowserSession extends DurableObject<Env> {
             results.push({
               index, op: step.op, passed: false,
               error: redact(error instanceof Error ? error.message : error),
+              outcome: step.op === "assert" || step.op === "wait" ? "not_completed" : "uncertain",
             });
             break;
           }
         }
-        const report = { passed, steps: results, total: steps.length, executed: results.length };
+        const report = { passed, steps: results, total: steps!.length, executed: results.length, elapsedMs: Date.now() - startedAt };
         if (!passed && command.screenshotOnFailure) {
           try {
-            const png = await page.screenshot({ fullPage: true });
+            const png = await page.screenshot({ fullPage: true, timeout: 5_000 });
             if (png.byteLength <= 2_000_000) {
               return { data: report, image: Buffer.from(png).toString("base64") };
             }
@@ -672,21 +679,23 @@ export class CrmBrowserSession extends DurableObject<Env> {
       }
       case "navigate": {
         const destination = browserUrl(command.url ?? "/", page.url() || CRM_ORIGIN);
-        return { data: await this.navigateTo(destination) };
+        return { data: await this.navigateTo(destination, runDeadline) };
       }
       case "reload":
-        await page.reload({ waitUntil: "domcontentloaded", timeout: 25000 });
+        await page.reload({ waitUntil: "domcontentloaded", timeout: operationTimeout(25_000, runDeadline) });
         return { data: { path: safePagePath(page.url()) } };
       case "back":
-        await page.goBack({ waitUntil: "domcontentloaded", timeout: 25000 });
+        await page.goBack({ waitUntil: "domcontentloaded", timeout: operationTimeout(25_000, runDeadline) });
         return { data: { path: safePagePath(page.url()) } };
       case "forward":
-        await page.goForward({ waitUntil: "domcontentloaded", timeout: 25000 });
+        await page.goForward({ waitUntil: "domcontentloaded", timeout: operationTimeout(25_000, runDeadline) });
         return { data: { path: safePagePath(page.url()) } };
       case "scroll":
         await page.mouse.wheel(command.x ?? 0, command.y ?? 650);
         return { data: { action: "scroll", completed: true } };
       case "press":
+        // Pinned Cloudflare Playwright keyboard.press has no timeout option.
+        // The run checks the remaining budget on return; never race a live key event.
         await page.keyboard.press(command.key ?? "");
         return { data: { action: "press", completed: true } };
       case "session": {
@@ -710,14 +719,14 @@ export class CrmBrowserSession extends DurableObject<Env> {
         const locator = this.target(command.target);
         this.acceptingDialog = command.acceptDialog === true;
         try {
-          if (command.op === "click") await locator.click({ timeout: 12000 });
-          else if (command.op === "double_click") await locator.dblclick({ timeout: 12000 });
-          else if (command.op === "fill") await locator.fill(command.text ?? "", { timeout: 12000 });
-          else if (command.op === "select") await locator.selectOption(command.value ?? "", { timeout: 12000 });
-          else if (command.op === "check") await locator.check({ timeout: 12000 });
-          else if (command.op === "uncheck") await locator.uncheck({ timeout: 12000 });
-          else if (command.op === "hover") await locator.hover({ timeout: 12000 });
-          else if (command.op === "type") await locator.pressSequentially(command.text ?? "", { timeout: 12000 });
+          if (command.op === "click") await locator.click({ timeout: operationTimeout(12_000, runDeadline) });
+          else if (command.op === "double_click") await locator.dblclick({ timeout: operationTimeout(12_000, runDeadline) });
+          else if (command.op === "fill") await locator.fill(command.text ?? "", { timeout: operationTimeout(12_000, runDeadline) });
+          else if (command.op === "select") await locator.selectOption(command.value ?? "", { timeout: operationTimeout(12_000, runDeadline) });
+          else if (command.op === "check") await locator.check({ timeout: operationTimeout(12_000, runDeadline) });
+          else if (command.op === "uncheck") await locator.uncheck({ timeout: operationTimeout(12_000, runDeadline) });
+          else if (command.op === "hover") await locator.hover({ timeout: operationTimeout(12_000, runDeadline) });
+          else if (command.op === "type") await locator.pressSequentially(command.text ?? "", { timeout: operationTimeout(12_000, runDeadline) });
         } finally {
           this.acceptingDialog = false;
         }

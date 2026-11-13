@@ -15,6 +15,7 @@ export async function navigatePage(
   page: NavigablePage,
   destination: string,
   setTrustedCrmNavigation: (enabled: boolean) => void,
+  timeoutMs = 25_000,
 ) {
   // A controller-directed main-frame navigation may be authorized for the
   // exact CRM origin only. Release that permission after errors and redirects.
@@ -22,7 +23,7 @@ export async function navigatePage(
   try {
     const response = await page.goto(destination, {
       waitUntil: "domcontentloaded",
-      timeout: 25_000,
+      timeout: timeoutMs,
     });
     return {
       http_status: response?.status() ?? null,

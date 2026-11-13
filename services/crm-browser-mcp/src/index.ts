@@ -4,6 +4,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import type { Env, Command, Target } from "./session";
 import { MCP_HOST, verifiedMcpOwnerEmail } from "./security";
+import { SCENARIO_OPERATIONS, isFailedVerdict } from "./browser-checks";
 
 export { CrmBrowserSession } from "./session";
 
@@ -23,11 +24,7 @@ const waitState = z.enum(["visible", "hidden", "attached", "detached"]);
 const timeoutMs = z.number().int().min(100).max(30_000).optional();
 const expected = z.union([z.string().max(512), z.number().finite(), z.boolean()]);
 const scenarioStep = z.object({
-  op: z.enum([
-    "click", "double_click", "fill", "type", "select", "check",
-    "uncheck", "hover", "press", "scroll", "navigate", "reload",
-    "back", "forward", "wait", "assert",
-  ]),
+  op: z.enum(SCENARIO_OPERATIONS),
   target: target.optional(),
   text: z.string().max(16_000).optional(),
   key: z.string().max(96).optional(),
@@ -62,6 +59,14 @@ function createServer(env: Env, ownerEmail: string) {
     if (!result.ok) return {
       isError: true,
       content: [{ type: "text" as const, text: result.error ?? "CRM_BROWSER_OPERATION_FAILED" }],
+    };
+    // A failed assertion/scenario must not appear as an MCP success.
+    if (isFailedVerdict(result.data)) return {
+      isError: true,
+      content: [
+        { type: "text" as const, text: JSON.stringify(result.data) },
+        ...(result.image ? [{ type: "image" as const, data: result.image, mimeType: "image/png" as const }] : []),
+      ],
     };
     if (result.image) return {
       content: [
@@ -180,13 +185,14 @@ function createServer(env: Env, ownerEmail: string) {
   }, async params => command({ op: "assert", ...params }));
 
   server.registerTool("browser_run", {
-    description: "Execute up to 12 ordered Playwright actions/waits/assertions; stop on first failure and optionally attach a screenshot. Return typed pass/fail steps.",
+    description: "Prevalidate 12 or fewer typed Playwright steps, bound waits/actions to a run budget and stop on first failure. Return an explicit pass/fail report.",
     inputSchema: {
       steps: z.array(scenarioStep).min(1).max(12),
+      timeoutMs: z.number().int().min(1_000).max(120_000).default(90_000),
       screenshotOnFailure: z.boolean().default(false),
     },
-  }, async ({ steps, screenshotOnFailure }) =>
-    command({ op: "run", steps, screenshotOnFailure }));
+  }, async ({ steps, screenshotOnFailure, timeoutMs }) =>
+    command({ op: "run", steps, screenshotOnFailure, timeoutMs }));
 
   server.registerTool("browser_diagnostics", {
     description: "Read sanitized cross-site browser console and HTTP statuses. Credential values and URL queries are never exposed.",
