@@ -7,10 +7,12 @@ import { MCP_HOST, verifiedMcpOwnerEmail } from "./security";
 
 export { CrmBrowserSession } from "./session";
 
+const frameIndex = z.number().int().min(0).max(49).optional();
 const target = z.object({
   kind: z.enum(["css", "role", "text", "label"]),
   value: z.string().min(1).max(512),
   name: z.string().min(1).max(512).optional(),
+  frameIndex,
 });
 const action = z.enum([
   "click", "double_click", "fill", "type", "select", "check",
@@ -88,9 +90,23 @@ function createServer(env: Env, ownerEmail: string) {
   }, async () => command({ op: "session" }));
 
   server.registerTool("browser_snapshot", {
-    description: "Return the current website accessibility tree and page title for reliable element targeting.",
+    description: "Return the current page or selected iframe accessibility tree and title. Use browser_frames to discover frameIndex.",
+    inputSchema: { frameIndex },
+  }, async params => command({ op: "snapshot", ...params }));
+
+  server.registerTool("browser_tabs", {
+    description: "List, create, select or close tabs and popup windows in the one existing browser context; tab IDs are ephemeral after reconnection.",
+    inputSchema: {
+      tabAction: z.enum(["list", "new", "select", "close"]).default("list"),
+      tabId: z.string().uuid().optional(),
+      url: z.string().max(1024).optional(),
+    },
+  }, async params => command({ op: "tabs", ...params }));
+
+  server.registerTool("browser_frames", {
+    description: "List main document and iframe indices, names and sanitized URLs. Use frameIndex for snapshot, action and assertions.",
     inputSchema: {},
-  }, async () => command({ op: "snapshot" }));
+  }, async () => command({ op: "frames" }));
 
   server.registerTool("browser_screenshot", {
     description: "Capture an actual full-page PNG screenshot of the currently open website.",
