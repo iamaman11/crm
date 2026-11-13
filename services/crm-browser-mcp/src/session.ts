@@ -45,6 +45,9 @@ export type Command = {
   fileName?: string;
   mimeType?: string;
   base64?: string;
+  inspection?: "network" | "performance" | "accessibility" | "pdf";
+  width?: number;
+  height?: number;
 };
 
 type Result = { ok: true; data: unknown; image?: string } | { ok: false; error: string };
@@ -62,7 +65,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private acceptingDialog = false;
   private ownerDirectedCrmNavigation = false;
   private consoleLog: Array<{ level: string; text: string }> = [];
-  private requestLog: Array<{ method: string; path: string; status: number }> = [];
+  private requestLog: Array<{
+    method: string; path: string; status: number;
+    resourceType?: string; durationMs?: number | null; failure?: string;
+  }> = [];
 
   private target(target: Target) {
     if (!this.page) throw new Error("CRM_BROWSER_NOT_OPEN");
@@ -196,6 +202,20 @@ export class CrmBrowserSession extends DurableObject<Env> {
           method: response.request().method(),
           path: safePagePath(url),
           status: response.status(),
+          resourceType: response.request().resourceType(),
+          durationMs: (() => {
+            const timing = response.timing();
+            if (timing.requestStart < 0 || timing.responseEnd < 0) return null;
+            return Math.max(0, Math.round(timing.responseEnd - timing.requestStart));
+          })(),
+        });
+        if (this.requestLog.length > 80) this.requestLog.shift();
+      });
+      page.on("requestfailed", request => {
+        this.requestLog.push({
+          method: request.method(), path: safePagePath(request.url()), status: 0,
+          resourceType: request.resourceType(),
+          failure: redact(request.failure()?.errorText ?? "request_failed"),
         });
         if (this.requestLog.length > 80) this.requestLog.shift();
       });
@@ -343,6 +363,96 @@ export class CrmBrowserSession extends DurableObject<Env> {
     if (!page || page.isClosed()) throw new Error("CRM_BROWSER_NOT_OPEN");
 
     switch (command.op) {
+      case "inspect": {
+        if (command.inspection === "network") {
+          return {
+            data: { path: safePagePath(page.url()), events: this.requestLog.slice(-80) },
+          };
+        }
+        if (command.inspection === "performance") {
+          const metrics = await page.evaluate(() => {
+            const n = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+            const paints = performance.getEntriesByType("paint")
+              .map(item => ({ name: item.name, startTimeMs: Math.round(item.startTime) }));
+            return {
+              navigationType: n?.type ?? null,
+              timeToFirstByteMs: n ? Math.round(n.responseStart - n.requestStart) : null,
+              domContentLoadedMs: n ? Math.round(n.domContentLoadedEventEnd - n.startTime) : null,
+              loadEventMs: n && n.loadEventEnd ? Math.round(n.loadEventEnd - n.startTime) : null,
+              transferSizeBytes: n?.transferSize ?? null,
+              resourceEntries: performance.getEntriesByType("resource").length,
+              paintEntries: paints,
+            };
+          });
+          return {
+            data: { path: safePagePath(page.url()), metrics, note: "Navigation and paint timing only; not Core Web Vitals." },
+          };
+        }
+        if (command.inspection === "accessibility") {
+          const audit = await page.evaluate(() => {
+            const problems: Array<{ rule: string; selector: string }> = [];
+            const describe = (element: Element) =>
+              element.tagName.toLowerCase() + (element.id ? "#" + element.id : "");
+            for (const image of document.querySelectorAll("img:not([alt])")) {
+              problems.push({ rule: "img_missing_alt", selector: describe(image) });
+              if (problems.length >= 100) break;
+            }
+            for (const field of document.querySelectorAll("input:not([type=hidden]),select,textarea")) {
+              if (problems.length >= 100) break;
+              const id = field.getAttribute("id");
+              const hasLabel = field.hasAttribute("aria-label") ||
+                field.hasAttribute("aria-labelledby") ||
+                Boolean(id && document.querySelector("label[for='" + CSS.escape(id) + "']")) ||
+                Boolean(field.closest("label"));
+              if (!hasLabel) problems.push({ rule: "form_field_missing_label", selector: describe(field) });
+            }
+            for (const button of document.querySelectorAll("button")) {
+              if (problems.length >= 100) break;
+              if (!button.textContent?.trim() &&
+                  !button.getAttribute("aria-label")?.trim() &&
+                  !button.getAttribute("aria-labelledby")?.trim()) {
+                problems.push({ rule: "button_missing_name", selector: describe(button) });
+              }
+            }
+            if (!document.title.trim()) problems.push({ rule: "document_missing_title", selector: "html" });
+            const images = document.querySelectorAll("img").length;
+            const fields = document.querySelectorAll("input,select,textarea").length;
+            return { issues: problems, scanned: { images, fields }, complete: problems.length < 100 };
+          });
+          return {
+            data: {
+              path: safePagePath(page.url()), ...audit,
+              note: "Limited DOM heuristics, not a WCAG conformance audit.",
+            },
+          };
+        }
+        if (command.inspection === "pdf") {
+          const result = Buffer.from(await page.pdf({
+            format: "A4", printBackground: true,
+          }));
+          if (result.byteLength > MAX_TRANSFER_BYTES) {
+            throw new Error("BROWSER_PDF_TOO_LARGE");
+          }
+          return {
+            data: {
+              path: safePagePath(page.url()), mimeType: "application/pdf",
+              bytes: result.byteLength, base64: result.toString("base64"),
+            },
+          };
+        }
+        throw new Error("BROWSER_INSPECTION_UNKNOWN_KIND");
+      }
+      case "viewport": {
+        if (!Number.isInteger(command.width) || !Number.isInteger(command.height) ||
+            (command.width ?? 0) < 320 || (command.width ?? 0) > 2560 ||
+            (command.height ?? 0) < 320 || (command.height ?? 0) > 2560) {
+          throw new Error("BROWSER_VIEWPORT_OUT_OF_RANGE");
+        }
+        await page.setViewportSize({ width: command.width!, height: command.height! });
+        return {
+          data: { viewport: page.viewportSize(), path: safePagePath(page.url()) },
+        };
+      }
       case "file": {
         if (!command.target) throw new Error("BROWSER_FILE_TARGET_REQUIRED");
         const locator = this.target(command.target);
