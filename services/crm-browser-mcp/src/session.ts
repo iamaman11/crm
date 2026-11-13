@@ -184,7 +184,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
             "CF-Access-Client-Secret": this.env.CRM_BROWSER_CLIENT_SECRET,
           },
           maxRedirects: 0,
-          timeout: operationTimeout(25_000, runDeadline),
+          timeout: 25_000,
         });
         await route.fulfill({ response });
       });
