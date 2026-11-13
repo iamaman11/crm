@@ -43,13 +43,16 @@ Doctor — read-only диагностика доступности D1/runtime, �
 Wrangler migration ledger. Новые изменения схемы оформляются следующими миграциями.
 Миграции и fixtures проверяются в CI; live reset разрешён только после проверки кандидата.
 
-Release использует проверенный artifact без повторной сборки. До миграций проверяет
-account/DB/SHA, checksum и D1 Time Travel bookmark, останавливает workers.dev вход.
-Wrangler загружает Worker с выключенными public/preview URL; release включает единственный
-public URL после проверки version/binding. Далее обязательна live-приёмка.
-При её ошибке публичный вход выключается штатным Cloudflare API, старый несовместимый
-Worker автоматически не возвращается. D1/Access не удаляются. Исправленный кандидат
-проходит тот же CI и release-путь; failed acceptance остаётся NO-GO.
+Release использует проверенный artifact без повторной сборки. Сначала проверяет
+account/DB/SHA, checksum, D1 Time Travel bookmark и сравнивает канонические SQL
+с существующим Wrangler migration ledger. **При отсутствии новых миграций** не
+останавливает workers.dev и не повторяет D1 apply. При новых миграциях до изменения
+D1 сначала закрывает вход и проверяет остановку. Далее публикует один Worker,
+проверяет signed Access и точный SHA через `/api/version`, а также отказ
+анонимному запросу к тому же маршруту. Полный live Access/browser/D1/Logs E2E
+обязателен в обоих случаях. Если приёмка не пройдена, остаётся строгий
+fail-closed (публичный вход выключается); никакой слепой rollback несовместимого
+Worker или D1 и автоматического принятия версии нет. D1/Access не удаляются.
 
 Privacy verification/execution, Enrichment provider dispatch, автоматическое объединение
 личностей и необоснованные consent grants не подключены и не имитируются.
