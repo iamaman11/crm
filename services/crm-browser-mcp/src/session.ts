@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { launch, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
 import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermittedBrowserRequest, redact, requireCrmAgentIdentity, safePagePath } from "./security";
 import { navigatePage } from "./page-navigation";
+import { boundedWaitTimeout, compareBrowserAssertion, safeAssertionValue, type BrowserAssertionKind, type TextMatch, type WaitState } from "./browser-checks";
 
 export interface Env {
   BROWSER: BrowserRun;
@@ -29,6 +30,12 @@ export type Command = {
   y?: number;
   value?: string;
   acceptDialog?: boolean;
+  kind?: BrowserAssertionKind;
+  expected?: string | number | boolean;
+  match?: TextMatch;
+  state?: WaitState;
+  timeoutMs?: number;
+  steps?: Command[];
 };
 
 type Result = { ok: true; data: unknown; image?: string } | { ok: false; error: string };
@@ -216,6 +223,84 @@ export class CrmBrowserSession extends DurableObject<Env> {
           guardrails: { mode: "readonly" },
         });
         return { data: { url: view.devtoolsFrontendUrl, readonly: true, expires_in_seconds: 60 } };
+      }
+      case "wait": {
+        const timeout = boundedWaitTimeout(command.timeoutMs);
+        if (command.target) {
+          await this.target(command.target).waitFor({
+            state: command.state ?? "visible",
+            timeout,
+          });
+        } else if (command.url) {
+          // Playwright owns the wait; no arbitrary sleeps or polling loops.
+          await page.waitForURL(command.url, { timeout });
+        } else {
+          await page.waitForLoadState("domcontentloaded", { timeout });
+        }
+        return {
+          data: {
+            completed: true,
+            condition: command.target ? "element" : command.url ? "url" : "domcontentloaded",
+            state: command.state ?? (command.target ? "visible" : "ready"),
+            path: safePagePath(page.url()),
+          },
+        };
+      }
+      case "assert": {
+        if (!command.kind || command.expected === undefined) {
+          throw new Error("BROWSER_ASSERT_MISSING_CONDITION");
+        }
+        let actual: string | number | boolean;
+        if (command.kind === "url") actual = safePagePath(page.url());
+        else if (command.kind === "title") actual = await page.title();
+        else {
+          if (!command.target) throw new Error("BROWSER_ASSERT_TARGET_REQUIRED");
+          const locator = this.target(command.target);
+          if (command.kind === "visible") actual = await locator.isVisible();
+          else if (command.kind === "hidden") actual = !(await locator.isVisible());
+          else if (command.kind === "count") actual = await locator.count();
+          else if (command.kind === "text") actual = (await locator.textContent()) ?? "";
+          else throw new Error("BROWSER_ASSERT_UNKNOWN_KIND");
+        }
+        const result = compareBrowserAssertion({
+          kind: command.kind, actual, expected: command.expected, match: command.match,
+        });
+        return {
+          data: {
+            ...result,
+            expected: safeAssertionValue(result.expected),
+            actual: safeAssertionValue(result.actual),
+            path: safePagePath(page.url()),
+          },
+        };
+      }
+      case "run": {
+        const steps = command.steps;
+        if (!steps || steps.length === 0 || steps.length > 12) {
+          throw new Error("BROWSER_RUN_STEPS_OUT_OF_RANGE");
+        }
+        const results: Array<{ index: number; op: string; passed: boolean; data?: unknown; error?: string }> = [];
+        let passed = true;
+        for (const [index, step] of steps.entries()) {
+          if (step.op === "run" || step.op === "open" || step.op === "close" || step.op === "session" || step.op === "live_view") {
+            throw new Error("BROWSER_RUN_UNSAFE_STEP");
+          }
+          try {
+            const response = await this.execute(step);
+            const data = response.data as { passed?: boolean };
+            const ok = data.passed !== false;
+            results.push({ index, op: step.op, passed: ok, data });
+            if (!ok) { passed = false; break; }
+          } catch (error) {
+            passed = false;
+            results.push({
+              index, op: step.op, passed: false,
+              error: redact(error instanceof Error ? error.message : error),
+            });
+            break;
+          }
+        }
+        return { data: { passed, steps: results, total: steps.length, executed: results.length } };
       }
       case "navigate": {
         const destination = browserUrl(command.url ?? "/", page.url() || CRM_ORIGIN);
