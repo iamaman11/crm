@@ -46,7 +46,7 @@ function createServer(env: Env, ownerEmail: string) {
   }
 
   server.registerTool("browser_open", {
-    description: "Open the real Cloudflare CRM in a browser using the authorized diagnostic admin; preserve tab state between MCP calls.",
+    description: "Open the real CRM by default, or any public HTTP(S) site. Preserve cloud browser state across calls; CRM service credentials are restricted to CRM.",
     inputSchema: {
       path: z.string().max(1024).default("/"),
     },
@@ -63,17 +63,17 @@ function createServer(env: Env, ownerEmail: string) {
   }, async () => command({ op: "session" }));
 
   server.registerTool("browser_snapshot", {
-    description: "Return the current CRM accessibility tree and page title for reliable element targeting.",
+    description: "Return the current website accessibility tree and page title for reliable element targeting.",
     inputSchema: {},
   }, async () => command({ op: "snapshot" }));
 
   server.registerTool("browser_screenshot", {
-    description: "Capture an actual full-page PNG screenshot of the current CRM browser tab.",
+    description: "Capture an actual full-page PNG screenshot of the currently open website.",
     inputSchema: {},
   }, async () => command({ op: "screenshot" }));
 
   server.registerTool("browser_action", {
-    description: "Perform one real Playwright UI action in the same persistent CRM tab. Never bypass CRM validation, Connect or D1. Navigation is restricted to CRM.",
+    description: "Perform one real Playwright UI action in the persistent browser. Browse ordinary public HTTP(S) sites. CRM admin actions use the real CRM UI, Connect and Rust.",
     inputSchema: {
       action,
       target: target.optional(),
@@ -92,12 +92,12 @@ function createServer(env: Env, ownerEmail: string) {
   }));
 
   server.registerTool("browser_diagnostics", {
-    description: "Read sanitized CRM browser console and recent HTTP response statuses. Secrets, query strings and off-domain URLs are not exposed.",
+    description: "Read sanitized cross-site browser console and HTTP statuses. Credential values and URL queries are never exposed.",
     inputSchema: {},
   }, async () => command({ op: "console" }));
 
   server.registerTool("browser_close", {
-    description: "Close the owner browser session and release Cloudflare Browser Run resources.",
+    description: "Close the cloud browser session and release Cloudflare Browser Run resources.",
     inputSchema: {},
   }, async () => command({ op: "close" }));
 
