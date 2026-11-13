@@ -8,6 +8,7 @@ export interface Env {
   CRM_BROWSER_CLIENT_ID: string;
   CRM_BROWSER_CLIENT_SECRET: string;
   CRM_MCP_OWNER_EMAIL: string;
+  CRM_MCP_ACCESS_AUD: string;
 }
 
 export type Target = {
