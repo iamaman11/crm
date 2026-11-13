@@ -18,6 +18,34 @@ export function isAuthorizedMcpOwner(
   );
 }
 
+// ctx.access is server-created by Cloudflare Access. Caller-supplied headers,
+// email strings and MCP tool parameters are never accepted as controller proof.
+// The same check works for both Managed OAuth and normal Access sessions.
+export interface AccessControllerEvidence {
+  aud: string;
+  getIdentity(): Promise<{ email?: string } | null>;
+}
+
+export async function verifiedMcpOwnerEmail(
+  access: AccessControllerEvidence | undefined,
+  expectedAudience: string | undefined,
+  ownerEmail: string | undefined,
+): Promise<string | null> {
+  if (!access || !expectedAudience || !ownerEmail ||
+      access.aud !== expectedAudience) return null;
+  try {
+    const identity = await access.getIdentity();
+    const email = identity?.email?.trim().toLowerCase();
+    return isAuthorizedMcpOwner(access.aud, expectedAudience, email, ownerEmail)
+      ? email!
+      : null;
+  } catch {
+    // Expired, malformed, rejected or unavailable Access evidence is denied;
+    // never turn an identity-verification error into an open MCP session.
+    return null;
+  }
+}
+
 export function isCrmRequest(input: string): boolean {
   try {
     const url = new URL(input);
