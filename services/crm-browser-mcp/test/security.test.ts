@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { browserUrl, crmCredentialsAllowed, CRM_ORIGIN, isCrmRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact, requireCrmAgentIdentity } from "../src/security.ts";
+import { browserUrl, crmCredentialsAllowed, CRM_ORIGIN, isCrmRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact, requireCrmAgentIdentity, verifiedMcpOwnerEmail } from "../src/security.ts";
 
 test("canonical CRM identification is exact; ordinary browser navigation stays universal", () => {
   assert.equal(browserUrl("/clients"), CRM_ORIGIN + "/clients");
@@ -118,4 +118,23 @@ test("CRM identity is fail-closed before provisioning; unrelated public websites
   for (const url of ["https://example.org/", "https://www.iana.org/domains/reserved"]) {
     assert.doesNotThrow(() => requireCrmAgentIdentity(url, "", ""));
   }
+});
+
+test("Managed OAuth/Access controller evidence denies missing, wrong, and broken identities", async () => {
+  const aud = "exact-app-audience";
+  const owner = "owner@example.test";
+  const valid = { aud, getIdentity: async () => ({ email: "OWNER@example.test" }) };
+  assert.equal(await verifiedMcpOwnerEmail(valid, aud, owner), owner);
+  assert.equal(await verifiedMcpOwnerEmail(undefined, aud, owner), null);
+  assert.equal(await verifiedMcpOwnerEmail(valid, "other-audience", owner), null);
+  assert.equal(await verifiedMcpOwnerEmail(valid, aud, undefined), null);
+  assert.equal(await verifiedMcpOwnerEmail(
+    { aud, getIdentity: async () => ({ email: "other@example.test" }) }, aud, owner,
+  ), null);
+  assert.equal(await verifiedMcpOwnerEmail(
+    { aud, getIdentity: async () => null }, aud, owner,
+  ), null);
+  assert.equal(await verifiedMcpOwnerEmail(
+    { aud, getIdentity: async () => { throw new Error("expired JWT"); } }, aud, owner,
+  ), null);
 });
