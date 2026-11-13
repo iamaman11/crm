@@ -1,4 +1,4 @@
-# Universal Browser MCP — candidate, NOT DEPLOYED
+# Universal Browser MCP — candidate, NOT RELEASED
 
 Canonical plan: https://github.com/iamaman11/crm/issues/357
 
@@ -6,6 +6,14 @@ This is an independent universal browser automation tool (public HTTP/HTTPS
 websites supported), not a CRM business backend. The real CRM remains the single Rust
 Connect Worker at https://crm-dev.crm-5bd5e1e1.workers.dev/ and existing D1.
 Browser writes must pass React -> Connect -> Rust -> D1, like a human user.
+
+## 13 November 2026 — first-version Cloudflare bootstrap, not release
+
+The previously empty Cloudflare Worker `crm-browser-mcp` received one deliberately inert first version from this canonical repository: [`bootstrap/deny.mjs`](bootstrap/deny.mjs). It always returns HTTP 503 and implements **no MCP functionality**. The Worker immutable ID is unchanged (`47a154994f254ca99e5d6d9b964412ee`).
+
+Cloudflare confirms `subdomain.enabled=false` and `previews_enabled=false`, and a public request to the workers.dev address returns HTTP 404. The actual MCP remains **Draft / NO-GO**, uninstalled, without deployment credentials or owner/CRM tenant onboarding; release automation stays disabled. The new `workers_dev:false` in `wrangler.jsonc` is intentional until secured MCP acceptance. A bootstrap upload is **not** approval or deployment of real MCP code.
+
+The Vault first-token request failed at Cloudflare API with HTTP 500/1004; its request ID is `crm-browser-mcp-github-deploy-20261113-01`. Vault status remains `outcome_unknown` with no receipt; Cloudflare full token inventory shows no matching new token. Do not blindly repeat POST or widen Worker privileges. See [Issue #357](https://github.com/iamaman11/crm/issues/357) for the readbacks and remaining acceptance gates.
 
 ## Architecture
 - Separate protected crm-browser-mcp Cloudflare Worker with MCP SDK v2 stateless
