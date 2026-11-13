@@ -49,6 +49,7 @@ export type Command = {
   width?: number;
   height?: number;
   recording?: boolean;
+  screenshotOnFailure?: boolean;
 };
 
 type Result = { ok: true; data: unknown; image?: string } | { ok: false; error: string };
@@ -645,7 +646,16 @@ export class CrmBrowserSession extends DurableObject<Env> {
             break;
           }
         }
-        return { data: { passed, steps: results, total: steps.length, executed: results.length } };
+        const report = { passed, steps: results, total: steps.length, executed: results.length };
+        if (!passed && command.screenshotOnFailure) {
+          try {
+            const png = await page.screenshot({ fullPage: true });
+            if (png.byteLength <= 2_000_000) {
+              return { data: report, image: Buffer.from(png).toString("base64") };
+            }
+          } catch { /* The failure report remains authoritative. */ }
+        }
+        return { data: report };
       }
       case "navigate": {
         const destination = browserUrl(command.url ?? "/", page.url() || CRM_ORIGIN);
