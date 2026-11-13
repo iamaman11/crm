@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {createRequire} from "node:module";
 const clientRequire=createRequire(new URL("../packages/client/package.json",import.meta.url));
-const {fromBinary,toBinary}=clientRequire("@bufbuild/protobuf");
+const {fromBinary,toBinary,create}=clientRequire("@bufbuild/protobuf");
 import {descriptorMethods,targetMethods} from "./crm-rpc-descriptors.mjs";
 const {FileDescriptorSetSchema,MethodOptions_IdempotencyLevel}=clientRequire("@bufbuild/protobuf/wkt");
 const descriptor=process.env.CRM_PROTO_DESCRIPTOR_FILE;
@@ -14,7 +14,7 @@ if(!descriptor)throw Error("compiled Buf FileDescriptorSet required");
 const compiled=fromBinary(FileDescriptorSetSchema,readFileSync(descriptor));
 // Reuse the compiled-descriptor scope from the executed router/policy gate.
 function activeFiles(files) {
- const methods=descriptorMethods(toBinary(FileDescriptorSetSchema,{file:files}));
+ const methods=descriptorMethods(toBinary(FileDescriptorSetSchema,create(FileDescriptorSetSchema,{file:files})));
  const required=new Set(targetMethods(methods));
  return files.filter(f=>f.service.some(service=>service.method.some(method=>
    required.has("/"+f.package+"."+service.name+"/"+method.name))));
