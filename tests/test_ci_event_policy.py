@@ -129,13 +129,14 @@ jobs:
         path.parent.mkdir(parents=True)
         cases = (
             (original.replace("'**/*.md'", "'apps/**'"), "CRM may ignore only **/*.md documentation"),
-            (original.replace("    paths-ignore:\n      - '**/*.md'\n", ""), "CRM may ignore only **/*.md documentation"),
+            (original.replace("    paths-ignore:", "    paths:"), "CRM may ignore only **/*.md documentation"),
             (original.replace("cancel-in-progress: false", "cancel-in-progress: true"), "CRM must not cancel an active release"),
             (original.replace("concurrency:\n", "  pull_request:\n    branches:\n      - dev\nconcurrency:\n", 1), "CRM uses one dev pipeline, not duplicate pull_request builds"),
             (original.replace("      - dev\n", "      - dev\n      - experimental\n", 1), "push must be restricted to branch dev"),
         )
         for contents, expected_error in cases:
             with self.subTest(expected_error=expected_error):
+                self.assertNotEqual(contents, original, "negative fixture must change the workflow")
                 path.write_text(contents, encoding="utf-8")
                 self.assertIn(expected_error, check_workflow(path).errors)
 
