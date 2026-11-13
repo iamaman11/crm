@@ -17,10 +17,10 @@ native-ci = ["native"]
 [dependencies]
 crm-customer-360-query-adapter = { path = "../../../crates/crm-customer-360-query-adapter", default-features = false, features = ["account-overview"] }
 worker = { version = "=0.8.7", features = ["d1", "http"] }
-connectrpc = { version = "=0.9.1", default-features = false, features = ["axum"] }
+connectrpc = { version = "=0.9.1", default-features = false, features = ["json", "axum"] }
 axum = { version = "0.8", default-features = false }
-buffa = { version = "=0.9.1", default-features = false }
-buffa-types = { version = "=0.9.1", default-features = false }
+buffa = { version = "=0.9.1", features = ["json"] }
+buffa-types = { version = "=0.9.1", features = ["json"] }
 tower-service = "0.3"
 crm-parties = { path = "../../../modules/crm-parties" }
 crm-sales = { path = "../../../modules/crm-sales" }
