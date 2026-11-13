@@ -63,7 +63,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
   const nextLabel=kind==="party"?"Другие участники":"Другие клиенты";
   const method=kind==="party"?"/ListParties":"/ListAccounts";
   for(let pageNumber=0;pageNumber<30;pageNumber++){
-   await picker.locator("option").nth(1).waitFor();
+   await picker.locator("option").nth(1).waitFor({state:"attached"});
    await picker.getByRole("status").waitFor({state:"hidden"});
    if(await select.locator(`option[value="${id}"]`).count()){
     await select.selectOption(id);
