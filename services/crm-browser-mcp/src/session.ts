@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { launch, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
 import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermittedBrowserRequest, redact, requireCrmAgentIdentity, safePagePath } from "./security";
+import { navigatePage } from "./page-navigation";
 
 export interface Env {
   BROWSER: BrowserRun;
@@ -63,19 +64,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
     requireCrmAgentIdentity(
       destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
     );
-    this.ownerDirectedCrmNavigation = isCrmRequest(destination);
-    try {
-      const response = await page.goto(destination, {
-        waitUntil: "domcontentloaded", timeout: 25000,
-      });
-      return {
-        http_status: response?.status() ?? null,
-        path: safePagePath(page.url()),
-        title: await page.title(),
-      };
-    } finally {
-      this.ownerDirectedCrmNavigation = false;
-    }
+    return navigatePage(
+      page, destination, enabled => { this.ownerDirectedCrmNavigation = enabled; },
+    );
   }
 
   private async open(path: string = "/") {
