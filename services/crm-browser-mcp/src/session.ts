@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { launch, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
-import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, redact, safePagePath } from "./security";
+import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermittedBrowserRequest, redact, safePagePath } from "./security";
 
 export interface Env {
   BROWSER: Fetcher;
@@ -69,6 +69,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
       // the whole browser context: that leaks across origins and redirects.
       await this.context.route("**/*", async route => {
         const request = route.request();
+        if (!isPermittedBrowserRequest(request.url())) {
+          await route.abort("blockedbyclient");
+          return;
+        }
         let initiator = "";
         let trustedMainNavigation = false;
         try {
