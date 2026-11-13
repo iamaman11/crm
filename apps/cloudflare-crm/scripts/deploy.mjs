@@ -130,17 +130,32 @@ async function deploy(){
     const result=await cf("/d1/database/"+database+"/query","POST",{sql});
     assert.equal(result?.[0]?.success,true);return result[0].results;
   };
-  const applied=await query("SELECT name FROM d1_migrations WHERE name='0002_hard_cutover.sql'");
-  if(applied.length===0)assert.equal(before.sha,"90a352be2a70b74a64e5a774c9a76b7f02c86a5f",
+  // Canonical files plus the existing D1 ledger: no third schema registry.
+  const localMigrations=readdirSync("apps/cloudflare-crm/migrations")
+    .filter(name=>name.endsWith(".sql")).sort();
+  const appliedMigrations=(await query("SELECT name FROM d1_migrations ORDER BY name"))
+    .map(row=>row.name);
+  assert.deepEqual(appliedMigrations,localMigrations.slice(0,appliedMigrations.length),
+    "D1 migration ledger must match the committed schema history");
+  const pendingMigrations=localMigrations.length>appliedMigrations.length;
+  const resetPending=!appliedMigrations.includes("0002_hard_cutover.sql");
+  if(resetPending)assert.equal(before.sha,"90a352be2a70b74a64e5a774c9a76b7f02c86a5f",
     "One-time reset requires the audited frozen predecessor");
+  console.log(JSON.stringify({event:"crm.migration-readback",result:"PASS",
+    pending:pendingMigrations,applied:appliedMigrations.length,canonical:localMigrations.length}));
   const principals=await query("SELECT * FROM crm_users ORDER BY email");
   const tenants=await query("SELECT * FROM crm_tenants ORDER BY id");
   record("checkpoint.json",{git_sha:sha,previous_sha:before.sha,previous_version:oldVersion,
-    d1_database:database,pre_migration_bookmark:bookmark,reset_pending:applied.length===0,rust});
-  await cf(worker+"/subdomain","POST",{enabled:false,previews_enabled:false});
-  await confirmClosed();
-  cmd("wrangler","d1","migrations","apply","crm-dev","--remote");
-  assert.equal((await query("SELECT name FROM d1_migrations WHERE name='0002_hard_cutover.sql'")).length,1);
+    d1_database:database,pre_migration_bookmark:bookmark,
+    reset_pending:resetPending,migration_pending:pendingMigrations,rust});
+  if(pendingMigrations){
+    // Stop traffic only when the D1 schema will actually change.
+    await cf(worker+"/subdomain","POST",{enabled:false,previews_enabled:false});
+    await confirmClosed();
+    cmd("wrangler","d1","migrations","apply","crm-dev","--remote");
+  }
+  assert.deepEqual((await query("SELECT name FROM d1_migrations ORDER BY name"))
+    .map(row=>row.name),localMigrations,"D1 must have exactly the canonical migrations");
   assert.deepEqual(await query("SELECT * FROM crm_users ORDER BY email"),principals);
   assert.deepEqual(await query("SELECT * FROM crm_tenants ORDER BY id"),tenants);
   assert.deepEqual(await query("PRAGMA foreign_key_check"),[]);
@@ -154,7 +169,7 @@ async function deploy(){
     expected=canonical.prepare(inventory).all().map(row=>({...row}));
   }finally{canonical.close();}
   assert.deepEqual(await query(inventory),expected,"Live D1 must have the exact canonical schema");
-  if(applied.length===0)for(const table of expected.filter(x=>x.type==="table"&&!['crm_users','crm_tenants'].includes(x.name))){
+  if(resetPending)for(const table of expected.filter(x=>x.type==="table"&&!['crm_users','crm_tenants'].includes(x.name))){
     assert.match(table.name,/^[a-z_][a-z0-9_]*$/);
     assert.equal((await query("SELECT COUNT(*) AS n FROM "+table.name))[0].n,0,"Reset left business data");
   }
@@ -163,10 +178,12 @@ async function deploy(){
   if(newVersion===oldVersion)throw Error("Worker version did not advance");
   await cf(worker+"/subdomain","POST",{enabled:true,previews_enabled:false});
   await waitForPublicSha(sha,"deploy");
-  const anonymous=await fetch(url+"/api/health",{redirect:"manual"});
-  if(anonymous.status===200||anonymous.status>=500)throw Error("Cloudflare Access denied check failed");
-  const authorized=await fetch(url+"/api/health",{headers:auth(),redirect:"manual"});
-  if(authorized.status!==200)throw Error("Cloudflare Access authorized health failed");
+  // Signed exact-SHA /api/version above already establishes Access plus Worker
+  // availability. Require the same endpoint to reject anonymous requests.
+  const anonymous=await fetch(url+"/api/version",{redirect:"manual",cache:"no-store"});
+  if(anonymous.status===200||anonymous.status>=500)
+    throw Error("Cloudflare Access anonymous denial failed: HTTP "+anonymous.status+
+      " ray="+(anonymous.headers.get("cf-ray")||"missing"));
   record("deployed.json",{git_sha:sha,worker_version:newVersion,d1_database:database,rust,started_at:startedAt,result:"E2E_PENDING"});
   console.log(JSON.stringify({event:"crm.deploy",sha,result:"E2E_PENDING",version:newVersion}));
 }

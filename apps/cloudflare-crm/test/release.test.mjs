@@ -13,19 +13,22 @@ async function subprocessEntry(){
  const {writeFileSync,readFileSync,readdirSync}=await import("node:fs");
  const {mode,variant,sha,database,audit,requestId,rpcPath}=JSON.parse(process.env.CRM_RELEASE_TEST_FIXTURE);
  const posts=[];
- let enabled=false,migrated=false,published=false,edgeAttempts=0,role="viewer";
+ let enabled=mode==="deploy",migrated=variant!=="migration-fails",published=false,edgeAttempts=0,role="viewer";
  const commands=[];
  let db;
  if(mode==="deploy"){
    const {DatabaseSync}=await import("node:sqlite");
    db=new DatabaseSync(":memory:");
+   // The ordinary release starts with the full current SQL schema.
+   if(migrated)for(const name of readdirSync("apps/cloudflare-crm/migrations").filter(n=>n.endsWith(".sql")).sort())
+     db.exec(readFileSync("apps/cloudflare-crm/migrations/"+name,"utf8"));
    const child=(await import("node:child_process")).default;
    child.spawnSync=(command,args)=>{
      commands.push([command,...args]);
      if(command==="sha256sum")return{status:0}; // Synthetic sealed files, not a real build.
      assert.equal(command,"npx");assert.equal(args[0],"wrangler");
-     assert.equal(enabled,false,"Migrations and upload require closed public entry");
      if(args[1]==="d1"){
+       assert.equal(enabled,false,"Schema changes require closed public entry");
        assert.deepEqual(args,["wrangler","d1","migrations","apply","crm-dev","--remote"]);
        if(variant==="migration-fails")return{status:1};
        for(const name of readdirSync("apps/cloudflare-crm/migrations").sort())
@@ -47,10 +50,9 @@ async function subprocessEntry(){
      if(mode==="fail-closed")return new Response("disabled",{status:404});
      if(mode==="deploy"){
        if(!enabled)return new Response("disabled",{status:404});
-       if(path==="/api/version"&&++edgeAttempts<=2)return new Response("propagating",{status:404});
-       if(path==="/api/health"){
-         assert.ok(edgeAttempts>=3,"Health checked before expected source reached the edge");
-         return new Response("health",{status:options.headers?200:302});
+       if(path==="/api/version"){
+         if(!options.headers)return new Response("denied",{status:403});
+         if(++edgeAttempts<=2)return new Response("propagating",{status:404});
        }
      }
      return json({source:sha});
@@ -94,7 +96,10 @@ async function subprocessEntry(){
      }
      if(mode==="deploy"){
        const {sql}=JSON.parse(options.body);
-       const results=sql.includes("FROM d1_migrations")?(migrated?[{name:"0002_hard_cutover.sql"}]:[]):
+       const names=readdirSync("apps/cloudflare-crm/migrations").filter(n=>n.endsWith(".sql")).sort();
+       const ledger=variant==="migration-fails"?names.slice(0,1):
+         variant==="migration-history-drift"?["unrecognized.sql"]:names;
+       const results=sql.includes("FROM d1_migrations")?ledger.map(name=>({name})):
          !migrated?[]:db.prepare(sql).all();
        return wrap([{success:true,results}]);
      }
@@ -169,11 +174,19 @@ for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-err
  const result=run("verify-data",variant);
  assert.notEqual(result.status,0);assert.equal(result.accepted,false);
 });
-test("deploy waits for temporary edge 404s before checking authenticated health",()=>{
+test("unchanged D1 ledger keeps public entry online and signed version checks Access",()=>{
  const result=run("deploy");
  assert.equal(result.status,0,result.error);assert.equal(result.deployed,true);
  assert.equal(result.state.edgeAttempts,3);assert.equal(result.state.enabled,true);
  assert.equal(result.state.migrated,true);assert.equal(result.state.published,true);
+ assert.equal(result.state.commands.filter(c=>c[2]==="migrations").length,0);
+ assert.equal(result.posts.filter(path=>path.endsWith("/subdomain")).length,1,
+   "Code-only release must not stop public entry before deployment");
+});
+test("unknown D1 migration history rejects the release before changing public entry",()=>{
+ const result=run("deploy","migration-history-drift");
+ assert.notEqual(result.status,0);assert.equal(result.state.published,false);
+ assert.equal(result.posts.filter(path=>path.endsWith("/subdomain")).length,0);
 });
 test("failed migration never publishes or reopens the Worker",()=>{
  const result=run("deploy","migration-fails");
