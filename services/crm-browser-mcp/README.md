@@ -43,27 +43,27 @@ On CRM: existing Connect API → Rust business logic → existing D1
 [release CI #43525548488](https://github.com/iamaman11/crm/actions/runs/43525548488)
 built and deployed the expanded MCP bundle from `mcp` commit `20c11c2e7a20628511cf1ddab3b53f50ce6580c7`.
 Cloudflare confirmed version `c17a8db8-76f9-4b74-96da-443095a9e83c` at **100%**.
-The deployed server defines **17 tools**, but ChatGPT has **a frozen discovery
-snapshot of the old nine tools** in this conversation. To make eight added tools
-visible, open **ChatGPT Plugins → this custom MCP connection → Refresh** and
-start a new chat. Official guidance:
-https://developers.openai.com/plugins/deploy/connect-chatgpt .
-Refresh/review tool permissions rather than recreating the server.
-The physical acceptance column below differentiates working deployed operations
-from items still awaiting a fresh tool discovery and real browser tests.
+The deployed server defines **17 tools**, and all **17/17** were actually
+discoverable and callable in a new owner-authenticated ChatGPT conversation
+on 14 November 2026. The previous 9-tool snapshot was historical, not a
+current server blocker. The Cloudflare release remains the previous R1 build;
+Draft PR #363 is **not** released. Below, physical acceptance differentiates
+the previous published build's verified behavior from untested capabilities.
+After future MCP tool schema updates, use ChatGPT Plugins → Refresh → new chat,
+as documented at https://developers.openai.com/plugins/deploy/connect-chatgpt .
 
 | Tool | Deployed functionality | Physical proof |
 |---|---|---|
 | `browser_open`, `browser_status`, `browser_close` | Official Browser Run acquire/connect, DO-persisted session ID, reattach path, opt-in native recording, explicit termination | **PASS** new version open/close and `recording=true`; durable reattach after actual eviction **not verified** |
 | `browser_action` | Navigation, click/double-click, fill, select, type, keyboard, scrolling, history, iframe selector | **PASS** new version: Selenium form text fill, select, checkbox, Submit → actual `Form submitted / Received!`; other variants pending |
 | `browser_snapshot`, `browser_screenshot` | Accessibility snapshot (main frame or selected iframe); full-page PNG | R1 screenshot/snapshot PASS; iframe unverified |
-| `browser_tabs`, `browser_frames` | List/new/select/close tab; discover popup, iframe name/index; per-tab actions | Not yet deployed/physically tested |
-| `browser_wait`, `browser_assert`, `browser_run` | Bounded Playwright waits, typed deterministic comparisons, ≤12-step E2E report, optional screenshot on failure | Static/unit CI only |
-| `browser_file` | Explicit inline base64 upload, click-to-download; 1 MB maximum, no server filesystem | Static/unit CI only; Cloudflare download stream needs live validation |
-| `browser_diagnostics`, `browser_inspect(network)` | Sanitized console, recent HTTP response/failure events, resource type and approximate timings | **PASS** new version: observed resource-type/elapsed-ms; specialized inspect tool not refreshed in ChatGPT |
-| `browser_inspect(performance)` | Browser navigation timings and paint entries; not complete Core Web Vitals | Not yet deployed |
-| `browser_inspect(accessibility)` | Heuristic missing-alt/label/button-name/title findings; not WCAG certification | Not yet deployed |
-| `browser_inspect(pdf)`, `browser_viewport` | Bounded PDF export, viewport resizing for responsive tests | Not yet deployed |
+| `browser_tabs`, `browser_frames` | List/new/select/close tab; discover popup, iframe name/index; per-tab actions | **PASS** real list/new/close (selenium.dev → example.com) and main frame enumeration; popup/cross-origin iframe pending |
+| `browser_wait`, `browser_assert`, `browser_run` | Bounded Playwright waits, typed deterministic comparisons, ≤12-step E2E report, optional screenshot on failure | **PASS** live wait, correct positive/negative assertions, stop-on-first-fail and Selenium fill/select/check/submit; PR #363 changes not deployed |
+| `browser_file` | Explicit inline base64 upload, click-to-download; 1 MB maximum, no server filesystem | **PASS** live 6-byte text upload; download, larger files and readback still pending |
+| `browser_diagnostics`, `browser_inspect(network)` | Sanitized console, recent HTTP response/failure events, resource type and approximate timings | **PASS** real HTTP resource/timing data; this is not HAR |
+| `browser_inspect(performance)` | Browser navigation timings and paint entries; not complete Core Web Vitals | **PASS** API returned navigation/paint entries; Core Web Vitals and budgets pending |
+| `browser_inspect(accessibility)` | Heuristic missing-alt/label/button-name/title findings; not WCAG certification | **PASS** live heuristic probe; WCAG audit pending |
+| `browser_inspect(pdf)`, `browser_viewport` | Bounded PDF export, viewport resizing for responsive tests | **PASS** PDF payload (26,138 bytes) and 390×844 viewport; independent PDF parse and device emulation pending |
 | `browser_live_view` | 60-second signed read-only Cloudflare Live View URL | **PASS** actual owner-authorized call returned HTTPS signed URL with `readonly=true`, expiry 60 seconds; URL intentionally never reproduced |
 | `browser_session` | CRM authentication diagnostics (does not grant admin rights) | CRM owner-tenant delegation still absent |
 
@@ -115,11 +115,9 @@ CRM/D1 changes.
    events, proving actual native recording persisted.
 
 **NOT PASS / pending:**
-- The current ChatGPT connection still sees only nine previously discovered
-  tool schemas, so `browser_wait`, `browser_assert`, `browser_run`,
-  `browser_tabs`, `browser_frames`, `browser_file`,
-  `browser_inspect`, `browser_viewport` have **not been physically invoked
-  from ChatGPT**. Refresh connection metadata and begin a new conversation.
+- The earlier 9-tool-only ChatGPT discovery restriction was **resolved** in a
+  fresh conversation: 17/17 callable. See Issue #357 acceptance comment
+  (14 November 2026) for receipts. This line is retained as a historical correction.
 - Recording's network/HAR API for the observed session returned
   `404 Network recording not found`; native recording is proven, **HAR export
   is not**.
