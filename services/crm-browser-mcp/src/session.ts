@@ -3,7 +3,7 @@ import { launch, type Browser, type BrowserContext, type Page } from "@cloudflar
 import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermittedBrowserRequest, redact, safePagePath } from "./security";
 
 export interface Env {
-  BROWSER: Fetcher;
+  BROWSER: BrowserRun;
   SESSIONS: DurableObjectNamespace<CrmBrowserSession>;
   CRM_BROWSER_CLIENT_ID: string;
   CRM_BROWSER_CLIENT_SECRET: string;
@@ -199,6 +199,17 @@ export class CrmBrowserSession extends DurableObject<Env> {
       }
       case "console":
         return { data: { messages: this.consoleLog.slice(-80), responses: this.requestLog.slice(-80) } };
+      case "live_view": {
+        if (!this.browser) throw new Error("BROWSER_SESSION_NOT_AVAILABLE");
+        // The URL contains a signed bearer credential. Return it only through
+        // the owner-authenticated MCP call; never log or store it.
+        const view = await this.env.BROWSER.getLiveView(this.browser.sessionId(), {
+          mode: "tab",
+          expiresInMs: 60_000,
+          guardrails: { mode: "readonly" },
+        });
+        return { data: { url: view.devtoolsFrontendUrl, readonly: true, expires_in_seconds: 60 } };
+      }
       case "navigate": {
         const destination = browserUrl(command.url ?? "/", page.url() || CRM_ORIGIN);
         this.ownerDirectedCrmNavigation = isCrmRequest(destination);
