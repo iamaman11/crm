@@ -55,13 +55,39 @@ export class CrmBrowserSession extends DurableObject<Env> {
     return this.page.locator(target.value);
   }
 
+  // Both browser_open(url) and browser_action(navigate) must really navigate
+  // an existing session. This is the single owner of privileged CRM navigation.
+  private async navigateTo(destination: string) {
+    const page = this.page;
+    if (!page || page.isClosed()) throw new Error("CRM_BROWSER_NOT_OPEN");
+    requireCrmAgentIdentity(
+      destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
+    );
+    this.ownerDirectedCrmNavigation = isCrmRequest(destination);
+    try {
+      const response = await page.goto(destination, {
+        waitUntil: "domcontentloaded", timeout: 25000,
+      });
+      return {
+        http_status: response?.status() ?? null,
+        path: safePagePath(page.url()),
+        title: await page.title(),
+      };
+    } finally {
+      this.ownerDirectedCrmNavigation = false;
+    }
+  }
+
   private async open(path: string = "/") {
     const destination = browserUrl(path);
     requireCrmAgentIdentity(
       destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
     );
     if (this.page && !this.page.isClosed()) {
-      return { state: "already_open", path: safePagePath(this.page.url()) };
+      if (this.page.url() === destination) {
+        return { state: "already_open", path: safePagePath(this.page.url()) };
+      }
+      return { state: "navigated", ...(await this.navigateTo(destination)) };
     }
     // Never use the owner's real Access cookie or the CI E2E service principals.
     this.browser = await launch(this.env.BROWSER);
@@ -135,21 +161,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
         if (accept) await dialog.accept();
         else await dialog.dismiss();
       });
-      this.ownerDirectedCrmNavigation = isCrmRequest(destination);
-      let response;
-      try {
-        response = await this.page.goto(destination, {
-          waitUntil: "domcontentloaded", timeout: 25000,
-        });
-      } finally {
-        this.ownerDirectedCrmNavigation = false;
-      }
-      return {
-        state: "open",
-        http_status: response?.status() ?? null,
-        path: safePagePath(this.page.url()),
-        title: await this.page.title(),
-      };
+      return { state: "open", ...(await this.navigateTo(destination)) };
     } catch (error) {
       await this.close();
       throw error;
@@ -216,16 +228,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       }
       case "navigate": {
         const destination = browserUrl(command.url ?? "/", page.url() || CRM_ORIGIN);
-        requireCrmAgentIdentity(
-          destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
-        );
-        this.ownerDirectedCrmNavigation = isCrmRequest(destination);
-        try {
-          await page.goto(destination, { waitUntil: "domcontentloaded", timeout: 25000 });
-        } finally {
-          this.ownerDirectedCrmNavigation = false;
-        }
-        return { data: { path: safePagePath(page.url()), title: await page.title() } };
+        return { data: await this.navigateTo(destination) };
       }
       case "reload":
         await page.reload({ waitUntil: "domcontentloaded", timeout: 25000 });
