@@ -293,18 +293,28 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private async close() {
     const sessionId = this.browserSessionId ??
       await this.ctx.storage.get<string>("browser_session_id");
+    let failure: unknown = null;
+    // Disconnecting the Playwright client is best-effort. Always attempt
+    // termination of the exact Browser Run session to avoid billable orphans.
     try {
-      // connect().close() disconnects Playwright; closeSession() terminates the
-      // Browser Run session, not just this DO's CDP connection.
       await this.browser?.close();
-      if (sessionId) await this.env.BROWSER.closeSession(sessionId);
-      if (sessionId && this.recordingEnabled) {
-        // The native Cloudflare recording is available only after session
-        // closure. Store the opaque ID, never recording contents or cookies.
-        await this.ctx.storage.put("last_recording_session_id", sessionId);
+    } catch (error) {
+      failure = error;
+    }
+    try {
+      if (sessionId) {
+        await this.env.BROWSER.closeSession(sessionId);
+        if (this.recordingEnabled) {
+          // The provider recording becomes inspectable only after closure.
+          await this.ctx.storage.put("last_recording_session_id", sessionId);
+        }
       }
       await this.ctx.storage.delete("browser_session_id");
       await this.ctx.storage.delete("browser_recording");
+    } catch (error) {
+      failure ??= error;
+      // Keep the persisted ID on failure so a later owner request can retry
+      // termination. Never create a replacement session implicitly.
     } finally {
       this.browser = null;
       this.browserSessionId = null;
@@ -317,6 +327,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       this.requestLog = [];
       this.consoleLog = [];
     }
+    if (failure) throw failure;
   }
 
   private async execute(command: Command): Promise<{ data: unknown; image?: string }> {
