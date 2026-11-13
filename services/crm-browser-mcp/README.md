@@ -192,3 +192,20 @@ Keep the release flag OFF except during a reviewed independent MCP release. **Do
 - [Browser session reuse](https://developers.cloudflare.com/browser-run/features/reuse-sessions/)
 - [Cloudflare Access protection for Workers](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
 - [Agents MCP handler](https://developers.cloudflare.com/agents/model-context-protocol/apis/handler-api/)
+
+## P0 scenario integrity candidate (Issue #357)
+
+The MCP schema and DO now share one typed list of permitted scenario operations.
+Every `browser_run` batch is prevalidated **before** any UI actions; an invalid
+late step cannot trigger a preceding click or submit. The run has a 1–120 s
+budget (90 s default). Supported Playwright action/navigation/wait timeouts are
+clamped to the remaining budget; a late ACK cannot produce PASS. A timed-out
+mutation is explicitly marked `outcome: uncertain` and MUST NOT be replayed
+without independent readback. Failed assertions and runs produce MCP
+`isError: true` without discarding JSON or optional failure PNG.
+
+This is **not** a hard OS kill or complete cancellation guarantee. In-flight
+operations without a cancellable Playwright API can still outlive a budget;
+no `Promise.race` frees the DO queue while remote actions may be running.
+Per-conversation session leases, network-level DNS/IP guardrails, genuine DO
+eviction recovery, live CI and CRM R2 remain **NO-GO**.
