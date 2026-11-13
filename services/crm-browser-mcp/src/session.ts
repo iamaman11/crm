@@ -53,7 +53,9 @@ export type Command = {
 type Result = { ok: true; data: unknown; image?: string } | { ok: false; error: string };
 
 // One DO = one authenticated operator's browser session. The MCP transport stays stateless.
-// State is ephemeral by design: expired Browser Run sessions are reopened explicitly.
+// Only in-memory browser handles are ephemeral. Official Browser Run session IDs
+// are persisted in DO storage and reattached after eviction; expired sessions
+// are not silently replaced until an explicit browser_open.
 export class CrmBrowserSession extends DurableObject<Env> {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
@@ -110,7 +112,8 @@ export class CrmBrowserSession extends DurableObject<Env> {
     const sessionId = await this.ctx.storage.get<string>("browser_session_id");
     if (!sessionId) return;
     const session = await this.env.BROWSER.getSession(sessionId);
-    if (!session) {
+    const status = (session as { status?: string } | null)?.status?.toLowerCase();
+    if (!session || status === "closed" || status === "closing" || status === "expired") {
       // Expired sessions are not silently replaced; only explicit open starts
       // another session. No attempt is made to recreate a login/cookie jar.
       await this.ctx.storage.delete("browser_session_id");
@@ -323,13 +326,14 @@ export class CrmBrowserSession extends DurableObject<Env> {
         }
         // A new tab belongs to the existing single browser context. Its
         // requests inherit precisely the same CRM origin/security route.
+        const url = command.url ? browserUrl(command.url, CRM_ORIGIN + "/") : null;
+        if (url) requireCrmAgentIdentity(
+          url, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
+        );
         const page = await this.context.newPage();
         this.attachPage(page);
         this.page = page;
-        if (command.url) {
-          const url = browserUrl(command.url, CRM_ORIGIN + "/");
-          await this.navigateTo(url);
-        }
+        if (url) await this.navigateTo(url);
       } else if (command.tabAction === "select" || command.tabAction === "close") {
         const matched = [...this.tabIds.entries()].find(([page, id]) =>
           id === command.tabId && !page.isClosed(),
