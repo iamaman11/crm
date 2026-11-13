@@ -3,10 +3,11 @@
 //! Owner comes from a cryptographically verified Cloudflare Access principal.
 use super::{bind, now_nanos};
 use crm_activities::{
-    CompleteTask, CreateTask, Task, TaskMutation, TaskOwner, TaskPriority, TaskStatus,
+    CompleteTask, CreateTask, UpdateTask, Task, TaskMutation, TaskOwner, TaskPriority, TaskStatus,
     decode_task_state, encode_task_state,
 };
 use crm_module_sdk::{ActorId, RecordId, ResourceRef};
+use crm_core_contracts::Patch;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -46,6 +47,30 @@ pub(super) struct CreateInput {
 #[serde(deny_unknown_fields)]
 pub(super) struct CompleteInput {
     pub(super) expected_version: i64,
+}
+// Wire intent is serialized only for the existing D1 idempotency digest.
+#[derive(Serialize)]
+pub(super) enum Change<T> {
+    Keep,
+    Set(T),
+    Clear,
+}
+impl<T> Change<T> {
+    fn into_patch(self) -> Patch<T> {
+        match self {
+            Self::Keep => Patch::Keep,
+            Self::Set(value) => Patch::Set(value),
+            Self::Clear => Patch::Clear,
+        }
+    }
+}
+#[derive(Serialize)]
+pub(super) struct UpdateInput {
+    pub(super) expected_version: i64,
+    pub(super) subject: Change<String>,
+    pub(super) description: Change<String>,
+    pub(super) priority: Change<Priority>,
+    pub(super) due_at_unix_nanos: Change<i64>,
 }
 pub(super) struct MutationOutcome {
     pub(super) task: Task,
@@ -188,6 +213,86 @@ pub(super) async fn create_typed(
           JsValue::from_str(&digest),JsValue::from_str(trace)])?.run().await;
     if r.is_err() {
         return Ok(Err(fail("ACTIVITIES_TASK_CREATE_CONFLICT", 409)));
+    }
+    Ok(Ok(MutationOutcome {
+        task,
+        replayed: false,
+        changed: true,
+    }))
+}
+pub(super) async fn update_typed(
+    input: UpdateInput,
+    key: &str,
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+    trace: &str,
+) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    if !(8..=120).contains(&key.len()) {
+        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+    }
+    if matches!(&input.subject, Change::Keep)
+        && matches!(&input.description, Change::Keep)
+        && matches!(&input.priority, Change::Keep)
+        && matches!(&input.due_at_unix_nanos, Change::Keep)
+    {
+        return Ok(Err(fail("ACTIVITIES_TASK_NO_CHANGES", 422)));
+    }
+    let digest = hash("update", id, &input)?;
+    if let Some(previous) = prior(db, tenant, key).await? {
+        if previous.digest != digest {
+            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+        }
+        let task = decode(&previous.state)?;
+        if task.task_id().as_str() != id {
+            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+        }
+        return Ok(Ok(MutationOutcome {
+            task,
+            replayed: true,
+            changed: false,
+        }));
+    }
+    let Some(mut task) = stored(db, tenant, id).await? else {
+        return Ok(Err(fail("NOT_FOUND", 404)));
+    };
+    let expected_version = input.expected_version;
+    let priority = match input.priority {
+        Change::Keep => Patch::Keep,
+        Change::Set(value) => Patch::Set(value.into()),
+        Change::Clear => Patch::Clear,
+    };
+    if let Err(error) = task.apply_update(UpdateTask {
+        expected_version,
+        subject: input.subject.into_patch(),
+        description: input.description.into_patch(),
+        owner: Patch::Keep,
+        priority,
+        due_at_unix_nanos: input.due_at_unix_nanos.into_patch(),
+        occurred_at_unix_nanos: now_nanos(),
+    }) {
+        return Ok(Err(fail(
+            error.code.clone(),
+            if error.code == "ACTIVITIES_TASK_VERSION_CONFLICT" {
+                409
+            } else {
+                422
+            },
+        )));
+    }
+    let saved = state(&task)?;
+    // One CAS write; the existing D1 trigger atomically stores receipt and audit.
+    let changed = bind(db,
+        "UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?",
+        &[JsValue::from_str(&saved), JsValue::from_f64(task.version() as f64),
+          JsValue::from_str(key), JsValue::from_str(&digest), JsValue::from_str(trace),
+          JsValue::from_str(tenant), JsValue::from_str(id),
+          JsValue::from_f64(expected_version as f64)])?.run().await;
+    let Ok(result) = changed else {
+        return Ok(Err(fail("ACTIVITIES_TASK_UPDATE_CONFLICT", 409)));
+    };
+    if result.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
+        return Ok(Err(fail("ACTIVITIES_TASK_VERSION_CONFLICT", 409)));
     }
     Ok(Ok(MutationOutcome {
         task,

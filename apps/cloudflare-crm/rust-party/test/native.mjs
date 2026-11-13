@@ -729,6 +729,62 @@ try{
    accountId,page:{pageSize:1}})).body.tasks.length,0);
  assert.equal((await taskV2("ListTasks",viewer,{
    page:{pageSize:101}})).status,400);
+ // UpdateTask: original Rust invariants and atomic state/receipt/audit.
+ const updateKey="candidate-task-update-other";
+ const baseUpdate={taskId:taskOther,precondition:{expectedVersion:1n,idempotencyKey:updateKey}};
+ const taskRow=()=>sql("SELECT state,version FROM crm_activity_task_records WHERE tenant='tenant-a' AND id='"+taskOther+"'")[0];
+ const taskAudits=()=>sql("SELECT action,request_id FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+taskOther+"' ORDER BY rowid");
+ const beforeTask=taskRow(),beforeTaskAudit=taskAudits();
+ const patchSubject=value=>({operation:{case:"set",value}});
+ assert.equal((await taskV2("UpdateTask",null,{...baseUpdate,subject:patchSubject("No auth")})).status,401);
+ assert.equal((await taskV2("UpdateTask",viewer,{...baseUpdate,subject:patchSubject("No permission")})).status,403);
+ assert.equal((await taskV2("UpdateTask",tenantB,{...baseUpdate,subject:patchSubject("Wrong tenant")})).status,404);
+ assert.equal((await taskV2("UpdateTask",admin,baseUpdate)).status,400);
+ assert.equal((await taskV2("UpdateTask",admin,{...baseUpdate,subject:{operation:{case:"clear",value:true}}})).status,400);
+ assert.equal((await taskV2("UpdateTask",admin,{...baseUpdate,priority:{operation:{case:"clear",value:true}}})).status,400);
+ assert.equal((await taskV2("UpdateTask",admin,{...baseUpdate,priority:{operation:{case:"set",value:0}}})).status,400);
+ const rejected=await taskV2("UpdateTask",admin,{...baseUpdate,
+   subject:patchSubject("Must not persist"),description:{operation:{case:"clear",value:true}},
+   priority:{operation:{case:"set",value:1}},
+   dueAt:{operation:{case:"set",value:{seconds:1840000000n,nanos:0}}}});
+ assert.equal(rejected.status,400,describeProtobuf(rejected.body));
+ assert.deepEqual(taskRow(),beforeTask,"late rejection must not persist an earlier field change");
+ assert.deepEqual(taskAudits(),beforeTaskAudit,"rejection must not create audit");
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts WHERE tenant='tenant-a' AND key='"+updateKey+"'")[0].n,0);
+ const updateTask={...baseUpdate,subject:patchSubject("Edited original Task"),
+   description:{operation:{case:"set",value:"Edited through Connect"}},
+   priority:{operation:{case:"set",value:3}},dueAt:{operation:{case:"clear",value:true}}};
+ const updatedTask=await taskV2("UpdateTask",admin,updateTask);
+ assert.equal(updatedTask.status,200,describeProtobuf(updatedTask.body));
+ assert.equal(updatedTask.body.task.subject,"Edited original Task");
+ assert.equal(updatedTask.body.task.description,"Edited through Connect");
+ assert.equal(updatedTask.body.task.priority,3);
+ assert.equal(updatedTask.body.task.dueAt,undefined);
+ assert.equal(updatedTask.body.task.version,2n);
+ assert.equal(updatedTask.body.receipt.resourceVersion,2n);
+ assert.equal(updatedTask.body.receipt.requestId,updatedTask.headers.get("x-request-id"));
+ assert.deepEqual(taskAudits().map(x=>x.action),["activity_tasks.create","activity_tasks.update"]);
+ assert.equal(taskAudits()[1].request_id,updatedTask.headers.get("x-request-id"));
+ assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{priority:3,accountId:accountNextId})).map(x=>x.taskId),[taskOther]);
+ assert.equal((await collectPages(taskV2,"ListTasks","tasks",{priority:4,accountId:accountNextId})).length,0);
+ const replayTask=await taskV2("UpdateTask",admin,updateTask);
+ assert.equal(replayTask.status,200);
+ assert.equal(replayTask.body.receipt.replayed,true);
+ assert.equal(taskAudits().length,2,"replay cannot duplicate audit");
+ assert.equal((await taskV2("UpdateTask",admin,{...updateTask,subject:patchSubject("Same key, different payload")})).status,409);
+ assert.equal((await taskV2("UpdateTask",admin,{...updateTask,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-task-update-stale"}})).status,409);
+ assert.equal(taskAudits().length,2,"stale version must not create audit");
+ const secondTaskEdit=await taskV2("UpdateTask",admin,{taskId:taskOther,
+   description:{operation:{case:"clear",value:true}},priority:{operation:{case:"set",value:2}},
+   dueAt:{operation:{case:"set",value:{seconds:1870000000n,nanos:987654321}}},
+   precondition:{expectedVersion:2n,idempotencyKey:"candidate-task-update-second"}});
+ assert.equal(secondTaskEdit.status,200,describeProtobuf(secondTaskEdit.body));
+ assert.equal(secondTaskEdit.body.task.description,"");
+ assert.equal(secondTaskEdit.body.task.dueAt.nanos,987654321);
+ assert.equal(secondTaskEdit.body.task.version,3n);
+ assert.deepEqual(taskAudits().map(x=>x.action),["activity_tasks.create","activity_tasks.update","activity_tasks.update"]);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts WHERE tenant='tenant-a' AND key IN ('candidate-task-create-other','candidate-task-update-other','candidate-task-update-second')")[0].n,3);
  const taskComplete={taskId:taskMid,
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-task-complete-mid"}};
  assert.equal((await taskV2("CompleteTask",viewer,taskComplete)).status,403);
@@ -780,7 +836,7 @@ try{
    "WHERE tenant='tenant-a' AND key IN ('candidate-task-create-mid',"+
    "'candidate-task-complete-mid')")[0].n,2);
  console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
-   result:"PASS",rpc_methods:["CreateTask","CompleteTask","GetTask","ListTasks"],
+   result:"PASS",rpc_methods:["CreateTask","UpdateTask","CompleteTask","GetTask","ListTasks"],
    generated_binary:true,original_owner:"crm.activities",signed_access:true,
    tenant_ab:true,viewer_write_denied:true,
    filtered_pagination:true,account_fk:true,d1_cas:true,

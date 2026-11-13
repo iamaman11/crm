@@ -60,11 +60,14 @@ reject("missing method fails even if policy and calls omit it",r=>{
 reject("read method cannot acquire a mutation policy",r=>{r.runtime.rpc.policies.find(([p])=>p===path)[1].permission="Write";},/permission denial coverage|policy effect differs from Protobuf/);
 reject("missing unauthenticated scenario fails",r=>{r.runtime.unauthenticated_denials.pop();},/authentication denial coverage/);
 reject("missing denied mutation scenario fails",r=>{r.runtime.viewer_denials.pop();},/permission denial coverage/);
-test("future v4 method must enter the required scope without a registry edit",()=>{
- const extended=new Map(available);
- const future="/crm.parties.v4.PartyService/GetParty";
- extended.set(future,{...available.get(path),file:"crm/parties/v4/party.proto",package:"crm.parties.v4"});
- assert.ok(targetMethods(extended).includes(future));
- const report=fixture();
- assert.throws(()=>validateRuntime(report,extended,validateBindings(report,extended)),/full contract differs/);
+test("future v4 and v10 RPCs must enter the required scope without a registry edit",()=>{
+ for(const version of [4,10]){
+  const extended=new Map(available);
+  const future="/crm.parties.v"+version+".PartyService/GetParty";
+  extended.set(future,{...available.get(path),file:"crm/parties/v"+version+"/party.proto",
+    package:"crm.parties.v"+version});
+  assert.ok(targetMethods(extended).includes(future));
+  const report=fixture();
+  assert.throws(()=>validateRuntime(report,extended,validateBindings(report,extended)),/full contract differs/);
+ }
 });

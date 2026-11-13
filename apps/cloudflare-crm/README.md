@@ -1,8 +1,10 @@
 # Cloudflare CRM
 
 Канонический репозиторий — [iamaman11/crm](https://github.com/iamaman11/crm).
-Норма — [ARCHITECTURE.md](ARCHITECTURE.md), текущая работа и проверенное состояние —
-[Issue #350](https://github.com/iamaman11/crm/issues/350). Cutover принят на
+Норма — [ARCHITECTURE.md](ARCHITECTURE.md), архитектурная основа —
+[#338](https://github.com/iamaman11/crm/issues/338), текущий план развития —
+[#352](https://github.com/iamaman11/crm/issues/352). Завершённый cutover —
+[#350](https://github.com/iamaman11/crm/issues/350). Он принят на
 `272aba214114f3db6247cad115f86d54312e3030`: [CI + live PASS](https://github.com/iamaman11/crm/actions/runs/43302137364).
 
 ```text
@@ -23,7 +25,7 @@ compiler/AST. Скомпилированные router/policy сверяются 
 workerd-сценариями. Нет второго ручного каталога покрытия и source-text доказательств тестов.
 Количество RPC не является процентом готовности приложения.
 
-PR #351 завершён; дальнейшая разработка ведётся в постоянной dev по #338. Сборки и тесты выполняет
+PR #351 завершён; дальнейшая разработка ведётся в постоянной dev по #352, с архитектурой #338. Сборки и тесты выполняет
 `.github/workflows/cloudflare-crm-spike.yml`. Зависимости устанавливаются через
 `pnpm install --frozen-lockfile`, Rust собирается с `--locked`.
 CI проверяет contracts/types, formatting/Clippy/domain, WASM/workerd/D1, затем Chromium.

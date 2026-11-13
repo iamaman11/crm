@@ -158,6 +158,29 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    await page.getByRole("heading",{name:"Browser Task "+runId,exact:true}).waitFor();
    await page.getByRole("heading",{name:"Browser Urgent "+runId,exact:true}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,beforeTaskFilters);
+   // Real React -> generated Connect UpdateTask -> D1 and audit -> reload.
+   const urgentCard=page.locator("section").filter({has:page.getByRole("heading",
+     {name:"Browser Urgent "+runId,exact:true})});
+   await urgentCard.getByRole("button",{name:"Редактировать задачу",exact:true}).click();
+   await page.getByRole("heading",{name:"Изменить задачу",exact:true}).waitFor();
+   await page.getByLabel("Тема задачи: изменение",{exact:true}).fill("Browser Edited Urgent "+runId);
+   await page.getByLabel("Описание задачи: изменение",{exact:true}).fill("Edited from UI");
+   await page.getByLabel("Приоритет: изменение",{exact:true}).selectOption("3");
+   await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),"UpdateTask");
+   const savedEdit=(await sql("SELECT version,json_extract(state,'$.subject') AS subject,json_extract(state,'$.priority') AS priority FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+urgentId+"'"))[0];
+   assert.equal(savedEdit.version,2);
+   assert.equal(savedEdit.subject,"Browser Edited Urgent "+runId);
+   assert.equal(savedEdit.priority,"high");
+   assert.deepEqual((await sql("SELECT action FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+urgentId+"' ORDER BY rowid")).map(x=>x.action),
+     ["activity_tasks.create","activity_tasks.update"]);
+   await page.reload();
+   await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor();
+   await filterTasks("Приоритет задач","4");
+   await page.getByText("Задач пока нет.",{exact:true}).waitFor();
+   await filterTasks("Приоритет задач","3");
+   await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor();
+   await filterTasks("Приоритет задач","");
+   steps.push("Task UpdateTask via React, D1 audit action, priority filter and reload");
    steps.push("Contact and Task create/complete; priority/status filters preserve records and audit");
    await navigate("sales","Сделки");
    await page.getByLabel("Название сделки",{exact:true}).fill("Browser Deal "+runId);

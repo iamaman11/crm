@@ -68,6 +68,13 @@ provides:
         rpc: crm.activities.v2.TaskService.CreateTask
         request: crm.activities.v2.CreateTaskRequest
         response: crm.activities.v2.CreateTaskResponse
+    - id: activities.task.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.TaskService.UpdateTask
+        request: crm.activities.v2.UpdateTaskRequest
+        response: crm.activities.v2.UpdateTaskResponse
     - id: activities.task.complete
       version: 2.0.0
       binding:

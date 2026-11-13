@@ -3,7 +3,7 @@
 ## Норма и область
 
 Применяется к apps/cloudflare-crm/**. Канонический source — только iamaman11/crm.
-[ARCHITECTURE.md](ARCHITECTURE.md) задаёт конечную схему; [Issue #350](https://github.com/iamaman11/crm/issues/350) — единственный подробный план жёсткого cutover; #338 — верхний план.
+[ARCHITECTURE.md](ARCHITECTURE.md) — нормативная схема; [#350](https://github.com/iamaman11/crm/issues/350) — завершённый cutover и его evidence; [#338](https://github.com/iamaman11/crm/issues/338) — архитектурная основа; [#352](https://github.com/iamaman11/crm/issues/352) — текущий план развития и приёмки новых функций.
 
 Решение владельца 12.11.2026 заменило прежние freeze/compatibility инструкции для одноразового cutover. Cutover принят на `272aba214114f3db6247cad115f86d54312e3030`, CI/live 43302137364 PASS. Теперь сохранять принятые контракты и историю migrations; несовместимая эволюция требует явного решения. Не повторять reset тестовых данных при обычной разработке. Пользовательские инструкции имеют приоритет.
 
@@ -11,12 +11,12 @@ Root AGENTS.md регулирует общие domain invariants и repository p
 
 ## Рабочий процесс
 
-1. Читать актуальный #350, этот файл, ARCHITECTURE.md, текущие PR/head и CI. Проверять реальный deployed SHA перед утверждениями о live.
-2. PR #351 завершён. Продолжать в постоянной dev по #338, без новых branches/plans/workflows/Environment на каждый шаг. Принятая API/schema baseline фиксирована в существующем CI; не заменять её автоматически на HEAD.
+1. Читать актуальный #352, этот файл, ARCHITECTURE.md, принятые решения #338/#350, текущие PR/head и CI. Проверять реальный deployed SHA перед утверждениями о live.
+2. PR #351 завершён. Продолжать в постоянной dev по #352 с архитектурой #338, без новых branches/plans/workflows/Environment на каждый шаг. Принятая API/schema baseline фиксирована в существующем CI; не заменять её автоматически на HEAD.
 3. Разработка через канонический GitHub; builds/tests выполняет GitHub Actions. Не поручать обычную работу локальному Windows агенту и не просить пользователя запускать команды.
 4. Определить existing owner и точную capability до изменения UI/transport. Не угадывать ownership по имени пакета.
 5. Неполные implementation commits допустимы, но конечные checks не ослабляются и не заменяются migration-phase PASS. Не публиковать частичные RPC.
-6. Записывать tested SHA/tree/features, CI и evidence в #350; #338 синхронизировать при принятии. Не утверждать DONE по документации или compile-only.
+6. Записывать tested SHA/tree/features, CI и evidence в implementation issue и #352; #338 остаётся архитектурной основой, #350 — завершённой исторической приёмкой. Не утверждать DONE по документации или compile-only.
 7. Не merge/deploy до полного CI и независимой проверки кандидата. Деструктивный reset тестовых business data выполняется только как подготовленная операция финального переключения с проверенным binding.
 
 ## Обязательные ограничения
@@ -48,4 +48,4 @@ Root AGENTS.md регулирует общие domain invariants и repository p
 
 Сохраняется решение владельца: не включать branch protection/rulesets/required checks dev/main. CI блокирует штатный deployment, не direct push. Не обещать абсолютную автоматическую бизнес-корректность.
 
-Полный DONE только по #350: конечное приложение, удалённый legacy, full CI, mandatory artifacts, независимая проверка и live Access A/B/UI/D1/Logs/readback.
+Cutover DONE зафиксирован в #350; новые продуктовые срезы принимаются отдельно по #352: полный CI, mandatory artifacts, независимая проверка и live Access A/B/UI/D1/Logs/readback.

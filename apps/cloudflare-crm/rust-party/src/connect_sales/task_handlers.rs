@@ -65,6 +65,77 @@ impl task_wire::TaskService for TaskV2Service {
         })
     }
     #[worker::send]
+    async fn update_task(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, task_wire::UpdateTaskRequest>,
+    ) -> ServiceResult<task_wire::UpdateTaskResponse> {
+        use activity_tasks::Change;
+        let input = req.to_owned_message();
+        let id = Self::valid_id(&input.task_id)?;
+        let (key, version) = wire_precondition(input.precondition.as_option(), false)?;
+        let string_patch = |patch: Option<&core_v2::StringPatch>| -> std::result::Result<Change<String>, ConnectError> {
+            let Some(patch) = patch else { return Ok(Change::Keep); };
+            match patch.operation.as_ref() {
+                Some(core_v2::string_patch::Operation::Set(value)) => Ok(Change::Set(value.clone())),
+                Some(core_v2::string_patch::Operation::Clear(true)) => Ok(Change::Clear),
+                _ => Err(ConnectError::invalid_argument("invalid string patch")),
+            }
+        };
+        let subject = string_patch(input.subject.as_option())?;
+        let description = string_patch(input.description.as_option())?;
+        let priority = match input.priority.as_option() {
+            None => Change::Keep,
+            Some(patch) => match patch.operation.as_ref() {
+                Some(task_wire::task_priority_patch::Operation::Set(value))
+                    if *value == task_wire::TaskPriority::TASK_PRIORITY_LOW => Change::Set(activity_tasks::Priority::Low),
+                Some(task_wire::task_priority_patch::Operation::Set(value))
+                    if *value == task_wire::TaskPriority::TASK_PRIORITY_NORMAL => Change::Set(activity_tasks::Priority::Normal),
+                Some(task_wire::task_priority_patch::Operation::Set(value))
+                    if *value == task_wire::TaskPriority::TASK_PRIORITY_HIGH => Change::Set(activity_tasks::Priority::High),
+                Some(task_wire::task_priority_patch::Operation::Set(value))
+                    if *value == task_wire::TaskPriority::TASK_PRIORITY_URGENT => Change::Set(activity_tasks::Priority::Urgent),
+                Some(task_wire::task_priority_patch::Operation::Clear(true)) => Change::Clear,
+                _ => return Err(ConnectError::invalid_argument("invalid TaskPriority patch")),
+            },
+        };
+        let due_at_unix_nanos = match input.due_at.as_option() {
+            None => Change::Keep,
+            Some(patch) => match patch.operation.as_ref() {
+                Some(core_v2::timestamp_patch::Operation::Set(value)) =>
+                    Change::Set(ContactPointV2Service::nanos(value)?),
+                Some(core_v2::timestamp_patch::Operation::Clear(true)) => Change::Clear,
+                _ => return Err(ConnectError::invalid_argument("invalid due_at patch")),
+            },
+        };
+        let saved = activity_tasks::update_typed(
+            activity_tasks::UpdateInput {
+                expected_version: version.unwrap_or_default(),
+                subject,
+                description,
+                priority,
+                due_at_unix_nanos,
+            },
+            &key,
+            &self.d1()?,
+            &self.tenant,
+            &id,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Task D1 update failed"))?
+        .map_err(Self::failed)?;
+        RpcResponse::ok(task_wire::UpdateTaskResponse {
+            task: Some(Self::convert(
+                &saved.task,
+                &self.persisted_account(saved.task.task_id().as_str()).await?,
+            )?)
+            .into(),
+            receipt: Some(self.receipt(&saved)).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
     async fn complete_task(
         &self,
         _ctx: RequestContext,
