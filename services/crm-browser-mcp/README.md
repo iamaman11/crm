@@ -53,7 +53,7 @@ Next capabilities must be built **inside this same MCP**, not as separate system
 
 ## Current proven deployment/auth state (14 Nov 2026)
 
-- PR #358 is **Draft / NO-GO**. Pre-update CI [#43497242212](https://github.com/iamaman11/crm/actions/runs/43497242212) succeeded on HEAD `a05a0b934c1a6ff03de95eaf0425716f62704fd4`, deployment job skipped. New HEAD requires new CI. This does **not** establish a live browser or MCP connection.
+- PR #358 remains **Draft / NO-GO**. Current CI [#43508066499](https://github.com/iamaman11/crm/actions/runs/43508066499) succeeded on HEAD `4ab634412b617ac90dabfa6e84d94e97b216dffd`: TypeScript, security/navigation regression tests, source boundaries and Wrangler dry-run PASS; deployment job SKIPPED. This does **not** establish a live browser or MCP connection.
 - Cloudflare `crm-browser-mcp` has a bootstrap-only `bootstrap/deny.mjs` first version `8d103dbe-3c8b-4811-9b41-5b7ec4c9fd91`; it is not the code in `src/`. Public `workers.dev` and preview routes are disabled, no working MCP is exposed.
 - Cloudflare Access app `crm-browser-mcp-access` exists and its Managed OAuth is enabled according to read-only API verification; the actual authorized ChatGPT OAuth/MCP flow has **not yet been accepted**.
 - **Deployment credential provisioning is COMPLETE**, as confirmed by the latest [Issue #357 Vault receipt comment](https://github.com/iamaman11/crm/issues/357#issuecomment-6864793396): exactly one `Individual Workers Editor` token for `crm-browser-mcp`, a tested HTTP 403 for `crm-dev`, encrypted in Windows Vault, and securely installed in GitHub Environment `browser-mcp` under `CLOUDFLARE_API_TOKEN`. Do **not** issue it again, broaden it or transfer it into the main CRM environment.
@@ -61,6 +61,10 @@ Next capabilities must be built **inside this same MCP**, not as separate system
 - A distinct Cloudflare Access service identity for browsing the owner's existing CRM tenant is **not** onboarded yet. In the current CRM, an unknown verified service principal can be auto-enrolled into a different tenant. Explicit owner-tenant mapping must occur before the first CRM request.
 
 Earlier 13 November status notes about failed Cloudflare POST 500/1004 and missing GitHub secret have been superseded; full evidence is retained in Issue #357 comments/history.
+
+## Confirmed R0 navigation fix (14 Nov 2026)
+
+The former `browser_open(url)` implementation returned `already_open` whenever any page was open, even if `url` was a completely different public site. It now navigates the existing Playwright Page when the requested URL differs; same-URL reuse retains the no-op. `browser_open` and `browser_action(navigate)` share `navigateTo` and the testable `navigatePage` lifecycle. New regression tests verify actual `Page.goto` invocation, trusted CRM navigation being temporary, public-domain navigation not elevating CRM trust, and cleanup on redirects/failure. Live browser proof is **still pending**.
 
 ## Release acceptance gates
 
