@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import type { Env, Command, Target } from "./session";
-import { MCP_HOST, isAuthorizedMcpOwner } from "./security";
+import { MCP_HOST, verifiedMcpOwnerEmail } from "./security";
 
 export { CrmBrowserSession } from "./session";
 
@@ -115,16 +115,10 @@ export default {
     if (new URL(request.url).pathname !== "/mcp") return new Response("Not found", { status: 404 });
     // Cloudflare Access must authenticate the *human controller*. Its signed
     // ctx.access is not forwarded from another Worker and cannot be model-supplied.
-    if (!ctx.access || !env.CRM_MCP_OWNER_EMAIL || !env.CRM_MCP_ACCESS_AUD) {
-      return new Response("Access required", { status: 403 });
-    }
-    const identity = await ctx.access.getIdentity();
-    const email = identity?.email?.trim().toLowerCase() ?? "";
-    if (!isAuthorizedMcpOwner(
-      ctx.access.aud, env.CRM_MCP_ACCESS_AUD, email, env.CRM_MCP_OWNER_EMAIL,
-    )) {
-      return new Response("Access forbidden", { status: 403 });
-    }
+    const email = await verifiedMcpOwnerEmail(
+      ctx.access, env.CRM_MCP_ACCESS_AUD, env.CRM_MCP_OWNER_EMAIL,
+    );
+    if (!email) return new Response("Access forbidden", { status: 403 });
     return createMcpHandler(
       () => createServer(env, email),
       {
