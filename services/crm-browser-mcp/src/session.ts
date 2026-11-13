@@ -3,6 +3,7 @@ import { acquire, connect, type Browser, type BrowserContext, type Page } from "
 import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermittedBrowserRequest, redact, requireCrmAgentIdentity, safePagePath } from "./security";
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, compareBrowserAssertion, safeAssertionValue, type BrowserAssertionKind, type TextMatch, type WaitState } from "./browser-checks";
+import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
 
 export interface Env {
   BROWSER: BrowserRun;
@@ -18,6 +19,10 @@ export type Target = {
   value: string;
   name?: string;
   frameIndex?: number;
+  fileAction?: "upload" | "download";
+  fileName?: string;
+  mimeType?: string;
+  base64?: string;
 };
 
 export type Command = {
@@ -338,6 +343,46 @@ export class CrmBrowserSession extends DurableObject<Env> {
     if (!page || page.isClosed()) throw new Error("CRM_BROWSER_NOT_OPEN");
 
     switch (command.op) {
+      case "file": {
+        if (!command.target) throw new Error("BROWSER_FILE_TARGET_REQUIRED");
+        const locator = this.target(command.target);
+        if (command.fileAction === "upload") {
+          const file = validatedUpload(
+            command.fileName ?? "", command.mimeType ?? "", command.base64 ?? "",
+          );
+          await locator.setInputFiles(file, { timeout: 15_000 });
+          return {
+            data: {
+              action: "upload", fileName: file.name, mimeType: file.mimeType,
+              bytes: file.buffer.byteLength, completed: true,
+              path: safePagePath(page.url()),
+            },
+          };
+        }
+        if (command.fileAction === "download") {
+          const awaited = page.waitForEvent("download", { timeout: 20_000 });
+          await locator.click({ timeout: 15_000 });
+          const download = await awaited;
+          const stream = await download.createReadStream();
+          const chunks: Uint8Array[] = [];
+          let size = 0;
+          for await (const chunk of stream) {
+            const bytes = Buffer.from(chunk);
+            size += bytes.byteLength;
+            if (size > MAX_TRANSFER_BYTES) {
+              throw new Error("BROWSER_DOWNLOAD_TOO_LARGE");
+            }
+            chunks.push(bytes);
+          }
+          return {
+            data: {
+              action: "download", completed: true,
+              ...transferDownload(download.suggestedFilename(), chunks),
+            },
+          };
+        }
+        throw new Error("BROWSER_FILE_UNKNOWN_ACTION");
+      }
       case "frames":
         return {
           data: {
