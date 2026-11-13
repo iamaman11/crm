@@ -180,11 +180,13 @@ function createServer(env: Env, ownerEmail: string) {
   }, async params => command({ op: "assert", ...params }));
 
   server.registerTool("browser_run", {
-    description: "Execute up to 12 ordered Playwright actions/waits/assertions and stop on first failure. Return machine-readable results for every executed step.",
+    description: "Execute up to 12 ordered Playwright actions/waits/assertions; stop on first failure and optionally attach a screenshot. Return typed pass/fail steps.",
     inputSchema: {
       steps: z.array(scenarioStep).min(1).max(12),
+      screenshotOnFailure: z.boolean().default(false),
     },
-  }, async ({ steps }) => command({ op: "run", steps }));
+  }, async ({ steps, screenshotOnFailure }) =>
+    command({ op: "run", steps, screenshotOnFailure }));
 
   server.registerTool("browser_diagnostics", {
     description: "Read sanitized cross-site browser console and HTTP statuses. Credential values and URL queries are never exposed.",
