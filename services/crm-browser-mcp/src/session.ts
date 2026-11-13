@@ -339,7 +339,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       await this.close();
       return { data: { state: "closed" } };
     }
-    if (command.op !== "close") await this.restore();
+    await this.restore();
     if (command.op === "status") return {
       data: {
         state: this.page && !this.page.isClosed() ? "open" : "closed",
@@ -689,7 +689,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
         await page.mouse.wheel(command.x ?? 0, command.y ?? 650);
         return { data: { action: "scroll", completed: true } };
       case "press":
-        await page.keyboard.press(command.key ?? "", { timeout: operationTimeout(12_000, runDeadline) });
+        // Pinned Cloudflare Playwright keyboard.press has no timeout option.
+        // The run checks the remaining budget on return; never race a live key event.
+        await page.keyboard.press(command.key ?? "");
         return { data: { action: "press", completed: true } };
       case "session": {
         if (!isCrmRequest(page.url())) throw new Error("CRM_BROWSER_NOT_ON_CRM");
