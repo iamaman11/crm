@@ -1,0 +1,25 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "universal-browser-mcp",
+  "version": "0.1.0",
+  "description": "Private ChatGPT connection to the owner's Cloudflare Access-protected universal browser MCP for real website interaction, inspection and E2E testing.",
+  "author": {
+    "name": "CRM project"
+  },
+  "repository": "https://github.com/iamaman11/crm",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Universal Browser MCP",
+        "shortDescription": "Browse and test websites",
+        "longDescription": "Control an isolated Cloudflare Browser Run session through a protected MCP server. Inspect, navigate and test authorized websites. CRM is the first acceptance case; CRM admin capabilities remain disabled until owner-tenant identity onboarding.",
+        "developerName": "CRM project",
+        "category": "Developer Tools",
+        "capabilities": [
+          "Interactive"
+        ],
+        "defaultPrompt": "Open a permitted public website with Universal Browser MCP, inspect its interface and report verified results."
+      }
+    }
+  }
+}
