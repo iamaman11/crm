@@ -1,5 +1,5 @@
 name: Universal Browser MCP CI
-# Independent app on the mcp branch; NEVER deploys the Rust CRM or runs D1 migrations.
+# Dedicated mcp-only application. Never builds/deploys CRM Rust, React, or D1.
 on:
   push:
     branches:
@@ -7,7 +7,6 @@ on:
   pull_request:
     branches:
       - mcp
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -15,7 +14,6 @@ concurrency:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   browser-mcp:
@@ -26,67 +24,88 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.18.0'
-      - name: Verify MCP branch and workflow isolation
+          cache: npm
+          cache-dependency-path: services/crm-browser-mcp/package-lock.json
+
+      - name: Enforce isolated MCP source changes in PRs
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_sha="$(jq -r '.pull_request.base.sha' "$GITHUB_EVENT_PATH")"
+          test "$base_sha" != "null"
+          git fetch --no-tags --depth=1 origin "$base_sha"
+          while IFS= read -r changed; do
+            case "$changed" in
+              services/crm-browser-mcp/*|.github/workflows/browser-mcp.yml) ;;
+              *) echo "::error::Browser MCP PR changes forbidden CRM/shared path: $changed"; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$base_sha" HEAD)
+          echo "MCP PR changes limited to the independent Browser MCP app and workflow."
+
+      - name: Check MCP branch policy and pinned GitHub Actions
         shell: bash
         run: |
           set -euo pipefail
           python scripts/check_ci_event_policy.py
           python -m unittest tests.test_ci_event_policy
           python scripts/check_action_pinning.py
-          echo "Standalone Browser MCP CI; no CRM Rust deployment in this workflow."
-      - name: Detect MCP sources
-        id: sources
-        shell: bash
-        run: |
-          if test -f services/crm-browser-mcp/package.json; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "Base mcp branch established; candidate source not merged yet."
-          fi
-      - name: Resolve reviewable lockfile artifact (pre-merge only)
-        if: steps.sources.outputs.present == 'true'
-        working-directory: services/crm-browser-mcp
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          test -s package-lock.json
-      - name: Preserve generated lockfile for canonical commit
-        if: steps.sources.outputs.present == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: browser-mcp-dependency-lock-${{ github.sha }}
-          path: services/crm-browser-mcp/package-lock.json
-          if-no-files-found: error
-          retention-days: 7
-      - name: Require immutable checked-in dependency lock
-        if: steps.sources.outputs.present == 'true'
-        working-directory: services/crm-browser-mcp
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f package-lock.json
-          git -C ../.. ls-files --error-unmatch services/crm-browser-mcp/package-lock.json
-          git diff --exit-code -- package-lock.json
-      - name: Install exact Browser MCP dependencies
-        if: steps.sources.outputs.present == 'true'
+
+      - name: Install exact pinned MCP dependencies
         working-directory: services/crm-browser-mcp
         run: npm ci --no-audit --no-fund
-      - name: Strict TypeScript and security tests
-        if: steps.sources.outputs.present == 'true'
+
+      - name: Strict TypeScript and browser security tests
         working-directory: services/crm-browser-mcp
         shell: bash
         run: |
           set -euo pipefail
           npm run check
           npm test
-      - name: Build independent Browser MCP Worker without publishing
-        if: steps.sources.outputs.present == 'true'
+          git diff --exit-code -- package-lock.json
+
+      - name: Build ONLY the Browser MCP Worker (no deployment)
         working-directory: services/crm-browser-mcp
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler deploy --dry-run --outdir /tmp/crm-browser-mcp-build
+          npx wrangler deploy --config wrangler.jsonc --dry-run --outdir /tmp/crm-browser-mcp-build
           test -n "$(find /tmp/crm-browser-mcp-build -type f -print -quit)"
-          echo "Browser MCP artifact built. No CRM build/deploy or D1 mutation performed."
+          echo "Independent Browser MCP bundle verified; CRM and D1 untouched."
+
+  # Explicit release switch remains OFF until live OAuth, redirect-safety,
+  # CRM tenant delegation, and runtime secrets are independently accepted.
+  # The repository variable BROWSER_MCP_RELEASE_ENABLED must equal 'true'.
+  deploy-browser-mcp:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/mcp' && vars.BROWSER_MCP_RELEASE_ENABLED == 'true'
+    needs: browser-mcp
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: browser-mcp
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.18.0'
+          cache: npm
+          cache-dependency-path: services/crm-browser-mcp/package-lock.json
+      - name: Check isolated Cloudflare release credentials
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if test -z "$CLOUDFLARE_API_TOKEN"; then
+            echo "::error::browser-mcp Environment has no CLOUDFLARE_API_TOKEN"
+            exit 1
+          fi
+      - name: Install pinned MCP release dependencies
+        working-directory: services/crm-browser-mcp
+        run: npm ci --no-audit --no-fund
+      - name: Deploy ONLY crm-browser-mcp (never CRM or D1)
+        working-directory: services/crm-browser-mcp
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config wrangler.jsonc --name crm-browser-mcp
