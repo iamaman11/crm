@@ -24,7 +24,19 @@ function isInternalHost(host: string): boolean {
       (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
       (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
   }
-  return /^(?:fc|fd|fe[89ab])[0-9a-f:]+$/i.test(h);
+  // IPv4-mapped IPv6, e.g. [::ffff:127.0.0.1] -> [::ffff:7f00:1].
+  if (h.startsWith("::ffff:")) {
+    const mapped = h.slice("::ffff:".length);
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(mapped)) return isInternalHost(mapped);
+    const words = mapped.split(":");
+    if (words.length === 2 && words.every(x => /^[0-9a-f]{1,4}$/i.test(x))) {
+      const left = Number.parseInt(words[0]!, 16);
+      const right = Number.parseInt(words[1]!, 16);
+      return isInternalHost([left >> 8, left & 255, right >> 8, right & 255].join("."));
+    }
+    return true;
+  }
+  return /^(?:fc|fd|fe[89ab]|ff)[0-9a-f:]+$/i.test(h);
 }
 
 // Normal public HTTP(S) sites are supported; only local/private network and
@@ -38,6 +50,17 @@ export function browserUrl(input: string, base: string = CRM_ORIGIN + "/"): stri
     throw new Error("BROWSER_UNSAFE_URL");
   }
   return parsed.toString();
+}
+
+// Apply the same destination policy to every intercepted browser request,
+// including links, redirects and subresources initiated inside untrusted pages.
+export function isPermittedBrowserRequest(input: string): boolean {
+  try {
+    browserUrl(input, input);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // A malicious third-party web page must not gain the CRM service identity by
