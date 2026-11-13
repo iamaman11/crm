@@ -73,11 +73,12 @@ function createServer(env: Env, ownerEmail: string) {
   }
 
   server.registerTool("browser_open", {
-    description: "Open the real CRM by default, or any public HTTP(S) site. Preserve cloud browser state across calls; CRM service credentials are restricted to CRM.",
+    description: "Open an authorized public HTTP(S) website in a reusable Cloudflare Playwright session. Recording is opt-in at session creation only and is accessed later through Cloudflare Browser Run.",
     inputSchema: {
       path: z.string().max(1024).default("/"),
+      recording: z.boolean().default(false),
     },
-  }, async ({ path }) => command({ op: "open", url: path }));
+  }, async ({ path, recording }) => command({ op: "open", url: path, recording }));
 
   server.registerTool("browser_status", {
     description: "Inspect whether the CRM browser is open without launching a new browser.",
