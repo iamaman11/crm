@@ -59,7 +59,7 @@ function isInternalHost(host: string): boolean {
   const h = host.replace(/^\[|\]$/g, "").toLowerCase();
   // A one-label name can resolve to a private machine through search
   // domains even though the URL itself contains no obvious private IP.
-  if (!h.includes(".") && !h.includes(":") && !/^\\d+$/.test(h)) return true;
+  if (!h.includes(".") && !h.includes(":") && !/^\d+$/.test(h)) return true;
   if (h === "localhost" || h.endsWith(".localhost") ||
       h.endsWith(".local") || h.endsWith(".internal") ||
       h.endsWith(".home.arpa") || h.endsWith(".lan") ||
