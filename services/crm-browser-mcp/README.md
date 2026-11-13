@@ -51,8 +51,8 @@ must be reported and recovered by an explicit reopen.
    Bind verified service:<id> to admin in precisely the existing human owner's
    tenant in one existing D1. Never move/impersonate the owner or reuse CI A/B.
    Store credentials only as Cloudflare Worker secrets, not code or logs.
-5. Deploy separate crm-browser-mcp Worker; leave the Rust CRM Worker, its
-   routes, D1 schema, existing release and one CI unchanged.
+5. Deploy the separate crm-browser-mcp Worker from its own `mcp` branch
+   and workflow; leave the Rust CRM Worker, routes, D1 and dev CRM CI unchanged.
 6. Prove two-way test-record visibility between the agent's UI and the human
    owner's ordinary CRM URL, plus audit and Connect request correlation.
 7. Extend advanced tools (tabs, upload, download, Live View, trace, timings,
@@ -70,20 +70,21 @@ Until these gates pass, this branch is DRAFT / NO-GO and is not a deployed app.
 - https://developers.cloudflare.com/workers/configuration/cloudflare-access/
 - https://developers.cloudflare.com/browser-run/features/reuse-sessions/
 
-## Build and release ownership (one GitHub, independent artifacts)
-Do not create a permanent second canonical branch. The exact source of truth
-is iamaman11/crm: ordinary dev/main lifecycle and short-lived feature branches.
+## Build and release ownership — separate permanent branch and workflow
+The **only** canonical source of project code is `iamaman11/crm`, but it has
+two separate app release lanes:
+- CRM: permanent `dev` branch; existing `.github/workflows/cloudflare-crm-spike.yml`;
+  Rust/WASM + React, current D1 and ordinary CRM deployment.
+- Universal Browser MCP: permanent `mcp` branch; independent
+  `.github/workflows/browser-mcp.yml`; separate TypeScript bundle and Browser Run
+  Cloudflare Worker. PR #358 targets `mcp`, never `dev`.
 
-Keep the browser MCP an isolated TypeScript service/package with its **own**
-dependency lock, release artifact, Cloudflare Worker and deployment. CRM has
-its existing Rust/WASM + React artifact, database migrations and deployment.
+The Browser MCP package has a dedicated pinned `package-lock.json`, generated
+and committed from the independent Browser MCP GitHub Actions run. Its CI
+checks the exact dependency install, strict types, security tests and isolated
+Wrangler dry-run. No CRM Rust build, D1 migration, or crm-dev deployment occurs
+on `mcp`. Actual MCP publication is disabled until the identity/tenant,
+OAuth, real browser E2E and privacy controls are independently accepted.
 
-Integrate MCP checks as a path-scoped job in the **existing single CRM GitHub
-workflow**, not a second standalone CI workflow. A browser-only change should
-run browser TypeScript/security tests and publish only the MCP; it must not
-rebuild/deploy the Rust CRM, apply D1 migrations or change Access. A CRM-only
-change should retain existing CRM CI/release and may execute a cheap smoke
-test of the browser MCP contract, without redeploying the browser tool.
-
-The branch code remains a draft: no pinned dependency lock, verified build,
-deployed MCP, owner-tenant service principal, or ChatGPT connector yet.
+The candidate is still Draft / NO-GO: CI build, deployed MCP,
+owner-tenant service principal, and ChatGPT connector remain to prove.
