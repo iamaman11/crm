@@ -3,6 +3,21 @@
 export const CRM_ORIGIN = "https://crm-dev.crm-5bd5e1e1.workers.dev";
 export const MCP_HOST = "crm-browser-mcp.crm-5bd5e1e1.workers.dev";
 
+// A human-readable owner email alone is insufficient. Verify the Access app
+// audience as well: a token issued for a different Access app is not accepted.
+export function isAuthorizedMcpOwner(
+  accessAudience: string | undefined,
+  expectedAudience: string | undefined,
+  accessEmail: string | undefined,
+  ownerEmail: string | undefined,
+): boolean {
+  return Boolean(
+    accessAudience && expectedAudience && accessAudience === expectedAudience &&
+    accessEmail?.trim() && ownerEmail?.trim() &&
+    accessEmail.trim().toLowerCase() === ownerEmail.trim().toLowerCase(),
+  );
+}
+
 export function isCrmRequest(input: string): boolean {
   try {
     const url = new URL(input);
