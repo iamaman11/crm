@@ -120,7 +120,7 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
                     filters.append(line.strip()[2:].strip("\"'"))
                 elif line.strip():
                     break
-        if filters != ["**/*.md"] or "    paths:" in push_section:
+        if filters != ["*.md", "**/*.md"] or "    paths:" in push_section:
             errors.append("CRM may ignore only **/*.md documentation")
 
     concurrency = _top_level_block(lines, "concurrency")

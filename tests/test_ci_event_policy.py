@@ -73,6 +73,7 @@ on:
     branches:
       - dev
     paths-ignore:
+      - '*.md'
       - '**/*.md'
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
