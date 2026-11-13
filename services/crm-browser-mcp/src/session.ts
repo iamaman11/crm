@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { launch, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
-import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermittedBrowserRequest, redact, safePagePath } from "./security";
+import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermittedBrowserRequest, redact, requireCrmAgentIdentity, safePagePath } from "./security";
 
 export interface Env {
   BROWSER: BrowserRun;
@@ -57,10 +57,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
 
   private async open(path: string = "/") {
     const destination = browserUrl(path);
-    if (isCrmRequest(destination) &&
-        (!this.env.CRM_BROWSER_CLIENT_ID || !this.env.CRM_BROWSER_CLIENT_SECRET)) {
-      throw new Error("CRM_BROWSER_AGENT_IDENTITY_NOT_PROVISIONED");
-    }
+    requireCrmAgentIdentity(
+      destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
+    );
     if (this.page && !this.page.isClosed()) {
       return { state: "already_open", path: safePagePath(this.page.url()) };
     }
@@ -217,10 +216,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
       }
       case "navigate": {
         const destination = browserUrl(command.url ?? "/", page.url() || CRM_ORIGIN);
-        if (isCrmRequest(destination) &&
-            (!this.env.CRM_BROWSER_CLIENT_ID || !this.env.CRM_BROWSER_CLIENT_SECRET)) {
-          throw new Error("CRM_BROWSER_AGENT_IDENTITY_NOT_PROVISIONED");
-        }
+        requireCrmAgentIdentity(
+          destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
+        );
         this.ownerDirectedCrmNavigation = isCrmRequest(destination);
         try {
           await page.goto(destination, { waitUntil: "domcontentloaded", timeout: 25000 });
