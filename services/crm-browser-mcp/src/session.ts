@@ -65,6 +65,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private acceptingDialog = false;
   private ownerDirectedCrmNavigation = false;
   private consoleLog: Array<{ level: string; text: string }> = [];
+  private requestStartedAt = new WeakMap<object, number>();
   private requestLog: Array<{
     method: string; path: string; status: number;
     resourceType?: string; durationMs?: number | null; failure?: string;
@@ -196,6 +197,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
         this.consoleLog.push({ level: "pageerror", text: redact(error.message) });
         if (this.consoleLog.length > 80) this.consoleLog.shift();
       });
+      page.on("request", request => {
+        this.requestStartedAt.set(request, Date.now());
+      });
       page.on("response", response => {
         const url = response.url();
         this.requestLog.push({
@@ -204,9 +208,8 @@ export class CrmBrowserSession extends DurableObject<Env> {
           status: response.status(),
           resourceType: response.request().resourceType(),
           durationMs: (() => {
-            const timing = response.timing();
-            if (timing.requestStart < 0 || timing.responseEnd < 0) return null;
-            return Math.max(0, Math.round(timing.responseEnd - timing.requestStart));
+            const started = this.requestStartedAt.get(response.request());
+            return started === undefined ? null : Math.max(0, Date.now() - started);
           })(),
         });
         if (this.requestLog.length > 80) this.requestLog.shift();
@@ -366,7 +369,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
       case "inspect": {
         if (command.inspection === "network") {
           return {
-            data: { path: safePagePath(page.url()), events: this.requestLog.slice(-80) },
+            data: {
+              path: safePagePath(page.url()), events: this.requestLog.slice(-80),
+              timing_note: "Elapsed request-to-response-event ms (approximate); not a browser HAR waterfall.",
+            },
           };
         }
         if (command.inspection === "performance") {
