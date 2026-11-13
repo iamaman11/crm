@@ -23,7 +23,7 @@ export function isAuthorizedMcpOwner(
 // The same check works for both Managed OAuth and normal Access sessions.
 export interface AccessControllerEvidence {
   aud: string;
-  getIdentity(): Promise<{ email?: string } | null>;
+  getIdentity(): Promise<{ email?: string } | null | undefined>;
 }
 
 export async function verifiedMcpOwnerEmail(
