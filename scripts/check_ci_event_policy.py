@@ -76,7 +76,31 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
         if not has_push:
             errors.append("CRM must run on push to dev")
         if has_pull_request:
-            errors.append("CRM uses one dev pipeline, not duplicate pull_request builds")
+            # A narrow, lightweight *job in the existing CRM workflow* can
+            # validate the standalone browser MCP PR. Never repeat the full
+            # Rust CRM build/release on PRs or create another workflow.
+            pr_section = _event_section(lines, event_start, event_end, "pull_request")
+            expected_paths = [
+                "services/crm-browser-mcp/**",
+                ".github/workflows/cloudflare-crm-spike.yml",
+                "scripts/check_ci_event_policy.py",
+                "tests/test_ci_event_policy.py",
+            ]
+            actual_paths: list[str] = []
+            if "    paths:" in pr_section:
+                pos = pr_section.index("    paths:") + 1
+                for line in pr_section[pos:]:
+                    if line.startswith("      - "):
+                        actual_paths.append(line.strip()[2:].strip("\\\"'"))
+                    elif line.strip():
+                        break
+            if actual_paths != expected_paths or "    paths-ignore:" in pr_section:
+                errors.append("CRM PR must only test Browser MCP source and its CI policy")
+            if (
+                "  cloudflare-crm-spike:" not in lines
+                or "    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && needs.classify-changes.outputs.mcp_only != 'true'" not in lines
+            ):
+                errors.append("CRM release build must remain push-only on dev")
     if has_pull_request:
         pr_section = _event_section(lines, event_start, event_end, "pull_request")
         expected_pr = "dev" if crm_dev_workflow else "main"
