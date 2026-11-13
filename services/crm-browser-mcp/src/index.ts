@@ -108,6 +108,17 @@ function createServer(env: Env, ownerEmail: string) {
     inputSchema: {},
   }, async () => command({ op: "frames" }));
 
+  server.registerTool("browser_file", {
+    description: "Upload explicit in-memory bytes to a file input, or click to download at most 1 MB into this authenticated MCP response. No Worker filesystem path or arbitrary URL fetch.",
+    inputSchema: {
+      fileAction: z.enum(["upload", "download"]),
+      target,
+      fileName: z.string().max(128).optional(),
+      mimeType: z.string().max(100).optional(),
+      base64: z.string().max(1_333_336).optional(),
+    },
+  }, async params => command({ op: "file", ...params }));
+
   server.registerTool("browser_screenshot", {
     description: "Capture an actual full-page PNG screenshot of the currently open website.",
     inputSchema: {},
