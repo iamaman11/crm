@@ -1,7 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
-import { launch, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
+import { acquire, connect, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
 import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermittedBrowserRequest, redact, requireCrmAgentIdentity, safePagePath } from "./security";
 import { navigatePage } from "./page-navigation";
+import { boundedWaitTimeout, compareBrowserAssertion, safeAssertionValue, type BrowserAssertionKind, type TextMatch, type WaitState } from "./browser-checks";
+import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
 
 export interface Env {
   BROWSER: BrowserRun;
@@ -16,6 +18,7 @@ export type Target = {
   kind: "css" | "role" | "text" | "label";
   value: string;
   name?: string;
+  frameIndex?: number;
 };
 
 export type Command = {
@@ -29,31 +32,63 @@ export type Command = {
   y?: number;
   value?: string;
   acceptDialog?: boolean;
+  kind?: BrowserAssertionKind;
+  expected?: string | number | boolean;
+  match?: TextMatch;
+  state?: WaitState;
+  timeoutMs?: number;
+  steps?: Command[];
+  tabAction?: "list" | "new" | "select" | "close";
+  tabId?: string;
+  frameIndex?: number;
+  fileAction?: "upload" | "download";
+  fileName?: string;
+  mimeType?: string;
+  base64?: string;
+  inspection?: "network" | "performance" | "accessibility" | "pdf";
+  width?: number;
+  height?: number;
+  recording?: boolean;
+  screenshotOnFailure?: boolean;
 };
 
 type Result = { ok: true; data: unknown; image?: string } | { ok: false; error: string };
 
 // One DO = one authenticated operator's browser session. The MCP transport stays stateless.
-// State is ephemeral by design: expired Browser Run sessions are reopened explicitly.
+// Only in-memory browser handles are ephemeral. Official Browser Run session IDs
+// are persisted in DO storage and reattached after eviction; expired sessions
+// are not silently replaced until an explicit browser_open.
 export class CrmBrowserSession extends DurableObject<Env> {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
+  private browserSessionId: string | null = null;
+  private recordingEnabled = false;
+  private tabIds = new Map<Page, string>();
+  private nextOperation: Promise<void> = Promise.resolve();
+  private pendingOperations = 0;
   private acceptingDialog = false;
   private ownerDirectedCrmNavigation = false;
   private consoleLog: Array<{ level: string; text: string }> = [];
-  private requestLog: Array<{ method: string; path: string; status: number }> = [];
+  private requestStartedAt = new WeakMap<object, number>();
+  private requestLog: Array<{
+    method: string; path: string; status: number;
+    resourceType?: string; durationMs?: number | null; failure?: string;
+  }> = [];
 
   private target(target: Target) {
     if (!this.page) throw new Error("CRM_BROWSER_NOT_OPEN");
+    const scope = target.frameIndex === undefined ? this.page :
+      this.page.frames()[target.frameIndex];
+    if (!scope) throw new Error("BROWSER_FRAME_NOT_FOUND");
     if (target.kind === "role") {
-      return this.page.getByRole(target.value as Parameters<Page["getByRole"]>[0], {
+      return scope.getByRole(target.value as Parameters<Page["getByRole"]>[0], {
         name: target.name, exact: true,
       });
     }
-    if (target.kind === "label") return this.page.getByLabel(target.value, { exact: true });
-    if (target.kind === "text") return this.page.getByText(target.value, { exact: true });
-    return this.page.locator(target.value);
+    if (target.kind === "label") return scope.getByLabel(target.value, { exact: true });
+    if (target.kind === "text") return scope.getByText(target.value, { exact: true });
+    return scope.locator(target.value);
   }
 
   // Both browser_open(url) and browser_action(navigate) must really navigate
@@ -69,27 +104,51 @@ export class CrmBrowserSession extends DurableObject<Env> {
     );
   }
 
-  private async open(path: string = "/") {
-    const destination = browserUrl(path);
-    requireCrmAgentIdentity(
-      destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
-    );
-    if (this.page && !this.page.isClosed()) {
-      if (this.page.url() === destination) {
-        return { state: "already_open", path: safePagePath(this.page.url()) };
-      }
-      return { state: "navigated", ...(await this.navigateTo(destination)) };
+  // The only browser owner. The DO stores only an opaque Browser Run session
+  // ID; cookies, tabs and browser processes remain in the official runtime.
+  private async restore() {
+    if (this.browser?.isConnected()) return;
+    this.browser = null;
+    this.context = null;
+    this.page = null;
+    this.tabIds.clear();
+    const sessionId = await this.ctx.storage.get<string>("browser_session_id");
+    if (!sessionId) return;
+    const session = await this.env.BROWSER.getSession(sessionId);
+    const status = (session as { status?: string } | null)?.status?.toLowerCase();
+    if (!session || status === "closed" || status === "closing" || status === "expired") {
+      // Expired sessions are not silently replaced; only explicit open starts
+      // another session. No attempt is made to recreate a login/cookie jar.
+      await this.ctx.storage.delete("browser_session_id");
+      await this.ctx.storage.delete("browser_recording");
+      this.browserSessionId = null;
+      this.recordingEnabled = false;
+      return;
     }
-    // Never use the owner's real Access cookie or the CI E2E service principals.
-    this.browser = await launch(this.env.BROWSER);
+    let browser: Browser;
     try {
-      this.context = await this.browser.newContext({
-        acceptDownloads: true,
-        serviceWorkers: "block",
-      });
-      // Universal public-web browsing. Never pass CRM's Access credentials to
-      // the whole browser context: that leaks across origins and redirects.
-      await this.context.route("**/*", async route => {
+      browser = await connect(this.env.BROWSER, sessionId);
+    } catch {
+      // Session could still be live. Keep its ID, fail closed and let a later
+      // request retry: do not launch an untracked second browser.
+      throw new Error("BROWSER_SESSION_RECONNECT_FAILED");
+    }
+    this.browser = browser;
+    this.browserSessionId = sessionId;
+    this.recordingEnabled = await this.ctx.storage.get<boolean>("browser_recording") ?? false;
+    const contexts = browser.contexts();
+    this.context = contexts.find(c => c.pages().some(p => !p.isClosed())) ??
+      contexts[0] ?? null;
+    if (this.context) {
+      await this.installSafetyRouting(this.context);
+      for (const page of this.context.pages()) this.attachPage(page);
+      this.page = this.context.pages().find(p => !p.isClosed()) ?? null;
+    }
+  }
+
+  private async installSafetyRouting(context: BrowserContext) {
+    context.on("page", page => { this.attachPage(page); });
+      await context.route("**/*", async route => {
         const request = route.request();
         if (!isPermittedBrowserRequest(request.url())) {
           await route.abort("blockedbyclient");
@@ -128,75 +187,382 @@ export class CrmBrowserSession extends DurableObject<Env> {
         });
         await route.fulfill({ response });
       });
-      this.page = await this.context.newPage();
-      this.page.on("console", message => {
+  }
+
+  private attachPage(page: Page) {
+    if (this.tabIds.has(page)) return;
+    this.tabIds.set(page, crypto.randomUUID());
+    page.on("close", () => {
+      this.tabIds.delete(page);
+      if (this.page === page) {
+        this.page = this.context?.pages().find(p => !p.isClosed()) ?? null;
+      }
+    });
+      page.on("console", message => {
         this.consoleLog.push({ level: message.type(), text: redact(message.text()) });
         if (this.consoleLog.length > 80) this.consoleLog.shift();
       });
-      this.page.on("pageerror", error => {
+      page.on("pageerror", error => {
         this.consoleLog.push({ level: "pageerror", text: redact(error.message) });
         if (this.consoleLog.length > 80) this.consoleLog.shift();
       });
-      this.page.on("response", response => {
+      page.on("request", request => {
+        this.requestStartedAt.set(request, Date.now());
+      });
+      page.on("response", response => {
         const url = response.url();
         this.requestLog.push({
           method: response.request().method(),
           path: safePagePath(url),
           status: response.status(),
+          resourceType: response.request().resourceType(),
+          durationMs: (() => {
+            const started = this.requestStartedAt.get(response.request());
+            return started === undefined ? null : Math.max(0, Date.now() - started);
+          })(),
         });
         if (this.requestLog.length > 80) this.requestLog.shift();
       });
-      this.page.on("dialog", async dialog => {
+      page.on("requestfailed", request => {
+        this.requestLog.push({
+          method: request.method(), path: safePagePath(request.url()), status: 0,
+          resourceType: request.resourceType(),
+          failure: redact(request.failure()?.errorText ?? "request_failed"),
+        });
+        if (this.requestLog.length > 80) this.requestLog.shift();
+      });
+      page.on("dialog", async dialog => {
         const accept = this.acceptingDialog;
         this.acceptingDialog = false;
         if (accept) await dialog.accept();
         else await dialog.dismiss();
       });
+  }
+
+  private async open(path: string = "/", recording: boolean = false) {
+    const destination = browserUrl(path);
+    requireCrmAgentIdentity(
+      destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
+    );
+    await this.restore();
+    if (recording && this.browser && !this.recordingEnabled) {
+      throw new Error("BROWSER_RECORDING_REQUIRES_NEW_SESSION");
+    }
+    if (this.page && !this.page.isClosed()) {
+      if (this.page.url() === destination) {
+        return { state: "already_open", path: safePagePath(this.page.url()) };
+      }
+      return { state: "navigated", ...(await this.navigateTo(destination)) };
+    }
+    let created = false;
+    if (!this.browser) {
+      // Official acquisition + explicit connection allows DO eviction recovery.
+      // Keep-alive is idle time, not an automatic browser polling loop.
+      const { sessionId } = await acquire(this.env.BROWSER, {
+        keep_alive: 600_000, recording,
+      });
+      try {
+        this.browser = await connect(this.env.BROWSER, sessionId);
+        this.browserSessionId = sessionId;
+        await this.ctx.storage.put("browser_session_id", sessionId);
+        await this.ctx.storage.put("browser_recording", recording);
+        this.recordingEnabled = recording;
+        created = true;
+      } catch (error) {
+        await this.env.BROWSER.closeSession(sessionId);
+        throw error;
+      }
+    }
+    try {
+      if (!this.context) {
+        this.context = await this.browser.newContext({
+          acceptDownloads: true,
+          serviceWorkers: "block",
+        });
+        await this.installSafetyRouting(this.context);
+      }
+      this.page = await this.context.newPage();
+      this.attachPage(this.page);
       return { state: "open", ...(await this.navigateTo(destination)) };
     } catch (error) {
-      await this.close();
+      if (created) await this.close();
       throw error;
     }
   }
 
   private async close() {
+    const sessionId = this.browserSessionId ??
+      await this.ctx.storage.get<string>("browser_session_id");
+    let failure: unknown = null;
+    // Disconnecting the Playwright client is best-effort. Always attempt
+    // termination of the exact Browser Run session to avoid billable orphans.
     try {
       await this.browser?.close();
+    } catch (error) {
+      failure = error;
+    }
+    try {
+      if (sessionId) {
+        await this.env.BROWSER.closeSession(sessionId);
+        if (this.recordingEnabled) {
+          // The provider recording becomes inspectable only after closure.
+          await this.ctx.storage.put("last_recording_session_id", sessionId);
+        }
+      }
+      await this.ctx.storage.delete("browser_session_id");
+      await this.ctx.storage.delete("browser_recording");
+    } catch (error) {
+      failure ??= error;
+      // Keep the persisted ID on failure so a later owner request can retry
+      // termination. Never create a replacement session implicitly.
     } finally {
       this.browser = null;
+      this.browserSessionId = null;
+      this.recordingEnabled = false;
       this.context = null;
       this.page = null;
+      this.tabIds.clear();
       this.acceptingDialog = false;
       this.ownerDirectedCrmNavigation = false;
       this.requestLog = [];
       this.consoleLog = [];
     }
+    if (failure) throw failure;
   }
 
   private async execute(command: Command): Promise<{ data: unknown; image?: string }> {
-    if (command.op === "open") return { data: await this.open(command.url) };
+    if (command.op === "open") return {
+      data: await this.open(command.url, command.recording ?? false),
+    };
     if (command.op === "close") {
       await this.close();
       return { data: { state: "closed" } };
     }
+    if (command.op !== "close") await this.restore();
     if (command.op === "status") return {
       data: {
         state: this.page && !this.page.isClosed() ? "open" : "closed",
         path: this.page && !this.page.isClosed() ? safePagePath(this.page.url()) : null,
+        recording: this.recordingEnabled,
+        lastRecordedSessionId: await this.ctx.storage.get<string>("last_recording_session_id") ?? null,
       },
     };
+    if (command.op === "tabs") {
+      if (!this.browser) throw new Error("CRM_BROWSER_NOT_OPEN");
+      if (command.tabAction === "new") {
+        if (!this.context) {
+          this.context = await this.browser.newContext({
+            acceptDownloads: true, serviceWorkers: "block",
+          });
+          await this.installSafetyRouting(this.context);
+        }
+        if (this.context.pages().filter(p => !p.isClosed()).length >= 12) {
+          throw new Error("BROWSER_TAB_LIMIT");
+        }
+        // A new tab belongs to the existing single browser context. Its
+        // requests inherit precisely the same CRM origin/security route.
+        const url = command.url ? browserUrl(command.url, CRM_ORIGIN + "/") : null;
+        if (url) requireCrmAgentIdentity(
+          url, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
+        );
+        const page = await this.context.newPage();
+        this.attachPage(page);
+        this.page = page;
+        if (url) await this.navigateTo(url);
+      } else if (command.tabAction === "select" || command.tabAction === "close") {
+        const matched = [...this.tabIds.entries()].find(([page, id]) =>
+          id === command.tabId && !page.isClosed(),
+        );
+        if (!matched) throw new Error("BROWSER_TAB_NOT_FOUND");
+        const [page] = matched;
+        if (command.tabAction === "select") {
+          this.page = page;
+          await page.bringToFront();
+        } else {
+          await page.close();
+          this.tabIds.delete(page);
+          if (this.page === page) {
+            this.page = this.context?.pages().find(p => !p.isClosed()) ?? null;
+          }
+        }
+      } else if (command.tabAction !== "list") {
+        throw new Error("BROWSER_UNKNOWN_TAB_ACTION");
+      }
+      const tabs = await Promise.all(
+        (this.context?.pages() ?? []).filter(p => !p.isClosed()).map(async (page) => {
+          this.attachPage(page);
+          return {
+            tabId: this.tabIds.get(page),
+            active: page === this.page,
+            path: safePagePath(page.url()),
+            title: await page.title(),
+          };
+        }),
+      );
+      return { data: { tabs, count: tabs.length } };
+    }
     const page = this.page;
     if (!page || page.isClosed()) throw new Error("CRM_BROWSER_NOT_OPEN");
 
     switch (command.op) {
-      case "snapshot":
+      case "inspect": {
+        if (command.inspection === "network") {
+          return {
+            data: {
+              path: safePagePath(page.url()), events: this.requestLog.slice(-80),
+              timing_note: "Elapsed request-to-response-event ms (approximate); not a browser HAR waterfall.",
+            },
+          };
+        }
+        if (command.inspection === "performance") {
+          const metrics = await page.evaluate(() => {
+            const n = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+            const paints = performance.getEntriesByType("paint")
+              .map(item => ({ name: item.name, startTimeMs: Math.round(item.startTime) }));
+            return {
+              navigationType: n?.type ?? null,
+              timeToFirstByteMs: n ? Math.round(n.responseStart - n.requestStart) : null,
+              domContentLoadedMs: n ? Math.round(n.domContentLoadedEventEnd - n.startTime) : null,
+              loadEventMs: n && n.loadEventEnd ? Math.round(n.loadEventEnd - n.startTime) : null,
+              transferSizeBytes: n?.transferSize ?? null,
+              resourceEntries: performance.getEntriesByType("resource").length,
+              paintEntries: paints,
+            };
+          });
+          return {
+            data: { path: safePagePath(page.url()), metrics, note: "Navigation and paint timing only; not Core Web Vitals." },
+          };
+        }
+        if (command.inspection === "accessibility") {
+          const audit = await page.evaluate(() => {
+            const problems: Array<{ rule: string; selector: string }> = [];
+            const describe = (element: Element) =>
+              element.tagName.toLowerCase() + (element.id ? "#" + element.id : "");
+            for (const image of document.querySelectorAll("img:not([alt])")) {
+              problems.push({ rule: "img_missing_alt", selector: describe(image) });
+              if (problems.length >= 100) break;
+            }
+            for (const field of document.querySelectorAll("input:not([type=hidden]),select,textarea")) {
+              if (problems.length >= 100) break;
+              const id = field.getAttribute("id");
+              const hasLabel = field.hasAttribute("aria-label") ||
+                field.hasAttribute("aria-labelledby") ||
+                Boolean(id && document.querySelector("label[for='" + CSS.escape(id) + "']")) ||
+                Boolean(field.closest("label"));
+              if (!hasLabel) problems.push({ rule: "form_field_missing_label", selector: describe(field) });
+            }
+            for (const button of document.querySelectorAll("button")) {
+              if (problems.length >= 100) break;
+              if (!button.textContent?.trim() &&
+                  !button.getAttribute("aria-label")?.trim() &&
+                  !button.getAttribute("aria-labelledby")?.trim()) {
+                problems.push({ rule: "button_missing_name", selector: describe(button) });
+              }
+            }
+            if (!document.title.trim()) problems.push({ rule: "document_missing_title", selector: "html" });
+            const images = document.querySelectorAll("img").length;
+            const fields = document.querySelectorAll("input,select,textarea").length;
+            return { issues: problems, scanned: { images, fields }, complete: problems.length < 100 };
+          });
+          return {
+            data: {
+              path: safePagePath(page.url()), ...audit,
+              note: "Limited DOM heuristics, not a WCAG conformance audit.",
+            },
+          };
+        }
+        if (command.inspection === "pdf") {
+          const result = Buffer.from(await page.pdf({
+            format: "A4", printBackground: true,
+          }));
+          if (result.byteLength > MAX_TRANSFER_BYTES) {
+            throw new Error("BROWSER_PDF_TOO_LARGE");
+          }
+          return {
+            data: {
+              path: safePagePath(page.url()), mimeType: "application/pdf",
+              bytes: result.byteLength, base64: result.toString("base64"),
+            },
+          };
+        }
+        throw new Error("BROWSER_INSPECTION_UNKNOWN_KIND");
+      }
+      case "viewport": {
+        if (!Number.isInteger(command.width) || !Number.isInteger(command.height) ||
+            (command.width ?? 0) < 320 || (command.width ?? 0) > 2560 ||
+            (command.height ?? 0) < 320 || (command.height ?? 0) > 2560) {
+          throw new Error("BROWSER_VIEWPORT_OUT_OF_RANGE");
+        }
+        await page.setViewportSize({ width: command.width!, height: command.height! });
+        return {
+          data: { viewport: page.viewportSize(), path: safePagePath(page.url()) },
+        };
+      }
+      case "file": {
+        if (!command.target) throw new Error("BROWSER_FILE_TARGET_REQUIRED");
+        const locator = this.target(command.target);
+        if (command.fileAction === "upload") {
+          const file = validatedUpload(
+            command.fileName ?? "", command.mimeType ?? "", command.base64 ?? "",
+          );
+          await locator.setInputFiles(file, { timeout: 15_000 });
+          return {
+            data: {
+              action: "upload", fileName: file.name, mimeType: file.mimeType,
+              bytes: file.buffer.byteLength, completed: true,
+              path: safePagePath(page.url()),
+            },
+          };
+        }
+        if (command.fileAction === "download") {
+          const awaited = page.waitForEvent("download", { timeout: 20_000 });
+          await locator.click({ timeout: 15_000 });
+          const download = await awaited;
+          const stream = await download.createReadStream();
+          const chunks: Uint8Array[] = [];
+          let size = 0;
+          for await (const chunk of stream) {
+            const bytes = Buffer.from(chunk);
+            size += bytes.byteLength;
+            if (size > MAX_TRANSFER_BYTES) {
+              throw new Error("BROWSER_DOWNLOAD_TOO_LARGE");
+            }
+            chunks.push(bytes);
+          }
+          return {
+            data: {
+              action: "download", completed: true,
+              ...transferDownload(download.suggestedFilename(), chunks),
+            },
+          };
+        }
+        throw new Error("BROWSER_FILE_UNKNOWN_ACTION");
+      }
+      case "frames":
         return {
           data: {
             path: safePagePath(page.url()),
-            title: await page.title(),
-            accessibility: (await page.locator("body").ariaSnapshot()).slice(0, 30000),
+            frames: page.frames().slice(0, 50).map((frame, index) => ({
+              frameIndex: index,
+              name: frame.name(),
+              path: safePagePath(frame.url()),
+              isMain: frame === page.mainFrame(),
+            })),
           },
         };
+      case "snapshot": {
+        const frame = command.frameIndex === undefined ? page.mainFrame() :
+          page.frames()[command.frameIndex];
+        if (!frame) throw new Error("BROWSER_FRAME_NOT_FOUND");
+        return {
+          data: {
+            path: safePagePath(frame.url()),
+            frameIndex: page.frames().indexOf(frame),
+            title: await page.title(),
+            accessibility: (await frame.locator("body").ariaSnapshot()).slice(0, 30000),
+          },
+        };
+      }
       case "screenshot": {
         const png = await page.screenshot({ fullPage: true });
         return {
@@ -216,6 +582,93 @@ export class CrmBrowserSession extends DurableObject<Env> {
           guardrails: { mode: "readonly" },
         });
         return { data: { url: view.devtoolsFrontendUrl, readonly: true, expires_in_seconds: 60 } };
+      }
+      case "wait": {
+        const timeout = boundedWaitTimeout(command.timeoutMs);
+        if (command.target) {
+          await this.target(command.target).waitFor({
+            state: command.state ?? "visible",
+            timeout,
+          });
+        } else if (command.url) {
+          // Playwright owns the wait; no arbitrary sleeps or polling loops.
+          await page.waitForURL(command.url, { timeout });
+        } else {
+          await page.waitForLoadState("domcontentloaded", { timeout });
+        }
+        return {
+          data: {
+            completed: true,
+            condition: command.target ? "element" : command.url ? "url" : "domcontentloaded",
+            state: command.state ?? (command.target ? "visible" : "ready"),
+            path: safePagePath(page.url()),
+          },
+        };
+      }
+      case "assert": {
+        if (!command.kind || command.expected === undefined) {
+          throw new Error("BROWSER_ASSERT_MISSING_CONDITION");
+        }
+        let actual: string | number | boolean;
+        if (command.kind === "url") actual = safePagePath(page.url());
+        else if (command.kind === "title") actual = await page.title();
+        else {
+          if (!command.target) throw new Error("BROWSER_ASSERT_TARGET_REQUIRED");
+          const locator = this.target(command.target);
+          if (command.kind === "visible") actual = await locator.isVisible();
+          else if (command.kind === "hidden") actual = !(await locator.isVisible());
+          else if (command.kind === "count") actual = await locator.count();
+          else if (command.kind === "text") actual = (await locator.textContent()) ?? "";
+          else throw new Error("BROWSER_ASSERT_UNKNOWN_KIND");
+        }
+        const result = compareBrowserAssertion({
+          kind: command.kind, actual, expected: command.expected, match: command.match,
+        });
+        return {
+          data: {
+            ...result,
+            expected: safeAssertionValue(result.expected),
+            actual: safeAssertionValue(result.actual),
+            path: safePagePath(page.url()),
+          },
+        };
+      }
+      case "run": {
+        const steps = command.steps;
+        if (!steps || steps.length === 0 || steps.length > 12) {
+          throw new Error("BROWSER_RUN_STEPS_OUT_OF_RANGE");
+        }
+        const results: Array<{ index: number; op: string; passed: boolean; data?: unknown; error?: string }> = [];
+        let passed = true;
+        for (const [index, step] of steps.entries()) {
+          if (step.op === "run" || step.op === "open" || step.op === "close" || step.op === "session" || step.op === "live_view") {
+            throw new Error("BROWSER_RUN_UNSAFE_STEP");
+          }
+          try {
+            const response = await this.execute(step);
+            const data = response.data as { passed?: boolean };
+            const ok = data.passed !== false;
+            results.push({ index, op: step.op, passed: ok, data });
+            if (!ok) { passed = false; break; }
+          } catch (error) {
+            passed = false;
+            results.push({
+              index, op: step.op, passed: false,
+              error: redact(error instanceof Error ? error.message : error),
+            });
+            break;
+          }
+        }
+        const report = { passed, steps: results, total: steps.length, executed: results.length };
+        if (!passed && command.screenshotOnFailure) {
+          try {
+            const png = await page.screenshot({ fullPage: true });
+            if (png.byteLength <= 2_000_000) {
+              return { data: report, image: Buffer.from(png).toString("base64") };
+            }
+          } catch { /* The failure report remains authoritative. */ }
+        }
+        return { data: report };
       }
       case "navigate": {
         const destination = browserUrl(command.url ?? "/", page.url() || CRM_ORIGIN);
@@ -285,6 +738,16 @@ export class CrmBrowserSession extends DurableObject<Env> {
     if (request.method !== "POST" || new URL(request.url).pathname !== "/internal") {
       return new Response("Not found", { status: 404 });
     }
+    // Commands for one owner share one browser and must not interleave across
+    // await points. A bounded FIFO serializes tab changes and all UI actions.
+    if (this.pendingOperations >= 8) {
+      return Response.json({ ok: false, error: "BROWSER_BUSY" }, { status: 429 });
+    }
+    this.pendingOperations++;
+    const previous = this.nextOperation;
+    let release!: () => void;
+    this.nextOperation = new Promise<void>(resolve => { release = resolve; });
+    await previous;
     let result: Result;
     try {
       const command = await request.json() as Command;
@@ -292,6 +755,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
       result = { ok: true, data, ...(image ? { image } : {}) };
     } catch (error) {
       result = { ok: false, error: redact(error instanceof Error ? error.message : error) };
+    } finally {
+      this.pendingOperations--;
+      release();
     }
     return Response.json(result);
   }

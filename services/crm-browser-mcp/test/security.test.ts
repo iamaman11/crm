@@ -52,6 +52,34 @@ test("universal web navigation rejects unsafe protocols and private endpoints", 
   }
 });
 
+test("reserved and private-address aliases are rejected without blocking public HTTPS", () => {
+  const blocked = [
+    "http://router/",
+    "http://metadata/",
+    "http://secret.home.arpa/",
+    "http://intranet.lan/",
+    "http://a.test/",
+    "http://a.invalid/",
+    "http://192.0.2.1/",
+    "http://198.18.0.1/",
+    "http://198.19.1.2/",
+    "http://198.51.100.5/",
+    "http://203.0.113.9/",
+    "http://192.0.0.3/",
+    "http://192.88.99.1/",
+  ];
+  for (const url of blocked) {
+    assert.equal(isPermittedBrowserRequest(url), false, url);
+    assert.throws(() => browserUrl(url), /BROWSER_UNSAFE_URL/, url);
+  }
+  for (const url of [
+    "https://example.org/",
+    "https://www.iana.org/help/example-domains",
+    "https://developers.cloudflare.com/browser-run/",
+    "http://1.1.1.1/",
+  ]) assert.equal(isPermittedBrowserRequest(url), true, url);
+});
+
 test("CRM Access service headers never authorize foreign pages or third-party initiated CRM calls", () => {
   const crm = CRM_ORIGIN + "/api/session";
   const foreign = "https://example.org/form";

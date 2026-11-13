@@ -37,26 +37,51 @@ On CRM: existing Connect API → Rust business logic → existing D1
 - Network policy must be checked against DNS resolution and redirects, not only initial URL parsing; Cloudflare Browser Run limitations and anti-bot restrictions must be described truthfully. Never promise access to every site regardless of its policies.
 - Logs, screenshots, browser traces and Live View links may contain sensitive data: avoid persisting raw credentials and carefully control release, access and retention.
 
-## Candidate tools and present implementation
+## MCP capabilities and acceptance (P0/P1/P2)
 
-| Tool | Purpose | Current state |
+The **published** release remains the original 9-tool R1 version until the
+new [PR #361](https://github.com/iamaman11/crm/pull/361) is approved and released.
+This section distinguishes tools **implemented in the candidate branch** from
+tools **physically accepted in the deployed Worker**.
+
+| Tool | Candidate functionality | Physical proof |
 |---|---|---|
-| `browser_open`, `browser_close`, `browser_status` | Browser session lifecycle | Candidate code; live proof pending |
-| `browser_action` | Navigate/click/double-click/fill/type/select/check/hover/press/scroll/back/forward/reload | Candidate code; live proof pending |
-| `browser_snapshot` | Accessibility snapshot and page title | Candidate code; live proof pending |
-| `browser_screenshot` | Full-page screenshot | Candidate code; live proof pending |
-| `browser_diagnostics` | Sanitized console errors and HTTP status history | Candidate code; richer trace required |
-| `browser_live_view` | Short-lived, read-only, signed Live View URL | Candidate code; live proof pending |
-| `browser_session` | Current CRM `/api/session` result using the real browser | CRM-specific diagnostic, not a generic-browser restriction |
+| `browser_open`, `browser_status`, `browser_close` | Official Browser Run acquisition, DO-persisted session ID, reconnection after isolate eviction, opt-in native session recording, explicit termination | Old R1 open/close PASS; new recovery unverified |
+| `browser_action` | Navigation, click/double-click, filling, selection, typing, keyboard, scroll, back/forward, refresh; optional iframe index in selector | R1 click/redirect PASS; other actions need E2E |
+| `browser_snapshot`, `browser_screenshot` | Accessibility snapshot (main frame or selected iframe); full-page PNG | R1 screenshot/snapshot PASS; iframe unverified |
+| `browser_tabs`, `browser_frames` | List/new/select/close tab; discover popup, iframe name/index; per-tab actions | Not yet deployed/physically tested |
+| `browser_wait`, `browser_assert`, `browser_run` | Bounded Playwright waits, typed deterministic comparisons, ≤12-step E2E report, optional screenshot on failure | Static/unit CI only |
+| `browser_file` | Explicit inline base64 upload, click-to-download; 1 MB maximum, no server filesystem | Static/unit CI only; Cloudflare download stream needs live validation |
+| `browser_diagnostics`, `browser_inspect(network)` | Sanitized console, requests/responses/failures; approximate request-to-response latency and resource type, capped at 80 events | R1 basic diagnostics PASS; richer network not yet accepted |
+| `browser_inspect(performance)` | Browser navigation timings and paint entries; not complete Core Web Vitals | Not yet deployed |
+| `browser_inspect(accessibility)` | Heuristic missing-alt/label/button-name/title findings; not WCAG certification | Not yet deployed |
+| `browser_inspect(pdf)`, `browser_viewport` | Bounded PDF export, viewport resizing for responsive tests | Not yet deployed |
+| `browser_live_view` | 60-second read-only signed link | Not physically accepted |
+| `browser_session` | CRM authentication diagnostics (does not grant admin rights) | CRM owner-tenant delegation still absent |
 
-Next capabilities must be built **inside this same MCP**, not as separate systems: tab/popup/context selection; uploads and downloads; navigation across multiple public domains; traces, timings and network debugging; deterministic assertions and test reporting; reconnect/expiry of Browser Run sessions; optional constrained page evaluation (explicitly authorized and safety-reviewed). See the capability matrix and acceptance checklist in Issue #357.
+Cloudflare Browser Run **session recording** is supported natively and may be
+enabled only on a fresh `browser_open(recording=true)`; it can later be located
+by the opaque session ID reported by `browser_status`. Native recording/HAR
+inspection is in the Cloudflare Dashboard; **the MCP does not yet export HAR
+artifacts directly**. Raw cookies, service credentials and unredacted headers
+are never returned by the diagnostics endpoint.
+
+**Still missing / gated:** DNS rebinding or private-address resolution checks
+at the actual network destination (URL-host syntax alone cannot prove this),
+full native HAR/trace artifact export through MCP, rich context/cookie storage
+management, stable tab IDs across DO eviction, binary visual diffs, cross-browser
+comparison, full mobile emulation, automated WCAG validation, downloads above
+1 MB, and a physical CRUD/audit cycle on the existing CRM owner tenant.
+These are not to be misrepresented as complete. Work in the *same browser
+owner* and add evidence to Issue #357. Do not release CRM admin credentials
+before the sensitive-origin negative tests and tenant mapping pass.
 
 ## Current verified deployment and authentication (14 Nov 2026)
 
 - **Real Universal Browser MCP deployed.** [CI/deploy #43510554028](https://github.com/iamaman11/crm/actions/runs/43510554028) passed from protected `mcp` commit `70119e852c5107cd8337abdac70c2325b6bb2218`. Cloudflare version `cec55b95-58f4-4f5a-ade7-e2e7ce14e4fe` is live at 100%, with the official Browser Run binding `BROWSER` and `SESSIONS` Durable Object binding. The sole published origin is `https://crm-browser-mcp.crm-5bd5e1e1.workers.dev/mcp`; preview URLs are disabled.
 - Cloudflare Access `crm-browser-mcp-access` protects the origin with a single owner-email policy. `CRM_MCP_OWNER_EMAIL` is a protected Worker secret. Anonymous GET and MCP initialize POST both receive HTTP 401 and OAuth `WWW-Authenticate`, never a tool response.
 - Access Managed OAuth exposes protected-resource discovery, the authorization server, PKCE S256 and DCR. **DCR was initially misconfigured:** only localhost/loopback callbacks were allowed, causing `HTTP 400 invalid_client_metadata: redirect_uri is not allowed by the account configuration`. The exact allowed redirect URI list and live positive/negative tests are documented below.
-- [PR #359](https://github.com/iamaman11/crm/pull/359) added the canonical private ChatGPT plugin package in `chatgpt-plugin/universal-browser-mcp/`. Private plugin exists, but human OAuth consent and authenticated `browser_status` / `browser_open` tool invocations from ChatGPT are **not yet proven**.
+- [PR #359](https://github.com/iamaman11/crm/pull/359) added the canonical private ChatGPT plugin package in `chatgpt-plugin/universal-browser-mcp/`. Private plugin exists, and owner OAuth plus `browser_status` / `browser_open`, real rendered DOM, cross-domain click, screenshot and close were later physically confirmed in the actual ChatGPT conversation (Issue #357 R1 receipt).
 - **CRM administrative browser access remains intentionally disabled** until a distinct service principal is explicitly bound to the existing human-owner tenant. Neither `CRM_BROWSER_CLIENT_ID` nor `CRM_BROWSER_CLIENT_SECRET` is present. Do not reuse CI credentials or create a parallel CRM tenant.
 - GitHub Environment `browser-mcp` holds an independently scoped `CLOUDFLARE_API_TOKEN` (Vault receipt [Issue #357](https://github.com/iamaman11/crm/issues/357#issuecomment-6864793396)); access to primary `crm-dev` was denied with HTTP 403. **`BROWSER_MCP_RELEASE_ENABLED=false`**, no automatic release, CRM and D1 unchanged.
 
@@ -78,7 +103,7 @@ Cloudflare supports a trailing path `/*` for a fixed HTTPS host. OpenAI uses `/c
 Provider change and independent verification on 14 Nov 2026:
 - **Before:** DCR POST with real MCP resource + ChatGPT stable redirect failed HTTP 400 `invalid_client_metadata`, explanation `redirect_uri is not allowed by the account configuration`.
 - **After:** DCR POST for each ChatGPT callback form succeeded HTTP 201 with a client ID issued. Non-ChatGPT `https://example.org/oauth/callback` still failed HTTP 400; anonymous MCP GET still HTTP 401 with OAuth challenge. Policy ID, audience and Worker version were unchanged.
-- **Remaining:** retry creating the custom MCP app inside ChatGPT, select DCR, leave unadvertised scopes empty and disable optional OIDC discovery when unavailable, then complete the owner's real OAuth login and tools smoke. Never claim a successful ChatGPT connection before the UI and tools confirm it.
+- **Verified since that fix:** ChatGPT discovered nine live tools and completed status → public-page open → DOM → cross-domain click → screenshot → close. That is R1 owner OAuth and basic browser E2E accepted; the richer P0/P1/P2 candidate requires its own live tests.
 
 Cloudflare Access app configuration is account infrastructure managed via its API, **not** Wrangler Worker source. This README records the expected configuration alongside the canonical deployment evidence; changing it requires readback of the exact Access application, not any changes to `crm-dev`.
 

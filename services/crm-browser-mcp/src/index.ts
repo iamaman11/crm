@@ -7,15 +7,42 @@ import { MCP_HOST, verifiedMcpOwnerEmail } from "./security";
 
 export { CrmBrowserSession } from "./session";
 
+const frameIndex = z.number().int().min(0).max(49).optional();
 const target = z.object({
   kind: z.enum(["css", "role", "text", "label"]),
   value: z.string().min(1).max(512),
   name: z.string().min(1).max(512).optional(),
+  frameIndex,
 });
 const action = z.enum([
   "click", "double_click", "fill", "type", "select", "check",
   "uncheck", "hover", "press", "scroll", "navigate", "reload", "back", "forward",
 ]);
+const assertionKind = z.enum(["url", "title", "visible", "hidden", "text", "count"]);
+const waitState = z.enum(["visible", "hidden", "attached", "detached"]);
+const timeoutMs = z.number().int().min(100).max(30_000).optional();
+const expected = z.union([z.string().max(512), z.number().finite(), z.boolean()]);
+const scenarioStep = z.object({
+  op: z.enum([
+    "click", "double_click", "fill", "type", "select", "check",
+    "uncheck", "hover", "press", "scroll", "navigate", "reload",
+    "back", "forward", "wait", "assert",
+  ]),
+  target: target.optional(),
+  text: z.string().max(16_000).optional(),
+  key: z.string().max(96).optional(),
+  value: z.string().max(1_000).optional(),
+  url: z.string().max(1_024).optional(),
+  x: z.number().finite().min(-5000).max(5000).optional(),
+  y: z.number().finite().min(-5000).max(5000).optional(),
+  acceptDialog: z.boolean().optional(),
+  kind: assertionKind.optional(),
+  expected: expected.optional(),
+  match: z.enum(["exact", "contains"]).optional(),
+  state: waitState.optional(),
+  timeoutMs,
+});
+
 
 function createServer(env: Env, ownerEmail: string) {
   const server = new McpServer({ name: "crm-browser-mcp", version: "0.1.0" });
@@ -46,11 +73,12 @@ function createServer(env: Env, ownerEmail: string) {
   }
 
   server.registerTool("browser_open", {
-    description: "Open the real CRM by default, or any public HTTP(S) site. Preserve cloud browser state across calls; CRM service credentials are restricted to CRM.",
+    description: "Open an authorized public HTTP(S) website in a reusable Cloudflare Playwright session. Recording is opt-in at session creation only and is accessed later through Cloudflare Browser Run.",
     inputSchema: {
       path: z.string().max(1024).default("/"),
+      recording: z.boolean().default(false),
     },
-  }, async ({ path }) => command({ op: "open", url: path }));
+  }, async ({ path, recording }) => command({ op: "open", url: path, recording }));
 
   server.registerTool("browser_status", {
     description: "Inspect whether the CRM browser is open without launching a new browser.",
@@ -63,9 +91,49 @@ function createServer(env: Env, ownerEmail: string) {
   }, async () => command({ op: "session" }));
 
   server.registerTool("browser_snapshot", {
-    description: "Return the current website accessibility tree and page title for reliable element targeting.",
+    description: "Return the current page or selected iframe accessibility tree and title. Use browser_frames to discover frameIndex.",
+    inputSchema: { frameIndex },
+  }, async params => command({ op: "snapshot", ...params }));
+
+  server.registerTool("browser_tabs", {
+    description: "List, create, select or close tabs and popup windows in the one existing browser context; tab IDs are ephemeral after reconnection.",
+    inputSchema: {
+      tabAction: z.enum(["list", "new", "select", "close"]).default("list"),
+      tabId: z.string().uuid().optional(),
+      url: z.string().max(1024).optional(),
+    },
+  }, async params => command({ op: "tabs", ...params }));
+
+  server.registerTool("browser_frames", {
+    description: "List main document and iframe indices, names and sanitized URLs. Use frameIndex for snapshot, action and assertions.",
     inputSchema: {},
-  }, async () => command({ op: "snapshot" }));
+  }, async () => command({ op: "frames" }));
+
+  server.registerTool("browser_file", {
+    description: "Upload explicit in-memory bytes to a file input, or click to download at most 1 MB into this authenticated MCP response. No Worker filesystem path or arbitrary URL fetch.",
+    inputSchema: {
+      fileAction: z.enum(["upload", "download"]),
+      target,
+      fileName: z.string().max(128).optional(),
+      mimeType: z.string().max(100).optional(),
+      base64: z.string().max(1_333_336).optional(),
+    },
+  }, async params => command({ op: "file", ...params }));
+
+  server.registerTool("browser_inspect", {
+    description: "Read a sanitized network timeline, browser navigation/paint performance timings, basic DOM accessibility heuristics or a capped PDF. No arbitrary code execution or credential-bearing headers.",
+    inputSchema: {
+      inspection: z.enum(["network", "performance", "accessibility", "pdf"]),
+    },
+  }, async params => command({ op: "inspect", ...params }));
+
+  server.registerTool("browser_viewport", {
+    description: "Resize the active tab for responsive layout testing (320-2560 pixels); does not impersonate a physical mobile device.",
+    inputSchema: {
+      width: z.number().int().min(320).max(2560),
+      height: z.number().int().min(320).max(2560),
+    },
+  }, async params => command({ op: "viewport", ...params }));
 
   server.registerTool("browser_screenshot", {
     description: "Capture an actual full-page PNG screenshot of the currently open website.",
@@ -90,6 +158,35 @@ function createServer(env: Env, ownerEmail: string) {
     text: params.text, key: params.key, value: params.value,
     url: params.url, x: params.x, y: params.y, acceptDialog: params.acceptDialog,
   }));
+
+  server.registerTool("browser_wait", {
+    description: "Deterministically wait for an element state, a URL, or DOM content load. Always bounded to 30 seconds; no arbitrary sleeps.",
+    inputSchema: {
+      target: target.optional(),
+      state: waitState.optional(),
+      url: z.string().max(1024).optional(),
+      timeoutMs,
+    },
+  }, async params => command({ op: "wait", ...params }));
+
+  server.registerTool("browser_assert", {
+    description: "Read and compare actual DOM, URL, or title values; return a typed pass/fail verdict (no false success on mismatch).",
+    inputSchema: {
+      kind: assertionKind,
+      target: target.optional(),
+      expected,
+      match: z.enum(["exact", "contains"]).optional(),
+    },
+  }, async params => command({ op: "assert", ...params }));
+
+  server.registerTool("browser_run", {
+    description: "Execute up to 12 ordered Playwright actions/waits/assertions; stop on first failure and optionally attach a screenshot. Return typed pass/fail steps.",
+    inputSchema: {
+      steps: z.array(scenarioStep).min(1).max(12),
+      screenshotOnFailure: z.boolean().default(false),
+    },
+  }, async ({ steps, screenshotOnFailure }) =>
+    command({ op: "run", steps, screenshotOnFailure }));
 
   server.registerTool("browser_diagnostics", {
     description: "Read sanitized cross-site browser console and HTTP statuses. Credential values and URL queries are never exposed.",
