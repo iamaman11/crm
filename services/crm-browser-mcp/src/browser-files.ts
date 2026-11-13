@@ -32,5 +32,7 @@ export function transferDownload(
   const bytes = parts.reduce((total, item) => total + item.byteLength, 0);
   if (bytes > MAX_TRANSFER_BYTES) throw new Error("BROWSER_DOWNLOAD_TOO_LARGE");
   const buffer = Buffer.concat(parts.map(item => Buffer.from(item)));
-  return { fileName: filename.slice(0, 128), bytes, base64: buffer.toString("base64") };
+  const leaf = filename.replaceAll("\\\\", "/").split("/").pop() ?? "";
+  const fileName = leaf.replace(/[\\x00-\\x1f\\x7f]/g, "").slice(0, 128) || "download";
+  return { fileName, bytes, base64: buffer.toString("base64") };
 }
