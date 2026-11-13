@@ -131,7 +131,7 @@ jobs:
             (original.replace("'**/*.md'", "'apps/**'"), "CRM may ignore only **/*.md documentation"),
             (original.replace("    paths-ignore:", "    paths:"), "CRM may ignore only **/*.md documentation"),
             (original.replace("cancel-in-progress: false", "cancel-in-progress: true"), "CRM must not cancel an active release"),
-            (original.replace("concurrency:\n", "  pull_request:\n    branches:\n      - dev\nconcurrency:\n", 1), "CRM uses one dev pipeline, not duplicate pull_request builds"),
+            (original.replace("'services/crm-browser-mcp/**'", "'**'"), "CRM PR must only test Browser MCP source and its CI policy"),
             (original.replace("      - dev\n", "      - dev\n      - experimental\n", 1), "push must be restricted to branch dev"),
         )
         for contents, expected_error in cases:
