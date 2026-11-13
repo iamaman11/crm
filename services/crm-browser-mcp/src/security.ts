@@ -31,8 +31,10 @@ export function safePagePath(url: string): string {
 }
 
 export function redact(input: unknown): string {
-  return String(input)
-    .replace(/(CF-Access-Client-Secret|CF-Access-Client-Id|Authorization|Cookie|Set-Cookie)\s*[:=]\s*[^\s,;"']+/gi, "$1=[REDACTED]")
-    .replace(/\bBearer\s+[-._~+/A-Za-z0-9]+=*/gi, "Bearer [REDACTED]")
-    .slice(0, 4000);
+  const raw = String(input).slice(0, 4000);
+  // Mask complete credential header values (which can contain spaces).
+  // A failed previous regex must never leave a Bearer token behind.
+  return raw
+    .replace(/\bBearer\s+\S+/gi, "Bearer [REDACTED]")
+    .replace(/\b(Authorization|Cookie|Set-Cookie|CF-Access-Client-Id|CF-Access-Client-Secret)\s*[:=]\s*[\s\S]*?(?=\s+\b(?:Authorization|Cookie|Set-Cookie|CF-Access-Client-Id|CF-Access-Client-Secret)\s*[:=]|$)/gi, "$1=[REDACTED]");
 }
