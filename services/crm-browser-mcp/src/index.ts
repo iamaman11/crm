@@ -119,7 +119,7 @@ export default {
       return new Response("Access required", { status: 403 });
     }
     const identity = await ctx.access.getIdentity();
-    const email = identity?.email?.trim().toLowerCase();
+    const email = identity?.email?.trim().toLowerCase() ?? "";
     if (!isAuthorizedMcpOwner(
       ctx.access.aud, env.CRM_MCP_ACCESS_AUD, email, env.CRM_MCP_OWNER_EMAIL,
     )) {
