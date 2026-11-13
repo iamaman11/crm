@@ -1,4 +1,4 @@
-# Universal Browser MCP — protected runtime deployed; OAuth/E2E pending
+# Universal Browser MCP — extended release deployed; physical acceptance in progress
 
 Canonical project: https://github.com/iamaman11/crm  
 Specification and live acceptance ledger: https://github.com/iamaman11/crm/issues/357  
@@ -39,24 +39,32 @@ On CRM: existing Connect API → Rust business logic → existing D1
 
 ## MCP capabilities and acceptance (P0/P1/P2)
 
-The **published** release remains the original 9-tool R1 version until the
-new [PR #361](https://github.com/iamaman11/crm/pull/361) is approved and released.
-This section distinguishes tools **implemented in the candidate branch** from
-tools **physically accepted in the deployed Worker**.
+[PR #361](https://github.com/iamaman11/crm/pull/361) **merged**, and
+[release CI #43525548488](https://github.com/iamaman11/crm/actions/runs/43525548488)
+built and deployed the expanded MCP bundle from `mcp` commit `20c11c2e7a20628511cf1ddab3b53f50ce6580c7`.
+Cloudflare confirmed version `c17a8db8-76f9-4b74-96da-443095a9e83c` at **100%**.
+The deployed server defines **17 tools**, but ChatGPT has **a frozen discovery
+snapshot of the old nine tools** in this conversation. To make eight added tools
+visible, open **ChatGPT Plugins → this custom MCP connection → Refresh** and
+start a new chat. Official guidance:
+https://developers.openai.com/plugins/deploy/connect-chatgpt .
+Refresh/review tool permissions rather than recreating the server.
+The physical acceptance column below differentiates working deployed operations
+from items still awaiting a fresh tool discovery and real browser tests.
 
-| Tool | Candidate functionality | Physical proof |
+| Tool | Deployed functionality | Physical proof |
 |---|---|---|
-| `browser_open`, `browser_status`, `browser_close` | Official Browser Run acquisition, DO-persisted session ID, reconnection after isolate eviction, opt-in native session recording, explicit termination | Old R1 open/close PASS; new recovery unverified |
-| `browser_action` | Navigation, click/double-click, filling, selection, typing, keyboard, scroll, back/forward, refresh; optional iframe index in selector | R1 click/redirect PASS; other actions need E2E |
+| `browser_open`, `browser_status`, `browser_close` | Official Browser Run acquire/connect, DO-persisted session ID, reattach path, opt-in native recording, explicit termination | **PASS** new version open/close and `recording=true`; durable reattach after actual eviction **not verified** |
+| `browser_action` | Navigation, click/double-click, fill, select, type, keyboard, scrolling, history, iframe selector | **PASS** new version: Selenium form text fill, select, checkbox, Submit → actual `Form submitted / Received!`; other variants pending |
 | `browser_snapshot`, `browser_screenshot` | Accessibility snapshot (main frame or selected iframe); full-page PNG | R1 screenshot/snapshot PASS; iframe unverified |
 | `browser_tabs`, `browser_frames` | List/new/select/close tab; discover popup, iframe name/index; per-tab actions | Not yet deployed/physically tested |
 | `browser_wait`, `browser_assert`, `browser_run` | Bounded Playwright waits, typed deterministic comparisons, ≤12-step E2E report, optional screenshot on failure | Static/unit CI only |
 | `browser_file` | Explicit inline base64 upload, click-to-download; 1 MB maximum, no server filesystem | Static/unit CI only; Cloudflare download stream needs live validation |
-| `browser_diagnostics`, `browser_inspect(network)` | Sanitized console, requests/responses/failures; approximate request-to-response latency and resource type, capped at 80 events | R1 basic diagnostics PASS; richer network not yet accepted |
+| `browser_diagnostics`, `browser_inspect(network)` | Sanitized console, recent HTTP response/failure events, resource type and approximate timings | **PASS** new version: observed resource-type/elapsed-ms; specialized inspect tool not refreshed in ChatGPT |
 | `browser_inspect(performance)` | Browser navigation timings and paint entries; not complete Core Web Vitals | Not yet deployed |
 | `browser_inspect(accessibility)` | Heuristic missing-alt/label/button-name/title findings; not WCAG certification | Not yet deployed |
 | `browser_inspect(pdf)`, `browser_viewport` | Bounded PDF export, viewport resizing for responsive tests | Not yet deployed |
-| `browser_live_view` | 60-second read-only signed link | Not physically accepted |
+| `browser_live_view` | 60-second signed read-only Cloudflare Live View URL | **PASS** actual owner-authorized call returned HTTPS signed URL with `readonly=true`, expiry 60 seconds; URL intentionally never reproduced |
 | `browser_session` | CRM authentication diagnostics (does not grant admin rights) | CRM owner-tenant delegation still absent |
 
 Cloudflare Browser Run **session recording** is supported natively and may be
@@ -75,6 +83,51 @@ comparison, full mobile emulation, automated WCAG validation, downloads above
 These are not to be misrepresented as complete. Work in the *same browser
 owner* and add evidence to Issue #357. Do not release CRM admin credentials
 before the sensitive-origin negative tests and tenant mapping pass.
+
+## 14 November 2026 extended release: physical test receipt
+
+Source: [Issue #357](https://github.com/iamaman11/crm/issues/357).
+Released Worker remains **only** `crm-browser-mcp`, protected by the original
+single-owner Cloudflare Access app. GitHub `BROWSER_MCP_RELEASE_ENABLED=false`
+was independently verified after the release. Worker secret readback contains
+only `CRM_MCP_OWNER_EMAIL`; **no CRM access service credentials**, no primary
+CRM/D1 changes.
+
+**PASS (real ChatGPT → Access → Cloudflare DO → Browser Run → Playwright):**
+
+1. `browser_status` after deployment returned `closed` plus the new
+   `recording=false` field, proving the new version was invoked.
+2. `browser_open(https://www.selenium.dev/selenium/web/web-form.html)` returned
+   HTTP 200 / title `Web form`. Snapshot showed actual role-tagged text input,
+   select dropdown, checkbox and Submit button.
+3. Real `browser_action` calls filled a non-sensitive test marker, selected
+   `2`, checked `Default checkbox`, clicked Submit, and navigated to
+   `/selenium/web/submitted-form.html`. Snapshot showed `Form submitted` /
+   `Received!`.
+4. `browser_diagnostics` returned new resource-type and measured timing fields.
+   `browser_live_view` produced a 60-second read-only signed HTTPS URL.
+5. Attempts to open main CRM without an explicitly provisioned service principal
+   were denied; metadata `169.254.169.254`, reserved `198.18.0.1` and local
+   single-label `metadata` were denied without changing the active page.
+6. After closing, `browser_open(recording=true)` started an isolated public
+   example.org session, with `status.recording=true`. `browser_close()` stored
+   `lastRecordedSessionId`; Cloudflare recording API returned four DOM/session
+   events, proving actual native recording persisted.
+
+**NOT PASS / pending:**
+- The current ChatGPT connection still sees only nine previously discovered
+  tool schemas, so `browser_wait`, `browser_assert`, `browser_run`,
+  `browser_tabs`, `browser_frames`, `browser_file`,
+  `browser_inspect`, `browser_viewport` have **not been physically invoked
+  from ChatGPT**. Refresh connection metadata and begin a new conversation.
+- Recording's network/HAR API for the observed session returned
+  `404 Network recording not found`; native recording is proven, **HAR export
+  is not**.
+- DO isolate eviction/reconnect, safe handling of redirects/DNS rebinding,
+  actual iframe/popup interactions, real file upload/download, PDF, screen
+  resize, assertions/reporting and visual-performance/a11y probes need separate
+  physical readbacks. Do not grant the CRM service principal until P0 security
+  and correct existing owner-tenant mapping are proven.
 
 ## Current verified deployment and authentication (14 Nov 2026)
 
