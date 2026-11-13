@@ -55,6 +55,32 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    await assertMutation(response,method,options);
    await page.getByRole("heading",{name:/^Сохранено/}).last().waitFor();
  };
+ // Pickers show one bounded page of options; randomly generated IDs
+ // need not be on the first page. Use real UI pagination, not sleeps.
+ const selectPagedPicker=async(scope,label,id,kind="party")=>{
+  const select=scope.getByLabel(label,{exact:true});
+  const picker=select.locator("xpath=../.."); // SelectField div -> picker div
+  const nextLabel=kind==="party"?"Другие участники":"Другие клиенты";
+  const method=kind==="party"?"/ListParties":"/ListAccounts";
+  for(let pageNumber=0;pageNumber<30;pageNumber++){
+   await picker.locator("option").nth(1).waitFor({state:"attached"});
+   await picker.getByRole("status").waitFor({state:"hidden"});
+   if(await select.locator(`option[value="${id}"]`).count()){
+    await select.selectOption(id);
+    assert.equal(await select.inputValue(),id,label+" selected another record");
+    return;
+   }
+   const next=picker.getByRole("button",{name:nextLabel,exact:true});
+   assert.equal(await next.count(),1,
+     label+" has no further page containing "+id+" (page "+pageNumber+")");
+   const pending=page.waitForResponse(response=>
+     response.url().endsWith(method)&&response.request().method()==="POST");
+   await next.click();
+   assert.equal((await pending).status(),200,label+" pagination RPC failed");
+   await picker.getByRole("status").waitFor({state:"hidden"});
+  }
+  throw Error(label+" lookup exceeded 30 pages for "+id);
+ };
  const firstId=async(table,column,value)=>{
    const escaped=value.replaceAll("'","''");
    const rows=await sql("SELECT id FROM "+table+" WHERE tenant='"+tenantSql+"' AND json_extract(state,'$."+column+"')='"+escaped+"'");
@@ -81,8 +107,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty");
    const otherPartyId=await firstId("crm_party_records","display_name","Browser Other "+runId);
    await navigate("relationships","Связи");
-   await page.getByLabel("Первый участник",{exact:true}).selectOption(partyId);
-   await page.getByLabel("Второй участник",{exact:true}).selectOption(otherPartyId);
+   await selectPagedPicker(page,"Первый участник",partyId);
+   await selectPagedPicker(page,"Второй участник",otherPartyId);
    await page.getByLabel("Код отношения",{exact:true}).fill("browser_relation_"+runId);
    await mutation(page.getByRole("button",{name:"Сохранить связь",exact:true}),"CreatePartyRelationship");
    await page.locator("section").filter({has:page.getByRole("heading",{name:"browser_relation_"+runId,exact:true})})
@@ -95,7 +121,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    steps.push("Relationship create/edit through original owner with D1 version/status");
    await navigate("accounts","Клиенты");
    await page.getByLabel("Название клиента",{exact:true}).fill("Browser Account "+runId);
-   await page.getByLabel("Основной участник",{exact:true}).selectOption(partyId);
+   await selectPagedPicker(page,"Основной участник",partyId);
    await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"CreateAccount");
    accountId=await firstId("crm_account_records","name","Browser Account "+runId);
    await page.getByRole("heading",{name:"Browser Account "+runId,exact:true}).waitFor();
@@ -115,7 +141,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    await accountCard.waitFor();
    steps.push("Account create and Customer360 read");
    await navigate("contacts","Контакты");
-   await page.getByLabel("Участник",{exact:true}).selectOption(partyId);
+   await selectPagedPicker(page,"Участник",partyId);
    await page.getByLabel("Значение контакта",{exact:true}).fill("browser-"+runId+"@example.org");
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].n,1);
@@ -127,14 +153,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    assert.equal((await sql("SELECT version FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].version,2);
    await navigate("tasks","Задачи");
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Task "+runId);
-   await page.getByLabel("Клиент",{exact:true}).selectOption(accountId);
+   await selectPagedPicker(page,"Клиент",accountId,"account");
    await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
    const taskId=await firstId("crm_activity_task_records","subject","Browser Task "+runId);
    const taskCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Task "+runId,exact:true})});
    await mutation(taskCard.getByRole("button",{name:"Выполнить задачу",exact:true}),"CompleteTask");
    assert.equal((await sql("SELECT json_extract(state,'$.status') AS status FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0].status,"completed");
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Urgent "+runId);
-   await page.getByLabel("Клиент",{exact:true}).selectOption(accountId);
+   await selectPagedPicker(page,"Клиент",accountId,"account");
    await page.getByLabel("Приоритет",{exact:true}).selectOption("4");
    await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
    const urgentId=await firstId("crm_activity_task_records","subject","Browser Urgent "+runId);
@@ -184,7 +210,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    steps.push("Contact and Task create/complete; priority/status filters preserve records and audit");
    await navigate("sales","Сделки");
    await page.getByLabel("Название сделки",{exact:true}).fill("Browser Deal "+runId);
-   await page.getByLabel("Клиент",{exact:true}).selectOption(accountId);
+   await selectPagedPicker(page,"Клиент",accountId,"account");
    await page.getByLabel("Сумма",{exact:true}).fill("90071992547409.93");
    await page.getByLabel("Вероятность, %",{exact:true}).fill("37.45");
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
@@ -214,24 +240,24 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    steps.push("Exact bigint Deal and atomic Sales–Activities flow visible in Account");
    await navigate("review","Качество и совпадения");
    const quality=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить имя",exact:true})});
-   await quality.getByLabel("Участник",{exact:true}).selectOption(partyId);
+   await selectPagedPicker(quality,"Участник",partyId);
    const qualityResponse=page.waitForResponse(r=>r.url().endsWith("/EvaluatePartyName"));
    await quality.getByRole("button",{name:"Проверить качество",exact:true}).click();
    assert.equal((await qualityResponse).status(),200);
    await page.getByText("Не пройдено: 0",{exact:true}).waitFor();
    const compare=page.locator("section").filter({has:page.getByRole("heading",{name:"Сравнить участников",exact:true})});
-   await compare.getByLabel("Первый участник",{exact:true}).selectOption(partyId);
-   await compare.getByLabel("Второй участник",{exact:true}).selectOption(otherPartyId);
+   await selectPagedPicker(compare,"Первый участник",partyId);
+   await selectPagedPicker(compare,"Второй участник",otherPartyId);
    const compared=page.waitForResponse(r=>r.url().endsWith("/CompareParties"));
    await compare.getByRole("button",{name:"Сравнить",exact:true}).click();
    assert.equal((await compared).status(),200);
    await compare.getByText(/разные записи; личность не подтверждена/).waitFor();
    await navigate("consents","Коммуникации");
    const suppress=page.locator("section").filter({has:page.getByRole("heading",{name:"Запретить коммуникацию",exact:true})});
-   await suppress.getByLabel("Участник",{exact:true}).selectOption(partyId);
+   await selectPagedPicker(suppress,"Участник",partyId);
    await mutation(suppress.getByRole("button",{name:"Запретить контакт",exact:true}),"SuppressCommunication");
    const evaluate=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить возможность контакта",exact:true})});
-   await evaluate.getByLabel("Участник",{exact:true}).selectOption(partyId);
+   await selectPagedPicker(evaluate,"Участник",partyId);
    await evaluate.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
    await page.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
    steps.push("Quality and consent evaluation/suppression");
