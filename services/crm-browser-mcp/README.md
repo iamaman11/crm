@@ -1,8 +1,8 @@
-# Universal Browser MCP — Draft / NO-GO
+# Universal Browser MCP — protected runtime deployed; OAuth/E2E pending
 
 Canonical project: https://github.com/iamaman11/crm  
 Specification and live acceptance ledger: https://github.com/iamaman11/crm/issues/357  
-Implementation review: https://github.com/iamaman11/crm/pull/358 (base: protected `mcp` branch).
+Implementation: [PR #358](https://github.com/iamaman11/crm/pull/358) merged to protected `mcp`; [PR #359](https://github.com/iamaman11/crm/pull/359) merged for the ChatGPT plugin package.
 
 ## Purpose — general-purpose browser automation
 
@@ -51,16 +51,38 @@ On CRM: existing Connect API → Rust business logic → existing D1
 
 Next capabilities must be built **inside this same MCP**, not as separate systems: tab/popup/context selection; uploads and downloads; navigation across multiple public domains; traces, timings and network debugging; deterministic assertions and test reporting; reconnect/expiry of Browser Run sessions; optional constrained page evaluation (explicitly authorized and safety-reviewed). See the capability matrix and acceptance checklist in Issue #357.
 
-## Current proven deployment/auth state (14 Nov 2026)
+## Current verified deployment and authentication (14 Nov 2026)
 
-- PR #358 remains **Draft / NO-GO**. Current CI [#43508066499](https://github.com/iamaman11/crm/actions/runs/43508066499) succeeded on HEAD `4ab634412b617ac90dabfa6e84d94e97b216dffd`: TypeScript, security/navigation regression tests, source boundaries and Wrangler dry-run PASS; deployment job SKIPPED. This does **not** establish a live browser or MCP connection.
-- Cloudflare `crm-browser-mcp` has a bootstrap-only `bootstrap/deny.mjs` first version `8d103dbe-3c8b-4811-9b41-5b7ec4c9fd91`; it is not the code in `src/`. Public `workers.dev` and preview routes are disabled, no working MCP is exposed.
-- Cloudflare Access app `crm-browser-mcp-access` exists and its Managed OAuth is enabled according to read-only API verification; the actual authorized ChatGPT OAuth/MCP flow has **not yet been accepted**.
-- **Deployment credential provisioning is COMPLETE**, as confirmed by the latest [Issue #357 Vault receipt comment](https://github.com/iamaman11/crm/issues/357#issuecomment-6864793396): exactly one `Individual Workers Editor` token for `crm-browser-mcp`, a tested HTTP 403 for `crm-dev`, encrypted in Windows Vault, and securely installed in GitHub Environment `browser-mcp` under `CLOUDFLARE_API_TOKEN`. Do **not** issue it again, broaden it or transfer it into the main CRM environment.
-- `BROWSER_MCP_RELEASE_ENABLED=false` remains mandatory. Token provisioning did not authorize a code release.
-- A distinct Cloudflare Access service identity for browsing the owner's existing CRM tenant is **not** onboarded yet. In the current CRM, an unknown verified service principal can be auto-enrolled into a different tenant. Explicit owner-tenant mapping must occur before the first CRM request.
+- **Real Universal Browser MCP deployed.** [CI/deploy #43510554028](https://github.com/iamaman11/crm/actions/runs/43510554028) passed from protected `mcp` commit `70119e852c5107cd8337abdac70c2325b6bb2218`. Cloudflare version `cec55b95-58f4-4f5a-ade7-e2e7ce14e4fe` is live at 100%, with the official Browser Run binding `BROWSER` and `SESSIONS` Durable Object binding. The sole published origin is `https://crm-browser-mcp.crm-5bd5e1e1.workers.dev/mcp`; preview URLs are disabled.
+- Cloudflare Access `crm-browser-mcp-access` protects the origin with a single owner-email policy. `CRM_MCP_OWNER_EMAIL` is a protected Worker secret. Anonymous GET and MCP initialize POST both receive HTTP 401 and OAuth `WWW-Authenticate`, never a tool response.
+- Access Managed OAuth exposes protected-resource discovery, the authorization server, PKCE S256 and DCR. **DCR was initially misconfigured:** only localhost/loopback callbacks were allowed, causing `HTTP 400 invalid_client_metadata: redirect_uri is not allowed by the account configuration`. The exact allowed redirect URI list and live positive/negative tests are documented below.
+- [PR #359](https://github.com/iamaman11/crm/pull/359) added the canonical private ChatGPT plugin package in `chatgpt-plugin/universal-browser-mcp/`. Private plugin exists, but human OAuth consent and authenticated `browser_status` / `browser_open` tool invocations from ChatGPT are **not yet proven**.
+- **CRM administrative browser access remains intentionally disabled** until a distinct service principal is explicitly bound to the existing human-owner tenant. Neither `CRM_BROWSER_CLIENT_ID` nor `CRM_BROWSER_CLIENT_SECRET` is present. Do not reuse CI credentials or create a parallel CRM tenant.
+- GitHub Environment `browser-mcp` holds an independently scoped `CLOUDFLARE_API_TOKEN` (Vault receipt [Issue #357](https://github.com/iamaman11/crm/issues/357#issuecomment-6864793396)); access to primary `crm-dev` was denied with HTTP 403. **`BROWSER_MCP_RELEASE_ENABLED=false`**, no automatic release, CRM and D1 unchanged.
 
-Earlier 13 November status notes about failed Cloudflare POST 500/1004 and missing GitHub secret have been superseded; full evidence is retained in Issue #357 comments/history.
+## ChatGPT OAuth DCR redirect allowlist — physical acceptance
+
+Cloudflare Access Managed OAuth must accept the actual ChatGPT callback URLs; enabling DCR alone is **insufficient**. The Access application `crm-browser-mcp-access` must keep `oauth_configuration.enabled=true` and `dynamic_client_registration.enabled=true`, with **only** these production callback patterns in `dynamic_client_registration.allowed_uris`:
+
+```json
+{
+  "allowed_uris": [
+    "https://chatgpt.com/connector/oauth/*",
+    "https://chatgpt.com/connector_platform_oauth_redirect"
+  ]
+}
+```
+
+Cloudflare supports a trailing path `/*` for a fixed HTTPS host. OpenAI uses `/connector/oauth/{callback_id}` where OAuth metadata lacks RFC 9207 issuer-in-response (as in our Cloudflare Access metadata), and may use the stable `/connector_platform_oauth_redirect` callback in compatible cases. **Do not** allow arbitrary redirect hosts, external wildcards, or bypass the Cloudflare Access owner policy.
+
+Provider change and independent verification on 14 Nov 2026:
+- **Before:** DCR POST with real MCP resource + ChatGPT stable redirect failed HTTP 400 `invalid_client_metadata`, explanation `redirect_uri is not allowed by the account configuration`.
+- **After:** DCR POST for each ChatGPT callback form succeeded HTTP 201 with a client ID issued. Non-ChatGPT `https://example.org/oauth/callback` still failed HTTP 400; anonymous MCP GET still HTTP 401 with OAuth challenge. Policy ID, audience and Worker version were unchanged.
+- **Remaining:** retry creating the custom MCP app inside ChatGPT, select DCR, leave unadvertised scopes empty and disable optional OIDC discovery when unavailable, then complete the owner's real OAuth login and tools smoke. Never claim a successful ChatGPT connection before the UI and tools confirm it.
+
+Cloudflare Access app configuration is account infrastructure managed via its API, **not** Wrangler Worker source. This README records the expected configuration alongside the canonical deployment evidence; changing it requires readback of the exact Access application, not any changes to `crm-dev`.
+
+Official references: [OpenAI OAuth callback requirements](https://developers.openai.com/plugins/build/auth#redirect-url) and [Cloudflare Access Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/).
 
 ## Confirmed R0 navigation fix (14 Nov 2026)
 
@@ -69,7 +91,7 @@ The former `browser_open(url)` implementation returned `already_open` whenever a
 ## Release acceptance gates
 
 1. **Functional code and CI:** independent `.github/workflows/browser-mcp.yml`, pinned dependencies, strict TypeScript, unit/security tests and Wrangler dry-run. No CRM build or D1 migration. Verify the actual PR HEAD, not an older successful run.
-2. **Safe reachable endpoint:** choose an Access-protected `workers.dev` hostname or controlled route; bind it to real worker code and verify `MCP_HOST`, Cloudflare Access audience, policy and Wrangler routing match. Current `workers_dev:false` / no alternate route is a **deliberate bootstrap-only deny**, not a live endpoint.
+2. **Safe reachable endpoint:** choose an Access-protected `workers.dev` hostname or controlled route; bind it to real worker code and verify `MCP_HOST`, Cloudflare Access audience, policy and Wrangler routing match. The deployed hostname is Access-protected `workers.dev`; no preview route is enabled.
 3. **Human controller auth:** only the owner is authorized. Prove correct signed identity/audience and rejection of anonymous and unrelated users. Never trust a user-supplied email or header.
 4. **Safe universal navigation:** visit at least two independent public websites; verify ordinary links, redirects, assets, forms, navigation and failures. Test private/loopback/metadata destinations, DNS and redirect bypasses, and protected CRM credentials staying on their exact origin.
 5. **CRM tenant identity:** create a distinct Access service token and allow it in the existing CRM Access app; explicitly map its verified `service:<common_name>` identity as admin of the **existing** owner's tenant before navigation. Do not reuse CI tokens or just check `/api/session` role. Independently correlate tenant and records.
@@ -77,12 +99,12 @@ The former `browser_open(url)` implementation returned `already_open` whenever a
 7. **Session and diagnostics:** prove close, timeout/expiry, reconnect, Live View and logs without exposing privileged secrets. Add advanced tools without creating another browser owner.
 8. **Explicit installation:** connect the published private MCP to ChatGPT and successfully invoke the tools. A Cloudflare release alone is not acceptance.
 
-Keep the PR Draft, release flag OFF, and the bootstrap isolated until the gates are met. **Never treat a successful compiler, unit test or dry-run as proof of a working remote browser.**
+Keep the release flag OFF except during a reviewed independent MCP release. **Do not treat CI, a published Worker or anonymous OAuth metadata as proof that ChatGPT has authenticated and run a real tool.**
 
 ## Workflow ownership
 
 - Canonical repository: `iamaman11/crm`, single Issue #357 for specification and evidence.
-- MCP branch: permanent protected `mcp`, feature PR #358 based exclusively on it.
+- MCP branch: permanent protected `mcp`; feature PRs #358 and #359 merged there.
 - MCP workflow: `.github/workflows/browser-mcp.yml`, GitHub Environment `browser-mcp`, dedicated Worker only.
 - Main CRM: `dev/main`, own existing CI and Worker; no dependency on the MCP release.
 
