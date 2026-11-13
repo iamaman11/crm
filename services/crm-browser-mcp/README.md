@@ -117,3 +117,14 @@ OAuth, real browser E2E and privacy controls are independently accepted.
 The candidate is still Draft / NO-GO: the CI build is proven, but deployed MCP,
 owner-tenant service principal, real end-to-end authorization, and ChatGPT
 connector remain to prove.
+
+### Operator release checklist (do not bypass)
+
+- Required browser-mcp check must pass on final PR HEAD, merged only to mcp.
+- The BROWSER_MCP_RELEASE_ENABLED repository switch stays false while any
+  identity, authorization, network safety, or service-token gate is unproven.
+- The dedicated browser-mcp Environment needs its own valid Cloudflare API
+  token. Never reuse the unauthorized Windows token or the CRM release token.
+- Publishing changes only the crm-browser-mcp Worker. The workflow contains no
+  D1 migration or CRM deployment command.
+- Disable the release switch again to stop future automatic publication.
