@@ -90,27 +90,28 @@ jobs:
         run: |
           set -euo pipefail
           # Immutable hard-cutover baseline and LAST LIVE-ACCEPTED app baseline:
-          # accepted CLI/live 43302137364 and accepted dev CI/live 43314210906.
+          # accepted CLI/live 43302137364 and accepted UpdateTask CI/live 43342945163.
           # Do not infer acceptance from event.before, the PR base or a green
           # build alone. A newer pin requires explicit live acceptance evidence.
+          # Keep pin unchanged for metadata-only releases with no schema/migration edits.
           historical=272aba214114f3db6247cad115f86d54312e3030
-          last_accepted=e7f93bba5e1db2ce74355a58623fe5086823f978
-          echo "::notice title=CRM compatibility bases::candidate=${CRM_CANDIDATE_SOURCE_SHA} tested_checkout=${GITHUB_SHA} historical=${historical} last_live_accepted=${last_accepted} development_previous_unaccepted=${CRM_DEVELOPMENT_PREVIOUS_SHA}"
+          accepted_contracts=50370070d2f9bb147baa8cb712ab4f54d174f7b8
+          echo "::notice title=CRM compatibility bases::candidate=${CRM_CANDIDATE_SOURCE_SHA} tested_checkout=${GITHUB_SHA} historical=${historical} last_accepted_contracts=${accepted_contracts} development_previous_unaccepted=${CRM_DEVELOPMENT_PREVIOUS_SHA}"
           {
             echo "### CRM compatibility gate"
             echo "- Candidate source: \`${CRM_CANDIDATE_SOURCE_SHA}\`"
             echo "- CI checkout: \`${GITHUB_SHA}\`"
             echo "- Historical accepted cutover: \`${historical}\`"
-            echo "- Last live-accepted CRM: \`${last_accepted}\`"
+            echo "- Latest live-accepted API/SQL schema: \`${accepted_contracts}\`"
             echo "- Prior development SHA (diagnostic only): \`${CRM_DEVELOPMENT_PREVIOUS_SHA}\`"
           } >> "$GITHUB_STEP_SUMMARY"
           crm_contract_failure() {
             local exit_code="$1" line="$2" command="$3"
-            echo "::error title=CRM contract FAIL::candidate=${CRM_CANDIDATE_SOURCE_SHA} checkout=${GITHUB_SHA} historical=${historical} last_live_accepted=${last_accepted} development_previous=${CRM_DEVELOPMENT_PREVIOUS_SHA} first_failing_line=${line} exit=${exit_code} command=${command}"
+            echo "::error title=CRM contract FAIL::candidate=${CRM_CANDIDATE_SOURCE_SHA} checkout=${GITHUB_SHA} historical=${historical} last_accepted_contracts=${accepted_contracts} development_previous=${CRM_DEVELOPMENT_PREVIOUS_SHA} first_failing_line=${line} exit=${exit_code} command=${command}"
             echo "- **FAIL** (exit ${exit_code}) at line ${line}: \`${command}\`" >> "$GITHUB_STEP_SUMMARY"
           }
           trap 'status=$?; crm_contract_failure "$status" "$LINENO" "$BASH_COMMAND"; exit "$status"' ERR
-          for baseline in "$historical" "$last_accepted"; do
+          for baseline in "$historical" "$accepted_contracts"; do
             git cat-file -e "${baseline}^{commit}"
             git merge-base --is-ancestor "$baseline" HEAD
             mapfile -t migrations < <(git ls-tree -r --name-only "$baseline" -- apps/cloudflare-crm/migrations/)
