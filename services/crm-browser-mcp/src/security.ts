@@ -57,15 +57,24 @@ export function isCrmRequest(input: string): boolean {
 
 function isInternalHost(host: string): boolean {
   const h = host.replace(/^\[|\]$/g, "").toLowerCase();
+  // A one-label name can resolve to a private machine through search
+  // domains even though the URL itself contains no obvious private IP.
+  if (!h.includes(".") && !h.includes(":") && !/^\\d+$/.test(h)) return true;
   if (h === "localhost" || h.endsWith(".localhost") ||
       h.endsWith(".local") || h.endsWith(".internal") ||
+      h.endsWith(".home.arpa") || h.endsWith(".lan") ||
+      h.endsWith(".test") || h.endsWith(".invalid") ||
       h === "::1" || h === "0.0.0.0" || h === "::") return true;
   const parts = h.split(".");
   if (parts.length === 4 && parts.every(x => /^\d+$/.test(x) && +x <= 255)) {
-    const [a = -1,b = -1] = parts.map(Number);
+    const [a = -1,b = -1,c = -1] = parts.map(Number);
     return a === 0 || a === 10 || a === 127 || a >= 224 ||
       (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+      (a === 192 && (b === 168 || (b === 0 && c === 0) ||
+        (b === 0 && c === 2) || (b === 88 && c === 99))) ||
+      (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+      (a === 203 && b === 0 && c === 113) ||
+      (a === 100 && b >= 64 && b <= 127);
   }
   // IPv4-mapped IPv6, e.g. [::ffff:127.0.0.1] -> [::ffff:7f00:1].
   if (h.startsWith("::ffff:")) {
