@@ -48,6 +48,7 @@ export type Command = {
   inspection?: "network" | "performance" | "accessibility" | "pdf";
   width?: number;
   height?: number;
+  recording?: boolean;
 };
 
 type Result = { ok: true; data: unknown; image?: string } | { ok: false; error: string };
@@ -61,6 +62,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private context: BrowserContext | null = null;
   private page: Page | null = null;
   private browserSessionId: string | null = null;
+  private recordingEnabled = false;
   private tabIds = new Map<Page, string>();
   private nextOperation: Promise<void> = Promise.resolve();
   private pendingOperations = 0;
@@ -130,6 +132,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
     }
     this.browser = browser;
     this.browserSessionId = sessionId;
+    this.recordingEnabled = await this.ctx.storage.get<boolean>("browser_recording") ?? false;
     const contexts = browser.contexts();
     this.context = contexts.find(c => c.pages().some(p => !p.isClosed())) ??
       contexts[0] ?? null;
@@ -233,12 +236,15 @@ export class CrmBrowserSession extends DurableObject<Env> {
       });
   }
 
-  private async open(path: string = "/") {
+  private async open(path: string = "/", recording: boolean = false) {
     const destination = browserUrl(path);
     requireCrmAgentIdentity(
       destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
     );
     await this.restore();
+    if (recording && this.browser && !this.recordingEnabled) {
+      throw new Error("BROWSER_RECORDING_REQUIRES_NEW_SESSION");
+    }
     if (this.page && !this.page.isClosed()) {
       if (this.page.url() === destination) {
         return { state: "already_open", path: safePagePath(this.page.url()) };
@@ -249,11 +255,15 @@ export class CrmBrowserSession extends DurableObject<Env> {
     if (!this.browser) {
       // Official acquisition + explicit connection allows DO eviction recovery.
       // Keep-alive is idle time, not an automatic browser polling loop.
-      const { sessionId } = await acquire(this.env.BROWSER, { keep_alive: 600_000 });
+      const { sessionId } = await acquire(this.env.BROWSER, {
+        keep_alive: 600_000, recording,
+      });
       try {
         this.browser = await connect(this.env.BROWSER, sessionId);
         this.browserSessionId = sessionId;
         await this.ctx.storage.put("browser_session_id", sessionId);
+        await this.ctx.storage.put("browser_recording", recording);
+        this.recordingEnabled = recording;
         created = true;
       } catch (error) {
         await this.env.BROWSER.closeSession(sessionId);
@@ -285,10 +295,17 @@ export class CrmBrowserSession extends DurableObject<Env> {
       // Browser Run session, not just this DO's CDP connection.
       await this.browser?.close();
       if (sessionId) await this.env.BROWSER.closeSession(sessionId);
+      if (sessionId && this.recordingEnabled) {
+        // The native Cloudflare recording is available only after session
+        // closure. Store the opaque ID, never recording contents or cookies.
+        await this.ctx.storage.put("last_recording_session_id", sessionId);
+      }
       await this.ctx.storage.delete("browser_session_id");
+      await this.ctx.storage.delete("browser_recording");
     } finally {
       this.browser = null;
       this.browserSessionId = null;
+      this.recordingEnabled = false;
       this.context = null;
       this.page = null;
       this.tabIds.clear();
@@ -300,7 +317,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
   }
 
   private async execute(command: Command): Promise<{ data: unknown; image?: string }> {
-    if (command.op === "open") return { data: await this.open(command.url) };
+    if (command.op === "open") return {
+      data: await this.open(command.url, command.recording ?? false),
+    };
     if (command.op === "close") {
       await this.close();
       return { data: { state: "closed" } };
@@ -310,6 +329,8 @@ export class CrmBrowserSession extends DurableObject<Env> {
       data: {
         state: this.page && !this.page.isClosed() ? "open" : "closed",
         path: this.page && !this.page.isClosed() ? safePagePath(this.page.url()) : null,
+        recording: this.recordingEnabled,
+        lastRecordedSessionId: await this.ctx.storage.get<string>("last_recording_session_id") ?? null,
       },
     };
     if (command.op === "tabs") {
