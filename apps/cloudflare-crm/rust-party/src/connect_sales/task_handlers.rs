@@ -88,13 +88,25 @@ impl task_wire::TaskService for TaskV2Service {
             None => Change::Keep,
             Some(patch) => match patch.operation.as_ref() {
                 Some(task_wire::task_priority_patch::Operation::Set(value))
-                    if *value == task_wire::TaskPriority::TASK_PRIORITY_LOW => Change::Set(activity_tasks::Priority::Low),
+                    if *value == task_wire::TaskPriority::TASK_PRIORITY_LOW =>
+                {
+                    Change::Set(activity_tasks::Priority::Low)
+                }
                 Some(task_wire::task_priority_patch::Operation::Set(value))
-                    if *value == task_wire::TaskPriority::TASK_PRIORITY_NORMAL => Change::Set(activity_tasks::Priority::Normal),
+                    if *value == task_wire::TaskPriority::TASK_PRIORITY_NORMAL =>
+                {
+                    Change::Set(activity_tasks::Priority::Normal)
+                }
                 Some(task_wire::task_priority_patch::Operation::Set(value))
-                    if *value == task_wire::TaskPriority::TASK_PRIORITY_HIGH => Change::Set(activity_tasks::Priority::High),
+                    if *value == task_wire::TaskPriority::TASK_PRIORITY_HIGH =>
+                {
+                    Change::Set(activity_tasks::Priority::High)
+                }
                 Some(task_wire::task_priority_patch::Operation::Set(value))
-                    if *value == task_wire::TaskPriority::TASK_PRIORITY_URGENT => Change::Set(activity_tasks::Priority::Urgent),
+                    if *value == task_wire::TaskPriority::TASK_PRIORITY_URGENT =>
+                {
+                    Change::Set(activity_tasks::Priority::Urgent)
+                }
                 Some(task_wire::task_priority_patch::Operation::Clear(true)) => Change::Clear,
                 _ => return Err(ConnectError::invalid_argument("invalid TaskPriority patch")),
             },
@@ -102,8 +114,9 @@ impl task_wire::TaskService for TaskV2Service {
         let due_at_unix_nanos = match input.due_at.as_option() {
             None => Change::Keep,
             Some(patch) => match patch.operation.as_ref() {
-                Some(core_v2::timestamp_patch::Operation::Set(value)) =>
-                    Change::Set(ContactPointV2Service::nanos(value)?),
+                Some(core_v2::timestamp_patch::Operation::Set(value)) => {
+                    Change::Set(ContactPointV2Service::nanos(value)?)
+                }
                 Some(core_v2::timestamp_patch::Operation::Clear(true)) => Change::Clear,
                 _ => return Err(ConnectError::invalid_argument("invalid due_at patch")),
             },
@@ -128,7 +141,9 @@ impl task_wire::TaskService for TaskV2Service {
         RpcResponse::ok(task_wire::UpdateTaskResponse {
             task: Some(Self::convert(
                 &saved.task,
-                &self.persisted_account(saved.task.task_id().as_str()).await?,
+                &self
+                    .persisted_account(saved.task.task_id().as_str())
+                    .await?,
             )?)
             .into(),
             receipt: Some(self.receipt(&saved)).into(),
