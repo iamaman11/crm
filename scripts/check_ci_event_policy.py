@@ -72,6 +72,13 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
         and path.parent.name == "workflows"
         and path.parent.parent.name == ".github"
     )
+    browser_mcp_workflow = (
+        path.name == "browser-mcp.yml"
+        and path.parent.name == "workflows"
+        and path.parent.parent.name == ".github"
+    )
+    if browser_mcp_workflow and (not has_push or not has_pull_request):
+        errors.append("Browser MCP workflow must validate pushes and PRs to mcp")
     if crm_dev_workflow:
         if not has_push:
             errors.append("CRM must run on push to dev")
@@ -79,7 +86,7 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
             errors.append("CRM uses one dev pipeline, not duplicate pull_request builds")
     if has_pull_request:
         pr_section = _event_section(lines, event_start, event_end, "pull_request")
-        expected_pr = "dev" if crm_dev_workflow else "main"
+        expected_pr = "dev" if crm_dev_workflow else "mcp" if browser_mcp_workflow else "main"
         branch_lines: list[str] = []
         if "    branches:" in pr_section:
             start = pr_section.index("    branches:") + 1
@@ -93,13 +100,13 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
                 or branch_lines != [f"- {expected_pr}"]
                 or "    branches-ignore:" in pr_section):
             errors.append(f"pull_request must be restricted to branch {expected_pr}")
-    if not crm_dev_workflow and not (has_push and has_pull_request):
+    if not (crm_dev_workflow or browser_mcp_workflow) and not (has_push and has_pull_request):
         return WorkflowPolicyResult(path, tuple(errors))
 
     push_section = _event_section(lines, event_start, event_end, "push")
     # A single, explicit exception for the one CRM development release job.
     # All unrelated workflows retain their main-only policy.
-    expected = "dev" if crm_dev_workflow else "main"
+    expected = "dev" if crm_dev_workflow else "mcp" if browser_mcp_workflow else "main"
     branch_lines = []
     if "    branches:" in push_section:
         for line in push_section[push_section.index("    branches:") + 1:]:
