@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { launch, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
-import { CRM_ORIGIN, crmUrl, isCrmRequest, redact, safePagePath } from "./security";
+import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, redact, safePagePath } from "./security";
 
 export interface Env {
   BROWSER: Fetcher;
@@ -38,6 +38,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private context: BrowserContext | null = null;
   private page: Page | null = null;
   private acceptingDialog = false;
+  private ownerDirectedCrmNavigation = false;
   private consoleLog: Array<{ level: string; text: string }> = [];
   private requestLog: Array<{ method: string; path: string; status: number }> = [];
 
@@ -54,9 +55,6 @@ export class CrmBrowserSession extends DurableObject<Env> {
   }
 
   private async open(path: string = "/") {
-    if (!this.env.CRM_BROWSER_CLIENT_ID || !this.env.CRM_BROWSER_CLIENT_SECRET) {
-      throw new Error("CRM_BROWSER_AGENT_NOT_ENROLLED");
-    }
     if (this.page && !this.page.isClosed()) {
       return { state: "already_open", path: safePagePath(this.page.url()) };
     }
@@ -67,21 +65,42 @@ export class CrmBrowserSession extends DurableObject<Env> {
         acceptDownloads: true,
         serviceWorkers: "block",
       });
-      // Origin-scoped access credentials: they are never registered as
-      // context-wide extraHTTPHeaders, which would leak on cross-origin navigations.
+      // Universal public-web browsing. Never pass CRM's Access credentials to
+      // the whole browser context: that leaks across origins and redirects.
       await this.context.route("**/*", async route => {
         const request = route.request();
-        if (!isCrmRequest(request.url())) {
-          await route.abort("blockedbyclient");
+        let initiator = "";
+        let trustedMainNavigation = false;
+        try {
+          const frame = request.frame();
+          initiator = frame.url();
+          trustedMainNavigation = this.ownerDirectedCrmNavigation &&
+            request.isNavigationRequest() && frame === this.page?.mainFrame();
+        } catch { /* Service-worker requests have no frame; never authorize. */ }
+        const hasAgentCredentials = Boolean(
+          this.env.CRM_BROWSER_CLIENT_ID && this.env.CRM_BROWSER_CLIENT_SECRET,
+        );
+        if (!hasAgentCredentials ||
+            !crmCredentialsAllowed(request.url(), initiator, trustedMainNavigation)) {
+          // Includes foreign sites, their assets, third-party CDNs and SSO.
+          await route.continue();
           return;
         }
-        await route.continue({
+        // Playwright route.continue({headers}) propagates overridden headers to
+        // every redirect, including foreign origins. This is NOT safe.
+        // route.fetch(maxRedirects:0) keeps the signed credentials on exactly
+        // the first CRM request and fulfills the response to the browser.
+        // A 3xx is followed in the browser WITHOUT privileged request headers.
+        const response = await route.fetch({
           headers: {
             ...request.headers(),
             "CF-Access-Client-Id": this.env.CRM_BROWSER_CLIENT_ID,
             "CF-Access-Client-Secret": this.env.CRM_BROWSER_CLIENT_SECRET,
           },
+          maxRedirects: 0,
+          timeout: 25000,
         });
+        await route.fulfill({ response });
       });
       this.page = await this.context.newPage();
       this.page.on("console", message => {
@@ -94,14 +113,12 @@ export class CrmBrowserSession extends DurableObject<Env> {
       });
       this.page.on("response", response => {
         const url = response.url();
-        if (isCrmRequest(url)) {
-          this.requestLog.push({
-            method: response.request().method(),
-            path: safePagePath(url),
-            status: response.status(),
-          });
-          if (this.requestLog.length > 80) this.requestLog.shift();
-        }
+        this.requestLog.push({
+          method: response.request().method(),
+          path: safePagePath(url),
+          status: response.status(),
+        });
+        if (this.requestLog.length > 80) this.requestLog.shift();
       });
       this.page.on("dialog", async dialog => {
         const accept = this.acceptingDialog;
@@ -109,9 +126,15 @@ export class CrmBrowserSession extends DurableObject<Env> {
         if (accept) await dialog.accept();
         else await dialog.dismiss();
       });
-      const response = await this.page.goto(crmUrl(path), {
-        waitUntil: "domcontentloaded", timeout: 25000,
-      });
+      this.ownerDirectedCrmNavigation = isCrmRequest(browserUrl(path));
+      let response;
+      try {
+        response = await this.page.goto(browserUrl(path), {
+          waitUntil: "domcontentloaded", timeout: 25000,
+        });
+      } finally {
+        this.ownerDirectedCrmNavigation = false;
+      }
       return {
         state: "open",
         http_status: response?.status() ?? null,
@@ -132,6 +155,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       this.context = null;
       this.page = null;
       this.acceptingDialog = false;
+      this.ownerDirectedCrmNavigation = false;
       this.requestLog = [];
       this.consoleLog = [];
     }
@@ -170,9 +194,16 @@ export class CrmBrowserSession extends DurableObject<Env> {
       }
       case "console":
         return { data: { messages: this.consoleLog.slice(-80), responses: this.requestLog.slice(-80) } };
-      case "navigate":
-        await page.goto(crmUrl(command.url), { waitUntil: "domcontentloaded", timeout: 25000 });
+      case "navigate": {
+        const destination = browserUrl(command.url ?? "/", page.url() || CRM_ORIGIN);
+        this.ownerDirectedCrmNavigation = isCrmRequest(destination);
+        try {
+          await page.goto(destination, { waitUntil: "domcontentloaded", timeout: 25000 });
+        } finally {
+          this.ownerDirectedCrmNavigation = false;
+        }
         return { data: { path: safePagePath(page.url()), title: await page.title() } };
+      }
       case "reload":
         await page.reload({ waitUntil: "domcontentloaded", timeout: 25000 });
         return { data: { path: safePagePath(page.url()) } };
@@ -189,6 +220,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
         await page.keyboard.press(command.key ?? "");
         return { data: { action: "press", completed: true } };
       case "session": {
+        if (!isCrmRequest(page.url())) throw new Error("CRM_BROWSER_NOT_ON_CRM");
         // Uses the CRM's own current Access identity, not an override header.
         const result = await page.evaluate(async () => {
           const response = await fetch("/api/session", { credentials: "same-origin" });
