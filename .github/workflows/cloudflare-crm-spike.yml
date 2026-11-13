@@ -85,17 +85,34 @@ jobs:
       - name: Enforce canonical Protobuf compatibility and typed packages
         shell: bash
         env:
-          CRM_PREVIOUS_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CRM_CANDIDATE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CRM_DEVELOPMENT_PREVIOUS_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
-          # Accepted hard cutover: CI 43302137364 + real Access/browser/D1/Logs.
-          # Immutable API/schema baseline, never automatically replaced by HEAD.
-          accepted=272aba214114f3db6247cad115f86d54312e3030
-          git cat-file -e "${accepted}^{commit}"
-          # Also protect contracts/migrations added after the initial baseline.
-          # PR: exact target SHA; push: dev immediately before this change.
-          git cat-file -e "${CRM_PREVIOUS_SHA}^{commit}"
-          for baseline in "$accepted" "$CRM_PREVIOUS_SHA"; do
+          # Immutable hard-cutover baseline and LAST LIVE-ACCEPTED app baseline:
+          # accepted CLI/live 43302137364 and accepted dev CI/live 43314210906.
+          # Do not infer acceptance from event.before, the PR base or a green
+          # build alone. A newer pin requires explicit live acceptance evidence.
+          historical=272aba214114f3db6247cad115f86d54312e3030
+          last_accepted=e7f93bba5e1db2ce74355a58623fe5086823f978
+          echo "::notice title=CRM compatibility bases::candidate=${CRM_CANDIDATE_SOURCE_SHA} tested_checkout=${GITHUB_SHA} historical=${historical} last_live_accepted=${last_accepted} development_previous_unaccepted=${CRM_DEVELOPMENT_PREVIOUS_SHA}"
+          {
+            echo "### CRM compatibility gate"
+            echo "- Candidate source: \`${CRM_CANDIDATE_SOURCE_SHA}\`"
+            echo "- CI checkout: \`${GITHUB_SHA}\`"
+            echo "- Historical accepted cutover: \`${historical}\`"
+            echo "- Last live-accepted CRM: \`${last_accepted}\`"
+            echo "- Prior development SHA (diagnostic only): \`${CRM_DEVELOPMENT_PREVIOUS_SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          crm_contract_failure() {
+            local exit_code="$1" line="$2" command="$3"
+            echo "::error title=CRM contract FAIL::candidate=${CRM_CANDIDATE_SOURCE_SHA} checkout=${GITHUB_SHA} historical=${historical} last_live_accepted=${last_accepted} development_previous=${CRM_DEVELOPMENT_PREVIOUS_SHA} first_failing_line=${line} exit=${exit_code} command=${command}"
+            echo "- **FAIL** (exit ${exit_code}) at line ${line}: \`${command}\`" >> "$GITHUB_STEP_SUMMARY"
+          }
+          trap 'status=$?; crm_contract_failure "$status" "$LINENO" "$BASH_COMMAND"; exit "$status"' ERR
+          for baseline in "$historical" "$last_accepted"; do
+            git cat-file -e "${baseline}^{commit}"
+            git merge-base --is-ancestor "$baseline" HEAD
             mapfile -t migrations < <(git ls-tree -r --name-only "$baseline" -- apps/cloudflare-crm/migrations/)
             test "${#migrations[@]}" -gt 0
             git diff --exit-code "$baseline" HEAD -- "${migrations[@]}"
@@ -137,50 +154,6 @@ jobs:
       - name: Build React CRM
         run: pnpm run build
         working-directory: apps/cloudflare-crm
-      - name: Install and launch Chromium before expensive native builds
-        working-directory: apps/cloudflare-crm
-        shell: bash
-        run: |
-          set -euo pipefail
-          # GitHub-hosted Ubuntu already ships many browser libraries; do not
-          # unconditionally call apt and depend on an external Ubuntu mirror.
-          # Verify by launching the SAME pinned Playwright Chromium headlessly.
-          for attempt in 1 2; do
-            if npx playwright install chromium; then
-              break
-            fi
-            if [ "$attempt" -eq 2 ]; then
-              echo "::error::Pinned Playwright Chromium download failed"
-              exit 1
-            fi
-            sleep 10
-          done
-          launch_browser() {
-            node --input-type=module -e '
-              import { chromium } from "playwright";
-              const browser = await chromium.launch({headless: true});
-              const page = await browser.newPage();
-              await page.goto("data:text/html,<h1>CRM browser preflight</h1>");
-              if (await page.locator("h1").innerText() !== "CRM browser preflight")
-                throw new Error("Chromium rendered unexpected content");
-              await browser.close();
-            '
-          }
-          if launch_browser; then
-            echo "Chromium physically launched with existing system libraries"
-          else
-            echo "::warning::Chromium needs OS libraries; installing declared Playwright dependencies"
-            for attempt in 1 2; do
-              if npx playwright install-deps chromium && launch_browser; then
-                exit 0
-              fi
-              if [ "$attempt" -eq 2 ]; then
-                echo "::error::Chromium system dependencies or physical launch failed"
-                exit 1
-              fi
-              sleep 10
-            done
-          fi
       - name: Compile the actual Worker owner graph for WebAssembly
         run: cargo check --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native
       - name: Run Clippy on the actual Worker for WebAssembly
@@ -288,7 +261,52 @@ jobs:
       - name: Compile native Rust Access gate using isolated RSA test keys
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --locked --features native-ci
+      - name: Install and launch Chromium after native compilation
+        working-directory: apps/cloudflare-crm
+        shell: bash
+        run: |
+          set -euo pipefail
+          # GitHub-hosted Ubuntu already ships many browser libraries; do not
+          # unconditionally call apt and depend on an external Ubuntu mirror.
+          # Verify by launching the SAME pinned Playwright Chromium headlessly.
+          for attempt in 1 2; do
+            if npx playwright install chromium; then
+              break
+            fi
+            if [ "$attempt" -eq 2 ]; then
+              echo "::error::Pinned Playwright Chromium download failed"
+              exit 1
+            fi
+            sleep 10
+          done
+          launch_browser() {
+            node --input-type=module -e '
+              import { chromium } from "playwright";
+              const browser = await chromium.launch({headless: true});
+              const page = await browser.newPage();
+              await page.goto("data:text/html,<h1>CRM browser preflight</h1>");
+              if (await page.locator("h1").innerText() !== "CRM browser preflight")
+                throw new Error("Chromium rendered unexpected content");
+              await browser.close();
+            '
+          }
+          if launch_browser; then
+            echo "Chromium physically launched with existing system libraries"
+          else
+            echo "::warning::Chromium needs OS libraries; installing declared Playwright dependencies"
+            for attempt in 1 2; do
+              if npx playwright install-deps chromium && launch_browser; then
+                exit 0
+              fi
+              if [ "$attempt" -eq 2 ]; then
+                echo "::error::Chromium system dependencies or physical launch failed"
+                exit 1
+              fi
+              sleep 10
+            done
+          fi
       - name: Test signed RPC and generated-client React scenarios under workerd
+        id: crm_native_workerd
         working-directory: apps/cloudflare-crm
         env:
           CRM_SOURCE_SHA: ${{ github.sha }}
@@ -310,12 +328,15 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Preserve native Rust browser proof and screenshot
-        if: always()
+        # No misleading second FAIL when an earlier gate skipped workerd/browser.
+        # A successful workerd test without mandatory evidence still fails the
+        # explicit "Require actual browser acceptance" step below.
+        if: ${{ always() && steps.crm_native_workerd.outcome != 'skipped' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: crm-native-party-proof-${{ github.sha }}
           path: apps/cloudflare-crm/e2e-evidence-native/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
       - name: Restore compiled production Worker after JWT test
         run: |

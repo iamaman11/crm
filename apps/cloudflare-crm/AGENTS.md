@@ -12,12 +12,12 @@ Root AGENTS.md регулирует общие domain invariants и repository p
 ## Рабочий процесс
 
 1. Читать актуальный #352, этот файл, ARCHITECTURE.md, принятые решения #338/#350, текущие PR/head и CI. Проверять реальный deployed SHA перед утверждениями о live.
-2. PR #351 завершён. Продолжать в постоянной dev по #352 с архитектурой #338, без новых branches/plans/workflows/Environment на каждый шаг. Принятая API/schema baseline фиксирована в существующем CI; не заменять её автоматически на HEAD.
+2. PR #351 завершён. Разрабатывать каждый законченный срез в одной кандидатной ветке/PR канонического GitHub → `dev`, с архитектурой #338 и планом #352. Не добавлять новые CI workflow, Environment или runtime. Непроверенный кандидат не отправлять прямым push в `dev`. Допустимый прямой push не является свидетельством принятия.
 3. Разработка через канонический GitHub; builds/tests выполняет GitHub Actions. Не поручать обычную работу локальному Windows агенту и не просить пользователя запускать команды.
 4. Определить existing owner и точную capability до изменения UI/transport. Не угадывать ownership по имени пакета.
-5. Неполные implementation commits допустимы, но конечные checks не ослабляются и не заменяются migration-phase PASS. Не публиковать частичные RPC.
+5. Неполные implementation commits допустимы **только в кандидатной ветке**. PR→dev прогоняет весь существующий CI; при новом commit или изменении dev/base PR требуется повторная применимая проверка. Не merge непроверенное. После merge dev выполняет тот же CI и только затем разрешает deploy/live.
 6. Записывать tested SHA/tree/features, CI и evidence в implementation issue и #352; #338 остаётся архитектурной основой, #350 — завершённой исторической приёмкой. Не утверждать DONE по документации или compile-only.
-7. Не merge/deploy до полного CI и независимой проверки кандидата. Деструктивный reset тестовых business data выполняется только как подготовленная операция финального переключения с проверенным binding.
+7. Не merge/deploy до полного CI и независимой проверки кандидата. Защищены историческая `272aba214114f3db6247cad115f86d54312e3030` и последняя **реально live-принятая** `e7f93bba5e1db2ce74355a58623fe5086823f978` (CI 43314210906). `event.before` и PR base — только диагностические SHA разработки; не base breaking checks, пока они не приняты. После новой успешной CI+live приёмки закреплять следующий точный accepted SHA отдельным явным изменением pin с доказательствами, не автоматически по 'последнему зелёному'.
 
 ## Обязательные ограничения
 
@@ -31,7 +31,7 @@ Root AGENTS.md регулирует общие domain invariants и repository p
 - Содержательные domain/workerd/D1/browser tests сохранять/переводить на новый API; source-only duplicate checks удалять. Не ослаблять auth, tenant, CAS, replay, audit.
 - При committed write и failed refresh показывать сохранённый результат и устаревшее чтение, не «запись не удалась».
 - В финальном runtime нет legacy JSX/business REST, temporary screen, Published/Candidate, migration-freeze/contract-only, codec bridges/stubs.
-- CI: один pinned pnpm workspace/lock, frozen/locked builds, реальные compiler tests, native integration и browser generated-client scenarios. Missing mandatory evidence = FAIL.
+- CI: один pinned pnpm workspace/lock, frozen/locked builds, реальные compiler tests, native integration и browser generated-client scenarios. Порядок: ранние проверки → Buf/TS → actual Rust/WASM check/Clippy → дальнейшая сборка → Chromium/workerd. Отчёт перечисляет source/checkout SHA, historical/last accepted и prior-development SHA и первую причину FAIL. Отсутствие обязательного evidence после выполненного browser test = FAIL, пропущенный browser этап не создаёт вторую ложную ошибку загрузки.
 - Test-only signed native-ci отличается от production features; не смешивать доказательства.
 - Clean reset не означает удаление Access infrastructure и не выполняется на каждом deploy. Старый несовместимый Worker не откатывать автоматически после reset.
 - Не ломать shared contracts других приложений без проверки consumers. После принятия закрепить новый immutable baseline, будущие breaking changes оформлять явно.

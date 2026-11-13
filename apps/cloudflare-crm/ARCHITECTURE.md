@@ -4,7 +4,7 @@
 
 Решение владельца от 12.11.2026 и [Issue #350](https://github.com/iamaman11/crm/issues/350): **жёсткий cutover тестового приложения**, без сохранения старых CRM API/UI/данных. PR #351 объединён в dev. Принятая исходная версия: `272aba214114f3db6247cad115f86d54312e3030`, [CI и live acceptance](https://github.com/iamaman11/crm/actions/runs/43302137364) PASS. Worker `08e73b33-da86-44e2-bb68-48855be214b1`, 100% traffic, прежняя единственная D1. Это базовая версия, а не автоматически обновляемая ссылка на HEAD.
 
-CI сравнивает Protobuf и защищает SQL migrations штатным git diff относительно двух точных commit: этой неизменной версии и предыдущего dev (для PR — actual base SHA, для push — event.before). Поэтому защита распространяется и на контракты/миграции, добавленные позже. Следующие изменения D1 оформляются новыми миграциями; reset 0002 повторно не применяется. API/schema evolution требует явного решения и тех же проверок. Реальная приёмка включила 24 записи с audit и 117 запросов, сопоставленных с Cloudflare Logs. Две CI-сборки одного дерева (PR 43298969184 и dev 43302137364) дали одинаковые 13 файлов UI/Worker; это проверенная повторяемость этой пары, не гарантия для любых окружений.
+CI сравнивает Protobuf и защищает SQL migrations штатным git diff относительно двух точных **принятых** commit: исторического `272aba214114f3db6247cad115f86d54312e3030` и последней версии с полным CI+live evidence — сейчас `e7f93bba5e1db2ce74355a58623fe5086823f978` ([CI 43314210906](https://github.com/iamaman11/crm/actions/runs/43314210906)). `event.before` и PR base могут быть непроверенными и теперь отражаются только в диагностике. Accepted SHA закрепляется явно после полного CI и live-приёмки; 'последний зелёный CI' не является автоматическим promotion. Следующие изменения D1 оформляются новыми миграциями; reset 0002 повторно не применяется. API/schema evolution требует явного решения и тех же проверок. Реальная приёмка включила 24 записи с audit и 117 запросов, сопоставленных с Cloudflare Logs. Две CI-сборки одного дерева (PR 43298969184 и dev 43302137364) дали одинаковые 13 файлов UI/Worker; это проверенная повторяемость этой пары, не гарантия для любых окружений.
 
 ## 1. Состав приложения
 
@@ -77,7 +77,7 @@ React strict TSX/TS; allowJs=false, strict=true, noUncheckedIndexedAccess=true, 
 
 Один pnpm workspace/pnpm-lock.yaml для приложения и shared packages; frozen install и локальные pinned tools. Закрепить Node/pnpm/Rust/Buf/codegen/Python dependency graph. Cargo locked распространяется на probes. Явные fmt/clippy/domain tests плюс native WASM/workerd/D1; install Clippy не заменяет его запуск.
 
-Тот же cloudflare-crm-spike.yml на PR→dev и push dev. Проверки по стоимости: config/topology → manifests/Buf/types → compiler/unit → workerd/D1 → реальный Chromium→Connect → mandatory artifacts. Deploy из dev после общего PASS использует sealed artifact, без повторной сборки. Не добавлять workflows/Environment.
+Тот же cloudflare-crm-spike.yml на PR→dev и push dev. Кандидат проверяется только из отдельного PR, исходный `dev` не служит площадкой для промежуточных неуспешных commits; исправляющий срез явно сравнивается с двумя принятыми baseline, а не с неуспешным previous SHA. Порядок: config/topology → форматирование → Buf/types → actual Rust/WASM check + Clippy/owner tests → сборка → реальный Chromium/workerd/D1 → mandatory artifacts. Deployment только из dev после полного CI PASS использует sealed artifact без повторной сборки. Не добавлять workflows/Environment.
 
 Browser preflight data: URL доказывает только запуск Chromium. Node fetch доказывает RPC integration, не browser E2E. Каждый обязательный сценарий засчитывается после assertions. Артефакты обязательны, отсутствие — FAIL. Negative checks обязаны обнаруживать пропуск policy/method/scenario.
 
@@ -91,6 +91,6 @@ Evidence различает PR head_sha, tested_sha, Git tree, features/tool ver
 
 Issue #350 содержит функциональный объём, execution checklist и актуальное evidence; #338 — верхний план. Docs обновляются вместе с кодом. CI доказывает заданные инварианты, не все возможные бизнес-состояния.
 
-Branch protection/required GitHub checks не включать по решению владельца. CI блокирует штатный deploy при FAIL, но не запрещает direct push.
+Branch protection/required GitHub checks не включать по решению владельца. CI блокирует штатный deploy при FAIL, но не запрещает direct push. Правило процесса: непроверенные commits остаются в PR. Один раз явно восстанавливаем base сравнения последнего непубликовавшегося экспериментального dev на последнее подтверждённое `e7f93bba…`, не ослабляя Buf. В случае работы над новым принятым релизом нужно отдельно обновить manual last-accepted pin с live evidence.
 
 DONE: полный API+UI, удалённый legacy, чистая схема, один окончательный CI PASS с evidence, независимая проверка, единое переключение и реальные Access A/B/browser/D1/Logs/readback. Частичный CI PASS не завершает #350.
