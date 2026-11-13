@@ -1,138 +1,90 @@
-# Universal Browser MCP — candidate, NOT RELEASED
+# Universal Browser MCP — Draft / NO-GO
 
-Canonical plan: https://github.com/iamaman11/crm/issues/357
+Canonical project: https://github.com/iamaman11/crm  
+Specification and live acceptance ledger: https://github.com/iamaman11/crm/issues/357  
+Implementation review: https://github.com/iamaman11/crm/pull/358 (base: protected `mcp` branch).
 
-This is an independent universal browser automation tool (public HTTP/HTTPS
-websites supported), not a CRM business backend. The real CRM remains the single Rust
-Connect Worker at https://crm-dev.crm-5bd5e1e1.workers.dev/ and existing D1.
-Browser writes must pass React -> Connect -> Rust -> D1, like a human user.
+## Purpose — general-purpose browser automation
 
-## 13 November 2026 — first-version Cloudflare bootstrap, not release
+This is a **universal, remotely hosted Browser MCP** for ChatGPT and other authorized MCP clients. It is **not** limited to the CRM hostname and is **not** another CRM business service. It is designed to operate permitted public HTTP(S) websites by reading the rendered interface, clicking, typing, navigating, inspecting browser output, testing workflows, and returning verifiable results.
 
-The previously empty Cloudflare Worker `crm-browser-mcp` received one deliberately inert first version from this canonical repository: [`bootstrap/deny.mjs`](bootstrap/deny.mjs). It always returns HTTP 503 and implements **no MCP functionality**. The Worker immutable ID is unchanged (`47a154994f254ca99e5d6d9b964412ee`).
+The **first acceptance target** is the user's real CRM at
+`https://crm-dev.crm-5bd5e1e1.workers.dev/`.
+The browser acts through that CRM's real React UI → Connect → Rust Worker → D1, with the **same existing owner tenant** and appropriate administrative permissions. No parallel CRM API, direct D1 writes, or surrogate tenant are allowed.
 
-Cloudflare confirms `subdomain.enabled=false` and `previews_enabled=false`, and a public request to the workers.dev address returns HTTP 404. The actual MCP remains **Draft / NO-GO**, uninstalled, without deployment credentials or owner/CRM tenant onboarding; release automation stays disabled. The new `workers_dev:false` in `wrangler.jsonc` is intentional until secured MCP acceptance. A bootstrap upload is **not** approval or deployment of real MCP code.
+## One runtime and one owner of browser state
 
-The Vault first-token request failed at Cloudflare API with HTTP 500/1004; its request ID is `crm-browser-mcp-github-deploy-20261113-01`. Vault status remains `outcome_unknown` with no receipt; Cloudflare full token inventory shows no matching new token. Do not blindly repeat POST or widen Worker privileges. See [Issue #357](https://github.com/iamaman11/crm/issues/357) for the readbacks and remaining acceptance gates.
+```text
+ChatGPT / authorized MCP client
+          |
+Cloudflare Access / Managed OAuth (human controller)
+          |
+crm-browser-mcp Worker (MCP tools; no CRM business logic)
+          |
+CrmBrowserSession Durable Object (one session owner)
+          |
+Cloudflare Browser Run + official @cloudflare/playwright
+          |
+Permitted public HTTP(S) sites, including existing CRM UI
+          |
+On CRM: existing Connect API → Rust business logic → existing D1
+```
 
-## Architecture
-- Separate protected crm-browser-mcp Cloudflare Worker with MCP SDK v2 stateless
-  transport, Access Managed OAuth, one Durable Object per owner, and native
-  Cloudflare Browser Run / @cloudflare/playwright.
-- Controller: real owner authenticated by Cloudflare Access, checked through
-  ctx.access plus exact CRM_MCP_OWNER_EMAIL secret; no owner JWT forging.
-- Browser actor: distinct signed Access service principal, to be enrolled as
-  admin of the existing owner's tenant. This is NOT a CI service token.
-- The browser can navigate and interact with external public websites.
-  Only non-web schemes, direct local/private network addresses, and embedded
-  URL credentials are rejected. CRM Access service headers are attached only
-  to the exact CRM origin, and only when requests originate from CRM or are
-  explicitly triggered by a trusted controller navigation. Cross-site
-  redirects are followed without privileged headers (no route.continue
-  header overrides). External browser sessions can use ordinary site logins.
-- No direct D1 writes, Cloudflare API mutations, arbitrary JS execution,
-  shared owner cookie, or duplicate CRM backend. The universal browsing
-  surface is separate from the CRM-only service identity.
-- Browser errors, URLs and HTTP logs must not disclose secrets or query strings.
+- The main `dev/main` branches, CRM deployment pipeline, React/Rust business code and D1 migrations must remain untouched by the isolated MCP release.
+- Browser Run + Playwright own the browser. The DO only coordinates session state, isolation, commands and cleanup. It never implements browser engine operations itself.
+- Service tokens for CRM are **origin-specific**: only explicit trusted controller-initiated CRM navigation or requests already originating within CRM may use them. External pages, redirects, frames and assets must not receive these credentials.
+- Other websites may use their ordinary authorized login processes; do not share CRM cookies or service tokens with them.
+- Network policy must be checked against DNS resolution and redirects, not only initial URL parsing; Cloudflare Browser Run limitations and anti-bot restrictions must be described truthfully. Never promise access to every site regardless of its policies.
+- Logs, screenshots, browser traces and Live View links may contain sensitive data: avoid persisting raw credentials and carefully control release, access and retention.
 
-## Available candidate tools
-browser_open, browser_status, browser_session, browser_snapshot,
-browser_screenshot, browser_action, browser_diagnostics, browser_live_view,
-browser_close.
+## Candidate tools and present implementation
 
-Actions: click, double_click, fill, type, select, check, uncheck, hover, press,
-scroll, navigate, reload, back, forward, with Playwright role/text/label/CSS
-selectors, including third-party websites. Browser state lives in one Durable Object. Idle/browser expiry
-must be reported and recovered by an explicit reopen.
+| Tool | Purpose | Current state |
+|---|---|---|
+| `browser_open`, `browser_close`, `browser_status` | Browser session lifecycle | Candidate code; live proof pending |
+| `browser_action` | Navigate/click/double-click/fill/type/select/check/hover/press/scroll/back/forward/reload | Candidate code; live proof pending |
+| `browser_snapshot` | Accessibility snapshot and page title | Candidate code; live proof pending |
+| `browser_screenshot` | Full-page screenshot | Candidate code; live proof pending |
+| `browser_diagnostics` | Sanitized console errors and HTTP status history | Candidate code; richer trace required |
+| `browser_live_view` | Short-lived, read-only, signed Live View URL | Candidate code; live proof pending |
+| `browser_session` | Current CRM `/api/session` result using the real browser | CRM-specific diagnostic, not a generic-browser restriction |
 
-## Mandatory gates BEFORE ANY deploy or agent admin token provisioning
-1. Generate and commit independent exact package-lock.json for this isolated
-   package. Run npm ci, npm run check, npm test with Node 24. No unpinned
-   dependencies or unverified transitive changes in release.
-2. Validate latest Cloudflare Playwright/context routing/ariaSnapshot/screenshot,
-   Agents MCP SDK v2 registration and DO reconnect/expiry against real Browser
-   Run; run fail-closed tests for redirects, redirects initiated by CRM, and
-   credential isolation. Run full browsing scenario on public external sites
-   and login flows, including multi-origin CSS/assets and normal links.
-3. Verify existing MCP Access application is Managed OAuth, and only the human
-   CRM owner can control it; test anonymous and unrelated identity denial.
-4. Create ONE distinct Cloudflare Access service token for the real CRM app.
-   Bind verified service:<id> to admin in precisely the existing human owner's
-   tenant in one existing D1. Never move/impersonate the owner or reuse CI A/B.
-   Store credentials only as Cloudflare Worker secrets, not code or logs.
-5. Deploy the separate crm-browser-mcp Worker from its own `mcp` branch
-   and workflow; leave the Rust CRM Worker, routes, D1 and dev CRM CI unchanged.
-6. Prove two-way test-record visibility between the agent's UI and the human
-   owner's ordinary CRM URL, plus audit and Connect request correlation.
-7. Extend advanced tools (tabs, upload, download, Live View, trace, timings,
-   page-level JS/permissions where explicitly authorized, multiple contexts)
-   after first accepted same-tenant end-to-end. These features are NOT yet
-   implemented in candidate code.
-8. Connect MCP explicitly to ChatGPT as a private plugin and demonstrate tools
-   callable in this chat. Deployment is not the same as tool installation.
+Next capabilities must be built **inside this same MCP**, not as separate systems: tab/popup/context selection; uploads and downloads; navigation across multiple public domains; traces, timings and network debugging; deterministic assertions and test reporting; reconnect/expiry of Browser Run sessions; optional constrained page evaluation (explicitly authorized and safety-reviewed). See the capability matrix and acceptance checklist in Issue #357.
 
-Until these gates pass, this branch is DRAFT / NO-GO and is not a deployed app.
+## Current proven deployment/auth state (14 Nov 2026)
 
+- PR #358 is **Draft / NO-GO**. Pre-update CI [#43497242212](https://github.com/iamaman11/crm/actions/runs/43497242212) succeeded on HEAD `a05a0b934c1a6ff03de95eaf0425716f62704fd4`, deployment job skipped. New HEAD requires new CI. This does **not** establish a live browser or MCP connection.
+- Cloudflare `crm-browser-mcp` has a bootstrap-only `bootstrap/deny.mjs` first version `8d103dbe-3c8b-4811-9b41-5b7ec4c9fd91`; it is not the code in `src/`. Public `workers.dev` and preview routes are disabled, no working MCP is exposed.
+- Cloudflare Access app `crm-browser-mcp-access` exists and its Managed OAuth is enabled according to read-only API verification; the actual authorized ChatGPT OAuth/MCP flow has **not yet been accepted**.
+- **Deployment credential provisioning is COMPLETE**, as confirmed by the latest [Issue #357 Vault receipt comment](https://github.com/iamaman11/crm/issues/357#issuecomment-6864793396): exactly one `Individual Workers Editor` token for `crm-browser-mcp`, a tested HTTP 403 for `crm-dev`, encrypted in Windows Vault, and securely installed in GitHub Environment `browser-mcp` under `CLOUDFLARE_API_TOKEN`. Do **not** issue it again, broaden it or transfer it into the main CRM environment.
+- `BROWSER_MCP_RELEASE_ENABLED=false` remains mandatory. Token provisioning did not authorize a code release.
+- A distinct Cloudflare Access service identity for browsing the owner's existing CRM tenant is **not** onboarded yet. In the current CRM, an unknown verified service principal can be auto-enrolled into a different tenant. Explicit owner-tenant mapping must occur before the first CRM request.
 
-### Physical proof and secure preview boundary (13 Nov 2026)
-- The real Cloudflare Browser Run account opened public `https://example.org/`
-  through Cloudflare's Browser Run REST action and returned "Example Domain"
-  from the rendered HTML. This is a **browser service smoke**, not a deployed
-  MCP/authorized CRM action. Several rapid additional Quick Actions produced
-  HTTP 429; do not spam retries or assume a specific plan/quota without evidence.
-- The Worker validates both the Cloudflare-signed Access **audience** and the
-  unique human owner's email. `CRM_MCP_ACCESS_AUD` is the real Access app
-  audience, stored as public Wrangler configuration; the owner email is a
-  Worker secret. Wrong audience, missing identity, and other users are denied.
-- Native TypeScript and 8 security unit tests **PASS** on Windows: public
-  websites, private/loopback URL rejection (including page-initiated links and
-  redirects), precise CRM credential scope and Access audience/owner checks.
-- The `browser_live_view` command asks the **native BrowserRun binding** for
-  a 60-second **read-only** signed link. This URL must not be recorded in logs.
-  The real command has **not** been exercised on a deployed MCP yet.
-- GitHub Environment `browser-mcp` exists and permits deployment from the
-  `mcp` branch **only**. No Cloudflare deployment token has been provisioned
-  in that Environment; the Windows environment token tested as unauthorized/
-  forbidden and must not be reused. The release job now exists but is disabled
-  by the repository variable `BROWSER_MCP_RELEASE_ENABLED=false`.
-- This candidate is **Draft / NO-GO**, pending live MCP OAuth authentication,
-  Browser Run Playwright session operation, redirect safety, service principal
-  enrollment into exactly the existing human owner's CRM tenant, and explicit
-  installation in ChatGPT. The CRM Rust Worker and D1 are unchanged.
+Earlier 13 November status notes about failed Cloudflare POST 500/1004 and missing GitHub secret have been superseded; full evidence is retained in Issue #357 comments/history.
 
-## Official references
-- https://developers.cloudflare.com/browser-run/playwright/
-- https://developers.cloudflare.com/agents/model-context-protocol/apis/handler-api/
-- https://developers.cloudflare.com/workers/configuration/cloudflare-access/
-- https://developers.cloudflare.com/browser-run/features/reuse-sessions/
+## Release acceptance gates
 
-## Build and release ownership — separate permanent branch and workflow
-The **only** canonical source of project code is `iamaman11/crm`, but it has
-two separate app release lanes:
-- CRM: permanent `dev` branch; existing `.github/workflows/cloudflare-crm-spike.yml`;
-  Rust/WASM + React, current D1 and ordinary CRM deployment.
-- Universal Browser MCP: permanent `mcp` branch; independent
-  `.github/workflows/browser-mcp.yml`; separate TypeScript bundle and Browser Run
-  Cloudflare Worker. PR #358 targets `mcp`, never `dev`.
+1. **Functional code and CI:** independent `.github/workflows/browser-mcp.yml`, pinned dependencies, strict TypeScript, unit/security tests and Wrangler dry-run. No CRM build or D1 migration. Verify the actual PR HEAD, not an older successful run.
+2. **Safe reachable endpoint:** choose an Access-protected `workers.dev` hostname or controlled route; bind it to real worker code and verify `MCP_HOST`, Cloudflare Access audience, policy and Wrangler routing match. Current `workers_dev:false` / no alternate route is a **deliberate bootstrap-only deny**, not a live endpoint.
+3. **Human controller auth:** only the owner is authorized. Prove correct signed identity/audience and rejection of anonymous and unrelated users. Never trust a user-supplied email or header.
+4. **Safe universal navigation:** visit at least two independent public websites; verify ordinary links, redirects, assets, forms, navigation and failures. Test private/loopback/metadata destinations, DNS and redirect bypasses, and protected CRM credentials staying on their exact origin.
+5. **CRM tenant identity:** create a distinct Access service token and allow it in the existing CRM Access app; explicitly map its verified `service:<common_name>` identity as admin of the **existing** owner's tenant before navigation. Do not reuse CI tokens or just check `/api/session` role. Independently correlate tenant and records.
+6. **Physical E2E:** ChatGPT → MCP → Browser Run → real CRM UI create/read/edit/delete → owner's ordinary CRM UI sees the same records → existing Connect/Rust/D1/audit confirm the same mutations.
+7. **Session and diagnostics:** prove close, timeout/expiry, reconnect, Live View and logs without exposing privileged secrets. Add advanced tools without creating another browser owner.
+8. **Explicit installation:** connect the published private MCP to ChatGPT and successfully invoke the tools. A Cloudflare release alone is not acceptance.
 
-The Browser MCP package has a dedicated pinned `package-lock.json`, generated
-and committed from the independent Browser MCP GitHub Actions run. Its CI
-checks the exact dependency install, strict types, security tests and isolated
-Wrangler dry-run. No CRM Rust build, D1 migration, or crm-dev deployment occurs
-on `mcp`. Actual MCP publication remains disabled until the identity/tenant,
-OAuth, real browser E2E and privacy controls are independently accepted.
+Keep the PR Draft, release flag OFF, and the bootstrap isolated until the gates are met. **Never treat a successful compiler, unit test or dry-run as proof of a working remote browser.**
 
-The candidate is still Draft / NO-GO: the CI build is proven, but deployed MCP,
-owner-tenant service principal, real end-to-end authorization, and ChatGPT
-connector remain to prove.
+## Workflow ownership
 
-### Operator release checklist (do not bypass)
+- Canonical repository: `iamaman11/crm`, single Issue #357 for specification and evidence.
+- MCP branch: permanent protected `mcp`, feature PR #358 based exclusively on it.
+- MCP workflow: `.github/workflows/browser-mcp.yml`, GitHub Environment `browser-mcp`, dedicated Worker only.
+- Main CRM: `dev/main`, own existing CI and Worker; no dependency on the MCP release.
 
-- Required browser-mcp check must pass on final PR HEAD, merged only to mcp.
-- The BROWSER_MCP_RELEASE_ENABLED repository switch stays false while any
-  identity, authorization, network safety, or service-token gate is unproven.
-- The dedicated browser-mcp Environment needs its own valid Cloudflare API
-  token. Never reuse the unauthorized Windows token or the CRM release token.
-- Publishing changes only the crm-browser-mcp Worker. The workflow contains no
-  D1 migration or CRM deployment command.
-- Disable the release switch again to stop future automatic publication.
+## Reference documentation
+
+- [Cloudflare Browser Run Playwright](https://developers.cloudflare.com/browser-run/playwright/)
+- [Browser session reuse](https://developers.cloudflare.com/browser-run/features/reuse-sessions/)
+- [Cloudflare Access protection for Workers](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
+- [Agents MCP handler](https://developers.cloudflare.com/agents/model-context-protocol/apis/handler-api/)
