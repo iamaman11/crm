@@ -207,3 +207,23 @@ operations without a cancellable Playwright API can still outlive a budget;
 no `Promise.race` frees the DO queue while remote actions may be running.
 Per-conversation session leases, network-level DNS/IP guardrails, genuine DO
 eviction recovery, live CI and CRM R2 remain **NO-GO**.
+
+## P1 download fail-closed gate — 14 November 2026
+
+Live `browser_file(download)` on the previously released R1 Worker emitted a
+download event and returned `completed:true` with zero bytes and empty base64
+for **four distinct** publicly available files: `some-file.txt`, `sample.csv`,
+`textfile.txt` and `1Mb.dat` (the latter filename is not independent proof
+of the true byte size). This is **not** a valid download receipt. A similar
+open upstream Cloudflare Playwright issue reports empty `createReadStream()`:
+https://github.com/cloudflare/playwright/issues/93 .
+
+This narrow fix checks `download.failure()` and rejects unverified empty
+streams, keeping the official Playwright download event path. No proxy fetch,
+secondary browser, Worker-local file workaround or accidental credential
+forwarding is added. Genuine zero-byte files are conservatively unsupported
+until the provider can distinguish them from an empty broken stream.
+
+**Download remains P1 NO-GO:** this patch prevents false PASS, but does not
+prove successful transfer of nonempty content. Require a real nonzero payload
+and independent byte/count check after a controlled release. CRM R2 remains OFF.

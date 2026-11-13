@@ -519,6 +519,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
           const awaited = page.waitForEvent("download", { timeout: 20_000 });
           await locator.click({ timeout: 15_000 });
           const download = await awaited;
+          // The event fires at download start, not when its bytes are verified.
+          // A failure or empty remote stream must never be a successful receipt.
+          const failure = await download.failure();
+          if (failure) throw new Error("BROWSER_DOWNLOAD_FAILED");
           const stream = await download.createReadStream();
           const chunks: Uint8Array[] = [];
           let size = 0;
