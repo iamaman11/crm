@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { browserUrl, crmCredentialsAllowed, CRM_ORIGIN, isCrmRequest, isPermittedBrowserRequest, safePagePath, redact } from "../src/security.ts";
+import { browserUrl, crmCredentialsAllowed, CRM_ORIGIN, isCrmRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact } from "../src/security.ts";
 
 test("canonical CRM identification is exact; ordinary browser navigation stays universal", () => {
   assert.equal(browserUrl("/clients"), CRM_ORIGIN + "/clients");
@@ -85,4 +85,22 @@ test("all browser requests, including page-initiated redirects and links, reject
     "https://developers.cloudflare.com/",
     CRM_ORIGIN + "/api/session",
   ]) assert.equal(isPermittedBrowserRequest(url), true, url);
+});
+
+test("only the exact CRM Browser MCP Access application owner can call control tools", () => {
+  const audience = "8d0515ac0f3dc33e9a39bebe5e4530f70056e6ddf3d4cb910df80e7ba5f6b67c";
+  assert.equal(isAuthorizedMcpOwner(audience, audience, "User@Example.test", "user@example.test"), true);
+  for (const invalid of [
+    { aud: "different-app", actual: "user@example.test", expected: "user@example.test" },
+    { aud: audience, actual: "other@example.test", expected: "user@example.test" },
+    { aud: audience, actual: undefined, expected: "user@example.test" },
+    { aud: undefined, actual: "user@example.test", expected: "user@example.test" },
+    { aud: audience, actual: "user@example.test", expected: "" },
+  ]) {
+    assert.equal(
+      isAuthorizedMcpOwner(invalid.aud, audience, invalid.actual, invalid.expected),
+      false,
+      JSON.stringify(invalid),
+    );
+  }
 });
