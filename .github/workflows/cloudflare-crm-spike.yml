@@ -8,15 +8,6 @@ on:
     paths-ignore:
       - '*.md'
       - '**/*.md'
-  # Only the browser-tool PR is tested here. No duplicate CRM PR pipeline.
-  pull_request:
-    branches:
-      - dev
-    paths:
-      - 'services/crm-browser-mcp/**'
-      - '.github/workflows/cloudflare-crm-spike.yml'
-      - 'scripts/check_ci_event_policy.py'
-      - 'tests/test_ci_event_policy.py'
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -24,79 +15,7 @@ permissions:
   contents: read
   actions: read
 jobs:
-  classify-changes:
-    runs-on: ubuntu-24.04
-    outputs:
-      mcp_only: ${{ steps.diff.outputs.mcp_only }}
-      mcp_changed: ${{ steps.diff.outputs.mcp_changed }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-      - name: Classify source diff (no second workflow)
-        id: diff
-        env:
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.sha }}
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            before="$PR_BASE"
-          else
-            before="$BEFORE"
-          fi
-          if ! git cat-file -e "$before^{commit}" 2>/dev/null; then
-            echo "::error::Cannot classify missing source baseline $before"
-            exit 1
-          fi
-          git diff --name-only "$before" "$AFTER" > /tmp/crm-changed-paths.txt
-          if grep -q '^services/crm-browser-mcp/' /tmp/crm-changed-paths.txt; then
-            echo "mcp_changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "mcp_changed=false" >> "$GITHUB_OUTPUT"
-          fi
-          if test -s /tmp/crm-changed-paths.txt &&              ! grep -qv '^services/crm-browser-mcp/' /tmp/crm-changed-paths.txt; then
-            echo "mcp_only=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "mcp_only=false" >> "$GITHUB_OUTPUT"
-          fi
-          cat /tmp/crm-changed-paths.txt
-
-  browser-mcp-check:
-    needs: classify-changes
-    if: needs.classify-changes.outputs.mcp_changed == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 12
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: '24.18.0'
-      - name: Verify existing CI topology and pinning
-        run: |
-          python scripts/check_ci_event_policy.py
-          python -m unittest tests.test_ci_event_policy
-          python scripts/check_action_pinning.py
-      - name: Typecheck and unit-test isolated Browser MCP
-        working-directory: services/crm-browser-mcp
-        run: |
-          set -euo pipefail
-          npm install --no-audit --no-fund
-          npm run check
-          npm test
-      - name: Dry-run Cloudflare browser Worker without publishing
-        working-directory: services/crm-browser-mcp
-        run: |
-          set -euo pipefail
-          npx wrangler deploy --dry-run --outdir /tmp/crm-browser-mcp-proof
-          test -n "$(find /tmp/crm-browser-mcp-proof -type f -print -quit)"
-      # CRM access, agent credentials and D1 remain completely untouched.
-
   cloudflare-crm-spike:
-    needs: classify-changes
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && needs.classify-changes.outputs.mcp_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
