@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { browserUrl, crmCredentialsAllowed, CRM_ORIGIN, isCrmRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact } from "../src/security.ts";
+import { browserUrl, crmCredentialsAllowed, CRM_ORIGIN, isCrmRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact, requireCrmAgentIdentity } from "../src/security.ts";
 
 test("canonical CRM identification is exact; ordinary browser navigation stays universal", () => {
   assert.equal(browserUrl("/clients"), CRM_ORIGIN + "/clients");
@@ -102,5 +102,20 @@ test("only the exact CRM Browser MCP Access application owner can call control t
       false,
       JSON.stringify(invalid),
     );
+  }
+});
+
+test("CRM identity is fail-closed before provisioning; unrelated public websites remain usable", () => {
+  for (const url of [CRM_ORIGIN + "/", CRM_ORIGIN + "/api/session"]) {
+    for (const [id, secret] of [
+      ["", ""], ["only-client", ""], ["", "only-secret"],
+    ]) assert.throws(
+      () => requireCrmAgentIdentity(url, id, secret),
+      /CRM_BROWSER_AGENT_IDENTITY_NOT_PROVISIONED/,
+    );
+    assert.doesNotThrow(() => requireCrmAgentIdentity(url, "signed-client", "signed-secret"));
+  }
+  for (const url of ["https://example.org/", "https://www.iana.org/domains/reserved"]) {
+    assert.doesNotThrow(() => requireCrmAgentIdentity(url, "", ""));
   }
 });
