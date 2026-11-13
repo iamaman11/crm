@@ -49,20 +49,15 @@ message CreateTaskResponse {
   crm.core.v2.MutationReceipt receipt = 2;
 }
 
-message TaskPriorityPatch {
-  oneof operation {
-    TaskPriority set = 1;
-    bool clear = 2;
-  }
-}
-
+// Priority is required: absent means Keep, a present enum means Set.
+// Clear is invalid, so an enum-valued oneof/parallel patch type is unnecessary.
 // Absent patch = keep; explicit clear is valid only for optional values.
 // Actor/owner and reminders are not editable in this first Task slice.
 message UpdateTaskRequest {
   string task_id = 1;
   crm.core.v2.StringPatch subject = 2;
   crm.core.v2.StringPatch description = 3;
-  TaskPriorityPatch priority = 4;
+  optional TaskPriority priority = 4;
   crm.core.v2.TimestampPatch due_at = 5;
   crm.core.v2.MutationPrecondition precondition = 6;
 }

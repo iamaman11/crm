@@ -741,11 +741,11 @@ try{
  assert.equal((await taskV2("UpdateTask",tenantB,{...baseUpdate,subject:patchSubject("Wrong tenant")})).status,404);
  assert.equal((await taskV2("UpdateTask",admin,baseUpdate)).status,400);
  assert.equal((await taskV2("UpdateTask",admin,{...baseUpdate,subject:{operation:{case:"clear",value:true}}})).status,400);
- assert.equal((await taskV2("UpdateTask",admin,{...baseUpdate,priority:{operation:{case:"clear",value:true}}})).status,400);
- assert.equal((await taskV2("UpdateTask",admin,{...baseUpdate,priority:{operation:{case:"set",value:0}}})).status,400);
+ assert.equal((await taskV2("UpdateTask",admin,{...baseUpdate,priority:99})).status,400);
+ assert.equal((await taskV2("UpdateTask",admin,{...baseUpdate,priority:0})).status,400);
  const rejected=await taskV2("UpdateTask",admin,{...baseUpdate,
    subject:patchSubject("Must not persist"),description:{operation:{case:"clear",value:true}},
-   priority:{operation:{case:"set",value:1}},
+   priority:1,
    dueAt:{operation:{case:"set",value:{seconds:1840000000n,nanos:0}}}});
  assert.equal(rejected.status,400,describeProtobuf(rejected.body));
  assert.deepEqual(taskRow(),beforeTask,"late rejection must not persist an earlier field change");
@@ -753,7 +753,7 @@ try{
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts WHERE tenant='tenant-a' AND key='"+updateKey+"'")[0].n,0);
  const updateTask={...baseUpdate,subject:patchSubject("Edited original Task"),
    description:{operation:{case:"set",value:"Edited through Connect"}},
-   priority:{operation:{case:"set",value:3}},dueAt:{operation:{case:"clear",value:true}}};
+   priority:3,dueAt:{operation:{case:"clear",value:true}}};
  const updatedTask=await taskV2("UpdateTask",admin,updateTask);
  assert.equal(updatedTask.status,200,describeProtobuf(updatedTask.body));
  assert.equal(updatedTask.body.task.subject,"Edited original Task");
@@ -776,7 +776,7 @@ try{
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-task-update-stale"}})).status,409);
  assert.equal(taskAudits().length,2,"stale version must not create audit");
  const secondTaskEdit=await taskV2("UpdateTask",admin,{taskId:taskOther,
-   description:{operation:{case:"clear",value:true}},priority:{operation:{case:"set",value:2}},
+   description:{operation:{case:"clear",value:true}},priority:2,
    dueAt:{operation:{case:"set",value:{seconds:1870000000n,nanos:987654321}}},
    precondition:{expectedVersion:2n,idempotencyKey:"candidate-task-update-second"}});
  assert.equal(secondTaskEdit.status,200,describeProtobuf(secondTaskEdit.body));

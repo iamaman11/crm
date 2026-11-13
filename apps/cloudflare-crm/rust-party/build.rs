@@ -28,8 +28,6 @@ fn main() {
         .files(CONNECT_PROTOS)
         .includes(&["../../../proto"])
         .include_file("_connectrpc.rs")
-        // Only binary Connect is served; avoid unused proto3-JSON derives.
-        .generate_json(false)
         .compile()
         .expect("CRM Connect code generation");
 }

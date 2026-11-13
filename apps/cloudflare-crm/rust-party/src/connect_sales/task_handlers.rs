@@ -84,32 +84,23 @@ impl task_wire::TaskService for TaskV2Service {
         };
         let subject = string_patch(input.subject.as_option())?;
         let description = string_patch(input.description.as_option())?;
-        let priority = match input.priority.as_option() {
+        // The same typed optional enum already serves ListTasks. Presence is
+        // Keep/Set; Clear cannot apply to this mandatory domain property.
+        let priority = match input.priority {
             None => Change::Keep,
-            Some(patch) => match patch.operation.as_ref() {
-                Some(task_wire::task_priority_patch::Operation::Set(value))
-                    if *value == task_wire::TaskPriority::TASK_PRIORITY_LOW =>
-                {
-                    Change::Set(activity_tasks::Priority::Low)
-                }
-                Some(task_wire::task_priority_patch::Operation::Set(value))
-                    if *value == task_wire::TaskPriority::TASK_PRIORITY_NORMAL =>
-                {
-                    Change::Set(activity_tasks::Priority::Normal)
-                }
-                Some(task_wire::task_priority_patch::Operation::Set(value))
-                    if *value == task_wire::TaskPriority::TASK_PRIORITY_HIGH =>
-                {
-                    Change::Set(activity_tasks::Priority::High)
-                }
-                Some(task_wire::task_priority_patch::Operation::Set(value))
-                    if *value == task_wire::TaskPriority::TASK_PRIORITY_URGENT =>
-                {
-                    Change::Set(activity_tasks::Priority::Urgent)
-                }
-                Some(task_wire::task_priority_patch::Operation::Clear(true)) => Change::Clear,
-                _ => return Err(ConnectError::invalid_argument("invalid TaskPriority patch")),
-            },
+            Some(x) if x == task_wire::TaskPriority::TASK_PRIORITY_LOW => {
+                Change::Set(activity_tasks::Priority::Low)
+            }
+            Some(x) if x == task_wire::TaskPriority::TASK_PRIORITY_NORMAL => {
+                Change::Set(activity_tasks::Priority::Normal)
+            }
+            Some(x) if x == task_wire::TaskPriority::TASK_PRIORITY_HIGH => {
+                Change::Set(activity_tasks::Priority::High)
+            }
+            Some(x) if x == task_wire::TaskPriority::TASK_PRIORITY_URGENT => {
+                Change::Set(activity_tasks::Priority::Urgent)
+            }
+            _ => return Err(ConnectError::invalid_argument("invalid TaskPriority patch")),
         };
         let due_at_unix_nanos = match input.due_at.as_option() {
             None => Change::Keep,

@@ -57,7 +57,7 @@ export function TaskScreen() {
             subject:{operation:{case:"set",value:field(data,"editSubject")}},
             description:{operation:description
               ?{case:"set",value:description}:{case:"clear",value:true}},
-            priority:{operation:{case:"set",value:Number(field(data,"editPriority"))}},
+            priority:Number(field(data,"editPriority")),
             ...(dueAt?{dueAt}:{}),
             precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
           });
