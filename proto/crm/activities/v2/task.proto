@@ -49,9 +49,14 @@ message CreateTaskResponse {
   crm.core.v2.MutationReceipt receipt = 2;
 }
 
+// Preserve an enum-valued wire contract through a message-valued oneof.
+message TaskPriorityValue {
+  TaskPriority priority = 1;
+}
+
 message TaskPriorityPatch {
   oneof operation {
-    TaskPriority set = 1;
+    TaskPriorityValue set = 1;
     bool clear = 2;
   }
 }

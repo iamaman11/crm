@@ -88,22 +88,22 @@ impl task_wire::TaskService for TaskV2Service {
             None => Change::Keep,
             Some(patch) => match patch.operation.as_ref() {
                 Some(task_wire::task_priority_patch::Operation::Set(value))
-                    if *value == task_wire::TaskPriority::TASK_PRIORITY_LOW =>
+                    if value.priority == task_wire::TaskPriority::TASK_PRIORITY_LOW =>
                 {
                     Change::Set(activity_tasks::Priority::Low)
                 }
                 Some(task_wire::task_priority_patch::Operation::Set(value))
-                    if *value == task_wire::TaskPriority::TASK_PRIORITY_NORMAL =>
+                    if value.priority == task_wire::TaskPriority::TASK_PRIORITY_NORMAL =>
                 {
                     Change::Set(activity_tasks::Priority::Normal)
                 }
                 Some(task_wire::task_priority_patch::Operation::Set(value))
-                    if *value == task_wire::TaskPriority::TASK_PRIORITY_HIGH =>
+                    if value.priority == task_wire::TaskPriority::TASK_PRIORITY_HIGH =>
                 {
                     Change::Set(activity_tasks::Priority::High)
                 }
                 Some(task_wire::task_priority_patch::Operation::Set(value))
-                    if *value == task_wire::TaskPriority::TASK_PRIORITY_URGENT =>
+                    if value.priority == task_wire::TaskPriority::TASK_PRIORITY_URGENT =>
                 {
                     Change::Set(activity_tasks::Priority::Urgent)
                 }
