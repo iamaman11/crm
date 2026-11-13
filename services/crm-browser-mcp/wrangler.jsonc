@@ -1,0 +1,32 @@
+{
+  "name": "crm-browser-mcp",
+  "main": "./src/index.ts",
+  "account_id": "5bd5e1e1e813f061afc259e91334262d",
+  "workers_dev": true,
+  "preview_urls": false,
+  "compatibility_date": "2026-11-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "CRM_MCP_ACCESS_AUD": "8d0515ac0f3dc33e9a39bebe5e4530f70056e6ddf3d4cb910df80e7ba5f6b67c"
+  },
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SESSIONS",
+        "class_name": "CrmBrowserSession"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CrmBrowserSession"]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
