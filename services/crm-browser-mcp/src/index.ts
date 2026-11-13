@@ -96,6 +96,11 @@ function createServer(env: Env, ownerEmail: string) {
     inputSchema: {},
   }, async () => command({ op: "console" }));
 
+  server.registerTool("browser_live_view", {
+    description: "Mint a 60-second read-only Cloudflare Live View link for the current tab. The signed URL is sensitive: share only with the authorized operator.",
+    inputSchema: {},
+  }, async () => command({ op: "live_view" }));
+
   server.registerTool("browser_close", {
     description: "Close the cloud browser session and release Cloudflare Browser Run resources.",
     inputSchema: {},
