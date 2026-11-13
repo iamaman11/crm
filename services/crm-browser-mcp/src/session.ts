@@ -120,7 +120,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
       // Expired sessions are not silently replaced; only explicit open starts
       // another session. No attempt is made to recreate a login/cookie jar.
       await this.ctx.storage.delete("browser_session_id");
+      await this.ctx.storage.delete("browser_recording");
       this.browserSessionId = null;
+      this.recordingEnabled = false;
       return;
     }
     let browser: Browser;
