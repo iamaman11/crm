@@ -56,6 +56,11 @@ export class CrmBrowserSession extends DurableObject<Env> {
   }
 
   private async open(path: string = "/") {
+    const destination = browserUrl(path);
+    if (isCrmRequest(destination) &&
+        (!this.env.CRM_BROWSER_CLIENT_ID || !this.env.CRM_BROWSER_CLIENT_SECRET)) {
+      throw new Error("CRM_BROWSER_AGENT_IDENTITY_NOT_PROVISIONED");
+    }
     if (this.page && !this.page.isClosed()) {
       return { state: "already_open", path: safePagePath(this.page.url()) };
     }
@@ -131,10 +136,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
         if (accept) await dialog.accept();
         else await dialog.dismiss();
       });
-      this.ownerDirectedCrmNavigation = isCrmRequest(browserUrl(path));
+      this.ownerDirectedCrmNavigation = isCrmRequest(destination);
       let response;
       try {
-        response = await this.page.goto(browserUrl(path), {
+        response = await this.page.goto(destination, {
           waitUntil: "domcontentloaded", timeout: 25000,
         });
       } finally {
@@ -212,6 +217,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
       }
       case "navigate": {
         const destination = browserUrl(command.url ?? "/", page.url() || CRM_ORIGIN);
+        if (isCrmRequest(destination) &&
+            (!this.env.CRM_BROWSER_CLIENT_ID || !this.env.CRM_BROWSER_CLIENT_SECRET)) {
+          throw new Error("CRM_BROWSER_AGENT_IDENTITY_NOT_PROVISIONED");
+        }
         this.ownerDirectedCrmNavigation = isCrmRequest(destination);
         try {
           await page.goto(destination, { waitUntil: "domcontentloaded", timeout: 25000 });
