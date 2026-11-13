@@ -108,7 +108,7 @@ test("task audit upgrade from 0002 and fresh 0003 distinguish update/complete at
      "task-stale","hash-stale","task-request-stale","tenant-a","task",1).changes,0);
    assert.equal(change.run(JSON.stringify({status:"completed",subject:"Edited"}),3,
      "task-complete","hash-complete","task-request-complete","tenant-a","task",2).changes,1);
-   const actions=database.prepare("SELECT action,request_id FROM crm_audit WHERE subject_id='task' ORDER BY rowid").all();
+   const actions=database.prepare("SELECT action,request_id FROM crm_audit WHERE subject_id='task' ORDER BY rowid").all().map(({action,request_id})=>({action,request_id}));
    assert.deepEqual(actions,[
      {action:"activity_tasks.create",request_id:"task-request-create"},
      {action:"activity_tasks.update",request_id:"task-request-update"},
@@ -119,7 +119,7 @@ test("task audit upgrade from 0002 and fresh 0003 distinguish update/complete at
    assert.throws(()=>change.run(JSON.stringify({status:"completed",subject:"Wrong replay"}),4,
      "task-update","other-digest","bad-replay","tenant-a","task",3),/constraint/i);
    assert.deepEqual(database.prepare("SELECT state,version FROM crm_activity_task_records WHERE tenant='tenant-a' AND id='task'").get(),stateBefore);
-   assert.deepEqual(database.prepare("SELECT action,request_id FROM crm_audit WHERE subject_id='task' ORDER BY rowid").all(),actions);
+   assert.deepEqual(database.prepare("SELECT action,request_id FROM crm_audit WHERE subject_id='task' ORDER BY rowid").all().map(({action,request_id})=>({action,request_id})),actions);
    assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(),[]);
   }finally{database.close();}
  }
