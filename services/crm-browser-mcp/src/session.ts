@@ -895,9 +895,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
         });
         const startedAt = Date.now();
         const deadline = startedAt + boundedRunTimeout(command.timeoutMs);
-        const results: Array<{ index: number; op: string; passed: boolean; data?: unknown; error?: string; outcome?: string }> = [];
+        const results: Array<{ index: number; op: string; passed: boolean; elapsedMs: number; data?: unknown; error?: string; outcome?: string }> = [];
         let passed = true;
         for (const [index, step] of steps!.entries()) {
+          const stepStartedAt = Date.now();
           try {
             operationTimeout(1, deadline);
             const response = await this.execute(step, deadline);
@@ -905,12 +906,12 @@ export class CrmBrowserSession extends DurableObject<Env> {
             operationTimeout(1, deadline);
             const data = response.data as { passed?: boolean };
             const ok = data.passed !== false;
-            results.push({ index, op: step.op, passed: ok, data });
+            results.push({ index, op: step.op, passed: ok, elapsedMs: Date.now() - stepStartedAt, data });
             if (!ok) { passed = false; break; }
           } catch (error) {
             passed = false;
             results.push({
-              index, op: step.op, passed: false,
+              index, op: step.op, passed: false, elapsedMs: Date.now() - stepStartedAt,
               error: redact(error instanceof Error ? error.message : error),
               outcome: step.op === "assert" || step.op === "wait" ? "not_completed" : "uncertain",
             });
