@@ -1,7 +1,7 @@
 /** A single testable recovery decision used by the real Durable Object.
  * Only the official Cloudflare Browser Run session may be reattached.
  * Never acquire a replacement browser as a side-effect of status or restore. */
-export type ExistingSession = { status?: string } | null;
+export type ExistingSession = { status?: unknown } | null;
 
 export type RecoveryOutcome<Browser> =
   | { kind: "missing" }
@@ -17,7 +17,7 @@ export async function recoverExistingBrowserSession<Browser>(
   // If lookup fails, propagate the error and preserve the stored session ID.
   // An API outage is not proof of closure and must not create a second browser.
   const session = await getSession(sessionId);
-  const status = session?.status?.toLowerCase();
+  const status = typeof session?.status === "string" ? session.status.toLowerCase() : undefined;
   if (!session || status === "closed" || status === "closing" || status === "expired") {
     return { kind: "expired" };
   }
