@@ -76,3 +76,46 @@ test("unsafe later navigation is rejected during preflight (no earlier submit)",
     {op:"navigate",url:"https://example.org/"},
   ], url => browserUrl(url)));
 });
+
+test("scenario assertion expected types are validated before any prior click", () => {
+  const click = {op:"click",target:{kind:"role",value:"button",name:"Submit"}};
+  const locator = {kind:"css",value:".status"};
+  const invalid = [
+    {op:"assert",kind:"count",expected:"1",target:locator},
+    {op:"assert",kind:"count",expected:-1,target:locator},
+    {op:"assert",kind:"count",expected:1.5,target:locator},
+    {op:"assert",kind:"count",expected:2,match:"contains",target:locator},
+    {op:"assert",kind:"visible",expected:"true",target:locator},
+    {op:"assert",kind:"hidden",expected:0,target:locator},
+    {op:"assert",kind:"text",expected:true,target:locator},
+    {op:"assert",kind:"url",expected:false},
+    {op:"assert",kind:"title",expected:7},
+  ];
+  for (const bad of invalid) assert.throws(
+    () => validateScenarioSteps([click,bad]), /BROWSER_RUN_INVALID_ASSERTION/,
+  );
+  assert.doesNotThrow(()=>validateScenarioSteps([
+    click,{op:"assert",kind:"count",expected:2,target:locator},
+    {op:"assert",kind:"visible",expected:true,target:locator},
+    {op:"assert",kind:"text",expected:"Completed",match:"contains",target:locator},
+  ]));
+});
+
+test("scenario ignored wait and malformed input actions are rejected before click", () => {
+  const click = {op:"click",target:{kind:"role",value:"button",name:"Submit"}};
+  const target = {kind:"css",value:".result"};
+  for (const bad of [
+    {op:"wait",state:"visible"},
+    {op:"wait",url:"https://example.org",target},
+    {op:"select",target},
+    {op:"select",target,value:""},
+    {op:"type",target},
+    {op:"type",target,text:""},
+  ]) assert.throws(()=>validateScenarioSteps([click,bad]),/BROWSER_RUN_/);
+  assert.doesNotThrow(()=>validateScenarioSteps([
+    {op:"fill",target,text:""}, // clearing a form is a legitimate action
+    {op:"wait",target,state:"visible"},
+    {op:"wait",url:"https://example.org/result"},
+    {op:"wait"}, // load-state wait
+  ]));
+});

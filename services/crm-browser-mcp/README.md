@@ -389,3 +389,18 @@ This is diagnostic evidence for a persistent 429 despite the official
 `limits()` reporting permitted acquisition. It does not retry failed
 acquisitions, alter the provider billing plan, change the owner-only OAuth
 scope or close remaining P0 physical Browser Run acceptance.
+
+## P0: full scenario preflight against partial side effects — Issue #357
+
+A scenario with an initial Submit followed by an invalid `assert.count`,
+`assert.visible`, `wait` state without target, empty select option or
+empty typing text previously could execute the first Submit before failing
+in the subsequent step. The same existing `validateScenarioSteps` now
+rejects these known-invalid conditions **before any UI mutation**, including
+assert expected types and numeric count bounds. `fill(text="")` remains
+supported to clear input fields. The canonical scenario operations list is
+unchanged and shared with Zod; no second validator, browser owner, or CI.
+Runtime Epoch was advanced for safe deployment across active DO isolates.
+
+Source/unit CI acceptance is not live proof; physical negative E2E and
+stale-active DO behavior are separate acceptance gates.
