@@ -56,7 +56,11 @@ export function isCrmRequest(input: string): boolean {
 }
 
 function isInternalHost(host: string): boolean {
-  const h = host.replace(/^\[|\]$/g, "").toLowerCase();
+  // A fully qualified DNS hostname may end in one or more dots. Compare its
+  // canonical label spelling, not the URL's raw hostname: "localhost." and
+  // "metadata." resolve to exactly the same destinations as bare names.
+  const h = host.replace(/^\[|\]$/g, "").replace(/\.+$/g, "").toLowerCase();
+  if (!h) return true;
   // A one-label name can resolve to a private machine through search
   // domains even though the URL itself contains no obvious private IP.
   if (!h.includes(".") && !h.includes(":") && !/^\d+$/.test(h)) return true;
