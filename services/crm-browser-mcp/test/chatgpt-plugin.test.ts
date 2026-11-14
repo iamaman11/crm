@@ -34,4 +34,10 @@ test("portable skill explains authentic UI operations and CRM tenant isolation",
   assert.match(text, /^---\nname: browser-operations\ndescription: /);
   assert.match(text, /real Playwright-backed MCP tools/);
   assert.match(text, /existing.*tenant/);
+  assert.match(text, /workspaceId/);
+  assert.match(text, /Cloudflare Access Managed OAuth/);
+  assert.match(text, /17 tool methods/);
+  assert.doesNotMatch(text, /Human OAuth flow and real tool use still require connection approval/);
+  const plugin = JSON.parse(readFileSync(new URL("plugin.json", root), "utf8"));
+  assert.equal(plugin.version, "0.2.0");
 });
