@@ -1,10 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
-import { acquire, connect, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
+import { acquire, connect, limits, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
 import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermittedBrowserRequest, redact, requireCrmAgentIdentity, safePagePath } from "./security";
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
-import { classifyBrowserAcquireFailure, recoverExistingBrowserSession } from "./browser-recovery";
+import { classifyBrowserAcquireFailure, readSafeBrowserLimits, recoverExistingBrowserSession } from "./browser-recovery";
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
 
 export interface Env {
@@ -365,6 +365,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
         path: this.page && !this.page.isClosed() ? safePagePath(this.page.url()) : null,
         recording: this.recordingEnabled,
         lastRecordedSessionId: await this.ctx.storage.get<string>("last_recording_session_id") ?? null,
+        // Official @cloudflare/playwright /v1/limits readback. No Browser Run
+        // acquire, no connection, no full provider session IDs in MCP output.
+        providerLimits: await readSafeBrowserLimits(() => limits(this.env.BROWSER)),
       },
     };
     if (command.op === "tabs") {
