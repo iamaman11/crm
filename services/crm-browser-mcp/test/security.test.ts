@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { browserUrl, crmCredentialsAllowed, CRM_ORIGIN, isCrmRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact, requireCrmAgentIdentity, verifiedMcpOwnerEmail } from "../src/security.ts";
+import { browserUrl, crmCredentialsAllowed, crmRequestDisposition, CRM_ORIGIN, isCrmRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact, requireCrmAgentIdentity, verifiedMcpOwnerEmail } from "../src/security.ts";
 
 test("canonical CRM identification is exact; ordinary browser navigation stays universal", () => {
   assert.equal(browserUrl("/clients"), CRM_ORIGIN + "/clients");
@@ -90,6 +90,24 @@ test("CRM Access service headers never authorize foreign pages or third-party in
   assert.equal(crmCredentialsAllowed(foreign, CRM_ORIGIN, true), false,
     "a redirect or navigation to a foreign origin never receives CRM credentials");
   assert.equal(crmCredentialsAllowed(CRM_ORIGIN + ".evil.net", CRM_ORIGIN, true), false);
+});
+
+test("CRM routing blocks foreign-origin cookies and CSRF while preserving real UI navigation", () => {
+  const crm = CRM_ORIGIN + "/crm.parties.v3.PartyService/ListParties";
+  const foreign = "https://example.org/untrusted";
+  assert.equal(crmRequestDisposition(crm, foreign, false), "block",
+    "foreign fetch cannot use an existing CRM Access cookie");
+  assert.equal(crmRequestDisposition(CRM_ORIGIN + "/api/session", foreign, false), "block",
+    "foreign iframe or redirect must be denied even after previous CRM login");
+  assert.equal(crmRequestDisposition(crm, "about:blank", false), "block");
+  assert.equal(crmRequestDisposition(crm, "about:blank", true), "crm",
+    "explicit controller top-level navigation is permitted");
+  assert.equal(crmRequestDisposition(crm, CRM_ORIGIN + "/contacts", false), "crm",
+    "real React-generated Connect traffic from the CRM remains permitted");
+  assert.equal(crmRequestDisposition(foreign, CRM_ORIGIN + "/contacts", true), "public",
+    "CRM credentials never accompany a cross-origin redirect");
+  assert.equal(crmRequestDisposition(foreign, foreign, false), "public",
+    "ordinary public pages remain fully usable");
 });
 
 test("all browser requests, including page-initiated redirects and links, reject local/private destinations", () => {

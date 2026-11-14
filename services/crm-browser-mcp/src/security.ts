@@ -142,6 +142,19 @@ export function crmCredentialsAllowed(
     (isCrmRequest(initiator) || authorizedMainNavigation);
 }
 
+// Block untrusted initiators outright, even when the browser already holds a
+// CRM Access cookie from an earlier visit. Omitting injected service headers
+// is not enough: a native browser request can still attach existing cookies.
+// Only a controller-directed top-level navigation, or a CRM-owned request,
+// can reach the CRM origin. Ordinary public-web traffic is unchanged.
+export function crmRequestDisposition(
+  destination: string, initiator: string, authorizedMainNavigation: boolean,
+): "public" | "crm" | "block" {
+  if (!isCrmRequest(destination)) return "public";
+  return crmCredentialsAllowed(destination, initiator, authorizedMainNavigation)
+    ? "crm" : "block";
+}
+
 // A public website can open without CRM credentials. CRM navigation cannot
 // silently create a new Access service principal in a different test tenant.
 export function requireCrmAgentIdentity(
