@@ -252,8 +252,15 @@ pub async fn actor(req: &Request, env: &Env) -> Result<Option<Actor>> {
     if let Some(actor) = enrolled(&db, &identity).await? {
         return Ok(Some(actor));
     }
-    // Preserve the existing CRM onboarding contract: a *verified* previously
-    // unknown Access principal receives one isolated test workspace.
+    // Signed service principals are never self-enrolled. Granting a new
+    // service its own admin tenant would silently split it from the owner's
+    // existing CRM and bypass the explicit provisioning decision. Only an
+    // already active crm_users row may authorize a service identity.
+    if identity.starts_with("service:") {
+        return Ok(None);
+    }
+    // Preserve the existing CRM onboarding contract for human identities:
+    // a verified previously unknown person receives one isolated test workspace.
     // This is the only enrollment path; user-supplied identity/tenant headers
     // never become trusted. INSERT OR IGNORE handles simultaneous first visits.
     let tenant = super::native_request_id()?;
