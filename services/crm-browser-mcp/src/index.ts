@@ -26,6 +26,10 @@ const waitState = z.enum(["visible", "hidden", "attached", "detached"]);
 const timeoutMs = z.number().int().min(100).max(30_000).optional();
 const workspaceIdSchema = z.string().uuid();
 const expected = z.union([z.string().max(512), z.number().finite(), z.boolean()]);
+const cdpCommand = z.object({
+  method: z.string().min(3).max(128),
+  params: z.record(z.string(), z.unknown()).optional(),
+});
 const scenarioStep = z.object({
   op: z.enum(SCENARIO_OPERATIONS),
   target: target.optional(),
@@ -237,6 +241,16 @@ function createServer(env: Env, ownerEmail: string) {
     },
   }, async ({ steps, screenshotOnFailure, timeoutMs, workspaceId }) =>
     command({ op: "run", steps, screenshotOnFailure, timeoutMs, workspaceId }));
+
+  server.registerTool("browser_execute", {
+    description: "Execute ordered Chrome DevTools Protocol (CDP) commands on the active Playwright page in the existing Browser Run. Each command is {method,params}; use Runtime.evaluate for page JavaScript, DOM/CSS/Network/Emulation for advanced inspection. No Worker-side eval and no new browser. Returns per-command results, elapsed times and a failure/uncertain report without automatic replay.",
+    inputSchema: {
+      workspaceId: workspaceIdSchema,
+      commands: z.array(cdpCommand).min(1).max(128),
+      timeoutMs: z.number().int().min(1_000).max(120_000).default(90_000),
+    },
+  }, async ({ workspaceId, commands, timeoutMs }) =>
+    command({ op: "execute", workspaceId, cdpCommands: commands, timeoutMs }));
 
   server.registerTool("browser_diagnostics", {
     description: "Read sanitized cross-site browser console and HTTP statuses. Credential values and URL queries are never exposed.",
