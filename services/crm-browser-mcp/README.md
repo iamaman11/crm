@@ -478,3 +478,10 @@ credentials are introduced. **This is a testable candidate, not proof**:
 real Browser Run page/context preservation must be independently validated
 after a protected immediate DO release, and a failed reattach must not create
 a replacement browser.
+
+The pinned official SDK's `WorkersConnectOptions` declaration omits
+`persistent` even though its `connect()` implementation accepts it.
+A local typed `persistentConnectOptions(sessionId)` returns the structural
+subtype `{sessionId:string,persistent:true}` and satisfies the SDK's type
+without `any`, assertion or alternate transport. The AST security test
+requires every production `connect()` to use this helper.
