@@ -55,7 +55,7 @@ test("bounded CDP output never returns an enormous raw DOM payload", async () =>
     { method: "Runtime.evaluate", params: { expression: "document.documentElement.outerHTML" } },
   ], async () => ({ result: "x".repeat(300_000) }));
   assert.equal(report.passed, false);
-  assert.equal(report.results[0]?.error, "Error: BROWSER_CDP_RESULT_TOO_LARGE");
+  assert.equal(report.results[0]?.error, "BROWSER_CDP_RESULT_TOO_LARGE");
   assert.equal(report.results[0]?.outcome, "uncertain");
 });
 
