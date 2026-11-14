@@ -6,7 +6,7 @@ import type { Env, Command, Target } from "./session";
 import { MCP_HOST, verifiedMcpOwnerEmail } from "./security";
 import { SCENARIO_OPERATIONS, isFailedVerdict } from "./browser-checks";
 import { selectWorkspaceId, workspaceObjectName } from "./browser-workspaces";
-import { BROWSER_RUNTIME_EPOCH, isVerifiedRuntimeProbe } from "./runtime-epoch";
+import { BROWSER_RUNTIME_EPOCH, isVerifiedRuntimeProbe, cleanupRuntimeEpoch } from "./runtime-epoch";
 
 export { CrmBrowserSession } from "./session";
 
@@ -59,10 +59,16 @@ function createServer(env: Env, ownerEmail: string) {
         body: JSON.stringify(command),
       },
     ));
-    // Running DO isolates can survive a Worker deployment. Old code may lack
-    // today's security checks, so never execute a mutation before a harmless
-    // read-only protocol probe. Explicit close is always available for cleanup.
-    if (payload.op !== "close") {
+    // A browser can outlive the deploying Worker. Normal operations require
+    // THIS code epoch. Cleanup is the sole exception: interrogate the exact
+    // old DO and use its read-only epoch only to close its original session.
+    let expectedEpoch: string = BROWSER_RUNTIME_EPOCH;
+    if (payload.op === "close") {
+      try {
+        const probe = await send({ op: "runtime" });
+        if (probe.ok) expectedEpoch = cleanupRuntimeEpoch(await probe.json());
+      } catch { /* Fallback to current epoch for normal closes. */ }
+    } else {
       let verified = false;
       try {
         const probe = await send({ op: "runtime" });
@@ -76,7 +82,7 @@ function createServer(env: Env, ownerEmail: string) {
     // Check again in the DO: protects races where the isolate restarts between
     // the probe and this action. Never trust caller-supplied runtime versions.
     const reply = await send({
-      ...browserCommand, expectedRuntimeEpoch: BROWSER_RUNTIME_EPOCH,
+      ...browserCommand, expectedRuntimeEpoch: expectedEpoch,
     });
     if (!reply.ok) throw new Error("CRM_BROWSER_SESSION_UNAVAILABLE");
     const result = await reply.json() as {

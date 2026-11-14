@@ -404,3 +404,24 @@ Runtime Epoch was advanced for safe deployment across active DO isolates.
 
 Source/unit CI acceptance is not live proof; physical negative E2E and
 stale-active DO behavior are separate acceptance gates.
+
+## P0 verified stale DO cleanup — Issue #357
+
+Physical release testing found a **new safety resource leak**: an active
+Durable Object correctly returned `BROWSER_RUNTIME_STALE_OR_UNVERIFIED`
+for status and click after a new epoch was deployed, but an explicit
+`browser_close` incorrectly returned `BROWSER_RUNTIME_EPOCH_MISMATCH`
+because the Worker sent the *new* epoch to an otherwise functioning *old*
+DO. Browser Run session remained active/billable.
+
+Only the **explicit, owner-authenticated Close** path now makes a read-only
+`runtime` probe to the exact workspace DO and, if the reply has a valid
+epoch signature, passes that old epoch to the old DO for close only.
+Every other command still requires the current release epoch and fails
+before execution against stale code. Unrecognized probes fall back to the
+current epoch; there is no arbitrary provider session termination API,
+new browser owner, automatic retry or relaxed CRM privilege.
+
+Source tests cover old epoch cleanup vs rejection of page actions and
+untrusted probe inputs. Protected release and physical stale-workspace
+closure are separate acceptance criteria.
