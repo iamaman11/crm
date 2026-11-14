@@ -218,8 +218,9 @@ of the true byte size). This is **not** a valid download receipt. A similar
 open upstream Cloudflare Playwright issue reports empty `createReadStream()`:
 https://github.com/cloudflare/playwright/issues/93 .
 
-This narrow fix checks `download.failure()` and rejects unverified empty
-streams, keeping the official Playwright download event path. No proxy fetch,
+This narrow fix relies on the official Playwright `createReadStream()`
+failure contract and rejects unverified empty streams; it does not add a
+second potentially unbounded `download.failure()` wait. No proxy fetch,
 secondary browser, Worker-local file workaround or accidental credential
 forwarding is added. Genuine zero-byte files are conservatively unsupported
 until the provider can distinguish them from an empty broken stream.
