@@ -518,11 +518,16 @@ export class CrmBrowserSession extends DurableObject<Env> {
         // The helper validates the whole batch before the first mutation.
         const commands = command.cdpCommands ?? [];
         const cdp = await page.context().newCDPSession(page);
+        // Playwright's typed Protocol.CommandParameters enumerates known CDP
+        // methods at compile time. This ONE boundary supports new runtime CDP
+        // methods; browser-cdp.ts validates the dynamic method and JSON params.
+        // No `any`, private SDK APIs or alternative browser engine.
+        const dynamicSend = cdp.send.bind(cdp) as unknown as
+          (method: string, params?: Record<string, unknown>) => Promise<unknown>;
         try {
           return {
             data: await executeCdpCommands(
-              commands, (method, params) => cdp.send(method, params),
-              command.timeoutMs ?? 90_000, redact,
+              commands, dynamicSend, command.timeoutMs ?? 90_000, redact,
             ),
           };
         } finally {
