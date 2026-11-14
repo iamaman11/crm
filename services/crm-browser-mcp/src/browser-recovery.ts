@@ -140,6 +140,30 @@ export async function readSafeBrowserHistory(
 }
 
 
+/** A lost tab is an expected lifecycle event, not a reason to make the
+ * operator issue a separate Close. Only an explicit Open may replace it. */
+export function isOriginalPageMissing(error: unknown): boolean {
+  return error instanceof Error &&
+    error.message === "BROWSER_SESSION_PAGE_NOT_RESTORED";
+}
+
+/** Reopen is a user command: terminate the old Browser Run before acquiring
+ * another. All other provider errors remain visible, with no extra acquire. */
+export async function restoreForExplicitOpen(
+  restore: () => Promise<void>,
+  close: () => Promise<void>,
+): Promise<boolean> {
+  try {
+    await restore();
+    return false;
+  } catch (error) {
+    if (!isOriginalPageMissing(error)) throw error;
+    await close();
+    return true;
+  }
+}
+
+
 /** Chromium exposes both the page target and its incognito BrowserContext ID
  * through the public Playwright CDP session. URL equality alone is never an
  * identity proof: a default-context tab or a different workspace may have the

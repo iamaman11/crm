@@ -4,7 +4,7 @@ import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermitte
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
-import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage, parsePageTargetInfo, type BrowserPageIdentity } from "./browser-recovery";
+import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage, parsePageTargetInfo, restoreForExplicitOpen, isOriginalPageMissing, type BrowserPageIdentity } from "./browser-recovery";
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
 
 export interface Env {
@@ -316,7 +316,12 @@ export class CrmBrowserSession extends DurableObject<Env> {
     requireCrmAgentIdentity(
       destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
     );
-    await this.restore();
+    // The user explicitly requested Open: replace a lost browser only after
+    // closing the original provider session. Status and other tools never
+    // acquire a substitute browser.
+    const restarted = await restoreForExplicitOpen(
+      () => this.restore(), () => this.close(),
+    );
     if (recording && this.browser && !this.recordingEnabled) {
       throw new Error("BROWSER_RECORDING_REQUIRES_NEW_SESSION");
     }
@@ -364,7 +369,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       this.page = await this.context.newPage();
       this.attachPage(this.page);
       await this.rememberSelectedPageIdentity();
-      return { state: "open", ...(await this.navigateTo(destination)) };
+      return { state: "open", ...(restarted ? { restarted: true } : {}), ...(await this.navigateTo(destination)) };
     } catch (error) {
       if (created) await this.close();
       throw error;
@@ -379,8 +384,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
     // termination of the exact Browser Run session to avoid billable orphans.
     try {
       await this.browser?.close();
-    } catch (error) {
-      failure = error;
+    } catch {
+      // A disconnected Playwright client cannot override a successful native
+      // Browser Run closeSession. The provider closure is authoritative.
     }
     try {
       if (sessionId) {
@@ -423,10 +429,17 @@ export class CrmBrowserSession extends DurableObject<Env> {
       await this.close();
       return { data: { state: "closed" } };
     }
-    await this.restore();
+    let needsReopen = false;
+    try {
+      await this.restore();
+    } catch (error) {
+      if (command.op !== "status" || !isOriginalPageMissing(error)) throw error;
+      needsReopen = true;
+    }
     if (command.op === "status") return {
       data: {
-        state: this.page && !this.page.isClosed() ? "open" : "closed",
+        state: needsReopen ? "needs_reopen" :
+          this.page && !this.page.isClosed() ? "open" : "closed",
         path: this.page && !this.page.isClosed() ? safePagePath(this.page.url()) : null,
         recording: this.recordingEnabled,
         lastRecordedSessionId: await this.ctx.storage.get<string>("last_recording_session_id") ?? null,
