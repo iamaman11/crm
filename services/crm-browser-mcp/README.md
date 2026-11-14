@@ -337,3 +337,21 @@ text, which might contain tokens or target URLs. This is a safe diagnostic,
 that physical Browser Run creation is working. No implicit acquire on status
 and no automatic retry after an uncertain operation. Session state continues
 to be owned by the original Durable Object and official Playwright.
+
+## P0 direct-IP URL classification — 14 November 2026
+
+The common `browserUrl` / `isPermittedBrowserRequest` owner previously
+blocked explicit private IPv4 and certain IPv6 literals, but still accepted
+special IPv4-compatible IPv6 spellings such as `[::7f00:1]` and IPv4
+translation/tunnel prefixes. This candidate filters IPv6 literals outside the
+ordinary public global-unicast prefix, and denies Teredo/6to4 and documentation
+ranges. The public IPv4-mapped IPv6 path remains supported only if its embedded
+IPv4 passes the existing address policy. It also treats all
+`192.0.0.0/24` as special-use rather than a few individual addresses.
+
+This classification is shared by direct `browser_open`, explicit navigation,
+and all Playwright `context.route` intercepted URLs; it is checked in the
+canonical security tests. **NOT equivalent to DNS rebinding protection**:
+a hostname that resolves to a private destination inside the provider can
+still evade a URL-only guardrail. Do not mark resolved-IP P0 accepted or
+replace native Browser Run networking with a second HTTP transport.

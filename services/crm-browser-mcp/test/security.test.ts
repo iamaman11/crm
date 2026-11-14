@@ -186,3 +186,34 @@ test("DNS root-dot aliases cannot bypass local, metadata, and reserved-host filt
   assert.equal(browserUrl("https://example.org./help"), "https://example.org./help");
   assert.equal(isPermittedBrowserRequest("https://example.org./"), true);
 });
+
+test("public-web policy rejects special-use IPv6 and IPv4-embedded literals at every navigation boundary", () => {
+  const unsafe = [
+    "http://[::7f00:1]/admin", // IPv4-compatible 127.0.0.1
+    "http://[::a9fe:a9fe]/latest/meta-data", // IPv4-compatible link-local
+    "http://[::c0a8:101]/", // IPv4-compatible 192.168.1.1
+    "http://[64:ff9b::7f00:1]/", // NAT64 can target loopback
+    "http://[64:ff9b::808:808]/", // public NAT64 literal is unsupported
+    "http://[2002:0a00:1::]/", // 6to4 tunnel with embedded private IPv4
+    "http://[2001:0:1234::]/", // Teredo tunnel prefix
+    "http://[fec0::1]/", // deprecated IPv6 site-local
+    "http://[feff::1]/",
+    "http://[fc00::1]/",
+    "http://[ff02::1]/",
+    "http://[::]/",
+    "http://[2001:db8::1]/", // documentation, not a public endpoint
+    "http://192.0.0.9/", // entire IPv4 special-use 192.0.0.0/24
+  ];
+  for (const address of unsafe) {
+    assert.throws(() => browserUrl(address), /BROWSER_UNSAFE_URL/, address);
+    assert.equal(isPermittedBrowserRequest(address), false, address);
+  }
+  for (const address of [
+    "https://[2606:4700:4700::1111]/",
+    "http://[2001:4860:4860::8888]/",
+    "http://[::ffff:8.8.8.8]/", // canonical IPv4-mapped public address
+  ]) {
+    assert.doesNotThrow(() => browserUrl(address), address);
+    assert.equal(isPermittedBrowserRequest(address), true, address);
+  }
+});

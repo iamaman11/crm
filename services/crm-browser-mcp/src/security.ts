@@ -74,8 +74,8 @@ function isInternalHost(host: string): boolean {
     const [a = -1,b = -1,c = -1] = parts.map(Number);
     return a === 0 || a === 10 || a === 127 || a >= 224 ||
       (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && (b === 168 || (b === 0 && c === 0) ||
-        (b === 0 && c === 2) || (b === 88 && c === 99))) ||
+      (a === 192 && (b === 168 || b === 0 ||
+        (b === 88 && c === 99))) ||
       (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
       (a === 203 && b === 0 && c === 113) ||
       (a === 100 && b >= 64 && b <= 127);
@@ -92,7 +92,20 @@ function isInternalHost(host: string): boolean {
     }
     return true;
   }
-  return /^(?:fc|fd|fe[89ab]|ff)[0-9a-f:]+$/i.test(h);
+  if (h.includes(":")) {
+    // Native IPv6 literals: only global-unicast 2000::/3 is routable on
+    // the ordinary public Internet. This excludes IPv4-compatible ::/96,
+    // NAT64 64:ff9b::/96, loopback, unspecified, link-local, ULA, site-local,
+    // multicast, and special-use ranges without enumerating their aliases.
+    // Public IPv4-mapped IPv6 was handled by the branch above.
+    if (!/^[23][0-9a-f]{0,3}:/i.test(h)) return true;
+    // Tunneling/translation and documentation prefixes are not appropriate
+    // destinations for this owner-operated public-web browser.
+    return h.startsWith("2002:") ||
+      h.startsWith("2001::") || h.startsWith("2001:0:") ||
+      h.startsWith("2001:db8:");
+  }
+  return false;
 }
 
 // Normal public HTTP(S) sites are supported; only local/private network and
