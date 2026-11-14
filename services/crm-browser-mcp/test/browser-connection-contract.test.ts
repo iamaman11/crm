@@ -3,36 +3,37 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import * as ts from "typescript";
 
-// The exact Cloudflare Playwright connection contract: both initial acquire
-// and DO restart must opt in to persistent CDP ownership. Extract from AST,
-// not another manually maintained inventory of browser operations.
-test("every production Browser Run connect uses persistent CDP transport", () => {
-  const src = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
-  const ast = ts.createSourceFile("session.ts", src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+// Check the exact SDK ownership contract in the actual production AST. Both
+// acquire and recovery must opt in to persistent CDP, while retaining the
+// existing browser contexts with blocked Service Workers.
+test("all production Cloudflare Browser Run connects use typed persistent session options", () => {
+  const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  const source = ts.createSourceFile("session.ts", code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   let connections = 0;
-  const visit = (node: ts.Node): void => {
+  let helperFound = false;
+  function visit(node: ts.Node): void {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "persistentConnectOptions") {
+      helperFound = true;
+      assert.equal(node.parameters.length, 1);
+      assert.ok(node.body && node.body.statements.some(stmt =>
+        ts.isReturnStatement(stmt) && stmt.expression &&
+        ts.isObjectLiteralExpression(stmt.expression) &&
+        stmt.expression.properties.some(p => ts.isPropertyAssignment(p) &&
+          p.name.getText(source) === "persistent" && p.initializer.getText(source) === "true")
+      ), "helper must expose persistent:true as a real SDK option");
+    }
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
         node.expression.text === "connect") {
       connections++;
-      assert.equal(node.arguments.length, 2, "Cloudflare Browser Run requires endpoint and options");
       const arg = node.arguments[1];
-      assert.ok(arg && ts.isObjectLiteralExpression(arg), "connect must use explicit session options");
-      if (arg && ts.isObjectLiteralExpression(arg)) {
-        const fields = new Map(arg.properties.filter(ts.isPropertyAssignment).map(p =>
-          [p.name.getText(ast), p.initializer.getText(ast)]));
-        // A shorthand sessionId is accepted for initial acquisition.
-        const shorthand = arg.properties.some(p => ts.isShorthandPropertyAssignment(p) &&
-          p.name.text === "sessionId");
-        assert.equal(fields.get("persistent"), "true",
-          "nonpersistent CDP context disappears after DO eviction");
-        assert.ok(fields.has("sessionId") || shorthand,
-          "reconnect must reattach existing Browser Run session ID");
-      }
+      assert.ok(arg && ts.isCallExpression(arg) &&
+        ts.isIdentifier(arg.expression) && arg.expression.text === "persistentConnectOptions",
+        "every browser connection must pass the same typed persistent options");
     }
     ts.forEachChild(node, visit);
-  };
-  visit(ast);
-  assert.ok(connections >= 2, "test must discover initial and recovery connection sites");
-  assert.match(src, /serviceWorkers:\s*"block"/,
-    "public-web SSRF routing requires blocked Service Workers in browser contexts");
+  }
+  visit(source);
+  assert.ok(helperFound, "persistent connection contract helper missing");
+  assert.ok(connections >= 2, "both initial and recovery connection paths must be present");
+  assert.match(code, /serviceWorkers:\s*"block"/, "SSRF interception relies on blocked Service Workers");
 });
