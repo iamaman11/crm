@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { acquire, connect, history, limits, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
-import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermittedBrowserRequest, redact, requireCrmAgentIdentity, safePagePath } from "./security";
+import { CRM_ORIGIN, browserUrl, crmRequestDisposition, isCrmRequest, isPermittedBrowserRequest, redact, requireCrmAgentIdentity, safePagePath } from "./security";
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
@@ -259,13 +259,24 @@ export class CrmBrowserSession extends DurableObject<Env> {
           trustedMainNavigation = this.ownerDirectedCrmNavigation &&
             request.isNavigationRequest() && frame === this.page?.mainFrame();
         } catch { /* Service-worker requests have no frame; never authorize. */ }
-        const hasAgentCredentials = Boolean(
-          this.env.CRM_BROWSER_CLIENT_ID && this.env.CRM_BROWSER_CLIENT_SECRET,
+        const disposition = crmRequestDisposition(
+          request.url(), initiator, trustedMainNavigation,
         );
-        if (!hasAgentCredentials ||
-            !crmCredentialsAllowed(request.url(), initiator, trustedMainNavigation)) {
-          // Includes foreign sites, their assets, third-party CDNs and SSO.
+        if (disposition === "block") {
+          // Browser-managed CRM cookies can survive earlier authenticated
+          // navigation; never allow a foreign page to trigger their use.
+          await route.abort("blockedbyclient");
+          return;
+        }
+        if (disposition === "public") {
+          // Foreign sites, their assets, third-party CDNs and SSO are public.
           await route.continue();
+          return;
+        }
+        if (!this.env.CRM_BROWSER_CLIENT_ID || !this.env.CRM_BROWSER_CLIENT_SECRET) {
+          // Never use an old Access cookie as a substitute for an explicitly
+          // provisioned CRM service identity.
+          await route.abort("blockedbyclient");
           return;
         }
         // Playwright route.continue({headers}) propagates overridden headers to
