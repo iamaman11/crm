@@ -28,7 +28,7 @@ This is one owner-authenticated, Cloudflare Playwright-backed universal browser,
 
 ## Current acceptance
 
-Owner OAuth and all 17 MCP tool methods were confirmed through ChatGPT. On
+Owner OAuth and all 17 tool methods were confirmed through ChatGPT. On
 14 November 2026 the new workspace protocol was published to
 `crm-browser-mcp` (Cloudflare version
 `6554e01a-3287-465e-9cc1-b418047558dd`) and a real two-workspace test
