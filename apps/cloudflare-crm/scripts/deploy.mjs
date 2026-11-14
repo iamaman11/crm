@@ -211,28 +211,17 @@ async function prepareE2e(){
   };
   const a=principal("A"),b=principal("B");
   if(a===b)throw Error("E2E identities must be distinct");
-  // A clean D1 has no pre-enrolled service actors. Enroll through the same
-  // signed Cloudflare Access entrypoint as production, not with forged DB roles.
-  for(const n of ["A","B"]){
-    const id=required("CRM_E2E_"+n+"_CLIENT_ID");
-    const secret=required("CRM_E2E_"+n+"_CLIENT_SECRET");
-    const reply=await fetch(url+"/api/session",{
-      headers:{"CF-Access-Client-Id":id,"CF-Access-Client-Secret":secret},
-      redirect:"manual",cache:"no-store"});
-    if(reply.status!==200)
-      throw Error("Signed E2E service principal "+n+" failed to enroll: HTTP "+reply.status);
-  }
+  // Service actors are explicitly enrolled by the trusted release process
+  // BEFORE contacting the signed Access endpoint. The Rust admission gate
+  // never creates a tenant or grants admin to an unknown service principal.
+  // These two CI-only tokens are distinct from the human owner and Browser MCP.
   const endpoint="/d1/database/"+database+"/query";
-  const query=async(sql,params)=>{
+  const query=async(sql,params=[])=>{
     const r=await cf(endpoint,"POST",{sql,params});
     if(!Array.isArray(r)||r.length!==1||r[0].success!==true)
       throw Error("E2E D1 query failed");
     return r[0].results;
   };
-  const current=await query(
-    "SELECT email,role,active FROM crm_users WHERE email IN (?,?)",[a,b]);
-  if(current.length!==2||current.some(r=>r.role!=="admin"||r.active!==1))
-    throw Error("Protected E2E service actors are not enrolled active administrators");
   const ta="crm-e2e-"+run+"-"+attempt+"-a",tb="crm-e2e-"+run+"-"+attempt+"-b";
   if(ta===tb)throw Error("E2E tenants must differ");
   const batch=[
@@ -240,23 +229,39 @@ async function prepareE2e(){
       params:[ta,"CRM protected E2E A"]},
     {sql:"INSERT OR IGNORE INTO crm_tenants(id,name) VALUES (?,?)",
       params:[tb,"CRM protected E2E B"]},
-    {sql:"UPDATE crm_users SET tenant_id=? WHERE email=? AND role='admin' AND active=1",
-      params:[ta,a]},
-    {sql:"UPDATE crm_users SET tenant_id=? WHERE email=? AND role='admin' AND active=1",
-      params:[tb,b]}
+    {sql:"INSERT INTO crm_users(email,tenant_id,role,active) VALUES (?,?,'admin',1) "+
+      "ON CONFLICT(email) DO UPDATE SET tenant_id=excluded.tenant_id,role='admin',active=1",
+      params:[a,ta]},
+    {sql:"INSERT INTO crm_users(email,tenant_id,role,active) VALUES (?,?,'admin',1) "+
+      "ON CONFLICT(email) DO UPDATE SET tenant_id=excluded.tenant_id,role='admin',active=1",
+      params:[b,tb]}
   ];
   const changed=await cf(endpoint,"POST",{batch});
   if(!Array.isArray(changed)||changed.length!==4||
       changed.some(x=>x.success!==true)||changed[2].meta?.changes!==1||
       changed[3].meta?.changes!==1)
-    throw Error("E2E tenant assignment did not update exactly two service actors");
+    throw Error("E2E explicit service enrollment failed for isolated actors");
   const readback=await query(
-    "SELECT COUNT(*) AS assigned FROM crm_users WHERE (email=? AND tenant_id=?) OR (email=? AND tenant_id=?)",
-    [a,ta,b,tb]);
+    "SELECT email,tenant_id,role,active FROM crm_users WHERE email IN (?,?) ORDER BY email",[a,b]);
+  if(readback.length!==2||readback.some(x=>
+    x.role!=="admin"||x.active!==1||
+    (x.email===a?x.tenant_id!==ta:x.email===b?x.tenant_id!==tb:true)))
+    throw Error("E2E enrolled actors do not match the two isolated tenants");
+  // Verify the real Cloudflare Access signature and Rust service lookup after
+  // the exact trusted D1 enrollment, never by forging an actor from the UI.
+  for(const n of ["A","B"]){
+    const id=required("CRM_E2E_"+n+"_CLIENT_ID");
+    const secret=required("CRM_E2E_"+n+"_CLIENT_SECRET");
+    const reply=await fetch(url+"/api/session",{
+      headers:{"CF-Access-Client-Id":id,"CF-Access-Client-Secret":secret},
+      redirect:"manual",cache:"no-store"});
+    if(reply.status!==200 || (await reply.json()).role!=="admin")
+      throw Error("Explicitly enrolled signed E2E service "+n+" failed Access verification: HTTP "+reply.status);
+  }
   const clean=await query(
     "SELECT COUNT(*) AS existing FROM crm_party_records WHERE tenant IN (?,?)",[ta,tb]);
-  if(readback[0]?.assigned!==2||clean[0]?.existing!==0)
-    throw Error("E2E tenant assignment/readback failed or contains old Party data");
+  if(clean[0]?.existing!==0)
+    throw Error("E2E isolated test tenants contain old Party data");
   record("e2e-tenants.json",{source_sha:sha,database,run_id:run,attempt,actor_a:a,tenant_a:ta,tenant_b:tb});
   console.log(JSON.stringify({event:"crm.e2e-tenant-isolation",
     result:"PASS",database:"existing D1",actors:2,tenants:2,previous_data_deleted:false}));
