@@ -129,7 +129,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
         const status = (session as unknown as { status?: unknown }).status;
         return { status };
       },
-      async id => connect(this.env.BROWSER, id),
+      // The provider may retain the process after the controlling DO isolate
+      // restarts. Use persistent CDP connections so browser contexts and tabs
+      // are eligible for reattachment instead of client-scoped disposal.
+      async id => connect(this.env.BROWSER, { sessionId: id, persistent: true }),
     );
     if (recovered.kind === "missing") return;
     if (recovered.kind === "expired") {
@@ -280,7 +283,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
         throw classifyBrowserAcquireFailure(error);
       }
       try {
-        this.browser = await connect(this.env.BROWSER, sessionId);
+        this.browser = await connect(this.env.BROWSER, { sessionId, persistent: true });
         this.browserSessionId = sessionId;
         await this.ctx.storage.put("browser_session_id", sessionId);
         await this.ctx.storage.put("browser_recording", recording);
