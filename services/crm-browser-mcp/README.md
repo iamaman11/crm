@@ -225,9 +225,11 @@ secondary browser, Worker-local file workaround or accidental credential
 forwarding is added. Genuine zero-byte files are conservatively unsupported
 until the provider can distinguish them from an empty broken stream.
 
-**Download remains P1 NO-GO:** this patch prevents false PASS, but does not
-prove successful transfer of nonempty content. Require a real nonzero payload
-and independent byte/count check after a controlled release. CRM R2 remains OFF.
+**Download remains P1 NO-GO:** the fix was deployed on 14 November 2026;
+live `browser_file(download)` now correctly returned
+`BROWSER_DOWNLOAD_CONTENT_UNVERIFIED`, not false `completed:true`.
+A successful nonempty file transfer with independent byte/count readback is
+still required. CRM R2 remains OFF.
 
 ## Explicit isolated workspaces (P0, Issue #357)
 
@@ -253,7 +255,28 @@ handles have different Durable Objects. A lost handle is not silently
 rediscovered. The provider's idle expiry limits abandoned Browser Run sessions.
 No new Worker, browser engine, D1 database, registry or hidden adapter.
 
-This is a breaking MCP input-schema change: refresh the connected ChatGPT
-plugin after controlled release. Physical distinct-workspace, closing-one-
-without-affecting-the-other and DO eviction/reconnect E2Es remain acceptance
-gates. CRM administrative R2 remains NO-GO.
+**Published / physically checked (14 November 2026):** protected release
+[CI #43534116743](https://github.com/iamaman11/crm/actions/runs/43534116743)
+deployed commit `1f52141efd7fab9adba76b7b0c8c7072442bf77a` as Cloudflare
+Worker version `6554e01a-3287-465e-9cc1-b418047558dd` at 100%.
+`BROWSER_MCP_RELEASE_ENABLED=false` after release.
+
+Two independent real workspaces A (Selenium form) and B (Example Domain)
+opened simultaneously. A was filled while B's DOM and title stayed unchanged.
+Closing A left B open; closing B succeeded. Calls without `workspaceId`
+were rejected, and provider session list showed **zero** open browsers after
+cleanup. An initial 429 when creating B was a new-browser creation rate
+limit (Workers Free: one new instance every 20 seconds), not a concurrency
+isolation failure. A same-workspace browser_open successfully navigated
+without allocating a new workspace.
+
+The deployed `browser_run` physically returned an MCP error for a negative
+assertion and stopped before the second step; a five-step Selenium E2E passed.
+A later forbidden URL in a batch was rejected **before** an earlier click.
+These are specific PASS cases, not full P0 acceptance.
+
+**Still NO-GO:** actual DO isolate eviction/reconnect and crash/expiry,
+DNS rebinding/resolved-IP and hostile redirect enforcement, real nonempty
+downloads/HAR/trace, full live CI and P2, and CRM R2 owner-tenant identity.
+Refresh ChatGPT MCP tool metadata after schema changes. The installed private
+Plugin Creator release must be synchronized separately from canonical source.
