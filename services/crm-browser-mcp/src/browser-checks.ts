@@ -60,6 +60,7 @@ type ScenarioStep = {
   value?: unknown;
   match?: unknown;
   state?: unknown;
+  followPopup?: unknown;
 };
 const targetOperations: ReadonlySet<string> = new Set([
   "click", "double_click", "fill", "type", "select", "check", "uncheck", "hover",
@@ -74,6 +75,17 @@ export function validateScenarioSteps(steps: readonly ScenarioStep[] | undefined
     if (!scenarioSet.has(step.op)) throw new Error("BROWSER_RUN_UNSAFE_STEP");
     if (targetOperations.has(step.op) && !step.target) {
       throw new Error("BROWSER_RUN_TARGET_REQUIRED");
+    }
+    if (step.followPopup !== undefined &&
+        (step.followPopup !== true ||
+          (step.op !== "click" && step.op !== "double_click"))) {
+      throw new Error("BROWSER_RUN_INVALID_POPUP_FOLLOW");
+    }
+    const target = step.target;
+    if (typeof target === "object" && target !== null &&
+        "frameIndex" in target && "frameSelector" in target &&
+        target.frameIndex !== undefined && target.frameSelector !== undefined) {
+      throw new Error("BROWSER_RUN_FRAME_TARGET_CONFLICT");
     }
     if (step.op === "assert") {
       // Validate types BEFORE previous clicks. A bad expected count/boolean or
