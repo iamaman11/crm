@@ -11,11 +11,15 @@ import { BROWSER_RUNTIME_EPOCH, isVerifiedRuntimeProbe, cleanupRuntimeEpoch } fr
 export { CrmBrowserSession } from "./session";
 
 const frameIndex = z.number().int().min(0).max(49).optional();
+const frameSelector = z.string().min(1).max(512).optional();
 const target = z.object({
   kind: z.enum(["css", "role", "text", "label"]),
   value: z.string().min(1).max(512),
   name: z.string().min(1).max(512).optional(),
   frameIndex,
+  frameSelector,
+}).refine(value => !(value.frameIndex !== undefined && value.frameSelector !== undefined), {
+  message: "Choose frameIndex or frameSelector, not both",
 });
 const action = z.enum([
   "click", "double_click", "fill", "type", "select", "check",
@@ -40,6 +44,7 @@ const scenarioStep = z.object({
   x: z.number().finite().min(-5000).max(5000).optional(),
   y: z.number().finite().min(-5000).max(5000).optional(),
   acceptDialog: z.boolean().optional(),
+  followPopup: z.boolean().optional(),
   kind: assertionKind.optional(),
   expected: expected.optional(),
   match: z.enum(["exact", "contains"]).optional(),
@@ -136,8 +141,8 @@ function createServer(env: Env, ownerEmail: string) {
   }, async ({ workspaceId }) => command({ op: "session", workspaceId }));
 
   server.registerTool("browser_snapshot", {
-    description: "Return the current page or selected iframe accessibility tree and title. Use browser_frames to discover frameIndex.",
-    inputSchema: { workspaceId: workspaceIdSchema, frameIndex },
+    description: "Return the current page or selected iframe accessibility tree. Select a stable iframe by CSS frameSelector (preferred) or frameIndex from browser_frames.",
+    inputSchema: { workspaceId: workspaceIdSchema, frameIndex, frameSelector },
   }, async params => command({ op: "snapshot", ...params }));
 
   server.registerTool("browser_tabs", {
@@ -190,7 +195,7 @@ function createServer(env: Env, ownerEmail: string) {
   }, async ({ workspaceId }) => command({ op: "screenshot", workspaceId }));
 
   server.registerTool("browser_action", {
-    description: "Perform one real Playwright UI action in the persistent browser. Browse ordinary public HTTP(S) sites. CRM admin actions use the real CRM UI, Connect and Rust.",
+    description: "Perform a real Playwright UI action. Set followPopup:true on click/double_click to wait for and activate the newly opened tab before returning. Use target.frameSelector for stable iframe targeting.",
     inputSchema: {
       workspaceId: workspaceIdSchema,
       action,
@@ -202,11 +207,13 @@ function createServer(env: Env, ownerEmail: string) {
       x: z.number().finite().min(-5000).max(5000).optional(),
       y: z.number().finite().min(-5000).max(5000).optional(),
       acceptDialog: z.boolean().optional(),
+      followPopup: z.boolean().optional(),
     },
   }, async (params) => command({
     op: params.action, workspaceId: params.workspaceId, target: params.target as Target | undefined,
     text: params.text, key: params.key, value: params.value,
     url: params.url, x: params.x, y: params.y, acceptDialog: params.acceptDialog,
+    followPopup: params.followPopup,
   }));
 
   server.registerTool("browser_wait", {
@@ -232,7 +239,7 @@ function createServer(env: Env, ownerEmail: string) {
   }, async params => command({ op: "assert", ...params }));
 
   server.registerTool("browser_run", {
-    description: "Prevalidate 12 or fewer typed Playwright steps, bound waits/actions to a run budget and stop on first failure. Return an explicit pass/fail report.",
+    description: "Run up to 12 prevalidated Playwright steps with assertions; a click can follow a real popup via followPopup:true and later steps run in that new tab.",
     inputSchema: {
       workspaceId: workspaceIdSchema,
       steps: z.array(scenarioStep).min(1).max(12),

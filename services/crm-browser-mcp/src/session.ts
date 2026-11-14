@@ -29,6 +29,7 @@ export type Target = {
   value: string;
   name?: string;
   frameIndex?: number;
+  frameSelector?: string;
 };
 
 export type Command = {
@@ -54,6 +55,8 @@ export type Command = {
   tabAction?: "list" | "new" | "select" | "close";
   tabId?: string;
   frameIndex?: number;
+  frameSelector?: string;
+  followPopup?: boolean;
   fileAction?: "upload" | "download";
   fileName?: string;
   mimeType?: string;
@@ -92,8 +95,16 @@ export class CrmBrowserSession extends DurableObject<Env> {
 
   private target(target: Target) {
     if (!this.page) throw new Error("CRM_BROWSER_NOT_OPEN");
-    const scope = target.frameIndex === undefined ? this.page :
-      this.page.frames()[target.frameIndex];
+    if (target.frameSelector !== undefined && target.frameIndex !== undefined) {
+      throw new Error("BROWSER_FRAME_TARGET_CONFLICT");
+    }
+    if (target.frameSelector !== undefined &&
+        (!target.frameSelector || target.frameSelector.length > 512)) {
+      throw new Error("BROWSER_FRAME_SELECTOR_INVALID");
+    }
+    const scope = target.frameSelector !== undefined ?
+      this.page.frameLocator(target.frameSelector) :
+      target.frameIndex === undefined ? this.page : this.page.frames()[target.frameIndex];
     if (!scope) throw new Error("BROWSER_FRAME_NOT_FOUND");
     if (target.kind === "role") {
       return scope.getByRole(target.value as Parameters<Page["getByRole"]>[0], {
@@ -683,6 +694,23 @@ export class CrmBrowserSession extends DurableObject<Env> {
           },
         };
       case "snapshot": {
+        if (command.frameIndex !== undefined && command.frameSelector !== undefined) {
+          throw new Error("BROWSER_FRAME_TARGET_CONFLICT");
+        }
+        if (command.frameSelector !== undefined) {
+          if (!command.frameSelector || command.frameSelector.length > 512) {
+            throw new Error("BROWSER_FRAME_SELECTOR_INVALID");
+          }
+          return {
+            data: {
+              path: safePagePath(page.url()),
+              frameSelector: command.frameSelector,
+              title: await page.title(),
+              accessibility: (await page.frameLocator(command.frameSelector)
+                .locator("body").ariaSnapshot()).slice(0, 30_000),
+            },
+          };
+        }
         const frame = command.frameIndex === undefined ? page.mainFrame() :
           page.frames()[command.frameIndex];
         if (!frame) throw new Error("BROWSER_FRAME_NOT_FOUND");
@@ -847,10 +875,28 @@ export class CrmBrowserSession extends DurableObject<Env> {
       case "hover":
       case "type": {
         if (!command.target) throw new Error("CRM_BROWSER_TARGET_REQUIRED");
+        if (command.followPopup &&
+            command.op !== "click" && command.op !== "double_click") {
+          throw new Error("BROWSER_POPUP_REQUIRES_CLICK");
+        }
         const locator = this.target(command.target);
+        let followedPopup: Page | null = null;
         this.acceptingDialog = command.acceptDialog === true;
         try {
-          if (command.op === "click") await locator.click({ timeout: operationTimeout(12_000, runDeadline) });
+          if (command.followPopup) {
+            // Listen before clicking so a fast window.open is never missed.
+            // The native Playwright event identifies exactly the new page.
+            const [popup] = await Promise.all([
+              page.waitForEvent("popup", { timeout: operationTimeout(12_000, runDeadline) }),
+              command.op === "click"
+                ? locator.click({ timeout: operationTimeout(12_000, runDeadline) })
+                : locator.dblclick({ timeout: operationTimeout(12_000, runDeadline) }),
+            ]);
+            this.attachPage(popup);
+            this.page = popup;
+            await this.rememberSelectedPageIdentity();
+            followedPopup = popup;
+          } else if (command.op === "click") await locator.click({ timeout: operationTimeout(12_000, runDeadline) });
           else if (command.op === "double_click") await locator.dblclick({ timeout: operationTimeout(12_000, runDeadline) });
           else if (command.op === "fill") await locator.fill(command.text ?? "", { timeout: operationTimeout(12_000, runDeadline) });
           else if (command.op === "select") await locator.selectOption(command.value ?? "", { timeout: operationTimeout(12_000, runDeadline) });
@@ -863,7 +909,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
         }
         return {
           data: {
-            action: command.op, completed: true, path: safePagePath(page.url()),
+            action: command.op, completed: true,
+            path: safePagePath(followedPopup?.url() ?? page.url()),
+            ...(followedPopup ? { followedPopup: true, tabId: this.tabIds.get(followedPopup) } : {}),
             // Request IDs and full data values can be inspected separately through Cloudflare.
             latest_requests: this.requestLog.slice(-8),
           },
