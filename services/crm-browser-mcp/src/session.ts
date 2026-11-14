@@ -9,6 +9,8 @@ import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserL
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
 import { executeCdpCommands, type CdpCommand } from "./browser-cdp";
 import { recordingTargets, recordingHar } from "./browser-recordings";
+import { completedHandoff, handoffIdentifier, handoffLiveViewUrl, isProviderHandoffActive,
+  validateHandoffRequest, type HumanHandoffRecord } from "./browser-handoff";
 
 export interface Env {
   BROWSER: BrowserRun;
@@ -37,7 +39,7 @@ export type Target = {
 };
 
 export type Command = {
-  op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "run" | "execute" | "recording" | "runtime";
+  op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "handoff" | "run" | "execute" | "recording" | "runtime";
   expectedRuntimeEpoch?: string; // Worker-supplied internal compatibility fence.
   workspaceId?: string; // MCP routing only; stripped before sending to this DO.
   url?: string;
@@ -76,6 +78,9 @@ export type Command = {
   width?: number;
   height?: number;
   recording?: boolean;
+  handoffAction?: "start" | "status";
+  handoffInstructions?: string;
+  handoffTimeoutMs?: number;
   screenshotOnFailure?: boolean;
 };
 
@@ -98,6 +103,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private pendingOperations = 0;
   private acceptingDialog = false;
   private ownerDirectedCrmNavigation = false;
+  // The original Playwright context remains the sole CDP owner while the
+  // human controls the page. Completion events are checkpointed to DO SQLite.
+  private handoffCdp: Awaited<ReturnType<BrowserContext["newCDPSession"]>> | null = null;
   private consoleLog: Array<{ level: string; text: string }> = [];
   private requestStartedAt = new WeakMap<object, number>();
   private requestLog: Array<{
@@ -413,6 +421,8 @@ export class CrmBrowserSession extends DurableObject<Env> {
   }
 
   private async close() {
+    try { await this.handoffCdp?.detach(); } catch { /* Browser already lost. */ }
+    this.handoffCdp = null;
     const sessionId = this.browserSessionId ??
       await this.ctx.storage.get<string>("browser_session_id");
     let failure: unknown = null;
@@ -435,6 +445,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       await this.ctx.storage.delete("browser_session_id");
       await this.ctx.storage.delete("browser_recording");
       await this.ctx.storage.delete("browser_page_identity");
+      await this.ctx.storage.delete("browser_handoff");
     } catch (error) {
       failure ??= error;
       // Keep the persisted ID on failure so a later owner request can retry
@@ -459,6 +470,13 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private async execute(command: Command, runDeadline?: number): Promise<{ data: unknown; image?: string }> {
     // The lightweight probe must NOT launch, restore or mutate a browser.
     if (command.op === "runtime") return { data: { epoch: BROWSER_RUNTIME_EPOCH } };
+    const activeHandoff = await this.ctx.storage.get<HumanHandoffRecord>("browser_handoff");
+    if (activeHandoff?.status === "waiting_human" &&
+        !["handoff", "status", "close", "live_view"].includes(command.op)) {
+      // No agent actions may race an active human operator, including Open,
+      // arbitrary CDP, tab changes, file uploads and background scenarios.
+      throw new Error("BROWSER_HANDOFF_WAITING_FOR_HUMAN");
+    }
     if (command.op === "open") return {
       data: await this.open(command.url, command.recording ?? false),
     };
@@ -470,7 +488,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
     try {
       await this.restore();
     } catch (error) {
-      if (command.op !== "status" || !isOriginalPageMissing(error)) throw error;
+      if ((command.op !== "status" &&
+           !(command.op === "handoff" && command.handoffAction === "status")) ||
+          !isOriginalPageMissing(error)) throw error;
       needsReopen = true;
     }
     if (command.op === "recording") {
@@ -519,6 +539,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
           this.page && !this.page.isClosed() ? "open" : "closed",
         path: this.page && !this.page.isClosed() ? safePagePath(this.page.url()) : null,
         recording: this.recordingEnabled,
+        humanHandoff: activeHandoff?.status ?? null,
         lastRecordedSessionId: await this.ctx.storage.get<string>("last_recording_session_id") ?? null,
         // Official @cloudflare/playwright /v1/limits readback. No Browser Run
         // acquire, no connection, no full provider session IDs in MCP output.
@@ -526,6 +547,12 @@ export class CrmBrowserSession extends DurableObject<Env> {
         providerHistory: await readSafeBrowserHistory(() => history(this.env.BROWSER)),
       },
     };
+    if (command.op === "handoff") {
+      if (command.handoffAction === "status" && needsReopen) {
+        return { data: { state: "needs_reopen", handoff: "unconfirmed" } };
+      }
+      return { data: await this.structuredHandoff(command) };
+    }
     if (command.op === "tabs") {
       if (!this.browser) throw new Error("CRM_BROWSER_NOT_OPEN");
       if (command.tabAction === "new") {
