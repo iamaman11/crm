@@ -355,3 +355,21 @@ canonical security tests. **NOT equivalent to DNS rebinding protection**:
 a hostname that resolves to a private destination inside the provider can
 still evade a URL-only guardrail. Do not mark resolved-IP P0 accepted or
 replace native Browser Run networking with a second HTTP transport.
+
+## Provider limits without starting a browser — P0 #357
+
+`browser_status(workspaceId)` now includes a `providerLimits` field from
+the **official pinned @cloudflare/playwright `limits(env.BROWSER)` API**.
+It uses the existing Browser Run binding's read-only `/v1/limits` endpoint
+and never allocates or connects a new browser. The returned data has only
+`activeSessionCount`, `allowedBrowserAcquisitions`,
+`maxConcurrentSessions`, and the provider's
+`timeUntilNextAllowedBrowserAcquisition` value. The provider's raw session IDs
+are **not** copied into MCP tool results. Missing, malformed or failed reads
+return `{state:"unavailable"}` and do not prevent an otherwise valid status
+response. This is one tool's response enhancement, **not** a second browser
+owner, new MCP tool, new CI or unbounded polling.
+
+Actual 429 diagnosis must use the physical limit readback. Even when allowed
+acquisitions are 0, that by itself does not prove the account's billing plan
+or daily budget. No automatic browser creation/retry is introduced.

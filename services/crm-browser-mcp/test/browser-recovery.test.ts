@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyBrowserAcquireFailure, recoverExistingBrowserSession } from "../src/browser-recovery.ts";
+import { classifyBrowserAcquireFailure, readSafeBrowserLimits, recoverExistingBrowserSession } from "../src/browser-recovery.ts";
 
 const id = "provider-session-123";
 test("no stored ID means closed, with no provider call or new browser", async () => {
@@ -75,4 +75,40 @@ test("unknown browser creation errors remain fail-closed and redact provider det
   assert.notEqual(classifyBrowserAcquireFailure(new Error("429 quota")).message,
     "BROWSER_PROVIDER_RATE_LIMITED",
     "a bare status code is insufficient to prove a rate limit cause");
+});
+
+test("provider limits can be inspected without acquiring a browser or exposing session IDs", async () => {
+  let reads=0;
+  const result=await readSafeBrowserLimits(async () => {
+    reads++;
+    return {
+      activeSessions: [{id:"SENSITIVE_BROWSER_SESSION_A"}, {id:"SENSITIVE_BROWSER_SESSION_B"}],
+      allowedBrowserAcquisitions: 0, maxConcurrentSessions: 3,
+      timeUntilNextAllowedBrowserAcquisition: 19,
+    };
+  });
+  assert.equal(reads,1);
+  assert.deepEqual(result,{
+    state:"available", activeSessionCount:2, allowedBrowserAcquisitions:0,
+    maxConcurrentSessions:3, timeUntilNextAllowedBrowserAcquisition:19,
+  });
+  assert.equal(JSON.stringify(result).includes("SENSITIVE_BROWSER_SESSION"),false);
+});
+
+test("provider limits read errors are unavailable, never falsely reported as zero", async () => {
+  const result=await readSafeBrowserLimits(async () => {
+    throw new Error("Authorization: Bearer SECRET Browser Run 429");
+  });
+  assert.deepEqual(result,{state:"unavailable"});
+});
+
+test("malformed provider limits do not become trusted account capacity", async () => {
+  for (const bad of [
+    {activeSessions:[],allowedBrowserAcquisitions:-1,maxConcurrentSessions:3,timeUntilNextAllowedBrowserAcquisition:0},
+    {activeSessions:[],allowedBrowserAcquisitions:0,maxConcurrentSessions:2,timeUntilNextAllowedBrowserAcquisition:Infinity},
+    {activeSessions:null,allowedBrowserAcquisitions:0,maxConcurrentSessions:2,timeUntilNextAllowedBrowserAcquisition:0},
+  ]) {
+    const result=await readSafeBrowserLimits(async()=>bad as never);
+    assert.deepEqual(result,{state:"unavailable"});
+  }
 });

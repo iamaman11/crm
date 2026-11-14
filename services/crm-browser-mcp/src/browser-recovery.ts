@@ -1,3 +1,4 @@
+import type { LimitsResponse } from "@cloudflare/playwright";
 /** A single testable recovery decision used by the real Durable Object.
  * Only the official Cloudflare Browser Run session may be reattached.
  * Never acquire a replacement browser as a side-effect of status or restore. */
@@ -44,4 +45,42 @@ export function classifyBrowserAcquireFailure(cause: unknown): Error {
     return new Error("BROWSER_PROVIDER_RATE_LIMITED");
   }
   return new Error("BROWSER_PROVIDER_ACQUIRE_FAILED");
+}
+
+
+/** Read-only Cloudflare Browser Run account limit readback, never acquisition.
+ * The provider returns session IDs, but the MCP may only reveal a count.
+ * A failed/unsupported limits endpoint is NOT evidence of available capacity. */
+export async function readSafeBrowserLimits(
+  readLimits: () => Promise<LimitsResponse>,
+): Promise<{
+  state: "available" | "unavailable";
+  activeSessionCount?: number;
+  allowedBrowserAcquisitions?: number;
+  maxConcurrentSessions?: number;
+  timeUntilNextAllowedBrowserAcquisition?: number;
+}> {
+  try {
+    const result = await readLimits();
+    const values = [
+      result.activeSessions?.length,
+      result.allowedBrowserAcquisitions,
+      result.maxConcurrentSessions,
+      result.timeUntilNextAllowedBrowserAcquisition,
+    ];
+    if (!values.every(value =>
+      typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    )) return { state: "unavailable" };
+    return {
+      state: "available",
+      activeSessionCount: result.activeSessions.length,
+      allowedBrowserAcquisitions: result.allowedBrowserAcquisitions,
+      maxConcurrentSessions: result.maxConcurrentSessions,
+      timeUntilNextAllowedBrowserAcquisition: result.timeUntilNextAllowedBrowserAcquisition,
+    };
+  } catch {
+    // Do not echo provider messages or expose a misleading zero-capacity
+    // readback. Browser status itself remains usable if this API is down.
+    return { state: "unavailable" };
+  }
 }
