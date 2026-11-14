@@ -166,3 +166,23 @@ test("Managed OAuth/Access controller evidence denies missing, wrong, and broken
     { aud, getIdentity: async () => { throw new Error("expired JWT"); } }, aud, owner,
   ), null);
 });
+
+
+test("DNS root-dot aliases cannot bypass local, metadata, and reserved-host filters", () => {
+  const unsafe = [
+    "http://localhost./", "http://LOCALHOST..:8000/",
+    "http://metadata./latest/meta-data", "http://router../admin",
+    "https://console.local./", "https://example.internal./",
+    "http://printer.lan./", "http://service.home.arpa./",
+    "http://one.test./", "http://two.invalid./",
+    "http://a.localhost./", "http://service.internal..",
+  ];
+  for (const input of unsafe) {
+    assert.equal(isPermittedBrowserRequest(input), false, input);
+    assert.throws(() => browserUrl(input), /BROWSER_UNSAFE_URL/, input);
+  }
+  // FQDN root dots are not forbidden by themselves; the browser stays
+  // universal for public sites and their ordinary external redirects.
+  assert.equal(browserUrl("https://example.org./help"), "https://example.org./help");
+  assert.equal(isPermittedBrowserRequest("https://example.org./"), true);
+});
