@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage } from "../src/browser-recovery.ts";
+import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage, parsePageTargetInfo, validBrowserPageIdentity } from "../src/browser-recovery.ts";
 
 const id = "provider-session-123";
 test("no stored ID means closed, with no provider call or new browser", async () => {
@@ -154,58 +154,124 @@ test("invalid rows and data outside the current UTC day are not counted as curre
 });
 
 
-test("provider session reconnect without an original public page fails closed", () => {
+const original = { targetId: "target-original", browserContextId: "incognito-original" };
+
+test("official CDP Target.getTargetInfo must prove a page in an incognito context", () => {
+  assert.deepEqual(parsePageTargetInfo({
+    targetInfo: { type: "page", ...original },
+  }), original);
+  for (const bad of [
+    null, {}, {targetInfo: null}, {targetInfo:{type:"service_worker",...original}},
+    {targetInfo:{type:"page",targetId:"target-original"}},
+    {targetInfo:{type:"page",browserContextId:"incognito-original"}},
+    {targetInfo:{type:"page",targetId:"",browserContextId:"incognito-original"}},
+    {targetInfo:{type:"page",targetId:"target-original",browserContextId:""}},
+    {targetInfo:{type:"page",targetId:123,browserContextId:"incognito-original"}},
+  ]) {
+    assert.equal(parsePageTargetInfo(bad),null);
+  }
+  assert.equal(validBrowserPageIdentity({targetId:"a"}),null);
+  assert.equal(validBrowserPageIdentity({targetId:"a",browserContextId:""}),null);
+});
+
+test("provider reconnect without the original live public page fails closed", async () => {
   const page = (url: string, closed = false) => ({
-    isClosed: () => closed,
-    url: () => url,
+    isClosed: () => closed, url: () => url, identity: original,
   });
   const contexts = [
-    { id: "default", pages: [page("about:blank")] },
-    { id: "disconnected", pages: [page("chrome://newtab"), page("http://localhost/")] },
-    { id: "empty", pages: [] as ReturnType<typeof page>[] },
+    {id:"default",pages:[page("about:blank")]},
+    {id:"disconnected",pages:[page("chrome://newtab"),page("http://localhost/")]},
+    {id:"empty",pages:[] as ReturnType<typeof page>[]},
   ];
-  const selected = selectRestoredPublicPage(
-    contexts, c => c.pages, url => url.startsWith("https://"),
+  let reads=0;
+  const restored=await selectRestoredPublicPage(
+    contexts,c=>c.pages,url=>url.startsWith("https://"),
+    original,async p=>{ reads++;return p.identity; },
   );
-  assert.equal(selected, null,
-    "active Chrome alone must not be reported as an open browser workspace");
-  assert.deepEqual(contexts.map(c => c.pages.map(p => p.url())), [
-    ["about:blank"], ["chrome://newtab", "http://localhost/"], [],
-  ], "must not silently create a substitute page");
+  assert.equal(restored,null);
+  assert.equal(reads,0,"never inspect CDP identity of blocked/non-HTTP targets");
+  assert.deepEqual(contexts.map(c=>c.pages.map(p=>p.url())),[
+    ["about:blank"],["chrome://newtab","http://localhost/"],[],
+  ],"never create a replacement browser tab");
 });
 
-test("recovery selects only a live public tab and preserves its exact context", () => {
-  const closed = {isClosed:()=>true, url:()=> "https://closed.example.org"};
-  const blocked = {isClosed:()=>false, url:()=> "http://127.0.0.1/"};
-  const publicPage = {isClosed:()=>false, url:()=> "https://www.selenium.dev/selenium/web/web-form.html"};
-  const contexts = [
-    {id:"unsafe",pages:[closed,blocked]},
-    {id:"original",pages:[publicPage]},
+test("recovery selects ONLY the original target in the original incognito context", async () => {
+  const publicURL="https://www.selenium.dev/selenium/web/web-form.html";
+  const page = (id: string, ctx: string) => ({
+    isClosed:()=>false,url:()=>publicURL,
+    identity:{targetId:id,browserContextId:ctx},
+  });
+  const contexts=[
+    {id:"default",pages:[page("target-original","another-context")]},
+    {id:"different-target",pages:[page("different-target","incognito-original")]},
+    {id:"original",pages:[page("target-original","incognito-original")]},
   ];
-  const recovered = selectRestoredPublicPage(
-    contexts, c => c.pages, url => !url.includes("127.0.0.1"),
+  const selected=await selectRestoredPublicPage(
+    contexts,c=>c.pages,()=>true,original,async p=>p.identity,
   );
-  assert.equal(recovered?.context,contexts[1]);
-  assert.equal(recovered?.page,publicPage);
-  assert.equal(recovered?.page.url(),publicPage.url());
+  assert.equal(selected?.context,contexts[2]);
+  assert.equal(selected?.page,contexts[2].pages[0]);
 });
 
-test("detached pages and invalid URL classifiers fail closed", () => {
-  const contexts = [{pages:[
-    {isClosed:()=>false,url:()=>{throw new Error("page detached");}},
-    {isClosed:()=>false,url:()=> "https://example.org"},
+test("identical URL cannot impersonate the original lost tab or browser context", async () => {
+  const url="https://example.org/same-url";
+  const contexts=[
+    {pages:[{
+      isClosed:()=>false,url:()=>url,
+      identity:{targetId:"different-tab",browserContextId:"incognito-original"},
+    }]},
+    {pages:[{
+      isClosed:()=>false,url:()=>url,
+      identity:{targetId:"target-original",browserContextId:"different-context"},
+    }]},
+  ];
+  const selected=await selectRestoredPublicPage(
+    contexts,c=>c.pages,()=>true,original,async p=>p.identity,
+  );
+  assert.equal(selected,null);
+});
+
+test("legacy/missing/invalid stored identity cannot silently adopt a public tab", async () => {
+  const page={isClosed:()=>false,url:()=> "https://example.org",identity:original};
+  for (const bad of [undefined,null,{}, {targetId:"target-original"}]) {
+    let cdpReads=0;
+    const selected=await selectRestoredPublicPage(
+      [{pages:[page]}],c=>c.pages,()=>true,bad,
+      async p=>{cdpReads++;return p.identity;},
+    );
+    assert.equal(selected,null);
+    assert.equal(cdpReads,0,"no page inspection without a durable identity");
+  }
+});
+
+test("closed, detached, blocked or uninspectable page cannot be recovered", async () => {
+  const contexts=[{pages:[
+    {isClosed:()=>true,url:()=>"https://example.org",identity:original},
+    {isClosed:()=>false,url:()=>{throw Error("detached");},identity:original},
+    {isClosed:()=>false,url:()=>"https://example.org",identity:original},
   ]}];
-  const result = selectRestoredPublicPage(
-    contexts,c=>c.pages,()=>{throw new Error("network policy unavailable");},
-  );
-  assert.equal(result,null);
+  assert.equal(await selectRestoredPublicPage(
+    contexts,c=>c.pages,()=>{throw Error("policy unavailable");},original,
+    async p=>p.identity,
+  ),null);
+  assert.equal(await selectRestoredPublicPage(
+    contexts,c=>c.pages,()=>true,original,
+    async()=>{throw Error("CDP unavailable");},
+  ),null);
 });
 
-test("production restore refuses to recreate a tab after lost page and still permits explicit Close", async () => {
-  const { readFileSync } = await import("node:fs");
-  const code = readFileSync(new URL("../src/session.ts",import.meta.url),"utf8");
-  assert.match(code, /if \(this\.recoveredPageMissing\) throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
-  assert.match(code, /if \(!restored\) \{\s*this\.recoveredPageMissing = true;\s*throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
-  assert.match(code, /private async open\([\s\S]*?await this\.restore\(\);[\s\S]*?this\.browser\.newContext/);
-  assert.match(code, /private async close\([\s\S]*?this\.recoveredPageMissing = false/);
+test("real DO saves CDP target+incognito identity before reporting Open and tab changes", async () => {
+  const {readFileSync}=await import("node:fs");
+  const code=readFileSync(new URL("../src/session.ts",import.meta.url),"utf8");
+  assert.match(code,/newCDPSession\(page\)/,"read via official Playwright CDP session");
+  assert.match(code,/cdp\.send\("Target\.getTargetInfo"\)/);
+  assert.match(code,/this\.ctx\.storage\.put\("browser_page_identity", await this\.readPageIdentity\(page\)\)/);
+  assert.match(code,/const storedPageIdentity: unknown = await this\.ctx\.storage\.get\("browser_page_identity"\)/);
+  assert.match(code,/storedPageIdentity, page => this\.readPageIdentity\(page\)/);
+  assert.match(code,/await this\.rememberSelectedPageIdentity\(\);\s*return \{ state: "open"/);
+  assert.match(code,/if \(command\.tabAction !== "list"\) await this\.rememberSelectedPageIdentity\(\)/);
+  assert.match(code,/if \(this\.recoveredPageMissing\) throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
+  assert.match(code,/if \(!restored\) \{\s*this\.recoveredPageMissing = true;\s*throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
+  assert.match(code,/private async close\([\s\S]*?this\.ctx\.storage\.delete\("browser_page_identity"\)/);
+  assert.match(code,/private async close\([\s\S]*?this\.recoveredPageMissing = false/);
 });

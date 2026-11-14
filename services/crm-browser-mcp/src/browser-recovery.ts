@@ -140,26 +140,63 @@ export async function readSafeBrowserHistory(
 }
 
 
-/** CDP can reconnect to the same Browser Run session after DO eviction while
- * the original incognito context/pages have vanished. Only an existing, open,
- * public HTTP(S) page is eligible for reattachment. Never manufacture a tab,
- * select about:blank/UNSAFE_URL, or mistake provider liveness for page recovery. */
-export function selectRestoredPublicPage<
+/** Chromium exposes both the page target and its incognito BrowserContext ID
+ * through the public Playwright CDP session. URL equality alone is never an
+ * identity proof: a default-context tab or a different workspace may have the
+ * same public URL. Keep both opaque IDs only inside this workspace's DO. */
+export type BrowserPageIdentity = Readonly<{
+  targetId: string;
+  browserContextId: string;
+}>;
+
+export function validBrowserPageIdentity(value: unknown): BrowserPageIdentity | null {
+  if (!value || typeof value !== "object") return null;
+  const info = value as { targetId?: unknown; browserContextId?: unknown };
+  if (typeof info.targetId !== "string" ||
+      typeof info.browserContextId !== "string") return null;
+  if (!info.targetId || !info.browserContextId ||
+      info.targetId.length > 128 || info.browserContextId.length > 128) return null;
+  return { targetId: info.targetId, browserContextId: info.browserContextId };
+}
+
+/** Target.getTargetInfo is a read-only, official CDP operation performed
+ * against the page's own Playwright CDPSession. Default contexts have no
+ * browserContextId: do not treat them as an isolated original context. */
+export function parsePageTargetInfo(value: unknown): BrowserPageIdentity | null {
+  if (!value || typeof value !== "object") return null;
+  const targetInfo = (value as { targetInfo?: unknown }).targetInfo;
+  if (!targetInfo || typeof targetInfo !== "object") return null;
+  const info = targetInfo as { type?: unknown };
+  if (info.type !== "page") return null;
+  return validBrowserPageIdentity(targetInfo);
+}
+
+/** Reconnect only to the exact previously selected Chromium page target AND
+ * incognito BrowserContext. A different public tab, even with the same URL,
+ * is not a recovered workspace. No new context/tab/browser is created. */
+export async function selectRestoredPublicPage<
   Context,
   Page extends { isClosed(): boolean; url(): string },
 >(
   contexts: readonly Context[],
   pagesOf: (context: Context) => readonly Page[],
   isPublicRequest: (url: string) => boolean,
-): { context: Context; page: Page } | null {
+  expectedIdentity: unknown,
+  readIdentity: (page: Page) => Promise<BrowserPageIdentity>,
+): Promise<{ context: Context; page: Page } | null> {
+  const expected = validBrowserPageIdentity(expectedIdentity);
+  if (!expected) return null;
   for (const context of contexts) {
     for (const page of pagesOf(context)) {
       try {
         if (page.isClosed()) continue;
         const url = page.url();
         if (!/^https?:\/\//i.test(url) || !isPublicRequest(url)) continue;
+        const actual = await readIdentity(page);
+        if (actual.targetId !== expected.targetId ||
+            actual.browserContextId !== expected.browserContextId) continue;
         return { context, page };
-      } catch { /* A detached frame/page is not a recoverable browser tab. */ }
+      } catch { /* Detached pages or CDP errors cannot prove identity. */ }
     }
   }
   return null;

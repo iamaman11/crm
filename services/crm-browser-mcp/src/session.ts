@@ -4,7 +4,7 @@ import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermitte
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
-import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage } from "./browser-recovery";
+import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage, parsePageTargetInfo, type BrowserPageIdentity } from "./browser-recovery";
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
 
 export interface Env {
@@ -117,6 +117,34 @@ export class CrmBrowserSession extends DurableObject<Env> {
     );
   }
 
+  /** Read the actual Chromium target/context identity via the public Playwright
+   * CDPSession API, not a URL, page title or a private Playwright field.
+   * A missing context ID means default/unknown context and fails closed. */
+  private async readPageIdentity(page: Page): Promise<BrowserPageIdentity> {
+    try {
+      const cdp = await page.context().newCDPSession(page);
+      try {
+        const response: unknown = await cdp.send("Target.getTargetInfo");
+        const identity = parsePageTargetInfo(response);
+        if (!identity) throw new Error("BROWSER_PAGE_IDENTITY_UNAVAILABLE");
+        return identity;
+      } finally {
+        try { await cdp.detach(); } catch { /* Best-effort read-only CDP cleanup. */ }
+      }
+    } catch {
+      throw new Error("BROWSER_PAGE_IDENTITY_UNAVAILABLE");
+    }
+  }
+
+  private async rememberSelectedPageIdentity() {
+    const page = this.page;
+    if (!page || page.isClosed()) {
+      await this.ctx.storage.delete("browser_page_identity");
+      return;
+    }
+    await this.ctx.storage.put("browser_page_identity", await this.readPageIdentity(page));
+  }
+
   // The only browser owner. The DO stores only an opaque Browser Run session
   // ID; cookies, tabs and browser processes remain in the official runtime.
   private async restore() {
@@ -153,6 +181,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       // Only an explicit browser_open may acquire a new Browser Run.
       await this.ctx.storage.delete("browser_session_id");
       await this.ctx.storage.delete("browser_recording");
+      await this.ctx.storage.delete("browser_page_identity");
       this.browserSessionId = null;
       this.recordingEnabled = false;
       return;
@@ -164,8 +193,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
     // BrowserRun's persistent CDP may retain the browser *process* while
     // destroying its incognito context. Do not pick a default/blank context
     // and claim "open" when the original page was not restored.
-    const restored = selectRestoredPublicPage(
+    const storedPageIdentity: unknown = await this.ctx.storage.get("browser_page_identity");
+    const restored = await selectRestoredPublicPage(
       browser.contexts(), context => context.pages(), isPermittedBrowserRequest,
+      storedPageIdentity, page => this.readPageIdentity(page),
     );
     if (!restored) {
       this.recoveredPageMissing = true;
@@ -332,6 +363,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       }
       this.page = await this.context.newPage();
       this.attachPage(this.page);
+      await this.rememberSelectedPageIdentity();
       return { state: "open", ...(await this.navigateTo(destination)) };
     } catch (error) {
       if (created) await this.close();
@@ -360,6 +392,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       }
       await this.ctx.storage.delete("browser_session_id");
       await this.ctx.storage.delete("browser_recording");
+      await this.ctx.storage.delete("browser_page_identity");
     } catch (error) {
       failure ??= error;
       // Keep the persisted ID on failure so a later owner request can retry
@@ -444,6 +477,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
       } else if (command.tabAction !== "list") {
         throw new Error("BROWSER_UNKNOWN_TAB_ACTION");
       }
+      // A tab switch/new/close changes the active CDP target. Persist the
+      // exact replacement identity before reporting a successful command.
+      if (command.tabAction !== "list") await this.rememberSelectedPageIdentity();
       const tabs = await Promise.all(
         (this.context?.pages() ?? []).filter(p => !p.isClosed()).map(async (page) => {
           this.attachPage(page);
