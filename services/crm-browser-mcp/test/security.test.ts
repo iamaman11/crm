@@ -189,6 +189,9 @@ test("DNS root-dot aliases cannot bypass local, metadata, and reserved-host filt
 
 test("public-web policy rejects special-use IPv6 and IPv4-embedded literals at every navigation boundary", () => {
   const unsafe = [
+    "http://[2::1]/", // not global unicast: 0x0002 != 0x2000
+    "http://[3::1]/", // not global unicast: 0x0003 != 0x3000
+    "http://[200::1]/", // not global unicast: 0x0200
     "http://[::7f00:1]/admin", // IPv4-compatible 127.0.0.1
     "http://[::a9fe:a9fe]/latest/meta-data", // IPv4-compatible link-local
     "http://[::c0a8:101]/", // IPv4-compatible 192.168.1.1
