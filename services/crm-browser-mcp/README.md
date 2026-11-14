@@ -485,3 +485,26 @@ A local typed `persistentConnectOptions(sessionId)` returns the structural
 subtype `{sessionId:string,persistent:true}` and satisfies the SDK's type
 without `any`, assertion or alternate transport. The AST security test
 requires every production `connect()` to use this helper.
+
+## P0 reconnect without original page — fail-closed, Issue #357
+
+Live evidence after immediate DO reset under SDK `persistent: true` showed a
+still-running Browser Run but a blank Chromium tab at `UNSAFE_URL`. The
+original Playwright `browser.newContext()` / Selenium page and its filled
+marker were **not** restored. Provider connection alone is not page recovery.
+
+The existing DO restore path now selects only existing non-closed public HTTP(S)
+pages via the central `isPermittedBrowserRequest` policy. If none exists,
+`BROWSER_SESSION_PAGE_NOT_RESTORED` is returned before any action, status,
+tab creation or implicit `browser_open` replacement. The original provider
+session ID and recording flag remain in Durable Object storage, so explicit
+owner `browser_close` can terminate exactly that Browser Run. In-memory
+failure is latched to prevent a later request misreporting `closed` from a
+connected but empty Chromium instance. Safety routing must be installed before
+an eligible recovered page is usable.
+
+Unit tests cover empty/blank/unsafe/closed/invalid CDP pages, valid page
+selection and production ordering. This is a **fail-closed safeguard only**:
+it does not claim restored tabs, cookies or form state. The provider-supported
+persistence of isolated browser contexts remains P0 NO-GO and must be
+established without adopting an unsafe unguarded default context.

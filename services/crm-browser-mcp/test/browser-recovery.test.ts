@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession } from "../src/browser-recovery.ts";
+import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage } from "../src/browser-recovery.ts";
 
 const id = "provider-session-123";
 test("no stored ID means closed, with no provider call or new browser", async () => {
@@ -151,4 +151,61 @@ test("invalid rows and data outside the current UTC day are not counted as curre
   assert.equal(result.state,"available");
   assert.equal(result.closedTodayUtc,0);
   assert.equal(result.observedDurationMsTodayUtc,0);
+});
+
+
+test("provider session reconnect without an original public page fails closed", () => {
+  const page = (url: string, closed = false) => ({
+    isClosed: () => closed,
+    url: () => url,
+  });
+  const contexts = [
+    { id: "default", pages: [page("about:blank")] },
+    { id: "disconnected", pages: [page("chrome://newtab"), page("http://localhost/")] },
+    { id: "empty", pages: [] as ReturnType<typeof page>[] },
+  ];
+  const selected = selectRestoredPublicPage(
+    contexts, c => c.pages, url => url.startsWith("https://"),
+  );
+  assert.equal(selected, null,
+    "active Chrome alone must not be reported as an open browser workspace");
+  assert.deepEqual(contexts.map(c => c.pages.map(p => p.url())), [
+    ["about:blank"], ["chrome://newtab", "http://localhost/"], [],
+  ], "must not silently create a substitute page");
+});
+
+test("recovery selects only a live public tab and preserves its exact context", () => {
+  const closed = {isClosed:()=>true, url:()=> "https://closed.example.org"};
+  const blocked = {isClosed:()=>false, url:()=> "http://127.0.0.1/"};
+  const publicPage = {isClosed:()=>false, url:()=> "https://www.selenium.dev/selenium/web/web-form.html"};
+  const contexts = [
+    {id:"unsafe",pages:[closed,blocked]},
+    {id:"original",pages:[publicPage]},
+  ];
+  const recovered = selectRestoredPublicPage(
+    contexts, c => c.pages, url => !url.includes("127.0.0.1"),
+  );
+  assert.equal(recovered?.context,contexts[1]);
+  assert.equal(recovered?.page,publicPage);
+  assert.equal(recovered?.page.url(),publicPage.url());
+});
+
+test("detached pages and invalid URL classifiers fail closed", () => {
+  const contexts = [{pages:[
+    {isClosed:()=>false,url:()=>{throw new Error("page detached");}},
+    {isClosed:()=>false,url:()=> "https://example.org"},
+  ]}];
+  const result = selectRestoredPublicPage(
+    contexts,c=>c.pages,()=>{throw new Error("network policy unavailable");},
+  );
+  assert.equal(result,null);
+});
+
+test("production restore refuses to recreate a tab after lost page and still permits explicit Close", async () => {
+  const { readFileSync } = await import("node:fs");
+  const code = readFileSync(new URL("../src/session.ts",import.meta.url),"utf8");
+  assert.match(code, /if \(this\.recoveredPageMissing\) throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
+  assert.match(code, /if \(!restored\) \{\s*this\.recoveredPageMissing = true;\s*throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
+  assert.match(code, /private async open\([\s\S]*?await this\.restore\(\);[\s\S]*?this\.browser\.newContext/);
+  assert.match(code, /private async close\([\s\S]*?this\.recoveredPageMissing = false/);
 });

@@ -138,3 +138,29 @@ export async function readSafeBrowserHistory(
     return { state: "unavailable" };
   }
 }
+
+
+/** CDP can reconnect to the same Browser Run session after DO eviction while
+ * the original incognito context/pages have vanished. Only an existing, open,
+ * public HTTP(S) page is eligible for reattachment. Never manufacture a tab,
+ * select about:blank/UNSAFE_URL, or mistake provider liveness for page recovery. */
+export function selectRestoredPublicPage<
+  Context,
+  Page extends { isClosed(): boolean; url(): string },
+>(
+  contexts: readonly Context[],
+  pagesOf: (context: Context) => readonly Page[],
+  isPublicRequest: (url: string) => boolean,
+): { context: Context; page: Page } | null {
+  for (const context of contexts) {
+    for (const page of pagesOf(context)) {
+      try {
+        if (page.isClosed()) continue;
+        const url = page.url();
+        if (!/^https?:\/\//i.test(url) || !isPublicRequest(url)) continue;
+        return { context, page };
+      } catch { /* A detached frame/page is not a recoverable browser tab. */ }
+    }
+  }
+  return null;
+}

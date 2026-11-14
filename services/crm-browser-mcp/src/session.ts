@@ -4,7 +4,7 @@ import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermitte
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
-import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession } from "./browser-recovery";
+import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage } from "./browser-recovery";
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
 
 export interface Env {
@@ -75,6 +75,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private page: Page | null = null;
   private browserSessionId: string | null = null;
   private recordingEnabled = false;
+  private recoveredPageMissing = false;
   private tabIds = new Map<Page, string>();
   private nextOperation: Promise<void> = Promise.resolve();
   private pendingOperations = 0;
@@ -119,6 +120,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
   // The only browser owner. The DO stores only an opaque Browser Run session
   // ID; cookies, tabs and browser processes remain in the official runtime.
   private async restore() {
+    // A connected provider does NOT prove that the original page survived.
+    // Block browser_open/status/action after detecting a lost incognito page;
+    // otherwise browser_open would silently create a replacement tab.
+    if (this.recoveredPageMissing) throw new Error("BROWSER_SESSION_PAGE_NOT_RESTORED");
     if (this.browser?.isConnected()) return;
     this.browser = null;
     this.context = null;
@@ -156,13 +161,29 @@ export class CrmBrowserSession extends DurableObject<Env> {
     this.browser = browser;
     this.browserSessionId = recovered.sessionId;
     this.recordingEnabled = await this.ctx.storage.get<boolean>("browser_recording") ?? false;
-    const contexts = browser.contexts();
-    this.context = contexts.find(c => c.pages().some(p => !p.isClosed())) ??
-      contexts[0] ?? null;
-    if (this.context) {
+    // BrowserRun's persistent CDP may retain the browser *process* while
+    // destroying its incognito context. Do not pick a default/blank context
+    // and claim "open" when the original page was not restored.
+    const restored = selectRestoredPublicPage(
+      browser.contexts(), context => context.pages(), isPermittedBrowserRequest,
+    );
+    if (!restored) {
+      this.recoveredPageMissing = true;
+      throw new Error("BROWSER_SESSION_PAGE_NOT_RESTORED");
+    }
+    this.context = restored.context;
+    // Do not authorize any page actions until the shared request policy is
+    // reinstalled on the recovered context.
+    this.recoveredPageMissing = true;
+    try {
       await this.installSafetyRouting(this.context);
       for (const page of this.context.pages()) this.attachPage(page);
-      this.page = this.context.pages().find(p => !p.isClosed()) ?? null;
+      this.page = restored.page;
+      this.recoveredPageMissing = false;
+    } catch {
+      this.context = null;
+      this.page = null;
+      throw new Error("BROWSER_SESSION_REATTACH_FAILED");
     }
   }
 
@@ -347,6 +368,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       this.browser = null;
       this.browserSessionId = null;
       this.recordingEnabled = false;
+      this.recoveredPageMissing = false;
       this.context = null;
       this.page = null;
       this.tabIds.clear();
