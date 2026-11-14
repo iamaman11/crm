@@ -6,6 +6,7 @@ import type { Env, Command, Target } from "./session";
 import { MCP_HOST, verifiedMcpOwnerEmail } from "./security";
 import { SCENARIO_OPERATIONS, isFailedVerdict } from "./browser-checks";
 import { selectWorkspaceId, workspaceObjectName } from "./browser-workspaces";
+import { BROWSER_RUNTIME_EPOCH, isVerifiedRuntimeProbe } from "./runtime-epoch";
 
 export { CrmBrowserSession } from "./session";
 
@@ -51,11 +52,32 @@ function createServer(env: Env, ownerEmail: string) {
     const stub = env.SESSIONS.get(sessionId);
     // Workspace identity is solely a routing selector, never page-supplied.
     const { workspaceId: _transportWorkspaceId, ...browserCommand } = payload;
-    const reply = await stub.fetch(new Request("https://crm-browser-internal.invalid/internal", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(browserCommand),
-    }));
+    const send = (command: Command) => stub.fetch(new Request(
+      "https://crm-browser-internal.invalid/internal", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(command),
+      },
+    ));
+    // Running DO isolates can survive a Worker deployment. Old code may lack
+    // today's security checks, so never execute a mutation before a harmless
+    // read-only protocol probe. Explicit close is always available for cleanup.
+    if (payload.op !== "close") {
+      let verified = false;
+      try {
+        const probe = await send({ op: "runtime" });
+        if (probe.ok) verified = isVerifiedRuntimeProbe(await probe.json());
+      } catch { /* Provider outage/old DO: fail closed. */ }
+      if (!verified) return {
+        isError: true,
+        content: [{ type: "text" as const, text: "BROWSER_RUNTIME_STALE_OR_UNVERIFIED" }],
+      };
+    }
+    // Check again in the DO: protects races where the isolate restarts between
+    // the probe and this action. Never trust caller-supplied runtime versions.
+    const reply = await send({
+      ...browserCommand, expectedRuntimeEpoch: BROWSER_RUNTIME_EPOCH,
+    });
     if (!reply.ok) throw new Error("CRM_BROWSER_SESSION_UNAVAILABLE");
     const result = await reply.json() as {
       ok: boolean; data?: unknown; image?: string; error?: string;

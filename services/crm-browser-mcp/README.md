@@ -280,3 +280,30 @@ DNS rebinding/resolved-IP and hostile redirect enforcement, real nonempty
 downloads/HAR/trace, full live CI and P2, and CRM R2 owner-tenant identity.
 Refresh ChatGPT MCP tool metadata after schema changes. The installed private
 Plugin Creator release must be synchronized separately from canonical source.
+
+## P0 code-epoch fence — 14 November 2026
+
+A live test across a protected Worker release demonstrated a critical difference:
+a workspace opened *before* deployment retained its page state but could still
+execute older DO-side URL preflight code, while a new DO rejected `a.test.`.
+A Worker 100% deployment is **not** evidence that all already-running Durable
+Object isolates immediately switched code. This can lead to action-before-fail
+behavior after a security fix, even though strict CI and fresh DO tests PASS.
+
+The MCP Worker now sends a harmless `runtime` probe to the exact workspace
+Durable Object before **every** operation except explicit close. The DO returns
+a shared static epoch without opening/restoring a browser; the Worker
+fail-closes with `BROWSER_RUNTIME_STALE_OR_UNVERIFIED` when an old isolate
+does not recognize the probe or returns a different epoch. The real command
+also includes the expected epoch and the DO enforces it immediately before
+execution, preventing probe→operation restart races. `browser_close` remains
+available to release a stale browser even when the epoch is incompatible.
+
+The **same existing** DO class and one MCP Worker are retained. The sole
+`src/runtime-epoch.ts` constant is required to change on every runtime
+source PR; the existing MCP CI checks this using Git diff, not a manually
+maintained list of operations. Workspaces with stale code must be closed and
+opened afresh; no attempt is made to replay clicks or migrate cookies.
+This specifically addresses stale **code versions**. It is **not** yet physical
+proof of real DO isolate eviction/restart after provider failure, nor full
+resolved-IP/DNS rebinding protection; those remain P0 NO-GO.
