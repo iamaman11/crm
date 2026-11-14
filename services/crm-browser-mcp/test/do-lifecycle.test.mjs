@@ -89,6 +89,7 @@ test("CrmBrowserSession preserves its provider identity across workerd restart",
     mf = start();
     const ns = await mf.getDurableObjectNamespace("SESSIONS");
     const originalId = ns.idFromName(workspaceName);
+    const originalIdString = originalId.toString();
     const stub = ns.get(originalId);
     const probe = await command(stub, { op: "runtime" });
     assert.equal(probe.ok, true);
@@ -107,7 +108,7 @@ test("CrmBrowserSession preserves its provider identity across workerd restart",
     mf = start();
     const recreatedNs = await mf.getDurableObjectNamespace("SESSIONS");
     const recreatedId = recreatedNs.idFromName(workspaceName);
-    assert.equal(recreatedId.toString(), originalId.toString());
+    assert.equal(recreatedId.toString(), originalIdString);
     const recreated = recreatedNs.get(recreatedId);
     const reprobe = await command(recreated, { op: "runtime" });
     assert.equal(reprobe.ok, true);
