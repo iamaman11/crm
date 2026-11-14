@@ -16,6 +16,13 @@ export interface Env {
   CRM_MCP_ACCESS_AUD: string;
 }
 
+/** The pinned SDK implementation recognizes persistent:true at runtime, while
+ * WorkersConnectOptions.d.ts omits it. A structural subtype adds the option
+ * without weakening TypeScript, casting to any, or replacing the SDK. */
+function persistentConnectOptions(sessionId: string): { sessionId: string; persistent: true } {
+  return { sessionId, persistent: true };
+}
+
 export type Target = {
   kind: "css" | "role" | "text" | "label";
   value: string;
@@ -129,7 +136,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
         const status = (session as unknown as { status?: unknown }).status;
         return { status };
       },
-      async id => connect(this.env.BROWSER, id),
+      // The provider may retain the process after the controlling DO isolate
+      // restarts. Use persistent CDP connections so browser contexts and tabs
+      // are eligible for reattachment instead of client-scoped disposal.
+      async id => connect(this.env.BROWSER, persistentConnectOptions(id)),
     );
     if (recovered.kind === "missing") return;
     if (recovered.kind === "expired") {
@@ -280,7 +290,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
         throw classifyBrowserAcquireFailure(error);
       }
       try {
-        this.browser = await connect(this.env.BROWSER, sessionId);
+        this.browser = await connect(this.env.BROWSER, persistentConnectOptions(sessionId));
         this.browserSessionId = sessionId;
         await this.ctx.storage.put("browser_session_id", sessionId);
         await this.ctx.storage.put("browser_recording", recording);

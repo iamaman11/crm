@@ -459,3 +459,29 @@ same workspace reconnects with its original page state (without a second
 acquire), and explicitly close it. A failing reconnect must keep its
 persistent ID and must not be reported as PASS. Only verified observations
 may close the live-provider reconnect gate in Issue #357.
+
+## P0 real DO reconnect candidate — persistent Playwright CDP
+
+After the Cloudflare immediate DO reset [run #43630534450](https://github.com/iamaman11/crm/actions/runs/43630534450),
+the original Browser Run process stayed active but the restored workspace had
+no pages or contexts (`state:closed`, `tabs:[]`). The SDK pinned at
+`@cloudflare/playwright@1.3.6` exposes `persistent:true` on `connect()`:
+the ordinary string-ID overload did not request a persistent CDP connection.
+
+Both existing owner-controlled `connect()` calls now use
+`connect(env.BROWSER,{sessionId,persistent:true})`. The initial
+`browser.newContext({acceptDownloads:true,serviceWorkers:"block"})` and
+all policy routes are unchanged. A TypeScript AST regression test inspects
+every production `connect` site. The shared runtime epoch advances to 9.
+No new browser process, owner, retry path, login migration or raw provider
+credentials are introduced. **This is a testable candidate, not proof**:
+real Browser Run page/context preservation must be independently validated
+after a protected immediate DO release, and a failed reattach must not create
+a replacement browser.
+
+The pinned official SDK's `WorkersConnectOptions` declaration omits
+`persistent` even though its `connect()` implementation accepts it.
+A local typed `persistentConnectOptions(sessionId)` returns the structural
+subtype `{sessionId:string,persistent:true}` and satisfies the SDK's type
+without `any`, assertion or alternate transport. The AST security test
+requires every production `connect()` to use this helper.
