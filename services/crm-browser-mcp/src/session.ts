@@ -120,7 +120,15 @@ export class CrmBrowserSession extends DurableObject<Env> {
     const sessionId = await this.ctx.storage.get<string>("browser_session_id");
     const recovered = await recoverExistingBrowserSession<Browser>(
       sessionId,
-      async id => this.env.BROWSER.getSession(id),
+      async id => {
+        const session = await this.env.BROWSER.getSession(id);
+        // Cloudflare BrowserRunSession is an SDK-specific shape, not a
+        // structural {status:string}. Normalize only the observable status;
+        // never invent a closed state for an unknown provider response.
+        if (!session) return null;
+        const status = (session as unknown as { status?: unknown }).status;
+        return { status };
+      },
       async id => connect(this.env.BROWSER, id),
     );
     if (recovered.kind === "missing") return;
