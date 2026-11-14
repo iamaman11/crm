@@ -9,7 +9,6 @@ import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserL
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
 import { executeCdpCommands, type CdpCommand } from "./browser-cdp";
 import { recordingTargets, recordingHar } from "./browser-recordings";
-import { MAX_WORKSPACE_CHUNK_BYTES } from "./browser-transfers";
 
 export interface Env {
   BROWSER: BrowserRun;
