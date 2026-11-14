@@ -166,7 +166,7 @@ function createServer(env: Env, ownerEmail: string) {
       workspaceId: workspaceIdSchema,
       fileAction: z.enum(["upload", "download", "upload_begin", "upload_chunk", "upload_commit",
         "download_link", "download_chunk", "discard"]),
-      target,
+      target: target.optional(),
       fileName: z.string().max(128).optional(),
       mimeType: z.string().max(100).optional(),
       base64: z.string().max(1_333_336).optional(),
@@ -244,10 +244,10 @@ function createServer(env: Env, ownerEmail: string) {
   }, async params => command({ op: "assert", ...params }));
 
   server.registerTool("browser_run", {
-    description: "Run up to 12 prevalidated Playwright steps with assertions; a click can follow a real popup via followPopup:true and later steps run in that new tab.",
+    description: "Run up to 64 prevalidated Playwright steps (one browser, one total 120-second deadline) with assertions, popup follow, per-step timings and screenshot on failure. Failing steps never auto-replay.",
     inputSchema: {
       workspaceId: workspaceIdSchema,
-      steps: z.array(scenarioStep).min(1).max(12),
+      steps: z.array(scenarioStep).min(1).max(64),
       timeoutMs: z.number().int().min(1_000).max(120_000).default(90_000),
       screenshotOnFailure: z.boolean().default(false),
     },
