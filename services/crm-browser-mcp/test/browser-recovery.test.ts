@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage, parsePageTargetInfo, validBrowserPageIdentity } from "../src/browser-recovery.ts";
+import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage, parsePageTargetInfo, validBrowserPageIdentity, isOriginalPageMissing, restoreForExplicitOpen } from "../src/browser-recovery.ts";
 
 const id = "provider-session-123";
 test("no stored ID means closed, with no provider call or new browser", async () => {
@@ -274,4 +274,59 @@ test("real DO saves CDP target+incognito identity before reporting Open and tab 
   assert.match(code,/if \(!restored\) \{\s*this\.recoveredPageMissing = true;\s*throw new Error\("BROWSER_SESSION_PAGE_NOT_RESTORED"\)/);
   assert.match(code,/private async close\([\s\S]*?this\.ctx\.storage\.delete\("browser_page_identity"\)/);
   assert.match(code,/private async close\([\s\S]*?this\.recoveredPageMissing = false/);
+});
+
+test("explicit Open works normally when the original browser is healthy", async () => {
+  const calls: string[] = [];
+  const restarted = await restoreForExplicitOpen(
+    async () => { calls.push("restore"); },
+    async () => { calls.push("close"); },
+  );
+  assert.equal(restarted, false);
+  assert.deepEqual(calls, ["restore"]);
+});
+
+test("explicit Open closes the lost browser once before a new acquire", async () => {
+  const calls: string[] = [];
+  const restarted = await restoreForExplicitOpen(
+    async () => { calls.push("restore"); throw new Error("BROWSER_SESSION_PAGE_NOT_RESTORED"); },
+    async () => { calls.push("provider-close"); },
+  );
+  assert.equal(restarted, true);
+  assert.deepEqual(calls, ["restore", "provider-close"]);
+  assert.equal(isOriginalPageMissing(new Error("BROWSER_SESSION_PAGE_NOT_RESTORED")), true);
+});
+
+test("a failed provider Close forbids creating a replacement browser", async () => {
+  const calls: string[] = [];
+  await assert.rejects(
+    restoreForExplicitOpen(
+      async () => { calls.push("restore"); throw new Error("BROWSER_SESSION_PAGE_NOT_RESTORED"); },
+      async () => { calls.push("provider-close"); throw new Error("CLOSE_FAILED"); },
+    ), /CLOSE_FAILED/,
+  );
+  assert.deepEqual(calls, ["restore","provider-close"]);
+});
+
+test("cloud outages and other failures must never trigger implicit Close or acquire", async () => {
+  for (const msg of ["BROWSER_SESSION_RECONNECT_FAILED","BROWSER_PROVIDER_RATE_LIMITED","unexpected failure"]) {
+    let closes = 0;
+    await assert.rejects(
+      restoreForExplicitOpen(
+        async () => { throw new Error(msg); },
+        async () => { closes++; },
+      ), new RegExp(msg),
+    );
+    assert.equal(closes, 0);
+  }
+});
+
+test("real DO exposes recoverable Status and one-step explicit Open", async () => {
+  const { readFileSync } = await import("node:fs");
+  const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  assert.match(code, /const restarted = await restoreForExplicitOpen\(/);
+  assert.match(code, /\(\) => this\.restore\(\), \(\) => this\.close\(\)/);
+  assert.match(code, /state: needsReopen \? "needs_reopen"/);
+  assert.match(code, /if \(command\.op !== "status" \|\| !isOriginalPageMissing\(error\)\) throw error/);
+  assert.match(code, /\(restarted \? \{ restarted: true \} : \{\}\)/);
 });
