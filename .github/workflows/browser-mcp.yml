@@ -56,8 +56,17 @@ jobs:
           # An old Durable Object can outlive a deployment. Every MCP source
           # change must advance the shared runtime epoch so old isolates are
           # rejected before they can execute commands under stale policy.
-          if git diff --name-only "$base_sha" HEAD |
-             grep -Eq '^services/crm-browser-mcp/src/.*[.]ts
+          code_changed=false
+          while IFS= read -r changed; do
+            case "$changed" in
+              services/crm-browser-mcp/src/*.ts) code_changed=true ;;
+            esac
+          done < <(git diff --name-only "$base_sha" HEAD)
+          if test "$code_changed" = "true" &&
+             git diff --quiet "$base_sha" HEAD -- services/crm-browser-mcp/src/runtime-epoch.ts; then
+            echo "::error::MCP runtime source changed without an epoch bump"
+            exit 1
+          fi
       - name: Check MCP branch policy and pinned GitHub Actions
         shell: bash
         run: |
