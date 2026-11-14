@@ -30,7 +30,7 @@ test("CrmBrowserSession preserves its provider identity across workerd restart",
     '  }',
     '  async storedId() { return await this.ctx.storage.get("browser_session_id"); }',
     '  async recorded() { return await this.ctx.storage.get("browser_recording"); }',
-    '  async pageIdentity() { return await this.ctx.storage.get("browser_page_identity"); }',
+    '  async pageIdentity() { return JSON.stringify(await this.ctx.storage.get("browser_page_identity")); }',
     '  async memoryMarker() { return this.syntheticMemoryMarker ?? null; }',
     '}',
     'export default { fetch() { return new Response("fixture-only", {status: 404}); } };',
@@ -100,7 +100,7 @@ test("CrmBrowserSession preserves its provider identity across workerd restart",
     await stub.seedSynthetic(sessionId);
     assert.equal(await stub.storedId(), sessionId);
     assert.equal(await stub.recorded(), true);
-    assert.deepEqual(await stub.pageIdentity(), {targetId:"target-before-restart",browserContextId:"incognito-before-restart"});
+    assert.deepEqual(JSON.parse(await stub.pageIdentity()), {targetId:"target-before-restart",browserContextId:"incognito-before-restart"});
     assert.equal(await stub.memoryMarker(), "alive-before-restart");
 
     // Disposing the host discards DO and Playwright in-memory handles.
@@ -119,7 +119,7 @@ test("CrmBrowserSession preserves its provider identity across workerd restart",
 
     assert.equal(await recreated.storedId(), sessionId);
     assert.equal(await recreated.recorded(), true);
-    assert.deepEqual(await recreated.pageIdentity(), {targetId:"target-before-restart",browserContextId:"incognito-before-restart"});
+    assert.deepEqual(JSON.parse(await recreated.pageIdentity()), {targetId:"target-before-restart",browserContextId:"incognito-before-restart"});
     assert.equal(await recreated.memoryMarker(), null,
       "a new DO process must not preserve its previous in-memory marker");
 
@@ -132,7 +132,7 @@ test("CrmBrowserSession preserves its provider identity across workerd restart",
     assert.equal(result.ok, false, "missing Browser Run cannot be reported open");
     assert.equal(await recreated.storedId(), sessionId);
     assert.equal(await recreated.recorded(), true);
-    assert.deepEqual(await recreated.pageIdentity(), {targetId:"target-before-restart",browserContextId:"incognito-before-restart"},
+    assert.deepEqual(JSON.parse(await recreated.pageIdentity()), {targetId:"target-before-restart",browserContextId:"incognito-before-restart"},
       "provider outage must not erase the original incognito target identity");
   } finally {
     if (mf) await mf.dispose();
