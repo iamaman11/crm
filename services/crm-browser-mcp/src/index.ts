@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Env, Command, Target } from "./session";
 import { MCP_HOST, verifiedMcpOwnerEmail } from "./security";
 import { SCENARIO_OPERATIONS, isFailedVerdict } from "./browser-checks";
+import { selectWorkspaceId, workspaceObjectName } from "./browser-workspaces";
 
 export { CrmBrowserSession } from "./session";
 
@@ -22,6 +23,7 @@ const action = z.enum([
 const assertionKind = z.enum(["url", "title", "visible", "hidden", "text", "count"]);
 const waitState = z.enum(["visible", "hidden", "attached", "detached"]);
 const timeoutMs = z.number().int().min(100).max(30_000).optional();
+const workspaceIdSchema = z.string().uuid();
 const expected = z.union([z.string().max(512), z.number().finite(), z.boolean()]);
 const scenarioStep = z.object({
   op: z.enum(SCENARIO_OPERATIONS),
@@ -43,14 +45,16 @@ const scenarioStep = z.object({
 
 function createServer(env: Env, ownerEmail: string) {
   const server = new McpServer({ name: "crm-browser-mcp", version: "0.1.0" });
-  const sessionId = env.SESSIONS.idFromName("owner:" + ownerEmail.toLowerCase());
-  const stub = env.SESSIONS.get(sessionId);
-
   async function command(payload: Command) {
+    const workspaceId = selectWorkspaceId(payload.op, payload.workspaceId);
+    const sessionId = env.SESSIONS.idFromName(workspaceObjectName(ownerEmail, workspaceId));
+    const stub = env.SESSIONS.get(sessionId);
+    // Workspace identity is solely a routing selector, never page-supplied.
+    const { workspaceId: _transportWorkspaceId, ...browserCommand } = payload;
     const reply = await stub.fetch(new Request("https://crm-browser-internal.invalid/internal", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(browserCommand),
     }));
     if (!reply.ok) throw new Error("CRM_BROWSER_SESSION_UNAVAILABLE");
     const result = await reply.json() as {
@@ -60,49 +64,54 @@ function createServer(env: Env, ownerEmail: string) {
       isError: true,
       content: [{ type: "text" as const, text: result.error ?? "CRM_BROWSER_OPERATION_FAILED" }],
     };
+    // Only a successful browser_open reveals a minted workspace handle.
+    const data = payload.op === "open" && result.data && typeof result.data === "object"
+      ? { ...result.data, workspaceId } : result.data;
     // A failed assertion/scenario must not appear as an MCP success.
-    if (isFailedVerdict(result.data)) return {
+    if (isFailedVerdict(data)) return {
       isError: true,
       content: [
-        { type: "text" as const, text: JSON.stringify(result.data) },
+        { type: "text" as const, text: JSON.stringify(data) },
         ...(result.image ? [{ type: "image" as const, data: result.image, mimeType: "image/png" as const }] : []),
       ],
     };
     if (result.image) return {
       content: [
-        { type: "text" as const, text: JSON.stringify(result.data) },
+        { type: "text" as const, text: JSON.stringify(data) },
         { type: "image" as const, data: result.image, mimeType: "image/png" },
       ],
     };
-    return { content: [{ type: "text" as const, text: JSON.stringify(result.data) }] };
+    return { content: [{ type: "text" as const, text: JSON.stringify(data) }] };
   }
 
   server.registerTool("browser_open", {
     description: "Open an authorized public HTTP(S) website in a reusable Cloudflare Playwright session. Recording is opt-in at session creation only and is accessed later through Cloudflare Browser Run.",
     inputSchema: {
+      workspaceId: workspaceIdSchema.optional(),
       path: z.string().max(1024).default("/"),
       recording: z.boolean().default(false),
     },
-  }, async ({ path, recording }) => command({ op: "open", url: path, recording }));
+  }, async ({ path, recording, workspaceId }) => command({ op: "open", url: path, recording, workspaceId }));
 
   server.registerTool("browser_status", {
     description: "Inspect whether the CRM browser is open without launching a new browser.",
-    inputSchema: {},
-  }, async () => command({ op: "status" }));
+    inputSchema: { workspaceId: workspaceIdSchema },
+  }, async ({ workspaceId }) => command({ op: "status", workspaceId }));
 
   server.registerTool("browser_session", {
     description: "Read the real CRM /api/session response as the diagnostic Access principal, with no impersonation.",
-    inputSchema: {},
-  }, async () => command({ op: "session" }));
+    inputSchema: { workspaceId: workspaceIdSchema },
+  }, async ({ workspaceId }) => command({ op: "session", workspaceId }));
 
   server.registerTool("browser_snapshot", {
     description: "Return the current page or selected iframe accessibility tree and title. Use browser_frames to discover frameIndex.",
-    inputSchema: { frameIndex },
+    inputSchema: { workspaceId: workspaceIdSchema, frameIndex },
   }, async params => command({ op: "snapshot", ...params }));
 
   server.registerTool("browser_tabs", {
     description: "List, create, select or close tabs and popup windows in the one existing browser context; tab IDs are ephemeral after reconnection.",
     inputSchema: {
+      workspaceId: workspaceIdSchema,
       tabAction: z.enum(["list", "new", "select", "close"]).default("list"),
       tabId: z.string().uuid().optional(),
       url: z.string().max(1024).optional(),
@@ -111,12 +120,13 @@ function createServer(env: Env, ownerEmail: string) {
 
   server.registerTool("browser_frames", {
     description: "List main document and iframe indices, names and sanitized URLs. Use frameIndex for snapshot, action and assertions.",
-    inputSchema: {},
-  }, async () => command({ op: "frames" }));
+    inputSchema: { workspaceId: workspaceIdSchema },
+  }, async ({ workspaceId }) => command({ op: "frames", workspaceId }));
 
   server.registerTool("browser_file", {
     description: "Upload explicit in-memory bytes to a file input, or click to download at most 1 MB into this authenticated MCP response. No Worker filesystem path or arbitrary URL fetch.",
     inputSchema: {
+      workspaceId: workspaceIdSchema,
       fileAction: z.enum(["upload", "download"]),
       target,
       fileName: z.string().max(128).optional(),
@@ -128,6 +138,7 @@ function createServer(env: Env, ownerEmail: string) {
   server.registerTool("browser_inspect", {
     description: "Read a sanitized network timeline, browser navigation/paint performance timings, basic DOM accessibility heuristics or a capped PDF. No arbitrary code execution or credential-bearing headers.",
     inputSchema: {
+      workspaceId: workspaceIdSchema,
       inspection: z.enum(["network", "performance", "accessibility", "pdf"]),
     },
   }, async params => command({ op: "inspect", ...params }));
@@ -135,6 +146,7 @@ function createServer(env: Env, ownerEmail: string) {
   server.registerTool("browser_viewport", {
     description: "Resize the active tab for responsive layout testing (320-2560 pixels); does not impersonate a physical mobile device.",
     inputSchema: {
+      workspaceId: workspaceIdSchema,
       width: z.number().int().min(320).max(2560),
       height: z.number().int().min(320).max(2560),
     },
@@ -142,12 +154,13 @@ function createServer(env: Env, ownerEmail: string) {
 
   server.registerTool("browser_screenshot", {
     description: "Capture an actual full-page PNG screenshot of the currently open website.",
-    inputSchema: {},
-  }, async () => command({ op: "screenshot" }));
+    inputSchema: { workspaceId: workspaceIdSchema },
+  }, async ({ workspaceId }) => command({ op: "screenshot", workspaceId }));
 
   server.registerTool("browser_action", {
     description: "Perform one real Playwright UI action in the persistent browser. Browse ordinary public HTTP(S) sites. CRM admin actions use the real CRM UI, Connect and Rust.",
     inputSchema: {
+      workspaceId: workspaceIdSchema,
       action,
       target: target.optional(),
       text: z.string().max(16000).optional(),
@@ -159,7 +172,7 @@ function createServer(env: Env, ownerEmail: string) {
       acceptDialog: z.boolean().optional(),
     },
   }, async (params) => command({
-    op: params.action, target: params.target as Target | undefined,
+    op: params.action, workspaceId: params.workspaceId, target: params.target as Target | undefined,
     text: params.text, key: params.key, value: params.value,
     url: params.url, x: params.x, y: params.y, acceptDialog: params.acceptDialog,
   }));
@@ -167,6 +180,7 @@ function createServer(env: Env, ownerEmail: string) {
   server.registerTool("browser_wait", {
     description: "Deterministically wait for an element state, a URL, or DOM content load. Always bounded to 30 seconds; no arbitrary sleeps.",
     inputSchema: {
+      workspaceId: workspaceIdSchema,
       target: target.optional(),
       state: waitState.optional(),
       url: z.string().max(1024).optional(),
@@ -177,6 +191,7 @@ function createServer(env: Env, ownerEmail: string) {
   server.registerTool("browser_assert", {
     description: "Read and compare actual DOM, URL, or title values; return a typed pass/fail verdict (no false success on mismatch).",
     inputSchema: {
+      workspaceId: workspaceIdSchema,
       kind: assertionKind,
       target: target.optional(),
       expected,
@@ -187,27 +202,28 @@ function createServer(env: Env, ownerEmail: string) {
   server.registerTool("browser_run", {
     description: "Prevalidate 12 or fewer typed Playwright steps, bound waits/actions to a run budget and stop on first failure. Return an explicit pass/fail report.",
     inputSchema: {
+      workspaceId: workspaceIdSchema,
       steps: z.array(scenarioStep).min(1).max(12),
       timeoutMs: z.number().int().min(1_000).max(120_000).default(90_000),
       screenshotOnFailure: z.boolean().default(false),
     },
-  }, async ({ steps, screenshotOnFailure, timeoutMs }) =>
-    command({ op: "run", steps, screenshotOnFailure, timeoutMs }));
+  }, async ({ steps, screenshotOnFailure, timeoutMs, workspaceId }) =>
+    command({ op: "run", steps, screenshotOnFailure, timeoutMs, workspaceId }));
 
   server.registerTool("browser_diagnostics", {
     description: "Read sanitized cross-site browser console and HTTP statuses. Credential values and URL queries are never exposed.",
-    inputSchema: {},
-  }, async () => command({ op: "console" }));
+    inputSchema: { workspaceId: workspaceIdSchema },
+  }, async ({ workspaceId }) => command({ op: "console", workspaceId }));
 
   server.registerTool("browser_live_view", {
     description: "Mint a 60-second read-only Cloudflare Live View link for the current tab. The signed URL is sensitive: share only with the authorized operator.",
-    inputSchema: {},
-  }, async () => command({ op: "live_view" }));
+    inputSchema: { workspaceId: workspaceIdSchema },
+  }, async ({ workspaceId }) => command({ op: "live_view", workspaceId }));
 
   server.registerTool("browser_close", {
     description: "Close the cloud browser session and release Cloudflare Browser Run resources.",
-    inputSchema: {},
-  }, async () => command({ op: "close" }));
+    inputSchema: { workspaceId: workspaceIdSchema },
+  }, async ({ workspaceId }) => command({ op: "close", workspaceId }));
 
   return server;
 }
