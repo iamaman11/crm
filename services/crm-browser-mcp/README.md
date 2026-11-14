@@ -440,3 +440,22 @@ This is a real **workerd host restart**, not the precise Cloudflare Vitest
 `evictDurableObject(stub)` helper. It does NOT prove a real remote Browser
 Run reconnect or preservation of browser tabs after DO eviction. Physical
 provider reconnect remains P0 NO-GO pending separate live evidence.
+
+## P0 physical provider reconnect via protected immediate DO deployment
+
+The existing `browser-mcp.yml` workflow has an optional
+`restart_do_immediately` **manual-dispatch-only** boolean, default `false`.
+It is valid only with the existing release flag, exact protected `mcp` SHA,
+successful required tests, and restricted GitHub Environment. When explicitly
+enabled, the same single Wrangler deploy command adds the officially
+supported `--durable-objects-code-update-mode immediate` flag. This asks
+Cloudflare to restart active DO isolates as the Worker updates. It does
+**not** create another Worker, test-only endpoint, or browser engine.
+Normal pushes and regular releases retain Cloudflare's default deferred mode.
+
+Physical acceptance must open an authorized test Browser Run, record its
+workspace/page state, use a protected immediate release, verify that the
+same workspace reconnects with its original page state (without a second
+acquire), and explicitly close it. A failing reconnect must keep its
+persistent ID and must not be reported as PASS. Only verified observations
+may close the live-provider reconnect gate in Issue #357.
