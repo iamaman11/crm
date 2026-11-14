@@ -66,7 +66,7 @@ const targetOperations: ReadonlySet<string> = new Set([
   "click", "double_click", "fill", "type", "select", "check", "uncheck", "hover",
 ]);
 export function validateScenarioSteps(steps: readonly ScenarioStep[] | undefined, validateNavigation?: (url: string) => void): void {
-  if (!steps || steps.length === 0 || steps.length > 12) {
+  if (!steps || steps.length === 0 || steps.length > 64) {
     throw new Error("BROWSER_RUN_STEPS_OUT_OF_RANGE");
   }
   // Preflight ALL steps before any side effects. An unsafe late step must not

@@ -4,6 +4,7 @@ import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermitte
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
+import { WorkspaceFileTransfers, MAX_WORKSPACE_FILE_BYTES, MAX_WORKSPACE_CHUNK_BYTES } from "./browser-transfers";
 import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage, parsePageTargetInfo, restoreForExplicitOpen, isOriginalPageMissing, type BrowserPageIdentity } from "./browser-recovery";
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
 import { executeCdpCommands, type CdpCommand } from "./browser-cdp";
@@ -57,10 +58,15 @@ export type Command = {
   frameIndex?: number;
   frameSelector?: string;
   followPopup?: boolean;
-  fileAction?: "upload" | "download";
+  fileAction?: "upload" | "download" | "upload_begin" | "upload_chunk" | "upload_commit" |
+    "download_link" | "download_chunk" | "discard";
   fileName?: string;
   mimeType?: string;
   base64?: string;
+  transferId?: string;
+  expectedSha256?: string;
+  offset?: number;
+  chunkBytes?: number;
   inspection?: "network" | "performance" | "accessibility" | "pdf";
   width?: number;
   height?: number;
@@ -78,6 +84,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
+  private readonly transfers = new WorkspaceFileTransfers();
   private browserSessionId: string | null = null;
   private recordingEnabled = false;
   private recoveredPageMissing = false;
@@ -428,6 +435,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       this.ownerDirectedCrmNavigation = false;
       this.requestLog = [];
       this.consoleLog = [];
+      this.transfers.clear();
     }
     if (failure) throw failure;
   }
@@ -639,8 +647,97 @@ export class CrmBrowserSession extends DurableObject<Env> {
         };
       }
       case "file": {
+        // A single file transfer lives only in this DO's memory. If Cloudflare
+        // evicts the DO mid-transfer, subsequent calls fail, never return
+        // corrupted or invented bytes. Browser state stays owned by Playwright.
+        if (command.fileAction === "upload_begin") {
+          return { data: this.transfers.beginUpload(command.fileName ?? "", command.mimeType ?? "") };
+        }
+        if (command.fileAction === "upload_chunk") {
+          return { data: this.transfers.appendUpload(command.transferId ?? "", command.base64 ?? "") };
+        }
+        if (command.fileAction === "discard") {
+          return { data: this.transfers.discard(command.transferId ?? "") };
+        }
+        if (command.fileAction === "download_chunk") {
+          return { data: this.transfers.readDownload(
+            command.transferId ?? "", command.offset ?? -1, command.chunkBytes,
+          ) };
+        }
+        if (command.fileAction === "upload_commit") {
+          if (!command.target) throw new Error("BROWSER_FILE_TARGET_REQUIRED");
+          const transferId = command.transferId ?? "";
+          const file = this.transfers.preparedUpload(transferId, command.expectedSha256 ?? "");
+          await this.target(command.target).setInputFiles({
+            name: file.name, mimeType: file.mimeType, buffer: file.buffer,
+          }, { timeout: 15_000 });
+          this.transfers.finishUpload(transferId);
+          return { data: {
+            action: "upload", completed: true, fileName: file.name,
+            mimeType: file.mimeType, bytes: file.bytes, sha256: file.sha256,
+            path: safePagePath(page.url()),
+          } };
+        }
         if (!command.target) throw new Error("BROWSER_FILE_TARGET_REQUIRED");
         const locator = this.target(command.target);
+        if (command.fileAction === "download_link") {
+          // Browser-side fetch is intentionally same-origin, using the
+          // actual page's cookies/CORS and Playwright request routing.
+          // Unlike a browser download event, response bytes are verified.
+          // No Worker-side remote URL fetch and no speculative re-click.
+          const response = await locator.evaluate(async (element, maxBytes) => {
+            const link = element.closest("a[href]");
+            if (!(link instanceof HTMLAnchorElement)) throw new Error("BROWSER_FILE_LINK_REQUIRED");
+            const url = new URL(link.href, location.href);
+            if (!["http:", "https:"].includes(url.protocol) ||
+                url.origin !== location.origin) {
+              throw new Error("BROWSER_FILE_LINK_CROSS_ORIGIN_UNSUPPORTED");
+            }
+            const downloaded = await fetch(url.href, {
+              credentials: "same-origin", mode: "same-origin", redirect: "follow",
+            });
+            if (!downloaded.ok || new URL(downloaded.url).origin !== location.origin) {
+              throw new Error("BROWSER_DOWNLOAD_HTTP_FAILED");
+            }
+            const length = downloaded.headers.get("content-length");
+            if (length && Number(length) > maxBytes) throw new Error("BROWSER_DOWNLOAD_TOO_LARGE");
+            if (!downloaded.body) throw new Error("BROWSER_DOWNLOAD_BODY_UNAVAILABLE");
+            const reader = downloaded.body.getReader();
+            const chunks: Uint8Array[] = [];
+            let size = 0;
+            try {
+              for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                size += value.byteLength;
+                if (size > maxBytes) throw new Error("BROWSER_DOWNLOAD_TOO_LARGE");
+                chunks.push(value);
+              }
+            } finally { await reader.cancel().catch(() => {}); }
+            if (!size) throw new Error("BROWSER_DOWNLOAD_CONTENT_UNVERIFIED");
+            const bytes = new Uint8Array(size);
+            let offset = 0;
+            for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+            let binary = "";
+            for (let i = 0; i < size; i += 8192) {
+              binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+            }
+            return {
+              name: url.pathname.split("/").pop() || "download",
+              mimeType: downloaded.headers.get("content-type") ?? "application/octet-stream",
+              base64: btoa(binary),
+            };
+          }, MAX_WORKSPACE_FILE_BYTES, { timeout: 45_000 });
+          const receipt = this.transfers.storeDownload(response.name, response.mimeType, response.base64);
+          return { data: {
+            action: "download_link", completed: true,
+            ...receipt,
+            // Small files are one-call results. Larger verified files are
+            // returned in bounded chunks using this same transferId.
+            ...(receipt.bytes <= MAX_WORKSPACE_CHUNK_BYTES ?
+              { base64: response.base64 } : {}),
+          } };
+        }
         if (command.fileAction === "upload") {
           const file = validatedUpload(
             command.fileName ?? "", command.mimeType ?? "", command.base64 ?? "",
@@ -803,9 +900,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
         });
         const startedAt = Date.now();
         const deadline = startedAt + boundedRunTimeout(command.timeoutMs);
-        const results: Array<{ index: number; op: string; passed: boolean; data?: unknown; error?: string; outcome?: string }> = [];
+        const results: Array<{ index: number; op: string; passed: boolean; elapsedMs: number; data?: unknown; error?: string; outcome?: string }> = [];
         let passed = true;
         for (const [index, step] of steps!.entries()) {
+          const stepStartedAt = Date.now();
           try {
             operationTimeout(1, deadline);
             const response = await this.execute(step, deadline);
@@ -813,12 +911,12 @@ export class CrmBrowserSession extends DurableObject<Env> {
             operationTimeout(1, deadline);
             const data = response.data as { passed?: boolean };
             const ok = data.passed !== false;
-            results.push({ index, op: step.op, passed: ok, data });
+            results.push({ index, op: step.op, passed: ok, elapsedMs: Date.now() - stepStartedAt, data });
             if (!ok) { passed = false; break; }
           } catch (error) {
             passed = false;
             results.push({
-              index, op: step.op, passed: false,
+              index, op: step.op, passed: false, elapsedMs: Date.now() - stepStartedAt,
               error: redact(error instanceof Error ? error.message : error),
               outcome: step.op === "assert" || step.op === "wait" ? "not_completed" : "uncertain",
             });

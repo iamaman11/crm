@@ -161,14 +161,19 @@ function createServer(env: Env, ownerEmail: string) {
   }, async ({ workspaceId }) => command({ op: "frames", workspaceId }));
 
   server.registerTool("browser_file", {
-    description: "Upload explicit in-memory bytes to a file input, or click to download at most 1 MB into this authenticated MCP response. No Worker filesystem path or arbitrary URL fetch.",
+    description: "Upload verified file bytes to a browser input, or fetch real same-origin link bytes from the current page. Legacy upload/download <=1 MB remain; download_link returns SHA-256/size and download_chunk returns bounded base64 pieces; upload_begin/upload_chunk/upload_commit support a verified 8 MB file. Use discard to release staging. Staging expires on DO restart.",
     inputSchema: {
       workspaceId: workspaceIdSchema,
-      fileAction: z.enum(["upload", "download"]),
-      target,
+      fileAction: z.enum(["upload", "download", "upload_begin", "upload_chunk", "upload_commit",
+        "download_link", "download_chunk", "discard"]),
+      target: target.optional(),
       fileName: z.string().max(128).optional(),
       mimeType: z.string().max(100).optional(),
       base64: z.string().max(1_333_336).optional(),
+      transferId: z.string().uuid().optional(),
+      expectedSha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+      offset: z.number().int().min(0).optional(),
+      chunkBytes: z.number().int().min(1).max(256_000).optional(),
     },
   }, async params => command({ op: "file", ...params }));
 
@@ -239,10 +244,10 @@ function createServer(env: Env, ownerEmail: string) {
   }, async params => command({ op: "assert", ...params }));
 
   server.registerTool("browser_run", {
-    description: "Run up to 12 prevalidated Playwright steps with assertions; a click can follow a real popup via followPopup:true and later steps run in that new tab.",
+    description: "Run up to 64 prevalidated Playwright steps (one browser, one total 120-second deadline) with assertions, popup follow, per-step timings and screenshot on failure. Failing steps never auto-replay.",
     inputSchema: {
       workspaceId: workspaceIdSchema,
-      steps: z.array(scenarioStep).min(1).max(12),
+      steps: z.array(scenarioStep).min(1).max(64),
       timeoutMs: z.number().int().min(1_000).max(120_000).default(90_000),
       screenshotOnFailure: z.boolean().default(false),
     },
