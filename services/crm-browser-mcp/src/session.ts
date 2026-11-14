@@ -4,7 +4,7 @@ import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermitte
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
-import { WorkspaceFileTransfers, MAX_WORKSPACE_FILE_BYTES } from "./browser-transfers";
+import { WorkspaceFileTransfers, MAX_WORKSPACE_FILE_BYTES, MAX_WORKSPACE_CHUNK_BYTES } from "./browser-transfers";
 import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage, parsePageTargetInfo, restoreForExplicitOpen, isOriginalPageMissing, type BrowserPageIdentity } from "./browser-recovery";
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
 import { executeCdpCommands, type CdpCommand } from "./browser-cdp";
@@ -728,9 +728,14 @@ export class CrmBrowserSession extends DurableObject<Env> {
               base64: btoa(binary),
             };
           }, MAX_WORKSPACE_FILE_BYTES, { timeout: 45_000 });
+          const receipt = this.transfers.storeDownload(response.name, response.mimeType, response.base64);
           return { data: {
             action: "download_link", completed: true,
-            ...this.transfers.storeDownload(response.name, response.mimeType, response.base64),
+            ...receipt,
+            // Small files are one-call results. Larger verified files are
+            // returned in bounded chunks using this same transferId.
+            ...(receipt.bytes <= MAX_WORKSPACE_CHUNK_BYTES ?
+              { base64: response.base64 } : {}),
           } };
         }
         if (command.fileAction === "upload") {
