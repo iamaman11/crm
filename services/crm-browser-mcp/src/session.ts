@@ -23,6 +23,7 @@ export type Target = {
 
 export type Command = {
   op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "run";
+  workspaceId?: string; // MCP routing only; stripped before sending to this DO.
   url?: string;
   target?: Target;
   text?: string;

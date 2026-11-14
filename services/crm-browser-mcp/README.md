@@ -228,3 +228,32 @@ until the provider can distinguish them from an empty broken stream.
 **Download remains P1 NO-GO:** this patch prevents false PASS, but does not
 prove successful transfer of nonempty content. Require a real nonzero payload
 and independent byte/count check after a controlled release. CRM R2 remains OFF.
+
+## Explicit isolated workspaces (P0, Issue #357)
+
+The MCP HTTP request has **no trustworthy ChatGPT conversation identifier**.
+The former `owner:<email>` Durable Object key shared one mutable browser
+among parallel chats. FIFO only serialized commands; it did not isolate
+tabs, cookies, forms, recordings or close.
+
+`browser_open` with no `workspaceId` now creates a random UUID workspace,
+opens a new Cloudflare Browser Run, and returns the handle with the successful
+open response. Every later method **requires** `workspaceId` (including
+`browser_status` and `browser_close`). Explicit `browser_open(workspaceId)`
+reuses the selected workspace. Missing handles fail with
+`BROWSER_WORKSPACE_REQUIRED`, without the old owner-wide fallback.
+The same existing Durable Object class is indexed by owner+workspace UUID,
+and alone owns that workspace's browser context, tabs, cookies and lifecycle.
+
+A workspace handle is **not an authentication credential**: Cloudflare Access
+still authenticates the owner for *every* request. It does not claim to
+automatically identify a ChatGPT conversation. Two chats explicitly providing
+the same handle intentionally share one workspace; two independently created
+handles have different Durable Objects. A lost handle is not silently
+rediscovered. The provider's idle expiry limits abandoned Browser Run sessions.
+No new Worker, browser engine, D1 database, registry or hidden adapter.
+
+This is a breaking MCP input-schema change: refresh the connected ChatGPT
+plugin after controlled release. Physical distinct-workspace, closing-one-
+without-affecting-the-other and DO eviction/reconnect E2Es remain acceptance
+gates. CRM administrative R2 remains NO-GO.
