@@ -119,3 +119,12 @@ test("scenario ignored wait and malformed input actions are rejected before clic
     {op:"wait"}, // load-state wait
   ]));
 });
+
+test("a 64-step E2E is prevalidated as one run, but 65 steps are rejected before side effects", () => {
+  const step = { op: "assert", kind: "title", expected: "Web form" };
+  const sixtyFour = Array.from({ length: 64 }, () => step);
+  assert.doesNotThrow(() => validateScenarioSteps(sixtyFour));
+  assert.throws(() => validateScenarioSteps([...sixtyFour, step]), /STEPS_OUT_OF_RANGE/);
+  const lateInvalid = [...sixtyFour.slice(0, 63), { op: "navigate", url: "http://169.254.169.254/" }];
+  assert.throws(() => validateScenarioSteps(lateInvalid, url => browserUrl(url)), /BROWSER_UNSAFE_URL/);
+});
