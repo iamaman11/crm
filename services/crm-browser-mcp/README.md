@@ -307,3 +307,20 @@ opened afresh; no attempt is made to replay clicks or migrate cookies.
 This specifically addresses stale **code versions**. It is **not** yet physical
 proof of real DO isolate eviction/restart after provider failure, nor full
 resolved-IP/DNS rebinding protection; those remain P0 NO-GO.
+
+## P0 recovery path — tested production decision, not simulated eviction
+
+The **same** `CrmBrowserSession.restore()` now delegates the existing provider-session
+lookup and official `connect(BROWSER, storedId)` to one pure, deterministic
+`recoverExistingBrowserSession` function. The helper is executed by the real
+DO and tested through the normal MCP CI with injected provider responses:
+missing ID (no provider call), terminal/expired IDs (no reconnect), active ID
+(exact session reconnect), unavailable lookup (fail closed without deleting
+stored ID), failed reconnect (generic error without ID loss), and unknown
+provider state (attempt exact-ID reconnect). No alternate browser owner,
+new browser allocation on readback, polling, fake page automation, or parallel
+transport is introduced.
+
+**This does not establish physical DO eviction / live Browser Run reconnect.**
+As of 14 Nov, Browser Run returned HTTP 429 on new sessions with no active
+sessions reported; release and actual eviction E2E remain separate gates.
