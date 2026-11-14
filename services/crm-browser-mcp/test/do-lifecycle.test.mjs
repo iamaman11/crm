@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Miniflare } from "miniflare";
@@ -39,16 +39,38 @@ test("CrmBrowserSession preserves its provider identity across workerd restart",
   const internal = "https://crm-browser-internal.invalid/internal";
   let mf;
 
+  // Miniflare 5 accepts Cloudflare worker config and an explicit module
+  // manifest. The compiled production bundle is loaded unchanged, together
+  // with a local-only test subclass that exposes seeding/inspection RPCs.
   const start = () => new Miniflare({
     resourcePersistencePath: storageDir,
     workers: [{
-      name: "crm-browser-mcp-lifecycle-local",
-      modules: true,
-      scriptPath: fixturePath,
-      compatibilityDate: "2026-11-13",
-      compatibilityFlags: ["nodejs_compat"],
-      durableObjects: {
-        SESSIONS: { className: "LifecycleTestSession", useSQLite: true },
+      config: {
+        name: "crm-browser-mcp-lifecycle-local",
+        compatibilityDate: "2026-11-13",
+        compatibilityFlags: ["nodejs_compat"],
+        manifest: {
+          mainModule: "__lifecycle_fixture.js",
+          modulesRoot: buildDir,
+          modules: {
+            "__lifecycle_fixture.js": {
+              type: "ESModule", contents: readFileSync(fixturePath, "utf8"),
+            },
+            [scripts[0]]: {
+              type: "ESModule", contents: readFileSync(join(buildDir, scripts[0]), "utf8"),
+            },
+          },
+        },
+        exports: {
+          LifecycleTestSession: { type: "durable-object", storage: "sqlite" },
+        },
+        env: {
+          SESSIONS: {
+            type: "durable-object",
+            worker: "crm-browser-mcp-lifecycle-local",
+            exportName: "LifecycleTestSession",
+          },
+        },
       },
     }],
   });
