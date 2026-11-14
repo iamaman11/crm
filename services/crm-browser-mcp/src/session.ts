@@ -118,7 +118,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
     this.page = null;
     this.tabIds.clear();
     const sessionId = await this.ctx.storage.get<string>("browser_session_id");
-    const recovered = await recoverExistingBrowserSession(
+    const recovered = await recoverExistingBrowserSession<Browser>(
       sessionId,
       async id => this.env.BROWSER.getSession(id),
       async id => connect(this.env.BROWSER, id),
