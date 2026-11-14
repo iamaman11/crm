@@ -8,6 +8,8 @@ import { WorkspaceFileTransfers, MAX_WORKSPACE_FILE_BYTES, MAX_WORKSPACE_CHUNK_B
 import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage, parsePageTargetInfo, restoreForExplicitOpen, isOriginalPageMissing, type BrowserPageIdentity } from "./browser-recovery";
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
 import { executeCdpCommands, type CdpCommand } from "./browser-cdp";
+import { recordingTargets, recordingHar } from "./browser-recordings";
+import { MAX_WORKSPACE_CHUNK_BYTES } from "./browser-transfers";
 
 export interface Env {
   BROWSER: BrowserRun;
@@ -16,6 +18,8 @@ export interface Env {
   CRM_BROWSER_CLIENT_SECRET: string;
   CRM_MCP_OWNER_EMAIL: string;
   CRM_MCP_ACCESS_AUD: string;
+  CF_BROWSER_ACCOUNT_ID: string;
+  CF_BROWSER_RECORDING_READ_TOKEN?: string; // Worker secret: Browser Run REST recording read only.
 }
 
 /** The pinned SDK implementation recognizes persistent:true at runtime, while
@@ -34,7 +38,7 @@ export type Target = {
 };
 
 export type Command = {
-  op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "run" | "execute" | "runtime";
+  op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "run" | "execute" | "recording" | "runtime";
   expectedRuntimeEpoch?: string; // Worker-supplied internal compatibility fence.
   workspaceId?: string; // MCP routing only; stripped before sending to this DO.
   url?: string;
@@ -67,7 +71,9 @@ export type Command = {
   expectedSha256?: string;
   offset?: number;
   chunkBytes?: number;
-  inspection?: "network" | "performance" | "accessibility" | "pdf";
+  recordingAction?: "targets" | "har" | "chunk" | "discard";
+  recordingTarget?: string;
+  inspection?:  "network" | "performance" | "accessibility" | "pdf";
   width?: number;
   height?: number;
   recording?: boolean;
@@ -456,6 +462,46 @@ export class CrmBrowserSession extends DurableObject<Env> {
     } catch (error) {
       if (command.op !== "status" || !isOriginalPageMissing(error)) throw error;
       needsReopen = true;
+    }
+    if (command.op === "recording") {
+      // Recordings are finalized ONLY after Close. Reading them must never
+      // acquire a new browser or create a new page/context.
+      if (command.recordingAction === "chunk") {
+        return { data: this.transfers.readDownload(
+          command.transferId ?? "", command.offset ?? -1, command.chunkBytes,
+        ) };
+      }
+      if (command.recordingAction === "discard") {
+        return { data: this.transfers.discard(command.transferId ?? "") };
+      }
+      if (this.browserSessionId) throw new Error("BROWSER_RECORDING_REQUIRES_CLOSED_SESSION");
+      const sessionId = await this.ctx.storage.get<string>("last_recording_session_id");
+      if (!sessionId) throw new Error("BROWSER_RECORDING_NOT_FOUND");
+      const token = this.env.CF_BROWSER_RECORDING_READ_TOKEN;
+      if (!token) throw new Error("BROWSER_RECORDING_READ_TOKEN_MISSING");
+      if (command.recordingAction === "targets") {
+        return { data: {
+          sessionId, targets: await recordingTargets(this.env.CF_BROWSER_ACCOUNT_ID, token, sessionId),
+        } };
+      }
+      if (command.recordingAction === "har") {
+        if (!command.recordingTarget) throw new Error("BROWSER_HAR_TARGET_REQUIRED");
+        const har = await recordingHar(
+          this.env.CF_BROWSER_ACCOUNT_ID, token, sessionId, command.recordingTarget,
+        );
+        const buffer = Buffer.from(JSON.stringify(har));
+        const receipt = this.transfers.storeDownload(
+          "browser-" + sessionId.slice(0, 8) + ".har", "application/json",
+          buffer.toString("base64"),
+        );
+        return { data: {
+          action: "har", sanitized: true, format: "HAR 1.2",
+          entryCount: har.log.entries.length, ...receipt,
+          ...(receipt.bytes <= MAX_WORKSPACE_CHUNK_BYTES ?
+            { base64: buffer.toString("base64") } : {}),
+        } };
+      }
+      throw new Error("BROWSER_RECORDING_UNKNOWN_ACTION");
     }
     if (command.op === "status") return {
       data: {
