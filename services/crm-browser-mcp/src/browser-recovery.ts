@@ -29,3 +29,19 @@ export async function recoverExistingBrowserSession<Browser>(
     throw new Error("BROWSER_SESSION_RECONNECT_FAILED");
   }
 }
+
+
+/** Provider errors are not safe to echo: upstream messages may contain URLs or
+ * credentials. Preserve only the distinction confirmed by the provider text.
+ * Never infer account plan/billing state from a generic HTTP 429. */
+export function classifyBrowserAcquireFailure(cause: unknown): Error {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  if (/browser time limit exceeded for today/i.test(message)) {
+    return new Error("BROWSER_PROVIDER_DAILY_LIMIT_EXCEEDED");
+  }
+  if (/\b429\b/i.test(message) &&
+      /rate limit exceeded|too many requests/i.test(message)) {
+    return new Error("BROWSER_PROVIDER_RATE_LIMITED");
+  }
+  return new Error("BROWSER_PROVIDER_ACQUIRE_FAILED");
+}

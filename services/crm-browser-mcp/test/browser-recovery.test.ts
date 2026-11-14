@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { recoverExistingBrowserSession } from "../src/browser-recovery.ts";
+import { classifyBrowserAcquireFailure, recoverExistingBrowserSession } from "../src/browser-recovery.ts";
 
 const id = "provider-session-123";
 test("no stored ID means closed, with no provider call or new browser", async () => {
@@ -54,4 +54,25 @@ test("failed reconnect does not silently replace or forget a still-live session"
 test("unrecognized provider status uses reconnect rather than deleting a recoverable session", async () => {
   const x=await recoverExistingBrowserSession(id,async()=>({status:"RUNNING"}),async()=>42);
   assert.deepEqual(x,{kind:"connected",sessionId:id,browser:42});
+});
+
+
+test("new browser rate limits return a stable code without guessing plan or repeating acquire", () => {
+  const throttled = new Error("Unable to create new browser: code: 429: message: Rate limit exceeded");
+  assert.equal(classifyBrowserAcquireFailure(throttled).message,"BROWSER_PROVIDER_RATE_LIMITED");
+  assert.equal(classifyBrowserAcquireFailure("HTTP 429 Too many requests").message,"BROWSER_PROVIDER_RATE_LIMITED");
+  assert.equal(classifyBrowserAcquireFailure(
+    new Error("Unable to create new browser: code: 429: message: Browser time limit exceeded for today"),
+  ).message, "BROWSER_PROVIDER_DAILY_LIMIT_EXCEEDED");
+});
+
+test("unknown browser creation errors remain fail-closed and redact provider details", () => {
+  for (const error of [new Error("secret=please-do-not-log, 401"),
+    "something bad",null,undefined]) {
+    assert.equal(classifyBrowserAcquireFailure(error).message,
+      "BROWSER_PROVIDER_ACQUIRE_FAILED");
+  }
+  assert.notEqual(classifyBrowserAcquireFailure(new Error("429 quota")).message,
+    "BROWSER_PROVIDER_RATE_LIMITED",
+    "a bare status code is insufficient to prove a rate limit cause");
 });

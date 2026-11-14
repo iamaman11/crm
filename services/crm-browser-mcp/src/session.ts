@@ -4,7 +4,7 @@ import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermitte
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
-import { recoverExistingBrowserSession } from "./browser-recovery";
+import { classifyBrowserAcquireFailure, recoverExistingBrowserSession } from "./browser-recovery";
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
 
 export interface Env {
@@ -268,9 +268,17 @@ export class CrmBrowserSession extends DurableObject<Env> {
     if (!this.browser) {
       // Official acquisition + explicit connection allows DO eviction recovery.
       // Keep-alive is idle time, not an automatic browser polling loop.
-      const { sessionId } = await acquire(this.env.BROWSER, {
-        keep_alive: 600_000, recording,
-      });
+      // A failed acquire must not start a second browser via automatic retry.
+      // Give the owner one stable, machine-readable error without echoing
+      // the raw provider message or falsely attributing its account plan.
+      let sessionId: string;
+      try {
+        ({ sessionId } = await acquire(this.env.BROWSER, {
+          keep_alive: 600_000, recording,
+        }));
+      } catch (error) {
+        throw classifyBrowserAcquireFailure(error);
+      }
       try {
         this.browser = await connect(this.env.BROWSER, sessionId);
         this.browserSessionId = sessionId;
