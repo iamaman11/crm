@@ -4,6 +4,7 @@ import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermitte
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
+import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
 
 export interface Env {
   BROWSER: BrowserRun;
@@ -22,7 +23,8 @@ export type Target = {
 };
 
 export type Command = {
-  op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "run";
+  op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "run" | "runtime";
+  expectedRuntimeEpoch?: string; // Worker-supplied internal compatibility fence.
   workspaceId?: string; // MCP routing only; stripped before sending to this DO.
   url?: string;
   target?: Target;
@@ -333,6 +335,8 @@ export class CrmBrowserSession extends DurableObject<Env> {
   }
 
   private async execute(command: Command, runDeadline?: number): Promise<{ data: unknown; image?: string }> {
+    // The lightweight probe must NOT launch, restore or mutate a browser.
+    if (command.op === "runtime") return { data: { epoch: BROWSER_RUNTIME_EPOCH } };
     if (command.op === "open") return {
       data: await this.open(command.url, command.recording ?? false),
     };
@@ -764,6 +768,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
     let result: Result;
     try {
       const command = await request.json() as Command;
+      if (command.op !== "runtime") requireRuntimeEpoch(command.expectedRuntimeEpoch);
       const { data, image } = await this.execute(command);
       result = { ok: true, data, ...(image ? { image } : {}) };
     } catch (error) {
