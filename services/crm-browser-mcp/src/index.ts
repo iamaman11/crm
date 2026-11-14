@@ -269,6 +269,18 @@ function createServer(env: Env, ownerEmail: string) {
     inputSchema: { workspaceId: workspaceIdSchema },
   }, async ({ workspaceId }) => command({ op: "console", workspaceId }));
 
+  server.registerTool("browser_recording", {
+    description: "Access finalized Cloudflare Browser Run recordings after recording:true Open + Close. targets lists native recorded CDP targets; har gets the official HAR 1.2 for one target with credentials/content sanitized and SHA-256 byte receipt. chunk reads a large HAR in bounded pieces and discard clears staging. Requires a separate read-only Browser Run recording API token stored as a Worker secret; never starts a browser.",
+    inputSchema: {
+      workspaceId: workspaceIdSchema,
+      recordingAction: z.enum(["targets", "har", "chunk", "discard"]),
+      recordingTarget: z.string().min(1).max(256).optional(),
+      transferId: z.string().uuid().optional(),
+      offset: z.number().int().min(0).optional(),
+      chunkBytes: z.number().int().min(1).max(256_000).optional(),
+    },
+  }, async params => command({ op: "recording", ...params }));
+
   server.registerTool("browser_live_view", {
     description: "Mint a 60-second read-only Cloudflare Live View link for the current tab. The signed URL is sensitive: share only with the authorized operator.",
     inputSchema: { workspaceId: workspaceIdSchema },
