@@ -44,13 +44,15 @@ const jwks=JSON.stringify({keys:[{...publicKey.export({format:"jwk"}),kid,alg:"R
 const iss="https://royal-limit-ea43.cloudflareaccess.com";
 const aud="e0a664cf4f46f0d13d0ac0d8dd621c718c70842a377bf6738d1a24f0d16cedc7";
 const now=Math.floor(Date.now()/1000);
-function jwt(email){
+function signedJwt(identityClaims){
  const parts=[{alg:"RS256",kid,typ:"JWT"},{
-   iss,aud,exp:now+3600,iat:now-10,sub:email,email
+   iss,aud,exp:now+3600,iat:now-10,...identityClaims
  }].map(x=>Buffer.from(JSON.stringify(x)).toString("base64url"));
  const raw=parts.join(".");
  return raw+"."+createSign("RSA-SHA256").update(raw).end().sign(privateKey).toString("base64url");
 }
+const jwt=email=>signedJwt({sub:email,email});
+const serviceJwt=common_name=>signedJwt({sub:"",common_name});
 let child;
 try{
  run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
@@ -59,7 +61,8 @@ try{
    "INSERT INTO crm_users(email,tenant_id,role,active) VALUES"+
    "('native-a@example.test','tenant-a','admin',1),"+
    "('native-viewer@example.test','tenant-a','viewer',1),"+
-   "('native-b@example.test','tenant-b','admin',1);"]);
+   "('native-b@example.test','tenant-b','admin',1),"+
+   "('service:ci-fixture.access','tenant-a','admin',1);"]);
  // This is a fixture row created in isolated D1 before the Worker starts,
  // not a second implementation of CRM's Party persistence.
  const state=JSON.stringify({party_id:"binary-rpc-proof-01",kind:"organization",
@@ -91,6 +94,15 @@ try{
  }
  assert.equal((await call("/api/parties",null)).status,401);
  const admin=jwt("native-a@example.test"),viewer=jwt("native-viewer@example.test");
+ const knownService=serviceJwt("ci-fixture.access");
+ const unknownService=serviceJwt("unassigned-fixture.access");
+ assert.equal((await call("/api/session",knownService)).status,200,
+   "An explicitly enrolled service must resolve its existing tenant");
+ assert.equal((await call("/api/session",unknownService)).status,401,
+   "An unknown signed service must not auto-create an admin tenant");
+ assert.equal((await call("/api/session",signedJwt({
+   sub:"",common_name:"ci-fixture.access",aud:"wrong-app-audience"
+ }))).status,401,"Cross-application service JWT must be denied");
  const version=await rpcFetch("/api/version",{headers:{"cf-access-jwt-assertion":admin}});
  assert.equal(version.status,200);
  assert.equal(version.headers.get("x-crm-source-sha"),sourceSha,"Worker must receive the tested checkout SHA");
@@ -190,6 +202,8 @@ try{
  assert.equal((await v3("CreateParty",admin,{...creation,
    displayName:"different replay"})).status,409);
  assert.equal((await v3("GetParty",tenantB,{partyId:id})).status,404);
+ assert.equal((await v3("GetParty",knownService,{partyId:id})).status,200,
+   "Enrolled service and human admin must read the same tenant");
  const read=await v3("GetParty",viewer,{partyId:id});
  assert.equal(read.status,200);
  assert.equal(read.body.party?.displayName,"Connect Native Rust");
@@ -215,6 +229,12 @@ try{
       idempotencyKey:"candidate-v3-stale-version"}})).status,409);
  const sql=(query)=>JSON.parse(run(["d1","execute","crm-rust-party-local","--local",
    "--persist-to",data,"--json","--command",query]))[0].results;
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_tenants")[0].n,2,
+   "Unknown signed service must not create another tenant");
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_users")[0].n,4,
+   "Unknown signed service must not insert an admin actor");
+ assert.equal(sql("SELECT tenant_id FROM crm_users WHERE email='service:ci-fixture.access'")[0].tenant_id,
+   "tenant-a","Explicit service enrollment must retain the owner's tenant");
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE id='binary-rpc-proof-01'")[0].n,1,
    "Repeated migrations apply must preserve existing business data");
  assert.equal(sql("SELECT COUNT(*) AS n FROM d1_migrations WHERE name='0002_hard_cutover.sql'")[0].n,1);

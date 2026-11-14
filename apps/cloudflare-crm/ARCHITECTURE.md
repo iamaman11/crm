@@ -50,6 +50,15 @@ Access проверяется до dispatch. Tenant/actor/role/server request_id
 от клиента. Один verified context передаётся сервисам. Unknown RPC, missing policy, invalid auth
 и недостаточные права закрыты. Право определяется policy, не названием метода.
 
+Новый подтверждённый человеческий Access principal может получить изолированный тестовый tenant
+по текущему onboarding. **Service principal никогда не создаёт себе tenant или роль автоматически**:
+только заранее внесённый активный `service:<verified common_name>` в `crm_users` связывает
+его с явно выбранным существующим tenant и ролью. CI сначала регистрирует две отдельные
+служебные тестовые учётные записи в изолированных tenant, затем проверяет их реальные Access JWT.
+Для браузерного MCP нужен отдельный служебный principal в tenant владельца, а не CI-аккаунт.
+Cloudflare Access / Worker secret / D1 enrollment — три независимые контрольные точки;
+без любой из них CRM должна отказать, не делать self-enrollment.
+
 Ошибки используют стандартные Connect codes и typed domain details. Request_id связывает ответ,
 D1 audit и логи. Generated client проверяет ConnectError.code; одного HTTP status мало.
 Не логировать JWT, secrets или raw business payload.
