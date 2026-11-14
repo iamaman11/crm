@@ -98,7 +98,7 @@ function isInternalHost(host: string): boolean {
     // NAT64 64:ff9b::/96, loopback, unspecified, link-local, ULA, site-local,
     // multicast, and special-use ranges without enumerating their aliases.
     // Public IPv4-mapped IPv6 was handled by the branch above.
-    if (!/^[23][0-9a-f]{0,3}:/i.test(h)) return true;
+    if (!/^[23][0-9a-f]{3}:/i.test(h)) return true;
     // Tunneling/translation and documentation prefixes are not appropriate
     // destinations for this owner-operated public-web browser.
     return h.startsWith("2002:") ||
