@@ -7,6 +7,17 @@ on:
   pull_request:
     branches:
       - mcp
+  workflow_dispatch:
+    inputs:
+      release_browser_mcp:
+        description: 'Publish only the protected mcp HEAD to crm-browser-mcp'
+        type: boolean
+        required: true
+        default: false
+      expected_sha:
+        description: 'Exact approved 40-character mcp HEAD SHA'
+        type: string
+        required: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -73,17 +84,30 @@ jobs:
           test -n "$(find /tmp/crm-browser-mcp-build -type f -print -quit)"
           echo "Independent Browser MCP bundle verified; CRM and D1 untouched."
 
-  # Explicit release switch remains OFF until live OAuth, redirect-safety,
-  # CRM tenant delegation, and runtime secrets are independently accepted.
-  # The repository variable BROWSER_MCP_RELEASE_ENABLED must equal 'true'.
+  # One protected release path: both push and explicit manual dispatch require
+  # the same repository flag and browser-mcp Environment / one-Worker token.
+  # CRM service identity / existing-owner tenant delegation remains disabled.
   deploy-browser-mcp:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/mcp' && vars.BROWSER_MCP_RELEASE_ENABLED == 'true'
+    if: >-
+      github.ref == 'refs/heads/mcp' &&
+      vars.BROWSER_MCP_RELEASE_ENABLED == 'true' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && inputs.release_browser_mcp == true))
     needs: browser-mcp
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: browser-mcp
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Verify exact reviewed mcp commit for manual release
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          echo "Approved mcp SHA matches checked-out commit."
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.18.0'
