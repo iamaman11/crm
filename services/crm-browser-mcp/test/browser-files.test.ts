@@ -26,4 +26,7 @@ test("download data stays bounded and checks size before encoding", () => {
   assert.equal(transferDownload("C:\\\\logs\\\\report.txt", [Buffer.from("y")]).fileName, "report.txt");
   assert.equal(transferDownload("report" + String.fromCharCode(0) + ".txt", [Buffer.from("z")]).fileName, "report.txt");
   assert.throws(() => transferDownload("huge.csv", [Buffer.alloc(MAX_TRANSFER_BYTES + 1)]), /TOO_LARGE/);
+  // Real Browser Run repeated four false 0-byte successes on 14 Nov 2026.
+  assert.throws(() => transferDownload("unknown.txt", []), /CONTENT_UNVERIFIED/);
+  assert.throws(() => transferDownload("unknown.txt", [Buffer.alloc(0)]), /CONTENT_UNVERIFIED/);
 });

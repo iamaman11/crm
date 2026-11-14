@@ -31,6 +31,11 @@ export function transferDownload(
 ): { fileName: string; bytes: number; base64: string } {
   const bytes = parts.reduce((total, item) => total + item.byteLength, 0);
   if (bytes > MAX_TRANSFER_BYTES) throw new Error("BROWSER_DOWNLOAD_TOO_LARGE");
+  // Some Browser Run builds return a valid download event and filename but
+  // an empty createReadStream() for a nonempty remote file. Do not invent PASS.
+  // Until the provider can prove a real empty file, zero-byte downloads are
+  // unsupported rather than silently accepted.
+  if (bytes === 0) throw new Error("BROWSER_DOWNLOAD_CONTENT_UNVERIFIED");
   const buffer = Buffer.concat(parts.map(item => Buffer.from(item)));
   const leaf = filename.replaceAll("\\", "/").split("/").pop() ?? "";
   const fileName = leaf.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 128) || "download";

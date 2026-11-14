@@ -519,6 +519,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
           const awaited = page.waitForEvent("download", { timeout: 20_000 });
           await locator.click({ timeout: 15_000 });
           const download = await awaited;
+          // The event fires at download start. createReadStream() already
+          // throws for a failed/canceled download under the Playwright contract.
+          // Avoid another indefinite download.failure() wait before reading.
           const stream = await download.createReadStream();
           const chunks: Uint8Array[] = [];
           let size = 0;
