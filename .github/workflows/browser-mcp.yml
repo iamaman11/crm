@@ -18,6 +18,11 @@ on:
         description: 'Exact approved 40-character mcp HEAD SHA'
         type: string
         required: true
+      restart_do_immediately:
+        description: 'Explicitly restart active Browser MCP Durable Objects during protected manual deployment'
+        type: boolean
+        required: true
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -136,6 +141,16 @@ jobs:
         working-directory: services/crm-browser-mcp
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DO_UPDATE_IMMEDIATE: ${{ inputs.restart_do_immediately || 'false' }}
+        shell: bash
         run: |
           set -euo pipefail
-          npx wrangler deploy --config wrangler.jsonc --name crm-browser-mcp
+          # One deploy command, unchanged default. Immediate DO reset is an
+          # explicit per-release owner choice, never an automatic PR/push action.
+          args=()
+          if [[ "$DO_UPDATE_IMMEDIATE" == "true" ]]; then
+            test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+            args+=(--durable-objects-code-update-mode immediate)
+            echo "Explicit immediate DO code update requested for protected release."
+          fi
+          npx wrangler deploy --config wrangler.jsonc --name crm-browser-mcp "${args[@]}"
