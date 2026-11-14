@@ -425,3 +425,18 @@ new browser owner, automatic retry or relaxed CRM privilege.
 Source tests cover old epoch cleanup vs rejection of page actions and
 untrusted probe inputs. Protected release and physical stale-workspace
 closure are separate acceptance criteria.
+
+## Offline workerd restart test — Issue #357
+
+The existing MCP CI runs `npm run test:do-lifecycle` after a Wrangler
+dry run bundles the **real production CrmBrowserSession**. Miniflare
+`5.20261110.1-beta` was already pinned by Wrangler and is now an explicit
+test-only dev dependency; no additional CI or Worker is created. The test
+seeds a synthetic Browser Run session ID and recording flag in real local DO
+SQLite storage, disposes the workerd process, recreates the same DO identity,
+and checks that storage persists and provider unavailability fails closed.
+
+This is a real **workerd host restart**, not the precise Cloudflare Vitest
+`evictDurableObject(stub)` helper. It does NOT prove a real remote Browser
+Run reconnect or preservation of browser tabs after DO eviction. Physical
+provider reconnect remains P0 NO-GO pending separate live evidence.

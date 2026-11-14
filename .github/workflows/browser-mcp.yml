@@ -84,6 +84,12 @@ jobs:
           test -n "$(find /tmp/crm-browser-mcp-build -type f -print -quit)"
           echo "Independent Browser MCP bundle verified; CRM and D1 untouched."
 
+      - name: Physical workerd restart with persisted Browser MCP Durable Object
+        working-directory: services/crm-browser-mcp
+        env:
+          MCP_TEST_BUNDLE_DIR: /tmp/crm-browser-mcp-build
+        run: npm run test:do-lifecycle
+
   # One protected release path: both push and explicit manual dispatch require
   # the same repository flag and browser-mcp Environment / one-Worker token.
   # CRM service identity / existing-owner tenant delegation remains disabled.
