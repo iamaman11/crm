@@ -80,7 +80,9 @@ export async function recordingTargets(
   const events = obj(obj(body.result)?.events);
   if (!events) throw new Error("BROWSER_RECORDING_TARGETS_MISSING");
   // A target ID is an opaque identifier; never derive it from a page URL.
-  return Object.keys(events).slice(0, 100);
+  const ids = Object.keys(events);
+  if (ids.length > 100) throw new Error("BROWSER_RECORDING_TOO_MANY_TARGETS");
+  return ids;
 }
 
 function finite(value: unknown, fallback: number = -1): number {
@@ -141,13 +143,13 @@ export function sanitizeHar(payload: unknown): SafeHar {
       time: finite(base.time, 0),
       request: {
         method: typeof req.method === "string" ? req.method.slice(0, 12) : "GET",
-        url: pathOnly(req.url), httpVersion: "HTTP/1.1",
+        url: pathOnly(req.url), httpVersion: typeof req.httpVersion === "string" ? req.httpVersion.slice(0, 20) : "",
         cookies: [] as [], headers: allowedHeaders(req.headers), queryString: [] as [],
         headersSize: -1, bodySize: -1,
       },
       response: {
         status: finite(resp.status, 0), statusText: typeof resp.statusText === "string"
-          ? resp.statusText.slice(0, 128) : "", httpVersion: "HTTP/1.1",
+          ? resp.statusText.slice(0, 128) : "", httpVersion: typeof resp.httpVersion === "string" ? resp.httpVersion.slice(0, 20) : "",
         cookies: [] as [], headers: allowedHeaders(resp.headers),
         content: { size: finite(content?.size, 0),
           mimeType: typeof content?.mimeType === "string"
