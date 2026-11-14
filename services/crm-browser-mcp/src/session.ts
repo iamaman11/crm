@@ -420,6 +420,132 @@ export class CrmBrowserSession extends DurableObject<Env> {
     }
   }
 
+  private async persistHandoffCompletion(record: HumanHandoffRecord, event: unknown) {
+    // The human may click Done after Close; do not resurrect a stale handoff.
+    const currentId = await this.ctx.storage.get<string>("browser_session_id");
+    const active = await this.ctx.storage.get<HumanHandoffRecord>("browser_handoff");
+    if (currentId !== record.sessionId ||
+        !active || active.handoffId !== record.handoffId ||
+        active.status !== "waiting_human") return;
+    await this.ctx.storage.put("browser_handoff", completedHandoff(active, event));
+  }
+
+  private listenForHandoffCompletion(
+    cdp: Awaited<ReturnType<BrowserContext["newCDPSession"]>>,
+    record: HumanHandoffRecord,
+  ) {
+    this.handoffCdp = cdp;
+    // Cloudflare.* events are supported at runtime, but Playwright's
+    // arrow-method typings do not accept additional CDP event overloads.
+    const listen = cdp.once as unknown as
+      (event: string, callback: (value: unknown) => void) => void;
+    listen.call(cdp, "Cloudflare.handoffComplete", event => {
+      this.ctx.waitUntil(this.persistHandoffCompletion(record, event).finally(async () => {
+        try { await cdp.detach(); } catch { /* Browser may have ended. */ }
+        if (this.handoffCdp === cdp) this.handoffCdp = null;
+      }));
+    });
+  }
+
+  private async structuredHandoff(command: Command) {
+    const existing = await this.ctx.storage.get<HumanHandoffRecord>("browser_handoff");
+    const isStatus = command.handoffAction === "status";
+    if (!isStatus && command.handoffAction !== "start") {
+      throw new Error("BROWSER_HANDOFF_ACTION_INVALID");
+    }
+    if (isStatus && !existing) return { state: "none" };
+    if (isStatus && existing?.status !== "waiting_human") {
+      return { state: existing?.status, handoffId: existing?.handoffId };
+    }
+    const page = this.page;
+    if (!page || page.isClosed() || !this.browserSessionId) {
+      return isStatus ? { state: "needs_reopen", handoff: "unconfirmed" } :
+        (() => { throw new Error("BROWSER_HANDOFF_REQUIRES_OPEN_PAGE"); })();
+    }
+    if (!this.context) throw new Error("BROWSER_HANDOFF_CONTEXT_MISSING");
+    if (!isStatus && existing &&
+        (existing.status === "waiting_human" || existing.status === "unconfirmed")) {
+      throw new Error("BROWSER_HANDOFF_ALREADY_PENDING");
+    }
+    const cdp = this.handoffCdp ?? await this.context.newCDPSession(page);
+    const newCdp = this.handoffCdp !== cdp;
+    const send = cdp.send.bind(cdp) as unknown as
+      (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+    try {
+      if (isStatus) {
+        if (existing?.sessionId !== this.browserSessionId) {
+          return { state: "needs_reopen", handoff: "unconfirmed" };
+        }
+        if (newCdp) this.listenForHandoffCompletion(cdp, existing!);
+        const provider = isProviderHandoffActive(await send("Cloudflare.getHandoffState"));
+        if (provider === null) throw new Error("BROWSER_HANDOFF_STATE_UNAVAILABLE");
+        const updated = await this.ctx.storage.get<HumanHandoffRecord>("browser_handoff");
+        if (updated && updated.status !== "waiting_human") {
+          return { state: updated.status, handoffId: updated.handoffId };
+        }
+        if (provider === false) {
+          // No event observed: provider may have completed while DO was
+          // evicted. Do not invent Done/Failed or silently release the lock.
+          const unconfirmed = { ...existing!, status: "unconfirmed" as const };
+          await this.ctx.storage.put("browser_handoff", unconfirmed);
+          return { state: "unconfirmed", handoffId: existing!.handoffId };
+        }
+        const view = handoffLiveViewUrl(await send("Cloudflare.getLiveView", {
+          mode: "tab", expiresInMs: 300_000,
+        }));
+        return { state: "waiting_human", handoffId: existing!.handoffId,
+          liveViewUrl: view, expiresInSeconds: 300 };
+      }
+
+      const checked = validateHandoffRequest(
+        command.handoffInstructions, command.handoffTimeoutMs,
+      );
+      if (isProviderHandoffActive(await send("Cloudflare.getHandoffState")) !== false) {
+        throw new Error("BROWSER_HANDOFF_PROVIDER_ALREADY_ACTIVE_OR_UNAVAILABLE");
+      }
+      const url = handoffLiveViewUrl(await send("Cloudflare.getLiveView", {
+        mode: "tab", expiresInMs: 300_000,
+      }));
+      // Persist the intent BEFORE requesting a potentially irreversible
+      // handoff. A lost ACK must never silently allow other browser actions.
+      const startedAt = Date.now();
+      const pending: HumanHandoffRecord = {
+        sessionId: this.browserSessionId, handoffId: "pending",
+        status: "waiting_human", startedAt,
+        deadline: startedAt + checked.timeoutMs,
+      };
+      await this.ctx.storage.put("browser_handoff", pending);
+      let earlyOutcome: unknown = null;
+      let record: HumanHandoffRecord | null = null;
+      const listen = cdp.once as unknown as
+        (event: string, callback: (value: unknown) => void) => void;
+      listen.call(cdp, "Cloudflare.handoffComplete", event => {
+        if (!record) { earlyOutcome = event; return; }
+        this.ctx.waitUntil(this.persistHandoffCompletion(record, event).finally(async () => {
+          try { await cdp.detach(); } catch { /* Browser may have ended. */ }
+          if (this.handoffCdp === cdp) this.handoffCdp = null;
+        }));
+      });
+      const handoff = await send("Cloudflare.handoff", {
+        instructions: checked.instructions, timeout: checked.timeoutMs,
+      });
+      record = { ...pending, handoffId: handoffIdentifier(handoff) };
+      await this.ctx.storage.put("browser_handoff", record);
+      this.handoffCdp = cdp;
+      if (earlyOutcome !== null) {
+        await this.persistHandoffCompletion(record, earlyOutcome);
+      }
+      const current = await this.ctx.storage.get<HumanHandoffRecord>("browser_handoff");
+      return { state: current?.status ?? "unconfirmed", handoffId: record.handoffId,
+        liveViewUrl: url, expiresInSeconds: 300 };
+    } catch (error) {
+      if (newCdp && !this.handoffCdp) {
+        try { await cdp.detach(); } catch { /* Detached already. */ }
+      }
+      throw error;
+    }
+  }
+
   private async close() {
     try { await this.handoffCdp?.detach(); } catch { /* Browser already lost. */ }
     this.handoffCdp = null;
@@ -471,7 +597,8 @@ export class CrmBrowserSession extends DurableObject<Env> {
     // The lightweight probe must NOT launch, restore or mutate a browser.
     if (command.op === "runtime") return { data: { epoch: BROWSER_RUNTIME_EPOCH } };
     const activeHandoff = await this.ctx.storage.get<HumanHandoffRecord>("browser_handoff");
-    if (activeHandoff?.status === "waiting_human" &&
+    if ((activeHandoff?.status === "waiting_human" ||
+         activeHandoff?.status === "unconfirmed") &&
         !["handoff", "status", "close", "live_view"].includes(command.op)) {
       // No agent actions may race an active human operator, including Open,
       // arbitrary CDP, tab changes, file uploads and background scenarios.
