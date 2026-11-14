@@ -6,6 +6,7 @@ import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operati
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
 import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage, parsePageTargetInfo, restoreForExplicitOpen, isOriginalPageMissing, type BrowserPageIdentity } from "./browser-recovery";
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
+import { executeCdpCommands, type CdpCommand } from "./browser-cdp";
 
 export interface Env {
   BROWSER: BrowserRun;
@@ -31,7 +32,7 @@ export type Target = {
 };
 
 export type Command = {
-  op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "run" | "runtime";
+  op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "run" | "execute" | "runtime";
   expectedRuntimeEpoch?: string; // Worker-supplied internal compatibility fence.
   workspaceId?: string; // MCP routing only; stripped before sending to this DO.
   url?: string;
@@ -49,6 +50,7 @@ export type Command = {
   state?: WaitState;
   timeoutMs?: number;
   steps?: Command[];
+  cdpCommands?: CdpCommand[];
   tabAction?: "list" | "new" | "select" | "close";
   tabId?: string;
   frameIndex?: number;
@@ -510,6 +512,28 @@ export class CrmBrowserSession extends DurableObject<Env> {
     if (!page || page.isClosed()) throw new Error("CRM_BROWSER_NOT_OPEN");
 
     switch (command.op) {
+      case "execute": {
+        // Universal CDP on the SAME active Playwright Page. No second Browser,
+        // MCP Worker, CDP connection manager or worker-side script evaluator.
+        // The helper validates the whole batch before the first mutation.
+        const commands = command.cdpCommands ?? [];
+        const cdp = await page.context().newCDPSession(page);
+        // Playwright's typed Protocol.CommandParameters enumerates known CDP
+        // methods at compile time. This ONE boundary supports new runtime CDP
+        // methods; browser-cdp.ts validates the dynamic method and JSON params.
+        // No `any`, private SDK APIs or alternative browser engine.
+        const dynamicSend = cdp.send.bind(cdp) as unknown as
+          (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+        try {
+          return {
+            data: await executeCdpCommands(
+              commands, dynamicSend, command.timeoutMs ?? 90_000, redact,
+            ),
+          };
+        } finally {
+          try { await cdp.detach(); } catch { /* Already disconnected. */ }
+        }
+      }
       case "inspect": {
         if (command.inspection === "network") {
           return {
