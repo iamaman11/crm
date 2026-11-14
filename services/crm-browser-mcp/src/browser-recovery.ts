@@ -1,4 +1,4 @@
-import type { LimitsResponse } from "@cloudflare/playwright";
+import type { LimitsResponse, ClosedSession } from "@cloudflare/playwright";
 /** A single testable recovery decision used by the real Durable Object.
  * Only the official Cloudflare Browser Run session may be reattached.
  * Never acquire a replacement browser as a side-effect of status or restore. */
@@ -81,6 +81,60 @@ export async function readSafeBrowserLimits(
   } catch {
     // Do not echo provider messages or expose a misleading zero-capacity
     // readback. Browser status itself remains usable if this API is down.
+    return { state: "unavailable" };
+  }
+}
+
+
+/** Account-wide recent Browser Run history, sanitized. This is a sample of
+ * closed sessions, NOT a Cloudflare usage/billing counter. No session IDs
+ * or arbitrary provider close-reason text may leave this boundary. */
+export async function readSafeBrowserHistory(
+  readHistory: () => Promise<ClosedSession[]>,
+  nowMs: number = Date.now(),
+): Promise<{
+  state: "available" | "unavailable";
+  recordsReturned?: number;
+  recordsExamined?: number;
+  closedTodayUtc?: number;
+  observedDurationMsTodayUtc?: number;
+  normalClosuresTodayUtc?: number;
+  idleClosuresTodayUtc?: number;
+  partial?: boolean;
+}> {
+  try {
+    const records = await readHistory();
+    if (!Array.isArray(records) || !Number.isFinite(nowMs)) {
+      return { state: "unavailable" };
+    }
+    const sample = records.slice(0, 200);
+    const startOfUtcDay = Math.floor(nowMs / 86_400_000) * 86_400_000;
+    let closedTodayUtc = 0;
+    let observedDurationMsTodayUtc = 0;
+    let normalClosuresTodayUtc = 0;
+    let idleClosuresTodayUtc = 0;
+    for (const entry of sample) {
+      if (!entry || !Number.isFinite(entry.startTime) ||
+          !Number.isFinite(entry.endTime) || entry.endTime < entry.startTime ||
+          entry.endTime < startOfUtcDay || entry.endTime > nowMs) continue;
+      closedTodayUtc++;
+      // Count only the portion of each recorded session in the current UTC
+      // day, never infer missing sessions or treat this as billed usage.
+      observedDurationMsTodayUtc +=
+        entry.endTime - Math.max(entry.startTime, startOfUtcDay);
+      if (entry.closeReasonText === "NormalClosure") normalClosuresTodayUtc++;
+      else if (entry.closeReasonText === "BrowserIdle") idleClosuresTodayUtc++;
+    }
+    return {
+      state: "available",
+      recordsReturned: records.length,
+      recordsExamined: sample.length,
+      closedTodayUtc, observedDurationMsTodayUtc,
+      normalClosuresTodayUtc, idleClosuresTodayUtc,
+      partial: records.length > sample.length,
+    };
+  } catch {
+    // Provider errors and raw account session identifiers are never echoed.
     return { state: "unavailable" };
   }
 }

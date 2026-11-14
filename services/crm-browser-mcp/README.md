@@ -373,3 +373,19 @@ owner, new MCP tool, new CI or unbounded polling.
 Actual 429 diagnosis must use the physical limit readback. Even when allowed
 acquisitions are 0, that by itself does not prove the account's billing plan
 or daily budget. No automatic browser creation/retry is introduced.
+
+## Read-only Browser Run history summary (P0 #357)
+
+`browser_status` includes `providerHistory`, alongside `providerLimits`,
+using the pinned official `history(env.BROWSER)` API. It never starts a
+browser or reveals the account's raw Browser Run session IDs. The output
+contains only count, normal-vs-idle closure counts and summed **observed**
+durations for returned records that closed in the current UTC day. It is
+a bounded sample (max 200 records), **not** complete billing or daily quota
+data. The API may omit sessions; missing or malformed data is
+`state:unavailable`, never a synthetic zero that appears authoritative.
+
+This is diagnostic evidence for a persistent 429 despite the official
+`limits()` reporting permitted acquisition. It does not retry failed
+acquisitions, alter the provider billing plan, change the owner-only OAuth
+scope or close remaining P0 physical Browser Run acceptance.

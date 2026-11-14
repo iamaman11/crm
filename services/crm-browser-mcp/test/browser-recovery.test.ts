@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyBrowserAcquireFailure, readSafeBrowserLimits, recoverExistingBrowserSession } from "../src/browser-recovery.ts";
+import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession } from "../src/browser-recovery.ts";
 
 const id = "provider-session-123";
 test("no stored ID means closed, with no provider call or new browser", async () => {
@@ -111,4 +111,44 @@ test("malformed provider limits do not become trusted account capacity", async (
     const result=await readSafeBrowserLimits(async()=>bad as never);
     assert.deepEqual(result,{state:"unavailable"});
   }
+});
+
+
+test("history exposes UTC usage clues without exposing Browser Run session IDs", async () => {
+  const day=Date.UTC(2026,10,14,0,0,0);
+  const records=[
+    {sessionId:"SECRET-CLOSED-A",startTime:day+10_000,endTime:day+70_000,
+      closeReason:1,closeReasonText:"NormalClosure"},
+    {sessionId:"SECRET-CLOSED-B",startTime:day-20_000,endTime:day+20_000,
+      closeReason:2,closeReasonText:"BrowserIdle"},
+  ];
+  const result=await readSafeBrowserHistory(async()=>records,day+80_000);
+  assert.deepEqual(result,{
+    state:"available",recordsReturned:2,recordsExamined:2,
+    closedTodayUtc:2,observedDurationMsTodayUtc:80_000,
+    normalClosuresTodayUtc:1,idleClosuresTodayUtc:1,partial:false,
+  });
+  assert.equal(JSON.stringify(result).includes("SECRET"),false);
+});
+
+test("history provider outage or malformed result remains unavailable, never a fake zero", async () => {
+  assert.deepEqual(await readSafeBrowserHistory(async()=>{
+    throw new Error("Authorization: Bearer SENSITIVE sessionId=ABC");
+  }),{state:"unavailable"});
+  assert.deepEqual(await readSafeBrowserHistory(async()=>null as never),
+    {state:"unavailable"});
+});
+
+test("invalid rows and data outside the current UTC day are not counted as current use", async () => {
+  const day=Date.UTC(2026,10,14,0,0,0);
+  const rows=[
+    {sessionId:"old",startTime:day-80_000,endTime:day-20_000,
+      closeReason:1,closeReasonText:"NormalClosure"},
+    {sessionId:"invalid",startTime:day+5_000,endTime:day+1_000,
+      closeReason:2,closeReasonText:"BrowserIdle"},
+  ];
+  const result=await readSafeBrowserHistory(async()=>rows,day+100_000);
+  assert.equal(result.state,"available");
+  assert.equal(result.closedTodayUtc,0);
+  assert.equal(result.observedDurationMsTodayUtc,0);
 });
