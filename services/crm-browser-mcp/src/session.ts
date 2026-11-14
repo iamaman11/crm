@@ -4,6 +4,7 @@ import { CRM_ORIGIN, browserUrl, crmCredentialsAllowed, isCrmRequest, isPermitte
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
+import { recoverExistingBrowserSession } from "./browser-recovery";
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
 
 export interface Env {
@@ -117,28 +118,25 @@ export class CrmBrowserSession extends DurableObject<Env> {
     this.page = null;
     this.tabIds.clear();
     const sessionId = await this.ctx.storage.get<string>("browser_session_id");
-    if (!sessionId) return;
-    const session = await this.env.BROWSER.getSession(sessionId);
-    const status = (session as { status?: string } | null)?.status?.toLowerCase();
-    if (!session || status === "closed" || status === "closing" || status === "expired") {
-      // Expired sessions are not silently replaced; only explicit open starts
-      // another session. No attempt is made to recreate a login/cookie jar.
+    const recovered = await recoverExistingBrowserSession(
+      sessionId,
+      async id => this.env.BROWSER.getSession(id),
+      async id => connect(this.env.BROWSER, id),
+    );
+    if (recovered.kind === "missing") return;
+    if (recovered.kind === "expired") {
+      // Delete only a conclusively closed provider session; a lookup outage
+      // or reconnect failure leaves persisted identity available for retry.
+      // Only an explicit browser_open may acquire a new Browser Run.
       await this.ctx.storage.delete("browser_session_id");
       await this.ctx.storage.delete("browser_recording");
       this.browserSessionId = null;
       this.recordingEnabled = false;
       return;
     }
-    let browser: Browser;
-    try {
-      browser = await connect(this.env.BROWSER, sessionId);
-    } catch {
-      // Session could still be live. Keep its ID, fail closed and let a later
-      // request retry: do not launch an untracked second browser.
-      throw new Error("BROWSER_SESSION_RECONNECT_FAILED");
-    }
+    const { browser } = recovered;
     this.browser = browser;
-    this.browserSessionId = sessionId;
+    this.browserSessionId = recovered.sessionId;
     this.recordingEnabled = await this.ctx.storage.get<boolean>("browser_recording") ?? false;
     const contexts = browser.contexts();
     this.context = contexts.find(c => c.pages().some(p => !p.isClosed())) ??
