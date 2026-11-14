@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { validatedUpload } from "./browser-files";
+import { validatedUpload } from "./browser-files.ts";
 
 // A single bounded, transient binary transfer per direction per workspace.
 // The Browser Run page and Cloudflare DO are still the only owners. No R2,
