@@ -56,6 +56,10 @@ type ScenarioStep = {
   expected?: unknown;
   url?: unknown;
   key?: unknown;
+  text?: unknown;
+  value?: unknown;
+  match?: unknown;
+  state?: unknown;
 };
 const targetOperations: ReadonlySet<string> = new Set([
   "click", "double_click", "fill", "type", "select", "check", "uncheck", "hover",
@@ -71,11 +75,35 @@ export function validateScenarioSteps(steps: readonly ScenarioStep[] | undefined
     if (targetOperations.has(step.op) && !step.target) {
       throw new Error("BROWSER_RUN_TARGET_REQUIRED");
     }
-    if (step.op === "assert" &&
-        (!["url", "title", "visible", "hidden", "text", "count"].includes(String(step.kind)) ||
-          step.expected === undefined ||
-          (!["url", "title"].includes(String(step.kind)) && !step.target))) {
-      throw new Error("BROWSER_RUN_INVALID_ASSERTION");
+    if (step.op === "assert") {
+      // Validate types BEFORE previous clicks. A bad expected count/boolean or
+      // contains-on-number used to fail only after submitting a real form.
+      const kind = step.kind;
+      const expectedType = kind === "visible" || kind === "hidden" ? "boolean" :
+        kind === "count" ? "number" :
+        kind === "url" || kind === "title" || kind === "text" ? "string" : null;
+      if (!expectedType || typeof step.expected !== expectedType ||
+          (kind !== "url" && kind !== "title" && !step.target) ||
+          (kind === "count" &&
+            (!Number.isSafeInteger(step.expected) || (step.expected as number) < 0)) ||
+          (step.match === "contains" && expectedType !== "string")) {
+        throw new Error("BROWSER_RUN_INVALID_ASSERTION");
+      }
+    }
+    if (step.op === "wait") {
+      // 'wait' without a target waits for page load. An explicit element
+      // state without a target, or a URL combined with a target, would be
+      // silently ignored and falsely treated as a successful wait.
+      if ((step.state !== undefined && !step.target) ||
+          (step.target && step.url !== undefined)) {
+        throw new Error("BROWSER_RUN_INVALID_WAIT");
+      }
+    }
+    if (step.op === "select" && (typeof step.value !== "string" || !step.value)) {
+      throw new Error("BROWSER_RUN_SELECT_VALUE_REQUIRED");
+    }
+    if (step.op === "type" && (typeof step.text !== "string" || !step.text)) {
+      throw new Error("BROWSER_RUN_TEXT_REQUIRED");
     }
     if (step.op === "navigate") {
       if (typeof step.url !== "string" || !step.url) {
