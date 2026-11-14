@@ -32,7 +32,7 @@ test("private ChatGPT plugin points only to the canonical OAuth-protected Browse
 test("portable skill explains authentic UI operations and CRM tenant isolation", () => {
   const text = readFileSync(new URL("skills/browser-operations/SKILL.md", root), "utf8");
   assert.match(text, /^---\nname: browser-operations\ndescription: /);
-  assert.match(text, /real Playwright-backed MCP tools/);
+  assert.match(text, /Cloudflare Playwright-backed universal browser/);
   assert.match(text, /existing.*tenant/);
   assert.match(text, /workspaceId/);
   assert.match(text, /Cloudflare Access Managed OAuth/);
