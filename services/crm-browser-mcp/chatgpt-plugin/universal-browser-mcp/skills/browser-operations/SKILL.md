@@ -28,4 +28,23 @@ This is one owner-authenticated, Cloudflare Playwright-backed universal browser,
 
 ## Current acceptance
 
-Owner OAuth and the original 17 tool methods have been confirmed in ChatGPT, with real public website actions, assertions, file upload and basic inspections. The revised explicit-workspace routing is merged to canonical GitHub but remains **unreleased** until a controlled MCP deployment and subsequent live two-workspace acceptance. The existing Worker may still expose the older schemas until then. CRM administrative R2 remains NO-GO: owner-tenant binding and physical CRM CRUD/security readback are not complete. Source of truth: https://github.com/iamaman11/crm/issues/357 .
+Owner OAuth and all 17 MCP tool methods were confirmed through ChatGPT. On
+14 November 2026 the new workspace protocol was published to
+`crm-browser-mcp` (Cloudflare version
+`6554e01a-3287-465e-9cc1-b418047558dd`) and a real two-workspace test
+passed: independent pages and form state, close A without affecting B, then
+close B. Invalid workspace omission was rejected. Live `browser_run` positive
+and negative assertions and upfront unsafe-URL preflight also passed; the
+download false-success now returns a verified error.
+
+The **installed private plugin release may still have cached v0.1.0 tool
+metadata**: check the tool schema and refresh the connected plugin after
+updating its release. Never treat a stale schema as proof that Worker deployment
+failed. Provider new-browser creation can return HTTP 429 under account rate
+limits; do not blindly retry side-effecting operations.
+
+**P0 is not fully accepted**: actual DO eviction/reconnect, DNS/private-IP
+enforcement, trace/HAR and automated live CI are still outstanding. CRM
+administrative R2 remains NO-GO until exact owner-tenant binding and physical
+CRUD/security acceptance. Source of truth:
+https://github.com/iamaman11/crm/issues/357 .
