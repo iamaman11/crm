@@ -324,3 +324,16 @@ transport is introduced.
 **This does not establish physical DO eviction / live Browser Run reconnect.**
 As of 14 Nov, Browser Run returned HTTP 429 on new sessions with no active
 sessions reported; release and actual eviction E2E remain separate gates.
+
+## Browser Run provider quota diagnostics (Issue #357)
+
+Browser session **acquisition only** now maps the exact Cloudflare error
+`429 Rate limit exceeded` to `BROWSER_PROVIDER_RATE_LIMITED`. The distinct
+documented `Browser time limit exceeded for today` maps to
+`BROWSER_PROVIDER_DAILY_LIMIT_EXCEEDED`; all unrecognized failures become
+`BROWSER_PROVIDER_ACQUIRE_FAILED`. The MCP returns no raw provider error
+text, which might contain tokens or target URLs. This is a safe diagnostic,
+**not** a retry mechanism, quota increase, account-plan inference, or proof
+that physical Browser Run creation is working. No implicit acquire on status
+and no automatic retry after an uncertain operation. Session state continues
+to be owned by the original Durable Object and official Playwright.
