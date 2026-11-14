@@ -54,10 +54,10 @@ test("CrmBrowserSession preserves its provider identity across workerd restart",
           modulesRoot: buildDir,
           modules: {
             "__lifecycle_fixture.js": {
-              type: "ESModule", contents: readFileSync(fixturePath, "utf8"),
+              type: "esm", contents: readFileSync(fixturePath, "utf8"),
             },
             [scripts[0]]: {
-              type: "ESModule", contents: readFileSync(join(buildDir, scripts[0]), "utf8"),
+              type: "esm", contents: readFileSync(join(buildDir, scripts[0]), "utf8"),
             },
           },
         },
