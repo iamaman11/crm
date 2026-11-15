@@ -1,3 +1,5 @@
+import {accountCreateHref,partyHref} from "./routes";
+
 /** One native Browser History owner. URL is the only route snapshot; no React route mirror. */
 type Listener=()=>void;
 type LeaveGuard=()=>boolean;
@@ -90,4 +92,38 @@ export function savedAccountListScroll():number|null {
   return state!==null&&typeof state==="object"&&"crmAccountScroll" in state&&
     typeof state.crmAccountScroll==="number"&&Number.isFinite(state.crmAccountScroll)
     ?state.crmAccountScroll:null;
+}
+
+/** Preserve the source Party as an addressable URL before entering Account creation. */
+export function openAccountFromParty(partyId:string):boolean {
+  if(!mayLeave())return false;
+  const from=partyHref(partyId);
+  window.history.replaceState({crmPartyScroll:window.scrollY},"",pathWithHash(from));
+  window.history.pushState({crmReturnToParty:from},"",pathWithHash(accountCreateHref(partyId)));
+  acceptLocation();
+  return true;
+}
+export function returnToParty(partyId:string):boolean {
+  if(!mayLeave())return false;
+  const from=partyHref(partyId);
+  const state:unknown=window.history.state;
+  if(state!==null&&typeof state==="object"&&"crmReturnToParty" in state&&
+      state.crmReturnToParty===from){
+    window.history.back();
+  }else{
+    window.history.pushState(null,"",pathWithHash(from));
+    acceptLocation();
+  }
+  return true;
+}
+export function savedPartyListScroll():number|null {
+  const state:unknown=window.history.state;
+  return state!==null&&typeof state==="object"&&"crmPartyScroll" in state&&
+    typeof state.crmPartyScroll==="number"&&Number.isFinite(state.crmPartyScroll)
+    ?state.crmPartyScroll:null;
+}
+/** Create was already confirmed: replace draft URL, never replay its form via Back. */
+export function replaceCommittedAccount(hash:string):void {
+  window.history.replaceState(null,"",pathWithHash(hash));
+  acceptLocation();
 }
