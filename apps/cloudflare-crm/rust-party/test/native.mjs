@@ -2017,7 +2017,9 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
        page.once("dialog",dialog=>void dialog.accept());
        await panel.getByRole("button",{name:"Отмена",exact:true}).click();
      }else{
-       await page.keyboard.press("Escape");
+       // Explicitly close the modal: Escape after selecting a native <select>
+       // may be consumed by the select popup rather than the enclosing dialog.
+       await panel.getByRole("button",{name:"Закрыть панель",exact:true}).click();
      }
      await panel.waitFor({state:"hidden"});
    }
