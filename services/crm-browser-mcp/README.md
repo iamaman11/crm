@@ -1,3 +1,22 @@
+## 15 November 2026 — axe-core bundle isolation, final production fix (#357)
+
+Live Selenium test proved two independent problems: DOM-inserted inline
+scripts are blocked by CSP; running `axe.source` directly through Playwright
+evaluation bypasses that but fails with `__name is not defined`, because
+Wrangler/esbuild rewrites `axeFunction.toString()` during Worker bundling.
+
+One **build-time** `npm postinstall` generates the immutable text module
+`src/axe-source.generated.ts` from the exact `axe-core@4.14.0/axe.min.js`
+on disk after npm verifies the lockfile's integrity. The file is git-ignored,
+not manually maintained and is generated for all CI/release builds by
+`npm ci`. The Worker imports the text literal, which esbuild cannot rewrite
+internally, and runs it through the same official Playwright Page.evaluate.
+No network/CDN at runtime, no provider-specific global shims, no second
+browser owner and no separate test service. The unit test asserts that the
+generated source is byte-for-byte equal to the pinned npm package file.
+
+---
+
 ## 15 November 2026 — axe-core CSP regression fix (#357)
 
 The first live Selenium Web Form test found a real Content-Security-Policy
