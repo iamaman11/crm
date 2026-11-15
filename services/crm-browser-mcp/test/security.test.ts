@@ -93,7 +93,7 @@ test("CRM Access service headers never authorize foreign pages or third-party in
   assert.equal(siteCredentialsAllowed(CRM_ORIGIN + ".evil.net", CRM_ORIGIN, true, CRM_ORIGIN), false);
 });
 
-test("CRM routing blocks foreign-origin cookies and CSRF while preserving real UI navigation", () => {
+test("configured service routing blocks foreign-origin cookies while preserving UI navigation", () => {
   const crm = CRM_ORIGIN + "/crm.parties.v3.PartyService/ListParties";
   const foreign = "https://example.org/untrusted";
   assert.equal(siteRequestDisposition(crm, foreign, false, CRM_ORIGIN, true), "block",
@@ -101,9 +101,9 @@ test("CRM routing blocks foreign-origin cookies and CSRF while preserving real U
   assert.equal(siteRequestDisposition(CRM_ORIGIN + "/api/session", foreign, false, CRM_ORIGIN, true), "block",
     "foreign iframe or redirect must be denied even after previous CRM login");
   assert.equal(siteRequestDisposition(crm, "about:blank", false, CRM_ORIGIN, true), "block");
-  assert.equal(siteRequestDisposition(crm, "about:blank", true, CRM_ORIGIN, true), "crm",
+  assert.equal(siteRequestDisposition(crm, "about:blank", true, CRM_ORIGIN, true), "site",
     "explicit controller top-level navigation is permitted");
-  assert.equal(siteRequestDisposition(crm, CRM_ORIGIN + "/contacts", false, CRM_ORIGIN, true), "crm",
+  assert.equal(siteRequestDisposition(crm, CRM_ORIGIN + "/contacts", false, CRM_ORIGIN, true), "site",
     "real React-generated Connect traffic from the CRM remains permitted");
   assert.equal(siteRequestDisposition(foreign, CRM_ORIGIN + "/contacts", true, CRM_ORIGIN, true), "public",
     "CRM credentials never accompany a cross-origin redirect");
