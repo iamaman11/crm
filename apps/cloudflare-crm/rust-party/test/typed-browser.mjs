@@ -301,7 +301,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await compared).status(),200);
    await compare.getByText(/разные записи; личность не подтверждена/).waitFor();
    await navigate("consents","Коммуникации");
-   const suppress=page.locator("section").filter({has:page.getByRole("heading",{name:"Запретить коммуникацию",exact:true})});
+   await page.getByRole("button",{name:"Запретить коммуникацию",exact:true}).click();
+   const suppress=page.getByRole("dialog");
    await selectPagedPicker(suppress,"Участник",partyId);
    await mutation(suppress.getByRole("button",{name:"Запретить контакт",exact:true}),"SuppressCommunication");
    const evaluate=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить возможность контакта",exact:true})});
@@ -324,6 +325,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const privacyState=(await sql("SELECT version,json_extract(state,'$.status.code') AS status FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"' AND id='"+privacyId+"'"))[0];
    assert.equal(privacyState.version,3);assert.equal(privacyState.status,"cancelled");
    await navigate("enrichment","Обогащение данных");
+   await page.getByRole("button",{name:"Новый профиль",exact:true}).click();
    await page.getByLabel("Ключ провайдера",{exact:true}).fill("browser_registry_"+runId);
    await page.getByLabel("Лицензия",{exact:true}).fill("Browser test license");
    await page.getByLabel("Начало действия",{exact:true}).fill("2026-11-12T12:00");
@@ -332,6 +334,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const profileId=await firstId("crm_enrichment_profiles","provider_key","browser_registry_"+runId);
    await page.getByRole("button",{name:"browser_registry_"+runId+" · 1.0.0",exact:true}).click();
    await page.getByText("ID: "+profileId,{exact:true}).waitFor();
+   await page.getByRole("button",{name:"Закрыть панель",exact:true}).click();
+   await page.getByRole("dialog").waitFor({state:"hidden"});
+   await page.getByRole("button",{name:"Новое сопоставление",exact:true}).click();
    await page.getByLabel("Версия профиля",{exact:true}).selectOption(profileId);
    await page.getByLabel("Ключ сопоставления",{exact:true}).fill("browser_mapping_"+runId);
    await mutation(page.getByRole("button",{name:"Опубликовать сопоставление",exact:true}),"PublishMapping");

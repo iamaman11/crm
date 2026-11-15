@@ -24,3 +24,8 @@ export function RecordPanel({open,title,onClose,children}:{
     <div className={styles.content}>{open?children:null}</div>
   </dialog>;
 }
+
+/** Shared visual layout for CRM page-level actions; business decisions stay in Rust. */
+export function RecordActions({children}:{children:ReactNode}) {
+  return <div className={styles.actions}>{children}</div>;
+}
