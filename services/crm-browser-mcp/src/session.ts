@@ -313,7 +313,11 @@ export class CrmBrowserSession extends DurableObject<Env> {
           maxRedirects: 0,
           timeout: 25_000,
         });
-        await route.fulfill({ response });
+        // Explicitly preserve the upstream headers. Real Browser Run returned
+        // correct JS/CSS/JSON bytes but an empty header map after fulfillment:
+        // Chromium rejected its JS module without Content-Type.
+        // Request service credentials must NEVER become response headers.
+        await route.fulfill({ response, headers: response.headers() });
       });
   }
 
