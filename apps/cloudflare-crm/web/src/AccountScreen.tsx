@@ -98,7 +98,7 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
         if(!canDiscard(createDirty))return;
         setCreateDirty(false);setCreateOpen(false);
       }} onSaved={async()=>{
-        setCreateDirty(false);setCreateOpen(false);setSavedNotice("Клиент создан.");
+        setCreateDirty(false);setCreateOpen(false);setSavedNotice("Сохранено. Клиент создан.");
         try {await query.reload();}
         catch(error){setCreateWarning("Клиент создан, но список устарел: "+api.describeError(error));}
       }}/>
