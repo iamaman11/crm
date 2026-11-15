@@ -1,3 +1,22 @@
+## 15.11.2026 — canonical SITE_ACCESS_ORIGIN configuration (#357)
+
+The optional Cloudflare Access service identity has two independently
+installed Worker secrets: `SITE_ACCESS_CLIENT_ID` and
+`SITE_ACCESS_CLIENT_SECRET`. The public non-secret
+`SITE_ACCESS_ORIGIN=https://crm-dev.crm-5bd5e1e1.workers.dev` is declared
+**only in this application's** `wrangler.jsonc` `vars` as a repeatable
+configuration value. It does not belong in Vault and must not be delivered as
+a secret. Use the **existing protected mcp release workflow**, which
+deploys the reviewed Worker bundle with these vars, never a second direct
+Cloudflare patch or a reused CI secret. Check the existing secret bindings
+before and after release; neither credential value goes in GitHub.
+
+After release, accept access by a real Browser MCP /api/session check and
+owner-tenant React→Connect→Rust→D1 UI E2E. A green CI check alone does not
+prove that Cloudflare Access authorizes the agent.
+
+---
+
 ## 15 November 2026 — axe-core bundle isolation, final production fix (#357)
 
 Live Selenium test proved two independent problems: DOM-inserted inline
