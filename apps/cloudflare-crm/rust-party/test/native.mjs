@@ -8,6 +8,7 @@ import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
 import {chromium} from "playwright";
 import {typedBrowser} from "./typed-browser.mjs";
+import {installUiDiagnostics,assertUiPanel,uiState} from "./ui-diagnostics.mjs";
 import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryAccountV2,decodeAccountV2,accountV2Path,
   binaryContactV2,decodeContactV2,contactV2Path,
@@ -1967,7 +1968,9 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  try{
    const context=await searchBrowser.newContext({extraHTTPHeaders:{"cf-access-jwt-assertion":admin}});
    const page=await context.newPage();
+   await installUiDiagnostics(page);
    const searchRequests=[];
+   const panelTransitions=[];
    const enterSearch=async(label,text,method)=>{
      const input=page.getByLabel(label,{exact:true});
      await input.fill(text);
@@ -2014,21 +2017,43 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      // AccountCreator correctly protects dirty drafts; an unhandled hash
      // transition must NOT bypass that guard or masquerade as a missing Task UI.
      if(hash==="accounts"){
+       // Rejecting dirty-form closure must preserve BOTH the React intent
+       // and the native dialog, rather than silently losing an unsaved draft.
+       page.once("dialog",dialog=>void dialog.dismiss());
+       await panel.getByRole("button",{name:"Отмена",exact:true}).click();
+       const rejected=await assertUiPanel({page,panel,title:"Новый клиент",
+         expected:"open",scenario:"dirty-account-close-rejected",
+         evidenceDirectory:join(cwd,"../e2e-evidence-native")});
+       const rejectedPanel=rejected.panels.find(p=>p.title==="Новый клиент");
+       assert.equal(rejectedPanel?.dirty,"true","CreateAccount draft guard must be active");
+       assert.equal(rejected.confirmations.at(-1)?.accepted,false,
+         "Closing dirty Account after rejecting confirm must not discard draft");
+       panelTransitions.push({title:"Новый клиент",result:"REJECTED",desired:rejectedPanel?.desired,
+         nativeOpen:rejectedPanel?.nativeOpen,dirty:rejectedPanel?.dirty});
        page.once("dialog",dialog=>void dialog.accept());
        await panel.getByRole("button",{name:"Отмена",exact:true}).click();
      }else{
-       // Explicitly close the modal: Escape after selecting a native <select>
-       // may be consumed by the select popup rather than the enclosing dialog.
+       // A native <select> can consume Escape. Use the explicit close button
+       // and inspect React intent and HTMLDialogElement.open independently.
        await panel.getByRole("button",{name:"Закрыть панель",exact:true}).click();
      }
-     await panel.waitFor({state:"hidden"});
+     const title=hash==="accounts"?"Новый клиент":"Новая задача";
+     const closed=await assertUiPanel({page,panel,title,
+       expected:"closed",scenario:hash+"-picker-closed",
+       evidenceDirectory:join(cwd,"../e2e-evidence-native")});
+     const observed=closed.panels.find(p=>p.title===title);
+     panelTransitions.push({title,result:"CLOSED",desired:observed?.desired,
+       nativeOpen:observed?.nativeOpen,dirty:observed?.dirty,
+       closeSource:observed?.closeSource});
    }
    await page.setViewportSize({width:390,height:844});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1));
    assert.deepEqual(searchSnapshot(),searchBefore,"Search and Enter inside pickers must never submit the enclosing mutation form");
    writeFileSync(join(cwd,"../e2e-evidence-native/search-browser.json"),JSON.stringify({result:"PASS",source_sha:sourceSha,
      scenarios:["search after first unfiltered page","Party picker beyond 100 rows","Account picker beyond 100 rows",
-       "selection reset","keyboard Enter does not submit mutation","mobile layout","read-only"],requests:searchRequests},null,2)+"\n");
+       "selection reset","keyboard Enter does not submit mutation","mobile layout","read-only",
+       "native dialog and React state matched on close","dirty draft close rejection retained dialog"],
+     panel_transitions:panelTransitions,requests:searchRequests},null,2)+"\n");
  }finally{await searchBrowser.close();}
  // Write evidence only after every scenario assertion above has completed.
  // A successful call is transport exercise coverage, not proof of all possible
