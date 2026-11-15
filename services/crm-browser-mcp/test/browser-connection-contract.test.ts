@@ -37,3 +37,13 @@ test("all production Cloudflare Browser Run connects use typed persistent sessio
   assert.ok(connections >= 2, "both initial and recovery connection paths must be present");
   assert.match(code, /serviceWorkers:\s*"block"/, "SSRF interception relies on blocked Service Workers");
 });
+
+test("service-origin Playwright replay keeps original MIME and security headers", () => {
+  const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  assert.match(code, /maxRedirects:\s*0/,
+    "privileged service fetch cannot follow redirects");
+  assert.match(code, /await route\.fulfill\(\{\s*response,\s*headers:\s*response\.headers\(\)\s*\}\)/,
+    "upstream Content-Type and security headers must reach Chromium");
+  assert.doesNotMatch(code, /route\.continue\(\{\s*headers:/,
+    "service headers cannot be forwarded across browser redirects");
+});

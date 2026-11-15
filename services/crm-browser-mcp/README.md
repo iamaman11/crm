@@ -1,3 +1,21 @@
+## 15 November 2026 — CRM Browser Run Content-Type preservation (#357)
+
+Real Browser MCP service authentication returned the CRM HTML, JS and CSS
+with HTTP 200 and a valid /api/session JSON body, but all fulfilled response
+headers were empty. Chromium refused the real ES module without Content-Type,
+leaving the React UI blank.
+
+Preserve the original upstream headers using native Playwright
+`route.fulfill({response, headers: response.headers()})`, without copying
+the privileged request headers into the browser response. The existing
+`route.fetch({headers, maxRedirects:0})` still prevents the exact-origin
+service credential pair from leaking across redirects. No new browser owner,
+token, account, storage layer or CRM application change is needed.
+
+Accept only after a real published Browser Run proves JS/CSS MIME, nonempty
+React UI, JSON /api/session, owner-tenant UI actions, and Close/provider 0.
+
+---
 ## 15.11.2026 — canonical SITE_ACCESS_ORIGIN configuration (#357)
 
 The optional Cloudflare Access service identity has two independently
