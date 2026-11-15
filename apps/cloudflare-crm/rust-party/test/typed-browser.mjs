@@ -198,6 +198,13 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.reload();
    await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    await page.getByRole("button",{name:"Редактировать",exact:true}).click();
+   await page.getByLabel("Название клиента",{exact:true}).fill("Unsaved "+runId);
+   page.once("dialog",dialog=>void dialog.dismiss());
+   await page.getByRole("button",{name:"К списку клиентов",exact:true}).click();
+   assert.equal(new URL(await page.url()).hash,"#accounts/"+encodeURIComponent(accountId),"discard refusal must retain the page");
+   assert.equal(await page.getByLabel("Название клиента",{exact:true}).inputValue(),"Unsaved "+runId);
+   await page.getByLabel("Название клиента",{exact:true}).fill("Browser Account "+runId);
+
    await page.getByLabel("Статус",{exact:true}).selectOption("1");
    await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"UpdateAccount");
    assert.equal((await sql("SELECT version FROM crm_account_records WHERE tenant='"+tenantSql+"' AND id='"+accountId+"'"))[0].version,3);

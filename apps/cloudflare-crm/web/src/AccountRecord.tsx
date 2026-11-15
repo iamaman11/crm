@@ -18,7 +18,7 @@ export function accountStatusLabel(status:AccountStatus):string {
 export function AccountDetails({accountId}:{accountId:string}) {
   const query=useQuery(useCallback(()=>api.overview.getAccountOverview({accountId}),[accountId]));
   const card:AccountOverview|undefined=query.data?.overview;
-  return <div><QueryNotice query={query}/>{card&&<>
+  return <div><QueryNotice query={query}/>{!query.error&&card&&<>
     <h3>{card.account?.name}</h3>
     <p>Статус: {card.account?accountStatusLabel(card.account.status):"Неизвестно"}</p>
     <p>ID: {accountId} · версия {card.account?.version.toString()??"—"}</p>
@@ -57,7 +57,8 @@ export function AccountEditor({accountId,onSaved,onCancel,onDirtyChange}:{
           ],"Статус клиента"),
           precondition:{idempotencyKey:mutation.key,expectedVersion:account.version}
         }),async()=>{
-          await Promise.all([query.reload(),onSaved()]);
+          await query.reload();
+          await onSaved();
           onDirtyChange(false);
         });
       }}>
@@ -68,7 +69,7 @@ export function AccountEditor({accountId,onSaved,onCancel,onDirtyChange}:{
           <option value={AccountStatus.ACCOUNT_STATUS_INACTIVE}>Неактивен</option>
         </SelectField>
       </FormGrid>
-      <Button type="submit" disabled={mutation.busy}>Сохранить клиента</Button>{" "}
+      <Button type="submit" disabled={mutation.busy||mutation.notice?.tone==="warning"}>Сохранить клиента</Button>{" "}
       <Button type="button" variant="secondary" disabled={mutation.busy} onClick={onCancel}>Отмена</Button>
     </form>}
     <MutationNotice state={mutation}/>

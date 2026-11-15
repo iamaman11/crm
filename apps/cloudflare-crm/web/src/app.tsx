@@ -1,4 +1,4 @@
-import {useEffect,useState} from "react";
+import {useCallback,useEffect,useRef,useState} from "react";
 import {createRoot} from "react-dom/client";
 import {AppShell,PageHeader,ThemePicker} from "@ultimate-crm/ui";
 import {PartyScreen} from "./PartyScreen";
@@ -29,15 +29,27 @@ const screens=[
 ] as const;
 function App() {
   const [route,setRoute]=useState(()=>parseRoute(window.location.hash));
+  const lastAcceptedHash=useRef(window.location.hash);
+  const routeBlocker=useRef<(()=>boolean)|null>(null);
+  const registerBlocker=useCallback((blocker:(()=>boolean)|null)=>{routeBlocker.current=blocker;},[]);
   useEffect(()=>{
-    const changed=()=>setRoute(parseRoute(window.location.hash));
+    const changed=()=>{
+      const target=window.location.hash;
+      if(target!==lastAcceptedHash.current&&routeBlocker.current&&!routeBlocker.current()){
+        // Restore the accepted URL and keep the form mounted on cancelled navigation.
+        window.history.replaceState(window.history.state,"",window.location.pathname+window.location.search+lastAcceptedHash.current);
+        return;
+      }
+      lastAcceptedHash.current=target;
+      setRoute(parseRoute(target));
+    };
     window.addEventListener("hashchange",changed);
     window.addEventListener("popstate",changed);
     return ()=>{window.removeEventListener("hashchange",changed);window.removeEventListener("popstate",changed);};
   },[]);
   const current=route.kind==="accounts"||route.kind==="account"?"accounts":route.kind==="section"?route.screen:"";
-  const content=route.kind==="accounts"?<AccountScreen filters={{search:route.search,status:route.status,cursor:route.cursor}}/>:
-    route.kind==="account"?<AccountPage accountId={route.accountId}/>:
+  const content=route.kind==="accounts"?<AccountScreen registerBlocker={registerBlocker} filters={{search:route.search,status:route.status,cursor:route.cursor}}/>:
+    route.kind==="account"?<AccountPage registerBlocker={registerBlocker} accountId={route.accountId}/>:
     route.kind==="not-found"?<><PageHeader title="Страница не найдена"/><a href="#accounts">К списку клиентов</a></>:
     route.screen==="parties"?<PartyScreen/>:
     route.screen==="contacts"?<ContactScreen key={route.partyId} initialPartyId={route.partyId}/>:

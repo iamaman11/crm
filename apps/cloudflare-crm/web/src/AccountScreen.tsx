@@ -12,6 +12,8 @@ import {accountsHref,accountHref} from "./routes";
 import type {RecordMode} from "@ultimate-crm/ui";
 
 type AccountFilters={search:string;status:string;cursor:string};
+type RegisterBlocker=(blocker:(()=>boolean)|null)=>void;
+const dirtyPrompt="Есть несохранённые изменения. Покинуть страницу без сохранения?";
 const allowed=[AccountStatus.ACCOUNT_STATUS_ACTIVE,AccountStatus.ACCOUNT_STATUS_INACTIVE] as const;
 function rememberAndNavigate(event:MouseEvent<HTMLAnchorElement>,accountId:string) {
   if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
@@ -24,7 +26,7 @@ function rememberAndNavigate(event:MouseEvent<HTMLAnchorElement>,accountId:strin
 function canDiscard(dirty:boolean) {
   return !dirty||window.confirm("Есть несохранённые изменения. Закрыть редактирование без сохранения?");
 }
-export function AccountScreen({filters}:{filters:AccountFilters}) {
+export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;registerBlocker:RegisterBlocker}) {
   const {search,status,cursor}=filters;
   const [expanded,setExpanded]=useState("");
   const [mode,setMode]=useState<"view"|"edit">("view");
@@ -33,12 +35,17 @@ export function AccountScreen({filters}:{filters:AccountFilters}) {
   const [createOpen,setCreateOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
+  useEffect(()=>{
+    registerBlocker(dirty?()=>window.confirm(dirtyPrompt):null);
+    return ()=>registerBlocker(null);
+  },[dirty,registerBlocker]);
   const query=useQuery(useCallback(()=>api.accounts.listAccounts({
     page:{pageSize:25,pageToken:cursor},search,
     ...(status?{status:enumValue(status,allowed,"Фильтр статуса")}:{})
   }),[cursor,status,search]));
   const navigate=(next:Partial<AccountFilters>)=>{
     if(!canDiscard(dirty))return;
+    registerBlocker(null);
     setDirty(false);setExpanded("");setSavedNotice("");
     window.location.hash=accountsHref({...filters,...next});
   };
@@ -47,6 +54,10 @@ export function AccountScreen({filters}:{filters:AccountFilters}) {
     setDirty(false);setSavedNotice("");
     if(expanded===id&&mode==="view"&&nextMode==="view")setExpanded("");
     else {setExpanded(id);setMode(nextMode);}
+  };
+  const collapse=()=>{
+    if(!canDiscard(dirty))return;
+    setDirty(false);setSavedNotice("");setExpanded("");
   };
   useEffect(()=>{
     if(query.busy||!query.data)return;
@@ -75,11 +86,13 @@ export function AccountScreen({filters}:{filters:AccountFilters}) {
       const current:RecordMode=active?mode:"collapsed";
       return <RecordCard key={a.accountId} title={a.name} mode={current}
         summary={<>{accountStatusLabel(a.status)}</>}
-        onToggle={()=>expand(a.accountId,"view")}
+        onToggle={()=>active?collapse():expand(a.accountId,"view")}
         actions={<>
           <Button variant="secondary" onClick={()=>expand(a.accountId,"edit")}>Редактировать</Button>
           <a href={accountHref(a.accountId)} onClick={event=>{
             if(!canDiscard(dirty)){event.preventDefault();return;}
+            registerBlocker(null);
+            setDirty(false);
             rememberAndNavigate(event,a.accountId);
           }}>Полная страница</a>
         </>}>
@@ -109,26 +122,19 @@ export function AccountScreen({filters}:{filters:AccountFilters}) {
     <MutationNotice state={mutation}/>
   </>;
 }
-export function AccountPage({accountId}:{accountId:string}) {
+export function AccountPage({accountId,registerBlocker}:{accountId:string;registerBlocker:RegisterBlocker}) {
   const [mode,setMode]=useState<"view"|"edit">("view");
   const [dirty,setDirty]=useState(false);
   const [revision,setRevision]=useState(0);
   const [savedNotice,setSavedNotice]=useState("");
   useEffect(()=>{
-    if(!dirty)return;
+    registerBlocker(dirty?()=>window.confirm(dirtyPrompt):null);
+    if(!dirty)return ()=>registerBlocker(null);
     const unload=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue="";};
-    const hashChanged=(event:HashChangeEvent)=>{
-      if(!window.confirm("Есть несохранённые изменения. Покинуть страницу?")){
-        window.history.replaceState(window.history.state,"",event.oldURL);
-        window.dispatchEvent(new PopStateEvent("popstate"));
-      }
-    };
     window.addEventListener("beforeunload",unload);
-    window.addEventListener("hashchange",hashChanged);
-    return ()=>{window.removeEventListener("beforeunload",unload);window.removeEventListener("hashchange",hashChanged);};
-  },[dirty]);
+    return ()=>{registerBlocker(null);window.removeEventListener("beforeunload",unload);};
+  },[dirty,registerBlocker]);
   const goBack=()=>{
-    if(!canDiscard(dirty))return;
     const state:unknown=window.history.state;
     if(state&&typeof state==="object"&&"crmReturnTo" in state&&typeof state.crmReturnTo==="string")window.history.back();
     else window.location.hash=accountsHref();
