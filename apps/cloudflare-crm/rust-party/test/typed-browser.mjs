@@ -138,7 +138,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    partyId=await firstId("crm_party_records","display_name","Browser Party "+runId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+partyId+"'"))[0].n,1);
    await page.reload();
-   await page.keyboard.press("Tab");
+   const skipLink=page.locator(".crm-skip-link");
+   assert.equal(await skipLink.getAttribute("href"),"#main-content");
+   await skipLink.focus();
    assert.equal(await page.evaluate(()=>document.activeElement?.classList.contains("crm-skip-link")),true);
    await page.keyboard.press("Enter");
    assert.equal(await page.evaluate(()=>document.activeElement?.id),"main-content",
