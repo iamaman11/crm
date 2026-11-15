@@ -373,7 +373,14 @@ pub(super) async fn verify_own_email_typed(
     let proof = format!(
         "{:x}",
         Sha256::digest(
-            format!("{}:{}:{}:{}", point.normalized_value(), id, trace, actor.identity).as_bytes()
+            format!(
+                "{}:{}:{}:{}",
+                point.normalized_value(),
+                id,
+                trace,
+                actor.identity
+            )
+            .as_bytes()
         )
     );
     if let Err(e) = point.verify(VerifyContactPoint {
