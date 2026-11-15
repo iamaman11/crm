@@ -1374,17 +1374,24 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
   const linked=sql("SELECT delivery_id,task_id,actor,request_id FROM crm_sales_link_delivery_records "+
     "WHERE tenant='tenant-a' AND deal_id='"+dealId+"' ORDER BY deal_version");
   assert.equal(linked.length,2);
+  // One signed server request atomically writes Deal, linked Task (if any),
+  // and linked-delivery audits. Distinguish their actions AND subject IDs.
   for(const [i,row] of linked.entries()){
     assert.equal(row.actor,"native-a@example.test");
     assert.equal(row.request_id,[advancedSale,closedSale][i].headers.get("x-request-id"));
-    assert.deepEqual(sql("SELECT actor,request_id FROM crm_audit "+
-      "WHERE tenant_id='tenant-a' AND subject_id='"+row.delivery_id+"' AND action LIKE 'sales_activities_link.%'"),[
-      {actor:"native-a@example.test",request_id:row.request_id}
-    ],"Sales linked-delivery audit must share actor and trace");
-    if(row.task_id)assert.deepEqual(sql("SELECT action,actor,request_id FROM crm_audit "+
-      "WHERE tenant_id='tenant-a' AND subject_id='"+row.task_id+"' AND action='activity_tasks.create'"),[
-      {action:"activity_tasks.create",actor:"native-a@example.test",request_id:row.request_id}
-    ],"Automated linked Task must preserve the verified source author");
+    const expected=[
+      {action:"sales_deals.advance",subject_id:dealId,
+        actor:"native-a@example.test",request_id:row.request_id},
+      {action:i===0?"sales_activities_link.applied":"sales_activities_link.ignored",
+        subject_id:row.delivery_id,actor:"native-a@example.test",
+        request_id:row.request_id},
+      ...(row.task_id?[{action:"activity_tasks.create",subject_id:row.task_id,
+        actor:"native-a@example.test",request_id:row.request_id}]:[])
+    ].sort((a,b)=>a.action.localeCompare(b.action));
+    const actual=sql("SELECT action,subject_id,actor,request_id FROM crm_audit "+
+      "WHERE tenant_id='tenant-a' AND request_id='"+row.request_id+"' ORDER BY action");
+    assert.deepEqual(actual,expected,
+      "One AdvanceStage request must commit attributed Deal + Task + delivery audit together");
   }
   const salesActorSnapshot=()=>sql("SELECT "+
     "(SELECT state FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id='"+dealLast+"') AS deal,"+
