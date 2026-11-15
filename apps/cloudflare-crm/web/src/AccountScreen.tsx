@@ -90,7 +90,7 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
     {!query.busy&&!query.error&&query.data?.accounts.length===0&&<p>{search?"Клиенты не найдены.":"Клиентов пока нет."}</p>}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
       onFirst={()=>navigate({cursor:""})} onNext={()=>navigate({cursor:query.data?.pageInfo?.nextPageToken??""})}/>
-    <RecordPanel open={createOpen} title="Новый клиент" onClose={()=>{
+    <RecordPanel open={createOpen} dirty={createDirty} title="Новый клиент" onClose={()=>{
       if(!canDiscard(createDirty))return;
       setCreateDirty(false);setCreateOpen(false);
     }}>
