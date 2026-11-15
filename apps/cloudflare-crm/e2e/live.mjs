@@ -1,6 +1,6 @@
 // Same Chromium scenarios against workerd and the existing live Worker.
 import assert from "node:assert/strict";
-import {readFileSync,writeFileSync,mkdirSync} from "node:fs";
+import {readFileSync,writeFileSync,mkdirSync,existsSync} from "node:fs";
 import {typedBrowser} from "../rust-party/test/typed-browser.mjs";
 const required=name=>{const value=process.env[name];if(!value)throw Error("Missing "+name);return value;};
 const sha=required("GITHUB_SHA");
@@ -59,10 +59,11 @@ try{
    }
  });
 }catch(error){
- // typedBrowser owns browser failure.json; never overwrite its navigation evidence.
- // A failure before Chromium starts is a separate deployment/preflight failure.
- writeFileSync(directory+"/live-preflight-failure.json",
-   JSON.stringify({result:"FAIL",source_sha:sha,error:String(error.message)},null,2)+"\n");
+ // Browser errors are already recorded by typedBrowser; do not create a second report.
+ // Only failures before the browser report exists need separate preflight evidence.
+ if(!existsSync(directory+"/failure.json"))
+   writeFileSync(directory+"/live-preflight-failure.json",
+     JSON.stringify({result:"FAIL",source_sha:sha,error:String(error.message)},null,2)+"\n");
  throw error;
 }finally{
  await restoreRole();
