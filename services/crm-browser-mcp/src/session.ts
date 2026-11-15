@@ -109,7 +109,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private recoveredPageMissing = false;
   // Only the current DO session owns an optional screenshot captured at a
   // failed scenario step. Large image bytes are retrieved separately.
-  private lastFailureScreenshot: string | null = null;
+  private lastFailureScreenshot: { image: string; capturedPath: string } | null = null;
   private tabIds = new Map<Page, string>();
   private nextOperation: Promise<void> = Promise.resolve();
   private pendingOperations = 0;
@@ -1121,8 +1121,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
         if (command.screenshotSource === "last_failure") {
           if (!this.lastFailureScreenshot) throw new Error("BROWSER_FAILURE_SCREENSHOT_NOT_AVAILABLE");
           return {
-            data: { path: safePagePath(page.url()), mimeType: "image/png", source: "last_failure" },
-            image: this.lastFailureScreenshot,
+            data: { path: this.lastFailureScreenshot.capturedPath,
+              mimeType: "image/png", source: "last_failure" },
+            image: this.lastFailureScreenshot.image,
           };
         }
         const png = await page.screenshot({ fullPage: true });
@@ -1234,7 +1235,10 @@ export class CrmBrowserSession extends DurableObject<Env> {
           try {
             const png = await page.screenshot({ fullPage: true, timeout: 5_000 });
             if (png.byteLength <= 2_000_000) {
-              this.lastFailureScreenshot = Buffer.from(png).toString("base64");
+              this.lastFailureScreenshot = {
+                image: Buffer.from(png).toString("base64"),
+                capturedPath: safePagePath(page.url()),
+              };
             }
           } catch { /* The failure report remains authoritative. */ }
           return { data: { ...report, failureScreenshot: this.lastFailureScreenshot ?
