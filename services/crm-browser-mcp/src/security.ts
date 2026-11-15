@@ -1,6 +1,6 @@
-// Browser MCP browses the public web, but CRM service credentials never leave
-// their exact origin. Do not treat an arbitrary web page as a trusted CRM actor.
-export const CRM_ORIGIN = "https://crm-dev.crm-5bd5e1e1.workers.dev";
+// The MCP is site-neutral. An optional Cloudflare Access service identity is
+// configured per exact HTTPS origin; normal human sign-in never needs it.
+export const DEFAULT_BROWSER_URL = "https://example.org/";
 export const MCP_HOST = "crm-browser-mcp.crm-5bd5e1e1.workers.dev";
 
 // A human-readable owner email alone is insufficient. Verify the Access app
@@ -46,13 +46,37 @@ export async function verifiedMcpOwnerEmail(
   }
 }
 
-export function isCrmRequest(input: string): boolean {
+export function isConfiguredSiteRequest(input: string, origin: string | null): boolean {
+  if (!origin) return false;
   try {
     const url = new URL(input);
-    return url.origin === CRM_ORIGIN && url.username === "" && url.password === "";
+    return url.origin === origin && url.username === "" && url.password === "" &&
+      (url.protocol === "https:" || url.protocol === "http:");
   } catch {
     return false;
   }
+}
+
+// An origin without credentials uses ordinary browser Access login / cookies.
+// A partial pair is never silently accepted. No site needs a service token to open.
+export function siteAccessConfiguration(
+  origin: string | undefined, clientId: string | undefined, clientSecret: string | undefined,
+): { origin: string | null; serviceCredentials: boolean } {
+  if (!origin) {
+    if (clientId || clientSecret) throw new Error("BROWSER_SITE_ACCESS_ORIGIN_MISSING");
+    return { origin: null, serviceCredentials: false };
+  }
+  let url: URL;
+  try { url = new URL(origin); }
+  catch { throw new Error("BROWSER_SITE_ACCESS_ORIGIN_INVALID"); }
+  if (url.protocol !== "https:" || url.username || url.password ||
+      url.href !== url.origin + "/" || isInternalHost(url.hostname)) {
+    throw new Error("BROWSER_SITE_ACCESS_ORIGIN_INVALID");
+  }
+  if (Boolean(clientId) !== Boolean(clientSecret)) {
+    throw new Error("BROWSER_SITE_ACCESS_CREDENTIALS_INCOMPLETE");
+  }
+  return { origin: url.origin, serviceCredentials: Boolean(clientId && clientSecret) };
 }
 
 function isInternalHost(host: string): boolean {
@@ -110,7 +134,7 @@ function isInternalHost(host: string): boolean {
 
 // Normal public HTTP(S) sites are supported; only local/private network and
 // non-web protocols are out of scope for remote Cloudflare Browser Run.
-export function browserUrl(input: string, base: string = CRM_ORIGIN + "/"): string {
+export function browserUrl(input: string, base: string = DEFAULT_BROWSER_URL): string {
   let parsed: URL;
   try { parsed = new URL(input, base); }
   catch { throw new Error("BROWSER_INVALID_URL"); }
@@ -132,37 +156,27 @@ export function isPermittedBrowserRequest(input: string): boolean {
   }
 }
 
-// A malicious third-party web page must not gain the CRM service identity by
-// issuing cross-site fetch() or navigating a hidden iframe to the CRM.
-// A user-directed main-frame navigation from the MCP is allowed.
-export function crmCredentialsAllowed(
+// Credentials are injected ONLY into a configured exact origin for a trusted
+// controller navigation or requests initiated within that same origin.
+// Without configured service credentials the browser uses normal login flows,
+// including identity-provider redirects and SameSite browser cookie policy.
+export function siteCredentialsAllowed(
   destination: string, initiator: string, authorizedMainNavigation: boolean,
+  siteOrigin: string,
 ): boolean {
-  return isCrmRequest(destination) &&
-    (isCrmRequest(initiator) || authorizedMainNavigation);
+  return isConfiguredSiteRequest(destination, siteOrigin) &&
+    (isConfiguredSiteRequest(initiator, siteOrigin) || authorizedMainNavigation);
 }
 
-// Block untrusted initiators outright, even when the browser already holds a
-// CRM Access cookie from an earlier visit. Omitting injected service headers
-// is not enough: a native browser request can still attach existing cookies.
-// Only a controller-directed top-level navigation, or a CRM-owned request,
-// can reach the CRM origin. Ordinary public-web traffic is unchanged.
-export function crmRequestDisposition(
+export function siteRequestDisposition(
   destination: string, initiator: string, authorizedMainNavigation: boolean,
-): "public" | "crm" | "block" {
-  if (!isCrmRequest(destination)) return "public";
-  return crmCredentialsAllowed(destination, initiator, authorizedMainNavigation)
-    ? "crm" : "block";
-}
-
-// A public website can open without CRM credentials. CRM navigation cannot
-// silently create a new Access service principal in a different test tenant.
-export function requireCrmAgentIdentity(
-  destination: string, clientId: string | undefined, clientSecret: string | undefined,
-): void {
-  if (isCrmRequest(destination) && (!clientId || !clientSecret)) {
-    throw new Error("CRM_BROWSER_AGENT_IDENTITY_NOT_PROVISIONED");
+  siteOrigin: string | null, serviceCredentials: boolean,
+): "public" | "site" | "block" {
+  if (!siteOrigin || !serviceCredentials || !isConfiguredSiteRequest(destination, siteOrigin)) {
+    return "public";
   }
+  return siteCredentialsAllowed(destination, initiator, authorizedMainNavigation, siteOrigin)
+    ? "site" : "block";
 }
 
 export function safePagePath(input: string): string {
@@ -171,7 +185,7 @@ export function safePagePath(input: string): string {
     if (url.protocol !== "https:" && url.protocol !== "http:") return "UNSAFE_URL";
     // Query strings, fragments and embedded credentials are never logged.
     if (url.username || url.password) return "URL_WITH_CREDENTIALS";
-    return (isCrmRequest(input) ? "" : url.origin) + url.pathname.slice(0, 512);
+    return url.origin + url.pathname.slice(0, 512);
   } catch {
     return "INVALID_URL";
   }

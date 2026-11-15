@@ -1,3 +1,32 @@
+## 15 November 2026 — site-neutral authorization contract (Issue #357)
+
+The **Browser MCP itself is universal**: opening any permitted public HTTPS site,
+including CRM, never requires CRM-specific service secrets. Normal Cloudflare
+Access sign-in happens in the real browser and may use `browser_handoff` for
+interactive steps. The existing owner OAuth controls MCP; it does not impersonate
+an application user. `browser_session` reads the current site's optional
+`/api/session` convention and reports its real status.
+
+For unattended CRM or another Cloudflare Access site, the Worker may **optionally**
+be configured with `SITE_ACCESS_ORIGIN=https://exact-host` (nonsecret) and the
+Worker secrets `SITE_ACCESS_CLIENT_ID` / `SITE_ACCESS_CLIENT_SECRET` (both
+required together). A configured origin without secrets still uses ordinary
+interactive login. A partial credential pair or missing origin fails before
+browser acquisition. On a complete pair, credentials only accompany requests
+to the exact origin from that site itself or explicit controller navigation;
+foreign-site requests are rejected, and redirects never forward injected
+credentials. No browser tool accepts arbitrary credentials, and there are no
+CRM-specific business API or D1 operations inside Browser MCP.
+
+The **CRM CI already owns** signed Access test identities, native Rust/Connect/D1
+and React Chromium E2E. Preserve that fast, reproducible GitHub workflow for
+all CRM changes. Browser MCP is the shared real-site interactive/live diagnostic
+surface, not an additional mandatory Worker or a replacement CI runner. Real
+owner-tenant unattended CRM UI CRUD and human handoff remain separate live
+acceptance gates; do not report them as passed before provider verification.
+
+---
+
 # Universal Browser MCP — extended release deployed; physical acceptance in progress
 
 Canonical project: https://github.com/iamaman11/crm  

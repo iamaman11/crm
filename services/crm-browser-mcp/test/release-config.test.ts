@@ -23,7 +23,7 @@ test("MCP delivery route matches the verified Cloudflare Access application", ()
     "MCP hostname must match exact published Access-protected origin");
   assert.match(config.vars.CRM_MCP_ACCESS_AUD ?? "", /^[0-9a-f]{64}$/,
     "Access application audience must be explicitly pinned");
-  for (const secret of ["CRM_MCP_OWNER_EMAIL", "CRM_BROWSER_CLIENT_ID", "CRM_BROWSER_CLIENT_SECRET"]) {
+  for (const secret of ["CRM_MCP_OWNER_EMAIL", "SITE_ACCESS_CLIENT_ID", "SITE_ACCESS_CLIENT_SECRET", "CRM_BROWSER_CLIENT_ID", "CRM_BROWSER_CLIENT_SECRET"]) {
     assert.equal(secret in config.vars, false,
       `${secret} must never appear in committed plain-text vars`);
   }

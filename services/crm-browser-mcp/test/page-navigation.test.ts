@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { navigatePage, type NavigablePage } from "../src/page-navigation.ts";
-import { CRM_ORIGIN } from "../src/security.ts";
+const CRM_ORIGIN = "https://crm-dev.crm-5bd5e1e1.workers.dev"; // Test fixture.
 
 test("controller navigation to CRM uses the real Page, then immediately releases CRM trust", async () => {
   let actualUrl = "https://example.org/previous";
@@ -19,9 +19,9 @@ test("controller navigation to CRM uses the real Page, then immediately releases
       return { status: () => 200 };
     },
   };
-  const result = await navigatePage(page, CRM_ORIGIN + "/clients", enabled => trust.push(enabled));
+  const result = await navigatePage(page, CRM_ORIGIN + "/clients", enabled => trust.push(enabled), undefined, CRM_ORIGIN);
   assert.equal(gotoCalls, 1);
-  assert.deepEqual(result, { http_status: 200, path: "/clients", title: "Clients" });
+  assert.deepEqual(result, { http_status: 200, path: CRM_ORIGIN + "/clients", title: "Clients" });
   assert.deepEqual(trust, [true, false]);
 });
 
@@ -38,7 +38,7 @@ test("universal public-site navigation never elevates a foreign origin", async (
       return { status: () => 200 };
     },
   };
-  const result = await navigatePage(page, destination, enabled => trust.push(enabled));
+  const result = await navigatePage(page, destination, enabled => trust.push(enabled), undefined, CRM_ORIGIN);
   assert.deepEqual(result, {
     http_status: 200,
     path: "https://www.iana.org/domains/reserved",
@@ -55,7 +55,7 @@ test("navigation failure and redirect never leave persistent CRM trust", async (
     goto: async () => { throw new Error("navigation failed"); },
   };
   await assert.rejects(
-    navigatePage(blocked, CRM_ORIGIN + "/clients", enabled => trust.push(enabled)),
+    navigatePage(blocked, CRM_ORIGIN + "/clients", enabled => trust.push(enabled), undefined, CRM_ORIGIN),
     /navigation failed/,
   );
   assert.deepEqual(trust, [true, false]);
@@ -71,7 +71,7 @@ test("navigation failure and redirect never leave persistent CRM trust", async (
   };
   const redirectTrust: boolean[] = [];
   const result = await navigatePage(
-    redirected, CRM_ORIGIN + "/auth", enabled => redirectTrust.push(enabled),
+    redirected, CRM_ORIGIN + "/auth", enabled => redirectTrust.push(enabled), undefined, CRM_ORIGIN,
   );
   assert.deepEqual(redirectTrust, [true, false]);
   assert.equal(result.path, "https://login.example.org/signin");

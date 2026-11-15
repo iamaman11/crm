@@ -1,7 +1,7 @@
-import { isCrmRequest, safePagePath } from "./security.ts";
+import { isConfiguredSiteRequest, safePagePath } from "./security.ts";
 
 // A minimal, testable Playwright Page contract. The Durable Object remains
-// the sole owner of the real browser, context, Page and CRM credential policy.
+// the sole owner of the real browser, context, Page and optional site credentials.
 export interface NavigablePage {
   url(): string;
   title(): Promise<string>;
@@ -14,12 +14,12 @@ export interface NavigablePage {
 export async function navigatePage(
   page: NavigablePage,
   destination: string,
-  setTrustedCrmNavigation: (enabled: boolean) => void,
+  setTrustedSiteNavigation: (enabled: boolean) => void,
   timeoutMs = 25_000,
+  privilegedOrigin: string | null = null,
 ) {
-  // A controller-directed main-frame navigation may be authorized for the
-  // exact CRM origin only. Release that permission after errors and redirects.
-  setTrustedCrmNavigation(isCrmRequest(destination));
+  // Trust is ephemeral and only exists for explicitly configured service auth.
+  setTrustedSiteNavigation(isConfiguredSiteRequest(destination, privilegedOrigin));
   try {
     const response = await page.goto(destination, {
       waitUntil: "domcontentloaded",
@@ -31,6 +31,6 @@ export async function navigatePage(
       title: await page.title(),
     };
   } finally {
-    setTrustedCrmNavigation(false);
+    setTrustedSiteNavigation(false);
   }
 }
