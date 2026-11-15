@@ -1,4 +1,4 @@
-import {useCallback,useState} from "react";
+import {useCallback,useEffect,useState} from "react";
 import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import type {Party} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId} from "./api";
@@ -6,11 +6,12 @@ import {PartyKind} from "@ultimate-crm/client/cloudflare";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {SearchField} from "./SearchField";
+import {openAccountFromParty,savedPartyListScroll} from "./navigation";
 
-export function PartyScreen() {
+export function PartyScreen({initialPartyId=""}:{initialPartyId?:string}) {
   const [cursor,setCursor]=useState("");
   const [kind,setKind]=useState("");
-  const [search,setSearch]=useState("");
+  const [search,setSearch]=useState(initialPartyId);
   const [selected,setSelected]=useState<Party>();
   const [editorOpen,setEditorOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
@@ -18,13 +19,18 @@ export function PartyScreen() {
   const query=useQuery(useCallback(()=>api.partyRecords.listParties({
     page:{pageSize:25,pageToken:cursor},search,...(kind?{kind:enumValue(kind,[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип участника")}:{})
   }),[cursor,kind,search]));
+  useEffect(()=>{
+    if(!initialPartyId||query.busy||!query.data)return;
+    const scroll=savedPartyListScroll();
+    if(scroll!==null)requestAnimationFrame(()=>window.scrollTo(0,scroll));
+  },[initialPartyId,query.busy,query.data]);
   const edit=async(id:string)=>{
     try {const result=await api.partyRecords.getParty({partyId:id});setSelected(result.party);setEditorOpen(true);mutation.changed();}
     catch(error){await mutation.run(()=>Promise.reject(error));}
   };
   return <>
     <PageHeader title="Люди и организации" description="Исходные участники клиентских отношений." actions={<Button onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать участника</Button>}/>
-    <SearchField label="Поиск участников" onSearch={value=>{setSearch(value);setCursor("");}}/>
+    <SearchField label="Поиск участников" submitted={search} onSearch={value=>{setSearch(value);setCursor("");}}/>
     <SelectField label="Тип участника" value={kind} onChange={e=>{setKind(e.target.value);setCursor("");}}>
       <option value="">Все</option><option value={PartyKind.PERSON}>Человек</option><option value={PartyKind.ORGANIZATION}>Организация</option>
     </SelectField>
@@ -32,7 +38,8 @@ export function PartyScreen() {
     <div>{!query.busy&&!query.error&&query.data?.parties.map(p=><Card key={p.partyId} title={p.displayName}>
       <p>{p.kind===PartyKind.PERSON?"Человек":p.kind===PartyKind.ORGANIZATION?"Организация":"Неизвестный тип"} · версия {p.version.toString()}</p>
       <p><small>ID: {p.partyId}</small></p>
-      <Button variant="secondary" onClick={()=>void edit(p.partyId)}>Редактировать</Button>
+      <Button variant="secondary" onClick={()=>void edit(p.partyId)}>Редактировать</Button>{" "}
+      <Button variant="secondary" onClick={()=>openAccountFromParty(p.partyId)}>Создать клиента</Button>
     </Card>)}</div>
     {!query.busy&&!query.error&&query.data?.parties.length===0&&<p>{search?"Участники не найдены.":"Записей пока нет."}</p>}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
