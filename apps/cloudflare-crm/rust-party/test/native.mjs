@@ -8,7 +8,7 @@ import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
 import {chromium} from "playwright";
 import {typedBrowser} from "./typed-browser.mjs";
-import {installUiDiagnostics,assertUiPanel,uiState} from "./ui-diagnostics.mjs";
+import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mjs";
 import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryAccountV2,decodeAccountV2,accountV2Path,
   binaryContactV2,decodeContactV2,contactV2Path,
@@ -2030,8 +2030,21 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
          "Closing dirty Account after rejecting confirm must not discard draft");
        panelTransitions.push({title:"Новый клиент",result:"REJECTED",desired:rejectedPanel?.desired,
          nativeOpen:rejectedPanel?.nativeOpen,dirty:rejectedPanel?.dirty});
+       // Escape must also enter the SAME dirty guard before the native dialog
+       // closes. Reject first, then accept: no second navigation/close owner.
+       page.once("dialog",dialog=>void dialog.dismiss());
+       await page.keyboard.press("Escape");
+       const escapeRejected=await assertUiPanel({page,panel,title:"Новый клиент",
+         expected:"open",scenario:"dirty-account-escape-rejected",
+         evidenceDirectory:join(cwd,"../e2e-evidence-native")});
+       const escapePanel=escapeRejected.panels.find(p=>p.title==="Новый клиент");
+       assert.equal(escapePanel?.closeSource,"escape");
+       assert.equal(escapeRejected.confirmations.at(-1)?.accepted,false);
+       assert.equal(escapePanel?.nativeOpen,true,"native Escape cannot bypass rejected dirty close");
+       panelTransitions.push({title:"Новый клиент",result:"ESCAPE_REJECTED",
+         desired:escapePanel?.desired,nativeOpen:escapePanel?.nativeOpen});
        page.once("dialog",dialog=>void dialog.accept());
-       await panel.getByRole("button",{name:"Отмена",exact:true}).click();
+       await page.keyboard.press("Escape");
      }else{
        // A native <select> can consume Escape. Use the explicit close button
        // and inspect React intent and HTMLDialogElement.open independently.
