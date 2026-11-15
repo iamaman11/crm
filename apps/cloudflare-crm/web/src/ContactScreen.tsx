@@ -7,9 +7,9 @@ import {PartyPicker} from "./Pickers";
 import {TimeFields} from "./TimeFields";
 import {timePatch} from "./timePatch";
 
-export function ContactScreen() {
+export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
   const [cursor,setCursor]=useState("");
-  const [partyId,setPartyId]=useState("");
+  const [partyId,setPartyId]=useState(initialPartyId);
   const [selected,setSelected]=useState<ContactPoint>();
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();

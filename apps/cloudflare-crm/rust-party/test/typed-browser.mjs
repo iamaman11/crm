@@ -406,6 +406,32 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.unroute("**/crm.parties.v3.PartyService/ListParties");
    steps.push("Committed write remains successful when refresh fails");
 
+   const navigationAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   for(const [link,screen,title,filter,value,method] of [
+     ["Все контакты участника","contacts","Контакты","Фильтр по ID участника",partyId,"ListContactPoints"],
+     ["Все связи участника","relationships","Связи","Фильтр по ID участника",partyId,"ListPartyRelationships"],
+     ["Все сделки клиента","sales","Сделки","Фильтр по ID клиента",accountId,"ListDeals"],
+     ["Все задачи клиента","tasks","Задачи","Фильтр по ID клиента",accountId,"ListTasks"],
+   ]){
+     await navigate("accounts","Клиенты");
+     await search("Поиск клиентов",accountId,"ListAccounts");
+     const overviewPending=page.waitForResponse(r=>r.url().endsWith("/GetAccountOverview"));
+     await page.getByRole("button",{name:"Открыть карточку",exact:true}).click();
+     assert.equal((await overviewPending).status(),200);
+     const pending=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
+     await page.getByRole("link",{name:link,exact:true}).click();
+     assert.equal((await pending).status(),200);
+     await page.getByRole("heading",{name:title,exact:true}).waitFor();
+     assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value);
+     assert.equal(new URL(await page.url()).hash,"#"+screen+"?"+(screen==="sales"||screen==="tasks"?"accountId":"partyId")+"="+encodeURIComponent(value));
+     const reloaded=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
+     await page.reload();assert.equal((await reloaded).status(),200);
+     assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value,"Reload must retain the linked scope");
+     if(screen==="sales")await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+     if(screen==="tasks")await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor();
+   }
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,navigationAuditBefore);
+   steps.push("Customer360 links to server-filtered full lists, reload retains scope, no writes");
    await page.getByLabel("Тема",{exact:true}).selectOption("dark");
    assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
    await page.reload();

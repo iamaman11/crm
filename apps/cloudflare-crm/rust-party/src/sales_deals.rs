@@ -527,6 +527,7 @@ pub(super) async fn list_page_typed(
     size: usize,
     pipeline: Option<&str>,
     status: Option<DealStatus>,
+    account: Option<&str>,
 ) -> Result<(Vec<Deal>, Option<String>)> {
     let mut args = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
     let mut sql =
@@ -542,6 +543,10 @@ pub(super) async fn list_page_typed(
             DealStatus::Won => "won",
             DealStatus::Lost => "lost",
         }));
+    }
+    if let Some(account) = account {
+        sql.push_str(" AND account_id=?");
+        args.push(JsValue::from_str(account));
     }
     sql.push_str(" ORDER BY id LIMIT ?");
     args.push(JsValue::from_f64((size + 1) as f64));

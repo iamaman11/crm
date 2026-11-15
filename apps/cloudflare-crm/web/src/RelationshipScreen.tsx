@@ -7,9 +7,9 @@ import {PartyPicker} from "./Pickers";
 import {TimeFields} from "./TimeFields";
 import {timePatch} from "./timePatch";
 
-export function RelationshipScreen() {
+export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string}) {
   const [cursor,setCursor]=useState("");
-  const [partyId,setPartyId]=useState("");
+  const [partyId,setPartyId]=useState(initialPartyId);
   const [selected,setSelected]=useState<PartyRelationship>();
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();

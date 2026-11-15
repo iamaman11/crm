@@ -13,12 +13,16 @@ function Overview({id}:{id:string}) {
     <h3>{card.account?.name}</h3><p>Основной участник: {card.primaryParty?.displayName}</p>
     <h3>Контакты</h3><ul>{card.contactPoints.map(p=><li key={p.contactPointId}>{p.displayValue}{p.verified?" · подтверждён":""}</li>)}</ul>
     {card.truncated?.contactPoints&&<p>Показаны первые {card.perCollectionLimit} контактов.</p>}
+    {card.primaryParty&&<a href={"#contacts?partyId="+encodeURIComponent(card.primaryParty.partyId)}>Все контакты участника</a>}
     <h3>Связи</h3><ul>{card.relationships.map(r=><li key={r.relationshipId}>{r.type?.code}: {r.fromPartyId} → {r.toPartyId}</li>)}</ul>
     {card.truncated?.relationships&&<p>Показаны первые {card.perCollectionLimit} связей.</p>}
+    {card.primaryParty&&<a href={"#relationships?partyId="+encodeURIComponent(card.primaryParty.partyId)}>Все связи участника</a>}
     <h3>Сделки</h3><ul>{card.deals.map(d=><li key={d.dealId}>{d.name} · {d.stage?.stageId}</li>)}</ul>
     {card.truncated?.deals&&<p>Показаны первые {card.perCollectionLimit} сделок.</p>}
+    <a href={"#sales?accountId="+encodeURIComponent(id)}>Все сделки клиента</a>
     <h3>Задачи</h3><ul>{card.tasks.map(t=><li key={t.taskId}>{t.subject} · {t.status===2?"Выполнена":dateText(t.dueAt)}</li>)}</ul>
     {card.truncated?.tasks&&<p>Показаны первые {card.perCollectionLimit} задач.</p>}
+    <a href={"#tasks?accountId="+encodeURIComponent(id)}>Все задачи клиента</a>
   </>}</Card>;
 }
 export function AccountScreen() {

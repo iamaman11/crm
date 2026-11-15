@@ -1573,6 +1573,13 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    original_owner:"crm.customer-data-operations",party_owner:"crm.parties",
    tenant_ab:true,atomic:true,replay:true,audit:true,verified_actor:true,sql_failure_rollback:true,csv_bytes_sha256:true,bounded:true}));
  await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
+ const salesAuditBeforeFilter=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ assert.deepEqual((await collectPages(salesV2,"ListDeals","deals",{accountId})).map(d=>d.dealId),
+   (await collectPages(salesV2,"ListDeals","deals")).filter(d=>d.accountId===accountId).map(d=>d.dealId));
+ assert.deepEqual((await salesV2("ListDeals",tenantB,{accountId})).body.deals,[]);
+ assert.deepEqual((await salesV2("ListDeals",viewer,{accountId:"missing-account"})).body.deals,[]);
+ assert.equal((await salesV2("ListDeals",viewer,{accountId:"bad/id"})).status,400);
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,salesAuditBeforeFilter);
  // Search is part of the existing List RPCs. Put matching rows after an entire
  // unfiltered page; literal punctuation and Unicode must not become SQL patterns.
  for(let index=0;index<101;index++){

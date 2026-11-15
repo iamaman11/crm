@@ -200,6 +200,11 @@ impl sale_wire::DealService for SalesV2Service {
                 _ => return Err(ConnectError::invalid_argument("invalid DealStatus filter")),
             }),
         };
+        let account = req.account_id;
+        if let Some(id) = account {
+            crm_customer_accounts::AccountId::try_new(id)
+                .map_err(|_| ConnectError::invalid_argument("invalid account filter"))?;
+        }
         let (list, next) = sales_deals::list_page_typed(
             &self.d1()?,
             &self.tenant,
@@ -207,6 +212,7 @@ impl sale_wire::DealService for SalesV2Service {
             size as usize,
             pipeline,
             status,
+            account,
         )
         .await
         .map_err(|_| ConnectError::internal("Sales original D1 list failed"))?;

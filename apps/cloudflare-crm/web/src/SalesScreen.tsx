@@ -7,15 +7,16 @@ import {AccountPicker} from "./Pickers";
 import {minorUnits,decimalUnits,moneyText,basisPoints,percent} from "./money";
 import styles from "./App.module.css";
 
-export function SalesScreen() {
+export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const [cursor,setCursor]=useState("");
   const [status,setStatus]=useState("");
+  const [accountId,setAccountId]=useState(initialAccountId);
   const [selected,setSelected]=useState<Deal>();
   const [advance,setAdvance]=useState<Deal>();
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
   const query=useQuery(useCallback(()=>api.deals.listDeals({page:{pageSize:25,pageToken:cursor},
-    ...(status?{status:Number(status)}:{})}),[cursor,status]));
+    ...(accountId?{accountId}:{}),...(status?{status:Number(status)}:{})}),[cursor,status,accountId]));
   const open=async(dealId:string,mode:"edit"|"advance")=>{
     try {const value=(await api.deals.getDeal({dealId})).deal;
       setSelected(mode==="edit"?value:undefined);setAdvance(mode==="advance"?value:undefined);mutation.changed();}
@@ -24,6 +25,7 @@ export function SalesScreen() {
   const columns=[...new Set(query.data?.deals.map(d=>d.stage?.stageId??"Без этапа")??[])];
   return <>
     <PageHeader title="Сделки" description="Доска текущей страницы. Суммы передаются без потери точности."/>
+    <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setCursor("");}}/>
     <SelectField label="Статус сделки" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>
       <option value="">Все</option><option value="1">Открытые</option><option value="2">Выигранные</option><option value="3">Проигранные</option>
     </SelectField><QueryNotice query={query}/>

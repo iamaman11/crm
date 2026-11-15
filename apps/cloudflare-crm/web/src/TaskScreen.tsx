@@ -7,17 +7,19 @@ import {AccountPicker} from "./Pickers";
 import {TimeFields} from "./TimeFields";
 import {timePatch} from "./timePatch";
 
-export function TaskScreen() {
+export function TaskScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const [cursor,setCursor]=useState("");
   const [status,setStatus]=useState("");
   const [priority,setPriority]=useState("");
+  const [accountId,setAccountId]=useState(initialAccountId);
   const [draftId,setDraftId]=useState(newId);
   const [selected,setSelected]=useState<Task>();
   const mutation=useMutation();
   const query=useQuery(useCallback(()=>api.tasks.listTasks({page:{pageSize:25,pageToken:cursor},
-    ...(status?{status:Number(status)}:{}),...(priority?{priority:Number(priority)}:{})}),[cursor,status,priority]));
+    ...(accountId?{accountId}:{}),...(status?{status:Number(status)}:{}),...(priority?{priority:Number(priority)}:{})}),[cursor,status,priority,accountId]));
   return <>
     <PageHeader title="Задачи" description="Работа по клиентам и задачи, созданные из сделок."/>
+    <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setCursor("");}}/>
     <SelectField label="Статус задачи" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>
       <option value="">Все</option><option value="1">Открытые</option><option value="2">Выполненные</option>
     </SelectField>
