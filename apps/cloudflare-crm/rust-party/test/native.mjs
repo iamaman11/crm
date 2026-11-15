@@ -1991,12 +1991,17 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      await enterSearch(label,"zz-search-padding-000",method);
      await page.getByRole("heading",{name:"Search padding 000",exact:true}).waitFor();
    }
-   for(const [hash,label,searchLabel,method] of [
-     ["accounts","Основной участник","Поиск: Основной участник","ListParties"],
-     ["tasks","Клиент","Поиск: Клиент","ListAccounts"],
+   // Searchable pickers are inside the shared create panel, not the list.
+   // Use the real UI, preserving the same native-Rust List RPC assertions.
+   for(const [hash,createAction,label,searchLabel,method] of [
+     ["accounts","Создать клиента","Основной участник","Поиск: Основной участник","ListParties"],
+     ["tasks","Новая задача","Клиент","Поиск: Клиент","ListAccounts"],
    ]){
      await page.goto(base+"/#"+hash);
-     const select=page.getByLabel(label,{exact:true});
+     await page.getByRole("button",{name:createAction,exact:true}).click();
+     const panel=page.getByRole("dialog");
+     await panel.waitFor();
+     const select=panel.getByLabel(label,{exact:true});
      await enterSearch(searchLabel,searchIds[2],method);
      await select.selectOption(searchIds[2]);
      assert.equal(await select.inputValue(),searchIds[2]);
