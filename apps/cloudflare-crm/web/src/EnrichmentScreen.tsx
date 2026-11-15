@@ -1,6 +1,8 @@
 import {useCallback,useState} from "react";
 import {Button,Card,RecordPanel,RecordActions,FeedbackPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import {api,field,timestamp} from "./api";
+import {RawPayloadPolicy} from "@ultimate-crm/client/cloudflare";
+import {enumValue,boundedInt} from "./enumFields";
 import {useQuery,useReadAction,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 export function EnrichmentScreen() {
   const [profileCursor,setProfileCursor]=useState("");
@@ -36,7 +38,7 @@ export function EnrichmentScreen() {
           providerKey:field(data,"provider"),adapterKind:field(data,"adapter"),adapterContractVersion:field(data,"version"),
           purposeCodes:field(data,"purposes").split(",").map(x=>x.trim()).filter(Boolean),
           licenseId:field(data,"license"),permittedUseClass:field(data,"use"),residencyRegion:field(data,"region"),
-          retentionDays:Number(field(data,"retention")),rawPayloadPolicy:Number(field(data,"raw")),
+          retentionDays:boundedInt(field(data,"retention"),0,3650,"Срок хранения"),rawPayloadPolicy:enumValue(field(data,"raw"),[RawPayloadPolicy.RAW_PAYLOAD_POLICY_DIGEST_ONLY,RawPayloadPolicy.RAW_PAYLOAD_POLICY_GOVERNED_PROTECTED_EVIDENCE],"Политика исходных данных"),
           credentialHandleAliases:field(data,"handles").split(",").map(x=>x.trim()).filter(Boolean),
           effectiveAt,...(expiresAt?{expiresAt}:{}),precondition:{idempotencyKey:profileMutation.key}
         });
@@ -50,7 +52,7 @@ export function EnrichmentScreen() {
       <TextField label="Класс разрешённого использования" name="use" defaultValue="customer_master_review" required/>
       <TextField label="Регион хранения" name="region" defaultValue="eu" required/>
       <TextField label="Срок хранения, дней" name="retention" type="number" min="0" max="3650" defaultValue="30" required/>
-      <SelectField label="Исходные данные" name="raw" defaultValue="1"><option value="1">Только хеш</option><option value="2">Защищённое доказательство</option></SelectField>
+      <SelectField label="Исходные данные" name="raw" defaultValue="1"><option value={RawPayloadPolicy.RAW_PAYLOAD_POLICY_DIGEST_ONLY}>Только хеш</option><option value={RawPayloadPolicy.RAW_PAYLOAD_POLICY_GOVERNED_PROTECTED_EVIDENCE}>Защищённое доказательство</option></SelectField>
       <TextField label="Имена ссылок на учётные данные (не секреты)" name="handles"/>
       <TextField label="Начало действия" name="effective" type="datetime-local" step="1" required/>
       <TextField label="Окончание действия" name="expires" type="datetime-local" step="1"/>
@@ -70,7 +72,7 @@ export function EnrichmentScreen() {
       e.preventDefault();const data=new FormData(e.currentTarget);
       void mappingMutation.run(()=>api.enrichment.publishMapping({
         mappingKey:field(data,"key"),providerProfileVersionId:field(data,"profile"),
-        providerResponseFieldPath:field(data,"path"),maximumSuggestionsPerResponse:Number(field(data,"maximum")),
+        providerResponseFieldPath:field(data,"path"),maximumSuggestionsPerResponse:boundedInt(field(data,"maximum"),1,32,"Максимум предложений"),
         confidenceRequired:data.get("confidence")==="on",precondition:{idempotencyKey:mappingMutation.key}
       }),async()=>{setPublishMode(null);await mappings.reload();});
     }}><FormGrid>

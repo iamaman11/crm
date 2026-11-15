@@ -29,6 +29,10 @@ rejects("second Connect transport in workspace helper", 'import {createConnectTr
 rejects("Connect transport through shared UI", 'export {createConnectTransport} from "@connectrpc/connect-web";',"packages/ui/src/alternate.ts");
 
 permits("generated Cloudflare client", 'import {createCloudflareCrmClient} from "@ultimate-crm/client/cloudflare";\nimport {useState} from "react";\nconst x = useState(1);');
+permits("generated enum values from the canonical client entrypoint",
+  'import {AccountStatus,PartyKind,TaskPriority} from "@ultimate-crm/client/cloudflare";');
+rejects("an unapproved runtime export cannot bypass the client boundary",
+  'import {createAlternateClient} from "@ultimate-crm/client/cloudflare";');
 permits("UI presentation only", 'import {Button} from "@ultimate-crm/ui";\nexport function Example(){return <Button>Save</Button>;}');
 permits("Connect transport in the client package only", 'import {createConnectTransport} from "@connectrpc/connect-web";\nexport const transport=createConnectTransport({baseUrl:"/",useBinaryFormat:true});',client);
 

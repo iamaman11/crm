@@ -23,7 +23,7 @@ export function AppShell({
 }: AppShellProps) {
   return (
     <div className="crm-shell">
-      <a className="crm-skip-link" href="#main-content">
+      <a className="crm-skip-link" href="#main-content" onClick={event=>{event.preventDefault();document.getElementById("main-content")?.focus();}}>
         Skip to main content
       </a>
       <header className="crm-topbar">

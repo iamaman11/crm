@@ -1,19 +1,28 @@
 import {useCallback,useState} from "react";
 import {Button,Card,RecordPanel,RecordActions,FeedbackPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import {api,field,newId} from "./api";
+import {CommunicationChannel,ConsentEffect,ConsentStatus,EvaluationReason} from "@ultimate-crm/client/cloudflare";
+import {enumValue} from "./enumFields";
 import {useQuery,useReadAction,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker} from "./Pickers";
+const reasonLabels:Partial<Record<EvaluationReason,string>>={
+  [EvaluationReason.EVALUATION_REASON_UNSPECIFIED]:"Не указано",
+  [EvaluationReason.EVALUATION_REASON_ACTIVE_GRANT]:"Действующее согласие",
+  [EvaluationReason.EVALUATION_REASON_ACTIVE_DENY]:"Действующий запрет",
+  [EvaluationReason.EVALUATION_REASON_WITHDRAWN]:"Согласие отозвано",
+  [EvaluationReason.EVALUATION_REASON_NO_APPLICABLE_GRANT]:"Подходящего согласия нет"
+};
 function ScopeFields() {
   return <><PartyPicker/><TextField label="ID контакта (необязательно)" name="contact"/>
     <TextField label="Цель" name="purpose" defaultValue="marketing" required/>
     <SelectField label="Канал" name="channel" defaultValue="1">
-      <option value="1">Email</option><option value="2">Телефон</option><option value="3">SMS</option>
-      <option value="4">Почта</option><option value="5">Мессенджер</option><option value="6">Push</option>
+      <option value={CommunicationChannel.COMMUNICATION_CHANNEL_EMAIL}>Email</option><option value={CommunicationChannel.COMMUNICATION_CHANNEL_PHONE}>Телефон</option><option value={CommunicationChannel.COMMUNICATION_CHANNEL_SMS}>SMS</option>
+      <option value={CommunicationChannel.COMMUNICATION_CHANNEL_POSTAL}>Почта</option><option value={CommunicationChannel.COMMUNICATION_CHANNEL_MESSAGING}>Мессенджер</option><option value={CommunicationChannel.COMMUNICATION_CHANNEL_PUSH}>Push</option>
     </SelectField></>;
 }
 function scope(data:FormData) {
   const contact=field(data,"contact");
-  return {partyId:field(data,"partyId"),purpose:field(data,"purpose"),channel:Number(field(data,"channel")),
+  return {partyId:field(data,"partyId"),purpose:field(data,"purpose"),channel:enumValue(field(data,"channel"),[CommunicationChannel.COMMUNICATION_CHANNEL_EMAIL,CommunicationChannel.COMMUNICATION_CHANNEL_PHONE,CommunicationChannel.COMMUNICATION_CHANNEL_SMS,CommunicationChannel.COMMUNICATION_CHANNEL_POSTAL,CommunicationChannel.COMMUNICATION_CHANNEL_MESSAGING,CommunicationChannel.COMMUNICATION_CHANNEL_PUSH],"Канал"),
     ...(contact?{contactPointId:contact}:{})};
 }
 export function ConsentScreen() {
@@ -33,14 +42,14 @@ export function ConsentScreen() {
     }}><FormGrid><ScopeFields/></FormGrid><Button type="submit" disabled={evaluation.busy}>Проверить разрешение</Button></form>
       {evaluation.error&&<FeedbackPanel tone="danger" title={evaluation.error}/>}
       {evaluation.data&&<FeedbackPanel tone={evaluation.data.allowed?"success":"warning"} title={evaluation.data.allowed?"Контакт разрешён":"Контакт не разрешён"}>
-        {["Не указано","Действующее согласие","Действующий запрет","Согласие отозвано","Подходящего согласия нет"][evaluation.data.reason]??"Неизвестная причина"}
+        {reasonLabels[evaluation.data.reason]??"Неизвестная причина"}
       </FeedbackPanel>}
     </Card>
     <TextField label="Фильтр по ID участника" value={partyId} onChange={e=>{setPartyId(e.target.value);setCursor("");}}/>
     <QueryNotice query={query}/>
-    {query.data?.authorizations.map(a=><Card key={a.authorizationId} title={a.effect===2?"Запрет":"Согласие"}>
-      <p>{a.partyId} · {a.purpose} · {a.jurisdiction}</p><p>{a.status===1?"Действует":"Отозвано"} · версия {a.version.toString()}</p>
-      {a.effect===1&&a.status===1&&<Button variant="danger" disabled={mutation.busy}
+    {query.data?.authorizations.map(a=><Card key={a.authorizationId} title={a.effect===ConsentEffect.CONSENT_EFFECT_DENY?"Запрет":a.effect===ConsentEffect.CONSENT_EFFECT_GRANT?"Согласие":"Неизвестный тип"}>
+      <p>{a.partyId} · {a.purpose} · {a.jurisdiction}</p><p>{a.status===ConsentStatus.CONSENT_STATUS_ACTIVE?"Действует":a.status===ConsentStatus.CONSENT_STATUS_WITHDRAWN?"Отозвано":"Неизвестный статус"} · версия {a.version.toString()}</p>
+      {a.effect===ConsentEffect.CONSENT_EFFECT_GRANT&&a.status===ConsentStatus.CONSENT_STATUS_ACTIVE&&<Button variant="danger" disabled={mutation.busy}
         onClick={()=>void mutation.run(()=>api.consents.withdrawConsentAuthorization({
           authorizationId:a.authorizationId,
           precondition:{idempotencyKey:mutation.key,expectedVersion:a.version}

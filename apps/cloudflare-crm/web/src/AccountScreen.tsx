@@ -1,78 +1,155 @@
-import {useCallback,useState} from "react";
-import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
-import type {Account,AccountOverview} from "@ultimate-crm/client/cloudflare";
-import {api,field,newId,dateText} from "./api";
+import {useCallback,useEffect,useState} from "react";
+import type {MouseEvent} from "react";
+import {AccountStatus} from "@ultimate-crm/client/cloudflare";
+import {Button,FeedbackPanel,RecordCard,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
+import {api,field,newId} from "./api";
+import {enumValue} from "./enumFields";
 import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker} from "./Pickers";
 import {SearchField} from "./SearchField";
+import {AccountDetails,AccountEditor,accountStatusLabel} from "./AccountRecord";
+import {accountsHref,accountHref} from "./routes";
+import type {RecordMode} from "@ultimate-crm/ui";
 
-function Overview({id}:{id:string}) {
-  const query=useQuery(useCallback(()=>api.overview.getAccountOverview({accountId:id}),[id]));
-  const card:AccountOverview|undefined=query.data?.overview;
-  return <div><QueryNotice query={query}/>{card&&<>
-    <h3>{card.account?.name}</h3><p>Основной участник: {card.primaryParty?.displayName}</p>
-    <h3>Контакты</h3><ul>{card.contactPoints.map(p=><li key={p.contactPointId}>{p.displayValue}{p.verified?" · подтверждён":""}</li>)}</ul>
-    {card.truncated?.contactPoints&&<p>Показаны первые {card.perCollectionLimit} контактов.</p>}
-    {card.primaryParty&&<a href={"#contacts?partyId="+encodeURIComponent(card.primaryParty.partyId)}>Все контакты участника</a>}
-    <h3>Связи</h3><ul>{card.relationships.map(r=><li key={r.relationshipId}>{r.type?.code}: {r.fromPartyId} → {r.toPartyId}</li>)}</ul>
-    {card.truncated?.relationships&&<p>Показаны первые {card.perCollectionLimit} связей.</p>}
-    {card.primaryParty&&<a href={"#relationships?partyId="+encodeURIComponent(card.primaryParty.partyId)}>Все связи участника</a>}
-    <h3>Сделки</h3><ul>{card.deals.map(d=><li key={d.dealId}>{d.name} · {d.stage?.stageId}</li>)}</ul>
-    {card.truncated?.deals&&<p>Показаны первые {card.perCollectionLimit} сделок.</p>}
-    <a href={"#sales?accountId="+encodeURIComponent(id)}>Все сделки клиента</a>
-    <h3>Задачи</h3><ul>{card.tasks.map(t=><li key={t.taskId}>{t.subject} · {t.status===2?"Выполнена":dateText(t.dueAt)}</li>)}</ul>
-    {card.truncated?.tasks&&<p>Показаны первые {card.perCollectionLimit} задач.</p>}
-    <a href={"#tasks?accountId="+encodeURIComponent(id)}>Все задачи клиента</a>
-  </>}</div>;
+type AccountFilters={search:string;status:string;cursor:string};
+type RegisterBlocker=(blocker:(()=>boolean)|null)=>void;
+const dirtyPrompt="Есть несохранённые изменения. Покинуть страницу без сохранения?";
+const allowed=[AccountStatus.ACCOUNT_STATUS_ACTIVE,AccountStatus.ACCOUNT_STATUS_INACTIVE] as const;
+function rememberAndNavigate(event:MouseEvent<HTMLAnchorElement>,accountId:string) {
+  if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+  event.preventDefault();
+  const from=window.location.hash||"#accounts";
+  window.history.replaceState({crmAccountScroll:window.scrollY},"",window.location.href);
+  window.history.pushState({crmReturnTo:from},"",accountHref(accountId));
+  window.dispatchEvent(new PopStateEvent("popstate"));
 }
-export function AccountScreen() {
-  const [cursor,setCursor]=useState("");
-  const [status,setStatus]=useState("");
-  const [search,setSearch]=useState("");
-  const [selected,setSelected]=useState<Account>();
-  const [editorOpen,setEditorOpen]=useState(false);
-  const [overview,setOverview]=useState("");
+function canDiscard(dirty:boolean) {
+  return !dirty||window.confirm("Есть несохранённые изменения. Закрыть редактирование без сохранения?");
+}
+export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;registerBlocker:RegisterBlocker}) {
+  const {search,status,cursor}=filters;
+  const [expanded,setExpanded]=useState("");
+  const [mode,setMode]=useState<"view"|"edit">("view");
+  const [dirty,setDirty]=useState(false);
+  const [savedNotice,setSavedNotice]=useState("");
+  const [createOpen,setCreateOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
+  useEffect(()=>{
+    registerBlocker(dirty?()=>window.confirm(dirtyPrompt):null);
+    return ()=>registerBlocker(null);
+  },[dirty,registerBlocker]);
   const query=useQuery(useCallback(()=>api.accounts.listAccounts({
-    page:{pageSize:25,pageToken:cursor},search,...(status?{status:Number(status)}:{})
+    page:{pageSize:25,pageToken:cursor},search,
+    ...(status?{status:enumValue(status,allowed,"Фильтр статуса")}:{})
   }),[cursor,status,search]));
-  const edit=async(accountId:string)=>{
-    try {setSelected((await api.accounts.getAccount({accountId})).account);setOverview("");setEditorOpen(true);mutation.changed();}
-    catch(error){await mutation.run(()=>Promise.reject(error));}
+  const navigate=(next:Partial<AccountFilters>)=>{
+    if(!canDiscard(dirty))return;
+    registerBlocker(null);
+    setDirty(false);setExpanded("");setSavedNotice("");
+    window.location.hash=accountsHref({...filters,...next});
   };
+  const expand=(id:string,nextMode:"view"|"edit")=>{
+    if((expanded!==id||mode!==nextMode)&&!canDiscard(dirty))return;
+    setDirty(false);setSavedNotice("");
+    if(expanded===id&&mode==="view"&&nextMode==="view")setExpanded("");
+    else {setExpanded(id);setMode(nextMode);}
+  };
+  const collapse=()=>{
+    if(!canDiscard(dirty))return;
+    setDirty(false);setSavedNotice("");setExpanded("");
+  };
+  useEffect(()=>{
+    if(query.busy||!query.data)return;
+    const state:unknown=window.history.state;
+    if(state&&typeof state==="object"&&"crmAccountScroll" in state&&typeof state.crmAccountScroll==="number") {
+      const top=state.crmAccountScroll;
+      requestAnimationFrame(()=>window.scrollTo(0,top));
+    }
+  },[query.busy,query.data]);
   return <>
-    <PageHeader title="Клиенты" description="Клиент связывается с человеком или организацией из раздела участников." actions={<Button onClick={()=>{setSelected(undefined);setOverview("");setEditorOpen(true);mutation.changed();}}>Создать клиента</Button>}/>
-    <SearchField label="Поиск клиентов" onSearch={value=>{setSearch(value);setCursor("");}}/>
-    <SelectField label="Статус клиента" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>
-      <option value="">Все</option><option value="1">Активные</option><option value="2">Неактивные</option>
-    </SelectField><QueryNotice query={query}/>
-    {!query.busy&&!query.error&&query.data?.accounts.map(a=><Card key={a.accountId} title={a.name}>
-      <p>{a.status===1?"Активен":"Неактивен"} · версия {a.version.toString()}</p><p><small>ID: {a.accountId}</small></p>
-      <Button variant="secondary" onClick={()=>void edit(a.accountId)}>Редактировать</Button>{" "}
-      <Button variant="secondary" onClick={()=>{setEditorOpen(false);setSelected(undefined);setOverview(a.accountId);}}>Открыть карточку</Button>
-    </Card>)}
+    <PageHeader title="Клиенты" description="Клиент связывается с человеком или организацией из раздела участников."
+      actions={<Button onClick={()=>{
+        if(!canDiscard(dirty))return;
+        setExpanded("");setDirty(false);setCreateOpen(true);mutation.changed();
+      }}>Создать клиента</Button>}/>
+    <SearchField label="Поиск клиентов" submitted={search} onSearch={value=>navigate({search:value,cursor:""})}/>
+    <SelectField label="Статус клиента" value={status} onChange={event=>navigate({status:event.target.value,cursor:""})}>
+      <option value="">Все</option>
+      <option value={AccountStatus.ACCOUNT_STATUS_ACTIVE}>Активные</option>
+      <option value={AccountStatus.ACCOUNT_STATUS_INACTIVE}>Неактивные</option>
+    </SelectField>
+    <QueryNotice query={query}/>
+    {savedNotice&&<FeedbackPanel tone="success" title={savedNotice}/>}
+    {!query.busy&&!query.error&&query.data?.accounts.map(a=>{
+      const active=expanded===a.accountId;
+      const current:RecordMode=active?mode:"collapsed";
+      return <RecordCard key={a.accountId} title={a.name} mode={current}
+        summary={<>{accountStatusLabel(a.status)}</>}
+        onToggle={()=>active?collapse():expand(a.accountId,"view")}
+        actions={<>
+          <Button variant="secondary" onClick={()=>expand(a.accountId,"edit")}>Редактировать</Button>
+          <a href={accountHref(a.accountId)} onClick={event=>{
+            if(!canDiscard(dirty)){event.preventDefault();return;}
+            registerBlocker(null);
+            setDirty(false);
+            rememberAndNavigate(event,a.accountId);
+          }}>Полная страница</a>
+        </>}>
+        {active&&(mode==="edit"?<AccountEditor key={a.accountId} accountId={a.accountId}
+          onDirtyChange={setDirty} onCancel={()=>expand(a.accountId,"view")}
+          onSaved={async()=>{await query.reload();setSavedNotice("Сохранено.");setMode("view");}}/>:
+          <AccountDetails key={a.accountId} accountId={a.accountId}/>)}
+      </RecordCard>;
+    })}
     {!query.busy&&!query.error&&query.data?.accounts.length===0&&<p>{search?"Клиенты не найдены.":"Клиентов пока нет."}</p>}
-    <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")}
-      onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
-    <RecordPanel open={!!overview} title="Карточка клиента" onClose={()=>setOverview("")}>{overview&&<Overview id={overview}/>}</RecordPanel>
-    <RecordPanel open={editorOpen} title={selected?"Изменить клиента":"Новый клиент"} onClose={()=>{setEditorOpen(false);setSelected(undefined);}}>
-      <form key={selected?selected.accountId+selected.version:draftId} onChange={mutation.changed} onSubmit={e=>{
-        e.preventDefault();const data=new FormData(e.currentTarget);
-        void mutation.run(()=>selected?api.accounts.updateAccount({
-          accountId:selected.accountId,name:field(data,"name"),status:Number(field(data,"status")),
-          precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
-        }):api.accounts.createAccount({accountId:draftId,name:field(data,"name"),primaryPartyId:field(data,"partyId"),
-          precondition:{idempotencyKey:mutation.key}}),
-          async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await query.reload();});
+    <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
+      onFirst={()=>navigate({cursor:""})} onNext={()=>navigate({cursor:query.data?.pageInfo?.nextPageToken??""})}/>
+    <RecordPanel open={createOpen} title="Новый клиент" onClose={()=>setCreateOpen(false)}>
+      <form key={draftId} onChange={mutation.changed} onSubmit={event=>{
+        event.preventDefault();
+        const data=new FormData(event.currentTarget);
+        void mutation.run(()=>api.accounts.createAccount({
+          accountId:draftId,name:field(data,"name"),primaryPartyId:field(data,"partyId"),
+          precondition:{idempotencyKey:mutation.key}
+        }),async()=>{setCreateOpen(false);setDraftId(newId());await query.reload();});
       }}>
-        <FormGrid><TextField label="Название клиента" name="name" defaultValue={selected?.name??""} required/>
-          {selected?<SelectField label="Статус" name="status" defaultValue={selected.status}><option value="1">Активен</option><option value="2">Неактивен</option></SelectField>:<PartyPicker label="Основной участник"/>}
-        </FormGrid><Button type="submit" disabled={mutation.busy}>Сохранить клиента</Button>{" "}
-        {selected&&<Button variant="secondary" onClick={()=>{setEditorOpen(false);setSelected(undefined);mutation.changed();}}>Отмена</Button>}
+        <FormGrid><TextField label="Название клиента" name="name" required/><PartyPicker label="Основной участник"/></FormGrid>
+        <Button type="submit" disabled={mutation.busy}>Сохранить клиента</Button>
       </form>
       {mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}
     </RecordPanel>
     <MutationNotice state={mutation}/>
+  </>;
+}
+export function AccountPage({accountId,registerBlocker}:{accountId:string;registerBlocker:RegisterBlocker}) {
+  const [mode,setMode]=useState<"view"|"edit">("view");
+  const [dirty,setDirty]=useState(false);
+  const [revision,setRevision]=useState(0);
+  const [savedNotice,setSavedNotice]=useState("");
+  useEffect(()=>{
+    registerBlocker(dirty?()=>window.confirm(dirtyPrompt):null);
+    if(!dirty)return ()=>registerBlocker(null);
+    const unload=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue="";};
+    window.addEventListener("beforeunload",unload);
+    return ()=>{registerBlocker(null);window.removeEventListener("beforeunload",unload);};
+  },[dirty,registerBlocker]);
+  const goBack=()=>{
+    const state:unknown=window.history.state;
+    if(state&&typeof state==="object"&&"crmReturnTo" in state&&typeof state.crmReturnTo==="string")window.history.back();
+    else window.location.hash=accountsHref();
+  };
+  return <>
+    <PageHeader title="Карточка клиента" description="Полная страница того же клиента."
+      actions={<Button variant="secondary" onClick={goBack}>К списку клиентов</Button>}/>
+    {savedNotice&&<FeedbackPanel tone="success" title={savedNotice}/>}
+    <div><Button variant="secondary" onClick={()=>{
+      if(mode==="edit"&&!canDiscard(dirty))return;
+      setDirty(false);setMode(mode==="edit"?"view":"edit");
+    }}>{mode==="edit"?"Просмотр":"Редактировать"}</Button></div>
+    {mode==="edit"?<AccountEditor key={accountId} accountId={accountId}
+      onDirtyChange={setDirty} onCancel={()=>{if(canDiscard(dirty)){setDirty(false);setMode("view");}}}
+      onSaved={async()=>{setSavedNotice("Сохранено.");setRevision(value=>value+1);setMode("view");}}/>:
+      <AccountDetails key={accountId+":"+revision} accountId={accountId}/>}
   </>;
 }

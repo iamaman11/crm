@@ -22,6 +22,14 @@ if(config.errors.length)throw Error(ts.formatDiagnosticsWithColorAndContext(conf
  getCanonicalFileName:file=>file,getCurrentDirectory:()=>root,getNewLine:()=>"\n",
 }));
 const allowedBrowserPackages=new Set(["react","react-dom","@ultimate-crm/ui","@ultimate-crm/client"]);
+// The existing Connect entrypoint also exports versioned, generated enum values.
+// Whitelist exact runtime names: no ad-hoc transports, wrappers or DTO factories.
+const allowedClientValues=new Set([
+ "createCloudflareCrmClient","AccountStatus","PartyKind","ContactPointKind","ContactPointStatus",
+ "RelationshipDirectionality","RelationshipStatus","TaskPriority","TaskStatus","DealStatus",
+ "CommunicationChannel","ConsentEffect","ConsentStatus","EvaluationReason",
+ "PrivacyCaseKind","PrivacyCaseStatus","RawPayloadPolicy"
+]);
 const insideRepo=path=>{
  const rel=relative(root,path);
  return rel && rel!==".." && !rel.startsWith(".."+sep) && !rel.startsWith("/") ? rel.replaceAll("\\","/") : null;
@@ -67,8 +75,8 @@ function inspect(file,source,strict=true){
    const names=node.importClause.namedBindings.elements
     .filter(x=>!node.importClause.isTypeOnly&&!x.isTypeOnly)
     .map(x=>x.propertyName?.text||x.name.text);
-   if(names.some(x=>x!=="createCloudflareCrmClient"))
-    fail(file,"only the generated Connect CRM client is allowed");
+   if(names.some(x=>!allowedClientValues.has(x)))
+    fail(file,"only the generated Connect CRM client and contract enums are allowed");
   }
  }
  const walk=node=>{

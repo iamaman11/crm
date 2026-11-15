@@ -1,8 +1,9 @@
-import {useState} from "react";
+import {useEffect,useState} from "react";
 import {Button,TextField} from "@ultimate-crm/ui";
 
-export function SearchField({label,onSearch}:{label:string;onSearch:(value:string)=>void}) {
-  const [value,setValue]=useState("");
+export function SearchField({label,onSearch,submitted=""}:{label:string;onSearch:(value:string)=>void;submitted?:string}) {
+  const [value,setValue]=useState(submitted);
+  useEffect(()=>setValue(submitted),[submitted]);
   return <div>
     <TextField type="search" label={label} value={value} maxLength={200}
       placeholder="Фрагмент имени или ID"

@@ -1,0 +1,11 @@
+.card{background:var(--crm-surface);border:1px solid var(--crm-border);border-radius:var(--crm-radius);padding:clamp(1rem,2vw,1.3rem);margin-block:1rem;overflow-wrap:anywhere}
+.header{display:flex;gap:1rem;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.heading{flex:1 1 12rem;min-width:0}
+.heading h2{margin:0 0 .35rem;font-size:1.15rem}
+.summary{font-size:.91rem;color:var(--crm-text-muted)}
+.actions{display:flex;gap:.55rem;align-items:center;flex-wrap:wrap}
+.toggle{font:inherit;min-height:2.6rem;padding:.55rem .8rem;cursor:pointer;border:1px solid var(--crm-border);border-radius:.55rem;background:var(--crm-surface-muted);color:var(--crm-text)}
+.toggle:focus-visible{outline:3px solid var(--crm-accent);outline-offset:2px}
+.content{border-top:1px solid var(--crm-border);margin-top:1rem;padding-top:1rem}
+.content[hidden]{display:none}
+@media(max-width:600px){.actions{width:100%}.actions button,.actions a{flex:1 1 auto;text-align:center}}

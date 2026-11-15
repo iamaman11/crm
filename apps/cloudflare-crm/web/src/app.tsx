@@ -1,8 +1,8 @@
-import {useEffect,useState} from "react";
+import {useCallback,useEffect,useRef,useState} from "react";
 import {createRoot} from "react-dom/client";
-import {AppShell,ThemePicker} from "@ultimate-crm/ui";
+import {AppShell,PageHeader,ThemePicker} from "@ultimate-crm/ui";
 import {PartyScreen} from "./PartyScreen";
-import {AccountScreen} from "./AccountScreen";
+import {AccountScreen,AccountPage} from "./AccountScreen";
 import {ContactScreen} from "./ContactScreen";
 import {RelationshipScreen} from "./RelationshipScreen";
 import {TaskScreen} from "./TaskScreen";
@@ -12,35 +12,59 @@ import {ReviewScreen} from "./ReviewScreen";
 import {PrivacyScreen} from "./PrivacyScreen";
 import {EnrichmentScreen} from "./EnrichmentScreen";
 import {DataScreen} from "./DataScreen";
+import {parseRoute} from "./routes";
 
 const screens=[
-  {id:"accounts",label:"Клиенты",Component:AccountScreen},
-  {id:"parties",label:"Участники",Component:PartyScreen},
-  {id:"contacts",label:"Контакты",Component:ContactScreen},
-  {id:"relationships",label:"Связи",Component:RelationshipScreen},
-  {id:"sales",label:"Сделки",Component:SalesScreen},
-  {id:"tasks",label:"Задачи",Component:TaskScreen},
-  {id:"consents",label:"Коммуникации",Component:ConsentScreen},
-  {id:"review",label:"Качество и совпадения",Component:ReviewScreen},
-  {id:"privacy",label:"Запросы о данных",Component:PrivacyScreen},
-  {id:"enrichment",label:"Обогащение",Component:EnrichmentScreen},
-  {id:"data",label:"Импорт и экспорт",Component:DataScreen},
-];
+  {id:"accounts",label:"Клиенты"},
+  {id:"parties",label:"Участники"},
+  {id:"contacts",label:"Контакты"},
+  {id:"relationships",label:"Связи"},
+  {id:"sales",label:"Сделки"},
+  {id:"tasks",label:"Задачи"},
+  {id:"consents",label:"Коммуникации"},
+  {id:"review",label:"Качество и совпадения"},
+  {id:"privacy",label:"Запросы о данных"},
+  {id:"enrichment",label:"Обогащение"},
+  {id:"data",label:"Импорт и экспорт"},
+] as const;
 function App() {
-  const [route,setRoute]=useState(()=>location.hash.slice(1)||"accounts");
-  useEffect(()=>{const changed=()=>setRoute(location.hash.slice(1)||"accounts");
-    window.addEventListener("hashchange",changed);return()=>window.removeEventListener("hashchange",changed);},[]);
-  const [screen,query=""]=route.split("?");
-  const params=new URLSearchParams(query);
-  const selected=screens.find(s=>s.id===screen);
-  const Component=selected?.Component??AccountScreen;
-  const content=screen==="contacts"?<ContactScreen initialPartyId={params.get("partyId")??""}/>:
-    screen==="relationships"?<RelationshipScreen initialPartyId={params.get("partyId")??""}/>:
-    screen==="tasks"?<TaskScreen initialAccountId={params.get("accountId")??""}/>:
-    screen==="sales"?<SalesScreen initialAccountId={params.get("accountId")??""}/>:<Component/>;
+  const [route,setRoute]=useState(()=>parseRoute(window.location.hash));
+  const lastAcceptedHash=useRef(window.location.hash);
+  const lastAcceptedState=useRef<unknown>(window.history.state);
+  const routeBlocker=useRef<(()=>boolean)|null>(null);
+  const registerBlocker=useCallback((blocker:(()=>boolean)|null)=>{routeBlocker.current=blocker;},[]);
+  useEffect(()=>{
+    const changed=()=>{
+      const target=window.location.hash;
+      if(target!==lastAcceptedHash.current&&routeBlocker.current&&!routeBlocker.current()){
+        // Restore the accepted URL and keep the form mounted on cancelled navigation.
+        window.history.replaceState(lastAcceptedState.current,"",window.location.pathname+window.location.search+lastAcceptedHash.current);
+        return;
+      }
+      lastAcceptedHash.current=target;
+      lastAcceptedState.current=window.history.state;
+      setRoute(parseRoute(target));
+    };
+    window.addEventListener("hashchange",changed);
+    window.addEventListener("popstate",changed);
+    return ()=>{window.removeEventListener("hashchange",changed);window.removeEventListener("popstate",changed);};
+  },[]);
+  const current=route.kind==="accounts"||route.kind==="account"?"accounts":route.kind==="section"?route.screen:"";
+  const content=route.kind==="accounts"?<AccountScreen registerBlocker={registerBlocker} filters={{search:route.search,status:route.status,cursor:route.cursor}}/>:
+    route.kind==="account"?<AccountPage registerBlocker={registerBlocker} accountId={route.accountId}/>:
+    route.kind==="not-found"?<><PageHeader title="Страница не найдена"/><a href="#accounts">К списку клиентов</a></>:
+    route.screen==="parties"?<PartyScreen/>:
+    route.screen==="contacts"?<ContactScreen key={route.partyId} initialPartyId={route.partyId}/>:
+    route.screen==="relationships"?<RelationshipScreen key={route.partyId} initialPartyId={route.partyId}/>:
+    route.screen==="tasks"?<TaskScreen key={route.accountId} initialAccountId={route.accountId}/>:
+    route.screen==="sales"?<SalesScreen key={route.accountId} initialAccountId={route.accountId}/>:
+    route.screen==="consents"?<ConsentScreen/>:
+    route.screen==="review"?<ReviewScreen/>:
+    route.screen==="privacy"?<PrivacyScreen/>:
+    route.screen==="enrichment"?<EnrichmentScreen/>:<DataScreen/>;
   return <AppShell productName="CRM" accountSlot={<ThemePicker/>}
-    navigation={screens.map(s=>({id:s.id,label:s.label,href:"#"+s.id,current:s.id===(selected?.id??"accounts")}))}>
-    <div key={route}>{content}</div>
+    navigation={screens.map(s=>({id:s.id,label:s.label,href:"#"+s.id,current:s.id===current}))}>
+    {content}
   </AppShell>;
 }
 const root=document.getElementById("root");
