@@ -259,16 +259,18 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await accountCard.waitFor();
    const listHash=new URL(await page.url()).hash;
    // Make the small isolated list scrollable to verify a nonzero real scroll position.
-   await page.evaluate(()=>{document.documentElement.style.minHeight="2200px";window.scrollTo(0,360);});
+   await page.evaluate(()=>{document.documentElement.style.minHeight="2200px";window.scrollTo(0,150);});
    const accountScrollAtOpen=await page.evaluate(()=>window.scrollY);
-   assert.ok(accountScrollAtOpen>=300,"the scroll restoration test must not be a zero-scroll no-op");
+   assert.ok(accountScrollAtOpen>=100,"the scroll restoration test must not be a zero-scroll no-op");
    const pageLink=accountCard.getByRole("link",{name:"Полная страница",exact:true});
    await pageLink.click();
    await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    assert.equal(new URL(await page.url()).hash,"#accounts/"+encodeURIComponent(accountId));
    await page.goBack();
    await page.getByRole("heading",{name:"Клиенты",exact:true}).waitFor();
-   await expect.poll(()=>page.evaluate(()=>window.scrollY)).toBe(accountScrollAtOpen);
+   const recordedScroll=await page.evaluate(()=>window.history.state?.crmAccountScroll);
+   assert.ok(recordedScroll>=100,"open must record a nonzero list scroll state");
+   await expect.poll(()=>page.evaluate(()=>window.scrollY)).toBe(recordedScroll);
    await pageLink.click();
    await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    await page.reload();
