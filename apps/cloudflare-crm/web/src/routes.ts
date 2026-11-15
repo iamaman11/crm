@@ -1,18 +1,35 @@
+import type {AccountStatus} from "@ultimate-crm/client/cloudflare";
+
 export type Section = "parties"|"contacts"|"relationships"|"sales"|"tasks"|"consents"|"review"|"privacy"|"enrichment"|"data";
+export type AccountFilterStatus = AccountStatus.ACTIVE | AccountStatus.INACTIVE;
+export type AccountFilters = {search:string;status:AccountFilterStatus|null;cursor:string};
 export type Route =
-  | {kind:"accounts";search:string;status:string;cursor:string}
+  | ({kind:"accounts"} & AccountFilters)
   | {kind:"account";accountId:string}
   | {kind:"section";screen:Section;partyId:string;accountId:string}
   | {kind:"not-found";path:string};
 
 const sections:readonly Section[]=["parties","contacts","relationships","sales","tasks","consents","review","privacy","enrichment","data"];
 function isSection(path:string):path is Section {return sections.some(screen=>screen===path);}
-export function parseRoute(hash:string):Route {
+
+/** The URL/HTML boundary must accept only known generated AccountStatus members. */
+export function accountFilterStatus(raw:string|null,allowed:readonly AccountFilterStatus[]):AccountFilterStatus|null {
+  if(raw===null||raw==="")return null;
+  const status=allowed.find(value=>String(value)===raw);
+  if(status===undefined)throw Error("Недопустимый статус клиента в маршруте");
+  return status;
+}
+export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterStatus[]):Route {
   const source=hash.replace(/^#/,"")||"accounts";
   const question=source.indexOf("?");
   const path=question<0?source:source.slice(0,question);
   const params=new URLSearchParams(question<0?"":source.slice(question+1));
-  if(path==="accounts")return {kind:"accounts",search:params.get("search")??"",status:params.get("status")??"",cursor:params.get("cursor")??""};
+  if(path==="accounts"){
+    try {
+      const status=accountFilterStatus(params.get("status"),allowedStatuses);
+      return {kind:"accounts",search:params.get("search")??"",status,cursor:params.get("cursor")??""};
+    }catch{return {kind:"not-found",path:source};}
+  }
   if(path.startsWith("accounts/")&&question<0){
     try {
       const id=decodeURIComponent(path.slice("accounts/".length));
@@ -22,10 +39,10 @@ export function parseRoute(hash:string):Route {
   if(isSection(path))return {kind:"section",screen:path,partyId:params.get("partyId")??"",accountId:params.get("accountId")??""};
   return {kind:"not-found",path:source};
 }
-export function accountsHref(filters:{search:string;status:string;cursor:string}={search:"",status:"",cursor:""}):string {
+export function accountsHref(filters:AccountFilters={search:"",status:null,cursor:""}):string {
   const params=new URLSearchParams();
   if(filters.search)params.set("search",filters.search);
-  if(filters.status)params.set("status",filters.status);
+  if(filters.status!==null)params.set("status",String(filters.status));
   if(filters.cursor)params.set("cursor",filters.cursor);
   const query=params.toString();
   return "#accounts"+(query?"?"+query:"");

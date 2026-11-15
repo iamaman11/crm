@@ -1,28 +1,19 @@
-import {useCallback,useEffect,useState} from "react";
-import type {MouseEvent} from "react";
+import {useCallback,useEffect,useLayoutEffect,useState} from "react";
 import {AccountStatus} from "@ultimate-crm/client/cloudflare";
 import {Button,FeedbackPanel,RecordCard,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import {api,field,newId} from "./api";
-import {enumValue} from "./enumFields";
 import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker} from "./Pickers";
 import {SearchField} from "./SearchField";
 import {AccountDetails,AccountEditor,accountStatusLabel} from "./AccountRecord";
-import {accountsHref,accountHref} from "./routes";
+import {accountsHref,accountHref,accountFilterStatus} from "./routes";
+import type {AccountFilters} from "./routes";
+import {navigateTo,openAccountFromList,returnToList,savedAccountListScroll} from "./navigation";
 import type {RecordMode} from "@ultimate-crm/ui";
 
-type AccountFilters={search:string;status:string;cursor:string};
 type RegisterBlocker=(blocker:(()=>boolean)|null)=>void;
 const dirtyPrompt="Есть несохранённые изменения. Покинуть страницу без сохранения?";
-const allowed=[AccountStatus.ACTIVE,AccountStatus.INACTIVE] as const;
-function rememberAndNavigate(event:MouseEvent<HTMLAnchorElement>,accountId:string) {
-  if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
-  event.preventDefault();
-  const from=window.location.hash||"#accounts";
-  window.history.replaceState({crmAccountScroll:window.scrollY},"",window.location.href);
-  window.history.pushState({crmReturnTo:from},"",accountHref(accountId));
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
+export const accountFilterStatuses=[AccountStatus.ACTIVE,AccountStatus.INACTIVE] as const;
 function canDiscard(dirty:boolean) {
   return !dirty||window.confirm("Есть несохранённые изменения. Закрыть редактирование без сохранения?");
 }
@@ -35,19 +26,17 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
   const [createOpen,setCreateOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
-  useEffect(()=>{
+  useLayoutEffect(()=>{
     registerBlocker(dirty?()=>window.confirm(dirtyPrompt):null);
     return ()=>registerBlocker(null);
   },[dirty,registerBlocker]);
   const query=useQuery(useCallback(()=>api.accounts.listAccounts({
     page:{pageSize:25,pageToken:cursor},search,
-    ...(status?{status:enumValue(status,allowed,"Фильтр статуса")}:{})
+    ...(status!==null?{status}:{})
   }),[cursor,status,search]));
   const navigate=(next:Partial<AccountFilters>)=>{
-    if(!canDiscard(dirty))return;
-    registerBlocker(null);
+    if(!navigateTo(accountsHref({...filters,...next})))return;
     setDirty(false);setExpanded("");setSavedNotice("");
-    window.location.hash=accountsHref({...filters,...next});
   };
   const expand=(id:string,nextMode:"view"|"edit")=>{
     if((expanded!==id||mode!==nextMode)&&!canDiscard(dirty))return;
@@ -61,11 +50,8 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
   };
   useEffect(()=>{
     if(query.busy||!query.data)return;
-    const state:unknown=window.history.state;
-    if(state&&typeof state==="object"&&"crmAccountScroll" in state&&typeof state.crmAccountScroll==="number") {
-      const top=state.crmAccountScroll;
-      requestAnimationFrame(()=>window.scrollTo(0,top));
-    }
+    const top=savedAccountListScroll();
+    if(top!==null)requestAnimationFrame(()=>window.scrollTo(0,top));
   },[query.busy,query.data]);
   return <>
     <PageHeader title="Клиенты" description="Клиент связывается с человеком или организацией из раздела участников."
@@ -74,7 +60,7 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
         setExpanded("");setDirty(false);setCreateOpen(true);mutation.changed();
       }}>Создать клиента</Button>}/>
     <SearchField label="Поиск клиентов" submitted={search} onSearch={value=>navigate({search:value,cursor:""})}/>
-    <SelectField label="Статус клиента" value={status} onChange={event=>navigate({status:event.target.value,cursor:""})}>
+    <SelectField label="Статус клиента" value={status??""} onChange={event=>navigate({status:accountFilterStatus(event.target.value,accountFilterStatuses),cursor:""})}>
       <option value="">Все</option>
       <option value={AccountStatus.ACTIVE}>Активные</option>
       <option value={AccountStatus.INACTIVE}>Неактивные</option>
@@ -90,10 +76,9 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
         actions={<>
           <Button variant="secondary" onClick={()=>expand(a.accountId,"edit")}>Редактировать</Button>
           <a href={accountHref(a.accountId)} onClick={event=>{
-            if(!canDiscard(dirty)){event.preventDefault();return;}
-            registerBlocker(null);
-            setDirty(false);
-            rememberAndNavigate(event,a.accountId);
+            if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+            event.preventDefault();
+            if(openAccountFromList(accountHref(a.accountId)))setDirty(false);
           }}>Полная страница</a>
         </>}>
         {active&&(mode==="edit"?<AccountEditor key={a.accountId} accountId={a.accountId}
@@ -127,7 +112,7 @@ export function AccountPage({accountId,registerBlocker}:{accountId:string;regist
   const [dirty,setDirty]=useState(false);
   const [revision,setRevision]=useState(0);
   const [savedNotice,setSavedNotice]=useState("");
-  useEffect(()=>{
+  useLayoutEffect(()=>{
     registerBlocker(dirty?()=>window.confirm(dirtyPrompt):null);
     if(!dirty)return ()=>registerBlocker(null);
     const unload=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue="";};
@@ -135,13 +120,7 @@ export function AccountPage({accountId,registerBlocker}:{accountId:string;regist
     return ()=>{registerBlocker(null);window.removeEventListener("beforeunload",unload);};
   },[dirty,registerBlocker]);
   const goBack=()=>{
-    // Confirm *before* moving history; cancellation must leave earlier entries intact.
-    if(!canDiscard(dirty))return;
-    registerBlocker(null);
-    setDirty(false);
-    const state:unknown=window.history.state;
-    if(state&&typeof state==="object"&&"crmReturnTo" in state&&typeof state.crmReturnTo==="string")window.history.back();
-    else window.location.hash=accountsHref();
+    if(returnToList(accountsHref()))setDirty(false);
   };
   return <>
     <PageHeader title="Карточка клиента" description="Полная страница того же клиента."

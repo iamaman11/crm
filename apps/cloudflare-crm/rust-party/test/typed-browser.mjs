@@ -44,6 +44,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  const context=await browser.newContext({extraHTTPHeaders:adminHeaders,timezoneId:"UTC"});
  watch(context);
  const page=await context.newPage();
+ await page.addInitScript(()=>{
+   const events=[];
+   Object.defineProperty(window,"__crmRouteEvents",{value:events});
+   for(const name of ["popstate","hashchange"])
+     window.addEventListener(name,()=>events.push({event:name,hash:window.location.hash,at:performance.now()}));
+ });
 
  const navigate=async(hash,title)=>{
    await page.goto(base+"/#"+hash);
@@ -214,14 +220,19 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(new URL(await page.url()).hash,listHash,"Back must restore search, status and cursor");
    // Hash navigation and React reconciliation are asynchronous: assert the settled
    // control value, not a transient value in the first paint after popstate.
+   await expect(page.locator('[data-crm-route-kind="accounts"]')).toHaveAttribute("data-crm-account-status","2");
    await expect(page.getByLabel("Статус клиента",{exact:true})).toHaveValue("2",{timeout:10000});
    await expect(page.getByLabel("Поиск клиентов",{exact:true})).toHaveValue(accountId,{timeout:10000});
    await page.reload();
+   await expect(page.locator('[data-crm-route-kind="accounts"]')).toHaveAttribute("data-crm-account-status","2");
    await expect(page.getByLabel("Статус клиента",{exact:true})).toHaveValue("2",{timeout:10000});
    await expect(page.getByLabel("Поиск клиентов",{exact:true})).toHaveValue(accountId,{timeout:10000});
    await page.getByLabel("Статус клиента",{exact:true}).selectOption("1");
    await page.getByRole("heading",{name:"Browser Account "+runId,exact:true}).waitFor();
    steps.push("Account one editor: inline, full-page, reload, mutation, Back and filter restoration");
+   await page.goto(base+"/#accounts?status=999");
+   await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
+   steps.push("Account URL filter rejects unknown generated enum values");
    steps.push("Account create and Customer360 read");
    steps.push("Party/Account literal search by name and ID, empty result and read-only D1");
    await navigate("contacts","Контакты");
@@ -569,8 +580,18 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    return evidence;
  } catch(error) {
    await Promise.all(headerReads);
+   const navigation=await page.evaluate(()=>{
+     const field=Array.from(document.querySelectorAll("label"))
+       .find(label=>label.textContent?.trim()==="Статус клиента");
+     const select=field?document.getElementById(field.htmlFor):null;
+     const route=document.querySelector("[data-crm-route-kind]");
+     return {hash:window.location.hash,rendered_kind:route?.getAttribute("data-crm-route-kind")??null,
+       rendered_account_status:route?.getAttribute("data-crm-account-status")??null,
+       select_status:select instanceof HTMLSelectElement?select.value:null,
+       events:window.__crmRouteEvents?.slice(-20)??[]};
+   }).catch(e=>({capture_error:String(e)}));
    writeFileSync(resolve(directory,"failure.json"),JSON.stringify({result:"FAIL",source_sha:sourceSha,
-     error:String(error.message),steps,requests,writes},null,2)+"\n");
+     error:String(error.message),navigation,steps,requests,writes},null,2)+"\n");
    await page.screenshot({path:resolve(directory,"failure.png"),fullPage:true}).catch(()=>{});
    throw error;
  } finally {
