@@ -461,9 +461,9 @@ try{
 
  // ContactPoints v2 uses the original Party-owned contact aggregate, NEVER
  // the removed pilot crm_contacts table. No browser-written verified=true.
- const contactV2=async(method,token,payload)=>{
+ const contactV2=async(method,token,payload,extraHeaders={})=>{
    const response=await rpcFetch(contactV2Path(method),{method:"POST",
-     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+     headers:{...extraHeaders,"content-type":"application/proto","connect-protocol-version":"1",
        ...(token?{"cf-access-jwt-assertion":token}:{})},
      body:binaryContactV2(method,payload)});
    return {status:response.status,headers:response.headers,
@@ -485,7 +485,9 @@ try{
  assert.equal((await contactV2("CreateContactPoint",admin,{
    ...contactInput,partyId:"missing-party",
    precondition:{idempotencyKey:"candidate-v2-contact-invalid-party"}})).status,400);
- const contactCreated=await contactV2("CreateContactPoint",admin,contactInput);
+ const contactCreated=await contactV2("CreateContactPoint",admin,contactInput,{
+    "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
+    "cf-access-authenticated-user-email":"forged@example.test"});
  assert.equal(contactCreated.status,200,describeProtobuf(contactCreated.body));
  assert.equal(contactCreated.body.contactPoint?.contactPointId,contactId);
  assert.equal(contactCreated.body.contactPoint?.partyId,id);
@@ -498,7 +500,7 @@ try{
  assert.equal(contactCreated.body.receipt?.resourceVersion,1n);
  assert.equal(contactCreated.body.receipt?.replayed,false);
  assert.equal(contactCreated.body.receipt?.requestId,contactCreated.headers.get("x-request-id"));
- const contactReplay=await contactV2("CreateContactPoint",admin,contactInput);
+ const contactReplay=await contactV2("CreateContactPoint",knownService,contactInput);
  assert.equal(contactReplay.status,200,describeProtobuf(contactReplay.body));
  assert.equal(contactReplay.body.receipt?.replayed,true);
  assert.equal((await contactV2("CreateContactPoint",admin,{...contactInput,
@@ -522,7 +524,7 @@ try{
  assert.equal((await contactV2("UpdateContactPoint",admin,{...contactUpdate,status:0,
    precondition:{expectedVersion:1n,
      idempotencyKey:"candidate-v2-contact-invalid-status"}})).status,400);
- const contactUpdated=await contactV2("UpdateContactPoint",admin,contactUpdate);
+ const contactUpdated=await contactV2("UpdateContactPoint",knownService,contactUpdate);
  assert.equal(contactUpdated.status,200,describeProtobuf(contactUpdated.body));
  assert.equal(contactUpdated.body.contactPoint?.version,2n);
  assert.equal(contactUpdated.body.contactPoint?.verified,false);
@@ -544,6 +546,48 @@ try{
    "AND key IN ('candidate-v2-contact-create-001','candidate-v2-contact-update-001')")[0].n,2);
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
    "AND subject_id='"+contactId+"' AND action LIKE 'contact_points.%'")[0].n,2);
+ assert.deepEqual(sql("SELECT action,tenant_id,subject_id,request_id,actor FROM crm_audit WHERE subject_id='"+contactId+"' ORDER BY rowid"),[
+   {action:"contact_points.create",tenant_id:"tenant-a",subject_id:contactId,
+     request_id:contactCreated.headers.get("x-request-id"),actor:"native-a@example.test"},
+   {action:"contact_points.update",tenant_id:"tenant-a",subject_id:contactId,
+     request_id:contactUpdated.headers.get("x-request-id"),actor:"service:ci-fixture.access"},
+ ],"Cross-actor contact replay must preserve signed author/request ID");
+ const contactSnapshot=()=>sql("SELECT "+
+   "(SELECT json_group_array(json_array(tenant,id,state,version,actor)) FROM crm_contact_point_records) AS states,"+
+   "(SELECT COUNT(*) FROM crm_contact_point_receipts) AS receipts,"+
+   "(SELECT COUNT(*) FROM crm_audit) AS audits");
+ const beforeContactDenials=contactSnapshot();
+ for(const token of [null,viewer,unknownService]){
+   assert.ok((await contactV2("CreateContactPoint",token,contactInput)).status>=400);
+   assert.ok((await contactV2("UpdateContactPoint",token,contactUpdate)).status>=400);
+ }
+ assert.equal((await contactV2("UpdateContactPoint",tenantB,contactUpdate)).status,404);
+ sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
+ assert.equal((await contactV2("CreateContactPoint",knownService,contactInput)).status,401,
+   "Inactive service cannot replay ContactPoint create");
+ sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
+ assert.equal((await contactV2("UpdateContactPoint",knownService,contactUpdate)).status,403,
+   "Current permission is required before ContactPoint replay");
+ sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
+ assert.deepEqual(contactSnapshot(),beforeContactDenials,
+   "Denied, stale and validation errors cannot change contact state, receipts or audit");
+ sql("CREATE TRIGGER fixture_fail_contact_audit BEFORE INSERT ON crm_audit "+
+   "WHEN NEW.subject_id IN ('contact-audit-rollback','"+contactId+"') "+
+   "BEGIN SELECT RAISE(ABORT,'fixture contact audit failure'); END;");
+ try{
+   assert.equal((await contactV2("CreateContactPoint",admin,{
+     contactPointId:"contact-audit-rollback",partyId:id,kind:1,
+     value:"rollback@example.org",preferred:false,
+     precondition:{idempotencyKey:"contact-audit-failed-create"}})).status,409);
+   assert.equal((await contactV2("UpdateContactPoint",admin,{
+     ...contactUpdate,value:"rollback@example.org",
+     precondition:{expectedVersion:2n,idempotencyKey:"contact-audit-failed-update"}})).status,409);
+   assert.deepEqual(contactSnapshot(),beforeContactDenials,
+     "Contact audit SQL failure must roll back both state and receipt");
+ }finally{sql("DROP TRIGGER fixture_fail_contact_audit");}
+ console.log(JSON.stringify({event:"crm.native-contact-actor-audit",result:"PASS",
+   human_create:true,service_update:true,cross_actor_replay:true,forged_headers_ignored:true,
+   authorization_before_replay:true,tenant_ab:true,sql_failure_rollback:true}));
  // Filtered ContactPoint list uses the EXISTING D1 party_id column.
  // Nonmatches sort before our two matches, exposing the old LIMIT bug.
  const contactLastId="contact-zzz-ours-"+randomUUID();

@@ -44,7 +44,7 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
             },
             &key,
             &self.d1()?,
-            &self.tenant,
+            &self.actor,
             &self.request_id,
         )
         .await
@@ -90,7 +90,7 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
             },
             &key,
             &db,
-            &self.tenant,
+            &self.actor,
             &id,
             &self.request_id,
         )
@@ -110,7 +110,7 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
         req: ServiceRequest<'_, contact_wire::GetContactPointRequest>,
     ) -> ServiceResult<contact_wire::GetContactPointResponse> {
         let id = Self::valid_id(req.contact_point_id)?;
-        let point = contact_points::load(&self.d1()?, &self.tenant, &id)
+        let point = contact_points::load(&self.d1()?, &self.actor.tenant, &id)
             .await
             .map_err(|_| ConnectError::internal("ContactPoint D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("CONTACT_POINTS_NOT_FOUND"))?;
@@ -144,7 +144,7 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
         }
         let (list, next) = contact_points::list_page_typed(
             &self.d1()?,
-            &self.tenant,
+            &self.actor.tenant,
             after,
             size as usize,
             filter,

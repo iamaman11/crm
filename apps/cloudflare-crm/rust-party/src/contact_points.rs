@@ -1,7 +1,7 @@
 //! Native Worker HTTP/D1 boundary for ORIGINAL crm.contact-points.
 //! Contact Point is a Party-owned endpoint, not a customer or a consent.
 //! Domain invariants and strict persisted codecs remain in crm-contact-points.
-use super::{bind, now_nanos};
+use super::{access, bind, now_nanos};
 use crm_contact_points::{
     ContactPoint, ContactPointId, ContactPointKind, ContactPointStatus, CreateContactPoint,
     PartyReference, UpdateContactPoint, decode_contact_point_state, encode_contact_point_state,
@@ -165,9 +165,10 @@ pub(super) async fn create_typed(
     input: CreateInput,
     idem: &str,
     db: &D1Database,
-    tenant: &str,
+    actor: &access::Actor,
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    let tenant = &actor.tenant;
     if !(8..=120).contains(&idem.len()) {
         return Ok(Err(failure("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
@@ -211,11 +212,12 @@ pub(super) async fn create_typed(
     };
     let saved = encode(&point)?;
     let result=bind(db,
-        "INSERT INTO crm_contact_point_records(tenant,id,party_id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?,?)",
+        "INSERT INTO crm_contact_point_records(tenant,id,party_id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant),JsValue::from_str(point.contact_point_id().as_str()),
           JsValue::from_str(point.party_ref().as_str()),JsValue::from_str(&saved),
           JsValue::from_f64(point.version() as f64),JsValue::from_str(idem),
-          JsValue::from_str(&hash),JsValue::from_str(trace)])?.run().await;
+          JsValue::from_str(&hash),JsValue::from_str(trace),
+           JsValue::from_str(&actor.identity)])?.run().await;
     if result.is_err() {
         return Ok(Err(failure("CONTACT_POINTS_CREATE_CONFLICT", 409)));
     }
@@ -228,10 +230,11 @@ pub(super) async fn update_typed(
     input: UpdateInput,
     idem: &str,
     db: &D1Database,
-    tenant: &str,
+    actor: &access::Actor,
     id: &str,
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    let tenant = &actor.tenant;
     if !(8..=120).contains(&idem.len()) {
         return Ok(Err(failure("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
@@ -278,10 +281,10 @@ pub(super) async fn update_typed(
     }
     let saved = encode(&point)?;
     let result=bind(db,
-        "UPDATE crm_contact_point_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?",
+        "UPDATE crm_contact_point_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&saved),JsValue::from_f64(point.version() as f64),
           JsValue::from_str(idem),JsValue::from_str(&hash),JsValue::from_str(trace),
-          JsValue::from_str(tenant),JsValue::from_str(id),
+          JsValue::from_str(&actor.identity),JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
     let Ok(changed) = result else {
         return Ok(Err(failure("CONTACT_POINTS_UPDATE_CONFLICT", 409)));

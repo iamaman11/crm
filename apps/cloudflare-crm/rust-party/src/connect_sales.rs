@@ -245,7 +245,7 @@ impl AccountV2Service {
 // Connect wire for ORIGINAL crm-contact-points (no browser verification claim).
 struct ContactPointV2Service {
     env: Arc<Env>,
-    tenant: String,
+    actor: access::Actor,
     request_id: String,
 }
 impl ContactPointV2Service {
@@ -770,7 +770,7 @@ pub(super) fn router(env: Env, verified: &access::Actor, request_id: &str) -> Co
         }))
         .add_service(Arc::new(ContactPointV2Service {
             env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
+            actor: verified.clone(),
             request_id: request_id.to_owned(),
         }))
         .add_service(Arc::new(RelationshipV2Service {
