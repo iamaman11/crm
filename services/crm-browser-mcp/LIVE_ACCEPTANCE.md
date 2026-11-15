@@ -71,8 +71,10 @@ Close first, then `browser_open(device=mobile)` and assert React/admin again.
   persisted DO state; this does **not** substitute for a Cloudflare-hosted DO
   reattachment test. When testing live DO restart, keep an original test page
   open and perform a controlled exact-SHA redeploy with immediate DO update.
-  Require the original tab/target to survive or report FAIL without pretending
-  a fresh Open restored the old page.
+  Desktop now uses Chromium's native **persistent default context**, so require
+  the exact original tab/target to survive. Mobile/tablet retain Playwright's
+  ephemeral device contexts and are tested for fresh Open, not claimed durable.
+  Report FAIL if an original tab disappears; never disguise fresh Open as restore.
 - The service identity and Playwright request header override are **test-only**.
   Before production, review redirect-scoped Access credentials. Do not claim
   they are safe for production or secretly alter Access policy.
