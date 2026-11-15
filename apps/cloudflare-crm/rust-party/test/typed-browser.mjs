@@ -415,9 +415,13 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    ]){
      await navigate("accounts","Клиенты");
      await search("Поиск клиентов",accountId,"ListAccounts");
-     const overviewPending=page.waitForResponse(r=>r.url().endsWith("/GetAccountOverview"));
-     await page.getByRole("button",{name:"Открыть карточку",exact:true}).click();
-     assert.equal((await overviewPending).status(),200);
+     const [overviewResult]=await Promise.all([
+       page.waitForResponse(r=>r.url().endsWith("/GetAccountOverview")),
+       page.locator("section").filter({has:page.getByRole("heading",
+         {name:"Browser Account "+runId,level:2,exact:true})})
+         .getByRole("button",{name:"Открыть карточку",exact:true}).click(),
+     ]);
+     assert.equal(overviewResult.status(),200);
      const pending=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
      await page.getByRole("link",{name:link,exact:true}).click();
      assert.equal((await pending).status(),200);
