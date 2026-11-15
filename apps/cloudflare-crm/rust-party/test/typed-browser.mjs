@@ -194,7 +194,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(await page.getByLabel("Название клиента",{exact:true}).inputValue(),"Not saved "+runId);
    page.once("dialog",dialog=>void dialog.accept());
    await page.getByRole("button",{name:"К участнику",exact:true}).click();
-   await expect(page).toHaveURL(/#parties\\?partyId=/);
+   await expect(page).toHaveURL(/#parties\?partyId=/);
    await page.getByRole("heading",{name:"Browser Updated "+runId,exact:true}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
      partyAccountAuditBefore,"Cancel/Back must not create an Account");
