@@ -327,6 +327,7 @@ test("real DO exposes recoverable Status and one-step explicit Open", async () =
   assert.match(code, /const restarted = await restoreForExplicitOpen\(/);
   assert.match(code, /\(\) => this\.restore\(\), \(\) => this\.close\(\)/);
   assert.match(code, /state: needsReopen \? "needs_reopen"/);
-  assert.match(code, /if \(command\.op !== "status" \|\| !isOriginalPageMissing\(error\)\) throw error/);
+  assert.match(code, /if \(\(command\.op !== "status" &&\s*!\(command\.op === "handoff" && command\.handoffAction === "status"\)\) \|\|\s*!isOriginalPageMissing\(error\)\) throw error/,
+    "only read-only status and handoff status may inspect a lost original page");
   assert.match(code, /\(restarted \? \{ restarted: true \} : \{\}\)/);
 });
