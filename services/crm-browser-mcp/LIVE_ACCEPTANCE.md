@@ -84,3 +84,34 @@ Close first, then `browser_open(device=mobile)` and assert React/admin again.
 Record date, branch HEAD SHA, accepted PR, CI run, Worker Version ID, each
 tool's LIVE PASS / PARTIAL / FAIL, links to the real CI and anonymized outcome.
 Never report sensitive tokens, full querystrings or Live View URLs.
+
+
+## Native cross-site input regression (15 November 2026)
+
+- **Cross-site PASS:** Playwright TodoMVC (17/17 ordered UI steps), Selenium form,
+  The Internet dynamic controls/iframe/popup/dialogs/files, Demoblaze full
+  add-to-cart/remove, cross-site redirects, desktop and mobile smoke.
+- **SauceDemo remains a provider compatibility issue, not an accepted PASS:**
+  in a fresh browser and after a successful public `standard_user` login,
+  `locator.click()` on `[data-test=add-to-cart-sauce-labs-backpack]`
+  reports completion without any DOM `pointerdown`/`click` capture events
+  or React change. Native `Input.dispatchMouseEvent` CDP also sends an ACK
+  without DOM events. Explicit DOM `element.click()` produces an **untrusted**
+  click and triggers React, proving different semantics. **Never silently
+  substitute a JS synthetic click** for a native Playwright action.
+- **Keyboard:** if `browser_action(action=press, target, key=Enter)` is
+  requested, native Playwright `locator.press` focuses and presses that
+  exact element. Without `target`, use `page.keyboard.press`. This is
+  not a claim that SauceDemo accepts it: verify with a live assertion.
+- **Scenario failure UX:** `browser_run(..., screenshotOnFailure=true)`
+  returns one compact typed error receipt with
+  `failureScreenshot=available_via_browser_screenshot` when it captured a
+  PNG. Retrieve the exact failed-state image using
+  `browser_screenshot(workspaceId, source=last_failure)` **before another
+  browser_run or Close**. The separate `browser_diagnostics` provides HTTP
+  events; do not embed repeated request logs or inline PNG data in an error.
+- The screenshot is **workspace-local ephemeral state**; it is not persisted
+  or claimed recoverable after Durable Object eviction.
+- Distinguish the browser command returning `completed=true` from an
+  application postcondition. Use `browser_wait` and `browser_assert`,
+  and treat a failed postcondition as FAIL, not a successful click.

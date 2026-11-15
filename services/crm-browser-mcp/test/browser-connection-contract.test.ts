@@ -69,3 +69,30 @@ test("both download actions share one Chromium-side, same-origin byte path", () 
   assert.ok(!code.includes('await download.createReadStream('),
     "known empty CDP download streams must not be used again");
 });
+
+test("native keyboard press targets the requested locator, never a generic page when scoped", () => {
+  const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  assert.match(code, /if \(command\.target\) \{\s*await this\.target\(command\.target\)\.press\(/,
+    "targeted press must use the official Playwright locator.press API");
+  assert.match(code, /else \{\s*await page\.keyboard\.press\(/,
+    "non-targeted press retains the native page keyboard");
+});
+
+test("failed browser runs keep typed receipts compact and screenshot separately", () => {
+  const session = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  const index = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  assert.ok(session.includes('key !== "latest_requests"'),
+    "request diagnostics must not be duplicated in every run step");
+  assert.ok(session.includes("this.lastFailureScreenshot = Buffer.from(png).toString"),
+    "capture exactly the original failure image in workspace-local memory");
+  assert.ok(session.includes('command.screenshotSource === "last_failure"'),
+    "the existing screenshot tool retrieves a recorded failure separately");
+  assert.ok(session.includes("this.lastFailureScreenshot = null"),
+    "stale failure screenshots must be cleared");
+  const failed = index.slice(index.indexOf("if (isFailedVerdict(data))"),
+    index.indexOf("if (result.image)", index.indexOf("if (isFailedVerdict(data))")));
+  assert.ok(failed.includes("isError: true"), "a failed scenario is an MCP error");
+  assert.ok(!failed.includes('type: "image"'), "failed MCP tools must not inline PNGs in errors");
+  assert.ok(index.includes('source: z.enum(["current","last_failure"])'),
+    "no second screenshot MCP tool is introduced");
+});
