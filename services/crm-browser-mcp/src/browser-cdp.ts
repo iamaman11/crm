@@ -32,6 +32,12 @@ export function validateCdpCommands(commands: readonly CdpCommand[] | undefined)
             Array.isArray(command.params)))) {
       throw new Error("BROWSER_CDP_INVALID_COMMAND");
     }
+    // A structured Cloudflare handoff must be recorded and serialized by the
+    // original Durable Object, not sent through a disposable raw CDP session.
+    // All other CDP commands retain the existing universal execution path.
+    if (command.method === "Cloudflare.handoff") {
+      throw new Error("BROWSER_CDP_HANDOFF_REQUIRES_TYPED_TOOL");
+    }
   }
   let serialized: string | undefined;
   try { serialized = JSON.stringify(commands); } catch { /* A non-JSON input is invalid. */ }
