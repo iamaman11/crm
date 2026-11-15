@@ -38,16 +38,16 @@ test("all production Cloudflare Browser Run connects use typed persistent sessio
   assert.match(code, /serviceWorkers:\s*"block"/, "SSRF interception relies on blocked Service Workers");
 });
 
-test("service-origin Playwright replay keeps original MIME and security headers", () => {
+test("test CRM uses native Playwright continuation so Chromium owns the response", () => {
   const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
-  assert.match(code, /maxRedirects:\s*0/,
-    "privileged service fetch cannot follow redirects");
-  assert.match(code, /status:\s*response\.status\(\)/,
-    "use actual upstream HTTP status, not a synthetic default 200");
-  assert.match(code, /headers:\s*upstreamHeaders/,
-    "forward only upstream response headers, never request credentials");
-  assert.match(code, /body:\s*await response\.body\(\)/,
-    "forward actual response bytes rather than proxy serialization");
-  assert.doesNotMatch(code, /route\.continue\(\{\s*headers:/,
-    "service headers cannot be forwarded across browser redirects");
+  assert.ok(code.includes("await route.continue({\n          headers:"),
+    "native Playwright continues the request with the configured test identity");
+  assert.ok(code.includes('"CF-Access-Client-Id": this.env.SITE_ACCESS_CLIENT_ID!'));
+  assert.ok(code.includes('"CF-Access-Client-Secret": this.env.SITE_ACCESS_CLIENT_SECRET!'));
+  assert.ok(code.includes("siteRequestDisposition("),
+    "site-origin request disposition is unchanged");
+  assert.ok(!code.includes("route.fetch("),
+    "MCP no longer downloads HTML, JS or CSS on Chromium's behalf");
+  assert.ok(!code.includes("route.fulfill("),
+    "MCP no longer replays responses without Content-Type");
 });
