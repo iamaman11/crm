@@ -1,7 +1,7 @@
 import {useCallback,useEffect,useState} from "react";
 import type {MouseEvent} from "react";
 import {AccountStatus} from "@ultimate-crm/client/cloudflare";
-import {Button,RecordCard,RecordPanel,FormGrid,PageHeader,TextField} from "@ultimate-crm/ui";
+import {Button,FeedbackPanel,RecordCard,RecordPanel,FormGrid,PageHeader,TextField} from "@ultimate-crm/ui";
 import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
@@ -29,6 +29,7 @@ export function AccountScreen({filters}:{filters:AccountFilters}) {
   const [expanded,setExpanded]=useState("");
   const [mode,setMode]=useState<"view"|"edit">("view");
   const [dirty,setDirty]=useState(false);
+  const [savedNotice,setSavedNotice]=useState("");
   const [createOpen,setCreateOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
@@ -38,12 +39,12 @@ export function AccountScreen({filters}:{filters:AccountFilters}) {
   }),[cursor,status,search]));
   const navigate=(next:Partial<AccountFilters>)=>{
     if(!canDiscard(dirty))return;
-    setDirty(false);setExpanded("");
+    setDirty(false);setExpanded("");setSavedNotice("");
     window.location.hash=accountsHref({...filters,...next});
   };
   const expand=(id:string,nextMode:"view"|"edit")=>{
     if((expanded!==id||mode!==nextMode)&&!canDiscard(dirty))return;
-    setDirty(false);
+    setDirty(false);setSavedNotice("");
     if(expanded===id&&mode==="view"&&nextMode==="view")setExpanded("");
     else {setExpanded(id);setMode(nextMode);}
   };
@@ -69,6 +70,7 @@ export function AccountScreen({filters}:{filters:AccountFilters}) {
       <option value={AccountStatus.ACCOUNT_STATUS_INACTIVE}>Неактивные</option>
     </select>
     <QueryNotice query={query}/>
+    {savedNotice&&<FeedbackPanel tone="success" title={savedNotice}/>}
     {!query.busy&&!query.error&&query.data?.accounts.map(a=>{
       const active=expanded===a.accountId;
       const current:RecordMode=active?mode:"collapsed";
@@ -84,7 +86,7 @@ export function AccountScreen({filters}:{filters:AccountFilters}) {
         </>}>
         {active&&(mode==="edit"?<AccountEditor key={a.accountId} accountId={a.accountId}
           onDirtyChange={setDirty} onCancel={()=>expand(a.accountId,"view")}
-          onSaved={async()=>{await query.reload();setMode("view");}}/>:
+          onSaved={async()=>{await query.reload();setSavedNotice("Сохранено.");setMode("view");}}/>:
           <AccountDetails key={a.accountId} accountId={a.accountId}/>)}
       </RecordCard>;
     })}
@@ -112,6 +114,7 @@ export function AccountPage({accountId}:{accountId:string}) {
   const [mode,setMode]=useState<"view"|"edit">("view");
   const [dirty,setDirty]=useState(false);
   const [revision,setRevision]=useState(0);
+  const [savedNotice,setSavedNotice]=useState("");
   useEffect(()=>{
     if(!dirty)return;
     const unload=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue="";};
@@ -134,13 +137,14 @@ export function AccountPage({accountId}:{accountId:string}) {
   return <>
     <PageHeader title="Карточка клиента" description="Полная страница того же клиента."
       actions={<Button variant="secondary" onClick={goBack}>К списку клиентов</Button>}/>
+    {savedNotice&&<FeedbackPanel tone="success" title={savedNotice}/>}
     <div><Button variant="secondary" onClick={()=>{
       if(mode==="edit"&&!canDiscard(dirty))return;
       setDirty(false);setMode(mode==="edit"?"view":"edit");
     }}>{mode==="edit"?"Просмотр":"Редактировать"}</Button></div>
     {mode==="edit"?<AccountEditor key={accountId} accountId={accountId}
       onDirtyChange={setDirty} onCancel={()=>{if(canDiscard(dirty)){setDirty(false);setMode("view");}}}
-      onSaved={async()=>{setRevision(value=>value+1);setMode("view");}}/>:
+      onSaved={async()=>{setSavedNotice("Сохранено.");setRevision(value=>value+1);setMode("view");}}/>:
       <AccountDetails key={accountId+":"+revision} accountId={accountId}/>}
   </>;
 }
