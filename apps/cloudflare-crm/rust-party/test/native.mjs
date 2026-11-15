@@ -1371,7 +1371,7 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
     {action:"sales_deals.advance",actor:"native-a@example.test",
       request_id:closedSale.headers.get("x-request-id")}
   ],"Sales create/update/stage actor and action survive cross-actor replay");
-  const linked=sql("SELECT delivery_id,task_id,actor,request_id FROM crm_sales_link_delivery_records "+
+  const linked=sql("SELECT delivery_id,task_id,disposition,CASE WHEN task_id IS NULL THEN 1 ELSE 0 END AS no_task,actor,request_id FROM crm_sales_link_delivery_records "+
     "WHERE tenant='tenant-a' AND deal_id='"+dealId+"' ORDER BY deal_version");
   assert.equal(linked.length,2);
   // One signed server request atomically writes Deal, linked Task (if any),
@@ -1379,13 +1379,16 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
   for(const [i,row] of linked.entries()){
     assert.equal(row.actor,"native-a@example.test");
     assert.equal(row.request_id,[advancedSale,closedSale][i].headers.get("x-request-id"));
+    assert.equal(row.disposition,i===0?"applied":"ignored");
+    assert.equal(row.no_task,i===0?0:1,
+      "Ignored delivery must not create a Task; validate SQL NULL, not serialized string");
     const expected=[
       {action:"sales_deals.advance",subject_id:dealId,
         actor:"native-a@example.test",request_id:row.request_id},
       {action:i===0?"sales_activities_link.applied":"sales_activities_link.ignored",
         subject_id:row.delivery_id,actor:"native-a@example.test",
         request_id:row.request_id},
-      ...(row.task_id?[{action:"activity_tasks.create",subject_id:row.task_id,
+      ...(row.disposition==="applied"?[{action:"activity_tasks.create",subject_id:row.task_id,
         actor:"native-a@example.test",request_id:row.request_id}]:[])
     ].sort((a,b)=>a.action.localeCompare(b.action));
     const actual=sql("SELECT action,subject_id,actor,request_id FROM crm_audit "+
