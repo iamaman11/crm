@@ -98,6 +98,20 @@ lifecycle:
         with self.assertRaisesRegex(ValueError, "stale or unsuccessful"):
             coverage.build_report(runtime=proof)
 
+    def test_signed_self_write_is_a_compiled_policy_not_an_unknown_permission(self) -> None:
+        current = coverage.build_report()
+        path = "/crm.contact_points.v2.ContactPointService/VerifyOwnEmailContactPoint"
+        proof = {"source_sha": current["source_sha"], "result": "PASS",
+                 "features": ["native-ci"], "successful_rpc_calls": [path],
+                 "rpc": {"compiled_policy_check": True,
+                         "registered_methods": [path],
+                         "policies": [[path, {"permission": "SelfWrite"}]]}}
+        report = coverage.build_report(runtime=proof)
+        self.assertEqual(report["rpc_policy"][path]["permission"], "SelfWrite")
+        proof["rpc"]["policies"][0][1]["permission"] = "UnknownWrite"
+        with self.assertRaisesRegex(ValueError, "invalid compiled RPC policy"):
+            coverage.build_report(runtime=proof)
+
     def test_active_rpc_without_manifest_binding_is_not_accepted(self) -> None:
         self.assertEqual(
             coverage.rpc_path({"kind": "protobuf_rpc",
