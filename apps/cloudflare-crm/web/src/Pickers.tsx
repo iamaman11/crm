@@ -1,17 +1,22 @@
 import {useCallback,useState} from "react";
 import {Button,SelectField} from "@ultimate-crm/ui";
 import {api} from "./api";
+import type {Party} from "@ultimate-crm/client/cloudflare";
 import {useQuery,QueryNotice} from "./hooks";
 import {SearchField} from "./SearchField";
 
-export function PartyPicker({name="partyId",label="Участник"}:{name?:string;label?:string}) {
+export function PartyPicker({name="partyId",label="Участник",initialParty}:{
+  name?:string;label?:string;initialParty?:Pick<Party,"partyId"|"displayName">;
+}) {
   const [cursor,setCursor]=useState("");
-  const [value,setValue]=useState("");
+  const [value,setValue]=useState(initialParty?.partyId??"");
   const [search,setSearch]=useState("");
   const query=useQuery(useCallback(()=>api.partyRecords.listParties({page:{pageSize:100,pageToken:cursor},search}),[cursor,search]));
   return <div><SearchField label={"Поиск: "+label} onSearch={text=>{setSearch(text);setCursor("");setValue("");}}/>
     <SelectField label={label} name={name} value={value} required disabled={query.busy||!!query.error} onChange={e=>setValue(e.target.value)}>
     <option value="">Выберите участника</option>
+    {initialParty&&!query.data?.parties.some(p=>p.partyId===initialParty.partyId)&&
+      <option value={initialParty.partyId}>{initialParty.displayName} · {initialParty.partyId}</option>}
     {!query.busy&&!query.error&&query.data?.parties.map(p=><option value={p.partyId} key={p.partyId}>{p.displayName} · {p.partyId}</option>)}
   </SelectField><QueryNotice query={query}/>
     {!query.busy&&!query.error&&query.data?.parties.length===0&&<p>Участники не найдены.</p>}
