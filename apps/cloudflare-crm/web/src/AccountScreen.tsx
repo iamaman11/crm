@@ -1,14 +1,13 @@
 import {useCallback,useEffect,useLayoutEffect,useState} from "react";
 import {AccountStatus} from "@ultimate-crm/client/cloudflare";
-import {Button,FeedbackPanel,RecordCard,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
-import {api,field,newId} from "./api";
-import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
-import {PartyPicker} from "./Pickers";
+import {Button,FeedbackPanel,RecordCard,RecordPanel,PageHeader,SelectField} from "@ultimate-crm/ui";
+import {api} from "./api";
+import {useQuery,QueryNotice,Paging} from "./hooks";
 import {SearchField} from "./SearchField";
-import {AccountDetails,AccountEditor,accountStatusLabel} from "./AccountRecord";
+import {AccountDetails,AccountEditor,AccountCreator,accountStatusLabel} from "./AccountRecord";
 import {accountsHref,accountHref,accountFilterStatus} from "./routes";
 import type {AccountFilters} from "./routes";
-import {navigateTo,openAccountFromList,returnToList,savedAccountListScroll} from "./navigation";
+import {navigateTo,openAccountFromList,returnToList,savedAccountListScroll,returnToParty,replaceCommittedAccount} from "./navigation";
 import type {RecordMode} from "@ultimate-crm/ui";
 
 type RegisterBlocker=(blocker:(()=>boolean)|null)=>void;
@@ -24,12 +23,12 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
   const [dirty,setDirty]=useState(false);
   const [savedNotice,setSavedNotice]=useState("");
   const [createOpen,setCreateOpen]=useState(false);
-  const [draftId,setDraftId]=useState(newId);
-  const mutation=useMutation();
+  const [createDirty,setCreateDirty]=useState(false);
+  const [createWarning,setCreateWarning]=useState("");
   useLayoutEffect(()=>{
-    registerBlocker(dirty?()=>window.confirm(dirtyPrompt):null);
+    registerBlocker(dirty||createOpen&&createDirty?()=>window.confirm(dirtyPrompt):null);
     return ()=>registerBlocker(null);
-  },[dirty,registerBlocker]);
+  },[dirty,createOpen,createDirty,registerBlocker]);
   const query=useQuery(useCallback(()=>api.accounts.listAccounts({
     page:{pageSize:25,pageToken:cursor},search,
     ...(status!==null?{status}:{})
@@ -57,7 +56,7 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
     <PageHeader title="Клиенты" description="Клиент связывается с человеком или организацией из раздела участников."
       actions={<Button onClick={()=>{
         if(!canDiscard(dirty))return;
-        setExpanded("");setDirty(false);setCreateOpen(true);mutation.changed();
+        setExpanded("");setDirty(false);setCreateDirty(false);setCreateWarning("");setCreateOpen(true);
       }}>Создать клиента</Button>}/>
     <SearchField label="Поиск клиентов" submitted={search} onSearch={value=>navigate({search:value,cursor:""})}/>
     <SelectField label="Статус клиента" value={status??""} onChange={event=>navigate({status:accountFilterStatus(event.target.value,accountFilterStatuses),cursor:""})}>
@@ -67,6 +66,7 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
     </SelectField>
     <QueryNotice query={query}/>
     {savedNotice&&<FeedbackPanel tone="success" title={savedNotice}/>}
+    {createWarning&&<FeedbackPanel tone="warning" title={createWarning}/>}
     {!query.busy&&!query.error&&query.data?.accounts.map(a=>{
       const active=expanded===a.accountId;
       const current:RecordMode=active?mode:"collapsed";
@@ -90,21 +90,19 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
     {!query.busy&&!query.error&&query.data?.accounts.length===0&&<p>{search?"Клиенты не найдены.":"Клиентов пока нет."}</p>}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
       onFirst={()=>navigate({cursor:""})} onNext={()=>navigate({cursor:query.data?.pageInfo?.nextPageToken??""})}/>
-    <RecordPanel open={createOpen} title="Новый клиент" onClose={()=>setCreateOpen(false)}>
-      <form key={draftId} onChange={mutation.changed} onSubmit={event=>{
-        event.preventDefault();
-        const data=new FormData(event.currentTarget);
-        void mutation.run(()=>api.accounts.createAccount({
-          accountId:draftId,name:field(data,"name"),primaryPartyId:field(data,"partyId"),
-          precondition:{idempotencyKey:mutation.key}
-        }),async()=>{setCreateOpen(false);setDraftId(newId());await query.reload();});
-      }}>
-        <FormGrid><TextField label="Название клиента" name="name" required/><PartyPicker label="Основной участник"/></FormGrid>
-        <Button type="submit" disabled={mutation.busy}>Сохранить клиента</Button>
-      </form>
-      {mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}
+    <RecordPanel open={createOpen} title="Новый клиент" onClose={()=>{
+      if(!canDiscard(createDirty))return;
+      setCreateDirty(false);setCreateOpen(false);
+    }}>
+      <AccountCreator onDirtyChange={setCreateDirty} onCancel={()=>{
+        if(!canDiscard(createDirty))return;
+        setCreateDirty(false);setCreateOpen(false);
+      }} onSaved={async()=>{
+        setCreateDirty(false);setCreateOpen(false);setSavedNotice("Сохранено. Клиент создан.");
+        try {await query.reload();}
+        catch(error){setCreateWarning("Клиент создан, но список устарел: "+api.describeError(error));}
+      }}/>
     </RecordPanel>
-    <MutationNotice state={mutation}/>
   </>;
 }
 export function AccountPage({accountId,registerBlocker}:{accountId:string;registerBlocker:RegisterBlocker}) {
@@ -134,5 +132,33 @@ export function AccountPage({accountId,registerBlocker}:{accountId:string;regist
       onDirtyChange={setDirty} onCancel={()=>{if(canDiscard(dirty)){setDirty(false);setMode("view");}}}
       onSaved={async()=>{setSavedNotice("Сохранено.");setRevision(value=>value+1);setMode("view");}}/>:
       <AccountDetails key={accountId+":"+revision} accountId={accountId}/>}
+  </>;
+}
+
+/** Party-origin creation uses the same AccountCreator as the Account list. */
+export function AccountCreatePage({partyId,registerBlocker}:{
+  partyId:string;registerBlocker:RegisterBlocker;
+}) {
+  const [dirty,setDirty]=useState(false);
+  const query=useQuery(useCallback(()=>api.partyRecords.getParty({partyId}),[partyId]));
+  useLayoutEffect(()=>{
+    registerBlocker(dirty?()=>window.confirm(dirtyPrompt):null);
+    if(!dirty)return ()=>registerBlocker(null);
+    const unload=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue="";};
+    window.addEventListener("beforeunload",unload);
+    return ()=>{registerBlocker(null);window.removeEventListener("beforeunload",unload);};
+  },[dirty,registerBlocker]);
+  const cancel=()=>{if(returnToParty(partyId))setDirty(false);};
+  return <>
+    <PageHeader title="Новый клиент" description="Создание клиента на основе выбранного человека или организации."
+      actions={<Button variant="secondary" onClick={cancel}>К участнику</Button>}/>
+    <QueryNotice query={query}/>
+    {!query.busy&&!query.error&&!query.data?.party&&<p>Участник не найден.</p>}
+    {query.data?.party&&<AccountCreator key={partyId} initialParty={query.data.party}
+      onDirtyChange={setDirty} onCancel={cancel} onSaved={accountId=>{
+        setDirty(false);
+        registerBlocker(null);
+        replaceCommittedAccount(accountHref(accountId));
+      }}/>}
   </>;
 }

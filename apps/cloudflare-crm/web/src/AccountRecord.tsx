@@ -1,11 +1,12 @@
-import {useCallback} from "react";
+import {useCallback,useState} from "react";
 import {Button,FormGrid,SelectField,TextField} from "@ultimate-crm/ui";
 import {AccountStatus,TaskStatus} from "@ultimate-crm/client/cloudflare";
-import type {Account,AccountOverview} from "@ultimate-crm/client/cloudflare";
-import {api,field,dateText} from "./api";
+import type {Account,AccountOverview,Party} from "@ultimate-crm/client/cloudflare";
+import {api,field,dateText,newId} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,MutationNotice,QueryNotice} from "./hooks";
 import {scopeHref} from "./routes";
+import {PartyPicker} from "./Pickers";
 
 export function accountStatusLabel(status:AccountStatus):string {
   switch(status) {
@@ -76,4 +77,43 @@ export function AccountEditor({accountId,onSaved,onCancel,onDirtyChange}:{
     </form>}
     <MutationNotice state={mutation}/>
   </div>;
+}
+
+/** The only CreateAccount form and command, shared by list and Party-origin creation. */
+export function AccountCreator({initialParty,onSaved,onCancel,onDirtyChange}:{
+  initialParty?:Pick<Party,"partyId"|"displayName">;
+  onSaved:(accountId:string)=>Promise<unknown>|unknown;
+  onCancel:()=>void;
+  onDirtyChange?:(dirty:boolean)=>void;
+}) {
+  const [draftId,setDraftId]=useState(newId);
+  const mutation=useMutation();
+  return <>
+    <form key={draftId} onChange={()=>{
+      mutation.changed();
+      onDirtyChange?.(true);
+    }} onSubmit={event=>{
+      event.preventDefault();
+      const data=new FormData(event.currentTarget);
+      void mutation.run(()=>api.accounts.createAccount({
+        accountId:draftId,
+        name:field(data,"name"),
+        primaryPartyId:field(data,"partyId"),
+        precondition:{idempotencyKey:mutation.key}
+      }),async()=>{
+        // The write is committed: navigation must not treat a successful save as a dirty draft.
+        onDirtyChange?.(false);
+        await onSaved(draftId);
+        setDraftId(newId());
+      });
+    }}>
+      <FormGrid>
+        <TextField label="Название клиента" name="name" defaultValue={initialParty?.displayName??""} required/>
+        <PartyPicker label="Основной участник" initialParty={initialParty}/>
+      </FormGrid>
+      <Button type="submit" disabled={mutation.busy}>Сохранить клиента</Button>{" "}
+      <Button type="button" variant="secondary" disabled={mutation.busy} onClick={onCancel}>Отмена</Button>
+    </form>
+    <MutationNotice state={mutation}/>
+  </>;
 }

@@ -138,6 +138,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    partyId=await firstId("crm_party_records","display_name","Browser Party "+runId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+partyId+"'"))[0].n,1);
    await page.reload();
+   await page.keyboard.press("Tab");
+   assert.equal(await page.evaluate(()=>document.activeElement?.classList.contains("crm-skip-link")),true);
+   await page.keyboard.press("Enter");
+   assert.equal(await page.evaluate(()=>document.activeElement?.id),"main-content",
+     "skip-link must focus main without changing the typed route");
+   assert.equal(new URL(await page.url()).hash,"#parties");
    await page.getByRole("heading",{name:"Browser Party "+runId,exact:true}).waitFor();
    const partyCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Party "+runId,exact:true})});
    const partyEdit=partyCard.getByRole("button",{name:"Редактировать",exact:true});
@@ -168,6 +174,42 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await search("Поиск участников",partyId,"ListParties");
    await page.getByRole("heading",{name:"Browser Updated "+runId,exact:true}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,searchAuditBefore);
+   // Party -> Account is one existing CreateAccount command, not a second submit owner.
+   const accountFromParty=async()=>{
+     await page.locator("section").filter({has:page.getByRole("heading",
+       {name:"Browser Updated "+runId,exact:true})})
+       .getByRole("button",{name:"Создать клиента",exact:true}).click();
+     await page.getByRole("heading",{name:"Новый клиент",exact:true}).waitFor();
+     assert.equal(new URL(await page.url()).hash,"#accounts/new?partyId="+partyId);
+     await expect(page.getByLabel("Название клиента",{exact:true})).toHaveValue("Browser Updated "+runId);
+     await expect(page.getByLabel("Основной участник",{exact:true})).toHaveValue(partyId);
+   };
+   const partyAccountAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await accountFromParty();
+   await page.getByLabel("Название клиента",{exact:true}).fill("Not saved "+runId);
+   page.once("dialog",dialog=>void dialog.dismiss());
+   await page.getByRole("button",{name:"К участнику",exact:true}).click();
+   assert.equal(new URL(await page.url()).hash,"#accounts/new?partyId="+partyId,
+     "cancelled discard must keep the unsaved Account form");
+   assert.equal(await page.getByLabel("Название клиента",{exact:true}).inputValue(),"Not saved "+runId);
+   page.once("dialog",dialog=>void dialog.accept());
+   await page.getByRole("button",{name:"К участнику",exact:true}).click();
+   await expect(page).toHaveURL(/#parties\?partyId=/);
+   await page.getByRole("heading",{name:"Browser Updated "+runId,exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     partyAccountAuditBefore,"Cancel/Back must not create an Account");
+   await accountFromParty();
+   await page.getByLabel("Название клиента",{exact:true}).fill("Browser Party Account "+runId);
+   const partyAccountResponse=page.waitForResponse(r=>
+     r.url().endsWith("/CreateAccount")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Сохранить клиента",exact:true}).click();
+   await assertMutation(await partyAccountResponse,"CreateAccount");
+   const linkedAccountId=await firstId("crm_account_records","name","Browser Party Account "+runId);
+   await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
+   assert.equal(new URL(await page.url()).hash,"#accounts/"+linkedAccountId,
+     "accepted CreateAccount must replace draft URL with a permalink");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_account_records WHERE tenant='"+tenantSql+"' AND id='"+linkedAccountId+"'"))[0].n,1);
+   steps.push("Party -> shared CreateAccount: selected Party, dirty Cancel/Back and permalink");
    await navigate("relationships","Связи");
    await page.getByRole("button",{name:"Создать связь",exact:true}).click();
    await selectPagedPicker(page,"Первый участник",partyId);
@@ -216,10 +258,21 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.locator('[data-crm-route-kind="accounts"]')).toHaveAttribute("data-crm-account-status","2");
    await accountCard.waitFor();
    const listHash=new URL(await page.url()).hash;
+   // Make the small isolated list scrollable to verify a nonzero real scroll position.
+   await page.evaluate(()=>{document.documentElement.style.minHeight="2200px";window.scrollTo(0,150);});
+   const accountScrollAtOpen=await page.evaluate(()=>window.scrollY);
+   assert.ok(accountScrollAtOpen>=100,"the scroll restoration test must not be a zero-scroll no-op");
    const pageLink=accountCard.getByRole("link",{name:"Полная страница",exact:true});
    await pageLink.click();
    await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    assert.equal(new URL(await page.url()).hash,"#accounts/"+encodeURIComponent(accountId));
+   await page.goBack();
+   await page.getByRole("heading",{name:"Клиенты",exact:true}).waitFor();
+   const recordedScroll=await page.evaluate(()=>window.history.state?.crmAccountScroll);
+   assert.ok(recordedScroll>=100,"open must record a nonzero list scroll state");
+   await expect.poll(()=>page.evaluate(()=>window.scrollY)).toBe(recordedScroll);
+   await pageLink.click();
+   await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    await page.reload();
    await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    await page.getByRole("button",{name:"Редактировать",exact:true}).click();

@@ -6,6 +6,7 @@ export type AccountFilters = {search:string;status:AccountFilterStatus|null;curs
 export type Route =
   | ({kind:"accounts"} & AccountFilters)
   | {kind:"account";accountId:string}
+  | {kind:"account-create";partyId:string}
   | {kind:"section";screen:Section;partyId:string;accountId:string}
   | {kind:"not-found";path:string};
 
@@ -30,6 +31,14 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
       return {kind:"accounts",search:params.get("search")??"",status,cursor:params.get("cursor")??""};
     }catch{return {kind:"not-found",path:source};}
   }
+  if(path==="accounts/new"){
+    const ids=params.getAll("partyId");
+    const partyId=ids[0];
+    if(ids.length===1&&partyId&&partyId.length<=128&&!partyId.includes("/")&&
+       !partyId.includes("\\")&&partyId!=="."&&partyId!==".."&&!partyId.includes("%"))
+      return {kind:"account-create",partyId};
+    return {kind:"not-found",path:source};
+  }
   if(path.startsWith("accounts/")&&question<0){
     try {
       const id=decodeURIComponent(path.slice("accounts/".length));
@@ -48,6 +57,12 @@ export function accountsHref(filters:AccountFilters={search:"",status:null,curso
   return "#accounts"+(query?"?"+query:"");
 }
 export function accountHref(accountId:string):string{return "#accounts/"+encodeURIComponent(accountId);}
+export function accountCreateHref(partyId:string):string {
+  return "#accounts/new?"+new URLSearchParams({partyId}).toString();
+}
+export function partyHref(partyId:string):string {
+  return "#parties?"+new URLSearchParams({partyId}).toString();
+}
 export function scopeHref(screen:"contacts"|"relationships"|"sales"|"tasks",id:string):string {
   const parameter=screen==="sales"||screen==="tasks"?"accountId":"partyId";
   return "#"+screen+"?"+new URLSearchParams({[parameter]:id}).toString();
