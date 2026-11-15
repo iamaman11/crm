@@ -1,3 +1,14 @@
+## 15 November 2026 — axe-core CSP regression fix (#357)
+
+The first live Selenium Web Form test found a real Content-Security-Policy
+failure: an inserted inline script appeared in the DOM but `window.axe`
+remained undefined. Execute the already pinned and bundled `axe.source` via
+Playwright `page.evaluate`, not `page.addScriptTag`. This is still the same
+Browser Run session, same engine and same audited page; no injected remote CDN.
+Physical live PASS is required before claiming axe acceptance.
+
+---
+
 ## 15.11.2026 — real axe-core and visual pixel regression (#357)
 
 `browser_inspect({inspection:"axe"})` injects the **pinned** `axe-core@4.14.0`
