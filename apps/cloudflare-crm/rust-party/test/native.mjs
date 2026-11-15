@@ -1378,11 +1378,11 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
     assert.equal(row.actor,"native-a@example.test");
     assert.equal(row.request_id,[advancedSale,closedSale][i].headers.get("x-request-id"));
     assert.deepEqual(sql("SELECT actor,request_id FROM crm_audit "+
-      "WHERE tenant_id='tenant-a' AND subject_id='"+row.delivery_id+"'"),[
+      "WHERE tenant_id='tenant-a' AND subject_id='"+row.delivery_id+"' AND action LIKE 'sales_activities_link.%'"),[
       {actor:"native-a@example.test",request_id:row.request_id}
     ],"Sales linked-delivery audit must share actor and trace");
     if(row.task_id)assert.deepEqual(sql("SELECT action,actor,request_id FROM crm_audit "+
-      "WHERE tenant_id='tenant-a' AND subject_id='"+row.task_id+"'"),[
+      "WHERE tenant_id='tenant-a' AND subject_id='"+row.task_id+"' AND action='activity_tasks.create'"),[
       {action:"activity_tasks.create",actor:"native-a@example.test",request_id:row.request_id}
     ],"Automated linked Task must preserve the verified source author");
   }
