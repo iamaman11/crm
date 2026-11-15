@@ -27,7 +27,7 @@ impl party_v3::PartyService for PartyV3Service {
         }
         let saved = parties::create_typed(
             &self.d1()?,
-            &self.tenant,
+            &self.actor,
             id.as_str().to_owned(),
             kind,
             input.display_name,
@@ -63,7 +63,7 @@ impl party_v3::PartyService for PartyV3Service {
         }
         let saved = parties::update_typed(
             &self.d1()?,
-            &self.tenant,
+            &self.actor,
             id.as_str(),
             input.display_name,
             version,
@@ -86,7 +86,7 @@ impl party_v3::PartyService for PartyV3Service {
         req: ServiceRequest<'_, party_v3::GetPartyRequest>,
     ) -> ServiceResult<party_v3::GetPartyResponse> {
         let id = Self::valid_id(req.party_id)?;
-        let party = parties::stored(&self.d1()?, &self.tenant, id.as_str())
+        let party = parties::stored(&self.d1()?, &self.actor.tenant, id.as_str())
             .await
             .map_err(|_| ConnectError::internal("Party D1 get failed"))?
             .ok_or_else(|| ConnectError::not_found("PARTIES_NOT_FOUND"))?;
@@ -122,7 +122,7 @@ impl party_v3::PartyService for PartyV3Service {
             _ => return Err(ConnectError::invalid_argument("invalid PartyKind filter")),
         };
         let (parties, next) =
-            parties::list_page_typed(&self.d1()?, &self.tenant, after, size as usize, filter)
+            parties::list_page_typed(&self.d1()?, &self.actor.tenant, after, size as usize, filter)
                 .await
                 .map_err(|_| ConnectError::internal("Party D1 list failed"))?;
         let mut items = Vec::with_capacity(parties.len());

@@ -6,6 +6,7 @@ import {readFileSync} from "node:fs";
 const migration = readFileSync("apps/cloudflare-crm/migrations/0001_initial.sql","utf8");
 const reset = readFileSync("apps/cloudflare-crm/migrations/0002_hard_cutover.sql","utf8");
 const taskAudit = readFileSync("apps/cloudflare-crm/migrations/0003_task_update_audit.sql","utf8");
+const partyAudit = readFileSync("apps/cloudflare-crm/migrations/0004_party_audit_actor.sql","utf8");
 const expected = [
  "crm_tenants","crm_users","crm_audit",
  "crm_party_records","crm_party_receipts","crm_party_import_receipts",
@@ -19,12 +20,13 @@ const expected = [
  "crm_privacy_case_records","crm_privacy_case_receipts",
  "crm_enrichment_profiles","crm_enrichment_mappings","crm_enrichment_receipts",
 ];
-function db(){
+function db(withPartyActor=true){
  const db = new DatabaseSync(":memory:");
  db.exec("PRAGMA foreign_keys=ON;");
  db.exec(migration);
  db.exec(reset);
  db.exec(taskAudit);
+ if(withPartyActor)db.exec(partyAudit);
  return db;
 }
 test("new D1 starts with only original Rust owner tables and no pilot records",()=>{
@@ -40,7 +42,7 @@ test("new D1 starts with only original Rust owner tables and no pilot records",(
  }finally{database.close();}
 });
 test("hard cutover removes populated business state and preserves tenant principals",()=>{
- const database=db();
+ const database=db(false);
  try{
   database.exec("INSERT INTO crm_tenants VALUES('tenant-a','A'); INSERT INTO crm_users VALUES('service:fixture.access','tenant-a','admin',1);");
   database.prepare("INSERT INTO crm_party_records VALUES(?,?,?,?,?,?,?)").run("tenant-a","party","{}",1,"party-key","hash","request");
@@ -68,8 +70,8 @@ test("original Party mutation, idempotency and correlated audit use one atomic D
  const database=db();
  try{
   database.exec("INSERT INTO crm_tenants(id,name) VALUES('tenant-a','A')");
-  const insert=database.prepare("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?)");
-  insert.run("tenant-a","p-1","{}",1,"idem-create-1","hash-1","request-1");
+  const insert=database.prepare("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?)");
+  insert.run("tenant-a","p-1","{}",1,"idem-create-1","hash-1","request-1","human@example.test");
   assert.equal(database.prepare("SELECT COUNT(*) AS n FROM crm_party_receipts").get().n,1);
   assert.equal(database.prepare("SELECT request_id FROM crm_audit WHERE subject_id='p-1'").get().request_id,"request-1");
   const change=database.prepare("UPDATE crm_party_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?");
@@ -77,7 +79,7 @@ test("original Party mutation, idempotency and correlated audit use one atomic D
   assert.equal(change.run('{"v":9}',9,"idem-stale-1","hash-9","request-3","tenant-a","p-1",1).changes,0);
   assert.equal(database.prepare("SELECT COUNT(*) AS n FROM crm_party_receipts").get().n,2);
   assert.deepEqual(database.prepare("SELECT request_id FROM crm_audit WHERE subject_id='p-1' ORDER BY rowid").all().map(x=>x.request_id),["request-1","request-2"]);
-  assert.throws(()=>insert.run("tenant-a","p-2","{}",1,"idem-create-1","other","request-4"),/constraint/i);
+  assert.throws(()=>insert.run("tenant-a","p-2","{}",1,"idem-create-1","other","request-4","human@example.test"),/constraint/i);
   assert.equal(database.prepare("SELECT COUNT(*) AS n FROM crm_party_records").get().n,1);
   assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(),[]);
  }finally{database.close();}
@@ -85,7 +87,7 @@ test("original Party mutation, idempotency and correlated audit use one atomic D
 
 test("task audit upgrade from 0002 and fresh 0003 distinguish update/complete atomically",()=>{
  for(const upgrade of [false,true]){
-  const database=upgrade?new DatabaseSync(":memory:"):db();
+  const database=upgrade?new DatabaseSync(":memory:"):db(false);
   try{
    if(upgrade){
     database.exec("PRAGMA foreign_keys=ON;");
@@ -120,6 +122,46 @@ test("task audit upgrade from 0002 and fresh 0003 distinguish update/complete at
      "task-update","other-digest","bad-replay","tenant-a","task",3),/constraint/i);
    assert.deepEqual(database.prepare("SELECT state,version FROM crm_activity_task_records WHERE tenant='tenant-a' AND id='task'").get(),stateBefore);
    assert.deepEqual(database.prepare("SELECT action,request_id FROM crm_audit WHERE subject_id='task' ORDER BY rowid").all().map(({action,request_id})=>({action,request_id})),actions);
+   assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(),[]);
+  }finally{database.close();}
+ }
+});
+
+test("Party actor migration preserves unknown history and requires attribution on fresh and upgraded writes",()=>{
+ for(const upgrade of [false,true]){
+  const database=db(!upgrade);
+  try{
+   database.exec("INSERT INTO crm_tenants VALUES('tenant-a','A');");
+   if(upgrade){
+    database.exec("INSERT INTO crm_party_records VALUES('tenant-a','old','{}',1,'old-key','hash','old-request');");
+    const oldState=database.prepare("SELECT state FROM crm_party_records WHERE id='old'").get();
+    database.exec(partyAudit);
+    assert.deepEqual(database.prepare("SELECT state FROM crm_party_records WHERE id='old'").get(),oldState);
+    assert.equal(database.prepare("SELECT actor FROM crm_audit WHERE subject_id='old'").get().actor,null);
+    assert.throws(()=>database.exec("UPDATE crm_party_records SET version=2,idem_key='old-update' WHERE id='old'"),/PARTY_AUDIT_ACTOR_REQUIRED/);
+   }
+   const insert=database.prepare("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES('tenant-a',?,'{}',1,?,'hash',?,?)");
+   const snapshot=()=>["crm_party_records","crm_party_receipts","crm_audit"].map(table=>database.prepare("SELECT * FROM "+table+" ORDER BY rowid").all());
+   const before=snapshot();
+   for(const actor of [null,"","   "]){
+    assert.throws(()=>insert.run("missing","missing-key","missing-request",actor),/PARTY_AUDIT_ACTOR_REQUIRED/);
+    assert.deepEqual(snapshot(),before,"missing actor must roll back the entire statement");
+   }
+   insert.run("new","new-key","new-request","human@example.test");
+   database.exec("UPDATE crm_party_records SET state='{\"v\":2}',version=2,idem_key='update-key',request_id='update-request',actor='service:fixture.access' WHERE id='new'");
+   assert.deepEqual(database.prepare("SELECT action,request_id,actor FROM crm_audit WHERE subject_id='new' ORDER BY rowid").all().map(row=>({...row})),[
+    {action:"parties.create",request_id:"new-request",actor:"human@example.test"},
+    {action:"parties.update",request_id:"update-request",actor:"service:fixture.access"},
+   ]);
+   const committed=snapshot();
+   assert.throws(()=>database.exec("UPDATE crm_party_records SET version=3,idem_key='invalid-update',actor=NULL WHERE id='new'"),/PARTY_AUDIT_ACTOR_REQUIRED/);
+   assert.deepEqual(snapshot(),committed);
+   // Fail after the Party state and receipt INSERT, inside the audit write itself.
+   database.exec("CREATE TRIGGER fail_party_audit BEFORE INSERT ON crm_audit WHEN NEW.request_id='fail-request' BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;");
+   assert.throws(()=>insert.run("failed","fail-key","fail-request","human@example.test"),/fixture audit failure/);
+   assert.deepEqual(snapshot(),committed);
+   assert.throws(()=>database.exec("UPDATE crm_party_records SET version=3,idem_key='fail-update',request_id='fail-request',actor='another@example.test' WHERE id='new'"),/fixture audit failure/);
+   assert.deepEqual(snapshot(),committed,"failed audit must roll back state, receipt and attribution");
    assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(),[]);
   }finally{database.close();}
  }

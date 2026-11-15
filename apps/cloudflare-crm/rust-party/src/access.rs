@@ -220,6 +220,7 @@ async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
 }
 
 // Signed Cloudflare Access identity, one tenant, no JS actor delegation.
+#[derive(Clone)]
 pub struct Actor {
     pub tenant: String,
     pub role: String,

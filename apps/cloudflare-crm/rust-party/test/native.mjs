@@ -38,6 +38,13 @@ const sourceSha=execFileSync("git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).t
 assert.equal(process.env.CRM_SOURCE_SHA,sourceSha,"runtime evidence must identify tested checkout");
 assert.ok(process.env.CRM_RPC_RUNTIME_PROOF,"CI runtime output path required");
 const run=(args)=>execFileSync("npx",["wrangler",...args],{cwd,encoding:"utf8"});
+const sql=(query)=>JSON.parse(run(["d1","execute","crm-rust-party-local","--local",
+  "--persist-to",data,"--json","--command",query]))[0].results;
+const partySnapshot=()=>sql("SELECT "+
+  "(SELECT json_group_array(json_array(tenant,id,state,version,actor)) FROM crm_party_records) AS states,"+
+  "(SELECT COUNT(*) FROM crm_party_receipts) AS receipts,"+
+  "(SELECT COUNT(*) FROM crm_party_import_receipts) AS imports,"+
+  "(SELECT COUNT(*) FROM crm_audit) AS audits");
 const {privateKey,publicKey}=generateKeyPairSync("rsa",{modulusLength:2048});
 const kid="local-signed-rsa-fixture";
 const jwks=JSON.stringify({keys:[{...publicKey.export({format:"jwk"}),kid,alg:"RS256",use:"sig"}]});
@@ -69,9 +76,9 @@ try{
    display_name:"Original Rust Party",created_at_unix_nanos:10,
    updated_at_unix_nanos:10,version:1});
  run(["d1","execute","crm-rust-party-local","--local","--persist-to",data,
-   "--command","INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id) "+
+   "--command","INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) "+
      "VALUES('tenant-a','binary-rpc-proof-01','"+state.replaceAll("'","''")+
-     "',1,'fixture-key-01','fixture-digest-01',NULL);"]);
+     "',1,'fixture-key-01','fixture-digest-01',NULL,'native-a@example.test');"]);
  // Wrangler's applied-migration ledger must prevent a second reset.
  run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
  child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
@@ -147,9 +154,9 @@ try{
  const tenantB=jwt("native-b@example.test");
  const describeProtobuf=value=>JSON.stringify(value,
    (_key,item)=>typeof item==="bigint"?item.toString():item);
- const v3=async(method,token,payload)=>{
+ const v3=async(method,token,payload,extraHeaders={})=>{
    const response=await rpcFetch(partyV3Path(method),{method:"POST",
-     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+     headers:{...extraHeaders,"content-type":"application/proto","connect-protocol-version":"1",
        ...(token?{"cf-access-jwt-assertion":token}:{})},
      body:binaryPartyV3(method,payload)});
    return {status:response.status,headers:response.headers,
@@ -189,14 +196,16 @@ try{
  assert.equal((await v3("CreateParty",admin,{...creation,
    precondition:{idempotencyKey:"candidate-v3-invalid-pre",
      expectedVersion:1n}})).status,400);
- const created=await v3("CreateParty",admin,creation);
+ const created=await v3("CreateParty",admin,creation,{
+   "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
+   "cf-access-authenticated-user-email":"forged@example.test","x-request-id":"forged-request"});
  assert.equal(created.status,200,describeProtobuf(created.body));
  assert.equal(created.body.party?.partyId,id);
  assert.equal(created.body.party?.displayName,"Connect Native Rust");
  assert.equal(created.body.receipt?.resourceVersion,1n);
  assert.equal(created.body.receipt?.replayed,false);
  assert.equal(created.body.receipt?.requestId,created.headers.get("x-request-id"));
- const replay=await v3("CreateParty",admin,creation);
+ const replay=await v3("CreateParty",knownService,creation);
  assert.equal(replay.status,200);
  assert.equal(replay.body.receipt?.replayed,true);
  assert.equal((await v3("CreateParty",admin,{...creation,
@@ -215,7 +224,7 @@ try{
  const updatedInput={partyId:id,displayName:"Updated via native v3",
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-v3-update-001"}};
  assert.equal((await v3("UpdateParty",viewer,updatedInput)).status,403);
- const updated=await v3("UpdateParty",admin,updatedInput);
+ const updated=await v3("UpdateParty",knownService,updatedInput);
  assert.equal(updated.status,200,describeProtobuf(updated.body));
  assert.equal(updated.body.party?.version,2n);
  assert.equal(updated.body.party?.displayName,"Updated via native v3");
@@ -227,8 +236,6 @@ try{
  assert.equal((await v3("UpdateParty",admin,{...updatedInput,
    precondition:{expectedVersion:1n,
       idempotencyKey:"candidate-v3-stale-version"}})).status,409);
- const sql=(query)=>JSON.parse(run(["d1","execute","crm-rust-party-local","--local",
-   "--persist-to",data,"--json","--command",query]))[0].results;
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_tenants")[0].n,2,
    "Unknown signed service must not create another tenant");
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_users")[0].n,4,
@@ -244,6 +251,44 @@ try{
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
    "AND subject_id='"+id+"'")[0].n,2);
  assert.equal((await v3("GetParty",admin,{partyId:id})).body.party?.version,2n);
+ assert.deepEqual(sql("SELECT action,tenant_id,subject_id,request_id,actor FROM crm_audit WHERE subject_id='"+id+"' ORDER BY rowid"),[
+   {action:"parties.create",tenant_id:"tenant-a",subject_id:id,
+     request_id:created.headers.get("x-request-id"),actor:"native-a@example.test"},
+   {action:"parties.update",tenant_id:"tenant-a",subject_id:id,
+     request_id:updated.headers.get("x-request-id"),actor:"service:ci-fixture.access"},
+ ],"Cross-actor replay must retain the original audit identity and request");
+ const partyBeforeDenials=partySnapshot();
+ for(const token of [null,viewer,unknownService]){
+   assert.ok((await v3("CreateParty",token,creation)).status>=400);
+   assert.ok((await v3("UpdateParty",token,updatedInput)).status>=400);
+ }
+ sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
+ assert.equal((await v3("CreateParty",knownService,creation)).status,401,
+   "Inactive actor cannot retrieve a previously committed mutation by replay");
+ sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
+ assert.equal((await v3("UpdateParty",knownService,updatedInput)).status,403,
+   "Current permission is required before replay");
+ sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
+ assert.equal((await v3("UpdateParty",tenantB,updatedInput)).status,404);
+ assert.equal((await v3("UpdateParty",admin,{...updatedInput,displayName:"   ",
+   precondition:{expectedVersion:2n,idempotencyKey:"party-invalid-name"}})).status,400);
+ assert.deepEqual(partySnapshot(),partyBeforeDenials,"Denied/invalid operations must not change Party state, receipts or audit");
+
+ // This fixture rejects the audit INSERT after the owner has written state and receipt.
+ // No test hook or failure path is compiled into the production Worker.
+ sql("CREATE TRIGGER fixture_fail_party_audit BEFORE INSERT ON crm_audit "+
+   "WHEN NEW.subject_id IN ('party-audit-failure','"+id+"') "+
+   "BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;");
+ try{
+   assert.equal((await v3("CreateParty",admin,{partyId:"party-audit-failure",kind:1,displayName:"Rollback",
+     precondition:{idempotencyKey:"party-audit-failed-create"}})).status,409);
+   assert.equal((await v3("UpdateParty",admin,{...updatedInput,displayName:"Must roll back",
+     precondition:{expectedVersion:2n,idempotencyKey:"party-audit-failed-update"}})).status,409);
+   assert.deepEqual(partySnapshot(),partyBeforeDenials,"SQL audit failure must roll back the state and receipt too");
+ }finally{sql("DROP TRIGGER fixture_fail_party_audit");}
+ console.log(JSON.stringify({event:"crm.native-party-actor-audit",result:"PASS",
+   human_create:true,service_update:true,cross_actor_replay:true,authorization_before_replay:true,
+   forged_headers_ignored:true,sql_failure_rollback:true,tenant_ab:true}));
 
  // Interleave nonmatching person rows between matching organizations.
  // The old Rust post-LIMIT filter produced an empty middle page here.
@@ -1421,7 +1466,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(applied.body.receipt.replayed,false);
  assert.equal(applied.body.receipt.requestId,applied.headers.get("x-request-id"));
  assert.equal(applied.body.receipt.resourceVersion,1n);
- const importReplay=await csv("ApplyPartyImport",admin,applyInput);
+ const importReplay=await csv("ApplyPartyImport",knownService,applyInput);
  assert.equal(importReplay.body.createdCount,0);assert.equal(importReplay.body.replayedCount,2);
  assert.equal(importReplay.body.receipt.replayed,true);
  assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,
@@ -1430,6 +1475,9 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  for(const target of importPreview.body.targetPartyIds){
    assert.equal((await v3("GetParty",viewer,{partyId:target})).status,200);
    assert.equal((await v3("GetParty",tenantB,{partyId:target})).body.code,"not_found");
+   assert.deepEqual(sql("SELECT action,tenant_id,actor,request_id FROM crm_audit WHERE subject_id='"+target+"'"),[
+     {action:"parties.create",tenant_id:"tenant-a",actor:"native-a@example.test",request_id:applied.headers.get("x-request-id")},
+   ],"Import replay by another actor must retain the original attribution");
  }
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,importAuditBefore+2,"replays never duplicate Party audit");
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE tenant='tenant-a'")[0].n,2);
@@ -1461,6 +1509,31 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await v3("GetParty",viewer,{partyId:firstTarget})).body.code,"not_found");
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE key='csv-conflict-operation'")[0].n,0);
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,importAuditBefore+3);
+ // Unlike the preflight target conflict above, this fails inside the second SQL
+ // audit INSERT, after the first row has executed in the same D1 batch.
+ const rollbackBytes=new TextEncoder().encode(
+   "party_id,kind,display_name,resource_version\r\nrollback-one,person,First,1\r\nrollback-two,person,Second,1\r\n");
+ const rollbackPreview=await csv("PreviewPartyImport",admin,{csv:rollbackBytes});
+ assert.equal(rollbackPreview.status,200);
+ const rollbackInput={csv:rollbackBytes,expectedSha256Hex:rollbackPreview.body.csvSha256Hex,
+   precondition:{idempotencyKey:"csv-audit-rollback"}};
+ const beforeRollback=partySnapshot();
+ for(const token of [null,viewer,unknownService])assert.ok((await csv("ApplyPartyImport",token,rollbackInput)).status>=400);
+ sql("CREATE TRIGGER fixture_fail_import_audit BEFORE INSERT ON crm_audit "+
+   "WHEN NEW.subject_id='"+rollbackPreview.body.targetPartyIds[1]+"' "+
+   "BEGIN SELECT RAISE(ABORT,'fixture late import audit failure'); END;");
+ try{
+   assert.equal((await csv("ApplyPartyImport",knownService,rollbackInput)).status,409);
+   assert.deepEqual(partySnapshot(),beforeRollback,"Late batch failure must remove every state, receipt and audit");
+ }finally{sql("DROP TRIGGER fixture_fail_import_audit");}
+ const retryImport=await csv("ApplyPartyImport",knownService,rollbackInput);
+ assert.equal(retryImport.status,200,describeProtobuf(retryImport.body));
+ assert.equal(retryImport.body.createdCount,2,"Failed batch must not reserve its idempotency key");
+ for(const target of rollbackPreview.body.targetPartyIds){
+   assert.deepEqual(sql("SELECT actor,request_id FROM crm_audit WHERE subject_id='"+target+"'"),[
+     {actor:"service:ci-fixture.access",request_id:retryImport.headers.get("x-request-id")},
+   ]);
+ }
  assert.equal((await csv("PreviewPartyExport",admin,{kind:0})).body.code,"invalid_argument");
  assert.equal((await csv("PreviewPartyExport",admin,{kind:999})).body.code,"invalid_argument");
  const exportBefore=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
@@ -1489,16 +1562,16 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const boundaryRows=Array.from({length:101},(_,i)=>{
    const state=JSON.stringify({party_id:"csv-boundary-"+i,kind:"person",display_name:"Boundary "+i,
      created_at_unix_nanos:10,updated_at_unix_nanos:10,version:1});
-   return "('tenant-b','csv-boundary-"+i+"','"+state+"',1,'csv-boundary-key-"+i+"','fixture','fixture')";
+   return "('tenant-b','csv-boundary-"+i+"','"+state+"',1,'csv-boundary-key-"+i+"','fixture','fixture','native-b@example.test')";
  }).join(",");
- sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id) VALUES "+boundaryRows);
+ sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES "+boundaryRows);
  assert.equal((await csv("PreviewPartyExport",tenantB,{kind:2})).body.code,"failed_precondition");
  assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv?kind=organization",{
    headers:{"cf-access-jwt-assertion":tenantB}})).status,409);
  console.log(JSON.stringify({event:"crm.native-party-csv-v2",result:"PASS",admin_read:true,
    original_owner:"crm.customer-data-operations",party_owner:"crm.parties",
-   tenant_ab:true,atomic:true,replay:true,audit:true,csv_bytes_sha256:true,bounded:true}));
- await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha});
+   tenant_ab:true,atomic:true,replay:true,audit:true,verified_actor:true,sql_failure_rollback:true,csv_bytes_sha256:true,bounded:true}));
+ await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
  // Write evidence only after every scenario assertion above has completed.
  // A successful call is transport exercise coverage, not proof of all possible
  // business states. Domain/CAS/tenant assertions remain independently explicit.

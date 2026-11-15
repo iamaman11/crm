@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use wasm_bindgen::JsValue;
 use worker::*;
 
+#[cfg(feature = "native")]
 mod parties;
 
 #[cfg(feature = "native")]
@@ -666,7 +667,7 @@ async fn dispatch(
         {
             return rpc_error(connectrpc::ConnectError::permission_denied("FORBIDDEN"));
         }
-        return connect_sales::route(req, env, tenant, &actor.identity, request_id).await;
+        return connect_sales::route(req, env, actor, request_id).await;
     }
     let db = env.d1("DB")?;
     // Explicitly CI-only, signed-Access-gated native workerd proof. This gate
@@ -674,7 +675,7 @@ async fn dispatch(
     #[cfg(feature = "native-ci")]
     if path == "/api/_ci/original-domain-check" && method == Method::Get {
         let code = original_domain_probe::check();
-        let router = connect_sales::router(env, tenant, &actor.identity, request_id);
+        let router = connect_sales::router(env, actor, request_id);
         let mut methods: Vec<String> = router
             .methods()
             .map(|path| format!("/{}", path.trim_start_matches('/')))

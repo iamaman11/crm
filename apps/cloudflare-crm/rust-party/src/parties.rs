@@ -1,6 +1,6 @@
 //! Original crm-parties HTTP/D1 adapter. Business invariants belong only to
 //! the existing crm-parties crate; this file owns transport/persistence only.
-use super::{bind, now_nanos};
+use super::{access, bind, now_nanos};
 use crm_parties::{
     CreateParty, Party, PartyId, PartyKind, UpdateParty, decode_party_state, encode_party_state,
 };
@@ -90,12 +90,13 @@ async fn import_operation(
 }
 pub(super) async fn import_batch(
     db: &D1Database,
-    tenant: &str,
+    actor: &access::Actor,
     rows: Vec<(String, PartyKind, String, String)>,
     operation_key: &str,
     source_hash: &str,
     trace: &str,
 ) -> Result<std::result::Result<ImportSaved, MutationFailure>> {
+    let tenant = &actor.tenant;
     if !(8..=120).contains(&operation_key.len()) || rows.is_empty() {
         return Ok(Err(failed("IMPORT_PRECONDITION_INVALID", 422)));
     }
@@ -144,11 +145,11 @@ pub(super) async fn import_batch(
         )
         .map_err(|e| worker::Error::RustError(e.to_string()))?;
         statements.push(bind(db,
-            "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?)",
+            "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?)",
             &[JsValue::from_str(tenant),JsValue::from_str(id),
               JsValue::from_str(&state),JsValue::from_f64(1.0),
               JsValue::from_str(key),JsValue::from_str(&hash),
-              JsValue::from_str(trace)])?);
+              JsValue::from_str(trace),JsValue::from_str(&actor.identity)])?);
     }
     if receipts > 0 && receipts != rows.len() {
         return Ok(Err(failed("IMPORT_PARTIAL_REPLAY_CONFLICT", 409)));
@@ -209,13 +210,14 @@ fn failed(code: impl Into<String>, status: u16) -> MutationFailure {
 }
 pub(super) async fn create_typed(
     db: &D1Database,
-    tenant: &str,
+    actor: &access::Actor,
     id: String,
     kind: PartyKind,
     name: String,
     key: &str,
     request_id: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    let tenant = &actor.tenant;
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(failed("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
@@ -253,11 +255,11 @@ pub(super) async fn create_typed(
     .map_err(|e| worker::Error::RustError(e.to_string()))?;
     // Existing D1 triggers write the audit and idempotency receipt atomically.
     let result = bind(db,
-        "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?)",
+        "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant), JsValue::from_str(party.party_id().as_str()),
           JsValue::from_str(&state), JsValue::from_f64(1.0),
           JsValue::from_str(key), JsValue::from_str(&hash),
-          JsValue::from_str(request_id)])?.run().await;
+          JsValue::from_str(request_id), JsValue::from_str(&actor.identity)])?.run().await;
     if result.is_err() {
         return Ok(Err(failed("PARTIES_PARTY_CREATE_CONFLICT", 409)));
     }
@@ -268,13 +270,14 @@ pub(super) async fn create_typed(
 }
 pub(super) async fn update_typed(
     db: &D1Database,
-    tenant: &str,
+    actor: &access::Actor,
     id: &str,
     name: String,
     expected_version: i64,
     key: &str,
     request_id: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    let tenant = &actor.tenant;
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(failed("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
@@ -313,10 +316,10 @@ pub(super) async fn update_typed(
     )
     .map_err(|e| worker::Error::RustError(e.to_string()))?;
     let result = bind(db,
-        "UPDATE crm_party_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?",
+        "UPDATE crm_party_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&state), JsValue::from_f64(party.version() as f64),
           JsValue::from_str(key), JsValue::from_str(&hash),
-          JsValue::from_str(request_id), JsValue::from_str(tenant),
+          JsValue::from_str(request_id), JsValue::from_str(&actor.identity), JsValue::from_str(tenant),
           JsValue::from_str(id), JsValue::from_f64(expected_version as f64)])?.run().await;
     let Ok(changed) = result else {
         return Ok(Err(failed("PARTIES_PARTY_UPDATE_CONFLICT", 409)));

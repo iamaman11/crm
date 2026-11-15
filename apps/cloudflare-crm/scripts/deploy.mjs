@@ -279,6 +279,7 @@ async function verifyData(){
   assert.ok(evidence.started_at>=deployed.started_at);
   const setup=load("e2e-tenants.json");
   assert.equal(evidence.tenant,setup.tenant_a);
+  assert.ok(setup.actor_a,"Release must identify its enrolled Access actor");
   assert.ok(evidence.writes.length>0&&evidence.requests.length>0);
   const requests=new Map();
   for(const request of evidence.requests){
@@ -295,12 +296,15 @@ async function verifyData(){
     assert.equal(requests.get(write.request_id)?.path,write.path);
     assert.equal(requests.get(write.request_id)?.status,200);
     const result=await cf("/d1/database/"+database+"/query","POST",{
-      sql:"SELECT action,subject_id FROM crm_audit WHERE tenant_id=? AND request_id=? ORDER BY action,subject_id",
+      sql:"SELECT action,subject_id,actor FROM crm_audit WHERE tenant_id=? AND request_id=? ORDER BY action,subject_id",
       params:[evidence.tenant,write.request_id]});
     assert.equal(result?.[0]?.success,true);
-    const sort=rows=>rows.map(r=>[r.action,r.subject_id]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+    const sort=rows=>rows.map(r=>[r.action,r.subject_id,r.actor]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
     assert.ok(write.audit.length>0);
     assert.deepEqual(sort(result[0].results),sort(write.audit),"D1 changed since browser assertion");
+    for(const row of result[0].results){
+      if(row.action.startsWith("parties."))assert.equal(row.actor,setup.actor_a,"Party audit must attribute the enrolled Access actor");
+    }
   }
   // Observe every exact browser request, including rejected requests and read-only RPCs.
   // Audit rows are required only for committed mutations, never invented for reads.

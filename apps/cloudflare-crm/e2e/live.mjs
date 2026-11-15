@@ -47,7 +47,7 @@ try{
  }
  assert.equal(stable,3,"Browser suite must start on the expected deployed source");
  await typedBrowser({base,sourceSha:sha,adminHeaders:access("A"),viewerHeaders:access("A"),
-   tenantBHeaders:access("B"),tenantA:setup.tenant_a,features:["native"],directory,
+   tenantBHeaders:access("B"),tenantA:setup.tenant_a,adminIdentity:principal,features:["native"],directory,
    sql:async sql=>(await query(sql)).results,
    beforeViewer:async()=>{
      // Signed/enrolled test actor, real persisted role; no JWT fabrication or role header.

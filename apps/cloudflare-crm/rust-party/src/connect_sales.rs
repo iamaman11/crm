@@ -2,8 +2,8 @@
 //! Cloudflare Access and tenant selection happen BEFORE routing here.
 //! Domain rules and storage belong exclusively to existing crm-sales and D1.
 use super::{
-    accounts, activity_tasks, consents, contact_points, data_quality, identity_resolution, parties,
-    party_relationships, sales_deals,
+    access, accounts, activity_tasks, consents, contact_points, data_quality, identity_resolution,
+    parties, party_relationships, sales_deals,
 };
 use axum::Router;
 use buffa_types::google::protobuf::Timestamp;
@@ -104,7 +104,7 @@ fn wire_precondition(
 // in parties.rs remains the SOLE state codec, D1 mutation and receipt owner.
 struct PartyV3Service {
     env: Arc<Env>,
-    tenant: String,
+    actor: access::Actor,
     request_id: String,
 }
 impl PartyV3Service {
@@ -745,12 +745,14 @@ impl SalesV2Service {
 
 // One constructor serves dispatch and the existing signed workerd diagnostic.
 // Router::methods() inspects the registered compiled handlers.
-pub(super) fn router(env: Env, tenant: &str, actor: &str, request_id: &str) -> ConnectRouter {
+pub(super) fn router(env: Env, verified: &access::Actor, request_id: &str) -> ConnectRouter {
     let env = Arc::new(env);
+    let tenant = &verified.tenant;
+    let actor = &verified.identity;
     ConnectRouter::new()
         .add_service(Arc::new(PartyV3Service {
             env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
+            actor: verified.clone(),
             request_id: request_id.to_owned(),
         }))
         .add_service(Arc::new(AccountV2Service {
@@ -794,7 +796,7 @@ pub(super) fn router(env: Env, tenant: &str, actor: &str, request_id: &str) -> C
         }))
         .add_service(Arc::new(PartyCsvV2Service {
             env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
+            actor: verified.clone(),
             request_id: request_id.to_owned(),
         }))
         .add_service(Arc::new(EnrichmentV2Service {
@@ -820,12 +822,11 @@ pub(super) fn router(env: Env, tenant: &str, actor: &str, request_id: &str) -> C
 pub(super) async fn route(
     req: Request,
     env: Env,
-    tenant: &str,
-    actor: &str,
+    actor: &access::Actor,
     request_id: &str,
 ) -> Result<Response> {
     // Preserve the typed Connect code for the existing request log; never log payloads.
-    let service = router(env, tenant, actor, request_id)
+    let service = router(env, actor, request_id)
         .into_axum_service()
         .with_interceptor(connectrpc::unary_interceptor(|req, next| {
             Box::pin(async move {

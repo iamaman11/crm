@@ -6,13 +6,14 @@ import {resolve} from "node:path";
 import {readFile} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
 
-export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
+export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity,
  adminHeaders={"cf-access-jwt-assertion":admin},
  viewerHeaders={"cf-access-jwt-assertion":viewer},
  tenantBHeaders={"cf-access-jwt-assertion":tenantB},tenantA="tenant-a",
  features=["native-ci"],beforeViewer=async()=>async()=>{},
  directory=fileURLToPath(new URL("../../e2e-evidence-native/",import.meta.url))}) {
  const tenantSql=tenantA.replaceAll("'","''");
+ assert.ok(adminIdentity,"Expected signed actor is required for browser audit assertions");
  const startedAt=Date.now();
  const requests=[],writes=[],pageErrors=[],steps=[];
  let restoreViewer=async()=>{};
@@ -42,10 +43,13 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,
    assert.equal(response.status(),200,method+" "+await response.text());
    const requestId=response.headers()["x-request-id"];
    assert.match(requestId??"",/^[a-f0-9-]{36}$/i);
-   const audit=await sql("SELECT action,subject_id FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND request_id='"+requestId+"'");
+   const audit=await sql("SELECT action,subject_id,actor FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND request_id='"+requestId+"'");
    if(replay)assert.equal(audit.length,0,"Replay must not append audit");
    else {
      assert.ok(audit.length>0,method+" must commit audit for the browser request");
+     if(["CreateParty","UpdateParty","ApplyPartyImport"].includes(method)){
+       for(const row of audit)assert.equal(row.actor,adminIdentity,method+" must preserve the signed actor in D1");
+     }
      writes.push({path:new URL(response.url()).pathname,request_id:requestId,audit});
    }
  };

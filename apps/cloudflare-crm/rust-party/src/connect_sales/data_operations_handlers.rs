@@ -5,7 +5,7 @@ use crm_customer_data_operations::PartyExportKindFilter;
 
 pub(super) struct PartyCsvV2Service {
     pub(super) env: Arc<Env>,
-    pub(super) tenant: String,
+    pub(super) actor: access::Actor,
     pub(super) request_id: String,
 }
 impl PartyCsvV2Service {
@@ -33,7 +33,7 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
             }
             _ => return Err(ConnectError::invalid_argument("EXPORT_KIND_INVALID")),
         };
-        let export = owner::assemble(&self.d1()?, &self.tenant, kind)
+        let export = owner::assemble(&self.d1()?, &self.actor.tenant, kind)
             .await
             .map_err(|_| ConnectError::internal("export D1 read failed"))?
             .ok_or_else(|| ConnectError::failed_precondition("EXPORT_SCOPE_LIMIT_REACHED"))?;
@@ -58,7 +58,7 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, csv_wire::PreviewPartyImportRequest>,
     ) -> ServiceResult<csv_wire::PreviewPartyImportResponse> {
-        let preview = owner::preview_import(req.csv, &self.d1()?, &self.tenant)
+        let preview = owner::preview_import(req.csv, &self.d1()?, &self.actor.tenant)
             .await
             .map_err(|_| ConnectError::internal("import preview D1 read failed"))?
             .map_err(PartyV3Service::mutation_error)?;
@@ -83,7 +83,7 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
             &input.expected_sha256_hex,
             &key,
             &self.d1()?,
-            &self.tenant,
+            &self.actor,
             &self.request_id,
         )
         .await

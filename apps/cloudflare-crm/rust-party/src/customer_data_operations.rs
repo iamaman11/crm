@@ -2,7 +2,7 @@
 //! crm-customer-data-operations scope/profile/specification/CSV functions.
 //! One signed Access tenant, one original Party D1 owner; NO shadow export
 //! business rules, persisted export job, file store or background service.
-use super::{bind, error, parties};
+use super::{access, bind, error, parties};
 use crm_customer_data_operations::{
     CreateImportRow, ImportJobId, ImportParserProfile, ImportRow, PartyImportKind,
     PartyImportMapping, PreparedPartyRow, parse_import_source, party_export_hash_parts,
@@ -297,10 +297,10 @@ pub(super) async fn apply_import(
     expected: &str,
     key: &str,
     db: &D1Database,
-    tenant: &str,
+    actor: &access::Actor,
     trace: &str,
 ) -> Result<std::result::Result<ImportApplied, parties::MutationFailure>> {
-    let plan = match parse_import(bytes, tenant) {
+    let plan = match parse_import(bytes, &actor.tenant) {
         Ok(plan) => plan,
         Err(code) => {
             return Ok(Err(parties::MutationFailure {
@@ -316,7 +316,7 @@ pub(super) async fn apply_import(
         }));
     }
     Ok(
-        parties::import_batch(db, tenant, plan.commands, key, &plan.hash, trace)
+        parties::import_batch(db, actor, plan.commands, key, &plan.hash, trace)
             .await?
             .map(|saved| ImportApplied {
                 saved,

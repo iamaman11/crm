@@ -122,7 +122,7 @@ function run(mode,variant="valid"){
  const save=(path,value)=>writeFileSync(path,JSON.stringify(value));
  if(variant!=="no-checkpoint")save(join(out,"checkpoint.json"),{git_sha:sha,previous_sha:previous,d1_database:database});
  save(join(out,"deployed.json"),{git_sha:sha,worker_version:"version-new",started_at:1});
- if(mode==="verify-data")save(join(out,"e2e-tenants.json"),{tenant_a:"fixture-a"});
+ if(mode==="verify-data")save(join(out,"e2e-tenants.json"),{tenant_a:"fixture-a",actor_a:"service:synthetic.access"});
  if(variant==="restore-role"||variant==="wrong-role-tenant")save(join(out,"e2e-tenants.json"),{
    source_sha:sha,database,run_id:"123",attempt:"1",actor_a:"service:synthetic.access",
    tenant_a:variant==="wrong-role-tenant"?"unrelated-tenant":"crm-e2e-123-1-a"});
@@ -136,7 +136,8 @@ function run(mode,variant="valid"){
    writeFileSync(join(app,"dist/index.html"),"synthetic UI");
    writeFileSync(join(out,"source-sha.txt"),sha);
  }
- const rpcPath="/crm.parties.v3.PartyService/CreateParty",audit=[{action:"parties.create",subject_id:"party"}];
+ const rpcPath="/crm.parties.v3.PartyService/CreateParty",audit=[{action:"parties.create",subject_id:"party",
+   actor:variant==="wrong-actor"?"forged@example.test":"service:synthetic.access"}];
  save(join(app,"e2e-evidence/typed-browser.json"),{result:"PASS",source_sha:sha,features:variant==="wrong-features"?["native-ci"]:["native"],
    tenant:"fixture-a",started_at:2,steps:["synthetic fixture"],requests:[
      {path:rpcPath,status:200,request_id:requestId,source_sha:sha,runtime:"native-workers-rs"}],
@@ -170,7 +171,7 @@ test("matching browser, D1 and version-specific Logs evidence passes the release
  const result=run("verify-data");
  assert.equal(result.status,0,result.error);assert.equal(result.accepted,true);
 });
-for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-error-code"])test("release rejects "+variant,()=>{
+for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-error-code","wrong-actor"])test("release rejects "+variant,()=>{
  const result=run("verify-data",variant);
  assert.notEqual(result.status,0);assert.equal(result.accepted,false);
 });
