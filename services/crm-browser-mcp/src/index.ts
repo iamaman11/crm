@@ -105,13 +105,14 @@ function createServer(env: Env, ownerEmail: string) {
     // Only a successful browser_open reveals a minted workspace handle.
     const data = payload.op === "open" && result.data && typeof result.data === "object"
       ? { ...result.data, workspaceId } : result.data;
-    // A failed assertion/scenario must not appear as an MCP success.
+    // A failed assertion/scenario remains an MCP error with a small typed
+    // receipt. Never attach a multi-megabyte PNG to a failed tool call: some
+    // MCP clients stringify the entire image inside their error message.
+    // The exact failure PNG, if requested, is retrieved separately through
+    // browser_screenshot(source="last_failure") in this workspace.
     if (isFailedVerdict(data)) return {
       isError: true,
-      content: [
-        { type: "text" as const, text: JSON.stringify(data) },
-        ...(result.image ? [{ type: "image" as const, data: result.image, mimeType: "image/png" as const }] : []),
-      ],
+      content: [{ type: "text" as const, text: JSON.stringify(data) }],
     };
     if (result.image) return {
       content: [
@@ -207,12 +208,12 @@ function createServer(env: Env, ownerEmail: string) {
   }, async params => command({ op: "viewport", ...params }));
 
   server.registerTool("browser_screenshot", {
-    description: "Capture an actual full-page PNG screenshot of the currently open website.",
-    inputSchema: { workspaceId: workspaceIdSchema },
-  }, async ({ workspaceId }) => command({ op: "screenshot", workspaceId }));
+    description: "Capture a current full-page PNG, or retrieve the exact PNG saved by the last failed browser_run in this workspace. The failed tool response remains compact.",
+    inputSchema: { workspaceId: workspaceIdSchema, source: z.enum(["current","last_failure"]).default("current") },
+  }, async ({ workspaceId, source }) => command({ op: "screenshot", workspaceId, screenshotSource: source }));
 
   server.registerTool("browser_action", {
-    description: "Perform a real Playwright UI action. Set followPopup:true on click/double_click to wait for and activate the newly opened tab before returning. Use target.frameSelector for stable iframe targeting.",
+    description: "Perform native Playwright UI actions. press with a target uses locator.press (focuses the actual element); without target uses page.keyboard.press. Set followPopup:true for popup clicks. A click ACK is not proof of an app state change; use browser_wait/assert.",
     inputSchema: {
       workspaceId: workspaceIdSchema,
       action,
@@ -256,7 +257,7 @@ function createServer(env: Env, ownerEmail: string) {
   }, async params => command({ op: "assert", ...params }));
 
   server.registerTool("browser_run", {
-    description: "Run up to 64 prevalidated Playwright steps (one browser, one total 120-second deadline) with assertions, popup follow, per-step timings and screenshot on failure. Failing steps never auto-replay.",
+    description: "Run up to 64 prevalidated native Playwright steps with bounded waits/assertions and concise per-step receipts (HTTP diagnostics are separate). On failure returns typed error without inline PNG; if screenshotOnFailure, retrieve exact image with browser_screenshot(source=last_failure). No auto-replay.",
     inputSchema: {
       workspaceId: workspaceIdSchema,
       steps: z.array(scenarioStep).min(1).max(64),
