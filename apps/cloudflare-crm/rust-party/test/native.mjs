@@ -2010,6 +2010,16 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      await enterSearch(searchLabel,searchIds[0],method);
      await select.selectOption(searchIds[0]);
      assert.equal(await select.inputValue(),searchIds[0]);
+     // Finish the form before navigating to the next screen. The shared
+     // AccountCreator correctly protects dirty drafts; an unhandled hash
+     // transition must NOT bypass that guard or masquerade as a missing Task UI.
+     if(hash==="accounts"){
+       page.once("dialog",dialog=>void dialog.accept());
+       await panel.getByRole("button",{name:"Отмена",exact:true}).click();
+     }else{
+       await page.keyboard.press("Escape");
+     }
+     await panel.waitFor({state:"hidden"});
    }
    await page.setViewportSize({width:390,height:844});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1));
