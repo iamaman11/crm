@@ -420,7 +420,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
         // Incognito browser.newContext() has dispose-on-detach semantics.
         // Mobile/tablet still need native Playwright context device options.
         this.context = device === "desktop"
-          ? this.browser.contexts()[0]
+          ? (this.browser.contexts()[0] ?? null)
           : await this.browser.newContext({
               ...deviceOptions(device),
               acceptDownloads: true, serviceWorkers: "block",
@@ -712,7 +712,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
         if (!this.context) {
           const device = await this.ctx.storage.get<BrowserDevice>("browser_device") ?? "desktop";
           this.context = device === "desktop"
-            ? this.browser.contexts()[0]
+            ? (this.browser.contexts()[0] ?? null)
             : await this.browser.newContext({
                 ...deviceOptions(device),
                 acceptDownloads: true, serviceWorkers: "block",
