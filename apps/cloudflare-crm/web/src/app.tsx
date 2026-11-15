@@ -30,11 +30,17 @@ function App() {
   const [route,setRoute]=useState(()=>location.hash.slice(1)||"accounts");
   useEffect(()=>{const changed=()=>setRoute(location.hash.slice(1)||"accounts");
     window.addEventListener("hashchange",changed);return()=>window.removeEventListener("hashchange",changed);},[]);
-  const selected=screens.find(s=>s.id===route);
+  const [screen,query=""]=route.split("?");
+  const params=new URLSearchParams(query);
+  const selected=screens.find(s=>s.id===screen);
   const Component=selected?.Component??AccountScreen;
+  const content=screen==="contacts"?<ContactScreen initialPartyId={params.get("partyId")??""}/>:
+    screen==="relationships"?<RelationshipScreen initialPartyId={params.get("partyId")??""}/>:
+    screen==="tasks"?<TaskScreen initialAccountId={params.get("accountId")??""}/>:
+    screen==="sales"?<SalesScreen initialAccountId={params.get("accountId")??""}/>:<Component/>;
   return <AppShell productName="CRM" accountSlot={<ThemePicker/>}
     navigation={screens.map(s=>({id:s.id,label:s.label,href:"#"+s.id,current:s.id===(selected?.id??"accounts")}))}>
-    <Component key={route}/>
+    <div key={route}>{content}</div>
   </AppShell>;
 }
 const root=document.getElementById("root");
