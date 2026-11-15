@@ -31,14 +31,28 @@ function App() {
   const [route,setRoute]=useState(()=>parseRoute(window.location.hash));
   const lastAcceptedHash=useRef(window.location.hash);
   const lastAcceptedState=useRef<unknown>(window.history.state);
+  const restoringBack=useRef(false);
   const routeBlocker=useRef<(()=>boolean)|null>(null);
   const registerBlocker=useCallback((blocker:(()=>boolean)|null)=>{routeBlocker.current=blocker;},[]);
   useEffect(()=>{
-    const changed=()=>{
+    const changed=(event:Event)=>{
       const target=window.location.hash;
+      if(restoringBack.current){
+        // Back was refused: do not display the transient previous route.
+        if(target===lastAcceptedHash.current)restoringBack.current=false;
+        return;
+      }
       if(target!==lastAcceptedHash.current&&routeBlocker.current&&!routeBlocker.current()){
-        // Restore the accepted URL and keep the form mounted on cancelled navigation.
-        window.history.replaceState(lastAcceptedState.current,"",window.location.pathname+window.location.search+lastAcceptedHash.current);
+        const accepted=lastAcceptedState.current;
+        if(event.type==="popstate"&&accepted!==null&&typeof accepted==="object"&&
+          "crmReturnTo" in accepted&&accepted.crmReturnTo===target){
+          // Undo Back without replacing the previous history entry or its filters.
+          restoringBack.current=true;
+          window.history.forward();
+        }else{
+          window.history.replaceState(accepted,"",
+            window.location.pathname+window.location.search+lastAcceptedHash.current);
+        }
         return;
       }
       lastAcceptedHash.current=target;
