@@ -30,6 +30,24 @@ test("CDP preflight rejects a malformed late method BEFORE earlier mutations", a
   assert.equal(calls, 0);
 });
 
+test("native Human-in-the-Loop cannot bypass the DO-owned handoff lock through raw CDP", async () => {
+  let sent = 0;
+  const commands = [
+    { method: "Runtime.evaluate", params: { expression: "window.location.href" } },
+    { method: "Cloudflare.handoff", params: { instructions: "Wait for human" } },
+  ];
+  assert.throws(() => validateCdpCommands(commands), /BROWSER_CDP_HANDOFF_REQUIRES_TYPED_TOOL/);
+  await assert.rejects(executeCdpCommands(commands, async () => {
+    sent++;
+    return {};
+  }), /BROWSER_CDP_HANDOFF_REQUIRES_TYPED_TOOL/);
+  assert.equal(sent, 0, "preflight must block ALL preceding commands");
+  assert.doesNotThrow(() => validateCdpCommands([
+    { method: "Cloudflare.getHandoffState" },
+    { method: "Cloudflare.getLiveView", params: { mode: "tab" } },
+  ]), "read-only native CDP methods remain available");
+});
+
 test("CDP reports a failed browser response precisely once, never replays a click", async () => {
   const calls: string[] = [];
   const report = await executeCdpCommands([

@@ -7,7 +7,7 @@ import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser
 import { WorkspaceFileTransfers, MAX_WORKSPACE_FILE_BYTES, MAX_WORKSPACE_CHUNK_BYTES } from "./browser-transfers";
 import { classifyBrowserAcquireFailure, readSafeBrowserHistory, readSafeBrowserLimits, recoverExistingBrowserSession, selectRestoredPublicPage, parsePageTargetInfo, restoreForExplicitOpen, isOriginalPageMissing, type BrowserPageIdentity } from "./browser-recovery";
 import { BROWSER_RUNTIME_EPOCH, requireRuntimeEpoch } from "./runtime-epoch";
-import { executeCdpCommands, type CdpCommand } from "./browser-cdp";
+import { executeCdpCommands, validateCdpCommands, type CdpCommand } from "./browser-cdp";
 import { recordingTargets, recordingHar } from "./browser-recordings";
 import { completedHandoff, handoffIdentifier, handoffLiveViewUrl, isProviderHandoffActive,
   validateHandoffRequest, type HumanHandoffRecord } from "./browser-handoff";
@@ -457,6 +457,11 @@ export class CrmBrowserSession extends DurableObject<Env> {
     if (isStatus && existing?.status !== "waiting_human") {
       return { state: existing?.status, handoffId: existing?.handoffId };
     }
+    // Validate before acquiring any CDP handles or minting an interactive
+    // Live View URL; malformed handoffs cannot affect the existing session.
+    const checked = isStatus ? undefined : validateHandoffRequest(
+      command.handoffInstructions, command.handoffTimeoutMs,
+    );
     const page = this.page;
     if (!page || page.isClosed() || !this.browserSessionId) {
       return isStatus ? { state: "needs_reopen", handoff: "unconfirmed" } :
@@ -497,9 +502,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
           liveViewUrl: view, expiresInSeconds: 300 };
       }
 
-      const checked = validateHandoffRequest(
-        command.handoffInstructions, command.handoffTimeoutMs,
-      );
+      if (!checked) throw new Error("BROWSER_HANDOFF_ACTION_INVALID");
       if (isProviderHandoffActive(await send("Cloudflare.getHandoffState")) !== false) {
         throw new Error("BROWSER_HANDOFF_PROVIDER_ALREADY_ACTIVE_OR_UNAVAILABLE");
       }
@@ -746,6 +749,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
         // MCP Worker, CDP connection manager or worker-side script evaluator.
         // The helper validates the whole batch before the first mutation.
         const commands = command.cdpCommands ?? [];
+        // Validate the entire batch before obtaining a CDP handle; in
+        // particular Cloudflare.handoff must use the typed DO handoff owner.
+        validateCdpCommands(commands);
         const cdp = await page.context().newCDPSession(page);
         // Playwright's typed Protocol.CommandParameters enumerates known CDP
         // methods at compile time. This ONE boundary supports new runtime CDP
