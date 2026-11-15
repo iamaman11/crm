@@ -59,7 +59,10 @@ try{
    }
  });
 }catch(error){
- writeFileSync(directory+"/failure.json",JSON.stringify({result:"FAIL",source_sha:sha,error:String(error.message)},null,2)+"\n");
+ // typedBrowser owns browser failure.json; never overwrite its navigation evidence.
+ // A failure before Chromium starts is a separate deployment/preflight failure.
+ writeFileSync(directory+"/live-preflight-failure.json",
+   JSON.stringify({result:"FAIL",source_sha:sha,error:String(error.message)},null,2)+"\n");
  throw error;
 }finally{
  await restoreRole();

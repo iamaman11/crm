@@ -47,8 +47,19 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  await page.addInitScript(()=>{
    const events=[];
    Object.defineProperty(window,"__crmRouteEvents",{value:events});
-   for(const name of ["popstate","hashchange"])
-     window.addEventListener(name,()=>events.push({event:name,hash:window.location.hash,at:performance.now()}));
+   const documentId=crypto.randomUUID();
+   const capture=(event)=>{
+     const root=document.querySelector("[data-crm-route-kind]");
+     events.push({event:event.type,document_id:documentId,
+       hash:window.location.hash,at:performance.now(),
+       persisted:"persisted" in event?event.persisted:null,
+       rendered_kind:root?.getAttribute("data-crm-route-kind")??null,
+       rendered_account_status:root?.getAttribute("data-crm-account-status")??null,
+       history_length:history.length});
+     if(events.length>80)events.shift();
+   };
+   for(const name of ["pageshow","pagehide","popstate","hashchange","visibilitychange"])
+     window.addEventListener(name,capture);
  });
 
  const navigate=async(hash,title)=>{
@@ -585,10 +596,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        .find(label=>label.textContent?.trim()==="Статус клиента");
      const select=field?document.getElementById(field.htmlFor):null;
      const route=document.querySelector("[data-crm-route-kind]");
-     return {hash:window.location.hash,rendered_kind:route?.getAttribute("data-crm-route-kind")??null,
+     return {hash:window.location.hash,
+       document_url:new URL(window.location.href).pathname+window.location.hash,
+       navigation_type:performance.getEntriesByType("navigation").at(-1)?.type??null,
+       history_length:history.length,
+       history_state:window.history.state,
+       rendered_kind:route?.getAttribute("data-crm-route-kind")??null,
        rendered_account_status:route?.getAttribute("data-crm-account-status")??null,
        select_status:select instanceof HTMLSelectElement?select.value:null,
-       events:window.__crmRouteEvents?.slice(-20)??[]};
+       events:window.__crmRouteEvents?.slice(-60)??[]};
    }).catch(e=>({capture_error:String(e)}));
    writeFileSync(resolve(directory,"failure.json"),JSON.stringify({result:"FAIL",source_sha:sourceSha,
      error:String(error.message),navigation,steps,requests,writes},null,2)+"\n");
