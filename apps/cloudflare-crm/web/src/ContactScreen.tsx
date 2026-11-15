@@ -57,11 +57,11 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
         },async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await query.reload();});
       }}><FormGrid>
         {!selected&&<><PartyPicker/><SelectField label="Тип контакта" name="kind" defaultValue="1">
-          <option value="1">Email</option><option value="2">Телефон</option><option value="3">Почтовый адрес</option><option value="4">Сайт</option><option value="5">Мессенджер</option>
+          <option value={ContactPointKind.CONTACT_POINT_KIND_EMAIL}>Email</option><option value={ContactPointKind.CONTACT_POINT_KIND_PHONE}>Телефон</option><option value={ContactPointKind.CONTACT_POINT_KIND_POSTAL}>Почтовый адрес</option><option value={ContactPointKind.CONTACT_POINT_KIND_WEB}>Сайт</option><option value={ContactPointKind.CONTACT_POINT_KIND_MESSAGING}>Мессенджер</option>
         </SelectField></>}
         <TextField label="Значение контакта" name="value" defaultValue={selected?.displayValue??""} required/>
         <TextField label="Предпочтительный" name="preferred" type="checkbox" defaultChecked={selected?.preferred??false}/>
-        {selected&&<SelectField label="Статус" name="status" defaultValue={selected.status}><option value="1">Активен</option><option value="2">Неактивен</option></SelectField>}
+        {selected&&<SelectField label="Статус" name="status" defaultValue={selected.status}><option value={ContactPointStatus.CONTACT_POINT_STATUS_ACTIVE}>Активен</option><option value={ContactPointStatus.CONTACT_POINT_STATUS_INACTIVE}>Неактивен</option></SelectField>}
         <TimeFields name="from" label="Действует с" editing={!!selected}/><TimeFields name="until" label="Действует до" editing={!!selected}/>
       </FormGrid><Button type="submit" disabled={mutation.busy}>Сохранить контакт</Button>{" "}
       {selected&&<Button variant="secondary" onClick={()=>{setEditorOpen(false);setSelected(undefined);mutation.changed();}}>Отмена</Button>}

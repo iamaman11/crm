@@ -1,7 +1,7 @@
 import {useCallback,useEffect,useState} from "react";
 import type {MouseEvent} from "react";
 import {AccountStatus} from "@ultimate-crm/client/cloudflare";
-import {Button,FeedbackPanel,RecordCard,RecordPanel,FormGrid,PageHeader,TextField} from "@ultimate-crm/ui";
+import {Button,FeedbackPanel,RecordCard,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
@@ -63,12 +63,11 @@ export function AccountScreen({filters}:{filters:AccountFilters}) {
         setExpanded("");setDirty(false);setCreateOpen(true);mutation.changed();
       }}>Создать клиента</Button>}/>
     <SearchField label="Поиск клиентов" submitted={search} onSearch={value=>navigate({search:value,cursor:""})}/>
-    <label htmlFor="account-status-filter">Статус клиента</label>{" "}
-    <select id="account-status-filter" value={status} onChange={event=>navigate({status:event.target.value,cursor:""})}>
+    <SelectField label="Статус клиента" value={status} onChange={event=>navigate({status:event.target.value,cursor:""})}>
       <option value="">Все</option>
       <option value={AccountStatus.ACCOUNT_STATUS_ACTIVE}>Активные</option>
       <option value={AccountStatus.ACCOUNT_STATUS_INACTIVE}>Неактивные</option>
-    </select>
+    </SelectField>
     <QueryNotice query={query}/>
     {savedNotice&&<FeedbackPanel tone="success" title={savedNotice}/>}
     {!query.busy&&!query.error&&query.data?.accounts.map(a=>{

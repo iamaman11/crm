@@ -5,12 +5,19 @@ import {CommunicationChannel,ConsentEffect,ConsentStatus,EvaluationReason} from 
 import {enumValue} from "./enumFields";
 import {useQuery,useReadAction,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker} from "./Pickers";
+const reasonLabels:Partial<Record<EvaluationReason,string>>={
+  [EvaluationReason.EVALUATION_REASON_UNSPECIFIED]:"Не указано",
+  [EvaluationReason.EVALUATION_REASON_ACTIVE_GRANT]:"Действующее согласие",
+  [EvaluationReason.EVALUATION_REASON_ACTIVE_DENY]:"Действующий запрет",
+  [EvaluationReason.EVALUATION_REASON_WITHDRAWN]:"Согласие отозвано",
+  [EvaluationReason.EVALUATION_REASON_NO_APPLICABLE_GRANT]:"Подходящего согласия нет"
+};
 function ScopeFields() {
   return <><PartyPicker/><TextField label="ID контакта (необязательно)" name="contact"/>
     <TextField label="Цель" name="purpose" defaultValue="marketing" required/>
     <SelectField label="Канал" name="channel" defaultValue="1">
-      <option value="1">Email</option><option value="2">Телефон</option><option value="3">SMS</option>
-      <option value="4">Почта</option><option value="5">Мессенджер</option><option value="6">Push</option>
+      <option value={CommunicationChannel.COMMUNICATION_CHANNEL_EMAIL}>Email</option><option value={CommunicationChannel.COMMUNICATION_CHANNEL_PHONE}>Телефон</option><option value={CommunicationChannel.COMMUNICATION_CHANNEL_SMS}>SMS</option>
+      <option value={CommunicationChannel.COMMUNICATION_CHANNEL_POSTAL}>Почта</option><option value={CommunicationChannel.COMMUNICATION_CHANNEL_MESSAGING}>Мессенджер</option><option value={CommunicationChannel.COMMUNICATION_CHANNEL_PUSH}>Push</option>
     </SelectField></>;
 }
 function scope(data:FormData) {
@@ -35,7 +42,7 @@ export function ConsentScreen() {
     }}><FormGrid><ScopeFields/></FormGrid><Button type="submit" disabled={evaluation.busy}>Проверить разрешение</Button></form>
       {evaluation.error&&<FeedbackPanel tone="danger" title={evaluation.error}/>}
       {evaluation.data&&<FeedbackPanel tone={evaluation.data.allowed?"success":"warning"} title={evaluation.data.allowed?"Контакт разрешён":"Контакт не разрешён"}>
-        {["Не указано","Действующее согласие","Действующий запрет","Согласие отозвано","Подходящего согласия нет"][evaluation.data.reason]??"Неизвестная причина"}
+        {reasonLabels[evaluation.data.reason]??"Неизвестная причина"}
       </FeedbackPanel>}
     </Card>
     <TextField label="Фильтр по ID участника" value={partyId} onChange={e=>{setPartyId(e.target.value);setCursor("");}}/>

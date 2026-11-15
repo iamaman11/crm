@@ -24,10 +24,10 @@ export function TaskScreen({initialAccountId=""}:{initialAccountId?:string}) {
     <PageHeader title="Задачи" description="Работа по клиентам и задачи, созданные из сделок." actions={<Button onClick={()=>{setSelected(undefined);setEditorMode("create");mutation.changed();}}>Новая задача</Button>}/>
     <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setCursor("");}}/>
     <SelectField label="Статус задачи" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>
-      <option value="">Все</option><option value="1">Открытые</option><option value="2">Выполненные</option>
+      <option value="">Все</option><option value={TaskStatus.TASK_STATUS_OPEN}>Открытые</option><option value={TaskStatus.TASK_STATUS_COMPLETED}>Выполненные</option>
     </SelectField>
     <SelectField label="Приоритет задач" value={priority} onChange={e=>{setPriority(e.target.value);setCursor("");}}>
-      <option value="">Все приоритеты</option><option value="1">Низкий</option><option value="2">Обычный</option><option value="3">Высокий</option><option value="4">Срочный</option>
+      <option value="">Все приоритеты</option><option value={TaskPriority.TASK_PRIORITY_LOW}>Низкий</option><option value={TaskPriority.TASK_PRIORITY_NORMAL}>Обычный</option><option value={TaskPriority.TASK_PRIORITY_HIGH}>Высокий</option><option value={TaskPriority.TASK_PRIORITY_URGENT}>Срочный</option>
     </SelectField><QueryNotice query={query}/>
     {query.data?.tasks.map(t=><Card title={t.subject} key={t.taskId}>
       <p>{t.description}</p><p>Клиент: {t.accountId}</p>
@@ -71,8 +71,8 @@ export function TaskScreen({initialAccountId=""}:{initialAccountId?:string}) {
         <TextField label="Тема задачи: изменение" name="editSubject" defaultValue={selected.subject} required/>
         <TextField label="Описание задачи: изменение" name="editDescription" defaultValue={selected.description}/>
         <SelectField label="Приоритет: изменение" name="editPriority" defaultValue={selected.priority}>
-          <option value="1">Низкий</option><option value="2">Обычный</option>
-          <option value="3">Высокий</option><option value="4">Срочный</option>
+          <option value={TaskPriority.TASK_PRIORITY_LOW}>Низкий</option><option value={TaskPriority.TASK_PRIORITY_NORMAL}>Обычный</option>
+          <option value={TaskPriority.TASK_PRIORITY_HIGH}>Высокий</option><option value={TaskPriority.TASK_PRIORITY_URGENT}>Срочный</option>
         </SelectField>
         <TimeFields name="editDue" label="Срок задачи" editing/>
       </FormGrid>
@@ -93,7 +93,7 @@ export function TaskScreen({initialAccountId=""}:{initialAccountId?:string}) {
       <TextField label="Тема задачи" name="subject" required/><AccountPicker/>
       <TextField label="Описание" name="description"/>
       <SelectField label="Приоритет" name="priority" defaultValue="2">
-        <option value="1">Низкий</option><option value="2">Обычный</option><option value="3">Высокий</option><option value="4">Срочный</option>
+        <option value={TaskPriority.TASK_PRIORITY_LOW}>Низкий</option><option value={TaskPriority.TASK_PRIORITY_NORMAL}>Обычный</option><option value={TaskPriority.TASK_PRIORITY_HIGH}>Высокий</option><option value={TaskPriority.TASK_PRIORITY_URGENT}>Срочный</option>
       </SelectField>
       <TextField label="Срок" name="due" type="datetime-local" step="1"/>
       <TextField label="Напоминание" name="reminder" type="datetime-local" step="1"/>

@@ -55,8 +55,8 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
         <TextField label="Код отношения" name="code" defaultValue="employment" required/>
         <TextField label="Роль первого" name="fromRole" defaultValue="employer" required/>
         <TextField label="Роль второго" name="toRole" defaultValue="employee" required/>
-        <SelectField label="Направление" name="direction" defaultValue="1"><option value="1">Направленная</option><option value="2">Взаимная</option></SelectField></>}
-      {selected&&<SelectField label="Статус" name="status" defaultValue={selected.status}><option value="1">Активна</option><option value="2">Неактивна</option></SelectField>}
+        <SelectField label="Направление" name="direction" defaultValue="1"><option value={RelationshipDirectionality.RELATIONSHIP_DIRECTIONALITY_DIRECTIONAL}>Направленная</option><option value={RelationshipDirectionality.RELATIONSHIP_DIRECTIONALITY_RECIPROCAL}>Взаимная</option></SelectField></>}
+      {selected&&<SelectField label="Статус" name="status" defaultValue={selected.status}><option value={RelationshipStatus.RELATIONSHIP_STATUS_ACTIVE}>Активна</option><option value={RelationshipStatus.RELATIONSHIP_STATUS_INACTIVE}>Неактивна</option></SelectField>}
       <TimeFields name="from" label="Действует с" editing={!!selected}/><TimeFields name="until" label="Действует до" editing={!!selected}/>
     </FormGrid><Button type="submit" disabled={mutation.busy}>Сохранить связь</Button>{" "}
     {selected&&<Button variant="secondary" onClick={()=>{setEditorOpen(false);setSelected(undefined);mutation.changed();}}>Отмена</Button>}
