@@ -315,9 +315,9 @@ try{
    .body.parties.length,0);
  console.log(JSON.stringify({event:"crm.native-g3-party-filtered-pagination",result:"PASS"}));
  // Accounts v2: original Account aggregate and D1 trigger, not a pilot record.
- const accountV2=async(method,token,payload)=>{
+ const accountV2=async(method,token,payload,extraHeaders={})=>{
    const response=await rpcFetch(accountV2Path(method),{method:"POST",
-     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+     headers:{...extraHeaders,"content-type":"application/proto","connect-protocol-version":"1",
        ...(token?{"cf-access-jwt-assertion":token}:{})},
      body:binaryAccountV2(method,payload)});
    return {status:response.status,headers:response.headers,
@@ -335,7 +335,9 @@ try{
  assert.equal((await accountV2("CreateAccount",admin,{...accountInput,
    primaryPartyId:"no-such-party",
    precondition:{idempotencyKey:"candidate-v2-account-fk"}})).status,400);
- const accountCreated=await accountV2("CreateAccount",admin,accountInput);
+ const accountCreated=await accountV2("CreateAccount",admin,accountInput,{
+    "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
+    "cf-access-authenticated-user-email":"forged@example.test"});
  assert.equal(accountCreated.status,200,describeProtobuf(accountCreated.body));
  assert.equal(accountCreated.body.account?.accountId,accountId);
  assert.equal(accountCreated.body.account?.name,"Connected Account");
@@ -344,7 +346,7 @@ try{
  assert.equal(accountCreated.body.receipt?.resourceVersion,1n);
  assert.equal(accountCreated.body.receipt?.replayed,false);
  assert.equal(accountCreated.body.receipt?.requestId,accountCreated.headers.get("x-request-id"));
- const accountReplay=await accountV2("CreateAccount",admin,accountInput);
+ const accountReplay=await accountV2("CreateAccount",knownService,accountInput);
  assert.equal(accountReplay.status,200,describeProtobuf(accountReplay.body));
  assert.equal(accountReplay.body.receipt?.replayed,true);
  assert.equal((await accountV2("CreateAccount",admin,{...accountInput,
@@ -361,7 +363,7 @@ try{
  assert.equal((await accountV2("UpdateAccount",viewer,accountUpdate)).status,403);
  assert.equal((await accountV2("UpdateAccount",admin,{...accountUpdate,status:0,
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-v2-account-invalid"}})).status,400);
- const accountUpdated=await accountV2("UpdateAccount",admin,accountUpdate);
+ const accountUpdated=await accountV2("UpdateAccount",knownService,accountUpdate);
  assert.equal(accountUpdated.status,200,describeProtobuf(accountUpdated.body));
  assert.equal(accountUpdated.body.account?.status,2);
  assert.equal(accountUpdated.body.account?.version,2n);
@@ -382,6 +384,47 @@ try{
    "AND key IN ('candidate-v2-account-create-001','candidate-v2-account-update-001')")[0].n,2);
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
    "AND subject_id='"+accountId+"' AND action LIKE 'accounts.%'")[0].n,2);
+ assert.deepEqual(sql("SELECT action,tenant_id,subject_id,request_id,actor FROM crm_audit WHERE subject_id='"+accountId+"' ORDER BY rowid"),[
+   {action:"accounts.create",tenant_id:"tenant-a",subject_id:accountId,
+     request_id:accountCreated.headers.get("x-request-id"),actor:"native-a@example.test"},
+   {action:"accounts.update",tenant_id:"tenant-a",subject_id:accountId,
+     request_id:accountUpdated.headers.get("x-request-id"),actor:"service:ci-fixture.access"},
+ ],"Cross-actor Account replay preserves original verified actor/request ID");
+ const accountSnapshot=()=>sql("SELECT "+
+   "(SELECT json_group_array(json_array(tenant,id,state,version,actor)) FROM crm_account_records) AS states,"+
+   "(SELECT COUNT(*) FROM crm_account_receipts) AS receipts,"+
+   "(SELECT COUNT(*) FROM crm_audit) AS audits");
+ const beforeAccountDenials=accountSnapshot();
+ for(const token of [null,viewer,unknownService]){
+   assert.ok((await accountV2("CreateAccount",token,accountInput)).status>=400);
+   assert.ok((await accountV2("UpdateAccount",token,accountUpdate)).status>=400);
+ }
+ assert.equal((await accountV2("UpdateAccount",tenantB,accountUpdate)).status,404);
+ sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
+ assert.equal((await accountV2("CreateAccount",knownService,accountInput)).status,401,
+   "Deactivated service cannot replay Account creation");
+ sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
+ assert.equal((await accountV2("UpdateAccount",knownService,accountUpdate)).status,403,
+   "Current permission must be checked before Account replay");
+ sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
+ assert.deepEqual(accountSnapshot(),beforeAccountDenials,
+   "Denied/stale/invalid Account commands cannot change state, receipts or audit");
+ sql("CREATE TRIGGER fixture_fail_account_audit BEFORE INSERT ON crm_audit "+
+   "WHEN NEW.subject_id IN ('account-audit-rollback','"+accountId+"') "+
+   "BEGIN SELECT RAISE(ABORT,'fixture account audit failure'); END;");
+ try{
+   assert.equal((await accountV2("CreateAccount",admin,{
+     accountId:"account-audit-rollback",name:"Must roll back",primaryPartyId:id,
+     precondition:{idempotencyKey:"account-audit-failed-create"}})).status,409);
+   assert.equal((await accountV2("UpdateAccount",admin,{
+     ...accountUpdate,name:"Must roll back",
+     precondition:{expectedVersion:2n,idempotencyKey:"account-audit-failed-update"}})).status,409);
+   assert.deepEqual(accountSnapshot(),beforeAccountDenials,
+     "Account audit INSERT failure rolls back state and receipt");
+ }finally{sql("DROP TRIGGER fixture_fail_account_audit");}
+ console.log(JSON.stringify({event:"crm.native-account-actor-audit",result:"PASS",
+   human_create:true,service_update:true,cross_actor_replay:true,forged_headers_ignored:true,
+   authorization_before_replay:true,tenant_ab:true,sql_failure_rollback:true}));
  console.log(JSON.stringify({event:"crm.native-g3-account-v2",result:"PASS",
    generated_binary:true,owner:"crm.customer-accounts",
    rpc_methods:["CreateAccount","UpdateAccount","GetAccount","ListAccounts"],

@@ -167,7 +167,7 @@ impl PartyV3Service {
 // All commands and D1 writes reside in accounts.rs; no parallel JSON handler.
 struct AccountV2Service {
     env: Arc<Env>,
-    tenant: String,
+    actor: access::Actor,
     request_id: String,
 }
 impl AccountV2Service {
@@ -765,7 +765,7 @@ pub(super) fn router(env: Env, verified: &access::Actor, request_id: &str) -> Co
         }))
         .add_service(Arc::new(AccountV2Service {
             env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
+            actor: verified.clone(),
             request_id: request_id.to_owned(),
         }))
         .add_service(Arc::new(ContactPointV2Service {

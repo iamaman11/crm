@@ -20,7 +20,7 @@ impl account_wire::AccountService for AccountV2Service {
             },
             &key,
             &self.d1()?,
-            &self.tenant,
+            &self.actor,
             &self.request_id,
         )
         .await
@@ -58,7 +58,7 @@ impl account_wire::AccountService for AccountV2Service {
             },
             &key,
             &self.d1()?,
-            &self.tenant,
+            &self.actor,
             &id,
             &self.request_id,
         )
@@ -78,7 +78,7 @@ impl account_wire::AccountService for AccountV2Service {
         req: ServiceRequest<'_, account_wire::GetAccountRequest>,
     ) -> ServiceResult<account_wire::GetAccountResponse> {
         let id = Self::valid_id(req.account_id)?;
-        let account = accounts::load(&self.d1()?, &self.tenant, &id)
+        let account = accounts::load(&self.d1()?, &self.actor.tenant, &id)
             .await
             .map_err(|_| ConnectError::internal("Account D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("CUSTOMER_ACCOUNTS_NOT_FOUND"))?;
@@ -121,7 +121,7 @@ impl account_wire::AccountService for AccountV2Service {
         };
         let (list, next) = accounts::list_page_typed(
             &self.d1()?,
-            &self.tenant,
+            &self.actor.tenant,
             after,
             size as usize,
             status,

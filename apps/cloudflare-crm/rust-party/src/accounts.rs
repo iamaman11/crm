@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use wasm_bindgen::JsValue;
 use worker::{D1Database, Result};
 
-use super::{bind, now_nanos};
+use super::{access, bind, now_nanos};
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -108,9 +108,10 @@ pub(super) async fn create_typed(
     input: CreateInput,
     key: &str,
     db: &D1Database,
-    tenant: &str,
+    actor: &access::Actor,
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    let tenant = &actor.tenant;
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
@@ -153,11 +154,12 @@ pub(super) async fn create_typed(
     };
     let snapshot = state(&account)?;
     let stored=bind(db,
-        "INSERT INTO crm_account_records(tenant,id,primary_party,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?,?)",
+        "INSERT INTO crm_account_records(tenant,id,primary_party,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant),JsValue::from_str(account.account_id().as_str()),
           JsValue::from_str(&input.party_id),JsValue::from_str(&snapshot),
           JsValue::from_f64(account.version() as f64),JsValue::from_str(key),
-          JsValue::from_str(&digest),JsValue::from_str(trace)])?.run().await;
+          JsValue::from_str(&digest),JsValue::from_str(trace),
+           JsValue::from_str(&actor.identity)])?.run().await;
     if stored.is_err() {
         return Ok(Err(fail("CUSTOMER_ACCOUNTS_CREATE_CONFLICT", 409)));
     }
@@ -170,10 +172,11 @@ pub(super) async fn update_typed(
     input: UpdateInput,
     key: &str,
     db: &D1Database,
-    tenant: &str,
+    actor: &access::Actor,
     id: &str,
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    let tenant = &actor.tenant;
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
@@ -216,10 +219,10 @@ pub(super) async fn update_typed(
     }
     let snapshot = state(&account)?;
     let changed=bind(db,
-        "UPDATE crm_account_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?",
+        "UPDATE crm_account_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&snapshot),JsValue::from_f64(account.version() as f64),
           JsValue::from_str(key),JsValue::from_str(&digest),JsValue::from_str(trace),
-          JsValue::from_str(tenant),JsValue::from_str(id),
+          JsValue::from_str(&actor.identity),JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
     let Ok(result) = changed else {
         return Ok(Err(fail("CUSTOMER_ACCOUNTS_UPDATE_CONFLICT", 409)));
