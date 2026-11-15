@@ -188,8 +188,16 @@ async function deploy(){
   console.log(JSON.stringify({event:"crm.deploy",sha,result:"E2E_PENDING",version:newVersion}));
 }
 async function confirmClosed(){
-  const state=await cf(worker+"/subdomain");
-  assert.equal(state.enabled,false);assert.equal(state.previews_enabled,false);
+  // The Cloudflare control-plane GET can briefly return the previous state after POST.
+  // Require convergence of the real API setting AND the public edge; never infer closure.
+  let state=null;
+  for(let attempt=0;attempt<30;attempt++){
+    state=await cf(worker+"/subdomain");
+    if(state.enabled===false&&state.previews_enabled===false)break;
+    await new Promise(resolve=>setTimeout(resolve,2000));
+  }
+  assert.equal(state?.enabled,false,"Cloudflare Worker subdomain remained enabled");
+  assert.equal(state?.previews_enabled,false,"Cloudflare Worker previews remained enabled");
   let stopped=0;
   for(let attempt=0;attempt<30&&stopped<3;attempt++){
     const response=await fetch(url+"/api/version?closed="+Date.now(),{headers:auth(),redirect:"manual"});
