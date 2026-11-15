@@ -3,6 +3,8 @@ import { acquire, connect, history, limits, type Browser, type BrowserContext, t
 import { DEFAULT_BROWSER_URL, browserUrl, siteAccessConfiguration, siteRequestDisposition, isPermittedBrowserRequest, redact, safePagePath } from "./security";
 import { chooseDevice, deviceOptions, type BrowserDevice } from "./browser-device";
 import { WEB_VITALS_INIT, readVitals, type WebVitals } from "./browser-performance";
+import axe from "axe-core";
+import { MAX_VISUAL_PNG_BYTES, comparePngPixels, pngReceipt, visualThreshold } from "./browser-visual";
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
@@ -42,7 +44,7 @@ export type Target = {
 };
 
 export type Command = {
-  op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "handoff" | "run" | "execute" | "recording" | "runtime";
+  op: ScenarioOperation | "open" | "close" | "status" | "session" | "tabs" | "frames" | "file" | "inspect" | "visual" | "viewport" | "snapshot" | "screenshot" | "console" | "live_view" | "handoff" | "run" | "execute" | "recording" | "runtime";
   expectedRuntimeEpoch?: string; // Worker-supplied internal compatibility fence.
   workspaceId?: string; // MCP routing only; stripped before sending to this DO.
   url?: string;
@@ -77,7 +79,9 @@ export type Command = {
   chunkBytes?: number;
   recordingAction?: "targets" | "har" | "chunk" | "discard";
   recordingTarget?: string;
-  inspection?:  "network" | "performance" | "accessibility" | "pdf";
+  inspection?:  "network" | "performance" | "accessibility" | "axe" | "pdf";
+  visualAction?: "capture" | "compare" | "discard";
+  visualThreshold?: number;
   width?: number;
   height?: number;
   recording?: boolean;
@@ -587,6 +591,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       await this.ctx.storage.delete("browser_page_identity");
       await this.ctx.storage.delete("browser_handoff");
       await this.ctx.storage.delete("browser_device");
+      await this.ctx.storage.delete("visual_baseline");
     } catch (error) {
       failure ??= error;
       // Keep the persisted ID on failure so a later owner request can retry
@@ -757,6 +762,32 @@ export class CrmBrowserSession extends DurableObject<Env> {
     if (!page || page.isClosed()) throw new Error("CRM_BROWSER_NOT_OPEN");
 
     switch (command.op) {
+      case "visual": {
+        const action=command.visualAction;
+        if (action==="discard") {
+          await this.ctx.storage.delete("visual_baseline");
+          return {data:{discarded:true}};
+        }
+        if (action!=="capture" && action!=="compare")
+          throw new Error("BROWSER_VISUAL_ACTION_INVALID");
+        const threshold=visualThreshold(command.visualThreshold);
+        const png=Buffer.from(await page.screenshot({fullPage:false}));
+        const receipt=pngReceipt(png);
+        if(action==="capture") {
+          await this.ctx.storage.put("visual_baseline",
+            {base64:png.toString("base64"),sha256:receipt.sha256,bytes:receipt.bytes});
+          return {data:{baseline:true,path:safePagePath(page.url()),...receipt}};
+        }
+        const baseline=await this.ctx.storage.get<{base64:string;sha256:string;bytes:number}>("visual_baseline");
+        if(!baseline) throw new Error("BROWSER_VISUAL_BASELINE_MISSING");
+        if(!baseline.bytes || baseline.bytes>MAX_VISUAL_PNG_BYTES ||
+            Buffer.byteLength(baseline.base64,"base64")!==baseline.bytes)
+          throw new Error("BROWSER_VISUAL_BASELINE_INVALID");
+        const result=await comparePngPixels(this.context!,baseline.base64,png.toString("base64"),threshold);
+        return {data:{...result,path:safePagePath(page.url()),
+          baselineSha256:baseline.sha256,currentSha256:receipt.sha256,
+          note:"Pixel comparison of actual browser viewport PNGs, max channel delta > 24. Difference is measured in an isolated blank tab; no second browser."}};
+      }
       case "execute": {
         // Universal CDP on the SAME active Playwright Page. No second Browser,
         // MCP Worker, CDP connection manager or worker-side script evaluator.
@@ -852,6 +883,37 @@ export class CrmBrowserSession extends DurableObject<Env> {
               note: "Limited DOM heuristics, not a WCAG conformance audit.",
             },
           };
+        }
+        if (command.inspection === "axe") {
+          // Official axe-core source is pinned/bundled with the Worker.
+          // Do not load mutable scripts from public CDNs at test runtime.
+          await page.addScriptTag({content:axe.source});
+          const audit=await page.evaluate(async () => {
+            type AxeViolation={id:string;impact?:string|null;description?:string;
+              nodes:Array<{target:string[]}>};
+            type AxeReport={violations:AxeViolation[];
+              passes:unknown[];incomplete:unknown[];inapplicable:unknown[]};
+            const runner=(window as Window & {axe?: {
+              run:(document:Document,options:unknown)=>Promise<AxeReport>;
+            }}).axe;
+            if(!runner) throw new Error("BROWSER_AXE_INJECTION_FAILED");
+            const report=await runner.run(document,{
+              runOnly:{type:"tag",values:["wcag2a","wcag2aa","wcag21a","wcag21aa","wcag22aa","best-practice"]},
+            });
+            return {engine:"axe-core",violationsTotal:report.violations.length,
+              violations:report.violations.slice(0,50).map(item=>({
+                id:item.id,impact:item.impact??null,
+                description:(item.description??"").slice(0,200),
+                affectedNodes:item.nodes.length,
+                targets:item.nodes.slice(0,4).map(node=>node.target.slice(0,3)
+                  .map(selector=>String(selector).slice(0,180))),
+              })),
+              passes:report.passes.length,incomplete:report.incomplete.length,
+              inapplicable:report.inapplicable.length,
+              truncated:report.violations.length>50};
+          });
+          return {data:{path:safePagePath(page.url()),...audit,
+            note:"Actual axe-core automated rules, not full WCAG certification. Some cross-origin frames may require separate audit."}};
         }
         if (command.inspection === "pdf") {
           const result = Buffer.from(await page.pdf({
