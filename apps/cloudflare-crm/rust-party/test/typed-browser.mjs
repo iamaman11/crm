@@ -200,7 +200,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      partyAccountAuditBefore,"Cancel/Back must not create an Account");
    await accountFromParty();
    await page.getByLabel("Название клиента",{exact:true}).fill("Browser Party Account "+runId);
-   await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"CreateAccount");
+   const partyAccountResponse=page.waitForResponse(r=>
+     r.url().endsWith("/CreateAccount")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Сохранить клиента",exact:true}).click();
+   await assertMutation(await partyAccountResponse,"CreateAccount");
    const linkedAccountId=await firstId("crm_account_records","name","Browser Party Account "+runId);
    await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    assert.equal(new URL(await page.url()).hash,"#accounts/"+linkedAccountId,
