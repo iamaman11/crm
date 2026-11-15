@@ -1238,6 +1238,10 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  assert.equal(verified.body.contactPoint?.verified,true);
  assert.equal(verified.body.contactPoint?.version,2n);
  assert.equal((await contactV2("VerifyOwnEmailContactPoint",admin,r3Verify)).body.receipt?.replayed,true);
+ assert.equal((await contactV2("VerifyOwnEmailContactPoint",admin,{
+   ...r3Verify,precondition:{expectedVersion:1n,
+     idempotencyKey:"r3-stale-verify-"+r3Contact}})).status,409,
+   "Stale verified-contact version must reject without any extra mutation");
  const r3Id="r3-consent-"+randomUUID();
  const r3Scope={partyId:id,contactPointId:r3Contact,purpose:"r3.test.newsletter",channel:1};
  const r3Grant={authorizationId:r3Id,partyId:id,contactPointId:r3Contact,
@@ -1256,6 +1260,10 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  assert.equal(revoked.status,200,describeProtobuf(revoked.body));
  assert.equal(revoked.body.authorization?.status,2);
  assert.equal((await consentV2("WithdrawConsentAuthorization",knownService,r3Withdraw)).body.receipt?.replayed,true);
+ assert.equal((await consentV2("WithdrawConsentAuthorization",admin,{
+   ...r3Withdraw,precondition:{expectedVersion:1n,
+     idempotencyKey:"r3-stale-withdraw-"+r3Id}})).status,409,
+   "Stale withdrawal cannot create another audit or receipt");
  const deniedAfter=await consentV2("EvaluateConsent",viewer,r3Scope);
  assert.equal(deniedAfter.body.allowed,false);
  assert.equal(deniedAfter.body.reason,3);
@@ -1264,6 +1272,25 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
    precondition:{idempotencyKey:"r3-grant2-"+secondId}};
  assert.equal((await consentV2("GrantVerifiedEmailConsent",admin,second)).status,200);
  assert.equal((await consentV2("EvaluateConsent",viewer,r3Scope)).body.allowed,true);
+ const failingGrantId="r3-audit-fault-"+randomUUID();
+ const failingKey="r3-audit-fault-key-"+failingGrantId;
+ const beforeGrantFault=sql("SELECT "+
+   "(SELECT COUNT(*) FROM crm_consent_records) AS records,"+
+   "(SELECT COUNT(*) FROM crm_consent_receipts) AS receipts,"+
+   "(SELECT COUNT(*) FROM crm_audit) AS audits");
+ sql("CREATE TRIGGER fixture_fail_r3_grant_audit BEFORE INSERT ON crm_audit "+
+   "WHEN NEW.subject_id='"+failingGrantId+"' AND NEW.action='consents.grant' "+
+   "BEGIN SELECT RAISE(ABORT,'fixture R3 consent grant audit failure'); END;");
+ try{
+   assert.equal((await consentV2("GrantVerifiedEmailConsent",admin,{
+     ...r3Grant,authorizationId:failingGrantId,
+     precondition:{idempotencyKey:failingKey}})).status,409);
+   assert.deepEqual(sql("SELECT "+
+     "(SELECT COUNT(*) FROM crm_consent_records) AS records,"+
+     "(SELECT COUNT(*) FROM crm_consent_receipts) AS receipts,"+
+     "(SELECT COUNT(*) FROM crm_audit) AS audits"),beforeGrantFault,
+     "Consent state, receipt and audit must roll back together on late audit failure");
+ } finally {sql("DROP TRIGGER fixture_fail_r3_grant_audit");}
  const changed=await contactV2("UpdateContactPoint",admin,{
    contactPointId:r3Contact,value:"other@example.org",status:1,preferred:false,
    precondition:{idempotencyKey:"r3-change-"+r3Contact,expectedVersion:2n}});
@@ -1282,7 +1309,8 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  ]);
  console.log(JSON.stringify({event:"crm.native-r3-signed-email-consent",result:"PASS",
    human_email:true,service_denied:true,grant_withdraw:true,replay:true,
-   changed_contact_invalidates_grant:true,actor_audit:true}));
+   changed_contact_invalidates_grant:true,actor_audit:true,
+   atomic_grant_rollback:true,stale_versions_denied:true}));
 
  // Original crm-sales v2: generated binary Connect, original Deal aggregate,
 // one tenant D1, exact money, CAS, receipt replay, and atomic stage->Activity.
