@@ -107,7 +107,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await picker.getByRole("status").waitFor({state:"hidden"});
    if(await select.locator(`option[value="${id}"]`).count()){
     await select.selectOption(id);
-    assert.equal(await select.inputValue(),id,label+" selected another record");
+    // A controlled React select settles after its change handler renders.
+    // Assert the committed value, not the same-tick DOM observation.
+    await expect(select,label+" must select the requested record").toHaveValue(id);
     return;
    }
    const next=picker.getByRole("button",{name:nextLabel,exact:true});
