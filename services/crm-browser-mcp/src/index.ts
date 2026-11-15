@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import type { Env, Command, Target } from "./session";
-import { MCP_HOST, verifiedMcpOwnerEmail } from "./security";
+import { DEFAULT_BROWSER_URL, MCP_HOST, verifiedMcpOwnerEmail } from "./security";
 import { SCENARIO_OPERATIONS, isFailedVerdict } from "./browser-checks";
 import { selectWorkspaceId, workspaceObjectName } from "./browser-workspaces";
 import { BROWSER_RUNTIME_EPOCH, isVerifiedRuntimeProbe, cleanupRuntimeEpoch } from "./runtime-epoch";
@@ -125,7 +125,7 @@ function createServer(env: Env, ownerEmail: string) {
     description: "Open an authorized public HTTP(S) website in a reusable Cloudflare Playwright session. Recording is opt-in at session creation only and is accessed later through Cloudflare Browser Run.",
     inputSchema: {
       workspaceId: workspaceIdSchema.optional(),
-      path: z.string().max(1024).default("/"),
+      path: z.string().max(1024).default(DEFAULT_BROWSER_URL),
       recording: z.boolean().default(false),
     },
   }, async ({ path, recording, workspaceId }) => command({ op: "open", url: path, recording, workspaceId }));
@@ -136,7 +136,7 @@ function createServer(env: Env, ownerEmail: string) {
   }, async ({ workspaceId }) => command({ op: "status", workspaceId }));
 
   server.registerTool("browser_session", {
-    description: "Read the real CRM /api/session response as the diagnostic Access principal, with no impersonation.",
+    description: "Read the current site's optional /api/session endpoint via its real browser identity. Returns HTTP status and JSON, or a non-JSON status without inventing a session.",
     inputSchema: { workspaceId: workspaceIdSchema },
   }, async ({ workspaceId }) => command({ op: "session", workspaceId }));
 

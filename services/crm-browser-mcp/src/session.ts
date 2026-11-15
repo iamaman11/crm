@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { acquire, connect, history, limits, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
-import { CRM_ORIGIN, browserUrl, crmRequestDisposition, isCrmRequest, isPermittedBrowserRequest, redact, requireCrmAgentIdentity, safePagePath } from "./security";
+import { DEFAULT_BROWSER_URL, browserUrl, siteAccessConfiguration, siteRequestDisposition, isPermittedBrowserRequest, redact, safePagePath } from "./security";
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
@@ -15,8 +15,9 @@ import { completedHandoff, handoffIdentifier, handoffLiveViewUrl, isProviderHand
 export interface Env {
   BROWSER: BrowserRun;
   SESSIONS: DurableObjectNamespace<CrmBrowserSession>;
-  CRM_BROWSER_CLIENT_ID: string;
-  CRM_BROWSER_CLIENT_SECRET: string;
+  SITE_ACCESS_ORIGIN?: string; // Optional exact HTTPS origin for automated Cloudflare Access.
+  SITE_ACCESS_CLIENT_ID?: string; // Optional Worker secret, never a browser parameter.
+  SITE_ACCESS_CLIENT_SECRET?: string; // Must be paired with CLIENT_ID.
   CRM_MCP_OWNER_EMAIL: string;
   CRM_MCP_ACCESS_AUD: string;
   CF_BROWSER_ACCOUNT_ID: string;
@@ -102,7 +103,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private nextOperation: Promise<void> = Promise.resolve();
   private pendingOperations = 0;
   private acceptingDialog = false;
-  private ownerDirectedCrmNavigation = false;
+  private ownerDirectedSiteNavigation = false;
   // The original Playwright context remains the sole CDP owner while the
   // human controls the page. Completion events are checkpointed to DO SQLite.
   private handoffCdp: Awaited<ReturnType<BrowserContext["newCDPSession"]>> | null = null;
@@ -136,17 +137,23 @@ export class CrmBrowserSession extends DurableObject<Env> {
     return scope.locator(target.value);
   }
 
-  // Both browser_open(url) and browser_action(navigate) must really navigate
-  // an existing session. This is the single owner of privileged CRM navigation.
+  // Both Open and navigate use one Playwright page owner. Service access, if
+  // configured, is an optional origin-bound transport; interactive login is normal.
+  private siteAccess() {
+    return siteAccessConfiguration(
+      this.env.SITE_ACCESS_ORIGIN, this.env.SITE_ACCESS_CLIENT_ID,
+      this.env.SITE_ACCESS_CLIENT_SECRET,
+    );
+  }
+
   private async navigateTo(destination: string, runDeadline?: number) {
     const page = this.page;
     if (!page || page.isClosed()) throw new Error("CRM_BROWSER_NOT_OPEN");
-    requireCrmAgentIdentity(
-      destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
-    );
+    const access = this.siteAccess();
     return navigatePage(
-      page, destination, enabled => { this.ownerDirectedCrmNavigation = enabled; },
+      page, destination, enabled => { this.ownerDirectedSiteNavigation = enabled; },
       operationTimeout(25_000, runDeadline),
+      access.serviceCredentials ? access.origin : null,
     );
   }
 
@@ -252,6 +259,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
   }
 
   private async installSafetyRouting(context: BrowserContext) {
+    const siteAccess = this.siteAccess();
     context.on("page", page => { this.attachPage(page); });
       await context.route("**/*", async route => {
         const request = route.request();
@@ -264,11 +272,12 @@ export class CrmBrowserSession extends DurableObject<Env> {
         try {
           const frame = request.frame();
           initiator = frame.url();
-          trustedMainNavigation = this.ownerDirectedCrmNavigation &&
+          trustedMainNavigation = this.ownerDirectedSiteNavigation &&
             request.isNavigationRequest() && frame === this.page?.mainFrame();
         } catch { /* Service-worker requests have no frame; never authorize. */ }
-        const disposition = crmRequestDisposition(
+        const disposition = siteRequestDisposition(
           request.url(), initiator, trustedMainNavigation,
+          siteAccess.origin, siteAccess.serviceCredentials,
         );
         if (disposition === "block") {
           // Browser-managed CRM cookies can survive earlier authenticated
@@ -281,12 +290,8 @@ export class CrmBrowserSession extends DurableObject<Env> {
           await route.continue();
           return;
         }
-        if (!this.env.CRM_BROWSER_CLIENT_ID || !this.env.CRM_BROWSER_CLIENT_SECRET) {
-          // Never use an old Access cookie as a substitute for an explicitly
-          // provisioned CRM service identity.
-          await route.abort("blockedbyclient");
-          return;
-        }
+        // siteRequestDisposition yields "site" only for a complete, valid
+        // origin-bound credential pair. No service token is needed for login.
         // Playwright route.continue({headers}) propagates overridden headers to
         // every redirect, including foreign origins. This is NOT safe.
         // route.fetch(maxRedirects:0) keeps the signed credentials on exactly
@@ -295,8 +300,8 @@ export class CrmBrowserSession extends DurableObject<Env> {
         const response = await route.fetch({
           headers: {
             ...request.headers(),
-            "CF-Access-Client-Id": this.env.CRM_BROWSER_CLIENT_ID,
-            "CF-Access-Client-Secret": this.env.CRM_BROWSER_CLIENT_SECRET,
+            "CF-Access-Client-Id": this.env.SITE_ACCESS_CLIENT_ID!,
+            "CF-Access-Client-Secret": this.env.SITE_ACCESS_CLIENT_SECRET!,
           },
           maxRedirects: 0,
           timeout: 25_000,
@@ -355,11 +360,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
       });
   }
 
-  private async open(path: string = "/", recording: boolean = false) {
+  private async open(path: string = DEFAULT_BROWSER_URL, recording: boolean = false) {
     const destination = browserUrl(path);
-    requireCrmAgentIdentity(
-      destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
-    );
+    this.siteAccess(); // Reject a partial secret configuration before acquire().
     // The user explicitly requested Open: replace a lost browser only after
     // closing the original provider session. Status and other tools never
     // acquire a substitute browser.
@@ -588,7 +591,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       this.page = null;
       this.tabIds.clear();
       this.acceptingDialog = false;
-      this.ownerDirectedCrmNavigation = false;
+      this.ownerDirectedSiteNavigation = false;
       this.requestLog = [];
       this.consoleLog = [];
       this.transfers.clear();
@@ -695,12 +698,8 @@ export class CrmBrowserSession extends DurableObject<Env> {
         if (this.context.pages().filter(p => !p.isClosed()).length >= 12) {
           throw new Error("BROWSER_TAB_LIMIT");
         }
-        // A new tab belongs to the existing single browser context. Its
-        // requests inherit precisely the same CRM origin/security route.
-        const url = command.url ? browserUrl(command.url, CRM_ORIGIN + "/") : null;
-        if (url) requireCrmAgentIdentity(
-          url, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
-        );
+        // A new tab uses the same site-neutral context and optional access policy.
+        const url = command.url ? browserUrl(command.url, this.page?.url() || DEFAULT_BROWSER_URL) : null;
         const page = await this.context.newPage();
         this.attachPage(page);
         this.page = page;
@@ -1109,10 +1108,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       case "run": {
         const steps = command.steps;
         validateScenarioSteps(steps, url => {
-          const destination = browserUrl(url, page.url() || CRM_ORIGIN);
-          requireCrmAgentIdentity(
-            destination, this.env.CRM_BROWSER_CLIENT_ID, this.env.CRM_BROWSER_CLIENT_SECRET,
-          );
+          browserUrl(url, page.url() || DEFAULT_BROWSER_URL);
         });
         const startedAt = Date.now();
         const deadline = startedAt + boundedRunTimeout(command.timeoutMs);
@@ -1151,7 +1147,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
         return { data: report };
       }
       case "navigate": {
-        const destination = browserUrl(command.url ?? "/", page.url() || CRM_ORIGIN);
+        const destination = browserUrl(command.url ?? "/", page.url() || DEFAULT_BROWSER_URL);
         return { data: await this.navigateTo(destination, runDeadline) };
       }
       case "reload":
@@ -1172,10 +1168,15 @@ export class CrmBrowserSession extends DurableObject<Env> {
         await page.keyboard.press(command.key ?? "");
         return { data: { action: "press", completed: true } };
       case "session": {
-        if (!isCrmRequest(page.url())) throw new Error("CRM_BROWSER_NOT_ON_CRM");
-        // Uses the CRM's own current Access identity, not an override header.
+        // Optional site convention: read /api/session as the CURRENT browser
+        // origin, with ordinary cookies or configured service identity.
+        // Non-JSON/404 responses are honest results, not a fabricated session.
         const result = await page.evaluate(async () => {
           const response = await fetch("/api/session", { credentials: "same-origin" });
+          const contentType = response.headers.get("content-type") ?? "";
+          if (!contentType.includes("json")) {
+            return { status: response.status, body: null, contentType };
+          }
           return { status: response.status, body: await response.json() };
         });
         return { data: result };

@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { browserUrl, crmCredentialsAllowed, crmRequestDisposition, CRM_ORIGIN, isCrmRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact, requireCrmAgentIdentity, verifiedMcpOwnerEmail } from "../src/security.ts";
+import { browserUrl, siteCredentialsAllowed, siteRequestDisposition, siteAccessConfiguration, isConfiguredSiteRequest, isPermittedBrowserRequest, isAuthorizedMcpOwner, safePagePath, redact, verifiedMcpOwnerEmail } from "../src/security.ts";
+const CRM_ORIGIN = "https://crm-dev.crm-5bd5e1e1.workers.dev"; // Test-only configured site.
 
-test("canonical CRM identification is exact; ordinary browser navigation stays universal", () => {
-  assert.equal(browserUrl("/clients"), CRM_ORIGIN + "/clients");
+test("site identity is configured per exact origin; ordinary browser navigation is universal", () => {
+  assert.equal(browserUrl("/clients", CRM_ORIGIN + "/"), CRM_ORIGIN + "/clients");
   assert.equal(browserUrl("https://crm-dev.crm-5bd5e1e1.workers.dev/api/session"),
     CRM_ORIGIN + "/api/session");
-  assert.equal(isCrmRequest(CRM_ORIGIN + "/api/session"), true);
+  assert.equal(isConfiguredSiteRequest(CRM_ORIGIN + "/api/session", CRM_ORIGIN), true);
   for (const url of [
     "http://crm-dev.crm-5bd5e1e1.workers.dev",
     "https://evil.example/",
@@ -14,10 +15,10 @@ test("canonical CRM identification is exact; ordinary browser navigation stays u
     "https://user:pass@crm-dev.crm-5bd5e1e1.workers.dev/",
     "javascript:alert(1)",
     "data:text/html,unsafe",
-  ]) assert.equal(isCrmRequest(url), false, url);
+  ]) assert.equal(isConfiguredSiteRequest(url, CRM_ORIGIN), false, url);
 });
 test("network diagnostics contain only paths, never query secrets or foreign URLs", () => {
-  assert.equal(safePagePath(CRM_ORIGIN + "/api/version?token=supersecret"), "/api/version");
+  assert.equal(safePagePath(CRM_ORIGIN + "/api/version?token=supersecret"), CRM_ORIGIN + "/api/version");
   assert.equal(safePagePath("https://evil.example/auth?secret=supersecret"),
     "https://evil.example/auth");
 });
@@ -38,7 +39,7 @@ test("universal browser allows real public HTTP(S) sites and links", () => {
   assert.equal(browserUrl("http://example.org"), "http://example.org/");
   assert.equal(browserUrl("//example.net/test", CRM_ORIGIN),
     "https://example.net/test");
-  assert.equal(isCrmRequest("https://example.org"), false);
+  assert.equal(isConfiguredSiteRequest("https://example.org", CRM_ORIGIN), false);
 });
 
 test("universal web navigation rejects unsafe protocols and private endpoints", () => {
@@ -83,30 +84,30 @@ test("reserved and private-address aliases are rejected without blocking public 
 test("CRM Access service headers never authorize foreign pages or third-party initiated CRM calls", () => {
   const crm = CRM_ORIGIN + "/api/session";
   const foreign = "https://example.org/form";
-  assert.equal(crmCredentialsAllowed(crm, "about:blank", true), true);
-  assert.equal(crmCredentialsAllowed(crm, CRM_ORIGIN + "/", false), true);
-  assert.equal(crmCredentialsAllowed(crm, foreign, false), false,
+  assert.equal(siteCredentialsAllowed(crm, "about:blank", true, CRM_ORIGIN), true);
+  assert.equal(siteCredentialsAllowed(crm, CRM_ORIGIN + "/", false, CRM_ORIGIN), true);
+  assert.equal(siteCredentialsAllowed(crm, foreign, false, CRM_ORIGIN), false,
     "untrusted third-party fetch must never get admin service credentials");
-  assert.equal(crmCredentialsAllowed(foreign, CRM_ORIGIN, true), false,
+  assert.equal(siteCredentialsAllowed(foreign, CRM_ORIGIN, true, CRM_ORIGIN), false,
     "a redirect or navigation to a foreign origin never receives CRM credentials");
-  assert.equal(crmCredentialsAllowed(CRM_ORIGIN + ".evil.net", CRM_ORIGIN, true), false);
+  assert.equal(siteCredentialsAllowed(CRM_ORIGIN + ".evil.net", CRM_ORIGIN, true, CRM_ORIGIN), false);
 });
 
-test("CRM routing blocks foreign-origin cookies and CSRF while preserving real UI navigation", () => {
+test("configured service routing blocks foreign-origin cookies while preserving UI navigation", () => {
   const crm = CRM_ORIGIN + "/crm.parties.v3.PartyService/ListParties";
   const foreign = "https://example.org/untrusted";
-  assert.equal(crmRequestDisposition(crm, foreign, false), "block",
+  assert.equal(siteRequestDisposition(crm, foreign, false, CRM_ORIGIN, true), "block",
     "foreign fetch cannot use an existing CRM Access cookie");
-  assert.equal(crmRequestDisposition(CRM_ORIGIN + "/api/session", foreign, false), "block",
+  assert.equal(siteRequestDisposition(CRM_ORIGIN + "/api/session", foreign, false, CRM_ORIGIN, true), "block",
     "foreign iframe or redirect must be denied even after previous CRM login");
-  assert.equal(crmRequestDisposition(crm, "about:blank", false), "block");
-  assert.equal(crmRequestDisposition(crm, "about:blank", true), "crm",
+  assert.equal(siteRequestDisposition(crm, "about:blank", false, CRM_ORIGIN, true), "block");
+  assert.equal(siteRequestDisposition(crm, "about:blank", true, CRM_ORIGIN, true), "site",
     "explicit controller top-level navigation is permitted");
-  assert.equal(crmRequestDisposition(crm, CRM_ORIGIN + "/contacts", false), "crm",
+  assert.equal(siteRequestDisposition(crm, CRM_ORIGIN + "/contacts", false, CRM_ORIGIN, true), "site",
     "real React-generated Connect traffic from the CRM remains permitted");
-  assert.equal(crmRequestDisposition(foreign, CRM_ORIGIN + "/contacts", true), "public",
+  assert.equal(siteRequestDisposition(foreign, CRM_ORIGIN + "/contacts", true, CRM_ORIGIN, true), "public",
     "CRM credentials never accompany a cross-origin redirect");
-  assert.equal(crmRequestDisposition(foreign, foreign, false), "public",
+  assert.equal(siteRequestDisposition(foreign, foreign, false, CRM_ORIGIN, true), "public",
     "ordinary public pages remain fully usable");
 });
 
@@ -151,18 +152,27 @@ test("only the exact CRM Browser MCP Access application owner can call control t
   }
 });
 
-test("CRM identity is fail-closed before provisioning; unrelated public websites remain usable", () => {
-  for (const url of [CRM_ORIGIN + "/", CRM_ORIGIN + "/api/session"]) {
-    for (const [id, secret] of [
-      ["", ""], ["only-client", ""], ["", "only-secret"],
-    ]) assert.throws(
-      () => requireCrmAgentIdentity(url, id, secret),
-      /CRM_BROWSER_AGENT_IDENTITY_NOT_PROVISIONED/,
-    );
-    assert.doesNotThrow(() => requireCrmAgentIdentity(url, "signed-client", "signed-secret"));
-  }
-  for (const url of ["https://example.org/", "https://www.iana.org/domains/reserved"]) {
-    assert.doesNotThrow(() => requireCrmAgentIdentity(url, "", ""));
+test("site Access credentials are optional, exact-origin and fail closed when partial", () => {
+  assert.deepEqual(siteAccessConfiguration(undefined, undefined, undefined),
+    { origin: null, serviceCredentials: false });
+  assert.deepEqual(siteAccessConfiguration(CRM_ORIGIN, undefined, undefined),
+    { origin: CRM_ORIGIN, serviceCredentials: false });
+  assert.deepEqual(siteAccessConfiguration(CRM_ORIGIN, "id", "secret"),
+    { origin: CRM_ORIGIN, serviceCredentials: true });
+  assert.equal(siteRequestDisposition(CRM_ORIGIN + "/api/session", "https://example.org", false, CRM_ORIGIN, false),
+    "public", "interactive human login uses standard browser navigation and cookies");
+  assert.throws(() => siteAccessConfiguration(undefined, "id", "secret"),
+    /BROWSER_SITE_ACCESS_ORIGIN_MISSING/);
+  assert.throws(() => siteAccessConfiguration(CRM_ORIGIN, "id", undefined),
+    /BROWSER_SITE_ACCESS_CREDENTIALS_INCOMPLETE/);
+  assert.throws(() => siteAccessConfiguration(CRM_ORIGIN, undefined, "secret"),
+    /BROWSER_SITE_ACCESS_CREDENTIALS_INCOMPLETE/);
+  for (const invalid of ["https://crm-dev.crm-5bd5e1e1.workers.dev/clients",
+    "https://crm-dev.crm-5bd5e1e1.workers.dev/?token=secret",
+    "http://crm-dev.crm-5bd5e1e1.workers.dev", "https://127.0.0.1",
+    "https://user:password@example.org", "https://evil.example.com/hidden"]) {
+    assert.throws(() => siteAccessConfiguration(invalid, "id", "secret"),
+      /BROWSER_SITE_ACCESS_ORIGIN_INVALID/, invalid);
   }
 });
 
