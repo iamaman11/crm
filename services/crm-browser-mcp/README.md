@@ -1,3 +1,20 @@
+## 15.11.2026 — native device emulation and honest performance (#357)
+
+`browser_open({device:"desktop"|"mobile"|"tablet"})` creates ONE official
+Playwright BrowserContext with actual mobile layout, DPR, touch, screen,
+Android user agent, locale and timezone options. To change profile, explicitly
+`browser_close`, then `browser_open`; an existing context's cookies and tabs
+are never silently reset. `browser_viewport` still only resizes the viewport,
+not a device. Browser status reports the actual workspace device.
+
+`browser_inspect({inspection:"performance"})` combines the existing navigation
+and paint readback with provisional per-page PerformanceObserver LCP/CLS and
+an **INP candidate**. The init script is installed before page navigation.
+Unavailable/unobserved measurements return null. Do NOT label these as
+finalized field Core Web Vitals.
+
+---
+
 ## 15 November 2026 — site-neutral authorization contract (Issue #357)
 
 The **Browser MCP itself is universal**: opening any permitted public HTTPS site,
