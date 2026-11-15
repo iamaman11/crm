@@ -1,8 +1,7 @@
 //! Native original crm-consents authority, NOT a self-attested consent API.
-//! Only authenticated *operator suppression* (Deny) is currently accepted.
-//! No user-controlled evidence_ref, grant or source is ever trusted. Operator
-//! action evidence proves only who recorded the block, NOT subject consent.
-//! Future Grant ingress requires a separately verified authoritative source.
+//! Operator suppression and verified email consent share this original D1
+//! owner. Human email proof is signed by Access; enrolled dev service-admin
+//! test actions carry separate provenance and never impersonate a human.
 use super::{access, bind, contact_points, now_nanos};
 use crm_consents::{
     CommunicationAuthorizationReason, CommunicationChannel, ConsentAuthorization,
@@ -277,8 +276,9 @@ pub(super) async fn suppress_typed(
         replayed: false,
     }))
 }
-// Self-consent: signed Access human identity must match an already verified
-// active email contact. The owner, not the React caller, creates evidence.
+// Human consent requires a matching verified Access email. Dev service-admin
+// may grant on a contact it verified as TEST data; audit records the real
+// service identity and the source cannot be mistaken for human consent.
 pub(super) async fn grant_verified_email_typed(
     input: GrantInput,
     key: &str,
@@ -286,13 +286,15 @@ pub(super) async fn grant_verified_email_typed(
     actor: &access::Actor,
     trace: &str,
 ) -> Result<std::result::Result<SuppressionOutcome, OperationFailure>> {
-    let Some(email) = contact_points::signed_human_email(&actor.identity) else {
+    let human_email = contact_points::signed_human_email(&actor.identity);
+    let test_agent = actor.is_dev_test_agent();
+    if human_email.is_none() && !test_agent {
         return Ok(Err(fail("CONSENTS_SIGNED_HUMAN_EMAIL_REQUIRED", 403)));
-    };
+    }
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
-    let digest = hash("email-grant", &input.id, &json!([&input, email]))?;
+    let digest = hash("email-grant", &input.id, &json!([&input, &actor.identity]))?;
     if let Some(prior) = receipt(db, &actor.tenant, key).await? {
         if prior.digest != digest {
             return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
@@ -333,12 +335,20 @@ pub(super) async fn grant_verified_email_typed(
         return Ok(Err(fail("CONSENTS_CONTACT_NOT_FOUND", 422)));
     };
     let now = now_nanos();
+    let proof_matches_actor = point.verification().evidence().is_some_and(|e| {
+        e.evidence_ref().starts_with(if test_agent {
+            "crm-dev-agent-email:"
+        } else {
+            "access-email:"
+        })
+    });
     if point.party_ref().as_str() != party.as_str()
         || point.kind() != ContactPointKind::Email
-        || point.normalized_value() != email
+        || human_email.is_some_and(|email| point.normalized_value() != email)
         || point.status() != ContactPointStatus::Active
         || !point.is_valid_at(now)
         || !point.verification().is_verified()
+        || !proof_matches_actor
     {
         return Ok(Err(fail("CONSENTS_VERIFIED_EMAIL_OWNERSHIP_REQUIRED", 403)));
     }
@@ -351,11 +361,19 @@ pub(super) async fn grant_verified_email_typed(
         purpose,
         channel: CommunicationChannel::Email,
         effect: ConsentEffect::Grant,
-        legal_basis: LegalBasisCode::try_new("consent.affirmative")
-            .map_err(|e| worker::Error::RustError(e.code))?,
+        legal_basis: LegalBasisCode::try_new(if test_agent {
+            "consent.test.agent"
+        } else {
+            "consent.affirmative"
+        })
+        .map_err(|e| worker::Error::RustError(e.code))?,
         jurisdiction,
-        source: SourceCode::try_new("cloudflare.access.email")
-            .map_err(|e| worker::Error::RustError(e.code))?,
+        source: SourceCode::try_new(if test_agent {
+            "crm.dev.agent"
+        } else {
+            "cloudflare.access.email"
+        })
+        .map_err(|e| worker::Error::RustError(e.code))?,
         evidence_ref: EvidenceReference::try_new(evidence)
             .map_err(|e| worker::Error::RustError(e.code))?,
         effective_from_unix_nanos: now,

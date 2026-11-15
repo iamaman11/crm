@@ -227,6 +227,14 @@ pub struct Actor {
     // Verified Access identity, never supplied by the HTTP request body.
     pub identity: String,
 }
+impl Actor {
+    // The CRM deployment is a dev/test application. Reuse the already enrolled
+    // signed service administrator for unattended UI acceptance. It remains a
+    // SERVICE actor in the audit; this never turns it into a human identity.
+    pub fn is_dev_test_agent(&self) -> bool {
+        self.role == "admin" && self.identity.starts_with("service:")
+    }
+}
 async fn enrolled(db: &D1Database, identity: &str) -> Result<Option<Actor>> {
     #[derive(serde::Deserialize)]
     struct Row {

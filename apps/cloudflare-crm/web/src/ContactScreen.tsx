@@ -27,7 +27,7 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
         onClick={()=>void mutation.run(()=>api.contactPoints.verifyOwnEmailContactPoint({
           contactPointId:p.contactPointId,
           precondition:{idempotencyKey:mutation.key,expectedVersion:p.version}
-        }),query.reload)}>Подтвердить свой email через Access</Button>}{" "}
+        }),query.reload)}>Подтвердить email (Access / тестовый администратор)</Button>}{" "}
       <p>С {dateText(p.validFrom)} до {dateText(p.validUntil)}</p>
       <Button variant="secondary" onClick={async()=>{
         try {setSelected((await api.contactPoints.getContactPoint({contactPointId:p.contactPointId})).contactPoint);mutation.changed();}

@@ -313,8 +313,9 @@ pub(super) async fn update_typed(
         replayed: false,
     }))
 }
-// The signed Access human email must equal the current canonical EMAIL value.
-// Existing original domain owns verification/CAS; D1 trigger owns audit+receipt.
+// Human verification proves matching Access email. The enrolled dev service
+// admin may also mark a test contact, with DISTINCT test-agent evidence.
+// Both paths use the original ContactPoint owner/CAS and D1 audit trigger.
 pub(super) async fn verify_own_email_typed(
     idem: &str,
     expected_version: i64,
@@ -323,16 +324,22 @@ pub(super) async fn verify_own_email_typed(
     id: &str,
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
-    let Some(email) = signed_human_email(&actor.identity) else {
+    let human_email = signed_human_email(&actor.identity);
+    let test_agent = actor.is_dev_test_agent();
+    if human_email.is_none() && !test_agent {
         return Ok(Err(failure(
             "CONTACT_POINTS_SIGNED_HUMAN_EMAIL_REQUIRED",
             403,
         )));
-    };
+    }
     if !(8..=120).contains(&idem.len()) {
         return Ok(Err(failure("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
-    let hash = digest("verify-own-email", id, &json!([expected_version, email]))?;
+    let hash = digest(
+        "verify-own-email",
+        id,
+        &json!([expected_version, &actor.identity]),
+    )?;
     if let Some(saved_receipt) = previous(db, &actor.tenant, idem).await? {
         if saved_receipt.digest != hash {
             return Ok(Err(failure("IDEMPOTENCY_CONFLICT", 409)));
@@ -340,7 +347,7 @@ pub(super) async fn verify_own_email_typed(
         let contact_point = decode(&saved_receipt.state)?;
         if contact_point.contact_point_id().as_str() != id
             || contact_point.kind() != ContactPointKind::Email
-            || contact_point.normalized_value() != email
+            || human_email.is_some_and(|email| contact_point.normalized_value() != email)
         {
             return Ok(Err(failure("CONTACT_POINTS_EMAIL_OWNERSHIP_REQUIRED", 403)));
         }
@@ -352,17 +359,26 @@ pub(super) async fn verify_own_email_typed(
     let Some(mut point) = load(db, &actor.tenant, id).await? else {
         return Ok(Err(failure("NOT_FOUND", 404)));
     };
-    if point.kind() != ContactPointKind::Email || point.normalized_value() != email {
+    if point.kind() != ContactPointKind::Email
+        || human_email.is_some_and(|email| point.normalized_value() != email)
+    {
         return Ok(Err(failure("CONTACT_POINTS_EMAIL_OWNERSHIP_REQUIRED", 403)));
     }
-    // Unique evidence per verification event; no raw email or client evidence in the state.
+    // Dev agent verification is never represented as human email ownership.
+    let evidence_source = if test_agent {
+        "crm-dev-agent-email"
+    } else {
+        "access-email"
+    };
     let proof = format!(
         "{:x}",
-        Sha256::digest(format!("{}:{}:{}", email, id, trace).as_bytes())
+        Sha256::digest(
+            format!("{}:{}:{}:{}", point.normalized_value(), id, trace, actor.identity).as_bytes()
+        )
     );
     if let Err(e) = point.verify(VerifyContactPoint {
         expected_version,
-        evidence_ref: format!("access-email:{proof}"),
+        evidence_ref: format!("{evidence_source}:{proof}"),
         occurred_at_unix_nanos: now_nanos(),
     }) {
         return Ok(Err(failure(

@@ -1223,7 +1223,7 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
   no_grant_ingress:true,before_limit_filtered_pagination:true,
   d1_receipts:true,no_extra_audit:true,published_active:true}));
 
-// R3a: signed human email is the only grant/verification trust source.
+// R3a: signed human self-consent and distinct enrolled dev test-agent path.
  const r3Contact="r3-contact-"+randomUUID();
  const r3Create=await contactV2("CreateContactPoint",admin,{
    contactPointId:r3Contact,partyId:id,kind:1,value:"native-a@example.test",
@@ -1231,7 +1231,6 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  assert.equal(r3Create.status,200,describeProtobuf(r3Create.body));
  const r3Verify={contactPointId:r3Contact,
    precondition:{expectedVersion:1n,idempotencyKey:"r3-verify-"+r3Contact}};
- assert.equal((await contactV2("VerifyOwnEmailContactPoint",knownService,r3Verify)).status,403);
  assert.equal((await contactV2("VerifyOwnEmailContactPoint",viewer,r3Verify)).status,403);
  const verified=await contactV2("VerifyOwnEmailContactPoint",admin,r3Verify);
  assert.equal(verified.status,200,describeProtobuf(verified.body));
@@ -1311,6 +1310,55 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
    human_email:true,service_denied:true,grant_withdraw:true,replay:true,
    changed_contact_invalidates_grant:true,actor_audit:true,
    atomic_grant_rollback:true,stale_versions_denied:true}));
+
+ // The same real signed admin service can accept a QA cycle through the UI.
+ // It must not use human Access evidence, nor grant on human-verified records.
+ const agentContact="r3-agent-contact-"+randomUUID();
+ const agentCreated=await contactV2("CreateContactPoint",knownService,{
+   contactPointId:agentContact,partyId:id,kind:1,value:"qa-agent@example.test",
+   preferred:false,precondition:{idempotencyKey:"r3-agent-create-"+agentContact}});
+ assert.equal(agentCreated.status,200,describeProtobuf(agentCreated.body));
+ const agentVerify={contactPointId:agentContact,
+   precondition:{expectedVersion:1n,idempotencyKey:"r3-agent-verify-"+agentContact}};
+ assert.equal((await contactV2("VerifyOwnEmailContactPoint",viewer,agentVerify)).status,403);
+ assert.equal((await contactV2("VerifyOwnEmailContactPoint",admin,agentVerify)).status,403);
+ const agentVerified=await contactV2("VerifyOwnEmailContactPoint",knownService,agentVerify);
+ assert.equal(agentVerified.status,200,describeProtobuf(agentVerified.body));
+ assert.equal(agentVerified.body.contactPoint?.verified,true);
+ assert.equal((await contactV2("VerifyOwnEmailContactPoint",knownService,agentVerify)).body.receipt?.replayed,true);
+ assert.equal((await contactV2("VerifyOwnEmailContactPoint",knownService,{
+   ...agentVerify,precondition:{expectedVersion:1n,
+     idempotencyKey:"r3-agent-stale-"+agentContact}})).status,409);
+ const agentId="r3-agent-consent-"+randomUUID();
+ const agentScope={partyId:id,contactPointId:agentContact,
+   purpose:"r3.dev.agent",channel:1};
+ const agentGrant={authorizationId:agentId,partyId:id,
+   contactPointId:agentContact,purpose:agentScope.purpose,
+   jurisdiction:"eu",precondition:{idempotencyKey:"r3-agent-grant-"+agentId}};
+ assert.equal((await consentV2("GrantVerifiedEmailConsent",viewer,agentGrant)).status,403);
+ assert.equal((await consentV2("GrantVerifiedEmailConsent",admin,agentGrant)).status,403);
+ const agentGranted=await consentV2("GrantVerifiedEmailConsent",knownService,agentGrant);
+ assert.equal(agentGranted.status,200,describeProtobuf(agentGranted.body));
+ assert.equal(agentGranted.body.authorization?.effect,1);
+ assert.equal((await consentV2("GrantVerifiedEmailConsent",knownService,agentGrant)).body.receipt?.replayed,true);
+ assert.equal((await consentV2("EvaluateConsent",viewer,agentScope)).body.allowed,true);
+ const agentState=sql("SELECT state FROM crm_consent_records WHERE id='"+agentId+"'")[0].state;
+ assert.ok(agentState.includes("crm.dev.agent"),"Service grant requires distinct test-agent provenance");
+ const agentWithdraw={authorizationId:agentId,
+   precondition:{expectedVersion:1n,idempotencyKey:"r3-agent-withdraw-"+agentId}};
+ assert.equal((await consentV2("WithdrawConsentAuthorization",knownService,agentWithdraw)).status,200);
+ assert.equal((await consentV2("EvaluateConsent",viewer,agentScope)).body.allowed,false);
+ assert.deepEqual(sql("SELECT action,actor FROM crm_audit WHERE subject_id='"+agentId+"' ORDER BY rowid"),[
+   {action:"consents.grant",actor:"service:ci-fixture.access"},
+   {action:"consents.withdraw",actor:"service:ci-fixture.access"}
+ ]);
+ assert.deepEqual(sql("SELECT action,actor FROM crm_audit WHERE subject_id='"+agentContact+"' ORDER BY rowid"),[
+   {action:"contact_points.create",actor:"service:ci-fixture.access"},
+   {action:"contact_points.verify",actor:"service:ci-fixture.access"}
+ ]);
+ console.log(JSON.stringify({event:"crm.native-r3-dev-agent-consent",result:"PASS",
+   signed_service_admin:true,test_provenance:true,non_impersonation:true,
+   grant_withdraw:true,replay:true,cas:true,actor_audit:true}));
 
  // Original crm-sales v2: generated binary Connect, original Deal aggregate,
 // one tenant D1, exact money, CAS, receipt replay, and atomic stage->Activity.
