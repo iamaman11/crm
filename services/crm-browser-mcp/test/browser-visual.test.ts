@@ -26,6 +26,6 @@ test("installed axe-core is the real pinned engine, not a DOM heuristic",()=>{
 test("axe injection uses Playwright page evaluation, not CSP-blocked inline script tags",()=>{
   // Regression guard for real Selenium CSP failure caught in Browser Run.
   const source = readFileSync(new URL("../src/session.ts",import.meta.url),"utf8");
-  assert.match(source,/await page\\.evaluate\\(axe\\.source\\)/);
-  assert.doesNotMatch(source,/page\\.addScriptTag\\(\\{content:axe\\.source\\}/);
+  assert.match(source,/await page\.evaluate\(axe\.source\)/);
+  assert.doesNotMatch(source,/page\.addScriptTag\(\{content:axe\.source\}/);
 });
