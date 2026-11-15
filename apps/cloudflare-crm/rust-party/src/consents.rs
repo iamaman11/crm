@@ -550,10 +550,8 @@ pub(super) async fn evaluate_typed(
             }
             // The dev agent's grant uses the same contact-proof evaluation,
             // but its source stays distinguishable from human Access consent.
-            matches!(
-                item.source().as_str(),
-                "cloudflare.access.email" | "crm.dev.agent"
-            ) && item
+            matches!(item.source().as_str(), "cloudflare.access.email" | "crm.dev.agent")
+                && item
                     .contact_point_ref()
                     .is_some_and(|c| scope.contact_point_ref.as_ref().is_some_and(|r| r == c))
                 && current_proof.as_deref() == Some(item.evidence_ref().as_str())
