@@ -121,10 +121,15 @@ impl party_v3::PartyService for PartyV3Service {
             }
             _ => return Err(ConnectError::invalid_argument("invalid PartyKind filter")),
         };
-        let (parties, next) =
-            parties::list_page_typed(&self.d1()?, &self.actor.tenant, after, size as usize, filter)
-                .await
-                .map_err(|_| ConnectError::internal("Party D1 list failed"))?;
+        let (parties, next) = parties::list_page_typed(
+            &self.d1()?,
+            &self.actor.tenant,
+            after,
+            size as usize,
+            filter,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Party D1 list failed"))?;
         let mut items = Vec::with_capacity(parties.len());
         for party in &parties {
             items.push(Self::convert(party)?);
