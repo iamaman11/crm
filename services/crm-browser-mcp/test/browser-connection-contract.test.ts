@@ -42,8 +42,12 @@ test("service-origin Playwright replay keeps original MIME and security headers"
   const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
   assert.match(code, /maxRedirects:\s*0/,
     "privileged service fetch cannot follow redirects");
-  assert.match(code, /await route\.fulfill\(\{\s*response,\s*headers:\s*response\.headers\(\)\s*\}\)/,
-    "upstream Content-Type and security headers must reach Chromium");
+  assert.match(code, /status:\s*response\.status\(\)/,
+    "use actual upstream HTTP status, not a synthetic default 200");
+  assert.match(code, /headers:\s*upstreamHeaders/,
+    "forward only upstream response headers, never request credentials");
+  assert.match(code, /body:\s*await response\.body\(\)/,
+    "forward actual response bytes rather than proxy serialization");
   assert.doesNotMatch(code, /route\.continue\(\{\s*headers:/,
     "service headers cannot be forwarded across browser redirects");
 });
