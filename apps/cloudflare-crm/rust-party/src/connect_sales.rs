@@ -102,7 +102,9 @@ fn wire_precondition(
 
 fn wire_search(value: &str) -> std::result::Result<&str, ConnectError> {
     if value.chars().count() > 200 {
-        return Err(ConnectError::invalid_argument("search exceeds 200 characters"));
+        return Err(ConnectError::invalid_argument(
+            "search exceeds 200 characters",
+        ));
     }
     Ok(value.trim())
 }
