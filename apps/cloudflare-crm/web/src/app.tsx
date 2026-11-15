@@ -30,6 +30,7 @@ const screens=[
 function App() {
   const [route,setRoute]=useState(()=>parseRoute(window.location.hash));
   const lastAcceptedHash=useRef(window.location.hash);
+  const lastAcceptedState=useRef<unknown>(window.history.state);
   const routeBlocker=useRef<(()=>boolean)|null>(null);
   const registerBlocker=useCallback((blocker:(()=>boolean)|null)=>{routeBlocker.current=blocker;},[]);
   useEffect(()=>{
@@ -37,10 +38,11 @@ function App() {
       const target=window.location.hash;
       if(target!==lastAcceptedHash.current&&routeBlocker.current&&!routeBlocker.current()){
         // Restore the accepted URL and keep the form mounted on cancelled navigation.
-        window.history.replaceState(window.history.state,"",window.location.pathname+window.location.search+lastAcceptedHash.current);
+        window.history.replaceState(lastAcceptedState.current,"",window.location.pathname+window.location.search+lastAcceptedHash.current);
         return;
       }
       lastAcceptedHash.current=target;
+      lastAcceptedState.current=window.history.state;
       setRoute(parseRoute(target));
     };
     window.addEventListener("hashchange",changed);

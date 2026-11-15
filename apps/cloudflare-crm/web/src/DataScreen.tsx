@@ -17,7 +17,7 @@ export function DataScreen() {
   return <>
     <PageHeader title="Импорт и экспорт" description="Доступно администратору. CSV-импорт создаёт новых участников; ID исходной системы не заменяют ID CRM."/>
     <Card title="Экспорт участников">
-      <SelectField label="Тип экспорта" value={kind} onChange={e=>setKind(e.target.value)}>
+      <SelectField label="Тип экспорта" value={kind} onChange={e=>setKind(e.target.value===""?"":String(enumValue(e.target.value,[PartyKind.PARTY_KIND_PERSON,PartyKind.PARTY_KIND_ORGANIZATION],"Тип экспорта")))}>
         <option value="">Все</option><option value={PartyKind.PARTY_KIND_PERSON}>Люди</option><option value={PartyKind.PARTY_KIND_ORGANIZATION}>Организации</option>
       </SelectField>
       <p><Button disabled={exported.busy} onClick={()=>void exported.run(()=>api.csv.previewPartyExport(kind?{kind:enumValue(kind,[PartyKind.PARTY_KIND_PERSON,PartyKind.PARTY_KIND_ORGANIZATION],"Тип экспорта")}:{}))}>Проверить экспорт</Button></p>

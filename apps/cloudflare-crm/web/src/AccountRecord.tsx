@@ -17,7 +17,7 @@ export function accountStatusLabel(status:AccountStatus):string {
 /** Both inline and full-page views use precisely the same read-only Customer360 projection. */
 export function AccountDetails({accountId}:{accountId:string}) {
   const query=useQuery(useCallback(()=>api.overview.getAccountOverview({accountId}),[accountId]));
-  const card:AccountOverview|undefined=query.data?.overview;
+  const card:AccountOverview|undefined=query.error?undefined:query.data?.overview;
   return <div><QueryNotice query={query}/>{!query.error&&card&&<>
     <h3>{card.account?.name}</h3>
     <p>Статус: {card.account?accountStatusLabel(card.account.status):"Неизвестно"}</p>

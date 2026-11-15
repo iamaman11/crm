@@ -45,7 +45,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
     <RecordPanel open={editorMode!==null} title={advance?"Этап сделки: "+advance.name:selected?"Изменить сделку":"Новая сделка"} onClose={()=>{setEditorMode(null);setSelected(undefined);setAdvance(undefined);}}>{advance?<form key={advance.dealId+advance.version} onChange={mutation.changed} onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
       void mutation.run(()=>api.deals.advanceStage({dealId:advance.dealId,
-        targetStage:{pipelineId:field(data,"pipeline"),stageId:field(data,"stage"),ordinal:boundedInt(field(data,"ordinal"),0,10000,"Порядок этапа")},
+        targetStage:{pipelineId:field(data,"pipeline"),stageId:field(data,"stage"),ordinal:boundedInt(field(data,"ordinal"),1,65535,"Порядок этапа")},
         targetStatus:enumValue(field(data,"targetStatus"),[DealStatus.DEAL_STATUS_OPEN,DealStatus.DEAL_STATUS_WON,DealStatus.DEAL_STATUS_LOST],"Статус сделки"),...(field(data,"reason")?{closeReasonCode:field(data,"reason")}:{}),
         precondition:{idempotencyKey:mutation.key,expectedVersion:advance.version}
       }),async()=>{setEditorMode(null);setAdvance(undefined);await query.reload();});

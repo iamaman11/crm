@@ -24,3 +24,29 @@ test("percent input preserves basis points and rejects overflow",()=>{
   assert.throws(()=>basisPoints("100.01"));
   assert.throws(()=>basisPoints("0.001"));
 });
+
+import {enumValue,boundedInt} from "../web/src/enumFields.ts";
+import {parseRoute,accountsHref,accountHref,scopeHref} from "../web/src/routes.ts";
+
+test("HTML enum boundary accepts only declared generated-style values",()=>{
+  assert.equal(enumValue("1",[1,2],"status"),1);
+  assert.equal(enumValue("2",[1,2],"status"),2);
+  for(const raw of ["","0","3","1.0","01","NaN","1e0"])
+    assert.throws(()=>enumValue(raw,[1,2],"status"),/Недопустимое значение/);
+});
+test("bounded numeric input rejects malformed and overflow values",()=>{
+  assert.equal(boundedInt("65535",1,65535,"stage"),65535);
+  for(const raw of ["","0","65536","-1","1.1","NaN","Infinity","1e2"," 1","1 "])
+    assert.throws(()=>boundedInt(raw,1,65535,"stage"),/Некорректное число/);
+});
+test("typed CRM routes preserve filters and deep links without a second router",()=>{
+  const hash=accountsHref({search:"A&B",status:"2",cursor:"opaque+cursor"});
+  assert.deepEqual(parseRoute(hash),{kind:"accounts",search:"A&B",status:"2",cursor:"opaque+cursor"});
+  assert.deepEqual(parseRoute(accountHref("id-123")),{kind:"account",accountId:"id-123"});
+  assert.equal(parseRoute("#accounts/%ZZ").kind,"not-found");
+  assert.equal(parseRoute("#accounts/%2F").kind,"not-found");
+  assert.equal(parseRoute("#accounts/").kind,"not-found");
+  assert.deepEqual(parseRoute(scopeHref("contacts","party?1")),{kind:"section",screen:"contacts",partyId:"party?1",accountId:""});
+  assert.deepEqual(parseRoute(scopeHref("sales","account&2")),{kind:"section",screen:"sales",partyId:"",accountId:"account&2"});
+  assert.equal(parseRoute("#not-a-screen").kind,"not-found");
+});
