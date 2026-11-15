@@ -135,6 +135,10 @@ export function AccountPage({accountId,registerBlocker}:{accountId:string;regist
     return ()=>{registerBlocker(null);window.removeEventListener("beforeunload",unload);};
   },[dirty,registerBlocker]);
   const goBack=()=>{
+    // Confirm *before* moving history; cancellation must leave earlier entries intact.
+    if(!canDiscard(dirty))return;
+    registerBlocker(null);
+    setDirty(false);
     const state:unknown=window.history.state;
     if(state&&typeof state==="object"&&"crmReturnTo" in state&&typeof state.crmReturnTo==="string")window.history.back();
     else window.location.hash=accountsHref();
