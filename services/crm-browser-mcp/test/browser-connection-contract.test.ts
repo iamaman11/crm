@@ -83,8 +83,12 @@ test("failed browser runs keep typed receipts compact and screenshot separately"
   const index = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
   assert.ok(session.includes('key !== "latest_requests"'),
     "request diagnostics must not be duplicated in every run step");
-  assert.ok(session.includes("this.lastFailureScreenshot = Buffer.from(png).toString"),
+  assert.ok(session.includes("image: Buffer.from(png).toString"),
     "capture exactly the original failure image in workspace-local memory");
+  assert.ok(session.includes("capturedPath: safePagePath(page.url())"),
+    "the failure screenshot retains its original page identity across navigation");
+  assert.ok(session.includes("path: this.lastFailureScreenshot.capturedPath"),
+    "retrieving a failure screenshot must never claim the currently open page");
   assert.ok(session.includes('command.screenshotSource === "last_failure"'),
     "the existing screenshot tool retrieves a recorded failure separately");
   assert.ok(session.includes("this.lastFailureScreenshot = null"),
