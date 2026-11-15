@@ -120,7 +120,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.reload();
    await page.getByRole("heading",{name:"Browser Party "+runId,exact:true}).waitFor();
    const partyCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Party "+runId,exact:true})});
-   await partyCard.getByRole("button",{name:"Редактировать",exact:true}).click();
+   const partyEdit=partyCard.getByRole("button",{name:"Редактировать",exact:true});
+   await partyEdit.click();
+   await page.getByRole("heading",{name:"Изменить участника",exact:true}).waitFor();
+   assert.equal(await page.getByRole("dialog").count(),1);
+   const scrollAtOpen=await page.evaluate(()=>window.scrollY);
+   await page.keyboard.press("Escape");
+   await page.getByRole("dialog").waitFor({state:"hidden"});
+   assert.equal(await page.evaluate(()=>window.scrollY),scrollAtOpen,"closing a record must keep list scroll");
+   await partyEdit.click();
    await page.getByRole("heading",{name:"Изменить участника",exact:true}).waitFor();
    assert.equal(await page.getByRole("dialog").count(),1);
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Updated "+runId);
@@ -464,6 +472,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.setViewportSize({width:390,height:844});
    await page.screenshot({path:resolve(directory,"crm-mobile-dark.png"),fullPage:true});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),"mobile horizontal overflow");
+   await navigate("accounts","Клиенты");
+   await page.getByRole("button",{name:"Создать клиента",exact:true}).click();
+   const mobilePanel=page.getByRole("dialog");
+   await mobilePanel.waitFor();
+   const mobileWidth=await mobilePanel.evaluate(element=>element.getBoundingClientRect().width);
+   assert.ok(mobileWidth<=window.innerWidth+1 && mobileWidth>=window.innerWidth-2,"record panel fills mobile viewport");
+   await page.keyboard.press("Escape");
+   await mobilePanel.waitFor({state:"hidden"});
    steps.push("Theme persistence and mobile layout");
 
    restoreViewer=await beforeViewer();
