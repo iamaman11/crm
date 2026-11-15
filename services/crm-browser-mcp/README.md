@@ -1,3 +1,22 @@
+## 15 November 2026 — explicit APIResponse binary replay diagnostic (#357)
+
+After the native `route.fulfill({response,headers:response.headers()})` change,
+the published Browser Run still returned empty headers in Chromium,
+preventing React from evaluating its module despite valid owner-tenant
+Access and correct 200 response bodies.
+
+The existing Playwright route owner now explicitly supplies upstream
+`status:response.status()`, `headers:response.headers()` and
+`body:await response.body()` to `route.fulfill`. This tests the standard
+APIResponse-to-browser response boundary without adding another networking
+owner, rerouting request credentials or following cross-origin redirects.
+
+If the upstream APIResponse itself lacks Content-Type, a bounded diagnostic
+receipt records only resource type and upstream **header count**, never URLs,
+values, cookies, Access Client ID/Secret or response bodies. Live acceptance
+must distinguish provider header loss from fulfill proxy serialization.
+
+---
 ## 15 November 2026 — CRM Browser Run Content-Type preservation (#357)
 
 Real Browser MCP service authentication returned the CRM HTML, JS and CSS

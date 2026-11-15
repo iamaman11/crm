@@ -313,11 +313,27 @@ export class CrmBrowserSession extends DurableObject<Env> {
           maxRedirects: 0,
           timeout: 25_000,
         });
-        // Explicitly preserve the upstream headers. Real Browser Run returned
-        // correct JS/CSS/JSON bytes but an empty header map after fulfillment:
-        // Chromium rejected its JS module without Content-Type.
-        // Request service credentials must NEVER become response headers.
-        await route.fulfill({ response, headers: response.headers() });
+        // Replay the actual bytes and headers, not a provider-side APIResponse
+        // proxy. Real Browser Run returned correct JS/CSS/JSON with HTTP 200,
+        // but route.fulfill({response}) lost every header, including MIME.
+        // Access credentials belong ONLY to the original request.
+        const upstreamHeaders = response.headers();
+        const resourceType = request.resourceType();
+        if (["document", "script", "stylesheet", "fetch", "xhr"].includes(resourceType) &&
+            !Object.keys(upstreamHeaders).some(name => name.toLowerCase() === "content-type")) {
+          // Provider diagnostics only: no URL, cookie, secret, header value or
+          // response body ever enters logs. Bounded by the existing console log.
+          this.consoleLog.push({
+            level: "warning",
+            text: `BROWSER_UPSTREAM_MIME_MISSING type=${resourceType} header_count=${Object.keys(upstreamHeaders).length}`,
+          });
+          if (this.consoleLog.length > 80) this.consoleLog.shift();
+        }
+        await route.fulfill({
+          status: response.status(),
+          headers: upstreamHeaders,
+          body: await response.body(),
+        });
       });
   }
 
