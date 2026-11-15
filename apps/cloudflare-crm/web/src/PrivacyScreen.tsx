@@ -2,6 +2,8 @@ import {useCallback,useState} from "react";
 import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField} from "@ultimate-crm/ui";
 import type {PrivacyCase} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
+import {PrivacyCaseKind,PrivacyCaseStatus} from "@ultimate-crm/client/cloudflare";
+import {enumValue} from "./enumFields";
 import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 const kinds=["Не указан","Доступ к данным","Переносимость данных","Ограничение обработки","Удаление данных"];
 const statuses=["Не указан","Черновик","Подано","Личность подтверждена","Определение состава","Состав определён","Запланировано","Ожидание согласования","Исполнение","Согласование результатов","Пересмотр состава","Повторяемая ошибка","Завершено","Частично завершено","Отказано","Отменено","Окончательная ошибка"];
@@ -25,17 +27,17 @@ export function PrivacyScreen() {
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
     <RecordPanel open={!!selected} title={selected?"Обращение "+selected.caseId:"Обращение"} onClose={()=>setSelected(undefined)}>{selected&&<>
       <p>{statuses[selected.status]} · {selected.subjectVerified?"Личность подтверждена":"Личность не подтверждена"}</p>
-      {selected.status===1&&<Button disabled={mutation.busy} onClick={()=>void mutation.run(()=>api.privacy.submitPrivacyCase({
+      {selected.status===PrivacyCaseStatus.PRIVACY_CASE_STATUS_DRAFT&&<Button disabled={mutation.busy} onClick={()=>void mutation.run(()=>api.privacy.submitPrivacyCase({
         caseId:selected.caseId,precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
       }),async()=>{setSelected(undefined);await query.reload();})}>Подать запрос</Button>}{" "}
-      {[1,2].includes(selected.status)&&<Button variant="danger" disabled={mutation.busy} onClick={()=>void mutation.run(()=>api.privacy.cancelPrivacyCase({
+      {[PrivacyCaseStatus.PRIVACY_CASE_STATUS_DRAFT,PrivacyCaseStatus.PRIVACY_CASE_STATUS_SUBMITTED].includes(selected.status)&&<Button variant="danger" disabled={mutation.busy} onClick={()=>void mutation.run(()=>api.privacy.cancelPrivacyCase({
         caseId:selected.caseId,precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
       }),async()=>{setSelected(undefined);await query.reload();})}>Отменить запрос</Button>}
       {mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}
     </>}</RecordPanel>
     <RecordPanel open={createOpen} title="Новое обращение" onClose={()=>setCreateOpen(false)}><form key={draftId} onChange={mutation.changed} onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
-      void mutation.run(()=>api.privacy.createPrivacyCase({caseId:draftId,kind:Number(data.get("kind")),
+      void mutation.run(()=>api.privacy.createPrivacyCase({caseId:draftId,kind:enumValue(String(data.get("kind")??""),[PrivacyCaseKind.PRIVACY_CASE_KIND_ACCESS,PrivacyCaseKind.PRIVACY_CASE_KIND_PORTABILITY_EXPORT,PrivacyCaseKind.PRIVACY_CASE_KIND_RESTRICT_PROCESSING,PrivacyCaseKind.PRIVACY_CASE_KIND_ERASURE],"Вид обращения"),
         precondition:{idempotencyKey:mutation.key}}),async()=>{setCreateOpen(false);setDraftId(newId());await query.reload();});
     }}><FormGrid><SelectField label="Вид обращения" name="kind" defaultValue="1">
       {kinds.slice(1).map((k,i)=><option key={k} value={i+1}>{k}</option>)}

@@ -1,6 +1,8 @@
 import {useCallback,useState} from "react";
 import {Button,Card,RecordPanel,RecordActions,FeedbackPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import {api,field,newId} from "./api";
+import {CommunicationChannel,ConsentEffect,ConsentStatus,EvaluationReason} from "@ultimate-crm/client/cloudflare";
+import {enumValue} from "./enumFields";
 import {useQuery,useReadAction,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker} from "./Pickers";
 function ScopeFields() {
@@ -13,7 +15,7 @@ function ScopeFields() {
 }
 function scope(data:FormData) {
   const contact=field(data,"contact");
-  return {partyId:field(data,"partyId"),purpose:field(data,"purpose"),channel:Number(field(data,"channel")),
+  return {partyId:field(data,"partyId"),purpose:field(data,"purpose"),channel:enumValue(field(data,"channel"),[CommunicationChannel.COMMUNICATION_CHANNEL_EMAIL,CommunicationChannel.COMMUNICATION_CHANNEL_PHONE,CommunicationChannel.COMMUNICATION_CHANNEL_SMS,CommunicationChannel.COMMUNICATION_CHANNEL_POSTAL,CommunicationChannel.COMMUNICATION_CHANNEL_MESSAGING,CommunicationChannel.COMMUNICATION_CHANNEL_PUSH],"Канал"),
     ...(contact?{contactPointId:contact}:{})};
 }
 export function ConsentScreen() {
@@ -38,9 +40,9 @@ export function ConsentScreen() {
     </Card>
     <TextField label="Фильтр по ID участника" value={partyId} onChange={e=>{setPartyId(e.target.value);setCursor("");}}/>
     <QueryNotice query={query}/>
-    {query.data?.authorizations.map(a=><Card key={a.authorizationId} title={a.effect===2?"Запрет":"Согласие"}>
-      <p>{a.partyId} · {a.purpose} · {a.jurisdiction}</p><p>{a.status===1?"Действует":"Отозвано"} · версия {a.version.toString()}</p>
-      {a.effect===1&&a.status===1&&<Button variant="danger" disabled={mutation.busy}
+    {query.data?.authorizations.map(a=><Card key={a.authorizationId} title={a.effect===ConsentEffect.CONSENT_EFFECT_DENY?"Запрет":a.effect===ConsentEffect.CONSENT_EFFECT_GRANT?"Согласие":"Неизвестный тип"}>
+      <p>{a.partyId} · {a.purpose} · {a.jurisdiction}</p><p>{a.status===ConsentStatus.CONSENT_STATUS_ACTIVE?"Действует":a.status===ConsentStatus.CONSENT_STATUS_WITHDRAWN?"Отозвано":"Неизвестный статус"} · версия {a.version.toString()}</p>
+      {a.effect===ConsentEffect.CONSENT_EFFECT_GRANT&&a.status===ConsentStatus.CONSENT_STATUS_ACTIVE&&<Button variant="danger" disabled={mutation.busy}
         onClick={()=>void mutation.run(()=>api.consents.withdrawConsentAuthorization({
           authorizationId:a.authorizationId,
           precondition:{idempotencyKey:mutation.key,expectedVersion:a.version}

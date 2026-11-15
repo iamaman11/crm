@@ -2,6 +2,8 @@ import {useCallback,useState} from "react";
 import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import type {ContactPoint} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId,timestamp,dateText} from "./api";
+import {ContactPointKind,ContactPointStatus} from "@ultimate-crm/client/cloudflare";
+import {enumValue} from "./enumFields";
 import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker} from "./Pickers";
 import {TimeFields} from "./TimeFields";
@@ -21,10 +23,10 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
     <TextField label="Фильтр по ID участника" value={partyId} onChange={e=>{setPartyId(e.target.value);setCursor("");}}/>
     <QueryNotice query={query}/>
     {query.data?.contactPoints.map(p=><Card key={p.contactPointId} title={p.displayValue}>
-      <p>Участник: {p.partyId} · {p.status===1?"Активен":"Неактивен"}{p.preferred?" · предпочтительный":""}</p>
+      <p>Участник: {p.partyId} · {p.status===ContactPointStatus.CONTACT_POINT_STATUS_ACTIVE?"Активен":p.status===ContactPointStatus.CONTACT_POINT_STATUS_INACTIVE?"Неактивен":"Неизвестный статус"}{p.preferred?" · предпочтительный":""}</p>
       <p>{p.verified?"Подтверждён доверенными данными":"Не подтверждён"} · {p.normalizedValue}</p>
       <p>ID контакта: {p.contactPointId}</p>
-      {p.kind===1&&!p.verified&&<Button variant="secondary" disabled={mutation.busy}
+      {p.kind===ContactPointKind.CONTACT_POINT_KIND_EMAIL&&!p.verified&&<Button variant="secondary" disabled={mutation.busy}
         onClick={()=>void mutation.run(()=>api.contactPoints.verifyOwnEmailContactPoint({
           contactPointId:p.contactPointId,
           precondition:{idempotencyKey:mutation.key,expectedVersion:p.version}
@@ -45,12 +47,12 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
           if(selected){
             const validFrom=timePatch(data,"from"),validUntil=timePatch(data,"until");
             return api.contactPoints.updateContactPoint({contactPointId:selected.contactPointId,...common,
-              status:Number(field(data,"status")),...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
+              status:enumValue(field(data,"status"),[ContactPointStatus.CONTACT_POINT_STATUS_ACTIVE,ContactPointStatus.CONTACT_POINT_STATUS_INACTIVE],"Статус контакта"),...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
               precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}});
           }
           const validFrom=timestamp(field(data,"from")),validUntil=timestamp(field(data,"until"));
           return api.contactPoints.createContactPoint({contactPointId:draftId,partyId:field(data,"partyId"),
-            kind:Number(field(data,"kind")),...common,...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
+            kind:enumValue(field(data,"kind"),[ContactPointKind.CONTACT_POINT_KIND_EMAIL,ContactPointKind.CONTACT_POINT_KIND_PHONE,ContactPointKind.CONTACT_POINT_KIND_POSTAL,ContactPointKind.CONTACT_POINT_KIND_WEB,ContactPointKind.CONTACT_POINT_KIND_MESSAGING],"Тип контакта"),...common,...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
             precondition:{idempotencyKey:mutation.key}});
         },async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await query.reload();});
       }}><FormGrid>
