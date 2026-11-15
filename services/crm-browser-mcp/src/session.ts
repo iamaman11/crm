@@ -164,9 +164,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
     );
   }
 
-  /** Read the actual Chromium target/context identity via the public Playwright
-   * CDPSession API, not a URL, page title or a private Playwright field.
-   * A missing context ID means default/unknown context and fails closed. */
+  /** Read the exact Chromium target via native Playwright CDPSession,
+   * never by URL/title. Default context is represented explicitly by the
+   * provider-identity parser, not confused with an incognito context. */
   private async readPageIdentity(page: Page): Promise<BrowserPageIdentity> {
     try {
       const cdp = await page.context().newCDPSession(page);
