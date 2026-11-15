@@ -33,6 +33,15 @@ test("synthetic evidence fixture exercises the validator, not the Worker",()=>{
  const report=fixture();
  assert.deepEqual(validateRuntime(report,available,validateBindings(report,available)).registered,targetMethods(available));
 });
+test("SelfWrite requires idempotent Protobuf and authenticated coverage without broad viewer role denial",()=>{
+ const report=fixture();
+ const method="/crm.consents.v2.ConsentAuthorizationService/GrantVerifiedEmailConsent";
+ const policy=report.runtime.rpc.policies.find(([path])=>path===method);
+ assert.ok(policy);
+ policy[1].permission="SelfWrite";
+ report.runtime.viewer_denials=report.runtime.viewer_denials.filter(path=>path!==method);
+ assert.doesNotThrow(()=>validateRuntime(report,available,validateBindings(report,available)));
+});
 reject("missing executed evidence fails",r=>{r.runtime_evidence="NOT_EXECUTED";},/executed workerd evidence required/);
 reject("stale evidence fails",r=>{r.runtime.source_sha="0".repeat(40);},/stale runtime evidence/);
 reject("missing policy fails",r=>{r.runtime.rpc.policies=[];},/permission denial coverage|missing or invalid compiled policy/);

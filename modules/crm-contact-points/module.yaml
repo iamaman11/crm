@@ -77,6 +77,13 @@ provides:
         rpc: crm.contact_points.v2.ContactPointService.UpdateContactPoint
         request: crm.contact_points.v2.UpdateContactPointRequest
         response: crm.contact_points.v2.UpdateContactPointResponse
+    - id: contact-points.contact-point.verify-own-email
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.contact_points.v2.ContactPointService.VerifyOwnEmailContactPoint
+        request: crm.contact_points.v2.VerifyOwnEmailContactPointRequest
+        response: crm.contact_points.v2.VerifyOwnEmailContactPointResponse
     - id: contact-points.contact-point.get
       version: 2.0.0
       binding:

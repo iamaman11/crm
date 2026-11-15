@@ -79,6 +79,20 @@ provides:
         rpc: crm.consents.v2.ConsentAuthorizationService.SuppressCommunication
         request: crm.consents.v2.SuppressCommunicationRequest
         response: crm.consents.v2.SuppressCommunicationResponse
+    - id: consents.authorization.grant-verified-email
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.consents.v2.ConsentAuthorizationService.GrantVerifiedEmailConsent
+        request: crm.consents.v2.GrantVerifiedEmailConsentRequest
+        response: crm.consents.v2.GrantVerifiedEmailConsentResponse
+    - id: consents.authorization.withdraw
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.consents.v2.ConsentAuthorizationService.WithdrawConsentAuthorization
+        request: crm.consents.v2.WithdrawConsentAuthorizationRequest
+        response: crm.consents.v2.WithdrawConsentAuthorizationResponse
     - id: consents.authorization.list
       version: 2.0.0
       binding:

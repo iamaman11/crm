@@ -70,10 +70,10 @@ export function validateRuntime(report,available,bound){
   if(!bound.has(path))fail("registered RPC absent from canonical module.yaml binding "+path);
   if(!bound.get(path).linked)fail("RPC owner is not linked into Worker "+path);
   const rule=policies.get(path);
-  if(!rule||!["Read","AdminRead","Write"].includes(rule.permission))fail("missing or invalid compiled policy "+path);
+  if(!rule||!["Read","AdminRead","Write","SelfWrite"].includes(rule.permission))fail("missing or invalid compiled policy "+path);
   const definition=available.get(path);
   {
-   const expected=rule.permission==="Write"
+   const expected=["Write","SelfWrite"].includes(rule.permission)
     ?MethodOptions_IdempotencyLevel.IDEMPOTENT:MethodOptions_IdempotencyLevel.NO_SIDE_EFFECTS;
    if(definition.idempotency!==expected)fail("compiled policy effect differs from Protobuf "+path);
   }
