@@ -48,6 +48,7 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
             &key,
             &self.d1()?,
             &self.tenant,
+            &self.actor,
             &self.request_id,
         )
         .await
@@ -90,6 +91,7 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
             &self.d1()?,
             &self.tenant,
             &id,
+            &self.actor,
             &self.request_id,
         )
         .await

@@ -361,6 +361,7 @@ impl ContactPointV2Service {
 struct RelationshipV2Service {
     env: Arc<Env>,
     tenant: String,
+    actor: String,
     request_id: String,
 }
 impl RelationshipV2Service {
@@ -776,6 +777,7 @@ pub(super) fn router(env: Env, verified: &access::Actor, request_id: &str) -> Co
         .add_service(Arc::new(RelationshipV2Service {
             env: Arc::clone(&env),
             tenant: tenant.to_owned(),
+            actor: actor.to_owned(),
             request_id: request_id.to_owned(),
         }))
         .add_service(Arc::new(TaskV2Service {

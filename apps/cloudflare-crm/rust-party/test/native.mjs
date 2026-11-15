@@ -743,7 +743,7 @@ try{
  assert.equal((await relationV2("UpdatePartyRelationship",admin,{
    ...relUpdate,status:0,
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-rel-invalid-status"}})).status,400);
- const updatedRel=await relationV2("UpdatePartyRelationship",admin,relUpdate);
+ const updatedRel=await relationV2("UpdatePartyRelationship",knownService,relUpdate);
  assert.equal(updatedRel.status,200,describeProtobuf(updatedRel.body));
  assert.equal(updatedRel.body.relationship?.version,2n);
  assert.equal(updatedRel.body.relationship?.status,2);
@@ -790,7 +790,34 @@ try{
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_relationship_receipts WHERE tenant='tenant-a'"+
    " AND key IN ('candidate-rel-create-mid','candidate-rel-update-01',"+
    " 'candidate-rel-keep-02','candidate-rel-later-03')")[0].n,4);
- console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
+ 
+  // R2a #408: real signed human/service authors, replay and atomic SQL rollback.
+  assert.deepEqual(sql("SELECT action,actor,request_id FROM crm_audit "+
+    "WHERE tenant_id='tenant-a' AND subject_id='"+rMid+"' ORDER BY rowid"),[
+    {action:"party_relationships.create",actor:"native-a@example.test",
+      request_id:midCreated.headers.get("x-request-id")},
+    {action:"party_relationships.update",actor:"service:ci-fixture.access",
+      request_id:updatedRel.headers.get("x-request-id")},
+    {action:"party_relationships.update",actor:"native-a@example.test",
+      request_id:relKeepApplied.headers.get("x-request-id")},
+    {action:"party_relationships.update",actor:"native-a@example.test",
+      request_id:relLater.headers.get("x-request-id")}
+  ],"Cross-actor replay never replaces original Relationship audit author");
+  const relSnapshot=()=>sql("SELECT "+
+    "(SELECT state FROM crm_party_relationship_records WHERE tenant='tenant-a' AND id='"+rMid+"') AS state,"+
+    "(SELECT COUNT(*) FROM crm_party_relationship_receipts) AS receipts,"+
+    "(SELECT COUNT(*) FROM crm_audit) AS audits");
+  const beforeRelFault=relSnapshot();
+  sql("CREATE TRIGGER fixture_fail_rel_actor BEFORE INSERT ON crm_audit "+
+    "WHEN NEW.subject_id='"+rMid+"' BEGIN SELECT RAISE(ABORT,'fixture relation audit'); END;");
+  try{
+    assert.equal((await relationV2("UpdatePartyRelationship",admin,{relationshipId:rMid,status:1,
+      precondition:{expectedVersion:4n,idempotencyKey:"candidate-rel-actor-failed"}})).status,409);
+    assert.deepEqual(relSnapshot(),beforeRelFault);
+  }finally{sql("DROP TRIGGER fixture_fail_rel_actor");}
+  console.log(JSON.stringify({event:"crm.native-r2a-relationship-actor-audit",result:"PASS",
+    signed_cross_actor:true,failed_audit_rollback:true}));
+console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
    result:"PASS",rpc_methods:["CreatePartyRelationship","UpdatePartyRelationship",
      "GetPartyRelationship","ListPartyRelationships"],
    generated_binary:true,original_owner:"crm.party-relationships",
@@ -907,7 +934,7 @@ try{
  const updateTask={...baseUpdate,subject:patchSubject("Edited original Task"),
    description:{operation:{case:"set",value:"Edited through Connect"}},
    priority:3,dueAt:{operation:{case:"clear",value:true}}};
- const updatedTask=await taskV2("UpdateTask",admin,updateTask);
+ const updatedTask=await taskV2("UpdateTask",knownService,updateTask);
  assert.equal(updatedTask.status,200,describeProtobuf(updatedTask.body));
  assert.equal(updatedTask.body.task.subject,"Edited original Task");
  assert.equal(updatedTask.body.task.description,"Edited through Connect");
@@ -944,7 +971,7 @@ try{
  assert.equal((await taskV2("CompleteTask",admin,{
    ...taskComplete,precondition:{expectedVersion:0n,
      idempotencyKey:"candidate-task-invalid-version"}})).status,400);
- const completed=await taskV2("CompleteTask",admin,taskComplete);
+ const completed=await taskV2("CompleteTask",knownService,taskComplete);
  assert.equal(completed.status,200,describeProtobuf(completed.body));
  assert.equal(completed.body.changed,true);
  assert.equal(completed.body.task?.status,2);
@@ -988,7 +1015,37 @@ try{
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts "+
    "WHERE tenant='tenant-a' AND key IN ('candidate-task-create-mid',"+
    "'candidate-task-complete-mid')")[0].n,2);
- console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
+ 
+  assert.deepEqual(sql("SELECT action,actor,request_id FROM crm_audit "+
+    "WHERE tenant_id='tenant-a' AND subject_id='"+taskOther+"' ORDER BY rowid"),[
+    {action:"activity_tasks.create",actor:"native-a@example.test",
+      request_id:taskOtherCreated.headers.get("x-request-id")},
+    {action:"activity_tasks.update",actor:"service:ci-fixture.access",
+      request_id:updatedTask.headers.get("x-request-id")},
+    {action:"activity_tasks.update",actor:"native-a@example.test",
+      request_id:secondTaskEdit.headers.get("x-request-id")}
+  ],"Task update replay keeps first signed author and trace");
+  assert.deepEqual(sql("SELECT action,actor FROM crm_audit "+
+    "WHERE tenant_id='tenant-a' AND subject_id='"+taskMid+"' ORDER BY rowid"),[
+    {action:"activity_tasks.create",actor:"native-a@example.test"},
+    {action:"activity_tasks.complete",actor:"service:ci-fixture.access"}
+  ],"Task complete and update stay distinct; no-op produces no extra audit");
+  const taskActorSnapshot=()=>sql("SELECT "+
+    "(SELECT state FROM crm_activity_task_records WHERE tenant='tenant-a' AND id='"+taskOther+"') AS state,"+
+    "(SELECT COUNT(*) FROM crm_activity_task_receipts) AS receipts,"+
+    "(SELECT COUNT(*) FROM crm_audit) AS audits");
+  const beforeTaskFault=taskActorSnapshot();
+  sql("CREATE TRIGGER fixture_fail_task_actor BEFORE INSERT ON crm_audit "+
+    "WHEN NEW.subject_id='"+taskOther+"' BEGIN SELECT RAISE(ABORT,'fixture task audit'); END;");
+  try{
+    assert.equal((await taskV2("UpdateTask",admin,{taskId:taskOther,
+      subject:patchSubject("Must not persist"),
+      precondition:{expectedVersion:3n,idempotencyKey:"candidate-task-actor-failed"}})).status,409);
+    assert.deepEqual(taskActorSnapshot(),beforeTaskFault);
+  }finally{sql("DROP TRIGGER fixture_fail_task_actor");}
+  console.log(JSON.stringify({event:"crm.native-r2a-task-actor-audit",result:"PASS",
+    update_complete_actor:true,no_op:true,failed_audit_rollback:true}));
+console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
    result:"PASS",rpc_methods:["CreateTask","UpdateTask","CompleteTask","GetTask","ListTasks"],
    generated_binary:true,original_owner:"crm.activities",signed_access:true,
    tenant_ab:true,viewer_write_denied:true,
@@ -1217,7 +1274,7 @@ assert.equal((await salesV2("UpdateDeal",viewer,updateSale)).status,403);
 assert.equal((await salesV2("UpdateDeal",admin,{
   ...updateSale,precondition:{expectedVersion:100n,
     idempotencyKey:"connect-sales-stale-version"}})).status,409);
-const saleUpdated=await salesV2("UpdateDeal",admin,updateSale);
+const saleUpdated=await salesV2("UpdateDeal",knownService,updateSale);
 assert.equal(saleUpdated.status,200,describeProtobuf(saleUpdated.body));
 assert.equal(saleUpdated.body.deal?.name,"Updated Connect Deal");
 assert.equal(saleUpdated.body.deal?.amount?.minorUnits,98765n);
@@ -1302,6 +1359,52 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
 assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
   "AND subject_id='"+dealId+"'")[0].n,4,
   "create + update + two stage transitions each write exactly one audit");
+
+  assert.deepEqual(sql("SELECT action,actor,request_id FROM crm_audit "+
+    "WHERE tenant_id='tenant-a' AND subject_id='"+dealId+"' ORDER BY rowid"),[
+    {action:"sales_deals.create",actor:"native-a@example.test",
+      request_id:salesCreated.headers.get("x-request-id")},
+    {action:"sales_deals.update",actor:"service:ci-fixture.access",
+      request_id:saleUpdated.headers.get("x-request-id")},
+    {action:"sales_deals.advance",actor:"native-a@example.test",
+      request_id:advancedSale.headers.get("x-request-id")},
+    {action:"sales_deals.advance",actor:"native-a@example.test",
+      request_id:closedSale.headers.get("x-request-id")}
+  ],"Sales create/update/stage actor and action survive cross-actor replay");
+  const linked=sql("SELECT delivery_id,task_id,actor,request_id FROM crm_sales_link_delivery_records "+
+    "WHERE tenant='tenant-a' AND deal_id='"+dealId+"' ORDER BY deal_version");
+  assert.equal(linked.length,2);
+  for(const [i,row] of linked.entries()){
+    assert.equal(row.actor,"native-a@example.test");
+    assert.equal(row.request_id,[advancedSale,closedSale][i].headers.get("x-request-id"));
+    assert.deepEqual(sql("SELECT actor,request_id FROM crm_audit "+
+      "WHERE tenant_id='tenant-a' AND subject_id='"+row.delivery_id+"'"),[
+      {actor:"native-a@example.test",request_id:row.request_id}
+    ],"Sales linked-delivery audit must share actor and trace");
+    if(row.task_id)assert.deepEqual(sql("SELECT action,actor,request_id FROM crm_audit "+
+      "WHERE tenant_id='tenant-a' AND subject_id='"+row.task_id+"'"),[
+      {action:"activity_tasks.create",actor:"native-a@example.test",request_id:row.request_id}
+    ],"Automated linked Task must preserve the verified source author");
+  }
+  const salesActorSnapshot=()=>sql("SELECT "+
+    "(SELECT state FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id='"+dealLast+"') AS deal,"+
+    "(SELECT COUNT(*) FROM crm_activity_task_records) AS tasks,"+
+    "(SELECT COUNT(*) FROM crm_sales_link_delivery_records) AS deliveries,"+
+    "(SELECT COUNT(*) FROM crm_sales_deal_receipts) AS receipts,"+
+    "(SELECT COUNT(*) FROM crm_audit) AS audits");
+  const beforeSalesFault=salesActorSnapshot();
+  sql("CREATE TRIGGER fixture_fail_sales_link_actor BEFORE INSERT ON crm_audit "+
+    "WHEN NEW.action='sales_activities_link.applied' "+
+    "BEGIN SELECT RAISE(ABORT,'fixture linked audit'); END;");
+  try{
+    assert.equal((await salesV2("AdvanceStage",admin,{dealId:dealLast,
+      targetStage:stageQualified,targetStatus:1,
+      precondition:{expectedVersion:1n,idempotencyKey:"connect-sales-linked-actor-fail"}})).status,409);
+    assert.deepEqual(salesActorSnapshot(),beforeSalesFault,
+      "Late link audit failure rolls back Deal, new Task, receipt, delivery and audit");
+  }finally{sql("DROP TRIGGER fixture_fail_sales_link_actor");}
+  console.log(JSON.stringify({event:"crm.native-r2a-sales-linked-actor-audit",result:"PASS",
+    all_sales_actions:true,linked_task_delivery:true,late_batch_rollback:true}));
 console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
   rpc_methods:["CreateDeal","UpdateDeal","AdvanceStage","GetDeal","ListDeals"],
   generated_binary:true,original_owner:"crm.sales",signed_access:true,tenant_ab:true,

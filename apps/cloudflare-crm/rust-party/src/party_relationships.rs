@@ -172,6 +172,7 @@ pub(super) async fn create_typed(
     k: &str,
     db: &D1Database,
     tenant: &str,
+    actor: &str,
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     if !(8..=120).contains(&k.len()) {
@@ -230,13 +231,13 @@ pub(super) async fn create_typed(
         Err(e) => return Ok(Err(fail(e.code, 422))),
     };
     let stored = encoded(&relationship)?;
-    let r=bind(db,"INSERT INTO crm_party_relationship_records(tenant,id,from_party,to_party,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?,?,?)",
+    let r=bind(db,"INSERT INTO crm_party_relationship_records(tenant,id,from_party,to_party,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant),
           JsValue::from_str(relationship.party_relationship_id().as_str()),
           JsValue::from_str(relationship.from_party_ref().as_str()),
           JsValue::from_str(relationship.to_party_ref().as_str()),
           JsValue::from_str(&stored),JsValue::from_f64(relationship.version() as f64),
-          JsValue::from_str(k),JsValue::from_str(&hash),JsValue::from_str(trace)])?
+          JsValue::from_str(k),JsValue::from_str(&hash),JsValue::from_str(trace),JsValue::from_str(actor)])?
         .run().await;
     if r.is_err() {
         return Ok(Err(fail("PARTY_RELATIONSHIPS_CREATE_CONFLICT", 409)));
@@ -252,6 +253,7 @@ pub(super) async fn update_typed(
     db: &D1Database,
     tenant: &str,
     id: &str,
+    actor: &str,
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     if !(8..=120).contains(&k.len()) {
@@ -297,10 +299,10 @@ pub(super) async fn update_typed(
         )));
     }
     let stored = encoded(&relationship)?;
-    let r=bind(db,"UPDATE crm_party_relationship_records SET state = ?,version = ?,idem_key = ?,idem_digest = ?,request_id = ? WHERE tenant = ? AND id = ? AND version = ?",
+    let r=bind(db,"UPDATE crm_party_relationship_records SET state = ?,version = ?,idem_key = ?,idem_digest = ?,request_id = ?,actor = ? WHERE tenant = ? AND id = ? AND version = ?",
         &[JsValue::from_str(&stored),JsValue::from_f64(relationship.version() as f64),
           JsValue::from_str(k),JsValue::from_str(&hash),JsValue::from_str(trace),
-          JsValue::from_str(tenant),JsValue::from_str(id),
+          JsValue::from_str(actor),JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
     let Ok(result) = r else {
         return Ok(Err(fail("PARTY_RELATIONSHIPS_UPDATE_CONFLICT", 409)));

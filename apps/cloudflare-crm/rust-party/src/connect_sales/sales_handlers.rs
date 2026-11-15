@@ -101,6 +101,7 @@ impl sale_wire::DealService for SalesV2Service {
             &self.d1()?,
             &self.tenant,
             &id,
+            &self.actor,
             &self.request_id,
         )
         .await

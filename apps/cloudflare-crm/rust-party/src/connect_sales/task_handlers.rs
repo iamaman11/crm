@@ -124,6 +124,7 @@ impl task_wire::TaskService for TaskV2Service {
             &self.d1()?,
             &self.tenant,
             &id,
+            &self.actor,
             &self.request_id,
         )
         .await
@@ -158,6 +159,7 @@ impl task_wire::TaskService for TaskV2Service {
             &self.d1()?,
             &self.tenant,
             &id,
+            &self.actor,
             &self.request_id,
         )
         .await

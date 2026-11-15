@@ -223,11 +223,11 @@ pub(super) async fn create_typed(
         Err(e) => return Ok(rejected(e.code, 422)),
     };
     let saved = encode(&deal)?;
-    let r=bind(db,"INSERT INTO crm_sales_deal_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?,?)",
+    let r=bind(db,"INSERT INTO crm_sales_deal_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant),JsValue::from_str(deal.deal_id().as_str()),
           JsValue::from_str(account_id.as_str()),JsValue::from_str(&saved),
           JsValue::from_f64(deal.version() as f64),JsValue::from_str(k),
-          JsValue::from_str(&digest),JsValue::from_str(trace)])?.run().await;
+          JsValue::from_str(&digest),JsValue::from_str(trace),JsValue::from_str(actor)])?.run().await;
     if r.is_err() {
         return Ok(rejected("SALES_DEAL_CREATE_CONFLICT", 409));
     }
@@ -242,6 +242,7 @@ pub(super) async fn update_typed(
     db: &D1Database,
     tenant: &str,
     id: &str,
+    actor: &str,
     trace: &str,
 ) -> Result<std::result::Result<SalesSaved, SalesFailure>> {
     if !(8..=120).contains(&key.len()) {
@@ -322,10 +323,10 @@ pub(super) async fn update_typed(
         ));
     }
     let saved = encode(&deal)?;
-    let result=bind(db,"UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,last_action='sales_deals.update' WHERE tenant=? AND id=? AND version=?",
+    let result=bind(db,"UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.update' WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&saved),JsValue::from_f64(deal.version() as f64),
           JsValue::from_str(key),JsValue::from_str(&digest),JsValue::from_str(trace),
-          JsValue::from_str(tenant),JsValue::from_str(id),
+          JsValue::from_str(actor),JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
     let Ok(result) = result else {
         return Ok(rejected("SALES_DEAL_UPDATE_CONFLICT", 409));
@@ -440,13 +441,14 @@ pub(super) async fn advance_typed(
     };
     let update = bind(
         db,
-        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,last_action='sales_deals.advance' WHERE tenant=? AND id=? AND version=?",
+        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.advance' WHERE tenant=? AND id=? AND version=?",
         &[
             JsValue::from_str(&saved),
             JsValue::from_f64(deal.version() as f64),
             JsValue::from_str(key),
             JsValue::from_str(&digest),
             JsValue::from_str(trace),
+            JsValue::from_str(actor),
             JsValue::from_str(tenant),
             JsValue::from_str(id),
             JsValue::from_f64(input.expected_version as f64),
@@ -465,7 +467,7 @@ pub(super) async fn advance_typed(
         .map_err(|e| worker::Error::RustError(e.to_string()))?;
         let task_stmt = bind(
             db,
-            "INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id) VALUES(?,?,?,?,?,?,?,?)",
+            "INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?)",
             &[
                 JsValue::from_str(tenant),
                 JsValue::from_str(task.task_id().as_str()),
@@ -475,13 +477,14 @@ pub(super) async fn advance_typed(
                 JsValue::from_str(&prepared.delivery_id),
                 JsValue::from_str(&prepared.event_id),
                 JsValue::from_str(trace),
+                JsValue::from_str(actor),
             ],
         )?;
         writes.push(task_stmt);
     }
     let link_stmt = bind(
         db,
-        "INSERT INTO crm_sales_link_delivery_records(tenant,delivery_id,event_id,deal_id,deal_version,task_id,disposition,state_json,request_id) VALUES(?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO crm_sales_link_delivery_records(tenant,delivery_id,event_id,deal_id,deal_version,task_id,disposition,state_json,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?,?)",
         &[
             JsValue::from_str(tenant),
             JsValue::from_str(&prepared.delivery_id),
@@ -498,6 +501,7 @@ pub(super) async fn advance_typed(
             }),
             JsValue::from_str(&prepared.state_json),
             JsValue::from_str(trace),
+            JsValue::from_str(actor),
         ],
     )?;
     writes.push(link_stmt);
