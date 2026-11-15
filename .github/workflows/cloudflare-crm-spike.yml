@@ -67,11 +67,13 @@ jobs:
             node apps/cloudflare-crm/scripts/architecture-gate.mjs
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
         with:
-          toolchain: 1.97.1
+          toolchain: 1.100.0
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
       - name: Verify Rust owner formatting before WASM compilation
         run: |
+          rustc --version | grep -F "rustc 1.100.0 "
+          cargo --version | grep -F "cargo 1.100.0 "
           set -euo pipefail
           cargo fmt --all -- --check
           cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml -- --check
@@ -130,9 +132,9 @@ jobs:
             ~/.cargo/git
             target
             apps/cloudflare-crm/rust-party/target
-          key: ${{ runner.os }}-crm-rust1971-wasm-v1-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/build.rs', '**/.cargo/config*', 'rust-toolchain*', 'proto/**') }}-${{ github.sha }}
+          key: ${{ runner.os }}-crm-rust1100-wasm-v1-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/build.rs', '**/.cargo/config*', 'rust-toolchain*', 'proto/**') }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-crm-rust1971-wasm-v1-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/build.rs', '**/.cargo/config*', 'rust-toolchain*', 'proto/**') }}-
+            ${{ runner.os }}-crm-rust1100-wasm-v1-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/build.rs', '**/.cargo/config*', 'rust-toolchain*', 'proto/**') }}-
       - name: Compile the actual Worker owner graph for WebAssembly
         run: cargo check --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native
       - name: Run Clippy on the actual Worker for WebAssembly
@@ -172,7 +174,7 @@ jobs:
           path: |
             ~/.cargo/bin/wasm-bindgen
             ~/.cargo/bin/worker-build
-          key: ${{ runner.os }}-crm-rust1971-wasm-bindgen-0.2.130-worker-build-0.8.7-v1
+          key: ${{ runner.os }}-crm-rust1100-wasm-bindgen-0.2.130-worker-build-0.8.7-v1
       - name: Install exact native wasm-bindgen CLI from Cargo registry
         # worker-build 0.8.7 officially supports WASM_BINDGEN_BIN. Fetching the
         # pinned CLI from crates.io avoids unstable GitHub Releases binary URLs.
