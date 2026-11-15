@@ -110,6 +110,7 @@ Never report sensitive tokens, full querystrings or Live View URLs.
   `browser_screenshot(workspaceId, source=last_failure)` **before another
   browser_run or Close**. The separate `browser_diagnostics` provides HTTP
   events; do not embed repeated request logs or inline PNG data in an error.
+- The screenshot receipt retains the page path captured **at the failed step**, even after a later navigate. The image must not be mislabeled as the currently open page.
 - The screenshot is **workspace-local ephemeral state**; it is not persisted
   or claimed recoverable after Durable Object eviction.
 - Distinguish the browser command returning `completed=true` from an
