@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { MAX_VISUAL_PNG_BYTES, pngReceipt, visualThreshold } from "../src/browser-visual.ts";
 import axe from "axe-core";
 
@@ -20,4 +21,11 @@ test("visual difference tolerance is bounded and never silently clamped",()=>{
 test("installed axe-core is the real pinned engine, not a DOM heuristic",()=>{
   assert.match(axe.version,/^4\.14\.0$/);
   assert.ok(axe.source.length>100_000);
+});
+
+test("axe injection uses Playwright page evaluation, not CSP-blocked inline script tags",()=>{
+  // Regression guard for real Selenium CSP failure caught in Browser Run.
+  const source = readFileSync(new URL("../src/session.ts",import.meta.url),"utf8");
+  assert.match(source,/await page\\.evaluate\\(axe\\.source\\)/);
+  assert.doesNotMatch(source,/page\\.addScriptTag\\(\\{content:axe\\.source\\}/);
 });

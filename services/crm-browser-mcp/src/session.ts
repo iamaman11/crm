@@ -885,9 +885,12 @@ export class CrmBrowserSession extends DurableObject<Env> {
           };
         }
         if (command.inspection === "axe") {
-          // Official axe-core source is pinned/bundled with the Worker.
-          // Do not load mutable scripts from public CDNs at test runtime.
-          await page.addScriptTag({content:axe.source});
+          // Execute bundled, integrity-pinned axe via Playwright's browser
+          // evaluation channel. Inserting an inline <script> tag is blocked
+          // by real websites' Content-Security-Policy (observed on Selenium),
+          // and silently leaves window.axe undefined.
+          // Never load a mutable third-party CDN at runtime.
+          await page.evaluate(axe.source);
           const audit=await page.evaluate(async () => {
             type AxeViolation={id:string;impact?:string|null;description?:string;
               nodes:Array<{target:string[]}>};
