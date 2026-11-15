@@ -23,10 +23,10 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
     <TextField label="Фильтр по ID участника" value={partyId} onChange={e=>{setPartyId(e.target.value);setCursor("");}}/>
     <QueryNotice query={query}/>
     {query.data?.contactPoints.map(p=><Card key={p.contactPointId} title={p.displayValue}>
-      <p>Участник: {p.partyId} · {p.status===ContactPointStatus.CONTACT_POINT_STATUS_ACTIVE?"Активен":p.status===ContactPointStatus.CONTACT_POINT_STATUS_INACTIVE?"Неактивен":"Неизвестный статус"}{p.preferred?" · предпочтительный":""}</p>
+      <p>Участник: {p.partyId} · {p.status===ContactPointStatus.ACTIVE?"Активен":p.status===ContactPointStatus.INACTIVE?"Неактивен":"Неизвестный статус"}{p.preferred?" · предпочтительный":""}</p>
       <p>{p.verified?"Подтверждён доверенными данными":"Не подтверждён"} · {p.normalizedValue}</p>
       <p>ID контакта: {p.contactPointId}</p>
-      {p.kind===ContactPointKind.CONTACT_POINT_KIND_EMAIL&&!p.verified&&<Button variant="secondary" disabled={mutation.busy}
+      {p.kind===ContactPointKind.EMAIL&&!p.verified&&<Button variant="secondary" disabled={mutation.busy}
         onClick={()=>void mutation.run(()=>api.contactPoints.verifyOwnEmailContactPoint({
           contactPointId:p.contactPointId,
           precondition:{idempotencyKey:mutation.key,expectedVersion:p.version}
@@ -47,21 +47,21 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
           if(selected){
             const validFrom=timePatch(data,"from"),validUntil=timePatch(data,"until");
             return api.contactPoints.updateContactPoint({contactPointId:selected.contactPointId,...common,
-              status:enumValue(field(data,"status"),[ContactPointStatus.CONTACT_POINT_STATUS_ACTIVE,ContactPointStatus.CONTACT_POINT_STATUS_INACTIVE],"Статус контакта"),...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
+              status:enumValue(field(data,"status"),[ContactPointStatus.ACTIVE,ContactPointStatus.INACTIVE],"Статус контакта"),...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
               precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}});
           }
           const validFrom=timestamp(field(data,"from")),validUntil=timestamp(field(data,"until"));
           return api.contactPoints.createContactPoint({contactPointId:draftId,partyId:field(data,"partyId"),
-            kind:enumValue(field(data,"kind"),[ContactPointKind.CONTACT_POINT_KIND_EMAIL,ContactPointKind.CONTACT_POINT_KIND_PHONE,ContactPointKind.CONTACT_POINT_KIND_POSTAL,ContactPointKind.CONTACT_POINT_KIND_WEB,ContactPointKind.CONTACT_POINT_KIND_MESSAGING],"Тип контакта"),...common,...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
+            kind:enumValue(field(data,"kind"),[ContactPointKind.EMAIL,ContactPointKind.PHONE,ContactPointKind.POSTAL,ContactPointKind.WEB,ContactPointKind.MESSAGING],"Тип контакта"),...common,...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
             precondition:{idempotencyKey:mutation.key}});
         },async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await query.reload();});
       }}><FormGrid>
         {!selected&&<><PartyPicker/><SelectField label="Тип контакта" name="kind" defaultValue="1">
-          <option value={ContactPointKind.CONTACT_POINT_KIND_EMAIL}>Email</option><option value={ContactPointKind.CONTACT_POINT_KIND_PHONE}>Телефон</option><option value={ContactPointKind.CONTACT_POINT_KIND_POSTAL}>Почтовый адрес</option><option value={ContactPointKind.CONTACT_POINT_KIND_WEB}>Сайт</option><option value={ContactPointKind.CONTACT_POINT_KIND_MESSAGING}>Мессенджер</option>
+          <option value={ContactPointKind.EMAIL}>Email</option><option value={ContactPointKind.PHONE}>Телефон</option><option value={ContactPointKind.POSTAL}>Почтовый адрес</option><option value={ContactPointKind.WEB}>Сайт</option><option value={ContactPointKind.MESSAGING}>Мессенджер</option>
         </SelectField></>}
         <TextField label="Значение контакта" name="value" defaultValue={selected?.displayValue??""} required/>
         <TextField label="Предпочтительный" name="preferred" type="checkbox" defaultChecked={selected?.preferred??false}/>
-        {selected&&<SelectField label="Статус" name="status" defaultValue={selected.status}><option value={ContactPointStatus.CONTACT_POINT_STATUS_ACTIVE}>Активен</option><option value={ContactPointStatus.CONTACT_POINT_STATUS_INACTIVE}>Неактивен</option></SelectField>}
+        {selected&&<SelectField label="Статус" name="status" defaultValue={selected.status}><option value={ContactPointStatus.ACTIVE}>Активен</option><option value={ContactPointStatus.INACTIVE}>Неактивен</option></SelectField>}
         <TimeFields name="from" label="Действует с" editing={!!selected}/><TimeFields name="until" label="Действует до" editing={!!selected}/>
       </FormGrid><Button type="submit" disabled={mutation.busy}>Сохранить контакт</Button>{" "}
       {selected&&<Button variant="secondary" onClick={()=>{setEditorOpen(false);setSelected(undefined);mutation.changed();}}>Отмена</Button>}

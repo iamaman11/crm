@@ -24,7 +24,7 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
     <QueryNotice query={query}/>
     {query.data?.relationships.map(r=><Card key={r.relationshipId} title={r.type?.code??"Связь"}>
       <p>{r.type?.fromRole}: {r.fromPartyId} → {r.type?.toRole}: {r.toPartyId}</p>
-      <p>{r.status===RelationshipStatus.RELATIONSHIP_STATUS_ACTIVE?"Активна":r.status===RelationshipStatus.RELATIONSHIP_STATUS_INACTIVE?"Неактивна":"Неизвестный статус"} · с {dateText(r.validFrom)} до {dateText(r.validUntil)}</p>
+      <p>{r.status===RelationshipStatus.ACTIVE?"Активна":r.status===RelationshipStatus.INACTIVE?"Неактивна":"Неизвестный статус"} · с {dateText(r.validFrom)} до {dateText(r.validUntil)}</p>
       <Button variant="secondary" onClick={async()=>{
         try {setSelected((await api.relationships.getPartyRelationship({relationshipId:r.relationshipId})).relationship);setEditorOpen(true);mutation.changed();}
         catch(error){await mutation.run(()=>Promise.reject(error));}
@@ -39,13 +39,13 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
           if(selected){
             const validFrom=timePatch(data,"from"),validUntil=timePatch(data,"until");
             return api.relationships.updatePartyRelationship({relationshipId:selected.relationshipId,
-              status:enumValue(field(data,"status"),[RelationshipStatus.RELATIONSHIP_STATUS_ACTIVE,RelationshipStatus.RELATIONSHIP_STATUS_INACTIVE],"Статус связи"),...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
+              status:enumValue(field(data,"status"),[RelationshipStatus.ACTIVE,RelationshipStatus.INACTIVE],"Статус связи"),...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
               precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}});
           }
           const validFrom=timestamp(field(data,"from")),validUntil=timestamp(field(data,"until"));
           return api.relationships.createPartyRelationship({relationshipId:draftId,
             fromPartyId:field(data,"fromParty"),toPartyId:field(data,"toParty"),
-            type:{code:field(data,"code"),directionality:enumValue(field(data,"direction"),[RelationshipDirectionality.RELATIONSHIP_DIRECTIONALITY_DIRECTIONAL,RelationshipDirectionality.RELATIONSHIP_DIRECTIONALITY_RECIPROCAL],"Направление"),
+            type:{code:field(data,"code"),directionality:enumValue(field(data,"direction"),[RelationshipDirectionality.DIRECTIONAL,RelationshipDirectionality.RECIPROCAL],"Направление"),
               fromRole:field(data,"fromRole"),toRole:field(data,"toRole")},
             ...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
             precondition:{idempotencyKey:mutation.key}});
@@ -55,8 +55,8 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
         <TextField label="Код отношения" name="code" defaultValue="employment" required/>
         <TextField label="Роль первого" name="fromRole" defaultValue="employer" required/>
         <TextField label="Роль второго" name="toRole" defaultValue="employee" required/>
-        <SelectField label="Направление" name="direction" defaultValue="1"><option value={RelationshipDirectionality.RELATIONSHIP_DIRECTIONALITY_DIRECTIONAL}>Направленная</option><option value={RelationshipDirectionality.RELATIONSHIP_DIRECTIONALITY_RECIPROCAL}>Взаимная</option></SelectField></>}
-      {selected&&<SelectField label="Статус" name="status" defaultValue={selected.status}><option value={RelationshipStatus.RELATIONSHIP_STATUS_ACTIVE}>Активна</option><option value={RelationshipStatus.RELATIONSHIP_STATUS_INACTIVE}>Неактивна</option></SelectField>}
+        <SelectField label="Направление" name="direction" defaultValue="1"><option value={RelationshipDirectionality.DIRECTIONAL}>Направленная</option><option value={RelationshipDirectionality.RECIPROCAL}>Взаимная</option></SelectField></>}
+      {selected&&<SelectField label="Статус" name="status" defaultValue={selected.status}><option value={RelationshipStatus.ACTIVE}>Активна</option><option value={RelationshipStatus.INACTIVE}>Неактивна</option></SelectField>}
       <TimeFields name="from" label="Действует с" editing={!!selected}/><TimeFields name="until" label="Действует до" editing={!!selected}/>
     </FormGrid><Button type="submit" disabled={mutation.busy}>Сохранить связь</Button>{" "}
     {selected&&<Button variant="secondary" onClick={()=>{setEditorOpen(false);setSelected(undefined);mutation.changed();}}>Отмена</Button>}
