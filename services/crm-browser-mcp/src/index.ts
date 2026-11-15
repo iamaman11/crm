@@ -4,6 +4,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import type { Env, Command, Target } from "./session";
 import { DEFAULT_BROWSER_URL, MCP_HOST, verifiedMcpOwnerEmail } from "./security";
+import { DEVICE_TYPES } from "./browser-device";
 import { SCENARIO_OPERATIONS, isFailedVerdict } from "./browser-checks";
 import { selectWorkspaceId, workspaceObjectName } from "./browser-workspaces";
 import { BROWSER_RUNTIME_EPOCH, isVerifiedRuntimeProbe, cleanupRuntimeEpoch } from "./runtime-epoch";
@@ -122,13 +123,15 @@ function createServer(env: Env, ownerEmail: string) {
   }
 
   server.registerTool("browser_open", {
-    description: "Open an authorized public HTTP(S) website in a reusable Cloudflare Playwright session. Recording is opt-in at session creation only and is accessed later through Cloudflare Browser Run.",
+    description: "Open a public HTTP(S) website in the existing Playwright Browser Run. Optional native desktop/mobile/tablet device context emulates touch, DPR, UA and layout; device switching requires Close then Open. Recording is opt-in on session creation.",
     inputSchema: {
       workspaceId: workspaceIdSchema.optional(),
       path: z.string().max(1024).default(DEFAULT_BROWSER_URL),
       recording: z.boolean().default(false),
+      device: z.enum(DEVICE_TYPES).optional(),
     },
-  }, async ({ path, recording, workspaceId }) => command({ op: "open", url: path, recording, workspaceId }));
+  }, async ({ path, recording, device, workspaceId }) =>
+    command({ op: "open", url: path, recording, device, workspaceId }));
 
   server.registerTool("browser_status", {
     description: "Inspect whether the CRM browser is open without launching a new browser.",
@@ -178,7 +181,7 @@ function createServer(env: Env, ownerEmail: string) {
   }, async params => command({ op: "file", ...params }));
 
   server.registerTool("browser_inspect", {
-    description: "Read a sanitized network timeline, browser navigation/paint performance timings, basic DOM accessibility heuristics or a capped PDF. No arbitrary code execution or credential-bearing headers.",
+    description: "Read sanitized network, navigation/paint and provisional browser-observed LCP/CLS/INP candidate timings, basic DOM accessibility heuristics or a bounded PDF. Unobserved metrics are null.",
     inputSchema: {
       workspaceId: workspaceIdSchema,
       inspection: z.enum(["network", "performance", "accessibility", "pdf"]),

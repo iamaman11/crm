@@ -1,6 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import { acquire, connect, history, limits, type Browser, type BrowserContext, type Page } from "@cloudflare/playwright";
 import { DEFAULT_BROWSER_URL, browserUrl, siteAccessConfiguration, siteRequestDisposition, isPermittedBrowserRequest, redact, safePagePath } from "./security";
+import { chooseDevice, deviceOptions, type BrowserDevice } from "./browser-device";
+import { WEB_VITALS_INIT, readVitals, type WebVitals } from "./browser-performance";
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
 import { validatedUpload, transferDownload, MAX_TRANSFER_BYTES } from "./browser-files";
@@ -79,6 +81,7 @@ export type Command = {
   width?: number;
   height?: number;
   recording?: boolean;
+  device?: BrowserDevice;
   handoffAction?: "start" | "status";
   handoffInstructions?: string;
   handoffTimeoutMs?: number;
@@ -360,9 +363,12 @@ export class CrmBrowserSession extends DurableObject<Env> {
       });
   }
 
-  private async open(path: string = DEFAULT_BROWSER_URL, recording: boolean = false) {
+  private async open(path: string = DEFAULT_BROWSER_URL, recording: boolean = false,
+      requestedDevice?: BrowserDevice) {
     const destination = browserUrl(path);
     this.siteAccess(); // Reject a partial secret configuration before acquire().
+    const activeDevice = await this.ctx.storage.get<BrowserDevice>("browser_device") ?? null;
+    const device = chooseDevice(requestedDevice, activeDevice);
     // The user explicitly requested Open: replace a lost browser only after
     // closing the original provider session. Status and other tools never
     // acquire a substitute browser.
@@ -374,7 +380,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
     }
     if (this.page && !this.page.isClosed()) {
       if (this.page.url() === destination) {
-        return { state: "already_open", path: safePagePath(this.page.url()) };
+        return { state: "already_open", path: safePagePath(this.page.url()), device };
       }
       return { state: "navigated", ...(await this.navigateTo(destination)) };
     }
@@ -408,15 +414,17 @@ export class CrmBrowserSession extends DurableObject<Env> {
     try {
       if (!this.context) {
         this.context = await this.browser.newContext({
-          acceptDownloads: true,
-          serviceWorkers: "block",
+          ...deviceOptions(device),
+          acceptDownloads: true, serviceWorkers: "block",
         });
+        await this.context.addInitScript({content: WEB_VITALS_INIT});
         await this.installSafetyRouting(this.context);
+        await this.ctx.storage.put("browser_device",device);
       }
       this.page = await this.context.newPage();
       this.attachPage(this.page);
       await this.rememberSelectedPageIdentity();
-      return { state: "open", ...(restarted ? { restarted: true } : {}), ...(await this.navigateTo(destination)) };
+      return { state: "open", device, ...(restarted ? { restarted: true } : {}), ...(await this.navigateTo(destination)) };
     } catch (error) {
       if (created) await this.close();
       throw error;
@@ -578,6 +586,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       await this.ctx.storage.delete("browser_recording");
       await this.ctx.storage.delete("browser_page_identity");
       await this.ctx.storage.delete("browser_handoff");
+      await this.ctx.storage.delete("browser_device");
     } catch (error) {
       failure ??= error;
       // Keep the persisted ID on failure so a later owner request can retry
@@ -611,7 +620,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       throw new Error("BROWSER_HANDOFF_WAITING_FOR_HUMAN");
     }
     if (command.op === "open") return {
-      data: await this.open(command.url, command.recording ?? false),
+      data: await this.open(command.url, command.recording ?? false, command.device),
     };
     if (command.op === "close") {
       await this.close();
@@ -672,6 +681,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
           this.page && !this.page.isClosed() ? "open" : "closed",
         path: this.page && !this.page.isClosed() ? safePagePath(this.page.url()) : null,
         recording: this.recordingEnabled,
+        device: await this.ctx.storage.get<BrowserDevice>("browser_device") ?? null,
         humanHandoff: activeHandoff?.status ?? null,
         lastRecordedSessionId: await this.ctx.storage.get<string>("last_recording_session_id") ?? null,
         // Official @cloudflare/playwright /v1/limits readback. No Browser Run
@@ -690,10 +700,14 @@ export class CrmBrowserSession extends DurableObject<Env> {
       if (!this.browser) throw new Error("CRM_BROWSER_NOT_OPEN");
       if (command.tabAction === "new") {
         if (!this.context) {
+          const device = await this.ctx.storage.get<BrowserDevice>("browser_device") ?? "desktop";
           this.context = await this.browser.newContext({
+            ...deviceOptions(device),
             acceptDownloads: true, serviceWorkers: "block",
           });
+          await this.context.addInitScript({content: WEB_VITALS_INIT});
           await this.installSafetyRouting(this.context);
+          await this.ctx.storage.put("browser_device",device);
         }
         if (this.context.pages().filter(p => !p.isClosed()).length >= 12) {
           throw new Error("BROWSER_TAB_LIMIT");
@@ -793,7 +807,12 @@ export class CrmBrowserSession extends DurableObject<Env> {
             };
           });
           return {
-            data: { path: safePagePath(page.url()), metrics, note: "Navigation and paint timing only; not Core Web Vitals." },
+            data: {
+              path: safePagePath(page.url()),metrics,
+              webVitals: readVitals(await page.evaluate(() =>
+                (window as Window & {__mcpVitals?:WebVitals}).__mcpVitals)),
+              note:"Per-page provisional PerformanceObserver values. LCP/CLS and INP candidate are not finalized CrUX field metrics; unsupported/unobserved values are null.",
+            },
           };
         }
         if (command.inspection === "accessibility") {
