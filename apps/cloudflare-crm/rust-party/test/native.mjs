@@ -1223,7 +1223,68 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
   no_grant_ingress:true,before_limit_filtered_pagination:true,
   d1_receipts:true,no_extra_audit:true,published_active:true}));
 
-// Original crm-sales v2: generated binary Connect, original Deal aggregate,
+// R3a: signed human email is the only grant/verification trust source.
+ const r3Contact="r3-contact-"+randomUUID();
+ const r3Create=await contactV2("CreateContactPoint",admin,{
+   contactPointId:r3Contact,partyId:id,kind:1,value:"native-a@example.test",
+   preferred:false,precondition:{idempotencyKey:"r3-create-"+r3Contact}});
+ assert.equal(r3Create.status,200,describeProtobuf(r3Create.body));
+ const r3Verify={contactPointId:r3Contact,
+   precondition:{expectedVersion:1n,idempotencyKey:"r3-verify-"+r3Contact}};
+ assert.equal((await contactV2("VerifyOwnEmailContactPoint",knownService,r3Verify)).status,403);
+ assert.equal((await contactV2("VerifyOwnEmailContactPoint",viewer,r3Verify)).status,403);
+ const verified=await contactV2("VerifyOwnEmailContactPoint",admin,r3Verify);
+ assert.equal(verified.status,200,describeProtobuf(verified.body));
+ assert.equal(verified.body.contactPoint?.verified,true);
+ assert.equal(verified.body.contactPoint?.version,2n);
+ assert.equal((await contactV2("VerifyOwnEmailContactPoint",admin,r3Verify)).body.receipt?.replayed,true);
+ const r3Id="r3-consent-"+randomUUID();
+ const r3Scope={partyId:id,contactPointId:r3Contact,purpose:"r3.test.newsletter",channel:1};
+ const r3Grant={authorizationId:r3Id,partyId:id,contactPointId:r3Contact,
+   purpose:r3Scope.purpose,jurisdiction:"eu",precondition:{idempotencyKey:"r3-grant-"+r3Id}};
+ assert.equal((await consentV2("GrantVerifiedEmailConsent",knownService,r3Grant)).status,403);
+ assert.equal((await consentV2("GrantVerifiedEmailConsent",viewer,r3Grant)).status,403);
+ const granted=await consentV2("GrantVerifiedEmailConsent",admin,r3Grant);
+ assert.equal(granted.status,200,describeProtobuf(granted.body));
+ assert.equal(granted.body.authorization?.effect,1);
+ assert.equal((await consentV2("GrantVerifiedEmailConsent",admin,r3Grant)).body.receipt?.replayed,true);
+ assert.equal((await consentV2("EvaluateConsent",viewer,r3Scope)).body.allowed,true);
+ const r3Withdraw={authorizationId:r3Id,
+   precondition:{expectedVersion:1n,idempotencyKey:"r3-withdraw-"+r3Id}};
+ assert.equal((await consentV2("WithdrawConsentAuthorization",viewer,r3Withdraw)).status,403);
+ const revoked=await consentV2("WithdrawConsentAuthorization",knownService,r3Withdraw);
+ assert.equal(revoked.status,200,describeProtobuf(revoked.body));
+ assert.equal(revoked.body.authorization?.status,2);
+ assert.equal((await consentV2("WithdrawConsentAuthorization",knownService,r3Withdraw)).body.receipt?.replayed,true);
+ const deniedAfter=await consentV2("EvaluateConsent",viewer,r3Scope);
+ assert.equal(deniedAfter.body.allowed,false);
+ assert.equal(deniedAfter.body.reason,3);
+ const secondId="r3-consent-renew-"+randomUUID();
+ const second={...r3Grant,authorizationId:secondId,
+   precondition:{idempotencyKey:"r3-grant2-"+secondId}};
+ assert.equal((await consentV2("GrantVerifiedEmailConsent",admin,second)).status,200);
+ assert.equal((await consentV2("EvaluateConsent",viewer,r3Scope)).body.allowed,true);
+ const changed=await contactV2("UpdateContactPoint",admin,{
+   contactPointId:r3Contact,value:"other@example.org",status:1,preferred:false,
+   precondition:{idempotencyKey:"r3-change-"+r3Contact,expectedVersion:2n}});
+ assert.equal(changed.status,200,describeProtobuf(changed.body));
+ assert.equal(changed.body.contactPoint?.verified,false);
+ assert.equal((await consentV2("EvaluateConsent",viewer,r3Scope)).body.allowed,false,
+   "Old grant must be ineffective after email change");
+ assert.deepEqual(sql("SELECT action,actor FROM crm_audit WHERE subject_id='"+r3Id+"' ORDER BY rowid"),[
+   {action:"consents.grant",actor:"native-a@example.test"},
+   {action:"consents.withdraw",actor:"service:ci-fixture.access"}
+ ]);
+ assert.deepEqual(sql("SELECT action,actor FROM crm_audit WHERE subject_id='"+r3Contact+"' ORDER BY rowid"),[
+   {action:"contact_points.create",actor:"native-a@example.test"},
+   {action:"contact_points.verify",actor:"native-a@example.test"},
+   {action:"contact_points.update",actor:"native-a@example.test"}
+ ]);
+ console.log(JSON.stringify({event:"crm.native-r3-signed-email-consent",result:"PASS",
+   human_email:true,service_denied:true,grant_withdraw:true,replay:true,
+   changed_contact_invalidates_grant:true,actor_audit:true}));
+
+ // Original crm-sales v2: generated binary Connect, original Deal aggregate,
 // one tenant D1, exact money, CAS, receipt replay, and atomic stage->Activity.
 const salesV2=signedReadOnly(salesV2Path,binarySalesV2,decodeSalesV2);
 const dealId="sales-mid-"+randomUUID();

@@ -16,12 +16,18 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
   const query=useQuery(useCallback(()=>api.contactPoints.listContactPoints({page:{pageSize:25,pageToken:cursor},
     ...(partyId?{partyId}:{})}),[cursor,partyId]));
   return <>
-    <PageHeader title="Контакты" description="Email, телефоны и другие способы связи с участниками."/>
+    <PageHeader title="Контакты" description="Email, телефоны и другие способы связи. Email подтверждает только сам владелец, вошедший через Cloudflare Access."/>
     <TextField label="Фильтр по ID участника" value={partyId} onChange={e=>{setPartyId(e.target.value);setCursor("");}}/>
     <QueryNotice query={query}/>
     {query.data?.contactPoints.map(p=><Card key={p.contactPointId} title={p.displayValue}>
       <p>Участник: {p.partyId} · {p.status===1?"Активен":"Неактивен"}{p.preferred?" · предпочтительный":""}</p>
       <p>{p.verified?"Подтверждён доверенными данными":"Не подтверждён"} · {p.normalizedValue}</p>
+      <p>ID контакта: {p.contactPointId}</p>
+      {p.kind===1&&!p.verified&&<Button variant="secondary" disabled={mutation.busy}
+        onClick={()=>void mutation.run(()=>api.contactPoints.verifyOwnEmailContactPoint({
+          contactPointId:p.contactPointId,
+          precondition:{idempotencyKey:mutation.key,expectedVersion:p.version}
+        }),query.reload)}>Подтвердить свой email через Access</Button>}{" "}
       <p>С {dateText(p.validFrom)} до {dateText(p.validUntil)}</p>
       <Button variant="secondary" onClick={async()=>{
         try {setSelected((await api.contactPoints.getContactPoint({contactPointId:p.contactPointId})).contactPoint);mutation.changed();}

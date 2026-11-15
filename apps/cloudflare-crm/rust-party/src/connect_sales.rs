@@ -347,6 +347,7 @@ impl ContactPointV2Service {
     }
     fn failed(f: contact_points::MutationFailure) -> ConnectError {
         match f.status {
+            403 => ConnectError::permission_denied(f.code),
             404 => ConnectError::not_found(f.code),
             409 => ConnectError::aborted(f.code),
             422 => ConnectError::invalid_argument(f.code),
@@ -561,8 +562,7 @@ struct IdentityV2Service {
 // suppression. This generated Connect boundary never accepts evidence/GRANT.
 struct ConsentV2Service {
     env: Arc<Env>,
-    tenant: String,
-    actor: String,
+    actor: access::Actor,
     request_id: String,
 }
 impl ConsentV2Service {
@@ -642,6 +642,7 @@ impl ConsentV2Service {
     }
     fn failed(f: consents::OperationFailure) -> ConnectError {
         match f.status {
+            403 => ConnectError::permission_denied(f.code),
             404 => ConnectError::not_found(f.code),
             409 => ConnectError::aborted(f.code),
             422 => ConnectError::invalid_argument(f.code),
@@ -796,8 +797,7 @@ pub(super) fn router(env: Env, verified: &access::Actor, request_id: &str) -> Co
         }))
         .add_service(Arc::new(ConsentV2Service {
             env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
-            actor: actor.to_owned(),
+            actor: verified.clone(),
             request_id: request_id.to_owned(),
         }))
         .add_service(Arc::new(Customer360V2Service {

@@ -25,7 +25,7 @@ export function ConsentScreen() {
   const query=useQuery(useCallback(()=>api.consents.listConsentAuthorizations({page:{pageSize:25,pageToken:cursor},
     ...(partyId?{partyId}:{})}),[cursor,partyId]));
   return <>
-    <PageHeader title="Коммуникации" description="Проверка разрешений и запрет контакта оператором. Выдать согласие без подтверждающих данных здесь нельзя."/>
+    <PageHeader title="Коммуникации" description="Проверка разрешений, отзыв и запрет. Новое согласие выдаёт только сам владелец подтверждённого email через подписанную Cloudflare Access-сессию."/>
     <Card title="Проверить возможность контакта"><form onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
       void evaluation.run(()=>api.consents.evaluateConsent(scope(data)));
@@ -39,8 +39,34 @@ export function ConsentScreen() {
     <QueryNotice query={query}/>
     {query.data?.authorizations.map(a=><Card key={a.authorizationId} title={a.effect===2?"Запрет":"Согласие"}>
       <p>{a.partyId} · {a.purpose} · {a.jurisdiction}</p><p>{a.status===1?"Действует":"Отозвано"} · версия {a.version.toString()}</p>
+      {a.effect===1&&a.status===1&&<Button variant="danger" disabled={mutation.busy}
+        onClick={()=>void mutation.run(()=>api.consents.withdrawConsentAuthorization({
+          authorizationId:a.authorizationId,
+          precondition:{idempotencyKey:mutation.key,expectedVersion:a.version}
+        }),query.reload)}>Отозвать согласие</Button>}
     </Card>)}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
+    <Card title="Дать согласие для своего подтверждённого email">
+      <p>Сначала подтвердите email в разделе «Контакты». Сервисные токены и оператор не могут выдавать согласие от имени владельца адреса.</p>
+      <form key={"grant-"+draftId} onChange={mutation.changed} onSubmit={e=>{
+        e.preventDefault();const data=new FormData(e.currentTarget);
+        void mutation.run(()=>api.consents.grantVerifiedEmailConsent({
+          authorizationId:draftId,partyId:field(data,"partyId"),
+          contactPointId:field(data,"verifiedContactId"),purpose:field(data,"grantPurpose"),
+          jurisdiction:field(data,"grantJurisdiction"),
+          precondition:{idempotencyKey:mutation.key}
+        }),async()=>{setDraftId(newId());await query.reload();});
+      }}>
+        <FormGrid>
+          <PartyPicker/>
+          <TextField label="ID подтверждённого email-контакта" name="verifiedContactId" required/>
+          <TextField label="Цель согласия" name="grantPurpose" defaultValue="marketing" required/>
+          <TextField label="Юрисдикция согласия" name="grantJurisdiction" defaultValue="EU" required/>
+        </FormGrid>
+        <Button type="submit" disabled={mutation.busy}>Даю согласие на email-коммуникацию</Button>
+      </form>
+      <MutationNotice state={mutation}/>
+    </Card>
     <Card title="Запретить коммуникацию"><form key={draftId} onChange={mutation.changed} onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
       void mutation.run(()=>api.consents.suppressCommunication({authorizationId:draftId,...scope(data),

@@ -4,6 +4,7 @@
 use super::{access, bind, now_nanos};
 use crm_contact_points::{
     ContactPoint, ContactPointId, ContactPointKind, ContactPointStatus, CreateContactPoint,
+    VerifyContactPoint,
     PartyReference, UpdateContactPoint, decode_contact_point_state, encode_contact_point_state,
 };
 use serde::{Deserialize, Serialize};
@@ -99,6 +100,18 @@ struct Stored {
 struct Receipt {
     digest: String,
     state: String,
+}
+
+// Only Cloudflare Access signed human identities, not service tokens, can
+// assert ownership of the matching email address.
+pub(super) fn signed_human_email(identity: &str) -> Option<&str> {
+    if identity.starts_with("service:") || identity.len() > 254 || identity.trim() != identity
+        || !identity.contains('@') || identity.chars().any(char::is_whitespace)
+    {
+        None
+    } else {
+        Some(identity)
+    }
 }
 
 fn digest<T: Serialize>(operation: &str, id: &str, input: &T) -> Result<String> {
@@ -281,7 +294,7 @@ pub(super) async fn update_typed(
     }
     let saved = encode(&point)?;
     let result=bind(db,
-        "UPDATE crm_contact_point_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?",
+        "UPDATE crm_contact_point_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='contact_points.update' WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&saved),JsValue::from_f64(point.version() as f64),
           JsValue::from_str(idem),JsValue::from_str(&hash),JsValue::from_str(trace),
           JsValue::from_str(&actor.identity),JsValue::from_str(tenant),JsValue::from_str(id),
@@ -297,6 +310,73 @@ pub(super) async fn update_typed(
         replayed: false,
     }))
 }
+// The signed Access human email must equal the current canonical EMAIL value.
+// Existing original domain owns verification/CAS; D1 trigger owns audit+receipt.
+pub(super) async fn verify_own_email_typed(
+    idem: &str,
+    expected_version: i64,
+    db: &D1Database,
+    actor: &access::Actor,
+    id: &str,
+    trace: &str,
+) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    let Some(email) = signed_human_email(&actor.identity) else {
+        return Ok(Err(failure("CONTACT_POINTS_SIGNED_HUMAN_EMAIL_REQUIRED", 403)));
+    };
+    if !(8..=120).contains(&idem.len()) {
+        return Ok(Err(failure("IDEMPOTENCY_KEY_REQUIRED", 422)));
+    }
+    let hash = digest("verify-own-email", id, &json!([expected_version, email]))?;
+    if let Some(saved_receipt) = previous(db, &actor.tenant, idem).await? {
+        if saved_receipt.digest != hash {
+            return Ok(Err(failure("IDEMPOTENCY_CONFLICT", 409)));
+        }
+        let contact_point = decode(&saved_receipt.state)?;
+        if contact_point.contact_point_id().as_str() != id
+            || contact_point.kind() != ContactPointKind::Email
+            || contact_point.normalized_value() != email
+        {
+            return Ok(Err(failure("CONTACT_POINTS_EMAIL_OWNERSHIP_REQUIRED", 403)));
+        }
+        return Ok(Ok(MutationOutcome { contact_point, replayed: true }));
+    }
+    let Some(mut point) = load(db, &actor.tenant, id).await? else {
+        return Ok(Err(failure("NOT_FOUND", 404)));
+    };
+    if point.kind() != ContactPointKind::Email || point.normalized_value() != email {
+        return Ok(Err(failure("CONTACT_POINTS_EMAIL_OWNERSHIP_REQUIRED", 403)));
+    }
+    // Unique evidence per verification event; no raw email or client evidence in the state.
+    let proof = format!("{:x}", Sha256::digest(format!(
+        "{}:{}:{}", email, id, trace
+    ).as_bytes()));
+    if let Err(e) = point.verify(VerifyContactPoint {
+        expected_version,
+        evidence_ref: format!("access-email:{proof}"),
+        occurred_at_unix_nanos: now_nanos(),
+    }) {
+        return Ok(Err(failure(
+            e.code.clone(),
+            if e.code == "CONTACT_POINTS_VERSION_CONFLICT"
+                || e.code == "CONTACT_POINTS_ALREADY_VERIFIED" { 409 } else { 422 }
+        )));
+    }
+    let saved = encode(&point)?;
+    let result = bind(db,
+        "UPDATE crm_contact_point_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='contact_points.verify' WHERE tenant=? AND id=? AND version=?",
+        &[JsValue::from_str(&saved),JsValue::from_f64(point.version() as f64),
+          JsValue::from_str(idem),JsValue::from_str(&hash),JsValue::from_str(trace),
+          JsValue::from_str(&actor.identity),JsValue::from_str(&actor.tenant),
+          JsValue::from_str(id),JsValue::from_f64(expected_version as f64)])?.run().await;
+    let Ok(changed) = result else {
+        return Ok(Err(failure("CONTACT_POINTS_VERIFY_CONFLICT",409)));
+    };
+    if changed.meta()?.and_then(|m|m.changes).unwrap_or(0)==0 {
+        return Ok(Err(failure("CONTACT_POINTS_VERSION_CONFLICT",409)));
+    }
+    Ok(Ok(MutationOutcome { contact_point: point, replayed: false }))
+}
+
 pub(super) async fn list_page_typed(
     db: &D1Database,
     tenant: &str,

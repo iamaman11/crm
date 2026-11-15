@@ -67,6 +67,18 @@ message UpdateContactPointResponse {
   crm.core.v2.MutationReceipt receipt = 2;
 }
 
+// Only the human identity in a signed Cloudflare Access JWT can prove ownership
+// of the identical EMAIL value; no caller-provided code or verification flag.
+message VerifyOwnEmailContactPointRequest {
+  string contact_point_id = 1;
+  crm.core.v2.MutationPrecondition precondition = 2;
+}
+
+message VerifyOwnEmailContactPointResponse {
+  ContactPoint contact_point = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
 message GetContactPointRequest {
   string contact_point_id = 1;
 }
@@ -90,6 +102,9 @@ service ContactPointService {
     option idempotency_level = IDEMPOTENT;
   }
   rpc UpdateContactPoint(UpdateContactPointRequest) returns (UpdateContactPointResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc VerifyOwnEmailContactPoint(VerifyOwnEmailContactPointRequest) returns (VerifyOwnEmailContactPointResponse) {
     option idempotency_level = IDEMPOTENT;
   }
   rpc GetContactPoint(GetContactPointRequest) returns (GetContactPointResponse) {

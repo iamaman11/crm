@@ -18,7 +18,7 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
                 channel: Self::channel(input.channel)?,
             },
             &self.d1()?,
-            &self.tenant,
+            &self.actor.tenant,
         )
         .await
         .map_err(|_| ConnectError::internal("Original Consent evaluation failed"))?
@@ -62,8 +62,8 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
             },
             &key,
             &self.d1()?,
-            &self.tenant,
-            &self.actor,
+            &self.actor.tenant,
+            &self.actor.identity,
             &self.request_id,
         )
         .await
@@ -78,6 +78,60 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
                 ..Default::default()
             })
             .into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn grant_verified_email_consent(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, consent_wire::GrantVerifiedEmailConsentRequest>,
+    ) -> ServiceResult<consent_wire::GrantVerifiedEmailConsentResponse> {
+        let input = req.to_owned_message();
+        let (key, _) = wire_precondition(input.precondition.as_option(), true)?;
+        let saved = consents::grant_verified_email_typed(
+            consents::GrantInput {
+                id: input.authorization_id, party_id: input.party_id,
+                contact_point_id: input.contact_point_id,
+                purpose: input.purpose, jurisdiction: input.jurisdiction,
+            },
+            &key, &self.d1()?, &self.actor, &self.request_id,
+        ).await
+            .map_err(|_| ConnectError::internal("Original Consent Grant failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(consent_wire::GrantVerifiedEmailConsentResponse {
+            authorization: Some(Self::convert(&saved.item)).into(),
+            receipt: Some(core_v2::MutationReceipt {
+                request_id: self.request_id.clone(),
+                resource_version: saved.item.version(),
+                replayed: saved.replayed,
+                ..Default::default()
+            }).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn withdraw_consent_authorization(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, consent_wire::WithdrawConsentAuthorizationRequest>,
+    ) -> ServiceResult<consent_wire::WithdrawConsentAuthorizationResponse> {
+        let input = req.to_owned_message();
+        let (key, version) = wire_precondition(input.precondition.as_option(), false)?;
+        let saved = consents::withdraw_typed(
+            &input.authorization_id, version.unwrap_or_default(), &key,
+            &self.d1()?, &self.actor, &self.request_id,
+        ).await
+            .map_err(|_| ConnectError::internal("Original Consent Withdrawal failed"))?
+            .map_err(Self::failed)?;
+        RpcResponse::ok(consent_wire::WithdrawConsentAuthorizationResponse {
+            authorization: Some(Self::convert(&saved.item)).into(),
+            receipt: Some(core_v2::MutationReceipt {
+                request_id: self.request_id.clone(),
+                resource_version: saved.item.version(),
+                replayed: saved.replayed,
+                ..Default::default()
+            }).into(),
             ..Default::default()
         })
     }
@@ -106,7 +160,7 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
                 .map_err(|_| ConnectError::invalid_argument("invalid party_id filter"))?;
         }
         let (list, next) =
-            consents::list_page_typed(&self.d1()?, &self.tenant, after, size as usize, filter)
+            consents::list_page_typed(&self.d1()?, &self.actor.tenant, after, size as usize, filter)
                 .await
                 .map_err(|_| ConnectError::internal("Original Consent D1 list failed"))?;
         let authorizations = list.iter().map(Self::convert).collect();
