@@ -109,7 +109,7 @@ export function AccountCreator({initialParty,onSaved,onCancel,onDirtyChange}:{
     }}>
       <FormGrid>
         <TextField label="Название клиента" name="name" defaultValue={initialParty?.displayName??""} required/>
-        <PartyPicker label="Основной участник" initialParty={initialParty}/>
+        <PartyPicker label="Основной участник" {...(initialParty?{initialParty}:{})}/>
       </FormGrid>
       <Button type="submit" disabled={mutation.busy}>Сохранить клиента</Button>{" "}
       <Button type="button" variant="secondary" disabled={mutation.busy} onClick={onCancel}>Отмена</Button>
