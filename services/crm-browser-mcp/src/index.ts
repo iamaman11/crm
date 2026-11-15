@@ -286,6 +286,18 @@ function createServer(env: Env, ownerEmail: string) {
     inputSchema: { workspaceId: workspaceIdSchema },
   }, async ({ workspaceId }) => command({ op: "live_view", workspaceId }));
 
+  server.registerTool("browser_handoff", {
+    description: "Cloudflare Browser Run structured Human-in-the-Loop. start pauses all agent actions on the SAME browser, returns a sensitive 5-minute interactive Live View link for the authorized owner, and listens for Done/Failed/timeout. status reads the provider's real state, returns a fresh owner-only link while active, and never invents completion after DO eviction. Explicit Close remains available.",
+    inputSchema: {
+      workspaceId: workspaceIdSchema,
+      handoffAction: z.enum(["start", "status"]),
+      handoffInstructions: z.string().min(5).max(1_000).optional(),
+      handoffTimeoutMs: z.number().int().min(30_000).max(1_800_000).optional(),
+    },
+  }, async ({ workspaceId, handoffAction, handoffInstructions, handoffTimeoutMs }) =>
+    command({ op: "handoff", workspaceId, handoffAction,
+      handoffInstructions, handoffTimeoutMs }));
+
   server.registerTool("browser_close", {
     description: "Close the cloud browser session and release Cloudflare Browser Run resources.",
     inputSchema: { workspaceId: workspaceIdSchema },
