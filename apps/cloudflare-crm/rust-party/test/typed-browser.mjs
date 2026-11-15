@@ -112,6 +112,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  let partyId,accountId;
  try {
    await navigate("parties","Люди и организации");
+   await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Party "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty");
    partyId=await firstId("crm_party_records","display_name","Browser Party "+runId);
@@ -121,10 +122,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const partyCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Party "+runId,exact:true})});
    await partyCard.getByRole("button",{name:"Редактировать",exact:true}).click();
    await page.getByRole("heading",{name:"Изменить участника",exact:true}).waitFor();
+   assert.equal(await page.getByRole("dialog").count(),1);
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Updated "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"UpdateParty");
    assert.equal((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0].version,2);
    steps.push("Party create/edit/reload and D1 version/audit");
+   await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Other "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty");
    const otherPartyId=await firstId("crm_party_records","display_name","Browser Other "+runId);
@@ -138,6 +141,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Browser Updated "+runId,exact:true}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,searchAuditBefore);
    await navigate("relationships","Связи");
+   await page.getByRole("button",{name:"Создать связь",exact:true}).click();
    await selectPagedPicker(page,"Первый участник",partyId);
    await selectPagedPicker(page,"Второй участник",otherPartyId);
    await page.getByLabel("Код отношения",{exact:true}).fill("browser_relation_"+runId);
@@ -151,6 +155,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(relationship.version,2);assert.equal(relationship.status,"inactive");
    steps.push("Relationship create/edit through original owner with D1 version/status");
    await navigate("accounts","Клиенты");
+   await page.getByRole("button",{name:"Создать клиента",exact:true}).click();
    await page.getByLabel("Название клиента",{exact:true}).fill("Browser Account "+runId);
    await search("Поиск: Основной участник",partyId,"ListParties");
    await selectPagedPicker(page,"Основной участник",partyId);
@@ -164,8 +169,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await accountCard.getByRole("button",{name:"Открыть карточку",exact:true}).click();
    assert.equal((await overviewResponse).status(),200);
    await page.getByText("Основной участник: Browser Updated "+runId,{exact:true}).waitFor();
+   assert.equal(await page.getByRole("dialog").count(),1,"overview opens in the shared panel");
+   await page.getByRole("button",{name:"Закрыть панель",exact:true}).click();
+   await page.getByRole("dialog").waitFor({state:"hidden"});
    await accountCard.getByRole("button",{name:"Редактировать",exact:true}).click();
    await page.getByRole("heading",{name:"Изменить клиента",exact:true}).waitFor();
+   assert.equal(await page.getByRole("dialog").count(),1,"edit opens one shared panel");
    await page.getByLabel("Статус",{exact:true}).selectOption("2");
    await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"UpdateAccount");
    assert.equal((await sql("SELECT version FROM crm_account_records WHERE tenant='"+tenantSql+"' AND id='"+accountId+"'"))[0].version,2);
@@ -176,6 +185,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    steps.push("Account create and Customer360 read");
    steps.push("Party/Account literal search by name and ID, empty result and read-only D1");
    await navigate("contacts","Контакты");
+   await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
    await selectPagedPicker(page,"Участник",partyId);
    await page.getByLabel("Значение контакта",{exact:true}).fill("browser-"+runId+"@example.org");
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
@@ -187,6 +197,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"UpdateContactPoint");
    assert.equal((await sql("SELECT version FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].version,2);
    await navigate("tasks","Задачи");
+   await page.getByRole("button",{name:"Новая задача",exact:true}).click();
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Task "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
    await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
@@ -194,6 +205,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const taskCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Task "+runId,exact:true})});
    await mutation(taskCard.getByRole("button",{name:"Выполнить задачу",exact:true}),"CompleteTask");
    assert.equal((await sql("SELECT json_extract(state,'$.status') AS status FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0].status,"completed");
+   await page.getByRole("button",{name:"Новая задача",exact:true}).click();
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Urgent "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
    await page.getByLabel("Приоритет",{exact:true}).selectOption("4");
@@ -244,6 +256,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    steps.push("Task UpdateTask via React, D1 audit action, priority filter and reload");
    steps.push("Contact and Task create/complete; priority/status filters preserve records and audit");
    await navigate("sales","Сделки");
+   await page.getByRole("button",{name:"Новая сделка",exact:true}).click();
    await page.getByLabel("Название сделки",{exact:true}).fill("Browser Deal "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
    await page.getByLabel("Сумма",{exact:true}).fill("90071992547409.93");
@@ -297,6 +310,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
    steps.push("Quality and consent evaluation/suppression");
    await navigate("privacy","Запросы о данных");
+   await page.getByRole("button",{name:"Новое обращение",exact:true}).click();
    const privacyBefore=new Set((await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
    await mutation(page.getByRole("button",{name:"Создать обращение",exact:true}),"CreatePrivacyCase");
    const newCases=(await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'")).filter(x=>!privacyBefore.has(x.id));
@@ -373,6 +387,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
 
    // Lose the response AFTER the server commits; retry the unchanged form.
    await navigate("parties","Люди и организации");
+   await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Retry "+runId);
    let dropped=false;
    await page.route("**/crm.parties.v3.PartyService/CreateParty",async route=>{
@@ -396,6 +411,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
 
    // Commit succeeds but only the following list refresh fails.
    await navigate("parties","Люди и организации");
+   await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Saved Stale "+runId);
    await page.route("**/crm.parties.v3.PartyService/ListParties",route=>route.abort("failed"));
    const created=page.waitForResponse(r=>r.url().endsWith("/CreateParty"));
@@ -450,6 +466,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    watch(denied);
    const deniedPage=await denied.newPage();
    await deniedPage.goto(base+"/#parties");
+   await deniedPage.getByRole("button",{name:"Создать участника",exact:true}).click();
    await deniedPage.getByLabel("Имя или название",{exact:true}).fill("Browser Denied "+runId);
    await deniedPage.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    await deniedPage.getByRole("heading",{name:/Недостаточно прав/}).waitFor();

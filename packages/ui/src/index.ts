@@ -5,3 +5,4 @@ export * from "./ExtensionRuntime";
 export * from "./Feedback";
 
 export * from "./Forms";
+export * from "./RecordPanel";
