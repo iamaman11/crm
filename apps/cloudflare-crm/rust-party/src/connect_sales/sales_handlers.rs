@@ -202,8 +202,7 @@ impl sale_wire::DealService for SalesV2Service {
         };
         let account = req.account_id;
         if let Some(id) = account {
-            crm_customer_accounts::AccountId::try_new(id)
-                .map_err(|_| ConnectError::invalid_argument("invalid account filter"))?;
+            AccountV2Service::valid_id(id)?;
         }
         let (list, next) = sales_deals::list_page_typed(
             &self.d1()?,
