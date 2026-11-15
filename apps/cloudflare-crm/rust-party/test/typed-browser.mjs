@@ -16,14 +16,23 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  assert.ok(adminIdentity,"Expected signed actor is required for browser audit assertions");
  const startedAt=Date.now();
  const requests=[],writes=[],pageErrors=[],steps=[];
+ const headerReads=[];
  let restoreViewer=async()=>{};
  const recordResponse=response=>{
    const path=new URL(response.url()).pathname;
    if(!path.startsWith("/crm.")&&!path.endsWith("/parties.csv"))return;
-   const headers=response.headers();
-   requests.push({path,status:response.status(),request_id:headers["x-request-id"],
-     error_code:headers["x-crm-error-code"]??null,
+   const entry={path,status:response.status()};
+   requests.push(entry);
+   const capture=headers=>Object.assign(entry,{
+     request_id:headers["x-request-id"],error_code:headers["x-crm-error-code"]??null,
      source_sha:headers["x-crm-source-sha"],runtime:headers["x-crm-runtime"]});
+   // Browser Response headers may arrive with later network extra-info. Await
+   // Playwright's complete headers; route.fetch() returns an APIResponse instead.
+   if(typeof response.allHeaders==="function"){
+     headerReads.push(response.allHeaders().then(capture).catch(error=>{
+       entry.header_error=String(error.message);
+     }));
+   }else capture(response.headers());
  };
  const watch=context=>{
    context.on("page",p=>p.on("pageerror",error=>pageErrors.push(error.message)));
@@ -336,6 +345,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await stalePage.getByRole("heading",{name:new RegExp("Конфликт изменения.*"+conflictRequestId)}).waitFor();
    assert.equal(await firstId("crm_party_records","display_name","Browser Winner "+runId),partyId);
    assert.equal((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0].version,3);
+   await Promise.all(headerReads);
    await stalePage.close();
    steps.push("Two browser forms enforce CAS and show generated-client conflict");
 
@@ -392,6 +402,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await deniedPage.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    await deniedPage.getByRole("heading",{name:/Недостаточно прав/}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"' AND json_extract(state,'$.display_name')='Browser Denied "+runId+"'"))[0].n,0);
+   await Promise.all(headerReads);
    await denied.close();
    await restoreViewer();restoreViewer=async()=>{};
    const other=await browser.newContext({extraHTTPHeaders:tenantBHeaders});
@@ -400,6 +411,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await otherPage.goto(base+"/#accounts");
    await otherPage.getByText("Клиентов пока нет.",{exact:true}).waitFor();
    assert.equal(await otherPage.getByRole("heading",{name:"Browser Account "+runId,exact:true}).count(),0);
+   await Promise.all(headerReads);
    await other.close();
    const anonymous=await browser.newContext();
    const anonymousPage=await anonymous.newPage();
@@ -418,8 +430,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    steps.push("Generated-client unauthenticated/permission errors and tenant B isolation");
    assert.deepEqual(pageErrors,[]);
    assert.ok(writes.length>0);
+   await Promise.all(headerReads);
    for(const response of requests){
-     assert.equal(response.source_sha,sourceSha,"Every browser response must use the tested source");
+     assert.equal(response.source_sha,sourceSha,"Every browser response must use the tested source: "+JSON.stringify(response));
      assert.equal(response.runtime,"native-workers-rs");
      assert.match(response.request_id??"",/^[a-f0-9-]{36}$/i);
    }
@@ -429,6 +442,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    writeFileSync(resolve(directory,"typed-browser.json"),JSON.stringify(evidence,null,2)+"\n");
    return evidence;
  } catch(error) {
+   await Promise.all(headerReads);
+   writeFileSync(resolve(directory,"failure.json"),JSON.stringify({result:"FAIL",source_sha:sourceSha,
+     error:String(error.message),steps,requests,writes},null,2)+"\n");
    await page.screenshot({path:resolve(directory,"failure.png"),fullPage:true}).catch(()=>{});
    throw error;
  } finally {
