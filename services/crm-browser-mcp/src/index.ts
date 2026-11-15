@@ -164,7 +164,7 @@ function createServer(env: Env, ownerEmail: string) {
   }, async ({ workspaceId }) => command({ op: "frames", workspaceId }));
 
   server.registerTool("browser_file", {
-    description: "Upload verified file bytes to a browser input, or fetch real same-origin link bytes from the current page. Legacy upload/download <=1 MB remain; download_link returns SHA-256/size and download_chunk returns bounded base64 pieces; upload_begin/upload_chunk/upload_commit support a verified 8 MB file. Use discard to release staging. Staging expires on DO restart.",
+    description: "Upload verified file bytes to a browser input, or fetch real same-origin link bytes from the current page. Legacy upload remains <=1 MB; download returns real same-origin link bytes inline (<=1 MB), while download_link returns SHA-256/size and download_chunk returns up to 8 MB in verified pieces; upload_begin/upload_chunk/upload_commit support a verified 8 MB file. Use discard to release staging. Staging expires on DO restart.",
     inputSchema: {
       workspaceId: workspaceIdSchema,
       fileAction: z.enum(["upload", "download", "upload_begin", "upload_chunk", "upload_commit",
