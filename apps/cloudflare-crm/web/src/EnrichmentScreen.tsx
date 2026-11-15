@@ -1,5 +1,5 @@
 import {useCallback,useState} from "react";
-import {Button,Card,FeedbackPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
+import {Button,Card,RecordPanel,RecordActions,FeedbackPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import {api,field,timestamp} from "./api";
 import {useQuery,useReadAction,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 export function EnrichmentScreen() {
@@ -10,18 +10,23 @@ export function EnrichmentScreen() {
   const profileDetail=useReadAction<Awaited<ReturnType<typeof api.enrichment.getProviderProfile>>>();
   const mappingDetail=useReadAction<Awaited<ReturnType<typeof api.enrichment.getMapping>>>();
   const profileMutation=useMutation(),mappingMutation=useMutation();
+  const [publishMode,setPublishMode]=useState<"profile"|"mapping"|null>(null);
+  const [detailMode,setDetailMode]=useState<"profile"|"mapping"|null>(null);
   return <>
-    <PageHeader title="Обогащение данных" description="Неизменяемые версии настроек провайдеров и сопоставлений. Запросы к провайдерам и изменение данных участников пока недоступны."/>
+    <PageHeader title="Обогащение данных" description="Неизменяемые версии настроек провайдеров и сопоставлений. Запросы к провайдерам и изменение данных участников пока недоступны." actions={<RecordActions><Button onClick={()=>{setPublishMode("profile");profileMutation.changed();}}>Новый профиль</Button><Button variant="secondary" onClick={()=>{setPublishMode("mapping");mappingMutation.changed();}}>Новое сопоставление</Button></RecordActions>}/>
     <Card title="Профили провайдеров"><QueryNotice query={profiles}/>
       {profiles.data?.profiles.map(p=><p key={p.profileVersionId}>
-        <Button variant="secondary" onClick={()=>void profileDetail.run(()=>api.enrichment.getProviderProfile({profileVersionId:p.profileVersionId}))}>{p.providerKey} · {p.adapterContractVersion}</Button>
+        <Button variant="secondary" onClick={()=>{setDetailMode("profile");void profileDetail.run(()=>api.enrichment.getProviderProfile({profileVersionId:p.profileVersionId}));}}>{p.providerKey} · {p.adapterContractVersion}</Button>
       </p>)}
       <Paging next={profiles.data?.pageInfo?.nextPageToken??""} busy={profiles.busy} onFirst={()=>setProfileCursor("")} onNext={()=>setProfileCursor(profiles.data?.pageInfo?.nextPageToken??"")}/>
+      </Card>
+    <RecordPanel open={detailMode==="profile"} title="Профиль провайдера" onClose={()=>setDetailMode(null)}>
+      {profileDetail.busy&&<p role="status">Загрузка…</p>}
       {profileDetail.error&&<FeedbackPanel tone="danger" title={profileDetail.error}/>}
       {profileDetail.data?.profile&&<><p>ID: {profileDetail.data.profile.profileVersionId}</p>
         <p>Лицензия: {profileDetail.data.profile.licenseId}; регион: {profileDetail.data.profile.residencyRegion}; хранение: {profileDetail.data.profile.retentionDays} дней.</p></>}
-    </Card>
-    <Card title="Опубликовать профиль"><form onChange={profileMutation.changed} onSubmit={e=>{
+    </RecordPanel>
+    <RecordPanel open={publishMode==="profile"} title="Опубликовать профиль" onClose={()=>setPublishMode(null)}><form onChange={profileMutation.changed} onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
       void profileMutation.run(()=>{
         const effectiveAt=timestamp(field(data,"effective"));
@@ -35,7 +40,7 @@ export function EnrichmentScreen() {
           credentialHandleAliases:field(data,"handles").split(",").map(x=>x.trim()).filter(Boolean),
           effectiveAt,...(expiresAt?{expiresAt}:{}),precondition:{idempotencyKey:profileMutation.key}
         });
-      },profiles.reload);
+      },async()=>{setPublishMode(null);await profiles.reload();});
     }}><FormGrid>
       <TextField label="Ключ провайдера" name="provider" defaultValue="company_registry" required/>
       <TextField label="Вид адаптера" name="adapter" defaultValue="registry_http_v1" required/>
@@ -49,21 +54,25 @@ export function EnrichmentScreen() {
       <TextField label="Имена ссылок на учётные данные (не секреты)" name="handles"/>
       <TextField label="Начало действия" name="effective" type="datetime-local" step="1" required/>
       <TextField label="Окончание действия" name="expires" type="datetime-local" step="1"/>
-    </FormGrid><Button type="submit" disabled={profileMutation.busy}>Опубликовать профиль</Button></form><MutationNotice state={profileMutation}/></Card>
+    </FormGrid><Button type="submit" disabled={profileMutation.busy}>Опубликовать профиль</Button></form>{profileMutation.notice?.tone==="danger"&&<MutationNotice state={profileMutation}/>}</RecordPanel>
+    <MutationNotice state={profileMutation}/>
     <Card title="Сопоставления"><QueryNotice query={mappings}/>
       {mappings.data?.mappings.map(m=><p key={m.mappingVersionId}><Button variant="secondary"
-        onClick={()=>void mappingDetail.run(()=>api.enrichment.getMapping({mappingVersionId:m.mappingVersionId}))}>{m.mappingKey}</Button></p>)}
+        onClick={()=>{setDetailMode("mapping");void mappingDetail.run(()=>api.enrichment.getMapping({mappingVersionId:m.mappingVersionId}));}}>{m.mappingKey}</Button></p>)}
       <Paging next={mappings.data?.pageInfo?.nextPageToken??""} busy={mappings.busy} onFirst={()=>setMappingCursor("")} onNext={()=>setMappingCursor(mappings.data?.pageInfo?.nextPageToken??"")}/>
+      </Card>
+    <RecordPanel open={detailMode==="mapping"} title="Сопоставление" onClose={()=>setDetailMode(null)}>
+      {mappingDetail.busy&&<p role="status">Загрузка…</p>}
       {mappingDetail.error&&<FeedbackPanel tone="danger" title={mappingDetail.error}/>}
       {mappingDetail.data?.mapping&&<p>ID: {mappingDetail.data.mapping.mappingVersionId}; поле: {mappingDetail.data.mapping.providerResponseFieldPath}; профиль: {mappingDetail.data.mapping.providerProfileVersionId}</p>}
-    </Card>
-    <Card title="Опубликовать сопоставление"><form onChange={mappingMutation.changed} onSubmit={e=>{
+    </RecordPanel>
+    <RecordPanel open={publishMode==="mapping"} title="Опубликовать сопоставление" onClose={()=>setPublishMode(null)}><form onChange={mappingMutation.changed} onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
       void mappingMutation.run(()=>api.enrichment.publishMapping({
         mappingKey:field(data,"key"),providerProfileVersionId:field(data,"profile"),
         providerResponseFieldPath:field(data,"path"),maximumSuggestionsPerResponse:Number(field(data,"maximum")),
         confidenceRequired:data.get("confidence")==="on",precondition:{idempotencyKey:mappingMutation.key}
-      }),mappings.reload);
+      }),async()=>{setPublishMode(null);await mappings.reload();});
     }}><FormGrid>
       <TextField label="Ключ сопоставления" name="key" defaultValue="party_display_name" required/>
       <SelectField label="Версия профиля" name="profile" required defaultValue="">
@@ -73,6 +82,7 @@ export function EnrichmentScreen() {
       <TextField label="Поле ответа провайдера" name="path" defaultValue="organization.legal_name" required/>
       <TextField label="Максимум предложений" name="maximum" type="number" min="1" max="32" defaultValue="1" required/>
       <TextField label="Требовать оценку уверенности" name="confidence" type="checkbox" defaultChecked/>
-    </FormGrid><Button type="submit" disabled={mappingMutation.busy}>Опубликовать сопоставление</Button></form><MutationNotice state={mappingMutation}/></Card>
+    </FormGrid><Button type="submit" disabled={mappingMutation.busy}>Опубликовать сопоставление</Button></form>{mappingMutation.notice?.tone==="danger"&&<MutationNotice state={mappingMutation}/>}</RecordPanel>
+    <MutationNotice state={mappingMutation}/>
   </>;
 }

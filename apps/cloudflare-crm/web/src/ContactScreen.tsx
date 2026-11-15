@@ -1,5 +1,5 @@
 import {useCallback,useState} from "react";
-import {Button,Card,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
+import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import type {ContactPoint} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId,timestamp,dateText} from "./api";
 import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
@@ -11,12 +11,13 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
   const [cursor,setCursor]=useState("");
   const [partyId,setPartyId]=useState(initialPartyId);
   const [selected,setSelected]=useState<ContactPoint>();
+  const [editorOpen,setEditorOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
   const query=useQuery(useCallback(()=>api.contactPoints.listContactPoints({page:{pageSize:25,pageToken:cursor},
     ...(partyId?{partyId}:{})}),[cursor,partyId]));
   return <>
-    <PageHeader title="Контакты" description="Email, телефоны и другие способы связи. Email подтверждает только сам владелец, вошедший через Cloudflare Access."/>
+    <PageHeader title="Контакты" description="Email, телефоны и другие способы связи. Email подтверждает владелец через Access или тестовый администратор в dev." actions={<Button onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать контакт</Button>}/>
     <TextField label="Фильтр по ID участника" value={partyId} onChange={e=>{setPartyId(e.target.value);setCursor("");}}/>
     <QueryNotice query={query}/>
     {query.data?.contactPoints.map(p=><Card key={p.contactPointId} title={p.displayValue}>
@@ -30,13 +31,13 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
         }),query.reload)}>Подтвердить email (Access / тестовый администратор)</Button>}{" "}
       <p>С {dateText(p.validFrom)} до {dateText(p.validUntil)}</p>
       <Button variant="secondary" onClick={async()=>{
-        try {setSelected((await api.contactPoints.getContactPoint({contactPointId:p.contactPointId})).contactPoint);mutation.changed();}
+        try {setSelected((await api.contactPoints.getContactPoint({contactPointId:p.contactPointId})).contactPoint);setEditorOpen(true);mutation.changed();}
         catch(error){await mutation.run(()=>Promise.reject(error));}
       }}>Редактировать контакт</Button>
     </Card>)}
     {!query.busy&&query.data?.contactPoints.length===0&&<p>Контактов пока нет.</p>}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
-    <Card title={selected?"Изменить контакт":"Новый контакт"}><form key={selected?selected.contactPointId+selected.version:draftId}
+    <RecordPanel open={editorOpen} title={selected?"Изменить контакт":"Новый контакт"} onClose={()=>{setEditorOpen(false);setSelected(undefined);}}><form key={selected?selected.contactPointId+selected.version:draftId}
       onChange={mutation.changed} onSubmit={e=>{
         e.preventDefault();const data=new FormData(e.currentTarget);
         void mutation.run(()=>{
@@ -51,7 +52,7 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
           return api.contactPoints.createContactPoint({contactPointId:draftId,partyId:field(data,"partyId"),
             kind:Number(field(data,"kind")),...common,...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
             precondition:{idempotencyKey:mutation.key}});
-        },async()=>{setSelected(undefined);setDraftId(newId());await query.reload();});
+        },async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await query.reload();});
       }}><FormGrid>
         {!selected&&<><PartyPicker/><SelectField label="Тип контакта" name="kind" defaultValue="1">
           <option value="1">Email</option><option value="2">Телефон</option><option value="3">Почтовый адрес</option><option value="4">Сайт</option><option value="5">Мессенджер</option>
@@ -61,7 +62,8 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
         {selected&&<SelectField label="Статус" name="status" defaultValue={selected.status}><option value="1">Активен</option><option value="2">Неактивен</option></SelectField>}
         <TimeFields name="from" label="Действует с" editing={!!selected}/><TimeFields name="until" label="Действует до" editing={!!selected}/>
       </FormGrid><Button type="submit" disabled={mutation.busy}>Сохранить контакт</Button>{" "}
-      {selected&&<Button variant="secondary" onClick={()=>{setSelected(undefined);mutation.changed();}}>Отмена</Button>}
-    </form><MutationNotice state={mutation}/></Card>
+      {selected&&<Button variant="secondary" onClick={()=>{setEditorOpen(false);setSelected(undefined);mutation.changed();}}>Отмена</Button>}
+    </form>{mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}</RecordPanel>
+    <MutationNotice state={mutation}/>
   </>;
 }

@@ -1,5 +1,5 @@
 import {useCallback,useState} from "react";
-import {Button,Card,FeedbackPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
+import {Button,Card,RecordPanel,RecordActions,FeedbackPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import {api,field,newId} from "./api";
 import {useQuery,useReadAction,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker} from "./Pickers";
@@ -20,12 +20,13 @@ export function ConsentScreen() {
   const [cursor,setCursor]=useState("");
   const [partyId,setPartyId]=useState("");
   const [draftId,setDraftId]=useState(newId);
+  const [composer,setComposer]=useState<"grant"|"suppress"|null>(null);
   const mutation=useMutation();
   const evaluation=useReadAction<Awaited<ReturnType<typeof api.consents.evaluateConsent>>>();
   const query=useQuery(useCallback(()=>api.consents.listConsentAuthorizations({page:{pageSize:25,pageToken:cursor},
     ...(partyId?{partyId}:{})}),[cursor,partyId]));
   return <>
-    <PageHeader title="Коммуникации" description="Проверка разрешений, отзыв и запрет. Подписанный Access-владелец выдаёт личное согласие; сервисный администратор dev может проводить отдельный тестовый сценарий."/>
+    <PageHeader title="Коммуникации" description="Проверка разрешений, отзыв и запрет. Подписанный Access-владелец выдаёт личное согласие; сервисный администратор dev может проводить отдельный тестовый сценарий." actions={<RecordActions><Button onClick={()=>{setComposer("grant");mutation.changed();}}>Выдать согласие</Button><Button variant="secondary" onClick={()=>{setComposer("suppress");mutation.changed();}}>Запретить коммуникацию</Button></RecordActions>}/>
     <Card title="Проверить возможность контакта"><form onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
       void evaluation.run(()=>api.consents.evaluateConsent(scope(data)));
@@ -46,7 +47,7 @@ export function ConsentScreen() {
         }),query.reload)}>Отозвать согласие</Button>}
     </Card>)}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
-    <Card title="Согласие для подтверждённого email">
+    <RecordPanel open={composer==="grant"} title="Согласие для подтверждённого email" onClose={()=>setComposer(null)}>
       <p>Сначала подтвердите email в разделе «Контакты». Сервисный администратор проверяет только тестовые контакты и записывается в аудит как агент, не как человек.</p>
       <form key={"grant-"+draftId} onChange={mutation.changed} onSubmit={e=>{
         e.preventDefault();const data=new FormData(e.currentTarget);
@@ -55,7 +56,7 @@ export function ConsentScreen() {
           contactPointId:field(data,"verifiedContactId"),purpose:field(data,"grantPurpose"),
           jurisdiction:field(data,"grantJurisdiction"),
           precondition:{idempotencyKey:mutation.key}
-        }),async()=>{setDraftId(newId());await query.reload();});
+        }),async()=>{setComposer(null);setDraftId(newId());await query.reload();});
       }}>
         <FormGrid>
           <PartyPicker/>
@@ -65,15 +66,16 @@ export function ConsentScreen() {
         </FormGrid>
         <Button type="submit" disabled={mutation.busy}>Выдать согласие на email-коммуникацию</Button>
       </form>
-      <MutationNotice state={mutation}/>
-    </Card>
-    <Card title="Запретить коммуникацию"><form key={draftId} onChange={mutation.changed} onSubmit={e=>{
+      {mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}
+    </RecordPanel>
+    <RecordPanel open={composer==="suppress"} title="Запретить коммуникацию" onClose={()=>setComposer(null)}><form key={draftId} onChange={mutation.changed} onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
       void mutation.run(()=>api.consents.suppressCommunication({authorizationId:draftId,...scope(data),
         jurisdiction:field(data,"jurisdiction"),precondition:{idempotencyKey:mutation.key}}),
-        async()=>{setDraftId(newId());await query.reload();});
+        async()=>{setComposer(null);setDraftId(newId());await query.reload();});
     }}><FormGrid><ScopeFields/><TextField label="Юрисдикция" name="jurisdiction" defaultValue="EU" required/></FormGrid>
       <Button type="submit" disabled={mutation.busy} variant="danger">Запретить контакт</Button>
-    </form><MutationNotice state={mutation}/></Card>
+    </form>{mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}</RecordPanel>
+    <MutationNotice state={mutation}/>
   </>;
 }
