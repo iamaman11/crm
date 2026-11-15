@@ -42,7 +42,19 @@ export async function uiState(page) {
   });
 }
 
-/** 
+/** @typedef {"CRM_UI_PANEL_NOT_FOUND"|"CRM_UI_PANEL_NATIVE_DESYNC"|"CRM_UI_PANEL_TRANSITION_REJECTED"|"CRM_UI_PANEL_TIMEOUT"} PanelFailureCode */
+
+/** Pure diagnostic classification: testable before compiling Rust or launching Chromium. */
+export function panelFailureCode({panels,expected}) {
+  if(panels.length!==1)return "CRM_UI_PANEL_NOT_FOUND";
+  const panel=panels[0];
+  const actual=panel.nativeOpen?"open":"closed";
+  if(panel.desired!==actual)return "CRM_UI_PANEL_NATIVE_DESYNC";
+  if(actual!==expected)return "CRM_UI_PANEL_TRANSITION_REJECTED";
+  return "CRM_UI_PANEL_TIMEOUT";
+}
+
+/**
  * Fail with the actual panel state, route and confirmation outcome, not a
  * naked Playwright 30-second timeout. Do not capture field values or secrets.
  * @param {{
@@ -65,10 +77,7 @@ export async function assertUiPanel({page,panel,title,expected,scenario,evidence
   const actual=target?.nativeOpen?"open":"closed";
   const synced=target?.desired===actual;
   if(!timeoutError&&target!==null&&target.desired===expected&&actual===expected&&synced)return state;
-  const code=target===null?"CRM_UI_PANEL_NOT_FOUND":
-    !synced?"CRM_UI_PANEL_NATIVE_DESYNC":
-    target.desired!==expected?"CRM_UI_PANEL_TRANSITION_REJECTED":
-    "CRM_UI_PANEL_TIMEOUT";
+  const code=panelFailureCode({panels:found,expected});
   const evidence={event:"crm.ui.panel-invariant",result:"FAIL",code,
     scenario,title,expected,observed:state};
   if(evidenceDirectory){
