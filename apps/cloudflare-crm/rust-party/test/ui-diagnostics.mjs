@@ -31,6 +31,7 @@ export async function uiState(page) {
         label:document.activeElement?.getAttribute("aria-label")??null,
       },
       panels:[...document.querySelectorAll("dialog")].map(element=>({
+        panelId:element.getAttribute("aria-labelledby"),
         title:element.querySelector("header h2")?.textContent?.trim()??"",
         desired:element.getAttribute("data-crm-panel-desired"),
         nativeOpen:element.open,
@@ -61,25 +62,29 @@ export function panelFailureCode({panels,expected}) {
  *   page: import("playwright").Page,
  *   panel: import("playwright").Locator,
  *   title: string,
+ *   panelId: string,
  *   expected: PanelState,
  *   scenario: string,
  *   evidenceDirectory?: string
  * }} options
  */
-export async function assertUiPanel({page,panel,title,expected,scenario,evidenceDirectory}) {
+export async function assertUiPanel({page,panel,title,panelId,expected,scenario,evidenceDirectory}) {
+  if(!panelId)throw new Error("CRM_UI_PANEL_ID_MISSING: "+scenario);
   let timeoutError=null;
   try {
     await panel.waitFor({state:expected==="open"?"visible":"hidden",timeout:5000});
   }catch(error){timeoutError=error;}
   const state=await uiState(page);
-  const found=state.panels.filter(x=>x.title===title);
+  // aria-labelledby originates from React useId, stays stable even when
+  // the heading changes from "Изменить участника" to "Новый участник".
+  const found=state.panels.filter(x=>x.panelId===panelId);
   const target=found.length===1?found[0]:null;
   const actual=target?.nativeOpen?"open":"closed";
   const synced=target?.desired===actual;
   if(!timeoutError&&target!==null&&target.desired===expected&&actual===expected&&synced)return state;
   const code=panelFailureCode({panels:found,expected});
   const evidence={event:"crm.ui.panel-invariant",result:"FAIL",code,
-    scenario,title,expected,observed:state};
+    scenario,title,panelId,expected,observed:state};
   if(evidenceDirectory){
     try{
       mkdirSync(evidenceDirectory,{recursive:true});
