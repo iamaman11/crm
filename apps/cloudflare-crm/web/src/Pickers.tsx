@@ -13,7 +13,7 @@ export function PartyPicker({name="partyId",label="Участник",initialPart
   const [search,setSearch]=useState("");
   const query=useQuery(useCallback(()=>api.partyRecords.listParties({page:{pageSize:100,pageToken:cursor},search}),[cursor,search]));
   return <div><SearchField label={"Поиск: "+label} onSearch={text=>{setSearch(text);setCursor("");setValue("");}}/>
-    <SelectField label={label} name={name} value={value} required disabled={query.busy||!!query.error} onChange={e=>setValue(e.target.value)}>
+    <SelectField label={label} name={name} value={value} required disabled={!initialParty&&(query.busy||!!query.error)} onChange={e=>setValue(e.target.value)}>
     <option value="">Выберите участника</option>
     {initialParty&&!query.data?.parties.some(p=>p.partyId===initialParty.partyId)&&
       <option value={initialParty.partyId}>{initialParty.displayName} · {initialParty.partyId}</option>}
