@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {minorUnits,decimalUnits,basisPoints} from "../web/src/money.ts";
+import {panelFailureCode} from "../rust-party/test/ui-diagnostics.mjs";
 
 test("money preserves int64 above JavaScript safe integer",()=>{
   const units=9007199254740993n;
@@ -72,4 +73,14 @@ test("Party-to-Account intent is typed, URL-addressable and rejects invalid sour
     "#accounts/new?partyId=x%2Fy","#accounts/new?partyId=%25ZZ",
     "#accounts/new?partyId=x&partyId=y","#accounts/new?partyId="+("x".repeat(129))])
     assert.equal(parseRoute(invalid,allowed).kind,"not-found",invalid);
+});
+
+
+test("UI panel diagnostics distinguish native desync, guard rejection and timeout",()=>{
+  const panel=(desired,nativeOpen)=>({desired,nativeOpen});
+  assert.equal(panelFailureCode({panels:[],expected:"closed"}),"CRM_UI_PANEL_NOT_FOUND");
+  assert.equal(panelFailureCode({panels:[panel("open",false)],expected:"open"}),"CRM_UI_PANEL_NATIVE_DESYNC");
+  assert.equal(panelFailureCode({panels:[panel("open",true)],expected:"closed"}),"CRM_UI_PANEL_TRANSITION_REJECTED");
+  assert.equal(panelFailureCode({panels:[panel("closed",false)],expected:"closed"}),"CRM_UI_PANEL_TIMEOUT");
+  assert.equal(panelFailureCode({panels:[panel("closed",true)],expected:"closed"}),"CRM_UI_PANEL_NATIVE_DESYNC");
 });
