@@ -51,3 +51,21 @@ test("test CRM uses native Playwright continuation so Chromium owns the response
   assert.ok(!code.includes("route.fulfill("),
     "MCP no longer replays responses without Content-Type");
 });
+
+test("both download actions share one Chromium-side, same-origin byte path", () => {
+  const code = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  assert.ok(code.includes('command.fileAction === "download_link" || command.fileAction === "download"'),
+    "legacy and chunked download paths must share one browser mechanism");
+  assert.ok(code.includes('const downloaded = await fetch(url.href,'),
+    "the real page fetches its own same-origin download with cookies");
+  assert.ok(code.includes('url.origin !== location.origin'),
+    "cross-origin links must not be represented as downloadable bytes");
+  assert.ok(code.includes('...transferDownload(response.name, [bytes])'),
+    "legacy inline bytes use the existing size and nonempty checks");
+  assert.ok(code.includes("this.transfers.storeDownload(response.name, response.mimeType, response.base64)"),
+    "large verified file receipts still support chunk and discard");
+  assert.ok(!code.includes('page.waitForEvent("download"'),
+    "CDP event streams are not a supported file transport on Browser Run");
+  assert.ok(!code.includes('await download.createReadStream('),
+    "known empty CDP download streams must not be used again");
+});
