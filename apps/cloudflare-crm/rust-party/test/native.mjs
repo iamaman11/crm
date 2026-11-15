@@ -2004,6 +2004,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      await page.getByRole("button",{name:createAction,exact:true}).click();
      const panel=page.getByRole("dialog");
      await panel.waitFor();
+     const panelId=await panel.getAttribute("aria-labelledby");
+     assert.ok(panelId,"The native picker must retain a stable React useId identity");
      const select=panel.getByLabel(label,{exact:true});
      await enterSearch(searchLabel,searchIds[2],method);
      await select.selectOption(searchIds[2]);
@@ -2021,7 +2023,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
        // and the native dialog, rather than silently losing an unsaved draft.
        page.once("dialog",dialog=>void dialog.dismiss());
        await panel.getByRole("button",{name:"Отмена",exact:true}).click();
-       const rejected=await assertUiPanel({page,panel,title:"Новый клиент",
+       const rejected=await assertUiPanel({page,panel,panelId,title:"Новый клиент",
          expected:"open",scenario:"dirty-account-close-rejected",
          evidenceDirectory:join(cwd,"../e2e-evidence-native")});
        const rejectedPanel=rejected.panels.find(p=>p.title==="Новый клиент");
@@ -2034,7 +2036,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
        // closes. Reject first, then accept: no second navigation/close owner.
        page.once("dialog",dialog=>void dialog.dismiss());
        await page.keyboard.press("Escape");
-       const escapeRejected=await assertUiPanel({page,panel,title:"Новый клиент",
+       const escapeRejected=await assertUiPanel({page,panel,panelId,title:"Новый клиент",
          expected:"open",scenario:"dirty-account-escape-rejected",
          evidenceDirectory:join(cwd,"../e2e-evidence-native")});
        const escapePanel=escapeRejected.panels.find(p=>p.title==="Новый клиент");
@@ -2051,7 +2053,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
        await panel.getByRole("button",{name:"Закрыть панель",exact:true}).click();
      }
      const title=hash==="accounts"?"Новый клиент":"Новая задача";
-     const closed=await assertUiPanel({page,panel,title,
+     const closed=await assertUiPanel({page,panel,panelId,title,
        expected:"closed",scenario:hash+"-picker-closed",
        evidenceDirectory:join(cwd,"../e2e-evidence-native")});
      const observed=closed.panels.find(p=>p.title===title);
