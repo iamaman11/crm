@@ -6,6 +6,7 @@ import {mkdirSync,writeFileSync} from "node:fs";
 import {resolve} from "node:path";
 import {readFile} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
+import {installUiDiagnostics,assertUiPanel} from "./ui-diagnostics.mjs";
 
 export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity,
  adminHeaders={"cf-access-jwt-assertion":admin},
@@ -44,6 +45,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  const context=await browser.newContext({extraHTTPHeaders:adminHeaders,timezoneId:"UTC"});
  watch(context);
  const page=await context.newPage();
+ await installUiDiagnostics(page);
  await page.addInitScript(()=>{
    const events=[];
    Object.defineProperty(window,"__crmRouteEvents",{value:events});
@@ -154,7 +156,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(await page.getByRole("dialog").count(),1);
    const scrollAtOpen=await page.evaluate(()=>window.scrollY);
    await page.keyboard.press("Escape");
-   await page.getByRole("dialog").waitFor({state:"hidden"});
+   await assertUiPanel({page,panel:page.getByRole("dialog"),title:"Изменить участника",
+     expected:"closed",scenario:"party-edit-escape",evidenceDirectory:directory});
    assert.equal(await page.evaluate(()=>window.scrollY),scrollAtOpen,"closing a record must keep list scroll");
    await partyEdit.click();
    await page.getByRole("heading",{name:"Изменить участника",exact:true}).waitFor();
