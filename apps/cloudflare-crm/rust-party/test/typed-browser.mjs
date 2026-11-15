@@ -476,8 +476,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Создать клиента",exact:true}).click();
    const mobilePanel=page.getByRole("dialog");
    await mobilePanel.waitFor();
-   const mobileWidth=await mobilePanel.evaluate(element=>element.getBoundingClientRect().width);
-   assert.ok(mobileWidth<=window.innerWidth+1 && mobileWidth>=window.innerWidth-2,"record panel fills mobile viewport");
+   const bounds=await mobilePanel.evaluate(element=>({
+     width:element.getBoundingClientRect().width,viewport:window.innerWidth
+   }));
+   assert.ok(bounds.width<=bounds.viewport+1 && bounds.width>=bounds.viewport-2,"record panel fills mobile viewport");
    await page.keyboard.press("Escape");
    await mobilePanel.waitFor({state:"hidden"});
    steps.push("Theme persistence and mobile layout");
