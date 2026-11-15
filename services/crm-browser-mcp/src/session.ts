@@ -90,6 +90,7 @@ export type Command = {
   handoffInstructions?: string;
   handoffTimeoutMs?: number;
   screenshotOnFailure?: boolean;
+  screenshotSource?: "current" | "last_failure";
 };
 
 type Result = { ok: true; data: unknown; image?: string } | { ok: false; error: string };
@@ -106,6 +107,9 @@ export class CrmBrowserSession extends DurableObject<Env> {
   private browserSessionId: string | null = null;
   private recordingEnabled = false;
   private recoveredPageMissing = false;
+  // Only the current DO session owns an optional screenshot captured at a
+  // failed scenario step. Large image bytes are retrieved separately.
+  private lastFailureScreenshot: string | null = null;
   private tabIds = new Map<Page, string>();
   private nextOperation: Promise<void> = Promise.resolve();
   private pendingOperations = 0;
@@ -606,6 +610,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       this.browserSessionId = null;
       this.recordingEnabled = false;
       this.recoveredPageMissing = false;
+      this.lastFailureScreenshot = null;
       this.context = null;
       this.page = null;
       this.tabIds.clear();
@@ -1113,9 +1118,16 @@ export class CrmBrowserSession extends DurableObject<Env> {
         };
       }
       case "screenshot": {
+        if (command.screenshotSource === "last_failure") {
+          if (!this.lastFailureScreenshot) throw new Error("BROWSER_FAILURE_SCREENSHOT_NOT_AVAILABLE");
+          return {
+            data: { path: safePagePath(page.url()), mimeType: "image/png", source: "last_failure" },
+            image: this.lastFailureScreenshot,
+          };
+        }
         const png = await page.screenshot({ fullPage: true });
         return {
-          data: { path: safePagePath(page.url()), mimeType: "image/png" },
+          data: { path: safePagePath(page.url()), mimeType: "image/png", source: "current" },
           image: Buffer.from(png).toString("base64"),
         };
       }
@@ -1187,6 +1199,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
         validateScenarioSteps(steps, url => {
           browserUrl(url, page.url() || DEFAULT_BROWSER_URL);
         });
+        this.lastFailureScreenshot = null;
         const startedAt = Date.now();
         const deadline = startedAt + boundedRunTimeout(command.timeoutMs);
         const results: Array<{ index: number; op: string; passed: boolean; elapsedMs: number; data?: unknown; error?: string; outcome?: string }> = [];
@@ -1200,7 +1213,11 @@ export class CrmBrowserSession extends DurableObject<Env> {
             operationTimeout(1, deadline);
             const data = response.data as { passed?: boolean };
             const ok = data.passed !== false;
-            results.push({ index, op: step.op, passed: ok, elapsedMs: Date.now() - stepStartedAt, data });
+            // Request diagnostics live in browser_diagnostics. Never repeat
+            // up to eight HTTP receipts for every scenario step or error.
+            const receipt = data && typeof data === "object" ?
+              Object.fromEntries(Object.entries(data).filter(([key]) => key !== "latest_requests")) : data;
+            results.push({ index, op: step.op, passed: ok, elapsedMs: Date.now() - stepStartedAt, data: receipt });
             if (!ok) { passed = false; break; }
           } catch (error) {
             passed = false;
@@ -1217,9 +1234,11 @@ export class CrmBrowserSession extends DurableObject<Env> {
           try {
             const png = await page.screenshot({ fullPage: true, timeout: 5_000 });
             if (png.byteLength <= 2_000_000) {
-              return { data: report, image: Buffer.from(png).toString("base64") };
+              this.lastFailureScreenshot = Buffer.from(png).toString("base64");
             }
           } catch { /* The failure report remains authoritative. */ }
+          return { data: { ...report, failureScreenshot: this.lastFailureScreenshot ?
+            "available_via_browser_screenshot" : "unavailable" } };
         }
         return { data: report };
       }
@@ -1240,10 +1259,16 @@ export class CrmBrowserSession extends DurableObject<Env> {
         await page.mouse.wheel(command.x ?? 0, command.y ?? 650);
         return { data: { action: "scroll", completed: true } };
       case "press":
-        // Pinned Cloudflare Playwright keyboard.press has no timeout option.
-        // The run checks the remaining budget on return; never race a live key event.
-        await page.keyboard.press(command.key ?? "");
-        return { data: { action: "press", completed: true } };
+        // A target-scoped press focuses the actual element with native
+        // Playwright. Without a target, retain the ordinary page keyboard.
+        if (command.target) {
+          await this.target(command.target).press(command.key ?? "", {
+            timeout: operationTimeout(12_000, runDeadline),
+          });
+        } else {
+          await page.keyboard.press(command.key ?? "");
+        }
+        return { data: { action: "press", completed: true, targeted: !!command.target } };
       case "session": {
         // Optional site convention: read /api/session as the CURRENT browser
         // origin, with ordinary cookies or configured service identity.
