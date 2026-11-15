@@ -9,14 +9,13 @@ use crm_consents::{
     ConsentAuthorizationId, ConsentAuthorizationStatus, ConsentEffect, ContactPointReference,
     CreateConsentAuthorization, EvaluateCommunicationAuthorization, EvidenceReference,
     JurisdictionCode, LegalBasisCode, PartyReference, PurposeCode, SourceCode,
-    WithdrawConsentAuthorization,
-    decode_consent_authorization_state, encode_consent_authorization_state,
-    evaluate_communication_authorization,
+    WithdrawConsentAuthorization, decode_consent_authorization_state,
+    encode_consent_authorization_state, evaluate_communication_authorization,
 };
+use crm_contact_points::{ContactPointKind, ContactPointStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use crm_contact_points::{ContactPointKind, ContactPointStatus};
 use wasm_bindgen::JsValue;
 use worker::{D1Database, Result};
 
@@ -120,9 +119,10 @@ fn state(item: &ConsentAuthorization) -> Result<String> {
 }
 fn contact_proof(contact: &crm_contact_points::ContactPoint) -> Option<String> {
     let verification = contact.verification().evidence()?;
-    Some(format!("verified-contact:{:x}", Sha256::digest(
-        verification.evidence_ref().as_bytes()
-    )))
+    Some(format!(
+        "verified-contact:{:x}",
+        Sha256::digest(verification.evidence_ref().as_bytes())
+    ))
 }
 fn decode(value: &str) -> Result<ConsentAuthorization> {
     decode_consent_authorization_state(value.as_bytes())
@@ -280,7 +280,11 @@ pub(super) async fn suppress_typed(
 // Self-consent: signed Access human identity must match an already verified
 // active email contact. The owner, not the React caller, creates evidence.
 pub(super) async fn grant_verified_email_typed(
-    input: GrantInput, key: &str, db: &D1Database, actor: &access::Actor, trace: &str,
+    input: GrantInput,
+    key: &str,
+    db: &D1Database,
+    actor: &access::Actor,
+    trace: &str,
 ) -> Result<std::result::Result<SuppressionOutcome, OperationFailure>> {
     let Some(email) = contact_points::signed_human_email(&actor.identity) else {
         return Ok(Err(fail("CONSENTS_SIGNED_HUMAN_EMAIL_REQUIRED", 403)));
@@ -290,27 +294,37 @@ pub(super) async fn grant_verified_email_typed(
     }
     let digest = hash("email-grant", &input.id, &json!([&input, email]))?;
     if let Some(prior) = receipt(db, &actor.tenant, key).await? {
-        if prior.digest != digest { return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409))); }
+        if prior.digest != digest {
+            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+        }
         let item = decode(&prior.state)?;
         if item.authorization_id().as_str() != input.id || item.effect() != ConsentEffect::Grant {
             return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
         }
-        return Ok(Ok(SuppressionOutcome { item, replayed: true }));
+        return Ok(Ok(SuppressionOutcome {
+            item,
+            replayed: true,
+        }));
     }
     let id = match ConsentAuthorizationId::try_new(&input.id) {
-        Ok(x) => x, Err(e) => return Ok(Err(fail(e.code, 422))),
+        Ok(x) => x,
+        Err(e) => return Ok(Err(fail(e.code, 422))),
     };
     let party = match PartyReference::try_new(&input.party_id) {
-        Ok(x) => x, Err(e) => return Ok(Err(fail(e.code, 422))),
+        Ok(x) => x,
+        Err(e) => return Ok(Err(fail(e.code, 422))),
     };
     let contact = match ContactPointReference::try_new(&input.contact_point_id) {
-        Ok(x) => x, Err(e) => return Ok(Err(fail(e.code, 422))),
+        Ok(x) => x,
+        Err(e) => return Ok(Err(fail(e.code, 422))),
     };
     let purpose = match PurposeCode::try_new(input.purpose) {
-        Ok(x) => x, Err(e) => return Ok(Err(fail(e.code, 422))),
+        Ok(x) => x,
+        Err(e) => return Ok(Err(fail(e.code, 422))),
     };
     let jurisdiction = match JurisdictionCode::try_new(input.jurisdiction) {
-        Ok(x) => x, Err(e) => return Ok(Err(fail(e.code, 422))),
+        Ok(x) => x,
+        Err(e) => return Ok(Err(fail(e.code, 422))),
     };
     if !party_exists(db, &actor.tenant, party.as_str()).await? {
         return Ok(Err(fail("CONSENTS_PARTY_NOT_FOUND", 422)));
@@ -323,25 +337,33 @@ pub(super) async fn grant_verified_email_typed(
         || point.kind() != ContactPointKind::Email
         || point.normalized_value() != email
         || point.status() != ContactPointStatus::Active
-        || !point.is_valid_at(now) || !point.verification().is_verified()
+        || !point.is_valid_at(now)
+        || !point.verification().is_verified()
     {
         return Ok(Err(fail("CONSENTS_VERIFIED_EMAIL_OWNERSHIP_REQUIRED", 403)));
     }
     let evidence = contact_proof(&point)
         .ok_or_else(|| worker::Error::RustError("CONTACT_EVIDENCE_MISSING".into()))?;
     let item = match ConsentAuthorization::create(CreateConsentAuthorization {
-        authorization_id: id, party_ref: party.clone(), contact_point_ref: Some(contact),
-        purpose, channel: CommunicationChannel::Email, effect: ConsentEffect::Grant,
+        authorization_id: id,
+        party_ref: party.clone(),
+        contact_point_ref: Some(contact),
+        purpose,
+        channel: CommunicationChannel::Email,
+        effect: ConsentEffect::Grant,
         legal_basis: LegalBasisCode::try_new("consent.affirmative")
             .map_err(|e| worker::Error::RustError(e.code))?,
-        jurisdiction, source: SourceCode::try_new("cloudflare.access.email")
+        jurisdiction,
+        source: SourceCode::try_new("cloudflare.access.email")
             .map_err(|e| worker::Error::RustError(e.code))?,
         evidence_ref: EvidenceReference::try_new(evidence)
             .map_err(|e| worker::Error::RustError(e.code))?,
-        effective_from_unix_nanos: now, expires_at_unix_nanos: None,
+        effective_from_unix_nanos: now,
+        expires_at_unix_nanos: None,
         occurred_at_unix_nanos: now,
     }) {
-        Ok(x) => x, Err(e) => return Ok(Err(fail(e.code, 422))),
+        Ok(x) => x,
+        Err(e) => return Ok(Err(fail(e.code, 422))),
     };
     let saved = state(&item)?;
     // Atomic ContactPoint-version guard closes the check->insert race.
@@ -359,47 +381,78 @@ pub(super) async fn grant_verified_email_typed(
     let Ok(changed) = result else {
         return Ok(Err(fail("CONSENTS_GRANT_CREATE_CONFLICT", 409)));
     };
-    if changed.meta()?.and_then(|m|m.changes).unwrap_or(0)==0 {
+    if changed.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
         return Ok(Err(fail("CONSENTS_CONTACT_CHANGED", 409)));
     }
-    Ok(Ok(SuppressionOutcome { item, replayed: false }))
+    Ok(Ok(SuppressionOutcome {
+        item,
+        replayed: false,
+    }))
 }
 
 // Active GRANT revocation can be initiated by its original signed human or
 // a tenant admin. DENY assertions cannot use this transition.
 pub(super) async fn withdraw_typed(
-    id: &str, expected_version: i64, key: &str, db: &D1Database,
-    actor: &access::Actor, trace: &str,
+    id: &str,
+    expected_version: i64,
+    key: &str,
+    db: &D1Database,
+    actor: &access::Actor,
+    trace: &str,
 ) -> Result<std::result::Result<SuppressionOutcome, OperationFailure>> {
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
     let id = match ConsentAuthorizationId::try_new(id) {
-        Ok(x) => x, Err(e) => return Ok(Err(fail(e.code, 422))),
+        Ok(x) => x,
+        Err(e) => return Ok(Err(fail(e.code, 422))),
     };
-    let Some(existing) = bind(db,
+    let Some(existing) = bind(
+        db,
         "SELECT state,operator_identity FROM crm_consent_records WHERE tenant=? AND id=?",
-        &[JsValue::from_str(&actor.tenant),JsValue::from_str(id.as_str())])?
-        .first::<ExistingConsent>(None).await? else {
-            return Ok(Err(fail("NOT_FOUND", 404)));
-        };
-    if actor.role != "admin" && (contact_points::signed_human_email(&actor.identity).is_none()
-        || existing.operator_identity != actor.identity) {
+        &[
+            JsValue::from_str(&actor.tenant),
+            JsValue::from_str(id.as_str()),
+        ],
+    )?
+    .first::<ExistingConsent>(None)
+    .await?
+    else {
+        return Ok(Err(fail("NOT_FOUND", 404)));
+    };
+    if actor.role != "admin"
+        && (contact_points::signed_human_email(&actor.identity).is_none()
+            || existing.operator_identity != actor.identity)
+    {
         return Ok(Err(fail("CONSENTS_WITHDRAW_NOT_OWNER", 403)));
     }
     let digest = hash("withdraw", id.as_str(), &expected_version)?;
     if let Some(prior) = receipt(db, &actor.tenant, key).await? {
-        if prior.digest != digest { return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409))); }
+        if prior.digest != digest {
+            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+        }
         let item = decode(&prior.state)?;
-        if item.authorization_id() != &id { return Ok(Err(fail("IDEMPOTENCY_CONFLICT",409))); }
-        return Ok(Ok(SuppressionOutcome { item, replayed: true }));
+        if item.authorization_id() != &id {
+            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+        }
+        return Ok(Ok(SuppressionOutcome {
+            item,
+            replayed: true,
+        }));
     }
     let mut item = decode(&existing.state)?;
     if let Err(e) = item.withdraw(WithdrawConsentAuthorization {
-        expected_version, occurred_at_unix_nanos: now_nanos(),
+        expected_version,
+        occurred_at_unix_nanos: now_nanos(),
     }) {
-        return Ok(Err(fail(e.code.clone(), if e.code == "CONSENTS_VERSION_CONFLICT"
-            || e.code == "CONSENTS_ALREADY_WITHDRAWN" {409} else {422})));
+        return Ok(Err(fail(
+            e.code.clone(),
+            if e.code == "CONSENTS_VERSION_CONFLICT" || e.code == "CONSENTS_ALREADY_WITHDRAWN" {
+                409
+            } else {
+                422
+            },
+        )));
     }
     let saved = state(&item)?;
     let r = bind(db,
@@ -408,11 +461,16 @@ pub(super) async fn withdraw_typed(
         JsValue::from_str(key),JsValue::from_str(&digest),JsValue::from_str(trace),
         JsValue::from_str(&actor.identity),JsValue::from_str(&actor.tenant),
         JsValue::from_str(id.as_str()),JsValue::from_f64(expected_version as f64)])?.run().await;
-    let Ok(changed) = r else { return Ok(Err(fail("CONSENTS_WITHDRAW_CONFLICT",409))); };
-    if changed.meta()?.and_then(|m|m.changes).unwrap_or(0)==0 {
-        return Ok(Err(fail("CONSENTS_VERSION_CONFLICT",409)));
+    let Ok(changed) = r else {
+        return Ok(Err(fail("CONSENTS_WITHDRAW_CONFLICT", 409)));
+    };
+    if changed.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
+        return Ok(Err(fail("CONSENTS_VERSION_CONFLICT", 409)));
     }
-    Ok(Ok(SuppressionOutcome { item, replayed: false }))
+    Ok(Ok(SuppressionOutcome {
+        item,
+        replayed: false,
+    }))
 }
 
 pub(super) async fn evaluate_typed(
@@ -455,18 +513,30 @@ pub(super) async fn evaluate_typed(
     // epoch, not only to a reusable contact ID.
     let current_proof = if let Some(contact_id) = scope.contact_point_ref.as_ref() {
         let point = contact_points::load(db, tenant, contact_id.as_str()).await?;
-        point.filter(|p| p.kind()==ContactPointKind::Email
-            && p.status()==ContactPointStatus::Active && p.is_valid_at(now_nanos()))
+        point
+            .filter(|p| {
+                p.kind() == ContactPointKind::Email
+                    && p.status() == ContactPointStatus::Active
+                    && p.is_valid_at(now_nanos())
+            })
             .and_then(|p| contact_proof(&p))
-    } else { None };
+    } else {
+        None
+    };
     let rows = all(db, tenant).await?;
-    let applicable: Vec<&ConsentAuthorization> = rows.iter().filter(|item| {
-        if item.effect() != ConsentEffect::Grant { return true; }
-        item.source().as_str() == "cloudflare.access.email"
-            && item.contact_point_ref().is_some_and(|c|
-                scope.contact_point_ref.as_ref().is_some_and(|r| r==c))
-            && current_proof.as_deref() == Some(item.evidence_ref().as_str())
-    }).collect();
+    let applicable: Vec<&ConsentAuthorization> = rows
+        .iter()
+        .filter(|item| {
+            if item.effect() != ConsentEffect::Grant {
+                return true;
+            }
+            item.source().as_str() == "cloudflare.access.email"
+                && item
+                    .contact_point_ref()
+                    .is_some_and(|c| scope.contact_point_ref.as_ref().is_some_and(|r| r == c))
+                && current_proof.as_deref() == Some(item.evidence_ref().as_str())
+        })
+        .collect();
     let decision = evaluate_communication_authorization(&scope, applicable.iter().copied())
         .map_err(|e| worker::Error::RustError(e.code))?;
     Ok(Ok(ConsentDecision {

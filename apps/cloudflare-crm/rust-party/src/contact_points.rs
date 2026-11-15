@@ -4,8 +4,8 @@
 use super::{access, bind, now_nanos};
 use crm_contact_points::{
     ContactPoint, ContactPointId, ContactPointKind, ContactPointStatus, CreateContactPoint,
-    VerifyContactPoint,
-    PartyReference, UpdateContactPoint, decode_contact_point_state, encode_contact_point_state,
+    PartyReference, UpdateContactPoint, VerifyContactPoint, decode_contact_point_state,
+    encode_contact_point_state,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -105,8 +105,11 @@ struct Receipt {
 // Only Cloudflare Access signed human identities, not service tokens, can
 // assert ownership of the matching email address.
 pub(super) fn signed_human_email(identity: &str) -> Option<&str> {
-    if identity.starts_with("service:") || identity.len() > 254 || identity.trim() != identity
-        || !identity.contains('@') || identity.chars().any(char::is_whitespace)
+    if identity.starts_with("service:")
+        || identity.len() > 254
+        || identity.trim() != identity
+        || !identity.contains('@')
+        || identity.chars().any(char::is_whitespace)
     {
         None
     } else {
@@ -321,7 +324,10 @@ pub(super) async fn verify_own_email_typed(
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     let Some(email) = signed_human_email(&actor.identity) else {
-        return Ok(Err(failure("CONTACT_POINTS_SIGNED_HUMAN_EMAIL_REQUIRED", 403)));
+        return Ok(Err(failure(
+            "CONTACT_POINTS_SIGNED_HUMAN_EMAIL_REQUIRED",
+            403,
+        )));
     };
     if !(8..=120).contains(&idem.len()) {
         return Ok(Err(failure("IDEMPOTENCY_KEY_REQUIRED", 422)));
@@ -338,7 +344,10 @@ pub(super) async fn verify_own_email_typed(
         {
             return Ok(Err(failure("CONTACT_POINTS_EMAIL_OWNERSHIP_REQUIRED", 403)));
         }
-        return Ok(Ok(MutationOutcome { contact_point, replayed: true }));
+        return Ok(Ok(MutationOutcome {
+            contact_point,
+            replayed: true,
+        }));
     }
     let Some(mut point) = load(db, &actor.tenant, id).await? else {
         return Ok(Err(failure("NOT_FOUND", 404)));
@@ -347,9 +356,10 @@ pub(super) async fn verify_own_email_typed(
         return Ok(Err(failure("CONTACT_POINTS_EMAIL_OWNERSHIP_REQUIRED", 403)));
     }
     // Unique evidence per verification event; no raw email or client evidence in the state.
-    let proof = format!("{:x}", Sha256::digest(format!(
-        "{}:{}:{}", email, id, trace
-    ).as_bytes()));
+    let proof = format!(
+        "{:x}",
+        Sha256::digest(format!("{}:{}:{}", email, id, trace).as_bytes())
+    );
     if let Err(e) = point.verify(VerifyContactPoint {
         expected_version,
         evidence_ref: format!("access-email:{proof}"),
@@ -358,7 +368,12 @@ pub(super) async fn verify_own_email_typed(
         return Ok(Err(failure(
             e.code.clone(),
             if e.code == "CONTACT_POINTS_VERSION_CONFLICT"
-                || e.code == "CONTACT_POINTS_ALREADY_VERIFIED" { 409 } else { 422 }
+                || e.code == "CONTACT_POINTS_ALREADY_VERIFIED"
+            {
+                409
+            } else {
+                422
+            },
         )));
     }
     let saved = encode(&point)?;
@@ -369,12 +384,15 @@ pub(super) async fn verify_own_email_typed(
           JsValue::from_str(&actor.identity),JsValue::from_str(&actor.tenant),
           JsValue::from_str(id),JsValue::from_f64(expected_version as f64)])?.run().await;
     let Ok(changed) = result else {
-        return Ok(Err(failure("CONTACT_POINTS_VERIFY_CONFLICT",409)));
+        return Ok(Err(failure("CONTACT_POINTS_VERIFY_CONFLICT", 409)));
     };
-    if changed.meta()?.and_then(|m|m.changes).unwrap_or(0)==0 {
-        return Ok(Err(failure("CONTACT_POINTS_VERSION_CONFLICT",409)));
+    if changed.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
+        return Ok(Err(failure("CONTACT_POINTS_VERSION_CONFLICT", 409)));
     }
-    Ok(Ok(MutationOutcome { contact_point: point, replayed: false }))
+    Ok(Ok(MutationOutcome {
+        contact_point: point,
+        replayed: false,
+    }))
 }
 
 pub(super) async fn list_page_typed(

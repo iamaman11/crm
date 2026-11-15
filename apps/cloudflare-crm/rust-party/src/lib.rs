@@ -503,7 +503,9 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     ),
     (
         "/crm.contact_points.v2.ContactPointService/VerifyOwnEmailContactPoint",
-        RpcPolicy { permission: RpcPermission::SelfWrite },
+        RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
     ),
     (
         "/crm.contact_points.v2.ContactPointService/GetContactPoint",
@@ -603,11 +605,15 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     ),
     (
         "/crm.consents.v2.ConsentAuthorizationService/GrantVerifiedEmailConsent",
-        RpcPolicy { permission: RpcPermission::SelfWrite },
+        RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
     ),
     (
         "/crm.consents.v2.ConsentAuthorizationService/WithdrawConsentAuthorization",
-        RpcPolicy { permission: RpcPermission::SelfWrite },
+        RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
     ),
     (
         "/crm.consents.v2.ConsentAuthorizationService/ListConsentAuthorizations",

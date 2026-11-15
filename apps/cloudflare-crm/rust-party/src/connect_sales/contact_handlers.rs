@@ -113,11 +113,16 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
         let id = Self::valid_id(&input.contact_point_id)?;
         let (key, version) = wire_precondition(input.precondition.as_option(), false)?;
         let saved = contact_points::verify_own_email_typed(
-            &key, version.unwrap_or_default(), &self.d1()?, &self.actor, &id,
+            &key,
+            version.unwrap_or_default(),
+            &self.d1()?,
+            &self.actor,
+            &id,
             &self.request_id,
-        ).await
-            .map_err(|_| ConnectError::internal("Original Contact verification failed"))?
-            .map_err(Self::failed)?;
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Original Contact verification failed"))?
+        .map_err(Self::failed)?;
         RpcResponse::ok(contact_wire::VerifyOwnEmailContactPointResponse {
             contact_point: Some(Self::convert(&saved.contact_point)?).into(),
             receipt: Some(self.receipt(&saved)?).into(),
