@@ -155,8 +155,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Изменить участника",exact:true}).waitFor();
    assert.equal(await page.getByRole("dialog").count(),1);
    const scrollAtOpen=await page.evaluate(()=>window.scrollY);
+   const editorPanel=page.getByRole("dialog");
+   const editorPanelId=await editorPanel.getAttribute("aria-labelledby");
+   assert.ok(editorPanelId,"The native Party dialog must have a stable React useId identity");
    await page.keyboard.press("Escape");
-   await assertUiPanel({page,panel:page.getByRole("dialog"),title:"Изменить участника",
+   await assertUiPanel({page,panel:editorPanel,panelId:editorPanelId,title:"Изменить участника",
      expected:"closed",scenario:"party-edit-escape",evidenceDirectory:directory});
    assert.equal(await page.evaluate(()=>window.scrollY),scrollAtOpen,"closing a record must keep list scroll");
    await partyEdit.click();
