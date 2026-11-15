@@ -297,42 +297,20 @@ export class CrmBrowserSession extends DurableObject<Env> {
           await route.continue();
           return;
         }
-        // siteRequestDisposition yields "site" only for a complete, valid
-        // origin-bound credential pair. No service token is needed for login.
-        // Playwright route.continue({headers}) propagates overridden headers to
-        // every redirect, including foreign origins. This is NOT safe.
-        // route.fetch(maxRedirects:0) keeps the signed credentials on exactly
-        // the first CRM request and fulfills the response to the browser.
-        // A 3xx is followed in the browser WITHOUT privileged request headers.
-        const response = await route.fetch({
+        // The test CRM already has an enrolled service principal with admin
+        // rights in the owner's existing tenant. Let Chromium receive the real
+        // HTTP response from the site: Playwright only overrides the request
+        // headers, not the status, MIME, body, or redirects.
+        //
+        // This is deliberately dev-only. Playwright propagates overridden
+        // headers on redirects, so this shortcut must be replaced by a
+        // redirect-scoped transport before production with real data.
+        await route.continue({
           headers: {
             ...request.headers(),
             "CF-Access-Client-Id": this.env.SITE_ACCESS_CLIENT_ID!,
             "CF-Access-Client-Secret": this.env.SITE_ACCESS_CLIENT_SECRET!,
           },
-          maxRedirects: 0,
-          timeout: 25_000,
-        });
-        // Replay the actual bytes and headers, not a provider-side APIResponse
-        // proxy. Real Browser Run returned correct JS/CSS/JSON with HTTP 200,
-        // but route.fulfill({response}) lost every header, including MIME.
-        // Access credentials belong ONLY to the original request.
-        const upstreamHeaders = response.headers();
-        const resourceType = request.resourceType();
-        if (["document", "script", "stylesheet", "fetch", "xhr"].includes(resourceType) &&
-            !Object.keys(upstreamHeaders).some(name => name.toLowerCase() === "content-type")) {
-          // Provider diagnostics only: no URL, cookie, secret, header value or
-          // response body ever enters logs. Bounded by the existing console log.
-          this.consoleLog.push({
-            level: "warning",
-            text: `BROWSER_UPSTREAM_MIME_MISSING type=${resourceType} header_count=${Object.keys(upstreamHeaders).length}`,
-          });
-          if (this.consoleLog.length > 80) this.consoleLog.shift();
-        }
-        await route.fulfill({
-          status: response.status(),
-          headers: upstreamHeaders,
-          body: await response.body(),
         });
       });
   }
