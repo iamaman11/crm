@@ -237,9 +237,8 @@ export class CrmBrowserSession extends DurableObject<Env> {
     this.browser = browser;
     this.browserSessionId = recovered.sessionId;
     this.recordingEnabled = await this.ctx.storage.get<boolean>("browser_recording") ?? false;
-    // BrowserRun's persistent CDP may retain the browser *process* while
-    // destroying its incognito context. Do not pick a default/blank context
-    // and claim "open" when the original page was not restored.
+    // Native CDP may retain a process while a disposable device context dies.
+    // Only reattach to the exact original page target, never a random page.
     const storedPageIdentity: unknown = await this.ctx.storage.get("browser_page_identity");
     const restored = await selectRestoredPublicPage(
       browser.contexts(), context => context.pages(), isPermittedBrowserRequest,
@@ -415,10 +414,18 @@ export class CrmBrowserSession extends DurableObject<Env> {
     }
     try {
       if (!this.context) {
-        this.context = await this.browser.newContext({
-          ...deviceOptions(device),
-          acceptDownloads: true, serviceWorkers: "block",
-        });
+        // One Browser Run process belongs to exactly one workspace. For
+        // desktop, use Chromium's own persistent default context so its tabs
+        // survive Playwright CDP disconnection and Durable Object eviction.
+        // Incognito browser.newContext() has dispose-on-detach semantics.
+        // Mobile/tablet still need native Playwright context device options.
+        this.context = device === "desktop"
+          ? this.browser.contexts()[0]
+          : await this.browser.newContext({
+              ...deviceOptions(device),
+              acceptDownloads: true, serviceWorkers: "block",
+            });
+        if (!this.context) throw new Error("BROWSER_DEFAULT_CONTEXT_UNAVAILABLE");
         await this.context.addInitScript({content: WEB_VITALS_INIT});
         await this.installSafetyRouting(this.context);
         await this.ctx.storage.put("browser_device",device);
@@ -704,10 +711,13 @@ export class CrmBrowserSession extends DurableObject<Env> {
       if (command.tabAction === "new") {
         if (!this.context) {
           const device = await this.ctx.storage.get<BrowserDevice>("browser_device") ?? "desktop";
-          this.context = await this.browser.newContext({
-            ...deviceOptions(device),
-            acceptDownloads: true, serviceWorkers: "block",
-          });
+          this.context = device === "desktop"
+            ? this.browser.contexts()[0]
+            : await this.browser.newContext({
+                ...deviceOptions(device),
+                acceptDownloads: true, serviceWorkers: "block",
+              });
+          if (!this.context) throw new Error("BROWSER_DEFAULT_CONTEXT_UNAVAILABLE");
           await this.context.addInitScript({content: WEB_VITALS_INIT});
           await this.installSafetyRouting(this.context);
           await this.ctx.storage.put("browser_device",device);
