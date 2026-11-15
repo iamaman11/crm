@@ -976,7 +976,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
         }
         if (!command.target) throw new Error("BROWSER_FILE_TARGET_REQUIRED");
         const locator = this.target(command.target);
-        if (command.fileAction === "download_link") {
+        if (command.fileAction === "download_link" || command.fileAction === "download") {
           // Browser-side fetch is intentionally same-origin, using the
           // actual page's cookies/CORS and Playwright request routing.
           // Unlike a browser download event, response bytes are verified.
@@ -1024,6 +1024,17 @@ export class CrmBrowserSession extends DurableObject<Env> {
               base64: btoa(binary),
             };
           }, MAX_WORKSPACE_FILE_BYTES, { timeout: 45_000 });
+          if (command.fileAction === "download") {
+            // Browser Run/CDP exposes a download event, but the stream is empty.
+            // Use the same supported browser-side, same-origin link fetch as
+            // download_link; never replay HTTP via a Worker or invent bytes.
+            // Legacy inline downloads remain capped at 1 MB.
+            const bytes = Buffer.from(response.base64, "base64");
+            return { data: {
+              action: "download", completed: true, mimeType: response.mimeType,
+              ...transferDownload(response.name, [bytes]),
+            } };
+          }
           const receipt = this.transfers.storeDownload(response.name, response.mimeType, response.base64);
           return { data: {
             action: "download_link", completed: true,
@@ -1044,31 +1055,6 @@ export class CrmBrowserSession extends DurableObject<Env> {
               action: "upload", fileName: file.name, mimeType: file.mimeType,
               bytes: file.buffer.byteLength, completed: true,
               path: safePagePath(page.url()),
-            },
-          };
-        }
-        if (command.fileAction === "download") {
-          const awaited = page.waitForEvent("download", { timeout: 20_000 });
-          await locator.click({ timeout: 15_000 });
-          const download = await awaited;
-          // The event fires at download start. createReadStream() already
-          // throws for a failed/canceled download under the Playwright contract.
-          // Avoid another indefinite download.failure() wait before reading.
-          const stream = await download.createReadStream();
-          const chunks: Uint8Array[] = [];
-          let size = 0;
-          for await (const chunk of stream) {
-            const bytes = Buffer.from(chunk);
-            size += bytes.byteLength;
-            if (size > MAX_TRANSFER_BYTES) {
-              throw new Error("BROWSER_DOWNLOAD_TOO_LARGE");
-            }
-            chunks.push(bytes);
-          }
-          return {
-            data: {
-              action: "download", completed: true,
-              ...transferDownload(download.suggestedFilename(), chunks),
             },
           };
         }
