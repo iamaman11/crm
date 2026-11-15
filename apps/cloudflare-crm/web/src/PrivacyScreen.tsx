@@ -31,6 +31,7 @@ export function PrivacyScreen() {
       {[1,2].includes(selected.status)&&<Button variant="danger" disabled={mutation.busy} onClick={()=>void mutation.run(()=>api.privacy.cancelPrivacyCase({
         caseId:selected.caseId,precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
       }),async()=>{setSelected(undefined);await query.reload();})}>Отменить запрос</Button>}
+      {mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}
     </>}</RecordPanel>
     <RecordPanel open={createOpen} title="Новое обращение" onClose={()=>setCreateOpen(false)}><form key={draftId} onChange={mutation.changed} onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);

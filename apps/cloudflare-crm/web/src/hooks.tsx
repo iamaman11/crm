@@ -47,7 +47,9 @@ export function useMutation() {
   return {key,busy,notice,changed,run};
 }
 export function MutationNotice({state}:{state:ReturnType<typeof useMutation>}) {
-  return state.notice?<FeedbackPanel tone={state.notice.tone} title={state.notice.text}/>:null;
+  return state.notice?<div className="crm-mutation-notice">
+    <FeedbackPanel tone={state.notice.tone} title={state.notice.text}/>
+  </div>:null;
 }
 export function QueryNotice({query}:{query:{busy:boolean;error:string;reload:()=>Promise<unknown>}}) {
   return query.error?<FeedbackPanel tone="danger" title={query.error}

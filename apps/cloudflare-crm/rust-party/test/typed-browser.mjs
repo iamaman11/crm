@@ -392,6 +392,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const conflictRequestId=conflictResponse.headers()["x-request-id"];
    assert.match(conflictRequestId??"",/^[a-f0-9-]{36}$/i);
    await stalePage.getByRole("heading",{name:new RegExp("Конфликт изменения.*"+conflictRequestId)}).waitFor();
+    assert.equal(await stalePage.getByRole("heading",{name:new RegExp("Конфликт изменения.*"+conflictRequestId)}).count(),1,
+      "a conflict is shown once in the active panel, not behind it");
    assert.equal(await firstId("crm_party_records","display_name","Browser Winner "+runId),partyId);
    assert.equal((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0].version,3);
    await Promise.all(headerReads);
