@@ -17,13 +17,13 @@ export function DataScreen() {
   return <>
     <PageHeader title="Импорт и экспорт" description="Доступно администратору. CSV-импорт создаёт новых участников; ID исходной системы не заменяют ID CRM."/>
     <Card title="Экспорт участников">
-      <SelectField label="Тип экспорта" value={kind} onChange={e=>setKind(e.target.value===""?"":String(enumValue(e.target.value,[PartyKind.PARTY_KIND_PERSON,PartyKind.PARTY_KIND_ORGANIZATION],"Тип экспорта")))}>
-        <option value="">Все</option><option value={PartyKind.PARTY_KIND_PERSON}>Люди</option><option value={PartyKind.PARTY_KIND_ORGANIZATION}>Организации</option>
+      <SelectField label="Тип экспорта" value={kind} onChange={e=>setKind(e.target.value===""?"":String(enumValue(e.target.value,[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип экспорта")))}>
+        <option value="">Все</option><option value={PartyKind.PERSON}>Люди</option><option value={PartyKind.ORGANIZATION}>Организации</option>
       </SelectField>
-      <p><Button disabled={exported.busy} onClick={()=>void exported.run(()=>api.csv.previewPartyExport(kind?{kind:enumValue(kind,[PartyKind.PARTY_KIND_PERSON,PartyKind.PARTY_KIND_ORGANIZATION],"Тип экспорта")}:{}))}>Проверить экспорт</Button></p>
+      <p><Button disabled={exported.busy} onClick={()=>void exported.run(()=>api.csv.previewPartyExport(kind?{kind:enumValue(kind,[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип экспорта")}:{}))}>Проверить экспорт</Button></p>
       {exported.error&&<FeedbackPanel tone="danger" title={exported.error}/>}
       {exported.data&&<p>Записей: {exported.data.count}. Предел: {exported.data.maximumTenantParties} участников в организации.</p>}
-      <a href={api.csvDownloadUrl+(kind?"?kind="+(kind===String(PartyKind.PARTY_KIND_PERSON)?"person":"organization"):"")}>Скачать CSV</a>
+      <a href={api.csvDownloadUrl+(kind?"?kind="+(kind===String(PartyKind.PERSON)?"person":"organization"):"")}>Скачать CSV</a>
       <p>Файл содержит party_id, kind, display_name, resource_version.</p>
     </Card>
     <Card title="Импорт участников">

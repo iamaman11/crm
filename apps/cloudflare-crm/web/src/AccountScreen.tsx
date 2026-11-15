@@ -14,7 +14,7 @@ import type {RecordMode} from "@ultimate-crm/ui";
 type AccountFilters={search:string;status:string;cursor:string};
 type RegisterBlocker=(blocker:(()=>boolean)|null)=>void;
 const dirtyPrompt="Есть несохранённые изменения. Покинуть страницу без сохранения?";
-const allowed=[AccountStatus.ACCOUNT_STATUS_ACTIVE,AccountStatus.ACCOUNT_STATUS_INACTIVE] as const;
+const allowed=[AccountStatus.ACTIVE,AccountStatus.INACTIVE] as const;
 function rememberAndNavigate(event:MouseEvent<HTMLAnchorElement>,accountId:string) {
   if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
   event.preventDefault();
@@ -76,8 +76,8 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
     <SearchField label="Поиск клиентов" submitted={search} onSearch={value=>navigate({search:value,cursor:""})}/>
     <SelectField label="Статус клиента" value={status} onChange={event=>navigate({status:event.target.value,cursor:""})}>
       <option value="">Все</option>
-      <option value={AccountStatus.ACCOUNT_STATUS_ACTIVE}>Активные</option>
-      <option value={AccountStatus.ACCOUNT_STATUS_INACTIVE}>Неактивные</option>
+      <option value={AccountStatus.ACTIVE}>Активные</option>
+      <option value={AccountStatus.INACTIVE}>Неактивные</option>
     </SelectField>
     <QueryNotice query={query}/>
     {savedNotice&&<FeedbackPanel tone="success" title={savedNotice}/>}

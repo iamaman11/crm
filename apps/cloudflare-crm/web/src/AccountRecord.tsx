@@ -9,8 +9,8 @@ import {scopeHref} from "./routes";
 
 export function accountStatusLabel(status:AccountStatus):string {
   switch(status) {
-    case AccountStatus.ACCOUNT_STATUS_ACTIVE:return "Активен";
-    case AccountStatus.ACCOUNT_STATUS_INACTIVE:return "Неактивен";
+    case AccountStatus.ACTIVE:return "Активен";
+    case AccountStatus.INACTIVE:return "Неактивен";
     default:return "Неизвестный статус";
   }
 }
@@ -32,7 +32,7 @@ export function AccountDetails({accountId}:{accountId:string}) {
     <h3>Сделки</h3><ul>{card.deals.map(d=><li key={d.dealId}>{d.name} · {d.stage?.stageId}</li>)}</ul>
     {card.truncated?.deals&&<p>Показаны первые {card.perCollectionLimit} сделок.</p>}
     <a href={scopeHref("sales",accountId)}>Все сделки клиента</a>
-    <h3>Задачи</h3><ul>{card.tasks.map(t=><li key={t.taskId}>{t.subject} · {t.status===TaskStatus.TASK_STATUS_COMPLETED?"Выполнена":t.status===TaskStatus.TASK_STATUS_OPEN?dateText(t.dueAt):"Неизвестный статус"}</li>)}</ul>
+    <h3>Задачи</h3><ul>{card.tasks.map(t=><li key={t.taskId}>{t.subject} · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?dateText(t.dueAt):"Неизвестный статус"}</li>)}</ul>
     {card.truncated?.tasks&&<p>Показаны первые {card.perCollectionLimit} задач.</p>}
     <a href={scopeHref("tasks",accountId)}>Все задачи клиента</a>
   </>}</div>;
@@ -53,7 +53,7 @@ export function AccountEditor({accountId,onSaved,onCancel,onDirtyChange}:{
         void mutation.run(()=>api.accounts.updateAccount({
           accountId:account.accountId,name:field(data,"name"),
           status:enumValue(field(data,"status"),[
-            AccountStatus.ACCOUNT_STATUS_ACTIVE,AccountStatus.ACCOUNT_STATUS_INACTIVE
+            AccountStatus.ACTIVE,AccountStatus.INACTIVE
           ],"Статус клиента"),
           precondition:{idempotencyKey:mutation.key,expectedVersion:account.version}
         }),async()=>{
@@ -65,8 +65,8 @@ export function AccountEditor({accountId,onSaved,onCancel,onDirtyChange}:{
       <FormGrid>
         <TextField label="Название клиента" name="name" defaultValue={account.name} required/>
         <SelectField label="Статус" name="status" defaultValue={account.status}>
-          <option value={AccountStatus.ACCOUNT_STATUS_ACTIVE}>Активен</option>
-          <option value={AccountStatus.ACCOUNT_STATUS_INACTIVE}>Неактивен</option>
+          <option value={AccountStatus.ACTIVE}>Активен</option>
+          <option value={AccountStatus.INACTIVE}>Неактивен</option>
         </SelectField>
       </FormGrid>
       <Button type="submit" disabled={mutation.busy||mutation.notice?.tone==="warning"}>Сохранить клиента</Button>{" "}

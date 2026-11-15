@@ -16,7 +16,7 @@ export function PartyScreen() {
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
   const query=useQuery(useCallback(()=>api.partyRecords.listParties({
-    page:{pageSize:25,pageToken:cursor},search,...(kind?{kind:enumValue(kind,[PartyKind.PARTY_KIND_PERSON,PartyKind.PARTY_KIND_ORGANIZATION],"Тип участника")}:{})
+    page:{pageSize:25,pageToken:cursor},search,...(kind?{kind:enumValue(kind,[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип участника")}:{})
   }),[cursor,kind,search]));
   const edit=async(id:string)=>{
     try {const result=await api.partyRecords.getParty({partyId:id});setSelected(result.party);setEditorOpen(true);mutation.changed();}
@@ -26,11 +26,11 @@ export function PartyScreen() {
     <PageHeader title="Люди и организации" description="Исходные участники клиентских отношений." actions={<Button onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать участника</Button>}/>
     <SearchField label="Поиск участников" onSearch={value=>{setSearch(value);setCursor("");}}/>
     <SelectField label="Тип участника" value={kind} onChange={e=>{setKind(e.target.value);setCursor("");}}>
-      <option value="">Все</option><option value={PartyKind.PARTY_KIND_PERSON}>Человек</option><option value={PartyKind.PARTY_KIND_ORGANIZATION}>Организация</option>
+      <option value="">Все</option><option value={PartyKind.PERSON}>Человек</option><option value={PartyKind.ORGANIZATION}>Организация</option>
     </SelectField>
     <QueryNotice query={query}/>
     <div>{!query.busy&&!query.error&&query.data?.parties.map(p=><Card key={p.partyId} title={p.displayName}>
-      <p>{p.kind===PartyKind.PARTY_KIND_PERSON?"Человек":p.kind===PartyKind.PARTY_KIND_ORGANIZATION?"Организация":"Неизвестный тип"} · версия {p.version.toString()}</p>
+      <p>{p.kind===PartyKind.PERSON?"Человек":p.kind===PartyKind.ORGANIZATION?"Организация":"Неизвестный тип"} · версия {p.version.toString()}</p>
       <p><small>ID: {p.partyId}</small></p>
       <Button variant="secondary" onClick={()=>void edit(p.partyId)}>Редактировать</Button>
     </Card>)}</div>
@@ -44,13 +44,13 @@ export function PartyScreen() {
           partyId:selected.partyId,displayName:field(data,"name"),
           precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
         }):api.partyRecords.createParty({
-          partyId:draftId,displayName:field(data,"name"),kind:enumValue(field(data,"kind"),[PartyKind.PARTY_KIND_PERSON,PartyKind.PARTY_KIND_ORGANIZATION],"Тип участника"),
+          partyId:draftId,displayName:field(data,"name"),kind:enumValue(field(data,"kind"),[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип участника"),
           precondition:{idempotencyKey:mutation.key}
         }),async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await query.reload();});
       }}>
         <FormGrid>
           <TextField label="Имя или название" name="name" defaultValue={selected?.displayName??""} required/>
-          {!selected&&<SelectField label="Тип" name="kind" defaultValue="2"><option value={PartyKind.PARTY_KIND_PERSON}>Человек</option><option value={PartyKind.PARTY_KIND_ORGANIZATION}>Организация</option></SelectField>}
+          {!selected&&<SelectField label="Тип" name="kind" defaultValue="2"><option value={PartyKind.PERSON}>Человек</option><option value={PartyKind.ORGANIZATION}>Организация</option></SelectField>}
         </FormGrid>
         <Button type="submit" disabled={mutation.busy}>Сохранить участника</Button>{" "}
         {selected&&<Button variant="secondary" onClick={()=>{setEditorOpen(false);setSelected(undefined);mutation.changed();}}>Отмена</Button>}
