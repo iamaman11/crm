@@ -121,7 +121,7 @@ members = [
 [workspace.package]
 edition = "2024"
 license = "Proprietary"
-rust-version = "1.97.1"
+rust-version = "1.100.0"
 
 [workspace.lints.rust]
 warnings = "deny"
