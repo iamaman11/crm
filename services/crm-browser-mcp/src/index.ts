@@ -181,12 +181,21 @@ function createServer(env: Env, ownerEmail: string) {
   }, async params => command({ op: "file", ...params }));
 
   server.registerTool("browser_inspect", {
-    description: "Read sanitized network, navigation/paint and provisional browser-observed LCP/CLS/INP candidate timings, basic DOM accessibility heuristics or a bounded PDF. Unobserved metrics are null.",
+    description: "Read network/performance diagnostics, basic DOM heuristics (accessibility), true bundled axe-core (axe), or bounded PDF. Axe reports automated WCAG rules, not a complete certification.",
     inputSchema: {
       workspaceId: workspaceIdSchema,
-      inspection: z.enum(["network", "performance", "accessibility", "pdf"]),
+      inspection: z.enum(["network", "performance", "accessibility", "axe", "pdf"]),
     },
   }, async params => command({ op: "inspect", ...params }));
+
+  server.registerTool("browser_visual", {
+    description: "Capture, compare or discard an actual Playwright viewport screenshot baseline. Baseline lives only in the current workspace DO, is deleted on Close and never returned as raw image. Compare returns pixel difference ratio and a typed pass/fail.",
+    inputSchema: {
+      workspaceId: workspaceIdSchema,
+      visualAction: z.enum(["capture","compare","discard"]),
+      visualThreshold: z.number().min(0).max(0.25).optional(),
+    },
+  }, async params => command({op:"visual",...params}));
 
   server.registerTool("browser_viewport", {
     description: "Resize the active tab for responsive layout testing (320-2560 pixels); does not impersonate a physical mobile device.",

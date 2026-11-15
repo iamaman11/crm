@@ -1,3 +1,25 @@
+## 15.11.2026 — real axe-core and visual pixel regression (#357)
+
+`browser_inspect({inspection:"axe"})` injects the **pinned** `axe-core@4.14.0`
+source from the Worker bundle (NOT an external CDN) and executes real WCAG
+A/AA + best-practice rules on the current page. The bounded report includes
+rule ID, impact, number of affected nodes, selector hints and incomplete count.
+Automated checks do not constitute a full WCAG certification; cross-origin
+frames may require separate work. The old `inspection:"accessibility"` remains
+explicitly labeled as limited DOM heuristics.
+
+`browser_visual` supports `capture`, `compare` and `discard`. Capture
+stores one capped real viewport PNG only in the existing workspace Durable
+Object storage; compare captures a new PNG and uses an ephemeral about:blank
+page in the **same Playwright context** to compare decoded pixels at fixed per-
+channel delta > 24. Returns dimensions, changedPixels, differenceRatio, actual
+SHA-256 receipts, and a typed pass/fail threshold (default 0.005). Any differing
+dimensions force fail. Screenshots with >900 KB are refused explicitly rather
+than truncated. All baseline data is deleted on `browser_close`; no R2 or
+parallel browser runtime is used.
+
+---
+
 ## 15.11.2026 — native device emulation and honest performance (#357)
 
 `browser_open({device:"desktop"|"mobile"|"tablet"})` creates ONE official
