@@ -168,6 +168,39 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await search("Поиск участников",partyId,"ListParties");
    await page.getByRole("heading",{name:"Browser Updated "+runId,exact:true}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,searchAuditBefore);
+   // Party -> Account is one existing CreateAccount command, not a second submit owner.
+   const accountFromParty=async()=>{
+     await page.locator("section").filter({has:page.getByRole("heading",
+       {name:"Browser Updated "+runId,exact:true})})
+       .getByRole("button",{name:"Создать клиента",exact:true}).click();
+     await page.getByRole("heading",{name:"Новый клиент",exact:true}).waitFor();
+     assert.equal(new URL(await page.url()).hash,"#accounts/new?partyId="+partyId);
+     await expect(page.getByLabel("Название клиента",{exact:true})).toHaveValue("Browser Updated "+runId);
+     await expect(page.getByLabel("Основной участник",{exact:true})).toHaveValue(partyId);
+   };
+   const partyAccountAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await accountFromParty();
+   await page.getByLabel("Название клиента",{exact:true}).fill("Not saved "+runId);
+   page.once("dialog",dialog=>void dialog.dismiss());
+   await page.getByRole("button",{name:"К участнику",exact:true}).click();
+   assert.equal(new URL(await page.url()).hash,"#accounts/new?partyId="+partyId,
+     "cancelled discard must keep the unsaved Account form");
+   assert.equal(await page.getByLabel("Название клиента",{exact:true}).inputValue(),"Not saved "+runId);
+   page.once("dialog",dialog=>void dialog.accept());
+   await page.getByRole("button",{name:"К участнику",exact:true}).click();
+   await expect(page).toHaveURL(/#parties\\?partyId=/);
+   await page.getByRole("heading",{name:"Browser Updated "+runId,exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     partyAccountAuditBefore,"Cancel/Back must not create an Account");
+   await accountFromParty();
+   await page.getByLabel("Название клиента",{exact:true}).fill("Browser Party Account "+runId);
+   await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"CreateAccount");
+   const linkedAccountId=await firstId("crm_account_records","name","Browser Party Account "+runId);
+   await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
+   assert.equal(new URL(await page.url()).hash,"#accounts/"+linkedAccountId,
+     "accepted CreateAccount must replace draft URL with a permalink");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_account_records WHERE tenant='"+tenantSql+"' AND id='"+linkedAccountId+"'"))[0].n,1);
+   steps.push("Party -> shared CreateAccount: selected Party, dirty Cancel/Back and permalink");
    await navigate("relationships","Связи");
    await page.getByRole("button",{name:"Создать связь",exact:true}).click();
    await selectPagedPicker(page,"Первый участник",partyId);
