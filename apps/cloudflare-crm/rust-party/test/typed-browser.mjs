@@ -1,5 +1,6 @@
 // Real Chromium -> built React -> generated Connect client -> signed native Worker -> D1.
 import {chromium} from "playwright";
+import {expect} from "playwright/test";
 import assert from "node:assert/strict";
 import {mkdirSync,writeFileSync} from "node:fs";
 import {resolve} from "node:path";
@@ -211,7 +212,13 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"К списку клиентов",exact:true}).click();
    await page.getByRole("heading",{name:"Клиенты",exact:true}).waitFor();
    assert.equal(new URL(await page.url()).hash,listHash,"Back must restore search, status and cursor");
-   assert.equal(await page.getByLabel("Статус клиента",{exact:true}).inputValue(),"2");
+   // Hash navigation and React reconciliation are asynchronous: assert the settled
+   // control value, not a transient value in the first paint after popstate.
+   await expect(page.getByLabel("Статус клиента",{exact:true})).toHaveValue("2",{timeout:10000});
+   await expect(page.getByLabel("Поиск клиентов",{exact:true})).toHaveValue(accountId,{timeout:10000});
+   await page.reload();
+   await expect(page.getByLabel("Статус клиента",{exact:true})).toHaveValue("2",{timeout:10000});
+   await expect(page.getByLabel("Поиск клиентов",{exact:true})).toHaveValue(accountId,{timeout:10000});
    await page.getByLabel("Статус клиента",{exact:true}).selectOption("1");
    await page.getByRole("heading",{name:"Browser Account "+runId,exact:true}).waitFor();
    steps.push("Account one editor: inline, full-page, reload, mutation, Back and filter restoration");
