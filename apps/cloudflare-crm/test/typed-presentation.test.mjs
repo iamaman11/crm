@@ -26,7 +26,7 @@ test("percent input preserves basis points and rejects overflow",()=>{
 });
 
 import {enumValue,boundedInt} from "../web/src/enumFields.ts";
-import {parseRoute,accountsHref,accountHref,scopeHref,accountFilterStatus} from "../web/src/routes.ts";
+import {parseRoute,accountsHref,accountHref,accountCreateHref,partyHref,scopeHref,accountFilterStatus} from "../web/src/routes.ts";
 
 test("HTML enum boundary accepts only declared generated-style values",()=>{
   assert.equal(enumValue("1",[1,2],"status"),1);
@@ -57,4 +57,19 @@ test("typed CRM routes preserve filters and deep links without a second router",
   assert.deepEqual(route(scopeHref("contacts","party?1")),{kind:"section",screen:"contacts",partyId:"party?1",accountId:""});
   assert.deepEqual(route(scopeHref("sales","account&2")),{kind:"section",screen:"sales",partyId:"",accountId:"account&2"});
   assert.equal(route("#not-a-screen").kind,"not-found");
+});
+
+test("Party-to-Account intent is typed, URL-addressable and rejects invalid source parties",()=>{
+  const allowed=[1,2];
+  const id="87e4c6bf-5885-4591-83d9-0de3ac25a802";
+  const source=partyHref(id);
+  const creation=accountCreateHref(id);
+  assert.equal(source,"#parties?partyId="+id);
+  assert.deepEqual(parseRoute(source,allowed),
+    {kind:"section",screen:"parties",partyId:id,accountId:""});
+  assert.deepEqual(parseRoute(creation,allowed),{kind:"account-create",partyId:id});
+  for(const invalid of ["#accounts/new","#accounts/new?partyId=",
+    "#accounts/new?partyId=x%2Fy","#accounts/new?partyId=%25ZZ",
+    "#accounts/new?partyId=x&partyId=y","#accounts/new?partyId="+("x".repeat(129))])
+    assert.equal(parseRoute(invalid,allowed).kind,"not-found",invalid);
 });
