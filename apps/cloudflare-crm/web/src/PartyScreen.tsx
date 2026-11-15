@@ -3,32 +3,35 @@ import {Button,Card,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-c
 import type {Party} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId} from "./api";
 import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
+import {SearchField} from "./SearchField";
 
 export function PartyScreen() {
   const [cursor,setCursor]=useState("");
   const [kind,setKind]=useState("");
+  const [search,setSearch]=useState("");
   const [selected,setSelected]=useState<Party>();
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
   const query=useQuery(useCallback(()=>api.partyRecords.listParties({
-    page:{pageSize:25,pageToken:cursor},...(kind?{kind:Number(kind)}:{})
-  }),[cursor,kind]));
+    page:{pageSize:25,pageToken:cursor},search,...(kind?{kind:Number(kind)}:{})
+  }),[cursor,kind,search]));
   const edit=async(id:string)=>{
     try {const result=await api.partyRecords.getParty({partyId:id});setSelected(result.party);mutation.changed();}
     catch(error){await mutation.run(()=>Promise.reject(error));}
   };
   return <>
     <PageHeader title="Люди и организации" description="Исходные участники клиентских отношений."/>
+    <SearchField label="Поиск участников" onSearch={value=>{setSearch(value);setCursor("");}}/>
     <SelectField label="Тип участника" value={kind} onChange={e=>{setKind(e.target.value);setCursor("");}}>
       <option value="">Все</option><option value="1">Человек</option><option value="2">Организация</option>
     </SelectField>
     <QueryNotice query={query}/>
-    <div>{query.data?.parties.map(p=><Card key={p.partyId} title={p.displayName}>
+    <div>{!query.busy&&!query.error&&query.data?.parties.map(p=><Card key={p.partyId} title={p.displayName}>
       <p>{p.kind===1?"Человек":"Организация"} · версия {p.version.toString()}</p>
       <p><small>ID: {p.partyId}</small></p>
       <Button variant="secondary" onClick={()=>void edit(p.partyId)}>Редактировать</Button>
     </Card>)}</div>
-    {!query.busy&&query.data?.parties.length===0&&<p>Записей пока нет.</p>}
+    {!query.busy&&!query.error&&query.data?.parties.length===0&&<p>{search?"Участники не найдены.":"Записей пока нет."}</p>}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
       onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
     <Card title={selected?"Изменить участника":"Новый участник"}>

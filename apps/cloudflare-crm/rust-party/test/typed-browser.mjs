@@ -48,6 +48,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.goto(base+"/#"+hash);
    await page.getByRole("heading",{name:title,exact:true}).waitFor();
  };
+ const search=async(label,value,method)=>{
+   const input=page.getByLabel(label,{exact:true});
+   await input.fill(value);
+   const pending=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
+   await input.press("Enter");
+   const response=await pending;
+   assert.equal(response.status(),200);
+   assert.equal((await response.allHeaders())["x-crm-source-sha"],sourceSha);
+ };
  const assertMutation=async(response,method,{replay=false}={})=>{
    assert.equal(response.status(),200,method+" "+await response.text());
    const requestId=response.headers()["x-request-id"];
@@ -119,6 +128,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Other "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty");
    const otherPartyId=await firstId("crm_party_records","display_name","Browser Other "+runId);
+   const searchAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await search("Поиск участников","Browser Updated "+runId,"ListParties");
+   await page.getByRole("heading",{name:"Browser Updated "+runId,exact:true}).waitFor();
+   assert.equal(await page.getByRole("heading",{name:"Browser Other "+runId,exact:true}).count(),0);
+   await search("Поиск участников","missing-search-"+runId,"ListParties");
+   await page.getByText("Участники не найдены.",{exact:true}).waitFor();
+   await search("Поиск участников",partyId,"ListParties");
+   await page.getByRole("heading",{name:"Browser Updated "+runId,exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,searchAuditBefore);
    await navigate("relationships","Связи");
    await selectPagedPicker(page,"Первый участник",partyId);
    await selectPagedPicker(page,"Второй участник",otherPartyId);
@@ -134,9 +152,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    steps.push("Relationship create/edit through original owner with D1 version/status");
    await navigate("accounts","Клиенты");
    await page.getByLabel("Название клиента",{exact:true}).fill("Browser Account "+runId);
+   await search("Поиск: Основной участник",partyId,"ListParties");
    await selectPagedPicker(page,"Основной участник",partyId);
    await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"CreateAccount");
    accountId=await firstId("crm_account_records","name","Browser Account "+runId);
+   await page.getByRole("heading",{name:"Browser Account "+runId,exact:true}).waitFor();
+   await search("Поиск клиентов",accountId,"ListAccounts");
    await page.getByRole("heading",{name:"Browser Account "+runId,exact:true}).waitFor();
    const accountCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,level:2,exact:true})});
    const overviewResponse=page.waitForResponse(r=>r.url().endsWith("/GetAccountOverview"));
@@ -153,6 +174,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Статус клиента",{exact:true}).selectOption("2");
    await accountCard.waitFor();
    steps.push("Account create and Customer360 read");
+   steps.push("Party/Account literal search by name and ID, empty result and read-only D1");
    await navigate("contacts","Контакты");
    await selectPagedPicker(page,"Участник",partyId);
    await page.getByLabel("Значение контакта",{exact:true}).fill("browser-"+runId+"@example.org");

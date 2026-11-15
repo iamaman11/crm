@@ -119,10 +119,16 @@ impl account_wire::AccountService for AccountV2Service {
                 ));
             }
         };
-        let (list, next) =
-            accounts::list_page_typed(&self.d1()?, &self.tenant, after, size as usize, status)
-                .await
-                .map_err(|_| ConnectError::internal("Account D1 list failed"))?;
+        let (list, next) = accounts::list_page_typed(
+            &self.d1()?,
+            &self.tenant,
+            after,
+            size as usize,
+            status,
+            wire_search(req.search)?,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Account D1 list failed"))?;
         let mut result = Vec::new();
         for account in &list {
             result.push(Self::convert(account)?);

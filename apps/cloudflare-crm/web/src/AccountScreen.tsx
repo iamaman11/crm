@@ -4,6 +4,7 @@ import type {Account,AccountOverview} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId,dateText} from "./api";
 import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker} from "./Pickers";
+import {SearchField} from "./SearchField";
 
 function Overview({id}:{id:string}) {
   const query=useQuery(useCallback(()=>api.overview.getAccountOverview({accountId:id}),[id]));
@@ -23,28 +24,30 @@ function Overview({id}:{id:string}) {
 export function AccountScreen() {
   const [cursor,setCursor]=useState("");
   const [status,setStatus]=useState("");
+  const [search,setSearch]=useState("");
   const [selected,setSelected]=useState<Account>();
   const [overview,setOverview]=useState("");
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
   const query=useQuery(useCallback(()=>api.accounts.listAccounts({
-    page:{pageSize:25,pageToken:cursor},...(status?{status:Number(status)}:{})
-  }),[cursor,status]));
+    page:{pageSize:25,pageToken:cursor},search,...(status?{status:Number(status)}:{})
+  }),[cursor,status,search]));
   const edit=async(accountId:string)=>{
     try {setSelected((await api.accounts.getAccount({accountId})).account);mutation.changed();}
     catch(error){await mutation.run(()=>Promise.reject(error));}
   };
   return <>
     <PageHeader title="Клиенты" description="Клиент связывается с человеком или организацией из раздела участников."/>
+    <SearchField label="Поиск клиентов" onSearch={value=>{setSearch(value);setCursor("");}}/>
     <SelectField label="Статус клиента" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>
       <option value="">Все</option><option value="1">Активные</option><option value="2">Неактивные</option>
     </SelectField><QueryNotice query={query}/>
-    {query.data?.accounts.map(a=><Card key={a.accountId} title={a.name}>
+    {!query.busy&&!query.error&&query.data?.accounts.map(a=><Card key={a.accountId} title={a.name}>
       <p>{a.status===1?"Активен":"Неактивен"} · версия {a.version.toString()}</p><p><small>ID: {a.accountId}</small></p>
       <Button variant="secondary" onClick={()=>void edit(a.accountId)}>Редактировать</Button>{" "}
       <Button variant="secondary" onClick={()=>setOverview(a.accountId)}>Открыть карточку</Button>
     </Card>)}
-    {!query.busy&&query.data?.accounts.length===0&&<p>Клиентов пока нет.</p>}
+    {!query.busy&&!query.error&&query.data?.accounts.length===0&&<p>{search?"Клиенты не найдены.":"Клиентов пока нет."}</p>}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")}
       onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
     {overview&&<Overview id={overview}/>}

@@ -338,6 +338,7 @@ pub(super) async fn list_page_typed(
     after: &str,
     page_size: usize,
     kind: Option<PartyKind>,
+    search: &str,
 ) -> Result<(Vec<Party>, Option<String>)> {
     // The original codec stores kind as top-level snake_case JSON.
     // Filter before LIMIT so a page cursor never skips matching records.
@@ -345,17 +346,19 @@ pub(super) async fn list_page_typed(
         PartyKind::Person => "person",
         PartyKind::Organization => "organization",
     });
-    let query = if filter.is_some() {
-        "SELECT id,state FROM crm_party_records WHERE tenant=? AND id>? AND json_extract(state,'$.kind')=? ORDER BY id LIMIT ?"
-    } else {
-        "SELECT id,state FROM crm_party_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?"
-    };
+    let mut query = "SELECT id,state FROM crm_party_records WHERE tenant=? AND id>?".to_owned();
     let mut params = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
     if let Some(value) = filter {
+        query.push_str(" AND json_extract(state,'$.kind')=?");
         params.push(JsValue::from_str(value));
     }
+    if !search.is_empty() {
+        query.push_str(" AND (instr(json_extract(state,'$.display_name'),?)>0 OR instr(id,?)>0)");
+        params.extend([JsValue::from_str(search), JsValue::from_str(search)]);
+    }
+    query.push_str(" ORDER BY id LIMIT ?");
     params.push(JsValue::from_f64((page_size + 1) as f64));
-    let rows = bind(db, query, &params)?
+    let rows = bind(db, &query, &params)?
         .all()
         .await?
         .results::<PartyRow>()?;

@@ -127,6 +127,7 @@ impl party_v3::PartyService for PartyV3Service {
             after,
             size as usize,
             filter,
+            wire_search(req.search)?,
         )
         .await
         .map_err(|_| ConnectError::internal("Party D1 list failed"))?;

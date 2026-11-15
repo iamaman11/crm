@@ -100,8 +100,14 @@ fn wire_precondition(
     }
 }
 
-// Cutover Party v3: generated Connect wire only. The historical Party owner
-// in parties.rs remains the SOLE state codec, D1 mutation and receipt owner.
+fn wire_search(value: &str) -> std::result::Result<&str, ConnectError> {
+    if value.chars().count() > 200 {
+        return Err(ConnectError::invalid_argument("search exceeds 200 characters"));
+    }
+    Ok(value.trim())
+}
+
+// Party v3 uses the original owner codec, D1 mutation and receipt owner.
 struct PartyV3Service {
     env: Arc<Env>,
     actor: access::Actor,

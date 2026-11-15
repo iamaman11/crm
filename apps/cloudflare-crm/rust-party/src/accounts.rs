@@ -238,6 +238,7 @@ pub(super) async fn list_page_typed(
     after: &str,
     size: usize,
     status: Option<AccountStatus>,
+    search: &str,
 ) -> Result<(Vec<Account>, Option<String>)> {
     // Original Account persisted state has top-level snake_case status.
     // Select and page the filtered rows in the same tenant-scoped D1 query.
@@ -245,17 +246,19 @@ pub(super) async fn list_page_typed(
         AccountStatus::Active => "active",
         AccountStatus::Inactive => "inactive",
     });
-    let query = if filter.is_some() {
-        "SELECT id,state FROM crm_account_records WHERE tenant=? AND id>? AND json_extract(state,'$.status')=? ORDER BY id LIMIT ?"
-    } else {
-        "SELECT id,state FROM crm_account_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?"
-    };
+    let mut query = "SELECT id,state FROM crm_account_records WHERE tenant=? AND id>?".to_owned();
     let mut params = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
     if let Some(value) = filter {
+        query.push_str(" AND json_extract(state,'$.status')=?");
         params.push(JsValue::from_str(value));
     }
+    if !search.is_empty() {
+        query.push_str(" AND (instr(json_extract(state,'$.name'),?)>0 OR instr(id,?)>0)");
+        params.extend([JsValue::from_str(search), JsValue::from_str(search)]);
+    }
+    query.push_str(" ORDER BY id LIMIT ?");
     params.push(JsValue::from_f64((size + 1) as f64));
-    let rows = bind(db, query, &params)?.all().await?.results::<Row>()?;
+    let rows = bind(db, &query, &params)?.all().await?.results::<Row>()?;
     let has_more = rows.len() > size;
     let next = if has_more {
         rows.get(size - 1).map(|r| r.id.clone())

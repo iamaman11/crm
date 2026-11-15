@@ -66,6 +66,9 @@ message GetAccountResponse {
 message ListAccountsRequest {
   crm.core.v2.PageRequest page = 1;
   optional AccountStatus status = 2;
+  // Literal, case-sensitive substring of name or account_id, before paging.
+  // Surrounding whitespace is trimmed; empty means no search; max 200 characters.
+  string search = 3;
 }
 
 message ListAccountsResponse {

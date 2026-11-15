@@ -6,6 +6,7 @@ import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
+import {chromium} from "playwright";
 import {typedBrowser} from "./typed-browser.mjs";
 import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryAccountV2,decodeAccountV2,accountV2Path,
@@ -1572,6 +1573,102 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    original_owner:"crm.customer-data-operations",party_owner:"crm.parties",
    tenant_ab:true,atomic:true,replay:true,audit:true,verified_actor:true,sql_failure_rollback:true,csv_bytes_sha256:true,bounded:true}));
  await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
+ // Search is part of the existing List RPCs. Put matching rows after an entire
+ // unfiltered page; literal punctuation and Unicode must not become SQL patterns.
+ for(let index=0;index<101;index++){
+   const suffix=String(index).padStart(3,"0");
+   assert.equal((await v3("CreateParty",admin,{partyId:"zz-search-padding-"+suffix,kind:1,
+     displayName:"Search padding "+suffix,precondition:{idempotencyKey:"search-party-padding-"+suffix}})).status,200);
+   assert.equal((await accountV2("CreateAccount",admin,{accountId:"zz-search-padding-"+suffix,
+     name:"Search padding "+suffix,primaryPartyId:id,
+     precondition:{idempotencyKey:"search-account-padding-"+suffix}})).status,200);
+ }
+ const searchIds=["zzz-search-first","zzz-search-gap","zzz-search-last"];
+ for(const [index,target] of searchIds.entries()){
+   const name=index===1?"Nonmatching gap":"Поиск 100%_ O'Neil "+index;
+   assert.equal((await v3("CreateParty",admin,{partyId:target,kind:2,displayName:name,
+     precondition:{idempotencyKey:"search-party-"+index}})).status,200);
+   assert.equal((await accountV2("CreateAccount",admin,{accountId:target,name,primaryPartyId:id,
+     precondition:{idempotencyKey:"search-account-"+index}})).status,200);
+ }
+ const searchSnapshot=()=>({party:partySnapshot(),
+   accounts:sql("SELECT id,state,version FROM crm_account_records ORDER BY tenant,id"),
+   accountReceipts:sql("SELECT COUNT(*) AS n FROM crm_account_receipts")});
+ const searchBefore=searchSnapshot();
+ for(const [rpcCall,method,field,idField,filter,opposite] of [
+   [v3,"ListParties","parties","partyId",{kind:2},{kind:1}],
+   [accountV2,"ListAccounts","accounts","accountId",{status:1},{status:2}],
+ ]){
+   const firstPage=await rpcCall(method,viewer,{page:{pageSize:100}});
+   assert.equal(firstPage.status,200);
+   assert.ok(!firstPage.body[field].some(row=>searchIds.includes(row[idField])));
+   const found=await collectPages(rpcCall,method,field,{search:"  Поиск 100%_ O'Neil  ",...filter});
+   assert.deepEqual(found.map(row=>row[idField]),[searchIds[0],searchIds[2]],"Search must filter before LIMIT and retain every matching cursor");
+   assert.deepEqual((await rpcCall(method,viewer,{search:"100%_",...opposite})).body[field],[]);
+   assert.deepEqual((await rpcCall(method,tenantB,{search:"Поиск 100%_"})).body[field],[]);
+   assert.deepEqual((await rpcCall(method,viewer,{search:"поиск 100%_"})).body[field],[],"Literal search is case-sensitive");
+   assert.deepEqual((await rpcCall(method,viewer,{search:"%' OR 1=1 --"})).body[field],[]);
+   assert.deepEqual((await rpcCall(method,viewer,{search:searchIds[2]})).body[field].map(row=>row[idField]),[searchIds[2]]);
+   assert.deepEqual((await rpcCall(method,viewer,{search:"   ",page:{pageSize:100}})).body,firstPage.body);
+   assert.equal((await rpcCall(method,viewer,{search:"я".repeat(200)})).status,200);
+   const tooLong=await rpcCall(method,viewer,{search:"я".repeat(201)});
+   assert.equal(tooLong.status,400);assert.equal(tooLong.body.code,"invalid_argument");
+   assert.equal((await rpcCall(method,null,{search:"Поиск"})).status,401);
+ }
+ assert.deepEqual(searchSnapshot(),searchBefore,"Search cannot mutate state, receipts or audit");
+ console.log(JSON.stringify({event:"crm.native-party-account-search",result:"PASS",
+   before_limit:true,unicode_literal:true,tenant_ab:true,read_only:true,existing_rpcs:true}));
+ // Actual React search and both pickers find a target beyond 100 existing rows.
+ const searchBrowser=await chromium.launch({headless:true});
+ try{
+   const context=await searchBrowser.newContext({extraHTTPHeaders:{"cf-access-jwt-assertion":admin}});
+   const page=await context.newPage();
+   const searchRequests=[];
+   const enterSearch=async(label,text,method)=>{
+     const input=page.getByLabel(label,{exact:true});
+     await input.fill(text);
+     const pending=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
+     await input.press("Enter");
+     const response=await pending,headers=await response.allHeaders();
+     assert.equal(response.status(),200);assert.equal(headers["x-crm-source-sha"],sourceSha);
+     searchRequests.push({method,status:response.status(),request_id:headers["x-request-id"]});
+   };
+   for(const [hash,title,label,method] of [
+     ["parties","Люди и организации","Поиск участников","ListParties"],
+     ["accounts","Клиенты","Поиск клиентов","ListAccounts"],
+   ]){
+     await page.goto(base+"/#"+hash);
+     await page.getByRole("heading",{name:title,exact:true}).waitFor();
+     const nextPage=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
+     await page.getByRole("button",{name:"Следующая страница",exact:true}).click();
+     assert.equal((await nextPage).status(),200);
+     await enterSearch(label,searchIds[2],method);
+     await page.getByRole("heading",{name:"Поиск 100%_ O'Neil 2",exact:true}).waitFor();
+     await enterSearch(label,"zz-search-padding-000",method);
+     await page.getByRole("heading",{name:"Search padding 000",exact:true}).waitFor();
+   }
+   for(const [hash,label,searchLabel,method] of [
+     ["accounts","Основной участник","Поиск: Основной участник","ListParties"],
+     ["tasks","Клиент","Поиск: Клиент","ListAccounts"],
+   ]){
+     await page.goto(base+"/#"+hash);
+     const select=page.getByLabel(label,{exact:true});
+     await enterSearch(searchLabel,searchIds[2],method);
+     await select.selectOption(searchIds[2]);
+     assert.equal(await select.inputValue(),searchIds[2]);
+     await enterSearch(searchLabel,"missing-search-target",method);
+     assert.equal(await select.inputValue(),"","Changed search must discard the old form selection");
+     await enterSearch(searchLabel,searchIds[0],method);
+     await select.selectOption(searchIds[0]);
+     assert.equal(await select.inputValue(),searchIds[0]);
+   }
+   await page.setViewportSize({width:390,height:844});
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1));
+   assert.deepEqual(searchSnapshot(),searchBefore,"Search and Enter inside pickers must never submit the enclosing mutation form");
+   writeFileSync(join(cwd,"../e2e-evidence-native/search-browser.json"),JSON.stringify({result:"PASS",source_sha:sourceSha,
+     scenarios:["search after first unfiltered page","Party picker beyond 100 rows","Account picker beyond 100 rows",
+       "selection reset","keyboard Enter does not submit mutation","mobile layout","read-only"],requests:searchRequests},null,2)+"\n");
+ }finally{await searchBrowser.close();}
  // Write evidence only after every scenario assertion above has completed.
  // A successful call is transport exercise coverage, not proof of all possible
  // business states. Domain/CAS/tenant assertions remain independently explicit.

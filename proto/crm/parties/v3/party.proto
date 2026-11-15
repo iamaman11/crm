@@ -53,6 +53,9 @@ message GetPartyResponse {
 message ListPartiesRequest {
   crm.core.v2.PageRequest page = 1;
   optional PartyKind kind = 2;
+  // Literal, case-sensitive substring of display_name or party_id, before paging.
+  // Surrounding whitespace is trimmed; empty means no search; max 200 characters.
+  string search = 3;
 }
 
 message ListPartiesResponse {
