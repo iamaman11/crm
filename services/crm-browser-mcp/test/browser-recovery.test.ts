@@ -156,22 +156,40 @@ test("invalid rows and data outside the current UTC day are not counted as curre
 
 const original = { targetId: "target-original", browserContextId: "incognito-original" };
 
-test("official CDP Target.getTargetInfo must prove a page in an incognito context", () => {
+test("official CDP identifies both native default and isolated browser contexts", () => {
   assert.deepEqual(parsePageTargetInfo({
     targetInfo: { type: "page", ...original },
   }), original);
+  assert.deepEqual(parsePageTargetInfo({targetInfo:{type:"page",targetId:"default-tab"}}),
+    {targetId:"default-tab",browserContextId:"default"});
+  assert.deepEqual(parsePageTargetInfo({targetInfo:{type:"page",targetId:"default-tab",browserContextId:""}}),
+    {targetId:"default-tab",browserContextId:"default"});
   for (const bad of [
     null, {}, {targetInfo: null}, {targetInfo:{type:"service_worker",...original}},
-    {targetInfo:{type:"page",targetId:"target-original"}},
     {targetInfo:{type:"page",browserContextId:"incognito-original"}},
     {targetInfo:{type:"page",targetId:"",browserContextId:"incognito-original"}},
-    {targetInfo:{type:"page",targetId:"target-original",browserContextId:""}},
     {targetInfo:{type:"page",targetId:123,browserContextId:"incognito-original"}},
   ]) {
     assert.equal(parsePageTargetInfo(bad),null);
   }
   assert.equal(validBrowserPageIdentity({targetId:"a"}),null);
   assert.equal(validBrowserPageIdentity({targetId:"a",browserContextId:""}),null);
+});
+
+test("persistent default context restores the exact tab without creating a replacement", async () => {
+  const url="https://crm.example.com/";
+  const expected={targetId:"original-default-tab",browserContextId:"default"};
+  const page=(id: string, address: string) => ({
+    url:()=>address,isClosed:()=>false,identity:{targetId:id,browserContextId:"default"},
+  });
+  const context={id:"default",pages:[page("other-tab",url),page("original-default-tab",url)]};
+  const result=await selectRestoredPublicPage(
+    [context],x=>x.pages,()=>true,expected,async x=>x.identity,
+  );
+  assert.equal(result?.page,context.pages[1]);
+  assert.equal(result?.context,context);
+  assert.deepEqual(context.pages.map(x=>x.url()),[url,url],
+    "identity selection never changes the existing tabs");
 });
 
 test("provider reconnect without the original live public page fails closed", async () => {
