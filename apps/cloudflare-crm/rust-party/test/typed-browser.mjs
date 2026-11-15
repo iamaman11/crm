@@ -138,6 +138,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    partyId=await firstId("crm_party_records","display_name","Browser Party "+runId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+partyId+"'"))[0].n,1);
    await page.reload();
+   await page.keyboard.press("Tab");
+   assert.equal(await page.evaluate(()=>document.activeElement?.classList.contains("crm-skip-link")),true);
+   await page.keyboard.press("Enter");
+   assert.equal(await page.evaluate(()=>document.activeElement?.id),"main-content",
+     "skip-link must focus main without changing the typed route");
+   assert.equal(new URL(await page.url()).hash,"#parties");
    await page.getByRole("heading",{name:"Browser Party "+runId,exact:true}).waitFor();
    const partyCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Party "+runId,exact:true})});
    const partyEdit=partyCard.getByRole("button",{name:"Редактировать",exact:true});
@@ -249,10 +255,19 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.locator('[data-crm-route-kind="accounts"]')).toHaveAttribute("data-crm-account-status","2");
    await accountCard.waitFor();
    const listHash=new URL(await page.url()).hash;
+   // Make the small isolated list scrollable to verify a nonzero real scroll position.
+   await page.evaluate(()=>{document.documentElement.style.minHeight="2200px";window.scrollTo(0,360);});
+   const accountScrollAtOpen=await page.evaluate(()=>window.scrollY);
+   assert.ok(accountScrollAtOpen>=300,"the scroll restoration test must not be a zero-scroll no-op");
    const pageLink=accountCard.getByRole("link",{name:"Полная страница",exact:true});
    await pageLink.click();
    await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    assert.equal(new URL(await page.url()).hash,"#accounts/"+encodeURIComponent(accountId));
+   await page.goBack();
+   await page.getByRole("heading",{name:"Клиенты",exact:true}).waitFor();
+   await expect.poll(()=>page.evaluate(()=>window.scrollY)).toBe(accountScrollAtOpen);
+   await pageLink.click();
+   await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    await page.reload();
    await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    await page.getByRole("button",{name:"Редактировать",exact:true}).click();
