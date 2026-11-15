@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
+import { AXE_SOURCE } from "../src/axe-source.generated.ts";
 import { MAX_VISUAL_PNG_BYTES, pngReceipt, visualThreshold } from "../src/browser-visual.ts";
 import axe from "axe-core";
 
@@ -20,12 +23,16 @@ test("visual difference tolerance is bounded and never silently clamped",()=>{
 });
 test("installed axe-core is the real pinned engine, not a DOM heuristic",()=>{
   assert.match(axe.version,/^4\.14\.0$/);
-  assert.ok(axe.source.length>100_000);
+  const packageRoot=dirname(createRequire(import.meta.url).resolve("axe-core"));
+  const original=readFileSync(resolve(packageRoot,"axe.min.js"),"utf8");
+  assert.ok(AXE_SOURCE.length>100_000);
+  assert.equal(AXE_SOURCE,original,
+    "runtime script must be the exact pinned npm axe.min.js bytes, not function.toString transformed by bundler");
 });
 
-test("axe injection uses Playwright page evaluation, not CSP-blocked inline script tags",()=>{
-  // Regression guard for real Selenium CSP failure caught in Browser Run.
-  const source = readFileSync(new URL("../src/session.ts",import.meta.url),"utf8");
-  assert.match(source,/await page\.evaluate\(axe\.source\)/);
-  assert.doesNotMatch(source,/page\.addScriptTag\(\{content:axe\.source\}/);
+test("axe injection uses original immutable source through Playwright, not transformed function.toString",()=>{
+  const source=readFileSync(new URL("../src/session.ts",import.meta.url),"utf8");
+  assert.match(source,/await page\.evaluate\(AXE_SOURCE\)/);
+  assert.doesNotMatch(source,/page\.addScriptTag\(/);
+  assert.doesNotMatch(source,/axe\.source/);
 });

@@ -7,6 +7,7 @@
     "node": ">=24.18.0 <25"
   },
   "scripts": {
+    "postinstall": "node scripts/generate-axe-source.mjs",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "deploy": "wrangler deploy --config wrangler.jsonc",

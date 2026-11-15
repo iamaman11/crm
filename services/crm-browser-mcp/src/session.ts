@@ -3,7 +3,7 @@ import { acquire, connect, history, limits, type Browser, type BrowserContext, t
 import { DEFAULT_BROWSER_URL, browserUrl, siteAccessConfiguration, siteRequestDisposition, isPermittedBrowserRequest, redact, safePagePath } from "./security";
 import { chooseDevice, deviceOptions, type BrowserDevice } from "./browser-device";
 import { WEB_VITALS_INIT, readVitals, type WebVitals } from "./browser-performance";
-import axe from "axe-core";
+import { AXE_SOURCE } from "./axe-source.generated";
 import { MAX_VISUAL_PNG_BYTES, comparePngPixels, pngReceipt, visualThreshold } from "./browser-visual";
 import { navigatePage } from "./page-navigation";
 import { boundedWaitTimeout, boundedRunTimeout, compareBrowserAssertion, operationTimeout, safeAssertionValue, validateScenarioSteps, type BrowserAssertionKind, type TextMatch, type WaitState, type ScenarioOperation } from "./browser-checks";
@@ -885,12 +885,11 @@ export class CrmBrowserSession extends DurableObject<Env> {
           };
         }
         if (command.inspection === "axe") {
-          // Execute bundled, integrity-pinned axe via Playwright's browser
-          // evaluation channel. Inserting an inline <script> tag is blocked
-          // by real websites' Content-Security-Policy (observed on Selenium),
-          // and silently leaves window.axe undefined.
-          // Never load a mutable third-party CDN at runtime.
-          await page.evaluate(axe.source);
+          // This is the original axe.min.js bytes from the exact npm lockfile.
+          // Build-time text generation prevents Wrangler/esbuild from rewriting
+          // axeFunction.toString() with an unavailable __name() closure.
+          // Playwright evaluation bypasses page inline-script CSP without a CDN.
+          await page.evaluate(AXE_SOURCE);
           const audit=await page.evaluate(async () => {
             type AxeViolation={id:string;impact?:string|null;description?:string;
               nodes:Array<{target:string[]}>};
