@@ -164,10 +164,10 @@ export async function restoreForExplicitOpen(
 }
 
 
-/** Chromium exposes both the page target and its incognito BrowserContext ID
+/** Chromium exposes the page target and its BrowserContext ID (when incognito)
  * through the public Playwright CDP session. URL equality alone is never an
- * identity proof: a default-context tab or a different workspace may have the
- * same public URL. Keep both opaque IDs only inside this workspace's DO. */
+ * identity proof: another tab or another workspace may have the
+ * same public URL. Store exact target plus provider context in this DO only. */
 export type BrowserPageIdentity = Readonly<{
   targetId: string;
   browserContextId: string;
@@ -183,20 +183,23 @@ export function validBrowserPageIdentity(value: unknown): BrowserPageIdentity | 
   return { targetId: info.targetId, browserContextId: info.browserContextId };
 }
 
-/** Target.getTargetInfo is a read-only, official CDP operation performed
- * against the page's own Playwright CDPSession. Default contexts have no
- * browserContextId: do not treat them as an isolated original context. */
+/** Target.getTargetInfo is the native CDP identity of the exact original
+ * target. Chromium's persistent default context has no browserContextId.
+ * Use one explicit sentinel for that *provider fact*, never fabricate a tab.
+ * The browser process belongs to one authenticated workspace only. */
 export function parsePageTargetInfo(value: unknown): BrowserPageIdentity | null {
   if (!value || typeof value !== "object") return null;
   const targetInfo = (value as { targetInfo?: unknown }).targetInfo;
   if (!targetInfo || typeof targetInfo !== "object") return null;
-  const info = targetInfo as { type?: unknown };
+  const info = targetInfo as { type?: unknown; browserContextId?: unknown };
   if (info.type !== "page") return null;
-  return validBrowserPageIdentity(targetInfo);
+  const browserContextId = info.browserContextId === undefined ||
+    info.browserContextId === "" ? "default" : info.browserContextId;
+  return validBrowserPageIdentity({ ...targetInfo, browserContextId });
 }
 
 /** Reconnect only to the exact previously selected Chromium page target AND
- * incognito BrowserContext. A different public tab, even with the same URL,
+ * its provider BrowserContext (including the persistent default). A different public tab, even with the same URL,
  * is not a recovered workspace. No new context/tab/browser is created. */
 export async function selectRestoredPublicPage<
   Context,
