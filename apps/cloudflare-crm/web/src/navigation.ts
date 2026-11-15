@@ -17,14 +17,7 @@ function acceptLocation():void {
 }
 function onLocationChanged(event:Event):void {
   const next=currentRouteHash();
-  // A restored BFCache document can resume with a different history entry.
-  // pageshow is a native resynchronization signal, not a navigation attempt.
-  if(event.type==="pageshow") {
-    reversing=false;
-    acceptLocation();
-    return;
-  }
-  if(reversing) {
+   if(reversing) {
     // A rejected browser Back/hash change is being undone without rewriting history.
     if(next===acceptedHash)reversing=false;
     return;
@@ -44,7 +37,6 @@ export function subscribeNavigation(listener:Listener):()=>void {
   if(!subscribed) {
     window.addEventListener("popstate",onLocationChanged);
     window.addEventListener("hashchange",onLocationChanged);
-    window.addEventListener("pageshow",onLocationChanged);
     subscribed=true;
   }
   return ()=>{
@@ -52,7 +44,6 @@ export function subscribeNavigation(listener:Listener):()=>void {
     if(subscribed&&listeners.size===0) {
       window.removeEventListener("popstate",onLocationChanged);
       window.removeEventListener("hashchange",onLocationChanged);
-      window.removeEventListener("pageshow",onLocationChanged);
       subscribed=false;
     }
   };

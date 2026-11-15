@@ -205,8 +205,13 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"UpdateAccount");
    assert.equal((await sql("SELECT version FROM crm_account_records WHERE tenant='"+tenantSql+"' AND id='"+accountId+"'"))[0].version,2);
    await page.getByLabel("Статус клиента",{exact:true}).selectOption("1");
+   // Assert the navigation commit itself: list disappearance can also be a pending refresh.
+   await expect(page).toHaveURL(/(?:\\?|&)status=1(?:&|$)/);
+   await expect(page.locator('[data-crm-route-kind="accounts"]')).toHaveAttribute("data-crm-account-status","1");
    await accountCard.waitFor({state:"detached"});
    await page.getByLabel("Статус клиента",{exact:true}).selectOption("2");
+   await expect(page).toHaveURL(/(?:\\?|&)status=2(?:&|$)/);
+   await expect(page.locator('[data-crm-route-kind="accounts"]')).toHaveAttribute("data-crm-account-status","2");
    await accountCard.waitFor();
    const listHash=new URL(await page.url()).hash;
    const pageLink=accountCard.getByRole("link",{name:"Полная страница",exact:true});

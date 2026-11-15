@@ -57,9 +57,11 @@ export function AccountEditor({accountId,onSaved,onCancel,onDirtyChange}:{
           ],"Статус клиента"),
           precondition:{idempotencyKey:mutation.key,expectedVersion:account.version}
         }),async()=>{
+          // A committed RPC is no longer a dirty draft, even if the readback is slow.
+          // Clear the navigation guard before the first awaited refresh.
+          onDirtyChange(false);
           await query.reload();
           await onSaved();
-          onDirtyChange(false);
         });
       }}>
       <FormGrid>
