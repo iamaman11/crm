@@ -38,7 +38,7 @@ const rpcFetch=async(path,options)=>{
    let probe;
    try {
      const health=await globalThis.fetch(base+"/api/parties",{
-       method:"GET",headers:{connection:"close"}});
+       method:"GET",headers:{connection:"close"},signal:AbortSignal.timeout(3000)});
      probe={reachable:true,status:health.status};
      await health.arrayBuffer();
    }catch(failure){probe={reachable:false,error:String(failure)};}
