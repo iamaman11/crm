@@ -4,7 +4,7 @@ import type {Deal,SalesPipeline} from "@ultimate-crm/client/cloudflare";
 import {DealStatus} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
-import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
+import {useQuery,useMutation,MutationNotice,QueryNotice} from "./hooks";
 import {AccountPicker} from "./Pickers";
 import {minorUnits,decimalUnits,moneyText,basisPoints,percent} from "./money";
 import styles from "./App.module.css";
@@ -34,7 +34,7 @@ async function allPipelines():Promise<SalesPipeline[]> {
   return all;
 }
 export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
-  const [cursor,setCursor]=useState("");
+  const [stageCursors,setStageCursors]=useState<Record<string,string>>({});
   const [status,setStatus]=useState("");
   const [accountId,setAccountId]=useState(initialAccountId);
   const [pipelineId,setPipelineId]=useState("");
@@ -57,10 +57,19 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
     }
   },[pipelineId,pipelines]);
   const activePipeline=pipelines.find(p=>p.pipelineId===pipelineId);
-  const query=useQuery(useCallback(()=>api.deals.listDeals({page:{pageSize:25,pageToken:cursor},
-    ...(pipelineId?{pipelineId}:{}),...(accountId?{accountId}:{}),
-    ...(status?{status:enumValue(status,[DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки")}:{})
-  }),[cursor,pipelineId,status,accountId]));
+  const query=useQuery(useCallback(async()=>{
+    if(!activePipeline)return [];
+    const selectedStatus=status?enumValue(status,[DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"):undefined;
+    return Promise.all(activePipeline.stages.map(async stage=>{
+      const result=await api.deals.listStageDeals({
+        pipelineId:activePipeline.pipelineId,stageId:stage.stageId,
+        page:{pageSize:25,pageToken:stageCursors[stage.stageId]??""},
+        ...(selectedStatus!==undefined?{status:selectedStatus}:{}),
+        ...(accountId?{accountId}:{})
+      });
+      return {stageId:stage.stageId,...result};
+    }));
+  },[activePipeline,stageCursors,status,accountId]));
   const open=async(dealId:string,mode:"edit"|"advance"|"close")=>{
     try {
       const value=(await api.deals.getDeal({dealId})).deal;
@@ -98,7 +107,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const nextStages=advancePipeline?.stages.filter(s=>!s.archived&&s.ordinal>(advance?.stage?.ordinal??0))??[];
   const readyStage=activePipeline?.stages.find(s=>!s.archived);
   return <>
-    <PageHeader title="Сделки" description="Воронки и сделки используют один Rust-владелец. На доске показана текущая страница, а не все сделки." actions={<>
+    <PageHeader title="Сделки" description="Количество сделок по каждому этапу вычисляется на сервере. Колонки имеют независимую пагинацию." actions={<>
       <Button variant="secondary" onClick={()=>editPipeline()}>Создать воронку</Button>{" "}
       {activePipeline&&<Button variant="secondary" onClick={()=>editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
       <Button disabled={!activePipeline||!readyStage} onClick={()=>{
@@ -110,38 +119,44 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
     {!pipelinesQuery.busy&&pipelines.length===0&&
       <p>Сначала создайте воронку с этапами. Сделки нельзя создавать с произвольными кодами этапов.</p>}
     <SelectField label="Воронка продаж" value={pipelineId} onChange={e=>{
-      setPipelineId(e.target.value);setCursor("");
+      setPipelineId(e.target.value);setStageCursors({});
     }}>
       {pipelines.map(p=><option value={p.pipelineId} key={p.pipelineId}>
         {p.name}{p.archived?" (архив)":""}
       </option>)}
     </SelectField>
-    <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setCursor("");}}/>
-    <SelectField label="Статус сделки" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>
+    <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setStageCursors({});}}/>
+    <SelectField label="Статус сделки" value={status} onChange={e=>{setStatus(e.target.value);setStageCursors({});}}>
       <option value="">Все</option><option value={DealStatus.OPEN}>Открытые</option>
       <option value={DealStatus.WON}>Выигранные</option><option value={DealStatus.LOST}>Проигранные</option>
     </SelectField>
     <QueryNotice query={query}/>
     {activePipeline&&<div className={styles.board}>
-      {columns.map(stage=><section key={stage.stageId}>
-        <h2>{stage.name}{stage.archived?" (архив)":""}</h2>
-        {query.data?.deals.filter(d=>d.stage?.pipelineId===activePipeline.pipelineId&&
-          d.stage.stageId===stage.stageId).map(d=><Card key={d.dealId} title={d.name}>
-          <p>{moneyText(d.amount)} · {percent(d.probabilityBasisPoints)}%</p>
-          <p>Клиент: {d.accountId}</p>
-          <p>{d.status===DealStatus.WON?"Выиграна":d.status===DealStatus.LOST?"Проиграна":
-            d.status===DealStatus.OPEN?"Открыта":"Неизвестный статус"} · версия {d.version.toString()}</p>
-          {d.status===DealStatus.OPEN&&<>
-            <Button variant="secondary" onClick={()=>void open(d.dealId,"edit")}>Изменить сделку</Button>{" "}
-            <Button variant="secondary" onClick={()=>void open(d.dealId,"advance")}>Изменить этап</Button>{" "}
-            <Button variant="secondary" onClick={()=>void open(d.dealId,"close")}>Завершить сделку</Button>
-          </>}
-        </Card>)}
-      </section>)}
+      {columns.map(stage=>{
+        const boardPage=query.data?.find(entry=>entry.stageId===stage.stageId);
+        return <section key={stage.stageId}>
+          <h2>{stage.name}{stage.archived?" (архив)":""} · {boardPage?.totalCount.toString()??"—"}</h2>
+          {boardPage?.deals.map(d=><Card key={d.dealId} title={d.name}>
+            <p>{moneyText(d.amount)} · {percent(d.probabilityBasisPoints)}%</p>
+            <p>Клиент: {d.accountId}</p>
+            <p>{d.status===DealStatus.WON?"Выиграна":d.status===DealStatus.LOST?"Проиграна":
+              d.status===DealStatus.OPEN?"Открыта":"Неизвестный статус"} · версия {d.version.toString()}</p>
+            {d.status===DealStatus.OPEN&&<>
+              <Button variant="secondary" onClick={()=>void open(d.dealId,"edit")}>Изменить сделку</Button>{" "}
+              <Button variant="secondary" onClick={()=>void open(d.dealId,"advance")}>Изменить этап</Button>{" "}
+              <Button variant="secondary" onClick={()=>void open(d.dealId,"close")}>Завершить сделку</Button>
+            </>}
+          </Card>)}
+          {boardPage?.pageInfo?.nextPageToken&&<Button variant="secondary" disabled={query.busy}
+            onClick={()=>setStageCursors(old=>({...old,[stage.stageId]:boardPage.pageInfo?.nextPageToken??""}))}>
+            Следующие сделки этапа</Button>}
+          {stageCursors[stage.stageId]&&<Button variant="secondary" disabled={query.busy}
+            onClick={()=>setStageCursors(old=>({...old,[stage.stageId]:""}))}>
+            К началу этапа</Button>}
+        </section>;
+      })}
     </div>}
-    {!query.busy&&query.data?.deals.length===0&&<p>Сделок пока нет.</p>}
-    <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
-      onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
+    {!query.busy&&query.data?.every(entry=>entry.totalCount===0n)&&<p>Сделок пока нет.</p>}
 
     <RecordPanel open={pipelineEditor!==null} dirty={false}
       title={pipelineEditor==="new"?"Новая воронка":"Настройка воронки"}
@@ -171,7 +186,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
           setPipelineEditor(null);
           await pipelinesQuery.reload();
           if(destination)setPipelineId(destination);
-          setCursor("");await query.reload();
+          setStageCursors({});await query.reload();
         });
       }}>
         <TextField label="Название воронки" value={pipelineName} onChange={e=>setPipelineName(e.target.value)} required/>
