@@ -128,3 +128,22 @@ test("a 64-step E2E is prevalidated as one run, but 65 steps are rejected before
   const lateInvalid = [...sixtyFour.slice(0, 63), { op: "navigate", url: "http://169.254.169.254/" }];
   assert.throws(() => validateScenarioSteps(lateInvalid, url => browserUrl(url)), /BROWSER_UNSAFE_URL/);
 });
+
+test("native HTML5 drag preflight requires a source and a destination before earlier actions", () => {
+  const source = { kind:"css", value:"[draggable=true]" };
+  const destination = { kind:"css", value:"[data-stage-id=next]" };
+  const drag = { op:"drag_to", target:source, destination };
+  assert.ok(SCENARIO_OPERATIONS.includes("drag_to"));
+  assert.doesNotThrow(() => validateScenarioSteps([drag]));
+  assert.doesNotThrow(() => validateScenarioSteps([
+    drag, { op:"assert", kind:"visible", target:{kind:"role",value:"dialog"}, expected:true },
+  ]));
+  const earlier = {op:"click",target:{kind:"role",value:"button",name:"Start"}};
+  for (const invalid of [
+    {op:"drag_to",target:source},
+    {op:"drag_to",destination},
+    {op:"drag_to",target:source,destination:"not a locator"},
+    {op:"drag_to",target:source,destination:{...destination,frameIndex:0,frameSelector:"iframe"}},
+    {op:"hover",target:source,destination},
+  ]) assert.throws(() => validateScenarioSteps([earlier,invalid]), /BROWSER_RUN_/);
+});

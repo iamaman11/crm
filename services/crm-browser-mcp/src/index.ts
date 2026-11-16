@@ -24,7 +24,7 @@ const target = z.object({
 });
 const action = z.enum([
   "click", "double_click", "fill", "type", "select", "check",
-  "uncheck", "hover", "press", "scroll", "navigate", "reload", "back", "forward",
+  "uncheck", "hover", "drag_to", "press", "scroll", "navigate", "reload", "back", "forward",
 ]);
 const assertionKind = z.enum(["url", "title", "visible", "hidden", "text", "count"]);
 const waitState = z.enum(["visible", "hidden", "attached", "detached"]);
@@ -38,6 +38,7 @@ const cdpCommand = z.object({
 const scenarioStep = z.object({
   op: z.enum(SCENARIO_OPERATIONS),
   target: target.optional(),
+  destination: target.optional(),
   text: z.string().max(16_000).optional(),
   key: z.string().max(96).optional(),
   value: z.string().max(1_000).optional(),
@@ -213,11 +214,12 @@ function createServer(env: Env, ownerEmail: string) {
   }, async ({ workspaceId, source }) => command({ op: "screenshot", workspaceId, screenshotSource: source }));
 
   server.registerTool("browser_action", {
-    description: "Perform native Playwright UI actions. press with a target uses locator.press (focuses the actual element); without target uses page.keyboard.press. Set followPopup:true for popup clicks. A click ACK is not proof of an app state change; use browser_wait/assert.",
+    description: "Perform native Playwright UI actions. drag_to uses locator.dragTo(source, destination) with target as source and destination as drop locator. press with a target uses locator.press; without target uses keyboard.press. A gesture ACK is not proof of an app state change; use browser_wait/assert.",
     inputSchema: {
       workspaceId: workspaceIdSchema,
       action,
       target: target.optional(),
+      destination: target.optional(),
       text: z.string().max(16000).optional(),
       key: z.string().max(96).optional(),
       value: z.string().max(1000).optional(),
@@ -229,6 +231,7 @@ function createServer(env: Env, ownerEmail: string) {
     },
   }, async (params) => command({
     op: params.action, workspaceId: params.workspaceId, target: params.target as Target | undefined,
+    destination: params.destination as Target | undefined,
     text: params.text, key: params.key, value: params.value,
     url: params.url, x: params.x, y: params.y, acceptDialog: params.acceptDialog,
     followPopup: params.followPopup,
@@ -257,7 +260,7 @@ function createServer(env: Env, ownerEmail: string) {
   }, async params => command({ op: "assert", ...params }));
 
   server.registerTool("browser_run", {
-    description: "Run up to 64 prevalidated native Playwright steps with bounded waits/assertions and concise per-step receipts (HTTP diagnostics are separate). On failure returns typed error without inline PNG; if screenshotOnFailure, retrieve exact image with browser_screenshot(source=last_failure). No auto-replay.",
+    description: "Run up to 64 prevalidated native Playwright steps, including drag_to with a required destination, with bounded waits/assertions and concise per-step receipts (HTTP diagnostics are separate). On failure returns typed error without inline PNG; if screenshotOnFailure, retrieve exact image with browser_screenshot(source=last_failure). No auto-replay.",
     inputSchema: {
       workspaceId: workspaceIdSchema,
       steps: z.array(scenarioStep).min(1).max(64),

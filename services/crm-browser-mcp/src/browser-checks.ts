@@ -44,7 +44,7 @@ export function safeAssertionValue(value: string | number | boolean): string | n
 /** One canonical list for the published scenario schema and DO validation. */
 export const SCENARIO_OPERATIONS = [
   "click", "double_click", "fill", "type", "select", "check",
-  "uncheck", "hover", "press", "scroll", "navigate", "reload",
+  "uncheck", "hover", "drag_to", "press", "scroll", "navigate", "reload",
   "back", "forward", "wait", "assert",
 ] as const;
 export type ScenarioOperation = (typeof SCENARIO_OPERATIONS)[number];
@@ -52,6 +52,7 @@ const scenarioSet: ReadonlySet<string> = new Set(SCENARIO_OPERATIONS);
 type ScenarioStep = {
   op: string;
   target?: unknown;
+  destination?: unknown;
   kind?: unknown;
   expected?: unknown;
   url?: unknown;
@@ -63,7 +64,7 @@ type ScenarioStep = {
   followPopup?: unknown;
 };
 const targetOperations: ReadonlySet<string> = new Set([
-  "click", "double_click", "fill", "type", "select", "check", "uncheck", "hover",
+  "click", "double_click", "fill", "type", "select", "check", "uncheck", "hover", "drag_to",
 ]);
 export function validateScenarioSteps(steps: readonly ScenarioStep[] | undefined, validateNavigation?: (url: string) => void): void {
   if (!steps || steps.length === 0 || steps.length > 64) {
@@ -81,11 +82,22 @@ export function validateScenarioSteps(steps: readonly ScenarioStep[] | undefined
           (step.op !== "click" && step.op !== "double_click"))) {
       throw new Error("BROWSER_RUN_INVALID_POPUP_FOLLOW");
     }
-    const target = step.target;
-    if (typeof target === "object" && target !== null &&
-        "frameIndex" in target && "frameSelector" in target &&
-        target.frameIndex !== undefined && target.frameSelector !== undefined) {
-      throw new Error("BROWSER_RUN_FRAME_TARGET_CONFLICT");
+    // A drag has exactly one source and one destination. Reject a malformed
+    // late drag before an earlier mutation is executed by the scenario runner.
+    if (step.op === "drag_to") {
+      if (typeof step.destination !== "object" || step.destination === null ||
+          !("kind" in step.destination) || !("value" in step.destination)) {
+        throw new Error("BROWSER_RUN_DRAG_DESTINATION_REQUIRED");
+      }
+    } else if (step.destination !== undefined) {
+      throw new Error("BROWSER_RUN_UNEXPECTED_DRAG_DESTINATION");
+    }
+    for (const target of [step.target, step.destination]) {
+      if (typeof target === "object" && target !== null &&
+          "frameIndex" in target && "frameSelector" in target &&
+          target.frameIndex !== undefined && target.frameSelector !== undefined) {
+        throw new Error("BROWSER_RUN_FRAME_TARGET_CONFLICT");
+      }
     }
     if (step.op === "assert") {
       // Validate types BEFORE previous clicks. A bad expected count/boolean or

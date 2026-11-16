@@ -49,6 +49,7 @@ export type Command = {
   workspaceId?: string; // MCP routing only; stripped before sending to this DO.
   url?: string;
   target?: Target;
+  destination?: Target;
   text?: string;
   key?: string;
   checked?: boolean;
@@ -1294,6 +1295,7 @@ export class CrmBrowserSession extends DurableObject<Env> {
       case "check":
       case "uncheck":
       case "hover":
+      case "drag_to":
       case "type": {
         if (!command.target) throw new Error("CRM_BROWSER_TARGET_REQUIRED");
         if (command.followPopup &&
@@ -1324,6 +1326,14 @@ export class CrmBrowserSession extends DurableObject<Env> {
           else if (command.op === "check") await locator.check({ timeout: operationTimeout(12_000, runDeadline) });
           else if (command.op === "uncheck") await locator.uncheck({ timeout: operationTimeout(12_000, runDeadline) });
           else if (command.op === "hover") await locator.hover({ timeout: operationTimeout(12_000, runDeadline) });
+          else if (command.op === "drag_to") {
+            if (!command.destination) throw new Error("BROWSER_DRAG_DESTINATION_REQUIRED");
+            // Official Playwright performs a real HTML5 drag gesture. The
+            // page owns drag/drop events; do not synthesize DOM events or CDP.
+            await locator.dragTo(this.target(command.destination), {
+              timeout: operationTimeout(12_000, runDeadline),
+            });
+          }
           else if (command.op === "type") await locator.pressSequentially(command.text ?? "", { timeout: operationTimeout(12_000, runDeadline) });
         } finally {
           this.acceptingDialog = false;
