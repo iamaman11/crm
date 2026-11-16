@@ -2,3 +2,6 @@
 .sections {display:grid;gap:1rem;}
 .actions {display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;}
 .output {white-space:pre-wrap;overflow-wrap:anywhere;}
+.boardDropReady {outline:2px dashed currentColor;outline-offset:4px;border-radius:.5rem;}
+.dealDragHandle {display:inline-flex;cursor:grab;user-select:none;padding:.3rem .5rem;margin-bottom:.4rem;border:1px dashed currentColor;border-radius:.35rem;}
+.dealDragHandle:active {cursor:grabbing;}
