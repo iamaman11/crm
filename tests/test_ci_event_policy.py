@@ -131,6 +131,9 @@ jobs:
             (original.replace("'**/*.md'", "'apps/**'"), "CRM may ignore only **/*.md documentation"),
             (original.replace("    paths-ignore:", "    paths:"), "CRM may ignore only **/*.md documentation"),
             (original.replace("cancel-in-progress: false", "cancel-in-progress: true"), "CRM must not cancel an active release"),
+            (original.replace("python scripts/crm-module-coverage.py",
+                              "python scripts/generate_repository_navigation.py --check\n          python scripts/crm-module-coverage.py"),
+             "CRM CI must not validate Markdown documentation"),
             (original.replace("concurrency:\n", "  pull_request:\n    branches:\n      - dev\nconcurrency:\n", 1), "CRM uses one dev pipeline, not duplicate pull_request builds"),
             (original.replace("      - dev\n", "      - dev\n      - experimental\n", 1), "push must be restricted to branch dev"),
         )

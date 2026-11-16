@@ -1,7 +1,8 @@
 // Full generated binary Connect contract and actual React against signed workerd/D1.
 import {spawn,execFileSync} from "node:child_process";
 import {generateKeyPairSync,createSign,randomUUID,createHash} from "node:crypto";
-import {mkdtempSync,rmSync,writeFileSync} from "node:fs";
+import {mkdtempSync,rmSync,writeFileSync,readdirSync} from "node:fs";
+import {DatabaseSync} from "node:sqlite";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -25,8 +26,40 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-connect-"));
 const base="http://127.0.0.1:18789";
-let child,stderr="",workerReady=false;
+let child,stderr="",workerReady=false,fixtureDb;
 const successfulCalls=new Set();
+// Wrangler migrations and initial fixture seed run BEFORE the Worker starts.
+// For live SQL readback and deliberate fault injection, attach one native SQLite
+// connection to the same persisted D1. A separate 'wrangler d1 execute --local'
+// spawns another Miniflare and can restart a Worker during an unknown POST.
+const openFixtureDb=()=>{
+ const pending=[join(data,"v3","d1")],files=[];
+ while(pending.length){
+   const directory=pending.pop();
+   for(const entry of readdirSync(directory,{withFileTypes:true})){
+     const path=join(directory,entry.name);
+     if(entry.isDirectory())pending.push(path);
+     else if(entry.isFile()&&entry.name.endsWith(".sqlite"))files.push(path);
+   }
+ }
+ const candidates=[];
+ for(const path of files){
+   const db=new DatabaseSync(path,{timeout:15000});
+   if(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='crm_party_records'").get()){
+     candidates.push(db);
+   }else db.close();
+ }
+ assert.equal(candidates.length,1,"expected one initialized native D1 SQLite store");
+ fixtureDb=candidates[0];
+ fixtureDb.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=15000;");
+ assert.equal(fixtureDb.prepare("SELECT COUNT(*) AS n FROM crm_tenants").get().n,2,
+   "the D1 native fixture must contain the exact two test tenants");
+};
+const sql=query=>{
+ assert.ok(fixtureDb,"D1 fixture is not initialized");
+ const statement=fixtureDb.prepare(query);
+ return statement.columns().length?statement.all().map(row=>({...row})):(statement.run(),[]);
+};
 const rpcFetch=async(path,options)=>{
  // Keep every CI RPC on a fresh HTTP connection. Workerd may close an idle
  // socket between requests; reusing that socket fails with UND_ERR_SOCKET.
@@ -57,7 +90,18 @@ const rpcFetch=async(path,options)=>{
  }
  if(path.startsWith("/crm.")&&response.ok)successfulCalls.add(path);
  if(path.startsWith("/crm.")&&!response.ok){
-   const error=await response.clone().json();
+   const raw=await response.clone().text();
+   let error;
+   try{error=JSON.parse(raw);}
+   catch{
+     const evidence={event:"crm.native-ci.non-connect-response",path,
+       method:options?.method??"GET",status:response.status,
+       content_type:response.headers.get("content-type"),
+       body_excerpt:raw.slice(0,600),worker_exit:child?.exitCode??null,
+       worker_signal:child?.signalCode??null,stderr_tail:stderr.slice(-1200)};
+     console.error(JSON.stringify(evidence));
+     throw new Error("Non-Connect RPC response: "+JSON.stringify(evidence));
+   }
    assert.equal(response.headers.get("x-crm-error-code"),error.code,
      "RPC diagnostics must preserve the actual Connect error code");
  }
@@ -67,8 +111,7 @@ const sourceSha=execFileSync("git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).t
 assert.equal(process.env.CRM_SOURCE_SHA,sourceSha,"runtime evidence must identify tested checkout");
 assert.ok(process.env.CRM_RPC_RUNTIME_PROOF,"CI runtime output path required");
 const run=(args)=>execFileSync("npx",["wrangler",...args],{cwd,encoding:"utf8"});
-const sql=(query)=>JSON.parse(run(["d1","execute","crm-rust-party-local","--local",
-  "--persist-to",data,"--json","--command",query]))[0].results;
+// SQL fixture access is native, using the single previously created D1 file.
 const partySnapshot=()=>sql("SELECT "+
   "(SELECT json_group_array(json_array(tenant,id,state,version,actor)) FROM crm_party_records) AS states,"+
   "(SELECT COUNT(*) FROM crm_party_receipts) AS receipts,"+
@@ -109,6 +152,7 @@ try{
      "',1,'fixture-key-01','fixture-digest-01',NULL,'native-a@example.test');"]);
  // Wrangler's applied-migration ledger must prevent a second reset.
  run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
+ openFixtureDb();
  child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
   "--var","CRM_NATIVE_CI_JWKS:"+jwks,"--var","GIT_SHA:"+sourceSha],
   {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
@@ -2407,5 +2451,6 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    try{process.kill(-child.pid,"SIGKILL");}catch(e){if(e.code!=="ESRCH")throw e;}
    child.stderr.destroy();child.unref();
  }
+ if(fixtureDb){fixtureDb.close();fixtureDb=undefined;}
  rmSync(data,{recursive:true,force:true});
 }

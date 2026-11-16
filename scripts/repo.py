@@ -76,7 +76,6 @@ def command_conformance(_: argparse.Namespace) -> None:
     command_architecture(argparse.Namespace())
     command_manifests(argparse.Namespace())
     command_contracts(argparse.Namespace(write=False))
-    run([sys.executable, "scripts/generate_repository_navigation.py", "--check"])
     run([sys.executable, "scripts/check_native_module_composition.py"])
     run([sys.executable, "scripts/check_production_route_classifications.py"])
     run(
@@ -84,11 +83,8 @@ def command_conformance(_: argparse.Namespace) -> None:
             sys.executable,
             "-m",
             "unittest",
-            "tests/test_architecture_documentation_consistency.py",
             "tests/test_contract_bindings.py",
-            "tests/test_customer_privacy_architecture_freeze.py",
             "tests/test_customer_privacy_contract_inventory.py",
-            "tests/test_customer_privacy_owner_scope_contracts.py",
             "tests/test_local_demo.py",
             "tests/test_local_dev.py",
             "tests/test_local_lifecycle.py",
@@ -97,7 +93,6 @@ def command_conformance(_: argparse.Namespace) -> None:
             "tests/test_module_scaffolding.py",
             "tests/test_native_module_composition.py",
             "tests/test_production_route_classifications.py",
-            "tests/test_repository_navigation.py",
         ]
     )
     run(

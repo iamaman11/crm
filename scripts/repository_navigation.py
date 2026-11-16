@@ -540,12 +540,15 @@ def packet_check(root: Path, base_ref: str) -> dict[str, Any]:
     base_ref = _text(base_ref, "base_ref")
     base_sha = _git(root, "rev-parse", base_ref)
     affected = build_report(root, base_ref)
-    paths = list(affected.get("changed_paths") or [])
+    # Markdown is non-normative and maintained in Issues. Even mixed code/docs
+    # pushes must be checked exclusively against machine-readable inputs.
+    paths = [path for path in (affected.get("changed_paths") or [])
+             if not path.lower().endswith(".md")]
     forbidden, disallowed = evaluate_path_policy(
         paths, packet["allowed_paths"], packet["forbidden_paths"]
     )
-    stale = stale_generated_documents(root)
     # Packet declares the actual PR target, never a stale promotion SHA.
+    # Generated Markdown freshness is no longer a CI requirement.
     target = packet["baseline"]["ref"]
     accepted = base_ref in (target, "origin/" + target, "refs/heads/" + target)
     mode = target if accepted else "unrecognized"
@@ -554,7 +557,6 @@ def packet_check(root: Path, base_ref: str) -> dict[str, Any]:
         blockers.append(f"unrecognized packet base {base_ref}; expected {target} or origin/{target}")
     blockers.extend(f"forbidden path changed: {path}" for path in forbidden)
     blockers.extend(f"path outside packet: {path}" for path in disallowed)
-    blockers.extend(f"generated navigation is stale: {path}" for path in stale)
     report = {
         "schema_version": NAVIGATION_SCHEMA,
         "packet_id": packet["packet_id"],
@@ -570,7 +572,6 @@ def packet_check(root: Path, base_ref: str) -> dict[str, Any]:
         "changed_categories": _changed_categories(paths),
         "affected_packages": affected.get("affected_packages") or [],
         "selected_workflows": affected.get("selected_workflows") or [],
-        "generated_stale_paths": stale,
         "blockers": blockers,
         "ok": not blockers,
     }

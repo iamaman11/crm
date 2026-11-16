@@ -122,6 +122,15 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
                     break
         if filters != ["*.md", "**/*.md"] or "    paths:" in push_section:
             errors.append("CRM may ignore only **/*.md documentation")
+        forbidden_document_gates = (
+            "tests.test_repository_navigation",
+            "tests.test_architecture_documentation_consistency",
+            "generate_repository_navigation.py --check",
+            "docs/ACTIVE_PACKET.md",
+            "docs/generated/REPOSITORY_MAP.md",
+        )
+        if any(gate in "\n".join(lines) for gate in forbidden_document_gates):
+            errors.append("CRM CI must not validate Markdown documentation")
 
     concurrency = _top_level_block(lines, "concurrency")
     if concurrency is None:
