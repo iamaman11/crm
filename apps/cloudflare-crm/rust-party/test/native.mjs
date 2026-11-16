@@ -1680,8 +1680,9 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
  assert.equal((await privacy("SubmitPrivacyCase",tenantB,submit)).body.code,"not_found");
  assert.equal((await privacy("SubmitPrivacyCase",admin,{
-   ...submit,precondition:{expectedVersion:1n,idempotencyKey:"privacy-audit-denied-stale"}
- })).body.code,"aborted");
+   ...submit,precondition:{expectedVersion:1n,idempotencyKey:"privacy-audit-denied-terminal"}
+ })).body.code,"failed_precondition",
+   "A cancelled case must reject a second Submit before version conflict");
  assert.deepEqual(privacySnapshot(),privacyBeforeDenials,
    "Denied, cross-tenant and stale Privacy writes cannot alter state, receipts or audit");
  // Reject audit INSERT after the owner wrote state and receipt.
