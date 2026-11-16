@@ -1584,6 +1584,29 @@ const filteredSales=await collectPages(salesV2,"ListDeals","deals",{
 assert.deepEqual(filteredSales.map(x=>x.dealId),[dealId,dealLast]);
 assert.equal((await collectPages(salesV2,"ListDeals","deals",{
   pipelineId:"pipeline.other"})).length,1);
+// A non-UI test pipeline has more than one board page. The server count must
+// be 27, not the 25 records rendered in a stage column.
+for(let index=0;index<26;index++){
+  const created=await salesV2("CreateDeal",admin,{
+    dealId:"r7-overflow-"+String(index).padStart(2,"0"),name:"Pagination Deal "+index,
+    accountId,stage:{pipelineId:"pipeline.other",stageId:"lead",ordinal:1},
+    probabilityBasisPoints:1000,
+    precondition:{idempotencyKey:"r7-stage-pagination-"+index}
+  });
+  assert.equal(created.status,200,describeProtobuf(created.body));
+}
+const overflow=await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.other",stageId:"lead",page:{pageSize:25}});
+assert.equal(overflow.status,200,describeProtobuf(overflow.body));
+assert.equal(overflow.body.totalCount,27n,"board count must include all 27, not the page");
+assert.equal(overflow.body.deals.length,25);
+assert.ok(overflow.body.pageInfo?.nextPageToken);
+const overflowLast=await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.other",stageId:"lead",
+  page:{pageSize:25,pageToken:overflow.body.pageInfo.nextPageToken}});
+assert.equal(overflowLast.status,200);
+assert.equal(overflowLast.body.deals.length,2);
+assert.equal(overflowLast.body.totalCount,27n);
 const stageCount=await salesV2("ListStageDeals",viewer,{
   pipelineId:"pipeline.enterprise",stageId:"lead",page:{pageSize:1}});
 assert.equal(stageCount.status,200,describeProtobuf(stageCount.body));
