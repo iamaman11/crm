@@ -1484,8 +1484,18 @@ const stageLead={pipelineId:"pipeline.enterprise",stageId:"lead",ordinal:1};
 const stageQualified={pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:2};
 const saleCreate={dealId,name:"Connect Deal",accountId,
   stage:{...stageLead,ordinal:999},amount:{minorUnits:12500n,currencyCode:"USD"},
-  probabilityBasisPoints:2500,
+  probabilityBasisPoints:2500,primaryContactId:contactId,
+  expectedCloseDate:{year:2027,month:2,day:28},
   precondition:{idempotencyKey:"connect-sales-create-main"}};
+const foreignSaleContactId="sales-contact-foreign-"+randomUUID();
+const foreignSaleContact=await contactV2("CreateContactPoint",admin,{
+  contactPointId:foreignSaleContactId,partyId:pagingPersonId,kind:1,
+  value:"sales-foreign@example.test",preferred:false,
+  precondition:{idempotencyKey:"connect-r72-foreign-contact-create"}
+});
+assert.equal(foreignSaleContact.status,200,describeProtobuf(foreignSaleContact.body));
+const denialAuditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+dealId+"'")[0].n;
 assert.equal((await salesV2("CreateDeal",null,saleCreate)).status,401);
 assert.equal((await salesV2("CreateDeal",viewer,saleCreate)).status,403);
 assert.equal((await salesV2("CreateDeal",admin,{
@@ -1503,6 +1513,21 @@ assert.equal((await salesV2("CreateDeal",admin,{
 assert.equal((await salesV2("CreateDeal",admin,{
   ...saleCreate,precondition:{idempotencyKey:"connect-sales-create-invalid-version",
     expectedVersion:1n}})).status,400);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,primaryContactId:foreignSaleContactId,
+  precondition:{idempotencyKey:"connect-r72-foreign-contact-create-denied"}
+})).status,400,"a ContactPoint owned by another Party cannot be attached to this Account");
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,primaryContactId:"foreign-tenant-contact-id",
+  precondition:{idempotencyKey:"connect-r72-missing-contact-denied"}
+})).status,400);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,expectedCloseDate:{year:2027,month:2,day:29},
+  precondition:{idempotencyKey:"connect-r72-bad-leapdate-denied"}
+})).status,400,"calendar validation must be in original Rust, not a JS Date");
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+dealId+"'")[0].n,denialAuditBefore,
+  "invalid Contact/CalendarDate must not create a Deal or append audit");
 const salesCreated=await salesV2("CreateDeal",admin,saleCreate);
 assert.equal(salesCreated.status,200,describeProtobuf(salesCreated.body));
 assert.equal(salesCreated.body.deal?.dealId,dealId);
@@ -1512,6 +1537,10 @@ assert.equal(salesCreated.body.deal?.stage?.ordinal,1,
 assert.equal(salesCreated.body.deal?.amount?.minorUnits,12500n);
 assert.equal(salesCreated.body.deal?.amount?.currencyCode,"USD");
 assert.equal(salesCreated.body.deal?.status,1);
+assert.equal(salesCreated.body.deal?.primaryContactId,contactId);
+assert.deepEqual(salesCreated.body.deal?.expectedCloseDate,{year:2027,month:2,day:28});
+assert.ok(salesCreated.body.deal?.createdAt);
+assert.ok(salesCreated.body.deal?.updatedAt);
 assert.equal(salesCreated.body.receipt?.resourceVersion,1n);
 assert.equal(salesCreated.body.receipt?.replayed,false);
 assert.equal(salesCreated.body.receipt?.requestId,salesCreated.headers.get("x-request-id"));
@@ -1527,6 +1556,8 @@ const updateSale={dealId,
   name:{operation:{case:"set",value:"Updated Connect Deal"}},
   amount:{operation:{case:"set",value:{minorUnits:98765n,currencyCode:"PLN"}}},
   probabilityBasisPoints:6750,
+  primaryContactId:{operation:{case:"clear",value:true}},
+  expectedCloseDate:{operation:{case:"set",value:{year:2028,month:2,day:29}}},
   precondition:{expectedVersion:1n,idempotencyKey:"connect-sales-update-main"}};
 assert.equal((await salesV2("UpdateDeal",viewer,updateSale)).status,403);
 assert.equal((await salesV2("UpdateDeal",admin,{
@@ -1538,6 +1569,9 @@ assert.equal(saleUpdated.body.deal?.name,"Updated Connect Deal");
 assert.equal(saleUpdated.body.deal?.amount?.minorUnits,98765n);
 assert.equal(saleUpdated.body.deal?.amount?.currencyCode,"PLN");
 assert.equal(saleUpdated.body.deal?.probabilityBasisPoints,6750);
+assert.equal(saleUpdated.body.deal?.primaryContactId,"");
+assert.deepEqual(saleUpdated.body.deal?.expectedCloseDate,{year:2028,month:2,day:29});
+assert.ok(saleUpdated.body.deal?.updatedAt);
 assert.equal(saleUpdated.body.receipt?.resourceVersion,2n);
 assert.equal(saleUpdated.body.receipt?.replayed,false);
 const saleUpdateReplayed=await salesV2("UpdateDeal",admin,updateSale);
@@ -1545,6 +1579,22 @@ assert.equal(saleUpdateReplayed.status,200);
 assert.equal(saleUpdateReplayed.body.receipt?.replayed,true);
 assert.equal((await salesV2("UpdateDeal",admin,{
   ...updateSale,probabilityBasisPoints:100})).status,409);
+assert.equal((await salesV2("UpdateDeal",admin,{
+  dealId,primaryContactId:{operation:{case:"set",value:foreignSaleContactId}},
+  precondition:{expectedVersion:2n,idempotencyKey:"connect-r72-foreign-contact-update-denied"}
+})).status,400);
+assert.equal((await salesV2("UpdateDeal",admin,{
+  dealId,expectedCloseDate:{operation:{case:"set",value:{year:2027,month:13,day:1}}},
+  precondition:{expectedVersion:2n,idempotencyKey:"connect-r72-invalid-month-update"}
+})).status,400);
+assert.equal((await salesV2("GetDeal",viewer,{dealId})).body.deal?.version,2n);
+assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+dealId+"'")[0].n,2,
+  "failed sales contact/date updates do not append audit");
+console.log(JSON.stringify({event:"crm.native-r72-linked-contact-date",result:"PASS",
+  create_contact:true,create_expected_close_date:true,update_contact_clear:true,
+  leap_date_validated_in_rust:true,wrong_account_rejected:true,
+  missing_contact_rejected:true,cas_and_replay:true,audit_rollback:true}));
 const advanceSale={dealId,targetStage:stageQualified,targetStatus:1,
   precondition:{expectedVersion:2n,idempotencyKey:"connect-sales-advance-main"}};
 assert.equal((await salesV2("AdvanceStage",viewer,advanceSale)).status,403);
