@@ -2,6 +2,7 @@
 //! Stage progression, closing rules, money and version invariants belong to
 //! crm-sales and crm-core-contracts, never the test pilot's crm_deals model.
 use super::{bind, now_nanos};
+use std::collections::BTreeMap;
 use crm_core_contracts::{BasisPoints, CurrencyCode, Money, Patch};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef};
 use crm_sales::{
@@ -547,8 +548,16 @@ struct CountRow {
     total: i64,
 }
 
-/// The count is over the full bounded tenant/pipeline/stage filter, not merely
-/// the current 25 visible cards. Every column has an independent keyset cursor.
+/// Both count and currency sums refer to the full tenant/pipeline/stage filter,
+/// never the current page. Totals accumulate exactly in Rust because SQLite
+/// SUM(int64) can overflow and SUM(REAL) silently loses minor-unit precision.
+pub(super) struct StageCurrencyTotal {
+    pub currency_code: String,
+    pub total_minor_units: i128,
+    pub amount_deal_count: u64,
+}
+
+/// Every column has an independent keyset cursor.
 pub(super) struct StageListQuery<'a> {
     pub pipeline_id: &'a str,
     pub stage_id: &'a str,
@@ -561,7 +570,7 @@ pub(super) async fn list_stage_page(
     db: &D1Database,
     tenant: &str,
     query: StageListQuery<'_>,
-) -> Result<(Vec<Deal>, Option<String>, u64)> {
+) -> Result<(Vec<Deal>, Option<String>, u64, Vec<StageCurrencyTotal>)> {
     let StageListQuery {
         pipeline_id,
         stage_id,
@@ -598,6 +607,63 @@ pub(super) async fn list_stage_page(
         .ok_or_else(|| worker::Error::RustError("SALES_BOARD_COUNT_MISSING".into()))?;
     let total = u64::try_from(counted.total)
         .map_err(|_| worker::Error::RustError("SALES_BOARD_COUNT_INVALID".into()))?;
+
+    // One bounded D1 keyset batch at a time, with the SAME tenant, pipeline,
+    // stage, status and account predicates as total_count. Pagination cursor
+    // is intentionally excluded so every column page reports the same totals.
+    // The existing stage index supplies the filter/id scan; no summary table
+    // or independently mutated aggregate state is introduced.
+    const SUMMARY_BATCH: usize = 256;
+    let totals_sql = format!(
+        "SELECT id,state FROM crm_sales_deal_records WHERE {condition} AND json_type(state,'$.amount')='object' AND id>? ORDER BY id LIMIT ?"
+    );
+    let mut summary_after = String::new();
+    let mut summary = BTreeMap::<String, (i128, u64)>::new();
+    loop {
+        let mut summary_args = arguments.clone();
+        summary_args.push(JsValue::from_str(&summary_after));
+        summary_args.push(JsValue::from_f64(SUMMARY_BATCH as f64));
+        let rows = bind(db, &totals_sql, &summary_args)?
+            .all()
+            .await?
+            .results::<PagedRow>()?;
+        if rows.is_empty() {
+            break;
+        }
+        for row in &rows {
+            let deal = decode(&row.state)?;
+            let amount = deal.amount().ok_or_else(|| {
+                worker::Error::RustError("SALES_BOARD_AMOUNT_INVALID".into())
+            })?;
+            let total = summary
+                .entry(amount.currency().to_string())
+                .or_insert((0, 0));
+            total.0 = total.0.checked_add(amount.minor_units()).ok_or_else(|| {
+                worker::Error::RustError("SALES_BOARD_AMOUNT_OVERFLOW".into())
+            })?;
+            total.1 = total.1.checked_add(1).ok_or_else(|| {
+                worker::Error::RustError("SALES_BOARD_AMOUNT_COUNT_OVERFLOW".into())
+            })?;
+        }
+        let next_after = rows.last().ok_or_else(|| {
+            worker::Error::RustError("SALES_BOARD_SUMMARY_CURSOR_MISSING".into())
+        })?.id.clone();
+        if next_after <= summary_after {
+            return Err(worker::Error::RustError("SALES_BOARD_SUMMARY_CURSOR_INVALID".into()));
+        }
+        summary_after = next_after;
+        if rows.len() < SUMMARY_BATCH {
+            break;
+        }
+    }
+    let currency_totals = summary
+        .into_iter()
+        .map(|(currency_code, (total_minor_units, amount_deal_count))| StageCurrencyTotal {
+            currency_code,
+            total_minor_units,
+            amount_deal_count,
+        })
+        .collect();
     condition.push_str(" AND id>?");
     arguments.push(JsValue::from_str(after));
     arguments.push(JsValue::from_f64((limit + 1) as f64));
@@ -619,7 +685,7 @@ pub(super) async fn list_stage_page(
         .iter()
         .map(|item| decode(&item.state))
         .collect::<Result<Vec<_>>>()?;
-    Ok((deals, next, total))
+    Ok((deals, next, total, currency_totals))
 }
 
 pub(super) async fn list_page_typed(

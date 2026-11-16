@@ -168,10 +168,20 @@ message ListStageDealsRequest {
   optional string account_id = 5;
 }
 
+// Exact unconverted minor-unit sum for the whole filtered stage, never the
+// visible page. A decimal string supports totals greater than int64 without
+// floating point conversion or silently combining distinct currencies.
+message StageCurrencyTotal {
+  string currency_code = 1;
+  string total_minor_units = 2;
+  uint64 amount_deal_count = 3;
+}
+
 message ListStageDealsResponse {
   repeated Deal deals = 1;
   crm.core.v2.PageInfo page_info = 2;
   uint64 total_count = 3;
+  repeated StageCurrencyTotal currency_totals = 4;
 }
 
 service DealService {
