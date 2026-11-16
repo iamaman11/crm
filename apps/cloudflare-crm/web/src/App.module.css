@@ -1,7 +1,40 @@
-.board {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));gap:1rem;align-items:start;}
+.board {
+  display:grid;
+  grid-auto-flow:column;
+  grid-auto-columns:minmax(min(85vw,18rem),1fr);
+  gap:1rem;
+  align-items:stretch;
+  max-height:min(72vh,52rem);
+  padding:.35rem;
+  overflow:auto;
+  overscroll-behavior:contain;
+  scroll-padding:.75rem;
+}
+.boardColumn {min-width:0;}
+.boardStageDropTarget {
+  position:sticky;
+  top:.35rem;
+  z-index:2;
+  display:grid;
+  place-items:center;
+  min-height:2.75rem;
+  padding:.5rem;
+  margin:.4rem 0;
+  border:1px dashed var(--crm-border);
+  border-radius:var(--crm-radius);
+  background:var(--crm-surface);
+  color:var(--crm-text-muted);
+}
 .sections {display:grid;gap:1rem;}
 .actions {display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;}
 .output {white-space:pre-wrap;overflow-wrap:anywhere;}
-.boardDropReady {outline:2px dashed currentColor;outline-offset:4px;border-radius:.5rem;}
+.boardDropReady {outline:2px dashed var(--crm-accent);outline-offset:4px;border-radius:.5rem;}
+.boardDropReady .boardStageDropTarget {
+  border-color:var(--crm-accent);
+  color:var(--crm-accent-strong);
+}
 .dealDragHandle {display:inline-flex;cursor:grab;user-select:none;padding:.3rem .5rem;margin-bottom:.4rem;border:1px dashed currentColor;border-radius:.35rem;}
 .dealDragHandle:active {cursor:grabbing;}
+@media (pointer:coarse) {
+  .dealDragHandle {display:none;}
+}

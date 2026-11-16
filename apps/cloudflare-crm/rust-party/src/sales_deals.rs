@@ -74,6 +74,15 @@ struct PagedRow {
     id: String,
     state: String,
 }
+
+// Only this indexed money projection is needed for a full-stage summary.
+// Do not deserialize an entire original Deal for every one of 1000+ rows.
+#[derive(Deserialize)]
+struct StageMoneyRow {
+    id: String,
+    currency_code: String,
+    minor_units: String,
+}
 #[derive(Deserialize)]
 struct Receipt {
     digest: String,
@@ -615,7 +624,10 @@ pub(super) async fn list_stage_page(
     // or independently mutated aggregate state is introduced.
     const SUMMARY_BATCH: usize = 256;
     let totals_sql = format!(
-        "SELECT id,state FROM crm_sales_deal_records WHERE {condition} AND json_type(state,'$.amount')='object' AND id>? ORDER BY id LIMIT ?"
+        "SELECT id, json_extract(state,'$.amount.currency') AS currency_code, \
+         CAST(json_extract(state,'$.amount.minor_units') AS TEXT) AS minor_units \
+         FROM crm_sales_deal_records WHERE {condition} \
+         AND json_type(state,'$.amount')='object' AND id>? ORDER BY id LIMIT ?"
     );
     let mut summary_after = String::new();
     let mut summary = BTreeMap::<String, (i128, u64)>::new();
@@ -626,21 +638,27 @@ pub(super) async fn list_stage_page(
         let rows = bind(db, &totals_sql, &summary_args)?
             .all()
             .await?
-            .results::<PagedRow>()?;
+            .results::<StageMoneyRow>()?;
         if rows.is_empty() {
             break;
         }
         for row in &rows {
-            let deal = decode(&row.state)?;
-            let amount = deal
-                .amount()
-                .ok_or_else(|| worker::Error::RustError("SALES_BOARD_AMOUNT_INVALID".into()))?;
+            // Decode exact integer text, never SQLite SUM/REAL; reject invalid
+            // stored Money rather than silently returning misleading totals.
+            let units = row.minor_units.parse::<i128>().map_err(|_| {
+                worker::Error::RustError("SALES_BOARD_AMOUNT_INVALID".into())
+            })?;
+            if units < 0 {
+                return Err(worker::Error::RustError("SALES_BOARD_AMOUNT_INVALID".into()));
+            }
+            let currency = CurrencyCode::try_new(row.currency_code.clone())
+                .map_err(|e| worker::Error::RustError(e.code))?;
             let total = summary
-                .entry(amount.currency().to_string())
+                .entry(currency.to_string())
                 .or_insert((0, 0));
             total.0 = total
                 .0
-                .checked_add(amount.minor_units())
+                .checked_add(units)
                 .ok_or_else(|| worker::Error::RustError("SALES_BOARD_AMOUNT_OVERFLOW".into()))?;
             total.1 = total.1.checked_add(1).ok_or_else(|| {
                 worker::Error::RustError("SALES_BOARD_AMOUNT_COUNT_OVERFLOW".into())
