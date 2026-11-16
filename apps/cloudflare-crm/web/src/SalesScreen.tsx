@@ -41,7 +41,6 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const [selected,setSelected]=useState<Deal>();
   const [advance,setAdvance]=useState<Deal>();
   const [editorMode,setEditorMode]=useState<EditorMode>(null);
-  const [stageId,setStageId]=useState("");
   const [draftId,setDraftId]=useState(newId);
   const [pipelineEditor,setPipelineEditor]=useState<SalesPipeline|"new"|null>(null);
   const [pipelineDraftId,setPipelineDraftId]=useState(newId);
@@ -68,7 +67,6 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
       if(!value)throw Error("Сделка не найдена");
       setSelected(mode==="edit"?value:undefined);
       setAdvance(mode==="edit"?undefined:value);
-      setStageId("");
       setEditorMode(mode);mutation.changed();
     } catch(error) {await mutation.run(()=>Promise.reject(error));}
   };
@@ -102,7 +100,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
       <Button variant="secondary" onClick={()=>editPipeline()}>Создать воронку</Button>{" "}
       {activePipeline&&<Button variant="secondary" onClick={()=>editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
       <Button disabled={!activePipeline||!readyStage} onClick={()=>{
-        setSelected(undefined);setAdvance(undefined);setStageId(readyStage?.stageId??"");
+        setSelected(undefined);setAdvance(undefined);
         setEditorMode("create");mutation.changed();
       }}>Новая сделка</Button>
     </>}/>
@@ -230,7 +228,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
           });
         },async()=>{setEditorMode(null);setAdvance(undefined);await query.reload();});
       }}><FormGrid>{editorMode==="close"?<>
-        <p>Текущий этап сохраняется: {advancePipeline?.stage?.name??advance.stage?.stageId??"неизвестен"}.</p>
+        <p>Текущий этап сохраняется: {advancePipeline?.stages.find(s=>s.stageId===advance.stage?.stageId)?.name??advance.stage?.stageId??"неизвестен"}.</p>
         <SelectField label="Результат сделки" name="targetStatus" defaultValue={DealStatus.WON}>
           <option value={DealStatus.WON}>Выиграна</option>
           <option value={DealStatus.LOST}>Проиграна</option>
