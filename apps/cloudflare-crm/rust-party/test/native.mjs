@@ -25,9 +25,32 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-connect-"));
 const base="http://127.0.0.1:18789";
+let child,stderr="",workerReady=false;
 const successfulCalls=new Set();
 const rpcFetch=async(path,options)=>{
- const response=await globalThis.fetch(base+path,options);
+ let response;
+ try {response=await globalThis.fetch(base+path,options);}
+ catch(error) {
+   if(!workerReady)throw error; // Startup probes are expected to fail until Wrangler binds.
+   // No mutation retry: an interrupted Connect request can have an unknown outcome.
+   // A separate read-only probe distinguishes a closed keepalive connection
+   // from a stopped workerd process, without hiding the original failure.
+   let probe;
+   try {
+     const health=await globalThis.fetch(base+"/api/parties",{
+       method:"GET",headers:{connection:"close"}});
+     probe={reachable:true,status:health.status};
+     await health.arrayBuffer();
+   }catch(failure){probe={reachable:false,error:String(failure)};}
+   const evidence={event:"crm.native-ci.transport-failure",result:"FAIL",
+     method:options?.method??"GET",path,
+     process_exit:child?.exitCode??null,process_signal:child?.signalCode??null,
+     probe,stderr_tail:stderr.slice(-1200),
+     error:error instanceof Error?error.message:String(error),
+     cause:error instanceof Error&&error.cause?String(error.cause):null};
+   console.error(JSON.stringify(evidence));
+   throw new Error("Native workerd transport failure: "+JSON.stringify(evidence),{cause:error});
+ }
  if(path.startsWith("/crm.")&&response.ok)successfulCalls.add(path);
  if(path.startsWith("/crm.")&&!response.ok){
    const error=await response.clone().json();
@@ -62,7 +85,6 @@ function signedJwt(identityClaims){
 }
 const jwt=email=>signedJwt({sub:email,email});
 const serviceJwt=common_name=>signedJwt({sub:"",common_name});
-let child;
 try{
  run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
  run(["d1","execute","crm-rust-party-local","--local","--persist-to",data,
@@ -86,7 +108,6 @@ try{
  child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
   "--var","CRM_NATIVE_CI_JWKS:"+jwks,"--var","GIT_SHA:"+sourceSha],
   {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
- let stderr="";
  child.stderr.on("data",b=>stderr=(stderr+b.toString()).slice(-2500));
  let ready=false;
  for(let i=0;i<120;i++){
@@ -95,6 +116,7 @@ try{
    await new Promise(resolve=>setTimeout(resolve,250));
  }
  assert(ready,"native-ci not ready: "+stderr);
+ workerReady=true;
  async function call(path,token,method="GET"){
    const response=await rpcFetch(path,{method,
      headers:{...(token?{"cf-access-jwt-assertion":token}:{}),"content-type":"application/json"},
