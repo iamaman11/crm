@@ -25,7 +25,7 @@ async function allPipelines():Promise<SalesPipeline[]> {
   let cursor="";
   const seen=new Set<string>();
   do {
-    const page=await api.deals.listPipelines({page:{pageSize:100,pageToken:cursor}});
+    const page=await api.deals.listPipelines({page:{pageSize:100,pageToken:cursor},includeArchived:true});
     all.push(...page.pipelines);
     cursor=page.pageInfo?.nextPageToken??"";
     if(cursor&&seen.has(cursor))throw Error("Повторный курсор воронок");
@@ -54,7 +54,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const pipelines=pipelinesQuery.data??[];
   useEffect(()=>{
     if(!pipelineId&&pipelines.length) {
-      setPipelineId(pipelines[0]?.pipelineId??"");
+      setPipelineId((pipelines.find(p=>!p.archived)??pipelines[0])?.pipelineId??"");
     }
   },[pipelineId,pipelines]);
   const activePipeline=pipelines.find(p=>p.pipelineId===pipelineId);
@@ -106,8 +106,8 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   };
   const columns=activePipeline?.stages??[];
   const advancePipeline=pipelines.find(p=>p.pipelineId===advance?.stage?.pipelineId);
-  const nextStages=advancePipeline?.stages.filter(s=>!s.archived&&s.ordinal>(advance?.stage?.ordinal??0))??[];
-  const readyStage=activePipeline?.stages.find(s=>!s.archived);
+  const nextStages=!advancePipeline?.archived?advancePipeline?.stages.filter(s=>!s.archived&&s.ordinal>(advance?.stage?.ordinal??0))??[]:[];
+  const readyStage=!activePipeline?.archived?activePipeline?.stages.find(s=>!s.archived):undefined;
   return <>
     <PageHeader title="Сделки" description="Количество сделок по каждому этапу вычисляется на сервере. Колонки имеют независимую пагинацию." actions={<>
       <Button variant="secondary" onClick={()=>editPipeline()}>Создать воронку</Button>{" "}
