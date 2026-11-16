@@ -14,11 +14,53 @@ const token=required("CLOUDFLARE_API_TOKEN"),api="https://api.cloudflare.com/cli
 const worker="/workers/scripts/crm-dev",url="https://crm-dev.crm-5bd5e1e1.workers.dev",out="apps/cloudflare-crm/.release";
 const record=(name,v)=>{mkdirSync(out,{recursive:true});writeFileSync(join(out,name),JSON.stringify(v,null,2)+"\n");};
 const load=name=>JSON.parse(readFileSync(join(out,name),"utf8"));
-async function cf(path,method="GET",body){
-  const r=await fetch(api+path,{method,headers:{authorization:"Bearer "+token,...(body?{"content-type":"application/json"}:{})},...(body?{body:JSON.stringify(body)}:{})});
-  const j=await r.json();
-  if(!r.ok||!j.success)throw Error("Cloudflare "+method+" "+path+" HTTP "+r.status+" codes="+JSON.stringify((j.errors||[]).map(e=>e.code)));
+async function cf(path,method="GET",body,timeoutMs=0){
+  const r=await fetch(api+path,{method,
+    headers:{authorization:"Bearer "+token,...(body?{"content-type":"application/json"}:{})},
+    ...(body?{body:JSON.stringify(body)}:{}),
+    ...(timeoutMs?{signal:AbortSignal.timeout(timeoutMs)}:{})});
+  // The API can return an HTML edge error (502/503/524) instead of JSON.
+  // Never echo its body, request headers, Access credentials or bearer token.
+  const ray=r.headers.get("cf-ray");
+  let j;
+  try{j=await r.json();}
+  catch{
+    throw Object.assign(new Error("Cloudflare "+method+" "+path+
+      " HTTP "+r.status+" NON_JSON content_type="+
+      (r.headers.get("content-type")||"none").slice(0,80)+" cf_ray="+(ray||"none")),
+      {cfHttpStatus:r.status,cfRay:ray});
+  }
+  if(!r.ok||!j?.success)throw Object.assign(new Error(
+    "Cloudflare "+method+" "+path+" HTTP "+r.status+" cf_ray="+(ray||"none")+
+    " codes="+JSON.stringify((j?.errors||[]).map(e=>e.code))),
+    {cfHttpStatus:r.status,cfRay:ray});
   return j.result;
+}
+// Only explicitly read-only D1 audit SELECT and telemetry search are replayable.
+// Never retry a D1 mutation, Worker deploy, subdomain POST or an ambiguous
+// business request. A failing 401/403/400 or HTML 200 remains fail-closed.
+async function cfReadback(path,body){
+  const audit=path==="/d1/database/"+database+"/query"&&
+    typeof body?.sql==="string"&&/^SELECT\\b/i.test(body.sql.trim())&&
+    !body.sql.includes(";");
+  const traces=path==="/workers/observability/telemetry/query"&&
+    body?.view==="events"&&typeof body?.parameters?.needle?.value==="string";
+  if(!audit&&!traces)throw Error("CRM_READBACK_RETRY_NOT_READ_ONLY");
+  const target=audit?"d1-audit":"telemetry";
+  const started=Date.now();
+  for(let attempt=1;;attempt++){
+    try{return await cf(path,"POST",body,30000);}
+    catch(error){
+      const status=error?.cfHttpStatus;
+      const retryable=status===429||(typeof status==="number"&&status>=500&&status<=599)||
+        (status===undefined&&["TimeoutError","AbortError","TypeError"].includes(error?.name));
+      if(!retryable||attempt>=3||Date.now()-started>=90000)throw error;
+      const delayMs=Math.min(attempt*2500,5000);
+      console.log(JSON.stringify({event:"crm.cf-readback-retry",target,attempt,
+        http_status:status??"transport",cf_ray:error?.cfRay??null,delay_ms:delayMs}));
+      await new Promise(resolve=>setTimeout(resolve,delayMs));
+    }
+  }
 }
 function cmd(...args){const r=spawnSync("npx",args,{cwd:"apps/cloudflare-crm",stdio:"inherit"});if(r.status!==0)throw Error("Failed npx "+args.join(" "));}
 function paths(dir){return readdirSync(dir).flatMap(n=>{const p=join(dir,n);return statSync(p).isDirectory()?paths(p):[p];});}
@@ -330,7 +372,7 @@ async function verifyData(){
     mutationIds.add(write.request_id);
     assert.equal(requests.get(write.request_id)?.path,write.path);
     assert.equal(requests.get(write.request_id)?.status,200);
-    const result=await cf("/d1/database/"+database+"/query","POST",{
+    const result=await cfReadback("/d1/database/"+database+"/query",{
       sql:"SELECT action,subject_id,actor FROM crm_audit WHERE tenant_id=? AND request_id=? ORDER BY action,subject_id",
       params:[evidence.tenant,write.request_id]});
     assert.equal(result?.[0]?.success,true);
@@ -354,7 +396,7 @@ async function verifyData(){
     for(let i=0;i<pending.length;i+=4){
       const batch=pending.slice(i,i+4);
       const found=await Promise.all(batch.map(async entry=>{
-        const data=await cf("/workers/observability/telemetry/query","POST",{
+        const data=await cfReadback("/workers/observability/telemetry/query",{
           queryId:"crm-350-typed-browser",view:"events",
           timeframe:{from,to:Date.now()+1000},limit:20,
           parameters:{needle:{value:entry.request_id},filters:[
