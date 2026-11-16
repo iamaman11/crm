@@ -367,6 +367,11 @@ impl sale_wire::DealService for SalesV2Service {
             .ok_or_else(|| ConnectError::invalid_argument("target_stage required"))?;
         let (pipeline_id, stage_id) = Self::stage(stage);
         let status = Self::deal_status(input.target_status)?;
+        if !matches!(status, sales_deals::StatusInput::Open) {
+            return Err(ConnectError::invalid_argument(
+                "SALES_CLOSE_SEPARATE_ACTION_REQUIRED",
+            ));
+        }
         let advanced = sales_deals::advance_typed(
             sales_deals::StageInput {
                 expected_version: version.unwrap_or_default(),
@@ -388,6 +393,180 @@ impl sale_wire::DealService for SalesV2Service {
         RpcResponse::ok(sale_wire::AdvanceStageResponse {
             deal: Some(Self::convert(&advanced.saved.deal)?).into(),
             receipt: Some(self.receipt(&advanced.saved)).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn close_deal(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::CloseDealRequest>,
+    ) -> ServiceResult<sale_wire::CloseDealResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.deal_id)?;
+        let (key, version) = wire_precondition(input.precondition.as_option(), false)?;
+        let status = Self::deal_status(input.outcome)?;
+        if matches!(status, sales_deals::StatusInput::Open) {
+            return Err(ConnectError::invalid_argument(
+                "SALES_CLOSE_OUTCOME_REQUIRED",
+            ));
+        }
+        if input.reason_code.is_empty() {
+            return Err(ConnectError::invalid_argument(
+                "SALES_CLOSE_REASON_REQUIRED",
+            ));
+        }
+        let saved = sales_deals::close_typed(
+            sales_deals::CloseInput {
+                expected_version: version.unwrap_or_default(),
+                outcome: status,
+                reason_code: input.reason_code,
+            },
+            &key,
+            &self.d1()?,
+            &self.tenant,
+            &id,
+            &self.actor,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Sales original D1 close failed"))?
+        .map_err(Self::failed)?;
+        RpcResponse::ok(sale_wire::CloseDealResponse {
+            deal: Some(Self::convert(&saved.saved.deal)?).into(),
+            receipt: Some(self.receipt(&saved.saved)).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn reopen_deal(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::ReopenDealRequest>,
+    ) -> ServiceResult<sale_wire::ReopenDealResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.deal_id)?;
+        let (key, version) = wire_precondition(input.precondition.as_option(), false)?;
+        if input.reason_code.is_empty() {
+            return Err(ConnectError::invalid_argument(
+                "SALES_REOPEN_REASON_REQUIRED",
+            ));
+        }
+        let saved = sales_deals::reopen_typed(
+            sales_deals::ReopenInput {
+                expected_version: version.unwrap_or_default(),
+                reason_code: input.reason_code,
+            },
+            &key,
+            &self.d1()?,
+            &self.tenant,
+            &id,
+            &self.actor,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Sales original D1 reopen failed"))?
+        .map_err(Self::failed)?;
+        RpcResponse::ok(sale_wire::ReopenDealResponse {
+            deal: Some(Self::convert(&saved.deal)?).into(),
+            receipt: Some(self.receipt(&saved)).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn list_deal_events(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::ListDealEventsRequest>,
+    ) -> ServiceResult<sale_wire::ListDealEventsResponse> {
+        let id = Self::id(req.deal_id)?;
+        let size = if req.page.page_size == 0 {
+            25
+        } else {
+            req.page.page_size
+        };
+        if size > 100 {
+            return Err(ConnectError::invalid_argument("page_size exceeds 100"));
+        }
+        let before = if req.page.page_token.is_empty() {
+            i64::MAX
+        } else {
+            let parsed = req
+                .page
+                .page_token
+                .parse::<i64>()
+                .map_err(|_| ConnectError::invalid_argument("SALES_HISTORY_CURSOR_INVALID"))?;
+            if parsed <= 0 {
+                return Err(ConnectError::invalid_argument(
+                    "SALES_HISTORY_CURSOR_INVALID",
+                ));
+            }
+            parsed
+        };
+        let db = self.d1()?;
+        if sales_deals::load(&db, &self.tenant, &id)
+            .await
+            .map_err(|_| ConnectError::internal("Sales history owner lookup failed"))?
+            .is_none()
+        {
+            return Err(ConnectError::not_found("SALES_DEAL_NOT_FOUND"));
+        }
+        let (rows, next) = sales_deals::list_events(&db, &self.tenant, &id, before, size as usize)
+            .await
+            .map_err(|_| ConnectError::internal("Sales D1 history read failed"))?;
+        let events = rows
+            .into_iter()
+            .map(|row| {
+                let kind = match row.action.as_str() {
+                    "created" => sale_wire::DealEventKind::DEAL_EVENT_KIND_CREATED,
+                    "updated" => sale_wire::DealEventKind::DEAL_EVENT_KIND_UPDATED,
+                    "moved" => sale_wire::DealEventKind::DEAL_EVENT_KIND_MOVED,
+                    "closed" => sale_wire::DealEventKind::DEAL_EVENT_KIND_CLOSED,
+                    "reopened" => sale_wire::DealEventKind::DEAL_EVENT_KIND_REOPENED,
+                    _ => {
+                        return Err(ConnectError::internal(
+                            "invalid persisted Sales event action",
+                        ));
+                    }
+                };
+                let status = |value: &str| match value {
+                    "open" => Ok(sale_wire::DealStatus::DEAL_STATUS_OPEN),
+                    "won" => Ok(sale_wire::DealStatus::DEAL_STATUS_WON),
+                    "lost" => Ok(sale_wire::DealStatus::DEAL_STATUS_LOST),
+                    _ => Err(ConnectError::internal(
+                        "invalid persisted Sales event status",
+                    )),
+                };
+                let previous_status = match row.previous_status {
+                    Some(previous) => status(&previous)?,
+                    None => sale_wire::DealStatus::DEAL_STATUS_UNSPECIFIED,
+                };
+                Ok(sale_wire::DealEvent {
+                    deal_version: row.deal_version,
+                    kind: kind.into(),
+                    pipeline_id: row.pipeline_id,
+                    previous_stage_id: row.previous_stage_id.unwrap_or_default(),
+                    stage_id: row.stage_id,
+                    previous_status: previous_status.into(),
+                    status: status(&row.status)?.into(),
+                    reason_code: row.reason_code.unwrap_or_default(),
+                    actor: row.actor,
+                    request_id: row.request_id,
+                    occurred_at: Some(ContactPointV2Service::timestamp(row.occurred_at_unix_nanos))
+                        .into(),
+                    catalog_version: row.catalog_version.unwrap_or_default(),
+                    linked_task_id: row.linked_task_id.unwrap_or_default(),
+                    ..Default::default()
+                })
+            })
+            .collect::<std::result::Result<Vec<_>, ConnectError>>()?;
+        RpcResponse::ok(sale_wire::ListDealEventsResponse {
+            events,
+            page_info: Some(core_v2::PageInfo {
+                next_page_token: next.unwrap_or_default(),
+                ..Default::default()
+            })
+            .into(),
             ..Default::default()
         })
     }

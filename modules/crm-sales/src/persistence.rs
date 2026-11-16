@@ -337,7 +337,7 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{AdvanceDealStage, CreateDeal, StageTransitionPolicy};
+    use crate::domain::{CloseDeal, CreateDeal};
 
     fn deal() -> Deal {
         Deal::create(CreateDeal {
@@ -371,18 +371,11 @@ mod tests {
     fn round_trip_preserves_exact_state_and_schema_hash() {
         let mut value = deal();
         value
-            .advance_stage(AdvanceDealStage {
+            .close(CloseDeal {
                 expected_version: 1,
-                target_stage: DealStage::try_new(
-                    PipelineId::try_new("pipeline.enterprise").unwrap(),
-                    StageId::try_new("qualification").unwrap(),
-                    1,
-                )
-                .unwrap(),
-                target_status: DealStatus::Won,
-                close_reason_code: Some(ReasonCode::try_new("selected").unwrap()),
+                outcome: DealStatus::Won,
+                reason_code: ReasonCode::try_new("selected").unwrap(),
                 occurred_at_unix_nanos: 30,
-                policy: StageTransitionPolicy::default(),
             })
             .unwrap();
 

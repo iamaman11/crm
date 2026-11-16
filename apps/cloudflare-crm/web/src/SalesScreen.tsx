@@ -11,7 +11,7 @@ import {dealHref} from "./routes";
 import {minorUnits,decimalUnits,moneyText,basisPoints,percent} from "./money";
 import styles from "./App.module.css";
 
-type EditorMode="create"|"edit"|"advance"|"close"|null;
+type EditorMode="create"|"edit"|"advance"|"close"|"reopen"|null;
 type StageDraft={stageId:string;name:string;probability:string;archived:boolean};
 function stageDrafts(pipeline?:SalesPipeline):StageDraft[] {
   return pipeline?.stages.map(stage=>({
@@ -94,7 +94,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const refreshSales=async()=>{
     await Promise.all([query.reload(),allDealsQuery.reload()]);
   };
-  const open=async(dealId:string,mode:"edit"|"advance"|"close",droppedOn="")=>{
+  const open=async(dealId:string,mode:"edit"|"advance"|"close"|"reopen",droppedOn="")=>{
     try {
       const value=(await api.deals.getDeal({dealId})).deal;
       if(!value)throw Error("Сделка не найдена");
@@ -144,7 +144,8 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       <PageHeader title="Карточка сделки" actions={<a href="#sales">К списку сделок</a>}/>
       <DealDetails key={focusedDealId+":"+detailRevision} dealId={focusedDealId}
         onEdit={()=>void open(focusedDealId,"edit")}
-        onClose={()=>void open(focusedDealId,"close")}/>
+        onClose={()=>void open(focusedDealId,"close")}
+        onReopen={()=>void open(focusedDealId,"reopen")}/>
     </section>:<>
     <PageHeader title="Сделки" description="Сначала все сделки из всех воронок. Выберите воронку для Kanban: количество по этапам вычисляется на сервере, колонки имеют независимую пагинацию." actions={<>
       <Button variant="secondary" onClick={()=>void editPipeline()}>Создать воронку</Button>{" "}
@@ -187,13 +188,14 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           {pipeline&&<Button variant="secondary" onClick={()=>{setPipelineId(pipeline.pipelineId);setStageCursors({});}}>Открыть воронку</Button>}
           <p>{moneyText(deal.amount)} · {percent(deal.probabilityBasisPoints)}%</p>
           <p>{deal.status===DealStatus.OPEN?"Открыта":deal.status===DealStatus.WON?"Выиграна":"Проиграна"} · версия {deal.version.toString()}</p>
-          {deal.status===DealStatus.OPEN&&<>
+          {deal.status===DealStatus.OPEN?<>
             <Button variant="secondary" onClick={()=>void open(deal.dealId,"edit")}>Редактировать</Button>{" "}
             <Button variant="secondary" onClick={()=>void open(deal.dealId,"close")}>Завершить</Button>
-          </>}
+          </>:<Button variant="secondary" onClick={()=>void open(deal.dealId,"reopen")}>Открыть повторно</Button>}
           {expandedDeal===deal.dealId&&<DealDetails key={deal.dealId+":"+detailRevision}
             dealId={deal.dealId} onEdit={()=>void open(deal.dealId,"edit")}
-            onClose={()=>void open(deal.dealId,"close")}/>}
+            onClose={()=>void open(deal.dealId,"close")}
+             onReopen={()=>void open(deal.dealId,"reopen")}/>}
         </Card>;
       })}
       {!allDealsQuery.busy&&allDealsQuery.data?.deals.length===0&&
@@ -264,14 +266,15 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
             <p>Клиент: {d.accountId}</p>
             <p>{d.status===DealStatus.WON?"Выиграна":d.status===DealStatus.LOST?"Проиграна":
               d.status===DealStatus.OPEN?"Открыта":"Неизвестный статус"} · версия {d.version.toString()}</p>
-            {d.status===DealStatus.OPEN&&<>
+            {d.status===DealStatus.OPEN?<>
               <Button variant="secondary" onClick={()=>void open(d.dealId,"edit")}>Изменить сделку</Button>{" "}
               <Button variant="secondary" onClick={()=>void open(d.dealId,"advance")}>Изменить этап</Button>{" "}
               <Button variant="secondary" onClick={()=>void open(d.dealId,"close")}>Завершить сделку</Button>
-            </>}
+            </>:<Button variant="secondary" onClick={()=>void open(d.dealId,"reopen")}>Открыть повторно</Button>}
             {expandedDeal===d.dealId&&<DealDetails key={d.dealId+":"+detailRevision}
               dealId={d.dealId} onEdit={()=>void open(d.dealId,"edit")}
-              onClose={()=>void open(d.dealId,"close")}/>}
+              onClose={()=>void open(d.dealId,"close")}
+               onReopen={()=>void open(d.dealId,"reopen")}/>}
           </Card>)}
           {boardPage?.pageInfo?.nextPageToken&&<Button variant="secondary" disabled={query.busy}
             onClick={()=>setStageCursors(old=>({...old,[stage.stageId]:boardPage.pageInfo?.nextPageToken??""}))}>
@@ -355,27 +358,34 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
     </>}
 
     <RecordPanel open={editorMode!==null}
-      title={advance?(editorMode==="close"?"Завершить сделку: ":"Этап сделки: ")+advance.name:
+      title={advance?(editorMode==="close"?"Завершить сделку: ":
+         editorMode==="reopen"?"Повторно открыть сделку: ":"Этап сделки: ")+advance.name:
         selected?"Изменить сделку":"Новая сделка"}
       onClose={()=>{setEditorMode(null);setSelected(undefined);setAdvance(undefined);}}>
       {advance?<form key={advance.dealId+advance.version+droppedStageId} onChange={mutation.changed} onSubmit={e=>{
         e.preventDefault();const data=new FormData(e.currentTarget);
         void mutation.run(()=>{
-          const closing=editorMode==="close";
+          const precondition={idempotencyKey:mutation.key,expectedVersion:advance.version};
+          if(editorMode==="reopen")return api.deals.reopenDeal({
+            dealId:advance.dealId,reasonCode:field(data,"reason"),precondition
+          });
+          if(editorMode==="close")return api.deals.closeDeal({
+            dealId:advance.dealId,
+            outcome:enumValue(field(data,"targetStatus"),
+              [DealStatus.WON,DealStatus.LOST],"Результат сделки"),
+            reasonCode:field(data,"reason"),precondition
+          });
           const currentStage=advance.stage;
           if(!currentStage)throw Error("У сделки отсутствует текущий этап");
           const next=nextStages.find(s=>s.stageId===field(data,"nextStage"));
-          if(!closing&&!next)throw Error("Выберите доступный следующий этап");
+          if(!next)throw Error("Выберите доступный следующий этап");
           return api.deals.advanceStage({
             dealId:advance.dealId,
-            targetStage:closing?currentStage:{
-              pipelineId:currentStage.pipelineId,stageId:next?.stageId??"",
-              ordinal:next?.ordinal??0
+            targetStage:{
+              pipelineId:currentStage.pipelineId,stageId:next.stageId,
+              ordinal:next.ordinal
             },
-            targetStatus:closing?enumValue(field(data,"targetStatus"),
-              [DealStatus.WON,DealStatus.LOST],"Результат сделки"):DealStatus.OPEN,
-            ...(closing?{closeReasonCode:field(data,"reason")}:{}),
-            precondition:{idempotencyKey:mutation.key,expectedVersion:advance.version}
+            targetStatus:DealStatus.OPEN,precondition
           });
         },async()=>{setEditorMode(null);setAdvance(undefined);setDetailRevision(v=>v+1);await refreshSales();});
       }}><FormGrid>{editorMode==="close"?<>
@@ -385,6 +395,9 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           <option value={DealStatus.LOST}>Проиграна</option>
         </SelectField>
         <TextField label="Причина закрытия" name="reason" required/>
+      </>:editorMode==="reopen"?<>
+        <p>Вернуть сделку в текущий активный этап воронки.</p>
+        <TextField label="Причина повторного открытия" name="reason" required/>
       </>:<>
         <SelectField label="Следующий этап" name="nextStage"
           defaultValue={nextStages.some(s=>s.stageId===droppedStageId)?droppedStageId:nextStages[0]?.stageId??""} required>
@@ -394,7 +407,8 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
         {nextStages.length===0&&<p>Следующих этапов нет. Сделку можно завершить на текущем этапе.</p>}
       </>}</FormGrid>
         <Button type="submit" disabled={mutation.busy||editorMode==="advance"&&nextStages.length===0}>
-          {editorMode==="close"?"Завершить сделку":"Сохранить этап"}
+          {editorMode==="close"?"Завершить сделку":
+             editorMode==="reopen"?"Открыть повторно":"Сохранить этап"}
         </Button>{" "}
         <Button variant="secondary" type="button" onClick={()=>{setEditorMode(null);setAdvance(undefined);mutation.changed();}}>Отмена</Button>
       </form>:<form key={selected?selected.dealId+selected.version:draftId} onChange={mutation.changed} onSubmit={e=>{

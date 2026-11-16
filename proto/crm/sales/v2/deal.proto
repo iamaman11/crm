@@ -82,6 +82,61 @@ message AdvanceStageResponse {
   crm.core.v2.MutationReceipt receipt = 2;
 }
 
+// Explicit lifecycle commands: moving a stage never means closing a Deal.
+message CloseDealRequest {
+  string deal_id = 1;
+  DealStatus outcome = 2; // WON or LOST, never OPEN
+  string reason_code = 3;
+  crm.core.v2.MutationPrecondition precondition = 4;
+}
+message CloseDealResponse {
+  Deal deal = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message ReopenDealRequest {
+  string deal_id = 1;
+  string reason_code = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+message ReopenDealResponse {
+  Deal deal = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+// Immutable, tenant-scoped original Deal event stream. One event per version,
+// written atomically by D1 with the mutation receipt and signed audit.
+enum DealEventKind {
+  DEAL_EVENT_KIND_UNSPECIFIED = 0;
+  DEAL_EVENT_KIND_CREATED = 1;
+  DEAL_EVENT_KIND_UPDATED = 2;
+  DEAL_EVENT_KIND_MOVED = 3;
+  DEAL_EVENT_KIND_CLOSED = 4;
+  DEAL_EVENT_KIND_REOPENED = 5;
+}
+message DealEvent {
+  int64 deal_version = 1;
+  DealEventKind kind = 2;
+  string pipeline_id = 3;
+  string previous_stage_id = 4;
+  string stage_id = 5;
+  DealStatus previous_status = 6;
+  DealStatus status = 7;
+  string reason_code = 8;
+  string actor = 9;
+  string request_id = 10;
+  google.protobuf.Timestamp occurred_at = 11;
+  int64 catalog_version = 12;
+  string linked_task_id = 13;
+}
+message ListDealEventsRequest {
+  string deal_id = 1;
+  crm.core.v2.PageRequest page = 2;
+}
+message ListDealEventsResponse {
+  repeated DealEvent events = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
 message GetDealRequest {
   string deal_id = 1;
 }
@@ -217,6 +272,15 @@ service DealService {
   }
   rpc AdvanceStage(AdvanceStageRequest) returns (AdvanceStageResponse) {
     option idempotency_level = IDEMPOTENT;
+  }
+  rpc CloseDeal(CloseDealRequest) returns (CloseDealResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc ReopenDeal(ReopenDealRequest) returns (ReopenDealResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc ListDealEvents(ListDealEventsRequest) returns (ListDealEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc GetDeal(GetDealRequest) returns (GetDealResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
