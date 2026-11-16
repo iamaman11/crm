@@ -14,6 +14,7 @@ from scripts.repository_navigation import (
     explain_target,
     generated_documents,
     load_packet,
+    load_modules,
     packet_check,
     stale_generated_documents,
 )
@@ -73,6 +74,22 @@ class RepositoryNavigationTests(unittest.TestCase):
             first[REPOSITORY_MAP_PATH],
         )
         self.assertEqual(stale_generated_documents(ROOT), [])
+
+    def test_r7_pipeline_contracts_have_one_canonical_sales_owner(self) -> None:
+        sales = next(
+            module for module in load_modules(ROOT)
+            if module["module_id"] == "crm.sales"
+        )
+        bindings = {
+            capability["binding"]["rpc"]
+            for capability in sales["manifest"]["provides"]["capabilities"]
+            if capability["binding"]["kind"] == "protobuf_rpc"
+        }
+        for method in (
+            "CreatePipeline", "UpdatePipeline", "GetPipeline",
+            "ListPipelines", "ListStageDeals",
+        ):
+            self.assertIn("crm.sales.v2.DealService." + method, bindings)
 
     def test_module_and_capability_explanations_remain_resolvable(self) -> None:
         module = explain_target(ROOT, "crm.customer-privacy")
