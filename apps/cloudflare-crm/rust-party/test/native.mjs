@@ -1746,7 +1746,11 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const result=await enrichment("PublishProviderProfile",admin,{...profileInput,...bad});
    assert.equal(result.body.code,"invalid_argument",describeProtobuf(result.body));
  }
- const profileResult=await enrichment("PublishProviderProfile",admin,profileInput);
+ const profileResult=await enrichment("PublishProviderProfile",admin,profileInput,{
+   "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
+   "cf-access-authenticated-user-email":"forged@example.test",
+   "x-request-id":"forged-enrichment-request"
+ });
  assert.equal(profileResult.status,200,describeProtobuf(profileResult.body));
  const profileId=profileResult.body.profile.profileVersionId;
  assert.ok(profileId);
@@ -1754,7 +1758,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(profileResult.body.receipt.resourceVersion,1n);
  assert.equal(profileResult.body.receipt.requestId,profileResult.headers.get("x-request-id"));
  assert.equal(profileResult.body.receipt.replayed,false);
- assert.equal((await enrichment("PublishProviderProfile",admin,profileInput)).body.receipt.replayed,true);
+ assert.equal((await enrichment("PublishProviderProfile",knownService,profileInput)).body.receipt.replayed,true);
  assert.equal((await enrichment("PublishProviderProfile",admin,{...profileInput,retentionDays:31})).body.code,"aborted");
  assert.equal((await enrichment("GetProviderProfile",viewer,{profileVersionId:profileId})).body.profile.profileVersionId,profileId);
  assert.equal((await enrichment("GetProviderProfile",tenantB,{profileVersionId:profileId})).body.code,"not_found");
@@ -1765,7 +1769,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  };
  assert.equal((await enrichment("PublishMapping",tenantB,mappingInput)).body.code,"not_found");
  assert.equal((await enrichment("PublishMapping",admin,{...mappingInput,maximumSuggestionsPerResponse:0})).body.code,"invalid_argument");
- const mappingResult=await enrichment("PublishMapping",admin,mappingInput);
+ const mappingResult=await enrichment("PublishMapping",knownService,mappingInput);
  assert.equal(mappingResult.status,200,describeProtobuf(mappingResult.body));
  const mappingId=mappingResult.body.mapping.mappingVersionId;
  assert.equal(mappingResult.body.mapping.providerProfileVersionId,profileId);
@@ -1776,6 +1780,76 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    precondition:{idempotencyKey:"enrichment-profile-main"}})).body.code,"aborted");
  assert.equal((await enrichment("GetMapping",viewer,{mappingVersionId:mappingId})).body.mapping.mappingVersionId,mappingId);
  assert.equal((await enrichment("GetMapping",tenantB,{mappingVersionId:mappingId})).body.code,"not_found");
+ assert.deepEqual(sql("SELECT action,subject_id,request_id,actor FROM crm_audit WHERE "+
+   "tenant_id='tenant-a' AND subject_id IN ('"+profileId+"','"+mappingId+"') ORDER BY rowid"),[
+   {action:"customer_enrichment.profile_publish",subject_id:profileId,
+     request_id:profileResult.headers.get("x-request-id"),actor:"native-a@example.test"},
+   {action:"customer_enrichment.mapping_publish",subject_id:mappingId,
+     request_id:mappingResult.headers.get("x-request-id"),actor:"service:ci-fixture.access"},
+ ],"Immutable definition audit must retain each original signed Access actor and request");
+ assert.deepEqual(sql("SELECT created_by FROM crm_enrichment_profiles WHERE id='"+profileId+"'"),
+   [{created_by:"native-a@example.test"}]);
+ assert.deepEqual(sql("SELECT created_by FROM crm_enrichment_mappings WHERE id='"+mappingId+"'"),
+   [{created_by:"service:ci-fixture.access"}]);
+ const enrichmentSnapshot=()=>sql("SELECT "+
+   "(SELECT json_group_array(json_array(id,tenant,state,created_by)) "+
+   " FROM crm_enrichment_profiles ORDER BY id) AS profiles,"+
+   "(SELECT json_group_array(json_array(id,tenant,state,created_by)) "+
+   " FROM crm_enrichment_mappings ORDER BY id) AS mappings,"+
+   "(SELECT COUNT(*) FROM crm_enrichment_receipts) AS receipts,"+
+   "(SELECT COUNT(*) FROM crm_audit) AS audits");
+ const enrichmentBeforeDenials=enrichmentSnapshot();
+ for(const token of [null,viewer,unknownService]){
+   assert.ok((await enrichment("PublishProviderProfile",token,profileInput)).status>=400);
+   assert.ok((await enrichment("PublishMapping",token,mappingInput)).status>=400);
+ }
+ sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
+ assert.equal((await enrichment("PublishMapping",knownService,mappingInput)).status,401,
+   "Inactive service cannot replay a committed Enrichment mapping");
+ sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
+ assert.equal((await enrichment("PublishMapping",knownService,mappingInput)).status,403,
+   "Permission must precede replay of immutable mapping");
+ sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
+ assert.equal((await enrichment("PublishProviderProfile",tenantB,profileInput)).status,200,
+   "Separate tenant may publish its own independent immutable definition");
+ assert.equal((await enrichment("GetMapping",tenantB,{mappingVersionId:mappingId})).body.code,"not_found");
+ // The independent tenant write above must not modify tenant-a's source, receipts or audit.
+ assert.deepEqual(sql("SELECT created_by FROM crm_enrichment_profiles "+
+   "WHERE tenant='tenant-a' AND id='"+profileId+"'"),[
+   {created_by:"native-a@example.test"}
+ ]);
+ const tenantAEnrichment=()=>sql("SELECT "+
+   "(SELECT COUNT(*) FROM crm_enrichment_profiles WHERE tenant='tenant-a') AS profiles,"+
+   "(SELECT COUNT(*) FROM crm_enrichment_mappings WHERE tenant='tenant-a') AS mappings,"+
+   "(SELECT COUNT(*) FROM crm_enrichment_receipts WHERE tenant='tenant-a') AS receipts,"+
+   "(SELECT COUNT(*) FROM crm_audit WHERE tenant_id='tenant-a') AS audits");
+ assert.deepEqual(tenantAEnrichment(),[
+   {profiles:1,mappings:1,receipts:2,
+     audits:enrichmentBeforeDenials[0].audits-(
+       sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-b'")[0].n)}
+ ],"Tenant B must not mutate tenant A");
+ // Failing audit INSERT must roll back immutable definition + receipt, for both kinds.
+ // No test hook in production Worker; fixture trigger is installed only in isolated D1.
+ sql("CREATE TRIGGER fixture_fail_enrichment_audit BEFORE INSERT ON crm_audit "+
+   "WHEN NEW.action LIKE 'customer_enrichment.%' "+
+   "BEGIN SELECT RAISE(ABORT,'fixture enrichment audit failure'); END;");
+ const beforeAuditFailure=enrichmentSnapshot();
+ try{
+   assert.equal((await enrichment("PublishProviderProfile",admin,{
+     ...profileInput,retentionDays:37,
+     precondition:{idempotencyKey:"enrichment-profile-audit-failure"}
+   })).body.code,"aborted");
+   assert.equal((await enrichment("PublishMapping",knownService,{
+     ...mappingInput,providerResponseFieldPath:"organization.alternate_legal_name",
+     precondition:{idempotencyKey:"enrichment-mapping-audit-failure"}
+   })).body.code,"aborted");
+   assert.deepEqual(enrichmentSnapshot(),beforeAuditFailure,
+     "Audit failure must atomically roll back published state and receipt");
+ }finally{sql("DROP TRIGGER fixture_fail_enrichment_audit");}
+ console.log(JSON.stringify({event:"crm.native-r2a-enrichment-actor-audit",result:"PASS",
+   human_profile:true,service_mapping:true,cross_actor_replay:true,
+   forged_headers_ignored:true,authorization_before_replay:true,
+   tenant_ab:true,sql_failure_rollback:true,immutable_created_by:true}));
  for(const index of [1,2]){
    const published=await enrichment("PublishProviderProfile",admin,{
      ...profileInput,retentionDays:30+index,
@@ -1799,8 +1873,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_receipts WHERE tenant='tenant-a'")[0].n,6);
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_profiles WHERE tenant='tenant-a'")[0].n,3);
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_mappings WHERE tenant='tenant-a'")[0].n,3);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,enrichmentAuditBefore+6,
-   "only six immutable publishes write audit; replay, read and denials never write");
+ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,enrichmentAuditBefore+7,
+   "six tenant-a publishes and one isolated tenant-b publish write audit; replay and denials never do");
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_records")[0].n,partyCountBefore);
  console.log(JSON.stringify({event:"crm.native-enrichment-v2",result:"PASS",
    original_owner:"crm.customer-enrichment",immutable:true,tenant_ab:true,replay:true,

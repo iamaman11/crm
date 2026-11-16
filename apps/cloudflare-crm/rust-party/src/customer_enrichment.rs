@@ -1,6 +1,6 @@
 //! Original customer-enrichment immutable provider/mapping definitions.
 //! Configuration only: no provider network, credentials, responses or Party updates.
-use super::bind;
+use super::{access, bind};
 use crm_customer_enrichment::{
     MappingDraft, MappingNormalization, MappingVersion, ProviderProfileDraft,
     ProviderProfileVersion, RawPayloadPolicy, TargetField, decode_mapping_version_state,
@@ -104,10 +104,10 @@ pub(super) async fn publish_profile(
     input: ProfileInput,
     k: &str,
     db: &D1Database,
-    tenant: &str,
-    actor: &str,
+    actor: &access::Actor,
     trace: &str,
 ) -> Result<std::result::Result<Saved<ProviderProfileVersion>, Failure>> {
+    let tenant = actor.tenant.as_str();
     if !(8..=120).contains(&k.len()) {
         return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
@@ -147,7 +147,7 @@ pub(super) async fn publish_profile(
           JsValue::from_str(profile.version_id().as_str()),
           JsValue::from_str(&saved),JsValue::from_str(k),
           JsValue::from_str(&hash),JsValue::from_str(trace),
-          JsValue::from_str(actor)])?.run().await;
+          JsValue::from_str(&actor.identity)])?.run().await;
     if inserted.is_err() {
         // A race on the same key may have committed while we were inserting.
         if let Some(r) = receipt(db, tenant, k).await?
@@ -170,10 +170,10 @@ pub(super) async fn publish_mapping(
     input: MappingInput,
     k: &str,
     db: &D1Database,
-    tenant: &str,
-    actor: &str,
+    actor: &access::Actor,
     trace: &str,
 ) -> Result<std::result::Result<Saved<MappingVersion>, Failure>> {
+    let tenant = actor.tenant.as_str();
     if !(8..=120).contains(&k.len()) {
         return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
@@ -219,7 +219,7 @@ pub(super) async fn publish_mapping(
           JsValue::from_str(&input.provider_profile_version_id),
           JsValue::from_str(&saved),JsValue::from_str(k),
           JsValue::from_str(&hash),JsValue::from_str(trace),
-          JsValue::from_str(actor)])?.run().await;
+          JsValue::from_str(&actor.identity)])?.run().await;
     if inserted.is_err() {
         if let Some(r) = receipt(db, tenant, k).await?
             && r.kind == "mapping"

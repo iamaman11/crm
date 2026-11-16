@@ -5,8 +5,7 @@ use crm_customer_enrichment::{MappingVersion, ProviderProfileVersion, RawPayload
 
 pub(super) struct EnrichmentV2Service {
     pub(super) env: Arc<Env>,
-    pub(super) tenant: String,
-    pub(super) actor: String,
+    pub(super) actor: access::Actor,
     pub(super) request_id: String,
 }
 impl EnrichmentV2Service {
@@ -154,7 +153,6 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
             draft,
             &key,
             &self.d1()?,
-            &self.tenant,
             &self.actor,
             &self.request_id,
         )
@@ -187,7 +185,6 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
             draft,
             &key,
             &self.d1()?,
-            &self.tenant,
             &self.actor,
             &self.request_id,
         )
@@ -207,7 +204,7 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         req: ServiceRequest<'_, enrichment_wire::GetProviderProfileRequest>,
     ) -> ServiceResult<enrichment_wire::GetProviderProfileResponse> {
         Self::id(req.profile_version_id)?;
-        let value = owner::profile(&self.d1()?, &self.tenant, req.profile_version_id)
+        let value = owner::profile(&self.d1()?, &self.actor.tenant, req.profile_version_id)
             .await
             .map_err(|_| ConnectError::internal("profile D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("ENRICHMENT_PROVIDER_PROFILE_NOT_FOUND"))?;
@@ -223,7 +220,7 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         req: ServiceRequest<'_, enrichment_wire::GetMappingRequest>,
     ) -> ServiceResult<enrichment_wire::GetMappingResponse> {
         Self::id(req.mapping_version_id)?;
-        let value = owner::mapping(&self.d1()?, &self.tenant, req.mapping_version_id)
+        let value = owner::mapping(&self.d1()?, &self.actor.tenant, req.mapping_version_id)
             .await
             .map_err(|_| ConnectError::internal("mapping D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("ENRICHMENT_MAPPING_NOT_FOUND"))?;
@@ -239,7 +236,7 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         req: ServiceRequest<'_, enrichment_wire::ListProviderProfilesRequest>,
     ) -> ServiceResult<enrichment_wire::ListProviderProfilesResponse> {
         let size = Self::page(req.page.page_size, req.page.page_token)?;
-        let (items, next) = owner::profiles(&self.d1()?, &self.tenant, req.page.page_token, size)
+        let (items, next) = owner::profiles(&self.d1()?, &self.actor.tenant, req.page.page_token, size)
             .await
             .map_err(|_| ConnectError::internal("profile D1 list failed"))?;
         RpcResponse::ok(enrichment_wire::ListProviderProfilesResponse {
@@ -262,7 +259,7 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         req: ServiceRequest<'_, enrichment_wire::ListMappingsRequest>,
     ) -> ServiceResult<enrichment_wire::ListMappingsResponse> {
         let size = Self::page(req.page.page_size, req.page.page_token)?;
-        let (items, next) = owner::mappings(&self.d1()?, &self.tenant, req.page.page_token, size)
+        let (items, next) = owner::mappings(&self.d1()?, &self.actor.tenant, req.page.page_token, size)
             .await
             .map_err(|_| ConnectError::internal("mapping D1 list failed"))?;
         RpcResponse::ok(enrichment_wire::ListMappingsResponse {
