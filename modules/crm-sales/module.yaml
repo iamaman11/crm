@@ -75,6 +75,27 @@ provides:
         rpc: crm.sales.v2.DealService.AdvanceStage
         request: crm.sales.v2.AdvanceStageRequest
         response: crm.sales.v2.AdvanceStageResponse
+    - id: sales.deal.close
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CloseDeal
+        request: crm.sales.v2.CloseDealRequest
+        response: crm.sales.v2.CloseDealResponse
+    - id: sales.deal.reopen
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ReopenDeal
+        request: crm.sales.v2.ReopenDealRequest
+        response: crm.sales.v2.ReopenDealResponse
+    - id: sales.deal.history
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListDealEvents
+        request: crm.sales.v2.ListDealEventsRequest
+        response: crm.sales.v2.ListDealEventsResponse
     - id: sales.deal.get
       version: 2.0.0
       binding:
