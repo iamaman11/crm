@@ -117,6 +117,13 @@ provides:
         rpc: crm.sales.v2.DealService.ListPipelines
         request: crm.sales.v2.ListPipelinesRequest
         response: crm.sales.v2.ListPipelinesResponse
+    - id: sales.deal.list_by_stage
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListStageDeals
+        request: crm.sales.v2.ListStageDealsRequest
+        response: crm.sales.v2.ListStageDealsResponse
   events:
     - id: sales.deal.created
       version: 1.0.0

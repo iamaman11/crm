@@ -160,6 +160,20 @@ message ListPipelinesResponse {
   crm.core.v2.PageInfo page_info = 2;
 }
 
+message ListStageDealsRequest {
+  string pipeline_id = 1;
+  string stage_id = 2;
+  crm.core.v2.PageRequest page = 3;
+  optional DealStatus status = 4;
+  optional string account_id = 5;
+}
+
+message ListStageDealsResponse {
+  repeated Deal deals = 1;
+  crm.core.v2.PageInfo page_info = 2;
+  uint64 total_count = 3;
+}
+
 service DealService {
   rpc CreatePipeline(CreatePipelineRequest) returns (CreatePipelineResponse) {
     option idempotency_level = IDEMPOTENT;
@@ -171,6 +185,9 @@ service DealService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc ListPipelines(ListPipelinesRequest) returns (ListPipelinesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListStageDeals(ListStageDealsRequest) returns (ListStageDealsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc CreateDeal(CreateDealRequest) returns (CreateDealResponse) {

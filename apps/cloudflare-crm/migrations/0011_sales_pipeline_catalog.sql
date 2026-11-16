@@ -89,3 +89,12 @@ WHEN NEW.last_action='sales_deals.advance' BEGIN
     AND json_extract(s.value,'$.archived')=0
  ) THEN RAISE(ABORT,'SALES_DEAL_STAGE_NOT_IN_CATALOG') END;
 END;
+
+-- Stage-local keyset queries use a single tenant/pipeline/stage covering prefix.
+CREATE INDEX idx_crm_sales_board_stage
+ON crm_sales_deal_records(
+ tenant,
+ json_extract(state,'$.stage.pipeline_id'),
+ json_extract(state,'$.stage.stage_id'),
+ id
+);
