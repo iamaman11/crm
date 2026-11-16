@@ -78,6 +78,34 @@ const report=JSON.parse(readFileSync(reportPath,"utf8"));
 validateModuleReport(report);
 check(report.source_sha===execFileSync("git",["rev-parse","HEAD"],{cwd:repo,encoding:"utf8"}).trim(),
  "stale module inventory");
+// Fail fast on compiler policy drift before npm/Cargo or Cloudflare work.
+// This is an existing machine-readable governance policy, never Markdown.
+const rustPolicy=JSON.parse(read("rust-governance-policy.json")).supported_toolchain;
+const tomlScalar=(path,section,key)=>{
+  let current="",values=[];
+  for(const line of read(path).split(/\r?\n/)){
+    const heading=/^\[([^\]]+)\]\s*$/.exec(line);
+    if(heading){current=heading[1];continue;}
+    if(current!==section)continue;
+    const pair=/^\s*([a-z-]+)\s*=\s*"([^"]+)"\s*$/.exec(line);
+    if(pair?.[1]===key)values.push(pair[2]);
+  }
+  check(values.length===1,"exact TOML field required: "+path+" ["+section+"] "+key);
+  return values[0];
+};
+const compiler=tomlScalar("rust-toolchain.toml","toolchain","channel");
+check(/^\d+\.\d+\.\d+$/.test(rustPolicy?.channel)&&compiler===rustPolicy.channel,
+  "Rust toolchain and machine policy disagree");
+check(tomlScalar("rust-toolchain.toml","toolchain","profile")===rustPolicy.profile,
+  "Rust toolchain profile and policy disagree");
+check(tomlScalar("Cargo.toml","workspace.package","edition")===rustPolicy.edition&&
+  tomlScalar("Cargo.toml","workspace.package","rust-version")===rustPolicy.minimum_rust_version,
+  "Rust workspace and machine policy disagree");
+check(tomlScalar("apps/cloudflare-crm/rust-party/Cargo.toml","package","edition")===rustPolicy.edition&&
+  tomlScalar("apps/cloudflare-crm/rust-party/Cargo.toml","package","rust-version")===rustPolicy.minimum_rust_version,
+  "native Worker compiler boundary differs from workspace policy");
+check(read(".github/workflows/cloudflare-crm-spike.yml").includes(
+  "toolchain: "+compiler+"\n"),"CRM CI compiler drift from source toolchain");
 const appPackage=JSON.parse(read("apps/cloudflare-crm/package.json"));
 check(!!appPackage.dependencies?.["@ultimate-crm/client"]&&!!appPackage.dependencies?.["@ultimate-crm/ui"],
  "existing typed client and UI packages required");
