@@ -817,8 +817,7 @@ pub(super) fn router(env: Env, verified: &access::Actor, request_id: &str) -> Co
         }))
         .add_service(Arc::new(PrivacyV2Service {
             env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
-            actor: actor.to_owned(),
+            actor: verified.clone(),
             request_id: request_id.to_owned(),
         }))
         .add_service(Arc::new(SalesV2Service {

@@ -5,8 +5,7 @@ use crm_customer_privacy::{PrivacyCase, PrivacyCaseKind, PrivacyCaseStatus};
 
 pub(super) struct PrivacyV2Service {
     pub(super) env: Arc<Env>,
-    pub(super) tenant: String,
-    pub(super) actor: String,
+    pub(super) actor: access::Actor,
     pub(super) request_id: String,
 }
 impl PrivacyV2Service {
@@ -128,7 +127,6 @@ impl PrivacyV2Service {
             version,
             &key,
             &self.d1()?,
-            &self.tenant,
             &self.actor,
             &self.request_id,
         )
@@ -167,7 +165,6 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
             kind,
             &key,
             &self.d1()?,
-            &self.tenant,
             &self.actor,
             &self.request_id,
         )
@@ -227,7 +224,7 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
         req: ServiceRequest<'_, privacy_wire::GetPrivacyCaseRequest>,
     ) -> ServiceResult<privacy_wire::GetPrivacyCaseResponse> {
         let id = Self::id(req.case_id)?;
-        let case = customer_privacy::stored(&self.d1()?, &self.tenant, id.as_str())
+        let case = customer_privacy::stored(&self.d1()?, &self.actor.tenant, id.as_str())
             .await
             .map_err(|_| ConnectError::internal("PrivacyCase D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("PRIVACY_CASE_NOT_FOUND"))?;
@@ -255,7 +252,7 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
             Self::id(after)?;
         }
         let (cases, next) =
-            customer_privacy::list_page_typed(&self.d1()?, &self.tenant, after, size as usize)
+            customer_privacy::list_page_typed(&self.d1()?, &self.actor.tenant, after, size as usize)
                 .await
                 .map_err(|_| ConnectError::internal("PrivacyCase D1 list failed"))?;
         let cases = cases
