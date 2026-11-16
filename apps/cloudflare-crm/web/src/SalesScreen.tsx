@@ -35,6 +35,7 @@ async function allPipelines():Promise<SalesPipeline[]> {
 }
 export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const [stageCursors,setStageCursors]=useState<Record<string,string>>({});
+  const [accountCursor,setAccountCursor]=useState("");
   const [status,setStatus]=useState("");
   const [accountId,setAccountId]=useState(initialAccountId);
   const [pipelineId,setPipelineId]=useState("");
@@ -71,6 +72,20 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
       return {stageId:stage.stageId,...result};
     }));
   },[activePipeline,stageCursors,status,accountId]));
+  // Customer360 must include every Deal of the Account, not just the
+  // currently selected Kanban pipeline. This is the existing typed ListDeals
+  // read model with independent bounded keyset pagination, not another owner.
+  const accountDealsQuery=useQuery(useCallback(async()=>{
+    if(!accountId)return null;
+    const selectedStatus=status?enumValue(status,[DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"):undefined;
+    return api.deals.listDeals({
+      accountId,page:{pageSize:25,pageToken:accountCursor},
+      ...(selectedStatus!==undefined?{status:selectedStatus}:{})
+    });
+  },[accountId,accountCursor,status]));
+  const refreshSales=async()=>{
+    await Promise.all([query.reload(),accountDealsQuery.reload()]);
+  };
   const open=async(dealId:string,mode:"edit"|"advance"|"close")=>{
     try {
       const value=(await api.deals.getDeal({dealId})).deal;
@@ -127,12 +142,38 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
         {p.name}{p.archived?" (архив)":""}
       </option>)}
     </SelectField>
-    <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setStageCursors({});}}/>
+    <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setStageCursors({});setAccountCursor("");}}/>
     <SelectField label="Статус сделки" value={status} onChange={e=>{setStatus(e.target.value);setStageCursors({});}}>
       <option value="">Все</option><option value={DealStatus.OPEN}>Открытые</option>
       <option value={DealStatus.WON}>Выигранные</option><option value={DealStatus.LOST}>Проигранные</option>
     </SelectField>
     <QueryNotice query={query}/>
+    {accountId&&<section aria-label="Сделки клиента во всех воронках">
+      <h2>Все сделки клиента во всех воронках</h2>
+      <p>Независимый от выбранной доски список; показывает только текущую страницу, без выдуманного общего количества.</p>
+      <QueryNotice query={accountDealsQuery}/>
+      {accountDealsQuery.data?.deals.map(deal=>{
+        const pipeline=pipelines.find(p=>p.pipelineId===deal.stage?.pipelineId);
+        const stage=pipeline?.stages.find(s=>s.stageId===deal.stage?.stageId);
+        return <Card key={deal.dealId} title={deal.name}>
+          <p>Воронка: {pipeline?.name??deal.stage?.pipelineId??"неизвестна"} · Этап: {stage?.name??deal.stage?.stageId??"неизвестен"}</p>
+          <p>{moneyText(deal.amount)} · {percent(deal.probabilityBasisPoints)}%</p>
+          <p>{deal.status===DealStatus.OPEN?"Открыта":deal.status===DealStatus.WON?"Выиграна":"Проиграна"} · версия {deal.version.toString()}</p>
+          {deal.status===DealStatus.OPEN&&<>
+            <Button variant="secondary" onClick={()=>void open(deal.dealId,"edit")}>Редактировать</Button>{" "}
+            <Button variant="secondary" onClick={()=>void open(deal.dealId,"close")}>Завершить</Button>
+          </>}
+        </Card>;
+      })}
+      {!accountDealsQuery.busy&&accountDealsQuery.data?.deals.length===0&&<p>У клиента нет сделок для выбранного статуса.</p>}
+      {accountDealsQuery.data?.pageInfo?.nextPageToken&&
+        <Button variant="secondary" disabled={accountDealsQuery.busy}
+          onClick={()=>setAccountCursor(accountDealsQuery.data?.pageInfo?.nextPageToken??"")}>
+          Следующие сделки клиента
+        </Button>}
+      {accountCursor&&<Button variant="secondary" disabled={accountDealsQuery.busy}
+        onClick={()=>setAccountCursor("")}>К началу сделок клиента</Button>}
+    </section>}
     {activePipeline&&<div className={styles.board}>
       {columns.map(stage=>{
         const boardPage=query.data?.find(entry=>entry.stageId===stage.stageId);
@@ -191,7 +232,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
           setPipelineDirty(false);setPipelineEditor(null);
           await pipelinesQuery.reload();
           if(destination)setPipelineId(destination);
-          setStageCursors({});await query.reload();
+          setStageCursors({});await refreshSales();
         });
       }}>
         <TextField label="Название воронки" value={pipelineName} onChange={e=>setPipelineName(e.target.value)} required/>
@@ -251,7 +292,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
             ...(closing?{closeReasonCode:field(data,"reason")}:{}),
             precondition:{idempotencyKey:mutation.key,expectedVersion:advance.version}
           });
-        },async()=>{setEditorMode(null);setAdvance(undefined);await query.reload();});
+        },async()=>{setEditorMode(null);setAdvance(undefined);await refreshSales();});
       }}><FormGrid>{editorMode==="close"?<>
         <p>Текущий этап сохраняется: {advancePipeline?.stages.find(s=>s.stageId===advance.stage?.stageId)?.name??advance.stage?.stageId??"неизвестен"}.</p>
         <SelectField label="Результат сделки" name="targetStatus" defaultValue={DealStatus.WON}>
