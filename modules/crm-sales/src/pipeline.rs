@@ -34,11 +34,21 @@ pub struct PipelineStageInput {
 }
 
 fn invalid(code: &'static str) -> SdkError {
-    SdkError::new(code, ErrorCategory::InvalidArgument, false, "Invalid sales pipeline.")
+    SdkError::new(
+        code,
+        ErrorCategory::InvalidArgument,
+        false,
+        "Invalid sales pipeline.",
+    )
 }
 
 fn conflict(code: &'static str) -> SdkError {
-    SdkError::new(code, ErrorCategory::Conflict, false, "Sales pipeline version conflict.")
+    SdkError::new(
+        code,
+        ErrorCategory::Conflict,
+        false,
+        "Sales pipeline version conflict.",
+    )
 }
 
 fn identifier(value: &str) -> bool {
@@ -195,16 +205,24 @@ mod tests {
     fn stages_use_owner_ordinals_and_stable_ids() {
         let mut pipeline = SalesPipeline::create("p-1".into(), "Основная".into(), draft()).unwrap();
         assert_eq!(pipeline.stage("qualified").unwrap().ordinal, 2);
-        assert_eq!(SalesPipeline::decode(pipeline.encode().unwrap().as_bytes()).unwrap(), pipeline);
+        assert_eq!(
+            SalesPipeline::decode(pipeline.encode().unwrap().as_bytes()).unwrap(),
+            pipeline
+        );
         let original = pipeline.clone();
         let mut reordered = draft();
         reordered.reverse();
-        pipeline = pipeline.reconfigure(1, "Обновлённая".into(), false, reordered).unwrap();
+        pipeline = pipeline
+            .reconfigure(1, "Обновлённая".into(), false, reordered)
+            .unwrap();
         assert_eq!(original.stage("lead").unwrap().ordinal, 1);
         assert_eq!(pipeline.stage("lead").unwrap().ordinal, 2);
         assert_eq!(pipeline.version, 2);
         assert_eq!(
-            pipeline.reconfigure(1, "Нет".into(), false, draft()).unwrap_err().code,
+            pipeline
+                .reconfigure(1, "Нет".into(), false, draft())
+                .unwrap_err()
+                .code,
             "SALES_PIPELINE_VERSION_CONFLICT"
         );
     }
@@ -214,19 +232,25 @@ mod tests {
         let mut duplicated = draft();
         duplicated[1].stage_id = "lead".into();
         assert_eq!(
-            SalesPipeline::create("p-1".into(), "Основная".into(), duplicated).unwrap_err().code,
+            SalesPipeline::create("p-1".into(), "Основная".into(), duplicated)
+                .unwrap_err()
+                .code,
             "SALES_PIPELINE_STAGE_DUPLICATE"
         );
         let mut bad = draft();
         bad[0].probability_basis_points = 10_001;
         assert_eq!(
-            SalesPipeline::create("p-1".into(), "Основная".into(), bad).unwrap_err().code,
+            SalesPipeline::create("p-1".into(), "Основная".into(), bad)
+                .unwrap_err()
+                .code,
             "SALES_PIPELINE_PROBABILITY_INVALID"
         );
         let mut pipeline = SalesPipeline::create("p-1".into(), "Основная".into(), draft()).unwrap();
         pipeline.stages[0].ordinal = 99;
         assert_eq!(
-            SalesPipeline::decode(pipeline.encode().unwrap().as_bytes()).unwrap_err().code,
+            SalesPipeline::decode(pipeline.encode().unwrap().as_bytes())
+                .unwrap_err()
+                .code,
             "SALES_PIPELINE_STAGE_ORDER_INVALID"
         );
     }
