@@ -1,4 +1,5 @@
 //! Canonical sales pipeline aggregate. No HTML/SQL-specific rules live here.
+use crate::{PipelineId, StageId};
 use crm_module_sdk::{ErrorCategory, SdkError};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -58,7 +59,7 @@ impl SalesPipeline {
         name: String,
         stages: Vec<PipelineStageInput>,
     ) -> Result<Self, SdkError> {
-        if !identifier(&pipeline_id) {
+        if !identifier(&pipeline_id) || PipelineId::try_new(pipeline_id.clone()).is_err() {
             return Err(invalid("SALES_PIPELINE_ID_INVALID"));
         }
         let stages = Self::validate_stages(stages)?;
@@ -87,10 +88,6 @@ impl SalesPipeline {
         if !title(&name) {
             return Err(invalid("SALES_PIPELINE_NAME_INVALID"));
         }
-        if archived && !self.archived {
-            // Storage-level reference validation is mandatory before archiving.
-            // This aggregate makes no unsupported assumptions about linked Deals.
-        }
         let stages = Self::validate_stages(stages)?;
         Ok(Self {
             pipeline_id: self.pipeline_id.clone(),
@@ -113,7 +110,10 @@ impl SalesPipeline {
             .into_iter()
             .enumerate()
             .map(|(index, stage)| {
-                if !identifier(&stage.stage_id) || !title(&stage.name) {
+                if !identifier(&stage.stage_id)
+                    || StageId::try_new(stage.stage_id.clone()).is_err()
+                    || !title(&stage.name)
+                {
                     return Err(invalid("SALES_PIPELINE_STAGE_INVALID"));
                 }
                 if !ids.insert(stage.stage_id.clone()) {
@@ -140,7 +140,11 @@ impl SalesPipeline {
     pub fn decode(bytes: &[u8]) -> Result<Self, SdkError> {
         let value: Self =
             serde_json::from_slice(bytes).map_err(|_| invalid("SALES_PIPELINE_STATE_INVALID"))?;
-        if value.version < 1 || !identifier(&value.pipeline_id) || !title(&value.name) {
+        if value.version < 1
+            || !identifier(&value.pipeline_id)
+            || PipelineId::try_new(value.pipeline_id.clone()).is_err()
+            || !title(&value.name)
+        {
             return Err(invalid("SALES_PIPELINE_STATE_INVALID"));
         }
         let checked = Self::validate_stages(
