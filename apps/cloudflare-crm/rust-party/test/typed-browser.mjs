@@ -459,7 +459,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await dealCard.getByRole("button",{name:"Раскрыть карточку",exact:true}).click();
    await page.getByRole("region",{name:"Подробности сделки "+dealId}).getByText(
      "Ожидаемое закрытие: 2030-05-21",{exact:true}).waitFor();
-   await dealCard.getByRole("button",{name:"Свернуть",exact:true}).click();
+   await page.getByRole("button",{name:"Свернуть",exact:true}).last().click();
    await dealCard.getByRole("button",{name:"Изменить сделку",exact:true}).click();
    // GetDeal completes asynchronously and replaces the create form. Editing the
    // old field before this heading appears would lose the entered value.
