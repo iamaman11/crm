@@ -345,7 +345,11 @@ async function verifyData(){
   // Audit rows are required only for committed mutations, never invented for reads.
   let pending=[...requests.values()];
   const from=evidence.started_at-1000;
-  for(let attempt=0;attempt<60&&pending.length;attempt++){
+  // Cloudflare telemetry can become searchable after the browser/D1 readback.
+  // A delayed event remains mandatory: extend the bounded indexing window,
+  // never weaken the exact source-version/request-id/path/status match below.
+  const traceAttempts=120;
+  for(let attempt=0;attempt<traceAttempts&&pending.length;attempt++){
     const missing=[];
     for(let i=0;i<pending.length;i+=4){
       const batch=pending.slice(i,i+4);
@@ -365,7 +369,11 @@ async function verifyData(){
       batch.forEach((entry,index)=>{if(!found[index])missing.push(entry);});
     }
     pending=missing;
-    if(pending.length&&attempt<59)await new Promise(resolve=>setTimeout(resolve,2500));
+    if(pending.length&&(attempt===0||(attempt+1)%20===0))
+      console.log(JSON.stringify({event:"crm.request-trace-readback",result:"WAIT",
+        attempt:attempt+1,pending:pending.length,elapsed_ms:Date.now()-evidence.started_at}));
+    if(pending.length&&attempt<traceAttempts-1)
+      await new Promise(resolve=>setTimeout(resolve,2500));
   }
   assert.equal(pending.length,0,"Missing Cloudflare request traces: "+pending.map(x=>x.path).join(","));
   assert.equal(await version(),liveVersion,"Deployment changed during acceptance");
