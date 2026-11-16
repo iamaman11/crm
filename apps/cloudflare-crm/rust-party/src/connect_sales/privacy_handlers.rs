@@ -251,10 +251,14 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
         if !after.is_empty() {
             Self::id(after)?;
         }
-        let (cases, next) =
-            customer_privacy::list_page_typed(&self.d1()?, &self.actor.tenant, after, size as usize)
-                .await
-                .map_err(|_| ConnectError::internal("PrivacyCase D1 list failed"))?;
+        let (cases, next) = customer_privacy::list_page_typed(
+            &self.d1()?,
+            &self.actor.tenant,
+            after,
+            size as usize,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("PrivacyCase D1 list failed"))?;
         let cases = cases
             .iter()
             .map(Self::convert)
