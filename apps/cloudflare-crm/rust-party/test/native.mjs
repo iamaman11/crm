@@ -1584,6 +1584,18 @@ const filteredSales=await collectPages(salesV2,"ListDeals","deals",{
 assert.deepEqual(filteredSales.map(x=>x.dealId),[dealId,dealLast]);
 assert.equal((await collectPages(salesV2,"ListDeals","deals",{
   pipelineId:"pipeline.other"})).length,1);
+const stageCount=await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.enterprise",stageId:"lead",page:{pageSize:1}});
+assert.equal(stageCount.status,200,describeProtobuf(stageCount.body));
+assert.equal(stageCount.body.totalCount,1n);
+assert.equal(stageCount.body.deals.length,1);
+assert.equal(stageCount.body.deals[0]?.dealId,dealLast);
+assert.equal((await salesV2("ListStageDeals",tenantB,{
+  pipelineId:"pipeline.enterprise",stageId:"lead"
+})).status,404,"tenant B cannot read tenant A pipeline");
+assert.equal((await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.enterprise",stageId:"not-a-stage"
+})).status,404,"unmanaged stage is not a valid board column");
 assert.equal((await salesV2("ListDeals",viewer,{
   page:{pageSize:1,pageToken:dealLast},pipelineId:"pipeline.enterprise"})
   ).body.deals.length,0);
@@ -1651,7 +1663,8 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
   console.log(JSON.stringify({event:"crm.native-r2a-sales-linked-actor-audit",result:"PASS",
     all_sales_actions:true,linked_task_delivery:true,late_batch_rollback:true}));
 console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
-  rpc_methods:["CreateDeal","UpdateDeal","AdvanceStage","GetDeal","ListDeals"],
+  rpc_methods:["CreatePipeline","UpdatePipeline","GetPipeline","ListPipelines","ListStageDeals",
+    "CreateDeal","UpdateDeal","AdvanceStage","GetDeal","ListDeals"],
   generated_binary:true,original_owner:"crm.sales",signed_access:true,tenant_ab:true,
   viewer_read:true,viewer_write_denied:true,exact_money:true,
   before_limit_filters:true,cas:true,idempotent_receipts:true,
