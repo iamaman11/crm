@@ -758,7 +758,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mobileKanban.focus();
    assert.equal(await mobileKanban.evaluate(element=>element===document.activeElement),true,
      "mobile Kanban scroll region must be keyboard focusable");
-   await mobileKanban.getByRole("button",{name:"Изменить этап",exact:true}).count();
+   await page.keyboard.press("ArrowRight");
+   await expect.poll(()=>mobileKanban.evaluate(element=>element.scrollLeft))
+     .toBeGreaterThan(0);
    await page.screenshot({path:resolve(directory,"crm-mobile-dark.png"),fullPage:true});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),"mobile horizontal overflow");
    steps.push("Mobile Kanban: named keyboard-focusable horizontal scroll region without viewport overflow");
