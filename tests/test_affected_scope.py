@@ -157,12 +157,16 @@ class AffectedScopeTests(unittest.TestCase):
                                       metadata=empty, head_sha="packet-only")
                 self.assertFalse(report["broadened"])
                 self.assertEqual(report["affected_packages"], [])
-                self.assertIn("operations", [s["id"] for s in report["selected_scopes"]])
                 names = [w["name"] for w in report["selected_workflows"]]
-                self.assertIn("Governance CI", names)
+                if "repository-packet.json" in changed:
+                    self.assertIn("operations", [s["id"] for s in report["selected_scopes"]])
+                    self.assertIn("Governance CI", names)
+                    self.assertIn("Cloudflare CRM Spike CI", names)
+                else:
+                    self.assertNotIn("operations", [s["id"] for s in report["selected_scopes"]])
+                    self.assertNotIn("Governance CI", names)
+                    self.assertNotIn("Cloudflare CRM Spike CI", names)
                 self.assertNotIn("Customer Privacy Owner Execution CI", names)
-                self.assertEqual("Cloudflare CRM Spike CI" in names,
-                                 "repository-packet.json" in changed)
         from scripts.repo import affected_clippy_command, affected_test_command
         report = build_report(root, "origin/main", paths=["repository-packet.json"],
                               metadata=empty, head_sha="packet")
@@ -463,7 +467,7 @@ class AffectedScopeTests(unittest.TestCase):
             "frontend": ("apps/web/src/app.tsx", "buf.gen.web.yaml"),
             "operations": (
                 ".github/workflows/governance.yml",
-                "docs/CI_TELEMETRY_BASELINE.md",
+                "repository-packet.json",
                 "scripts/check_native_module_composition.py",
                 "scripts/prepare_isolated_process_database.sh",
             ),

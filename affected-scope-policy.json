@@ -141,18 +141,9 @@
       "id": "operations",
       "owner": "platform-operations",
       "path_patterns": [
-        ".github/pull_request_template.md",
         ".github/workflows/**",
-        "AGENTS.md",
         "repository-packet.json",
-        "docs/ACTIVE_PACKET.md",
         "customer-privacy-operations-policy.json",
-        "docs/ARCHITECTURE_CI_SCALABILITY_AND_DEVICE_LAB_PLAN.md",
-        "docs/CI_TELEMETRY_BASELINE.md",
-        "docs/CUSTOMER_PRIVACY_OPERATIONS_READINESS.md",
-        "docs/DELIVERY_GOVERNANCE.md",
-        "docs/POSTGRESQL_PROCESS_ISOLATION_PILOT.md",
-        "docs/RUST_CI_CACHE_PILOT.md",
         "rust-governance-policy.json",
         "scripts/analyze_step13_complexity.py",
         "scripts/check_native_module_composition.py",
@@ -191,6 +182,8 @@
     "tests/**",
     "README.md",
     "LICENSE",
-    "LICENSE.*"
+    "LICENSE.*",
+    "*.md",
+    "**/*.md"
   ]
 }
