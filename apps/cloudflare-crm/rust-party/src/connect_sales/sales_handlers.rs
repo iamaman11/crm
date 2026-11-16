@@ -119,6 +119,74 @@ impl sale_wire::DealService for SalesV2Service {
         })
     }
     #[worker::send]
+    async fn list_stage_deals(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::ListStageDealsRequest>,
+    ) -> ServiceResult<sale_wire::ListStageDealsResponse> {
+        Self::pipeline_id(req.pipeline_id)?;
+        crm_sales::StageId::try_new(req.stage_id.to_owned())
+            .map_err(|_| ConnectError::invalid_argument("SALES_STAGE_ID_INVALID"))?;
+        let size = if req.page.page_size == 0 {
+            25
+        } else {
+            req.page.page_size
+        };
+        if size > 100 {
+            return Err(ConnectError::invalid_argument("page_size exceeds 100"));
+        }
+        let cursor = &req.page.page_token;
+        if !cursor.is_empty() {
+            Self::id(cursor)?;
+        }
+        let status = match req.status {
+            None => None,
+            Some(raw) => Some(match raw {
+                x if x == sale_wire::DealStatus::DEAL_STATUS_OPEN => DomainDealStatus::Open,
+                x if x == sale_wire::DealStatus::DEAL_STATUS_WON => DomainDealStatus::Won,
+                x if x == sale_wire::DealStatus::DEAL_STATUS_LOST => DomainDealStatus::Lost,
+                _ => return Err(ConnectError::invalid_argument("invalid DealStatus filter")),
+            }),
+        };
+        if let Some(id) = req.account_id {
+            AccountV2Service::valid_id(id)?;
+        }
+        let db = self.d1()?;
+        let pipeline = sales_pipelines::get(&db, &self.tenant, req.pipeline_id)
+            .await
+            .map_err(|_| ConnectError::internal("Pipeline D1 read failed"))?
+            .ok_or_else(|| ConnectError::not_found("SALES_PIPELINE_NOT_FOUND"))?;
+        if pipeline.stage(req.stage_id).is_none() {
+            return Err(ConnectError::not_found("SALES_PIPELINE_STAGE_NOT_FOUND"));
+        }
+        let (list, next, total_count) = sales_deals::list_stage_page(
+            &db,
+            &self.tenant,
+            req.pipeline_id,
+            req.stage_id,
+            cursor,
+            size as usize,
+            status,
+            req.account_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Sales D1 stage list failed"))?;
+        let deals = list
+            .iter()
+            .map(Self::convert)
+            .collect::<std::result::Result<Vec<_>, ConnectError>>()?;
+        RpcResponse::ok(sale_wire::ListStageDealsResponse {
+            deals,
+            page_info: Some(core_v2::PageInfo {
+                next_page_token: next.unwrap_or_default(),
+                ..Default::default()
+            })
+            .into(),
+            total_count,
+            ..Default::default()
+        })
+    }
+    #[worker::send]
     async fn create_deal(
         &self,
         _ctx: RequestContext,
