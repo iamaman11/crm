@@ -5,8 +5,9 @@ use super::{bind, now_nanos};
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money, Patch};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef};
 use crm_sales::{
-    AdvanceDealStage, CreateDeal, Deal, DealOwner, DealStage, DealStatus, PipelineId, ReasonCode,
-    StageId, StageTransitionPolicy, UpdateDeal, decode_deal_state, encode_deal_state,
+    AdvanceDealStage, CloseDeal, CreateDeal, Deal, DealOwner, DealStage, DealStatus, PipelineId,
+    ReasonCode, ReopenDeal, StageId, StageTransitionPolicy, UpdateDeal, decode_deal_state,
+    encode_deal_state,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -69,6 +70,20 @@ pub(super) struct StageInput {
     pub(super) status: StatusInput,
     pub(super) close_reason_code: Option<String>,
 }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CloseInput {
+    pub(super) expected_version: i64,
+    pub(super) outcome: StatusInput,
+    pub(super) reason_code: String,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ReopenInput {
+    pub(super) expected_version: i64,
+    pub(super) reason_code: String,
+}
+
 // HTTP only edits the original Deal's business fields, never trusted ownership.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -473,8 +488,52 @@ fn advance_rejected(
 }
 /// Atomically persists ONE domain stage advancement, its idempotency receipt
 /// and an optional original Activities follow-up in the SAME D1 batch.
+enum StageMutation {
+    Move(StageInput),
+    Close(CloseInput),
+}
 pub(super) async fn advance_typed(
     input: StageInput,
+    key: &str,
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+    actor: &str,
+    trace: &str,
+) -> Result<std::result::Result<AdvanceSaved, SalesFailure>> {
+    stage_mutation(
+        StageMutation::Move(input),
+        key,
+        db,
+        tenant,
+        id,
+        actor,
+        trace,
+    )
+    .await
+}
+pub(super) async fn close_typed(
+    input: CloseInput,
+    key: &str,
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+    actor: &str,
+    trace: &str,
+) -> Result<std::result::Result<AdvanceSaved, SalesFailure>> {
+    stage_mutation(
+        StageMutation::Close(input),
+        key,
+        db,
+        tenant,
+        id,
+        actor,
+        trace,
+    )
+    .await
+}
+async fn stage_mutation(
+    input: StageMutation,
     key: &str,
     db: &D1Database,
     tenant: &str,
@@ -485,7 +544,12 @@ pub(super) async fn advance_typed(
     if !(8..=120).contains(&key.len()) {
         return Ok(advance_rejected("IDEMPOTENCY_KEY_REQUIRED", 422));
     }
-    let digest = hash("advance", id, &input)?;
+    // Only client-owned typed input contributes to the digest. The stage at
+    // replay time cannot alter the idempotent identity of a CloseDeal request.
+    let digest = match &input {
+        StageMutation::Move(value) => hash("advance", id, value)?,
+        StageMutation::Close(value) => hash("close", id, value)?,
+    };
     if let Some(p) = prior(db, tenant, key).await? {
         if p.digest != digest {
             return Ok(advance_rejected("IDEMPOTENCY_CONFLICT", 409));
@@ -502,35 +566,66 @@ pub(super) async fn advance_typed(
         return Ok(advance_rejected("NOT_FOUND", 404));
     };
     let before = deal.clone();
-    let Some(ordinal) = super::sales_pipelines::active_stage_ordinal(
-        db,
-        tenant,
-        &input.pipeline_id,
-        &input.stage_id,
-    )
-    .await?
-    else {
-        return Ok(advance_rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
+    let closing = matches!(&input, StageMutation::Close(_));
+    let expected_version = match &input {
+        StageMutation::Move(value) => value.expected_version,
+        StageMutation::Close(value) => value.expected_version,
     };
-    let target = match stage(input.pipeline_id, input.stage_id, ordinal) {
-        Ok(x) => x,
-        Err(code) => return Ok(advance_rejected(code, 422)),
+    let outcome = match input {
+        StageMutation::Move(value) => {
+            if !matches!(value.status, StatusInput::Open) {
+                return Ok(advance_rejected(
+                    "SALES_CLOSE_SEPARATE_ACTION_REQUIRED",
+                    422,
+                ));
+            }
+            let Some(ordinal) = super::sales_pipelines::active_stage_ordinal(
+                db,
+                tenant,
+                &value.pipeline_id,
+                &value.stage_id,
+            )
+            .await?
+            else {
+                return Ok(advance_rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
+            };
+            let target = match stage(value.pipeline_id, value.stage_id, ordinal) {
+                Ok(x) => x,
+                Err(code) => return Ok(advance_rejected(code, 422)),
+            };
+            let reason = match value.close_reason_code {
+                Some(code) => match ReasonCode::try_new(code) {
+                    Ok(v) => Some(v),
+                    Err(e) => return Ok(advance_rejected(e.code, 422)),
+                },
+                None => None,
+            };
+            deal.advance_stage(AdvanceDealStage {
+                expected_version,
+                target_stage: target,
+                target_status: DealStatus::Open,
+                close_reason_code: reason,
+                occurred_at_unix_nanos: now_nanos(),
+                policy: StageTransitionPolicy::default(),
+            })
+        }
+        StageMutation::Close(value) => {
+            if matches!(value.outcome, StatusInput::Open) {
+                return Ok(advance_rejected("SALES_CLOSE_OUTCOME_REQUIRED", 422));
+            }
+            let reason_code = match ReasonCode::try_new(value.reason_code) {
+                Ok(v) => v,
+                Err(e) => return Ok(advance_rejected(e.code, 422)),
+            };
+            deal.close(CloseDeal {
+                expected_version,
+                outcome: value.outcome.into(),
+                reason_code,
+                occurred_at_unix_nanos: now_nanos(),
+            })
+        }
     };
-    let reason = match input.close_reason_code {
-        Some(code) => match ReasonCode::try_new(code) {
-            Ok(v) => Some(v),
-            Err(e) => return Ok(advance_rejected(e.code, 422)),
-        },
-        None => None,
-    };
-    if let Err(e) = deal.advance_stage(AdvanceDealStage {
-        expected_version: input.expected_version,
-        target_stage: target,
-        target_status: input.status.into(),
-        close_reason_code: reason,
-        occurred_at_unix_nanos: now_nanos(),
-        policy: StageTransitionPolicy::default(),
-    }) {
+    if let Err(e) = outcome {
         return Ok(advance_rejected(
             e.code,
             if e.category == ErrorCategory::Conflict {
@@ -565,7 +660,7 @@ pub(super) async fn advance_typed(
     };
     let update = bind(
         db,
-        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.advance' WHERE tenant=? AND id=? AND version=?",
+        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action=? WHERE tenant=? AND id=? AND version=?",
         &[
             JsValue::from_str(&saved),
             JsValue::from_f64(deal.version() as f64),
@@ -573,9 +668,14 @@ pub(super) async fn advance_typed(
             JsValue::from_str(&digest),
             JsValue::from_str(trace),
             JsValue::from_str(actor),
+            JsValue::from_str(if closing {
+                "sales_deals.close"
+            } else {
+                "sales_deals.advance"
+            }),
             JsValue::from_str(tenant),
             JsValue::from_str(id),
-            JsValue::from_f64(input.expected_version as f64),
+            JsValue::from_f64(expected_version as f64),
         ],
     )?;
     let mut writes = vec![update];
@@ -648,6 +748,141 @@ pub(super) async fn advance_typed(
         link,
     }))
 }
+/// Explicit reopening is one original Rust CAS, trigger-owned receipt,
+/// attributed audit and immutable history event. Never emit a stage-change
+/// follow-up on reopening a finished Deal.
+pub(super) async fn reopen_typed(
+    input: ReopenInput,
+    key: &str,
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+    actor: &str,
+    trace: &str,
+) -> Result<std::result::Result<SalesSaved, SalesFailure>> {
+    if !(8..=120).contains(&key.len()) {
+        return Ok(rejected("IDEMPOTENCY_KEY_REQUIRED", 422));
+    }
+    let digest = hash("reopen", id, &input)?;
+    if let Some(p) = prior(db, tenant, key).await? {
+        if p.digest != digest {
+            return Ok(rejected("IDEMPOTENCY_CONFLICT", 409));
+        }
+        return Ok(Ok(SalesSaved {
+            deal: decode(&p.state)?,
+            replayed: true,
+        }));
+    }
+    let Some(mut deal) = load(db, tenant, id).await? else {
+        return Ok(rejected("NOT_FOUND", 404));
+    };
+    // Reopen only into a live, currently ranked catalog stage.
+    // The D1 BEFORE UPDATE guard separately closes the catalog race.
+    let Some(ordinal) = super::sales_pipelines::active_stage_ordinal(
+        db,
+        tenant,
+        deal.stage().pipeline_id().as_str(),
+        deal.stage().stage_id().as_str(),
+    )
+    .await?
+    else {
+        return Ok(rejected("SALES_REOPEN_INACTIVE_STAGE", 409));
+    };
+    if ordinal != deal.stage().ordinal() {
+        return Ok(rejected("SALES_REOPEN_CATALOG_RANK_CONFLICT", 409));
+    }
+    let reason_code = match ReasonCode::try_new(&input.reason_code) {
+        Ok(reason) => reason,
+        Err(e) => return Ok(rejected(e.code, 422)),
+    };
+    if let Err(e) = deal.reopen(ReopenDeal {
+        expected_version: input.expected_version,
+        reason_code,
+        occurred_at_unix_nanos: now_nanos(),
+    }) {
+        return Ok(rejected(
+            e.code,
+            if e.category == ErrorCategory::Conflict {
+                409
+            } else {
+                422
+            },
+        ));
+    }
+    let state = encode(&deal)?;
+    let result = bind(db,
+        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.reopen',last_reason_code=? WHERE tenant=? AND id=? AND version=?",
+        &[
+            JsValue::from_str(&state),
+            JsValue::from_f64(deal.version() as f64),
+            JsValue::from_str(key),
+            JsValue::from_str(&digest),
+            JsValue::from_str(trace),
+            JsValue::from_str(actor),
+            JsValue::from_str(&input.reason_code),
+            JsValue::from_str(tenant),
+            JsValue::from_str(id),
+            JsValue::from_f64(input.expected_version as f64),
+        ],
+    )?.run().await;
+    let Ok(result) = result else {
+        return Ok(rejected("SALES_DEAL_REOPEN_CONFLICT", 409));
+    };
+    if result.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
+        return Ok(rejected("SALES_DEAL_VERSION_CONFLICT", 409));
+    }
+    Ok(Ok(SalesSaved {
+        deal,
+        replayed: false,
+    }))
+}
+
+#[derive(Deserialize)]
+pub(super) struct DealEventRow {
+    pub(super) deal_version: i64,
+    pub(super) action: String,
+    pub(super) pipeline_id: String,
+    pub(super) previous_stage_id: Option<String>,
+    pub(super) stage_id: String,
+    pub(super) previous_status: Option<String>,
+    pub(super) status: String,
+    pub(super) reason_code: Option<String>,
+    pub(super) actor: String,
+    pub(super) request_id: String,
+    pub(super) occurred_at_unix_nanos: i64,
+    pub(super) catalog_version: Option<i64>,
+    pub(super) linked_task_id: Option<String>,
+}
+
+/// A single tenant-scoped keyset stream backed by the D1 composite PK.
+/// Related original Activity Task is joined at read time because link delivery
+/// is inserted in the same atomic batch *after* the Deal update trigger.
+pub(super) async fn list_events(
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+    before: i64,
+    size: usize,
+) -> Result<(Vec<DealEventRow>, Option<String>)> {
+    let mut rows=bind(db,
+        "SELECT e.deal_version,e.action,e.pipeline_id,e.previous_stage_id,e.stage_id,e.previous_status,e.status,e.reason_code,e.actor,e.request_id,e.occurred_at_unix_nanos,e.catalog_version,l.task_id AS linked_task_id FROM crm_sales_deal_events e LEFT JOIN crm_sales_link_delivery_records l ON l.tenant=e.tenant AND l.deal_id=e.deal_id AND l.deal_version=e.deal_version WHERE e.tenant=? AND e.deal_id=? AND e.deal_version<? ORDER BY e.deal_version DESC LIMIT ?",
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(id),
+            JsValue::from_f64(before as f64),
+            JsValue::from_f64((size+1) as f64),
+        ],
+    )?.all().await?.results::<DealEventRow>()?;
+    let more = rows.len() > size;
+    rows.truncate(size);
+    let next = if more {
+        rows.last().map(|e| e.deal_version.to_string())
+    } else {
+        None
+    };
+    Ok((rows, next))
+}
+
 #[derive(Deserialize)]
 struct CountRow {
     total: i64,

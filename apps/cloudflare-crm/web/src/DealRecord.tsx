@@ -1,6 +1,7 @@
 import {useCallback,useState} from "react";
 import {Button,SelectField} from "@ultimate-crm/ui";
 import type {ContactPoint,Deal} from "@ultimate-crm/client/cloudflare";
+import {DealEventKind} from "@ultimate-crm/client/cloudflare";
 import {ContactPointStatus,DealStatus} from "@ultimate-crm/client/cloudflare";
 import {api,dateText} from "./api";
 import {useQuery,QueryNotice} from "./hooks";
@@ -66,9 +67,49 @@ export function DealContactPicker({accountId,initialContactId=""}:{
   </div>;
 }
 
+function eventLabel(kind:DealEventKind):string {
+  switch(kind){
+    case DealEventKind.CREATED:return "Сделка создана";
+    case DealEventKind.UPDATED:return "Поля обновлены";
+    case DealEventKind.MOVED:return "Изменён этап";
+    case DealEventKind.CLOSED:return "Сделка завершена";
+    case DealEventKind.REOPENED:return "Сделка повторно открыта";
+    default:return "Неизвестное событие";
+  }
+}
+// One original, owner-authorized event projection for inline/full Deal pages.
+// No reconstruction of history from mutable client-side snapshots.
+export function DealHistory({dealId,accountId}:{dealId:string;accountId:string}){
+  const [cursor,setCursor]=useState("");
+  const history=useQuery(useCallback(
+    ()=>api.deals.listDealEvents({dealId,page:{pageSize:25,pageToken:cursor}}),
+    [dealId,cursor]
+  ));
+  const next=history.data?.pageInfo?.nextPageToken??"";
+  return <section aria-label={"История сделки "+dealId}>
+    <h4>История сделки</h4>
+    <QueryNotice query={history}/>
+    <ol>
+      {history.data?.events.map(event=><li key={event.dealVersion.toString()}>
+        <strong>{eventLabel(event.kind)}</strong>
+        {" · версия "}{event.dealVersion.toString()}
+        {" · "}{dateText(event.occurredAt)}
+        <p>Этап: {event.previousStageId?event.previousStageId+" → ":""}{event.stageId}</p>
+        {event.reasonCode&&<p>Причина: {event.reasonCode}</p>}
+        <p>Исполнитель: {event.actor} · запрос: {event.requestId}</p>
+        {event.linkedTaskId&&<p>Связанная задача: <a href={scopeHref("tasks",accountId)}>
+          {event.linkedTaskId}</a></p>}
+      </li>)}
+    </ol>
+    {!history.busy&&history.data?.events.length===0&&<p>Событий на этой странице нет.</p>}
+    {next&&<Button variant="secondary" onClick={()=>setCursor(next)}>Ранее</Button>}
+    {cursor&&<Button variant="secondary" onClick={()=>setCursor("")}>К последним</Button>}
+  </section>;
+}
+
 // One canonical GetDeal/ContactPoint read projection for inline/full page.
-export function DealDetails({dealId,onEdit,onClose}:{dealId:string;
- onEdit?:()=>void;onClose?:()=>void}) {
+export function DealDetails({dealId,onEdit,onClose,onReopen}:{dealId:string;
+ onEdit?:()=>void;onClose?:()=>void;onReopen?:()=>void}) {
   const details=useQuery(useCallback(async()=>{
     const deal=(await api.deals.getDeal({dealId})).deal;
     if(!deal)throw Error("Сделка не найдена");
@@ -96,10 +137,13 @@ export function DealDetails({dealId,onEdit,onClose}:{dealId:string;
       <p>Создана: {dateText(deal.createdAt)} · обновлена: {dateText(deal.updatedAt)}</p>
       {deal.closedAt&&<p>Закрыта: {dateText(deal.closedAt)}</p>}
       <p><a href={scopeHref("tasks",deal.accountId)}>Задачи клиента</a></p>
-      {deal.status===DealStatus.OPEN&&<div>
+      {deal.status===DealStatus.OPEN?<div>
         {onEdit&&<Button variant="secondary" onClick={onEdit}>Редактировать сделку</Button>}
         {" "}{onClose&&<Button variant="secondary" onClick={onClose}>Завершить сделку</Button>}
-      </div>}
+      </div>:onReopen?<Button variant="secondary" onClick={onReopen}>
+        Открыть повторно
+      </Button>:null}
+      <DealHistory key={deal.dealId} dealId={deal.dealId} accountId={deal.accountId}/>
     </>}
   </section>;
 }

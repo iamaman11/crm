@@ -200,6 +200,21 @@ pub struct AdvanceDealStage {
     pub policy: StageTransitionPolicy,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CloseDeal {
+    pub expected_version: i64,
+    pub outcome: DealStatus,
+    pub reason_code: ReasonCode,
+    pub occurred_at_unix_nanos: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReopenDeal {
+    pub expected_version: i64,
+    pub reason_code: ReasonCode,
+    pub occurred_at_unix_nanos: i64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DealSort {
     UpdatedAtDescending,
@@ -502,6 +517,15 @@ impl Deal {
                 "stage advancement cannot change the deal pipeline",
             ));
         }
+        // Domain operations are distinct. The stage transition cannot imply
+        // a terminal outcome; callers must use CloseDeal.
+        if command.target_status != DealStatus::Open {
+            return Err(invalid(
+                "SALES_CLOSE_SEPARATE_ACTION_REQUIRED",
+                "deal.target_status",
+                "use CloseDeal to finish the current stage",
+            ));
+        }
         // A terminal outcome is independent of pipeline progression: closing
         // must preserve the actual current stage, not invent a synthetic one.
         // Open-stage transitions still require a distinct stage and obey policy.
@@ -570,6 +594,52 @@ impl Deal {
         self.stage = command.target_stage;
         self.status = command.target_status;
         self.close_outcome = close_outcome;
+        self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
+        self.version += 1;
+        Ok(())
+    }
+
+    pub fn close(&mut self, command: CloseDeal) -> Result<(), SdkError> {
+        self.require_version(command.expected_version)?;
+        self.require_monotonic_time(command.occurred_at_unix_nanos)?;
+        if self.status != DealStatus::Open {
+            return Err(conflict(
+                "SALES_DEAL_ALREADY_CLOSED",
+                "a closed deal requires explicit reopening",
+            ));
+        }
+        if !matches!(command.outcome, DealStatus::Won | DealStatus::Lost) {
+            return Err(invalid(
+                "SALES_CLOSE_OUTCOME_REQUIRED",
+                "deal.outcome",
+                "close outcome must be Won or Lost",
+            ));
+        }
+        self.status = command.outcome;
+        self.close_outcome = Some(DealCloseOutcome {
+            status: command.outcome,
+            reason_code: command.reason_code,
+            closed_at_unix_nanos: command.occurred_at_unix_nanos,
+        });
+        self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
+        self.version += 1;
+        Ok(())
+    }
+
+    pub fn reopen(&mut self, command: ReopenDeal) -> Result<(), SdkError> {
+        self.require_version(command.expected_version)?;
+        self.require_monotonic_time(command.occurred_at_unix_nanos)?;
+        if self.status == DealStatus::Open {
+            return Err(conflict(
+                "SALES_DEAL_ALREADY_OPEN",
+                "only closed deals can reopen",
+            ));
+        }
+        // ReasonCode is a validated, bounded domain identifier; the D1 event
+        // persists it with the same CAS/audit/receipt mutation.
+        let _reason = command.reason_code;
+        self.status = DealStatus::Open;
+        self.close_outcome = None;
         self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
         self.version += 1;
         Ok(())
@@ -803,92 +873,139 @@ mod tests {
     }
 
     #[test]
-    fn closes_only_with_reason_and_never_advances_after_close() {
+    fn close_and_reopen_have_separate_versioned_commands() {
         let mut deal = open_deal();
-        let missing_reason = deal
-            .advance_stage(AdvanceDealStage {
+        let stage = deal.stage().clone();
+        assert_eq!(
+            deal.advance_stage(AdvanceDealStage {
                 expected_version: 1,
-                target_stage: stage("qualification", 1),
+                target_stage: stage.clone(),
                 target_status: DealStatus::Won,
-                close_reason_code: None,
+                close_reason_code: Some(ReasonCode::try_new("won").unwrap()),
                 occurred_at_unix_nanos: 30,
                 policy: StageTransitionPolicy::default(),
             })
-            .unwrap_err();
-        assert_eq!(missing_reason.code, "SALES_CLOSE_REASON_REQUIRED");
+            .unwrap_err()
+            .code,
+            "SALES_CLOSE_SEPARATE_ACTION_REQUIRED"
+        );
 
-        deal.advance_stage(AdvanceDealStage {
+        assert_eq!(
+            deal.close(CloseDeal {
+                expected_version: 1,
+                outcome: DealStatus::Open,
+                reason_code: ReasonCode::try_new("won").unwrap(),
+                occurred_at_unix_nanos: 30,
+            })
+            .unwrap_err()
+            .code,
+            "SALES_CLOSE_OUTCOME_REQUIRED"
+        );
+        assert_eq!(deal.version(), 1);
+        deal.close(CloseDeal {
             expected_version: 1,
-            target_stage: stage("qualification", 1),
-            target_status: DealStatus::Won,
-            close_reason_code: Some(ReasonCode::try_new("customer_selected_us").unwrap()),
+            outcome: DealStatus::Won,
+            reason_code: ReasonCode::try_new("won").unwrap(),
             occurred_at_unix_nanos: 30,
-            policy: StageTransitionPolicy::default(),
         })
         .unwrap();
-        assert_eq!(deal.status, DealStatus::Won);
+        assert_eq!(deal.status(), DealStatus::Won);
+        assert_eq!(deal.stage(), &stage);
+        assert_eq!(deal.version(), 2);
+        assert_eq!(deal.close_outcome().unwrap().reason_code().as_str(), "won");
+        assert_eq!(
+            deal.close(CloseDeal {
+                expected_version: 2,
+                outcome: DealStatus::Lost,
+                reason_code: ReasonCode::try_new("again").unwrap(),
+                occurred_at_unix_nanos: 40,
+            })
+            .unwrap_err()
+            .code,
+            "SALES_DEAL_ALREADY_CLOSED"
+        );
+        assert_eq!(
+            deal.reopen(ReopenDeal {
+                expected_version: 1,
+                reason_code: ReasonCode::try_new("revisit").unwrap(),
+                occurred_at_unix_nanos: 40,
+            })
+            .unwrap_err()
+            .code,
+            "SALES_DEAL_VERSION_CONFLICT"
+        );
+        deal.reopen(ReopenDeal {
+            expected_version: 2,
+            reason_code: ReasonCode::try_new("revisit").unwrap(),
+            occurred_at_unix_nanos: 40,
+        })
+        .unwrap();
+        assert_eq!(deal.status(), DealStatus::Open);
+        assert!(deal.close_outcome().is_none());
+        assert_eq!(deal.stage(), &stage);
+        assert_eq!(deal.version(), 3);
+        assert_eq!(
+            deal.reopen(ReopenDeal {
+                expected_version: 3,
+                reason_code: ReasonCode::try_new("again").unwrap(),
+                occurred_at_unix_nanos: 50,
+            })
+            .unwrap_err()
+            .code,
+            "SALES_DEAL_ALREADY_OPEN"
+        );
+        assert_eq!(deal.version(), 3);
+        deal.close(CloseDeal {
+            expected_version: 3,
+            outcome: DealStatus::Lost,
+            reason_code: ReasonCode::try_new("lost").unwrap(),
+            occurred_at_unix_nanos: 50,
+        })
+        .unwrap();
+        assert_eq!(deal.status(), DealStatus::Lost);
+        assert_eq!(deal.version(), 4);
+    }
 
-        let error = deal
-            .advance_stage(AdvanceDealStage {
+    #[test]
+    fn terminal_edit_and_move_are_forbidden() {
+        let mut deal = open_deal();
+        deal.close(CloseDeal {
+            expected_version: 1,
+            outcome: DealStatus::Won,
+            reason_code: ReasonCode::try_new("signed").unwrap(),
+            occurred_at_unix_nanos: 30,
+        })
+        .unwrap();
+        assert_eq!(
+            deal.apply_update(UpdateDeal {
+                expected_version: 2,
+                name: Patch::Set("Forbidden".into()),
+                owner: Patch::Keep,
+                account: Patch::Keep,
+                primary_contact: Patch::Keep,
+                amount: Patch::Keep,
+                expected_close_date: Patch::Keep,
+                probability: Patch::Keep,
+                occurred_at_unix_nanos: 40,
+            })
+            .unwrap_err()
+            .code,
+            "SALES_DEAL_ALREADY_CLOSED"
+        );
+        assert_eq!(
+            deal.advance_stage(AdvanceDealStage {
                 expected_version: 2,
                 target_stage: stage("negotiation", 3),
                 target_status: DealStatus::Open,
                 close_reason_code: None,
                 occurred_at_unix_nanos: 40,
-                policy: StageTransitionPolicy {
-                    allow_regression: true,
-                    allow_skip: true,
-                },
-            })
-            .unwrap_err();
-        assert_eq!(error.code, "SALES_DEAL_ALREADY_CLOSED");
-    }
-
-    #[test]
-    fn closes_at_current_stage_and_rejects_terminal_edits() {
-        let mut deal = open_deal();
-        let before_stage = deal.stage.clone();
-        let baseline_version = deal.version();
-        let mismatch = deal
-            .advance_stage(AdvanceDealStage {
-                expected_version: baseline_version,
-                target_stage: stage("synthetic_won", 4),
-                target_status: DealStatus::Won,
-                close_reason_code: Some(ReasonCode::try_new("signed").unwrap()),
-                occurred_at_unix_nanos: 30,
                 policy: StageTransitionPolicy::default(),
             })
-            .unwrap_err();
-        assert_eq!(mismatch.code, "SALES_CLOSE_STAGE_MISMATCH");
-        assert_eq!(deal.version(), baseline_version);
-        assert_eq!(deal.stage(), &before_stage);
-
-        deal.advance_stage(AdvanceDealStage {
-            expected_version: baseline_version,
-            target_stage: before_stage.clone(),
-            target_status: DealStatus::Won,
-            close_reason_code: Some(ReasonCode::try_new("signed").unwrap()),
-            occurred_at_unix_nanos: 30,
-            policy: StageTransitionPolicy::default(),
-        })
-        .unwrap();
-        assert_eq!(deal.stage(), &before_stage);
-        assert_eq!(deal.status(), DealStatus::Won);
-        assert_eq!(deal.version(), baseline_version + 1);
-        let result = deal.apply_update(UpdateDeal {
-            expected_version: deal.version(),
-            name: Patch::Set("Must remain unchanged".into()),
-            owner: Patch::Keep,
-            account: Patch::Keep,
-            primary_contact: Patch::Keep,
-            amount: Patch::Keep,
-            expected_close_date: Patch::Keep,
-            probability: Patch::Keep,
-            occurred_at_unix_nanos: 40,
-        });
-        assert_eq!(result.unwrap_err().code, "SALES_DEAL_ALREADY_CLOSED");
-        assert_ne!(deal.name(), "Must remain unchanged");
-        assert_eq!(deal.version(), baseline_version + 1);
+            .unwrap_err()
+            .code,
+            "SALES_DEAL_ALREADY_CLOSED"
+        );
+        assert_eq!(deal.version(), 2);
     }
 
     #[test]

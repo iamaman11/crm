@@ -539,7 +539,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await movedDealCard.getByRole("button",{name:"Завершить сделку",exact:true}).click();
    await page.getByRole("heading",{name:"Завершить сделку: Browser Deal "+runId,exact:true}).waitFor();
    await page.getByLabel("Причина закрытия",{exact:true}).fill("contract-signed");
-   await mutation(page.getByRole("button",{name:"Завершить сделку",exact:true}).last(),"AdvanceStage");
+   await mutation(page.getByRole("button",{name:"Завершить сделку",exact:true}).last(),"CloseDeal");
    const terminal=(await sql("SELECT version,json_extract(state,'$.status') AS status,json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
    assert.deepEqual(terminal,{version:4,status:"won",stage:actualStage});
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,2);
@@ -572,6 +572,34 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
    assert.equal(JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].state).archived,false);
    steps.push("Pipeline archive and restore using real React, Connect and D1");
+   // Actual full Deal route: typed append-only history, linked Task and
+   // explicit ReopenDeal. No second editor or client-side history inference.
+   await page.goto(base+"/#sales/"+encodeURIComponent(dealId));
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+   await page.getByText("Сделка завершена",{exact:true}).waitFor();
+   await page.getByText("contract-signed",{exact:false}).first().waitFor();
+   await page.getByText("Связанная задача:",{exact:false}).first().waitFor();
+   await page.getByRole("button",{name:"Открыть повторно",exact:true}).last().click();
+   await page.getByRole("heading",{name:"Повторно открыть сделку: Browser Deal "+runId,exact:true}).waitFor();
+   await page.getByLabel("Причина повторного открытия",{exact:true}).fill("reconsidered");
+   await mutation(page.getByRole("button",{name:"Открыть повторно",exact:true}).last(),"ReopenDeal");
+   await page.getByText("Сделка повторно открыта",{exact:true}).waitFor();
+   const reopened=(await sql("SELECT version,json_extract(state,'$.status') AS status,"+
+     "json_extract(state,'$.close_outcome') AS close_outcome FROM crm_sales_deal_records "+
+     "WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+   assert.equal(reopened.version,5);
+   assert.equal(reopened.status,"open");
+   assert.equal(reopened.close_outcome,null);
+   assert.deepEqual((await sql("SELECT action FROM crm_sales_deal_events "+
+     "WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"' ORDER BY deal_version DESC LIMIT 2"))
+     .map(r=>r.action),["reopened","closed"]);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
+     "WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,2);
+   steps.push("R7.2 CloseDeal→immutable history→ReopenDeal→D1 and linked Task");
+   await page.goto(base+"/#sales");
+   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+
    // The live tenant may have ZERO seeded pipelines. Create the second
    // pipeline through React; never depend on CI-only pipeline.enterprise.
    await page.getByRole("button",{name:"Создать воронку",exact:true}).click();

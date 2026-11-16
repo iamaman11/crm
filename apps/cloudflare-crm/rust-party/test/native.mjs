@@ -1627,15 +1627,15 @@ assert.equal((await salesV2("AdvanceStage",admin,{
   targetStatus:2,closeReasonCode:"contract-signed",
   precondition:{expectedVersion:3n,idempotencyKey:"connect-sales-fake-stage-close"}
 })).status,400,"closing cannot fabricate a terminal stage");
-assert.equal((await salesV2("AdvanceStage",admin,{
-  dealId,targetStage:stageQualified,targetStatus:2,
+assert.equal((await salesV2("CloseDeal",admin,{
+  dealId,outcome:2,
   precondition:{expectedVersion:3n,idempotencyKey:"connect-sales-missing-close-reason"}
 })).status,400,"closing requires an explicit reason");
 assert.equal((await salesV2("GetDeal",viewer,{dealId})).body.deal?.version,3n,
   "rejected synthetic stage and missing reason cannot change the open deal");
-const closeSale={dealId,targetStage:stageQualified,targetStatus:2,closeReasonCode:"contract-signed",
+const closeSale={dealId,outcome:2,reasonCode:"contract-signed",
   precondition:{expectedVersion:3n,idempotencyKey:"connect-sales-close-main"}};
-const closedSale=await salesV2("AdvanceStage",admin,closeSale);
+const closedSale=await salesV2("CloseDeal",admin,closeSale);
 assert.equal(closedSale.status,200,describeProtobuf(closedSale.body));
 assert.equal(closedSale.body.deal?.status,2);
 assert.equal(closedSale.body.deal?.stage?.stageId,"qualified",
@@ -1645,22 +1645,41 @@ assert.equal((await salesV2("UpdateDeal",admin,{
   dealId,name:{operation:{case:"set",value:"Forbidden post-close edit"}},
   precondition:{expectedVersion:4n,idempotencyKey:"connect-sales-update-closed"}
 })).status,409,"closed Deal must be immutable");
-assert.equal((await salesV2("AdvanceStage",admin,{
-  dealId,targetStage:stageLead,
-  targetStatus:2,closeReasonCode:"contract-signed",
+assert.equal((await salesV2("CloseDeal",admin,{
+  dealId,outcome:2,reasonCode:"contract-signed",
   precondition:{expectedVersion:4n,idempotencyKey:"connect-sales-double-close"}
-})).status,409,"a closed Deal cannot transition even to a valid catalog stage");
+})).status,409,"double-close must be rejected");
 assert.ok(closedSale.body.deal?.closedAt);
 assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
   "WHERE tenant='tenant-a'")[0].n,taskCountAfter,
   "Won closure must not create a second follow-up Task");
-assert.equal((await salesV2("AdvanceStage",admin,closeSale))
+assert.equal((await salesV2("CloseDeal",admin,closeSale))
   .body.receipt?.replayed,true);
 assert.equal((await salesV2("GetPipeline",viewer,{pipelineId:"pipeline.enterprise"}))
   .body.pipeline?.version,2n);
 assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
   "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'")[0].n,2,
   "two original one-batch Sales->Activities delivery receipts");
+const dealHistory=await salesV2("ListDealEvents",viewer,{dealId,page:{pageSize:25}});
+assert.equal(dealHistory.status,200,describeProtobuf(dealHistory.body));
+assert.deepEqual(dealHistory.body.events.map(e=>e.dealVersion),[4n,3n,2n,1n]);
+assert.deepEqual(dealHistory.body.events.map(e=>e.kind),[4,3,2,1],
+  "Append-only lifecycle history must be ordered and typed");
+assert.equal(dealHistory.body.events[0].reasonCode,"contract-signed");
+assert.equal(dealHistory.body.events[1].linkedTaskId?.length>0,true);
+assert.equal(dealHistory.body.events[0].linkedTaskId,"",
+  "Close does not invent a follow-up Task");
+assert.equal(dealHistory.body.events[0].actor,"native-a@example.test");
+assert.equal(dealHistory.body.events[0].requestId,closedSale.headers.get("x-request-id"));
+assert.equal((await salesV2("ListDealEvents",viewer,{dealId,
+  page:{pageSize:2}})).body.pageInfo?.nextPageToken,"3");
+assert.deepEqual((await salesV2("ListDealEvents",viewer,{dealId,
+  page:{pageSize:2,pageToken:"3"}})).body.events.map(e=>e.dealVersion),[2n,1n]);
+assert.equal((await salesV2("ListDealEvents",viewer,{dealId,
+  page:{pageSize:2,pageToken:"not-an-integer"}})).status,400);
+assert.equal((await salesV2("ListDealEvents",viewer,{
+  dealId:"missing-"+randomUUID(),page:{pageSize:1}})).status,404);
+
 const dealOther="sales-aaa-other-"+randomUUID();
 const dealLast="sales-zzz-ours-"+randomUUID();
 for(const [index,nextId,pipe] of [
@@ -1916,7 +1935,7 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
       request_id:saleUpdated.headers.get("x-request-id")},
     {action:"sales_deals.advance",actor:"native-a@example.test",
       request_id:advancedSale.headers.get("x-request-id")},
-    {action:"sales_deals.advance",actor:"native-a@example.test",
+    {action:"sales_deals.close",actor:"native-a@example.test",
       request_id:closedSale.headers.get("x-request-id")}
   ],"Sales create/update/stage actor and action survive cross-actor replay");
   const linked=sql("SELECT delivery_id,task_id,disposition,CASE WHEN task_id IS NULL THEN 1 ELSE 0 END AS no_task,actor,request_id FROM crm_sales_link_delivery_records "+
@@ -1931,7 +1950,7 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
     assert.equal(row.no_task,i===0?0:1,
       "Ignored delivery must not create a Task; validate SQL NULL, not serialized string");
     const expected=[
-      {action:"sales_deals.advance",subject_id:dealId,
+      {action:i===0?"sales_deals.advance":"sales_deals.close",subject_id:dealId,
         actor:"native-a@example.test",request_id:row.request_id},
       {action:i===0?"sales_activities_link.applied":"sales_activities_link.ignored",
         subject_id:row.delivery_id,actor:"native-a@example.test",
@@ -2032,11 +2051,70 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
     stable_ids:true,open_closed_rebased:true,versions_preserved:true,
     audit_receipt_single_owner:true,cas:true,invalid_deletion_denied:true,
     catalog_assigned_ordinal:true}));
+  // A finished Deal is reopened only through the explicit original owner.
+  const reopenSale={dealId,reasonCode:"customer-revisited",
+    precondition:{expectedVersion:4n,idempotencyKey:"connect-sales-reopen-main"}};
+  assert.equal((await salesV2("ReopenDeal",viewer,reopenSale)).status,403);
+  assert.equal((await salesV2("ReopenDeal",admin,{
+    ...reopenSale,precondition:{expectedVersion:3n,idempotencyKey:"r72-reopen-stale"}
+  })).status,409);
+  const reopenedSale=await salesV2("ReopenDeal",admin,reopenSale);
+  assert.equal(reopenedSale.status,200,describeProtobuf(reopenedSale.body));
+  assert.equal(reopenedSale.body.deal?.status,1);
+  assert.equal(reopenedSale.body.deal?.version,5n);
+  assert.equal(reopenedSale.body.deal?.closedAt,undefined);
+  assert.equal(reopenedSale.body.deal?.stage?.stageId,"qualified");
+  assert.equal((await salesV2("ReopenDeal",admin,reopenSale)).body.receipt?.replayed,true);
+  assert.equal((await salesV2("ReopenDeal",admin,{
+    dealId,reasonCode:"attempt-again",
+    precondition:{expectedVersion:5n,idempotencyKey:"r72-reopen-already-open"}
+  })).status,409);
+  const afterReopen=await salesV2("ListDealEvents",viewer,{dealId,page:{pageSize:25}});
+  assert.deepEqual(afterReopen.body.events.map(e=>e.dealVersion),[5n,4n,3n,2n,1n]);
+  assert.equal(afterReopen.body.events[0].kind,5);
+  assert.equal(afterReopen.body.events[0].reasonCode,"customer-revisited");
+  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
+    "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'")[0].n,2,
+    "reopen must not invent a stage-change delivery");
+  const reclosed=await salesV2("CloseDeal",admin,{
+    dealId,outcome:3,reasonCode:"customer-cancelled",
+    precondition:{expectedVersion:5n,idempotencyKey:"r72-close-again"}
+  });
+  assert.equal(reclosed.status,200);
+  assert.equal(reclosed.body.deal?.status,3);
+  assert.equal(reclosed.body.deal?.version,6n);
+  assert.equal((await salesV2("CloseDeal",admin,closeSale)).body.receipt?.replayed,true,
+    "first CloseDeal must replay unchanged after stage reorder and reopen");
+  const reopenAuditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+    "AND subject_id='"+dealId+"'")[0].n;
+  const reopenReceiptBefore=sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
+    "WHERE tenant='tenant-a'")[0].n;
+  const reopenEventsBefore=sql("SELECT COUNT(*) AS n FROM crm_sales_deal_events "+
+    "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'")[0].n;
+  sql("CREATE TRIGGER fixture_fail_reopen_audit BEFORE INSERT ON crm_audit "+
+    "WHEN NEW.action='sales_deals.reopen' "+
+    "BEGIN SELECT RAISE(ABORT,'fixture reopen audit'); END;");
+  try{
+    assert.equal((await salesV2("ReopenDeal",admin,{dealId,reasonCode:"revisit",
+      precondition:{expectedVersion:6n,idempotencyKey:"r72-failed-reopen"}})).status,409);
+  }finally{sql("DROP TRIGGER fixture_fail_reopen_audit");}
+  assert.equal((await salesV2("GetDeal",viewer,{dealId})).body.deal?.version,6n);
+  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+    "AND subject_id='"+dealId+"'")[0].n,reopenAuditBefore);
+  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
+    "WHERE tenant='tenant-a'")[0].n,reopenReceiptBefore);
+  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_events "+
+    "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'")[0].n,reopenEventsBefore);
+  console.log(JSON.stringify({event:"crm.native-r72-deal-lifecycle",result:"PASS",
+    separate_close_reopen:true,closed_readonly:true,actor_audit:true,
+    append_only_history:true,cursor:true,linked_task:true,
+    replay_after_reclose:true,stale_cas:true,rollback:true}));
   console.log(JSON.stringify({event:"crm.native-r2a-sales-linked-actor-audit",result:"PASS",
     all_sales_actions:true,linked_task_delivery:true,late_batch_rollback:true}));
 console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
   rpc_methods:["CreatePipeline","UpdatePipeline","GetPipeline","ListPipelines","ListStageDeals",
-    "CreateDeal","UpdateDeal","AdvanceStage","GetDeal","ListDeals"],
+    "CreateDeal","UpdateDeal","AdvanceStage","CloseDeal","ReopenDeal",
+    "ListDealEvents","GetDeal","ListDeals"],
   generated_binary:true,original_owner:"crm.sales",signed_access:true,tenant_ab:true,
   viewer_read:true,viewer_write_denied:true,exact_money:true,
   before_limit_filters:true,cas:true,idempotent_receipts:true,
