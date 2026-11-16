@@ -35,6 +35,12 @@ async function allPipelines():Promise<SalesPipeline[]> {
 }
 export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const [stageCursors,setStageCursors]=useState<Record<string,string>>({});
+  // Native DnD is presentation only: the existing confirmed advance form
+  // remains the ONE mutation path (no optimistic Deal update).
+  const [draggingDeal,setDraggingDeal]=useState<{
+    dealId:string;pipelineId:string;stageId:string
+  }|null>(null);
+  const [droppedStageId,setDroppedStageId]=useState("");
   const [accountCursor,setAccountCursor]=useState("");
   const [status,setStatus]=useState("");
   const [accountId,setAccountId]=useState(initialAccountId);
@@ -86,12 +92,13 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const refreshSales=async()=>{
     await Promise.all([query.reload(),accountDealsQuery.reload()]);
   };
-  const open=async(dealId:string,mode:"edit"|"advance"|"close")=>{
+  const open=async(dealId:string,mode:"edit"|"advance"|"close",droppedOn="")=>{
     try {
       const value=(await api.deals.getDeal({dealId})).deal;
       if(!value)throw Error("Сделка не найдена");
       setSelected(mode==="edit"?value:undefined);
       setAdvance(mode==="edit"?undefined:value);
+      setDroppedStageId(mode==="advance"?droppedOn:"");
       setEditorMode(mode);mutation.changed();
     } catch(error) {await mutation.run(()=>Promise.reject(error));}
   };
@@ -181,12 +188,43 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
       {accountCursor&&<Button variant="secondary" disabled={accountDealsQuery.busy}
         onClick={()=>setAccountCursor("")}>К началу сделок клиента</Button>}
     </section>}
-    {activePipeline&&<div className={styles.board}>
+    {activePipeline&&<>
+      <p>Перетащите открытую сделку в следующий этап. Для клавиатуры или сенсорного экрана используйте «Изменить этап» и подтвердите переход в единой форме.</p>
+      <div className={styles.board}>
       {columns.map(stage=>{
         const boardPage=query.data?.find(entry=>entry.stageId===stage.stageId);
-        return <section key={stage.stageId}>
+        const source=columns.find(s=>s.stageId===draggingDeal?.stageId);
+        const acceptsDrop=!!draggingDeal&&draggingDeal.pipelineId===activePipeline.pipelineId&&
+          !activePipeline.archived&&!stage.archived&&!!source&&
+          stage.ordinal>source.ordinal;
+        return <section key={stage.stageId} aria-label={"Этап "+stage.name}
+          className={acceptsDrop?styles.boardDropReady:undefined}
+          onDragOver={event=>{
+            if(acceptsDrop){event.preventDefault();event.dataTransfer.dropEffect="move";}
+          }}
+          onDrop={event=>{
+            const moving=draggingDeal;
+            const dragId=event.dataTransfer.getData("application/x-crm-deal");
+            setDraggingDeal(null);
+            if(!acceptsDrop||!moving||dragId!==moving.dealId)return;
+            event.preventDefault();
+            void open(moving.dealId,"advance",stage.stageId);
+          }}>
           <h2>{stage.name}{stage.archived?" (архив)":""} · {boardPage?.totalCount.toString()??"—"}</h2>
           {boardPage?.deals.map(d=><Card key={d.dealId} title={d.name}>
+            {d.status===DealStatus.OPEN&&!activePipeline.archived&&
+              <span className={styles.dealDragHandle} draggable
+                aria-label={"Перетащить сделку "+d.name}
+                title="Перетащить к следующему этапу; затем подтвердить изменение"
+                onDragStart={event=>{
+                  event.dataTransfer.effectAllowed="move";
+                  event.dataTransfer.setData("application/x-crm-deal",d.dealId);
+                  setDraggingDeal({dealId:d.dealId,
+                    pipelineId:activePipeline.pipelineId,stageId:stage.stageId});
+                }}
+                onDragEnd={()=>setDraggingDeal(null)}>
+                Перетащить
+              </span>}
             <p>{moneyText(d.amount)} · {percent(d.probabilityBasisPoints)}%</p>
             <p>Клиент: {d.accountId}</p>
             <p>{d.status===DealStatus.WON?"Выиграна":d.status===DealStatus.LOST?"Проиграна":
@@ -205,7 +243,8 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
             К началу этапа</Button>}
         </section>;
       })}
-    </div>}
+      </div>
+    </>}
     {!query.busy&&query.data?.every(entry=>entry.totalCount===0n)&&<p>Сделок пока нет.</p>}
 
     <RecordPanel open={pipelineEditor!==null} dirty={pipelineDirty}
@@ -280,7 +319,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
       title={advance?(editorMode==="close"?"Завершить сделку: ":"Этап сделки: ")+advance.name:
         selected?"Изменить сделку":"Новая сделка"}
       onClose={()=>{setEditorMode(null);setSelected(undefined);setAdvance(undefined);}}>
-      {advance?<form key={advance.dealId+advance.version} onChange={mutation.changed} onSubmit={e=>{
+      {advance?<form key={advance.dealId+advance.version+droppedStageId} onChange={mutation.changed} onSubmit={e=>{
         e.preventDefault();const data=new FormData(e.currentTarget);
         void mutation.run(()=>{
           const closing=editorMode==="close";
@@ -308,7 +347,8 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
         </SelectField>
         <TextField label="Причина закрытия" name="reason" required/>
       </>:<>
-        <SelectField label="Следующий этап" name="nextStage" required>
+        <SelectField label="Следующий этап" name="nextStage"
+          defaultValue={nextStages.some(s=>s.stageId===droppedStageId)?droppedStageId:nextStages[0]?.stageId??""} required>
           {nextStages.map(stage=><option value={stage.stageId} key={stage.stageId}>
             {stage.name}</option>)}
         </SelectField>

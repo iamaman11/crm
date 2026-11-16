@@ -419,8 +419,24 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const savedDeal=(await sql("SELECT version,json_extract(state,'$.probability_basis_points') AS probability FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
    assert.equal(savedDeal.version,2);assert.equal(savedDeal.probability,3850);
    await page.getByText("90071992547409.93 USD · 38.50%",{exact:true}).waitFor();
-   await dealCard.getByRole("button",{name:"Изменить этап",exact:true}).click();
+   // Keyboard/select fallback remains the original mutation form; verify
+   // it opens and can be cancelled without a write before testing native DnD.
+   await dealCard.getByRole("button",{name:"Изменить этап",exact:true}).focus();
+   await page.keyboard.press("Enter");
+   await page.getByRole("heading",{name:"Этап сделки: Browser Deal "+runId,exact:true}).waitFor();
    await page.getByLabel("Следующий этап",{exact:true}).selectOption(ownStageIds[1]);
+   await page.getByRole("button",{name:"Отмена",exact:true}).last().click();
+   assert.equal((await sql("SELECT version FROM crm_sales_deal_records WHERE tenant='"+
+     tenantSql+"' AND id='"+dealId+"'"))[0].version,2,
+     "Keyboard fallback cancellation must not mutate a Deal");
+
+   // HTML5 native DnD opens the SAME typed CAS/receipt confirmation form.
+   const dragHandle=dealCard.getByText("Перетащить",{exact:true});
+   const targetColumn=page.locator('section[aria-label="Этап Квалификация"]');
+   await dragHandle.dragTo(targetColumn);
+   await page.getByRole("heading",{name:"Этап сделки: Browser Deal "+runId,exact:true}).waitFor();
+   assert.equal(await page.getByLabel("Следующий этап",{exact:true}).inputValue(),
+     ownStageIds[1],"Native DnD must preselect the dropped stage");
    await mutation(page.getByRole("button",{name:"Сохранить этап",exact:true}),"AdvanceStage");
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,1);
    // Closing is independent of stage movement: retain the real stage and do
