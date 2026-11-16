@@ -1,6 +1,7 @@
 -- R7.1: atomic catalog-rank rebase for occupied stages. Immutable 0011 stays applied.
 DROP TRIGGER crm_sales_pipeline_references_guard;
 DROP TRIGGER crm_sales_deal_update_audit;
+DROP TRIGGER crm_sales_deal_catalog_move_guard;
 
 -- Stage ID is stable. Used stages cannot be deleted; open Deal stages cannot
 -- be archived, and a pipeline with open Deals cannot be archived.
@@ -21,6 +22,24 @@ BEFORE UPDATE ON crm_sales_pipeline_records BEGIN
       )
     )
  ) THEN RAISE(ABORT,'SALES_PIPELINE_REFERENCED_STAGE_CHANGED') END;
+END;
+
+-- The 0011 advance-stage trigger must not classify metadata-only rank
+-- rebases as new Deal stage transitions. Domain transitions still get the
+-- full authoritative active-stage and ordinal check at write time.
+CREATE TRIGGER crm_sales_deal_catalog_move_guard
+BEFORE UPDATE ON crm_sales_deal_records
+WHEN NEW.last_action='sales_deals.advance' AND NEW.version>OLD.version BEGIN
+ SELECT CASE WHEN NOT EXISTS (
+  SELECT 1 FROM crm_sales_pipeline_records p
+  JOIN json_each(p.state,'$.stages') s
+  WHERE p.tenant=NEW.tenant
+    AND p.id=json_extract(NEW.state,'$.stage.pipeline_id')
+    AND json_extract(p.state,'$.archived')=0
+    AND json_extract(s.value,'$.stage_id')=json_extract(NEW.state,'$.stage.stage_id')
+    AND json_extract(s.value,'$.ordinal')=json_extract(NEW.state,'$.stage.ordinal')
+    AND json_extract(s.value,'$.archived')=0
+ ) THEN RAISE(ABORT,'SALES_DEAL_STAGE_NOT_IN_CATALOG') END;
 END;
 
 -- Only a catalog-derived ordinal can change without a Deal version increment.
