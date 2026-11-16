@@ -437,6 +437,19 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await movedDealCard.getByText("Выиграна · версия 4",{exact:true}).waitFor();
    assert.equal(await movedDealCard.getByRole("button",{name:"Изменить сделку",exact:true}).count(),0);
    steps.push("CloseDeal: Won at unchanged stage, terminal read-only, D1 linked receipt");
+   // The same visible editor may reorder stages already used by closed Deals.
+   await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
+   await page.getByRole("button",{name:"Выше",exact:true}).last().click();
+   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
+   const newCatalog=JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+
+     tenantSql+"' AND id='"+newPipelineId+"'"))[0].state);
+   assert.deepEqual(newCatalog.stages.map(s=>s.stage_id),[ownStageIds[1],ownStageIds[0]]);
+   const rebased=(await sql("SELECT version,json_extract(state,'$.stage.ordinal') AS rank "+
+     "FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+   assert.deepEqual(rebased,{version:4,rank:1},
+     "Occupied reorder must not increment Deal versions");
+   await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+   steps.push("Occupied stage reorder in real React keeps Deal version and stable ID");
    await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
    await page.getByLabel("Архивировать воронку",{exact:true}).check();
    await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
