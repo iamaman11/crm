@@ -729,18 +729,29 @@ impl SalesV2Service {
                 .close_outcome()
                 .map(|outcome| ContactPointV2Service::timestamp(outcome.closed_at_unix_nanos()))
                 .into(),
-            close_reason_code: deal.close_outcome()
+            close_reason_code: deal
+                .close_outcome()
                 .map_or(String::new(), |x| x.reason_code().as_str().to_owned()),
-            primary_contact_id: deal.primary_contact()
+            primary_contact_id: deal
+                .primary_contact()
                 .map_or(String::new(), |x| x.resource_id.clone()),
-            expected_close_date: deal.expected_close_date().map(|d| core_v2::CalendarDate {
-                year: d.year(),
-                month: u32::from(d.month()),
-                day: u32::from(d.day()),
-                ..Default::default()
-            }).into(),
-            created_at: Some(ContactPointV2Service::timestamp(deal.created_at_unix_nanos())).into(),
-            updated_at: Some(ContactPointV2Service::timestamp(deal.updated_at_unix_nanos())).into(),
+            expected_close_date: deal
+                .expected_close_date()
+                .map(|d| core_v2::CalendarDate {
+                    year: d.year(),
+                    month: u32::from(d.month()),
+                    day: u32::from(d.day()),
+                    ..Default::default()
+                })
+                .into(),
+            created_at: Some(ContactPointV2Service::timestamp(
+                deal.created_at_unix_nanos(),
+            ))
+            .into(),
+            updated_at: Some(ContactPointV2Service::timestamp(
+                deal.updated_at_unix_nanos(),
+            ))
+            .into(),
             ..Default::default()
         })
     }
