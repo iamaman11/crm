@@ -645,17 +645,18 @@ pub(super) async fn list_stage_page(
         for row in &rows {
             // Decode exact integer text, never SQLite SUM/REAL; reject invalid
             // stored Money rather than silently returning misleading totals.
-            let units = row.minor_units.parse::<i128>().map_err(|_| {
-                worker::Error::RustError("SALES_BOARD_AMOUNT_INVALID".into())
-            })?;
+            let units = row
+                .minor_units
+                .parse::<i128>()
+                .map_err(|_| worker::Error::RustError("SALES_BOARD_AMOUNT_INVALID".into()))?;
             if units < 0 {
-                return Err(worker::Error::RustError("SALES_BOARD_AMOUNT_INVALID".into()));
+                return Err(worker::Error::RustError(
+                    "SALES_BOARD_AMOUNT_INVALID".into(),
+                ));
             }
             let currency = CurrencyCode::try_new(row.currency_code.clone())
                 .map_err(|e| worker::Error::RustError(e.code))?;
-            let total = summary
-                .entry(currency.to_string())
-                .or_insert((0, 0));
+            let total = summary.entry(currency.to_string()).or_insert((0, 0));
             total.0 = total
                 .0
                 .checked_add(units)
