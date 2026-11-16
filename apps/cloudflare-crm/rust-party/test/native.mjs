@@ -1740,6 +1740,26 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
     stages:[pipelineSeed.stages[1],pipelineSeed.stages[0],pipelineSeed.stages[2]],
     archived:false,
     precondition:{expectedVersion:2n,idempotencyKey:"connect-r7-reorder-used-stage"}};
+  // A late D1 failure after the catalog CAS must roll back BOTH the
+  // Pipeline audit/receipt and every Deal rank projection.
+  const failedRebaseSnapshot=()=>sql("SELECT (SELECT state FROM crm_sales_pipeline_records "+
+    "WHERE tenant='tenant-a' AND id='pipeline.enterprise') AS catalog, "+
+    "(SELECT state FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id='"+dealId+"') AS closed, "+
+    "(SELECT state FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id='"+dealLast+"') AS opened, "+
+    "(SELECT COUNT(*) FROM crm_sales_pipeline_receipts WHERE tenant='tenant-a') AS receipts, "+
+    "(SELECT COUNT(*) FROM crm_audit WHERE tenant_id='tenant-a') AS audits");
+  const beforeFailedRebase=failedRebaseSnapshot();
+  sql("CREATE TRIGGER fixture_deny_rank_rebase BEFORE UPDATE ON crm_sales_deal_records "+
+    "WHEN NEW.id='"+dealLast+"' AND NEW.version=OLD.version "+
+    "BEGIN SELECT RAISE(ABORT,'fixture rank rollback'); END;");
+  try {
+    const denied=await salesV2("UpdatePipeline",admin,{
+      ...reorder,precondition:{expectedVersion:2n,idempotencyKey:"r7-rebase-rollback"}
+    });
+    assert.equal(denied.status,409,describeProtobuf(denied.body));
+    assert.deepEqual(failedRebaseSnapshot(),beforeFailedRebase,
+      "Late D1 failure must roll back catalog, both Deals, receipts and audit");
+  }finally{sql("DROP TRIGGER fixture_deny_rank_rebase");}
   const reordered=await salesV2("UpdatePipeline",admin,reorder);
   assert.equal(reordered.status,200,describeProtobuf(reordered.body));
   assert.equal(reordered.body.pipeline?.version,3n);
