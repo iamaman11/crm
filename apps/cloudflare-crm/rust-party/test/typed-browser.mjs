@@ -393,7 +393,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await sql("SELECT version FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].version,1);
    const recordedPipelines=await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+newPipelineId+"' AND action='sales_pipeline.create'");
    assert.equal(recordedPipelines[0].n,1);
-   await page.getByLabel("Воронка продаж",{exact:true}).selectOption("pipeline.enterprise");
+   // The test owns its pipeline end-to-end; old test Deals are discarded in 0012.
+   const pipelineState=(await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].state;
+   const ownStageIds=JSON.parse(pipelineState).stages.map(s=>s.stage_id);
+   assert.equal(ownStageIds.length,2,"new user-managed pipeline must have two stages");
+   await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
    await page.getByRole("button",{name:"Новая сделка",exact:true}).click();
    await page.getByLabel("Название сделки",{exact:true}).fill("Browser Deal "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
@@ -416,7 +420,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(savedDeal.version,2);assert.equal(savedDeal.probability,3850);
    await page.getByText("90071992547409.93 USD · 38.50%",{exact:true}).waitFor();
    await dealCard.getByRole("button",{name:"Изменить этап",exact:true}).click();
-   await page.getByLabel("Следующий этап",{exact:true}).selectOption("qualified");
+   await page.getByLabel("Следующий этап",{exact:true}).selectOption(ownStageIds[1]);
    await mutation(page.getByRole("button",{name:"Сохранить этап",exact:true}),"AdvanceStage");
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,1);
    // Closing is independent of stage movement: retain the real stage and do
@@ -433,6 +437,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await movedDealCard.getByText("Выиграна · версия 4",{exact:true}).waitFor();
    assert.equal(await movedDealCard.getByRole("button",{name:"Изменить сделку",exact:true}).count(),0);
    steps.push("CloseDeal: Won at unchanged stage, terminal read-only, D1 linked receipt");
+   await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
+   await page.getByLabel("Архивировать воронку",{exact:true}).check();
+   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
+   assert.equal(JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].state).archived,true);
+   await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeDisabled();
+   await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
+   await page.getByLabel("Архивировать воронку",{exact:true}).uncheck();
+   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
+   assert.equal(JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].state).archived,false);
+   steps.push("Pipeline archive and restore using real React, Connect and D1");
    await navigate("accounts","Клиенты");
    await page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,level:2,exact:true})})
      .getByRole("button",{name:"Открыть карточку",exact:true}).click();
