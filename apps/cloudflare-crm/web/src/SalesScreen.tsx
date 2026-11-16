@@ -6,6 +6,8 @@ import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,MutationNotice,QueryNotice} from "./hooks";
 import {AccountPicker} from "./Pickers";
+import {DealContactPicker,DealDetails,inputDate,parseDate} from "./DealRecord";
+import {dealHref} from "./routes";
 import {minorUnits,decimalUnits,moneyText,basisPoints,percent} from "./money";
 import styles from "./App.module.css";
 
@@ -33,7 +35,9 @@ async function allPipelines():Promise<SalesPipeline[]> {
   } while(cursor);
   return all;
 }
-export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
+export function SalesScreen({initialAccountId="",focusedDealId=""}:{
+  initialAccountId?:string;focusedDealId?:string;
+}) {
   const [stageCursors,setStageCursors]=useState<Record<string,string>>({});
   // Native DnD is presentation only: the existing confirmed advance form
   // remains the ONE mutation path (no optimistic Deal update).
@@ -49,6 +53,9 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const [advance,setAdvance]=useState<Deal>();
   const [editorMode,setEditorMode]=useState<EditorMode>(null);
   const [draftId,setDraftId]=useState(newId);
+  const [formAccountId,setFormAccountId]=useState("");
+  const [expandedDeal,setExpandedDeal]=useState("");
+  const [detailRevision,setDetailRevision]=useState(0);
   const [pipelineEditor,setPipelineEditor]=useState<SalesPipeline|"new"|null>(null);
   const [pipelineDraftId,setPipelineDraftId]=useState<string>(newId);
   const [pipelineName,setPipelineName]=useState("");
@@ -133,6 +140,12 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const nextStages=!advancePipeline?.archived?advancePipeline?.stages.filter(s=>!s.archived&&s.ordinal>(advance?.stage?.ordinal??0))??[]:[];
   const readyStage=!activePipeline?.archived?activePipeline?.stages.find(s=>!s.archived):undefined;
   return <>
+    {focusedDealId?<section>
+      <PageHeader title="Карточка сделки" actions={<a href="#sales">К списку сделок</a>}/>
+      <DealDetails key={focusedDealId+":"+detailRevision} dealId={focusedDealId}
+        onEdit={()=>void open(focusedDealId,"edit")}
+        onClose={()=>void open(focusedDealId,"close")}/>
+    </section>:<>
     <PageHeader title="Сделки" description="Сначала все сделки из всех воронок. Выберите воронку для Kanban: количество по этапам вычисляется на сервере, колонки имеют независимую пагинацию." actions={<>
       <Button variant="secondary" onClick={()=>void editPipeline()}>Создать воронку</Button>{" "}
       {activePipeline&&<Button variant="secondary" onClick={()=>void editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
@@ -166,6 +179,10 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
         const pipeline=pipelines.find(p=>p.pipelineId===deal.stage?.pipelineId);
         const stage=pipeline?.stages.find(s=>s.stageId===deal.stage?.stageId);
         return <Card key={deal.dealId} title={deal.name}>
+          <Button variant="secondary" onClick={()=>setExpandedDeal(old=>old===deal.dealId?"":deal.dealId)}>
+            {expandedDeal===deal.dealId?"Свернуть":"Раскрыть карточку"}
+          </Button>{" "}
+          <a href={dealHref(deal.dealId)}>Полная страница</a>
           <p>Воронка: {pipeline?.name??deal.stage?.pipelineId??"неизвестна"} · Этап: {stage?.name??deal.stage?.stageId??"неизвестен"}</p>
           {pipeline&&<Button variant="secondary" onClick={()=>{setPipelineId(pipeline.pipelineId);setStageCursors({});}}>Открыть воронку</Button>}
           <p>{moneyText(deal.amount)} · {percent(deal.probabilityBasisPoints)}%</p>
@@ -174,6 +191,9 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
             <Button variant="secondary" onClick={()=>void open(deal.dealId,"edit")}>Редактировать</Button>{" "}
             <Button variant="secondary" onClick={()=>void open(deal.dealId,"close")}>Завершить</Button>
           </>}
+          {expandedDeal===deal.dealId&&<DealDetails key={deal.dealId+":"+detailRevision}
+            dealId={deal.dealId} onEdit={()=>void open(deal.dealId,"edit")}
+            onClose={()=>void open(deal.dealId,"close")}/>}
         </Card>;
       })}
       {!allDealsQuery.busy&&allDealsQuery.data?.deals.length===0&&
@@ -223,6 +243,10 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
             {boardPage.currencyTotals.length===0&&<p>Суммы не указаны</p>}
           </div>}
           {boardPage?.deals.map(d=><Card key={d.dealId} title={d.name}>
+            <Button variant="secondary" onClick={()=>setExpandedDeal(old=>old===d.dealId?"":d.dealId)}>
+              {expandedDeal===d.dealId?"Свернуть":"Раскрыть карточку"}
+            </Button>{" "}
+            <a href={dealHref(d.dealId)}>Полная страница</a>
             {d.status===DealStatus.OPEN&&!activePipeline.archived&&
               <span className={styles.dealDragHandle} draggable
                 aria-label={"Перетащить сделку "+d.name}
@@ -245,6 +269,9 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
               <Button variant="secondary" onClick={()=>void open(d.dealId,"advance")}>Изменить этап</Button>{" "}
               <Button variant="secondary" onClick={()=>void open(d.dealId,"close")}>Завершить сделку</Button>
             </>}
+            {expandedDeal===d.dealId&&<DealDetails key={d.dealId+":"+detailRevision}
+              dealId={d.dealId} onEdit={()=>void open(d.dealId,"edit")}
+              onClose={()=>void open(d.dealId,"close")}/>}
           </Card>)}
           {boardPage?.pageInfo?.nextPageToken&&<Button variant="secondary" disabled={query.busy}
             onClick={()=>setStageCursors(old=>({...old,[stage.stageId]:boardPage.pageInfo?.nextPageToken??""}))}>
@@ -325,6 +352,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
       </form>
     </RecordPanel>
     <MutationNotice state={pipelineMutation}/>
+    </>}
 
     <RecordPanel open={editorMode!==null}
       title={advance?(editorMode==="close"?"Завершить сделку: ":"Этап сделки: ")+advance.name:
@@ -349,7 +377,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
             ...(closing?{closeReasonCode:field(data,"reason")}:{}),
             precondition:{idempotencyKey:mutation.key,expectedVersion:advance.version}
           });
-        },async()=>{setEditorMode(null);setAdvance(undefined);await refreshSales();});
+        },async()=>{setEditorMode(null);setAdvance(undefined);setDetailRevision(v=>v+1);await refreshSales();});
       }}><FormGrid>{editorMode==="close"?<>
         <p>Текущий этап сохраняется: {advancePipeline?.stages.find(s=>s.stageId===advance.stage?.stageId)?.name??advance.stage?.stageId??"неизвестен"}.</p>
         <SelectField label="Результат сделки" name="targetStatus" defaultValue={DealStatus.WON}>
@@ -378,10 +406,23 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
             minorUnits:minorUnits(amountText,currencyCode),currencyCode
           }:undefined;
           const common={probabilityBasisPoints:basisPoints(field(data,"probability"))};
+          const contactId=field(data,"primaryContactId");
+          const expectedCloseDate=parseDate(field(data,"expectedCloseDate"));
           if(selected) {
+            const dateBefore=inputDate(selected.expectedCloseDate);
+            const dateNow=inputDate(expectedCloseDate);
+            const contactPatch=contactId===selected.primaryContactId?{}:{
+              primaryContactId:{operation:contactId?
+                {case:"set" as const,value:contactId}:{case:"clear" as const,value:true}}
+            };
+            const datePatch=dateBefore===dateNow?{}:{
+              expectedCloseDate:{operation:expectedCloseDate?
+                {case:"set" as const,value:expectedCloseDate}:{case:"clear" as const,value:true}}
+            };
             return api.deals.updateDeal({
               dealId:selected.dealId,
               name:{operation:{case:"set",value:field(data,"name")}},...common,
+              ...contactPatch,...datePatch,
               ...(mode==="clear"?{amount:{operation:{case:"clear" as const,value:true}}}:
                 mode==="set"?(amount?{amount:{operation:{case:"set" as const,value:amount}}}:
                   (()=>{throw Error("Введите сумму");})()):{}),
@@ -394,18 +435,25 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
             dealId:draftId,name:field(data,"name"),accountId:field(data,"accountId"),
             stage:{pipelineId:activePipeline.pipelineId,stageId:stage.stageId,ordinal:stage.ordinal},
             ...(amount?{amount}:{}),...common,
+            ...(contactId?{primaryContactId:contactId}:{}),
+            ...(expectedCloseDate?{expectedCloseDate}:{}),
             precondition:{idempotencyKey:mutation.key}
           });
-        },async()=>{setEditorMode(null);setSelected(undefined);setDraftId(newId());await refreshSales();});
+        },async()=>{setEditorMode(null);setSelected(undefined);setDraftId(newId());setDetailRevision(v=>v+1);await refreshSales();});
       }}><FormGrid>
         <TextField label="Название сделки" name="name" defaultValue={selected?.name??""} required/>
         {!selected&&<>
-          <AccountPicker/>
+          <AccountPicker onSelect={setFormAccountId}/>
           <SelectField label="Этап" name="stageId" defaultValue={readyStage?.stageId??""} required>
             {activePipeline?.stages.filter(stage=>!stage.archived).map(stage=>
               <option value={stage.stageId} key={stage.stageId}>{stage.name}</option>)}
           </SelectField>
         </>}
+        <DealContactPicker key={selected?.dealId??formAccountId}
+          accountId={selected?.accountId??formAccountId}
+          initialContactId={selected?.primaryContactId??""}/>
+        <TextField label="Ожидаемая дата закрытия" name="expectedCloseDate" type="date"
+          defaultValue={inputDate(selected?.expectedCloseDate)}/>
         {selected&&<SelectField label="Изменение суммы" name="amountMode" defaultValue="keep">
           <option value="keep">Сохранить прежнюю</option><option value="set">Установить</option>
           <option value="clear">Убрать</option>
