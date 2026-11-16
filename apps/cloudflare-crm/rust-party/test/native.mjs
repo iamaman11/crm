@@ -2045,6 +2045,21 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
        assert.equal(escapePanel?.nativeOpen,true,"native Escape cannot bypass rejected dirty close");
        panelTransitions.push({title:"Новый клиент",result:"ESCAPE_REJECTED",
          desired:escapePanel?.desired,nativeOpen:escapePanel?.nativeOpen});
+       // Regression for Chromium native cancel after repeated rejections:
+       // the second Escape must also be prevented before the browser closes
+       // the HTMLDialogElement (React desired and native open stay in sync).
+       page.once("dialog",dialog=>void dialog.dismiss());
+       await page.keyboard.press("Escape");
+       const secondRejected=await assertUiPanel({page,panel,panelId,title:"Новый клиент",
+         expected:"open",scenario:"dirty-account-second-escape-rejected",
+         evidenceDirectory:join(cwd,"../e2e-evidence-native")});
+       const secondPanel=secondRejected.panels.find(p=>p.panelId===panelId);
+       assert.equal(secondRejected.confirmations.at(-1)?.accepted,false);
+       assert.equal(secondPanel?.desired,"open");
+       assert.equal(secondPanel?.nativeOpen,true);
+       assert.equal(secondPanel?.closeSource,"escape");
+       panelTransitions.push({title:"Новый клиент",result:"SECOND_ESCAPE_REJECTED",
+         desired:secondPanel?.desired,nativeOpen:secondPanel?.nativeOpen});
        page.once("dialog",dialog=>void dialog.accept());
        await page.keyboard.press("Escape");
      }else{
@@ -2067,7 +2082,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    writeFileSync(join(cwd,"../e2e-evidence-native/search-browser.json"),JSON.stringify({result:"PASS",source_sha:sourceSha,
      scenarios:["search after first unfiltered page","Party picker beyond 100 rows","Account picker beyond 100 rows",
        "selection reset","keyboard Enter does not submit mutation","mobile layout","read-only",
-       "native dialog and React state matched on close","dirty draft close rejection retained dialog"],
+       "native dialog and React state matched on close","dirty draft close rejection retained dialog",
+       "second rejected Escape preserves native modal before accepted close"],
      panel_transitions:panelTransitions,requests:searchRequests},null,2)+"\n");
  }finally{await searchBrowser.close();}
  // Write evidence only after every scenario assertion above has completed.
