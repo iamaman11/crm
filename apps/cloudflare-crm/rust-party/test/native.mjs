@@ -1386,6 +1386,46 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  // Original crm-sales v2: generated binary Connect, original Deal aggregate,
 // one tenant D1, exact money, CAS, receipt replay, and atomic stage->Activity.
 const salesV2=signedReadOnly(salesV2Path,binarySalesV2,decodeSalesV2);
+// The authoritative pipeline catalog is created before any new Deal write.
+// Stage order is owner-assigned, never supplied as an untrusted rank.
+const pipelineSeed={pipelineId:"pipeline.enterprise",name:"Enterprise",
+  stages:[
+    {stageId:"lead",name:"Lead",probabilityBasisPoints:1000},
+    {stageId:"qualified",name:"Qualified",probabilityBasisPoints:4500},
+    {stageId:"won",name:"Historical terminal",probabilityBasisPoints:10000}
+  ],precondition:{idempotencyKey:"connect-r7-pipeline-create-1"}};
+assert.equal((await salesV2("CreatePipeline",viewer,pipelineSeed)).status,403);
+assert.equal((await salesV2("CreatePipeline",admin,{
+  ...pipelineSeed,stages:[pipelineSeed.stages[0],pipelineSeed.stages[0]],
+  precondition:{idempotencyKey:"connect-r7-pipeline-duplicate-stage"}
+})).status,400);
+const pipelineCreated=await salesV2("CreatePipeline",admin,pipelineSeed);
+assert.equal(pipelineCreated.status,200,describeProtobuf(pipelineCreated.body));
+assert.equal(pipelineCreated.body.pipeline?.version,1n);
+assert.deepEqual(pipelineCreated.body.pipeline?.stages.map(s=>s.ordinal),[1,2,3]);
+assert.equal((await salesV2("CreatePipeline",admin,pipelineSeed)).body.receipt?.replayed,true);
+assert.equal((await salesV2("CreatePipeline",admin,{...pipelineSeed,name:"modified"})).status,409);
+assert.equal((await salesV2("GetPipeline",tenantB,{pipelineId:"pipeline.enterprise"})).status,404);
+assert.equal((await salesV2("GetPipeline",viewer,{pipelineId:"pipeline.enterprise"})).status,200);
+const pipelineOther=await salesV2("CreatePipeline",admin,{
+  pipelineId:"pipeline.other",name:"Other",stages:[pipelineSeed.stages[0]],
+  precondition:{idempotencyKey:"connect-r7-pipeline-create-2"}});
+assert.equal(pipelineOther.status,200,describeProtobuf(pipelineOther.body));
+const pipelineList=await salesV2("ListPipelines",viewer,{page:{pageSize:1}});
+assert.equal(pipelineList.status,200,describeProtobuf(pipelineList.body));
+assert.equal(pipelineList.body.pipelines.length,1);
+assert.ok(pipelineList.body.pageInfo?.nextPageToken);
+const pipelineUpdated=await salesV2("UpdatePipeline",admin,{
+  pipelineId:"pipeline.enterprise",name:"Enterprise managed",
+  stages:pipelineSeed.stages,archived:false,
+  precondition:{expectedVersion:1n,idempotencyKey:"connect-r7-pipeline-rename-1"}});
+assert.equal(pipelineUpdated.status,200,describeProtobuf(pipelineUpdated.body));
+assert.equal(pipelineUpdated.body.pipeline?.version,2n);
+assert.equal((await salesV2("UpdatePipeline",admin,{
+  pipelineId:"pipeline.enterprise",name:"stale",
+  stages:pipelineSeed.stages,archived:false,
+  precondition:{expectedVersion:1n,idempotencyKey:"connect-r7-pipeline-stale"}
+})).status,409);
 const dealId="sales-mid-"+randomUUID();
 const stageLead={pipelineId:"pipeline.enterprise",stageId:"lead",ordinal:1};
 const stageQualified={pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:2};
@@ -1404,6 +1444,12 @@ assert.equal((await salesV2("CreateDeal",admin,{
 assert.equal((await salesV2("CreateDeal",admin,{
   ...saleCreate,probabilityBasisPoints:10001,
   precondition:{idempotencyKey:"connect-sales-invalid-probability"}})).status,400);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,stage:{pipelineId:"pipeline.enterprise",stageId:"unknown",ordinal:1},
+  precondition:{idempotencyKey:"connect-sales-invalid-catalog-stage"}})).status,400);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,stage:{pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:999},
+  precondition:{idempotencyKey:"connect-sales-untrusted-ordinal"}})).status,400);
 assert.equal((await salesV2("CreateDeal",admin,{
   ...saleCreate,precondition:{idempotencyKey:"connect-sales-create-invalid-version",
     expectedVersion:1n}})).status,400);
@@ -1504,6 +1550,14 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
   "Won closure must not create a second follow-up Task");
 assert.equal((await salesV2("AdvanceStage",admin,closeSale))
   .body.receipt?.replayed,true);
+assert.equal((await salesV2("UpdatePipeline",admin,{
+  pipelineId:"pipeline.enterprise",name:"Unsafe reorder",
+  stages:[pipelineSeed.stages[1],pipelineSeed.stages[0],pipelineSeed.stages[2]],
+  archived:false,
+  precondition:{expectedVersion:2n,idempotencyKey:"connect-r7-reorder-used-stage"}
+})).status,409,"referenced stage reorder must fail atomically");
+assert.equal((await salesV2("GetPipeline",viewer,{pipelineId:"pipeline.enterprise"}))
+  .body.pipeline?.version,2n);
 assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
   "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'")[0].n,2,
   "two original one-batch Sales->Activities delivery receipts");
