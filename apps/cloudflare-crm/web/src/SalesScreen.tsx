@@ -188,7 +188,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
     </section>}
     {!activePipeline&&pipelines.length>0&&<p>Для работы с Kanban выберите конкретную воронку. Общий обзор показывает все сделки без выбора этапа.</p>}
     {activePipeline&&<>
-      <p>Перетащите открытую сделку в следующий этап. Для клавиатуры или сенсорного экрана используйте «Изменить этап» и подтвердите переход в единой форме.</p>
+      <p>Перетащите открытую сделку в следующий этап. Для клавиатуры или сенсорного экрана используйте «Изменить этап» и подтвердите переход в единой форме. Суммы по валютам рассчитаны сервером по всем подходящим сделкам этапа, независимо от страницы карточек.</p>
       <div className={styles.board}>
       {columns.map(stage=>{
         const boardPage=query.data?.find(entry=>entry.stageId===stage.stageId);
@@ -210,6 +210,13 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
             void open(moving.dealId,"advance",stage.stageId);
           }}>
           <h2>{stage.name}{stage.archived?" (архив)":""} · {boardPage?.totalCount.toString()??"—"}</h2>
+          {boardPage&&<div role="group" aria-label={"Итоги этапа "+stage.name}>
+            {boardPage.currencyTotals.map(total=><p key={total.currencyCode}>
+              {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode)} {total.currencyCode}
+              {" · сделок с суммой: "}{total.amountDealCount.toString()}
+            </p>)}
+            {boardPage.currencyTotals.length===0&&<p>Суммы не указаны</p>}
+          </div>}
           {boardPage?.deals.map(d=><Card key={d.dealId} title={d.name}>
             {d.status===DealStatus.OPEN&&!activePipeline.archived&&
               <span className={styles.dealDragHandle} draggable

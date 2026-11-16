@@ -159,7 +159,7 @@ impl sale_wire::DealService for SalesV2Service {
         if pipeline.stage(req.stage_id).is_none() {
             return Err(ConnectError::not_found("SALES_PIPELINE_STAGE_NOT_FOUND"));
         }
-        let (list, next, total_count) = sales_deals::list_stage_page(
+        let (list, next, total_count, currency_totals) = sales_deals::list_stage_page(
             &db,
             &self.tenant,
             sales_deals::StageListQuery {
@@ -185,6 +185,15 @@ impl sale_wire::DealService for SalesV2Service {
             })
             .into(),
             total_count,
+            currency_totals: currency_totals
+                .into_iter()
+                .map(|total| sale_wire::StageCurrencyTotal {
+                    currency_code: total.currency_code,
+                    total_minor_units: total.total_minor_units.to_string(),
+                    amount_deal_count: total.amount_deal_count,
+                    ..Default::default()
+                })
+                .collect(),
             ..Default::default()
         })
     }

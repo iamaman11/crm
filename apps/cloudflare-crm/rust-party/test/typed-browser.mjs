@@ -440,6 +440,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const dealId=await firstId("crm_sales_deal_records","name","Browser Deal "+runId);
    assert.ok(dealId);
    await page.getByText("90071992547409.93 USD · 37.45%",{exact:true}).waitFor();
+   const leadTotals=page.getByRole("group",{name:"Итоги этапа Первичный контакт"});
+   await leadTotals.getByText("90071992547409.93 USD · сделок с суммой: 1",
+     {exact:true}).waitFor();
    const dealCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Deal "+runId,exact:true})}).last();
    await dealCard.getByRole("button",{name:"Изменить сделку",exact:true}).click();
    // GetDeal completes asynchronously and replaces the create form. Editing the
@@ -471,6 +474,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(await page.getByLabel("Следующий этап",{exact:true}).inputValue(),
      ownStageIds[1],"Native DnD must preselect the dropped stage");
    await mutation(page.getByRole("button",{name:"Сохранить этап",exact:true}),"AdvanceStage");
+   await page.getByRole("group",{name:"Итоги этапа Квалификация"})
+     .getByText("90071992547409.93 USD · сделок с суммой: 1",
+       {exact:true}).waitFor();
+   await leadTotals.getByText("Суммы не указаны",{exact:true}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,1);
    // Closing is independent of stage movement: retain the real stage and do
    // not create a fictitious terminal stage or a second follow-up Task.

@@ -1646,6 +1646,8 @@ const overflow=await salesV2("ListStageDeals",viewer,{
 assert.equal(overflow.status,200,describeProtobuf(overflow.body));
 assert.equal(overflow.body.totalCount,27n,"board count must include all 27, not the page");
 assert.equal(overflow.body.deals.length,25);
+assert.deepEqual(overflow.body.currencyTotals,[],
+  "missing optional Money is not zero currency or an invented total");
 assert.ok(overflow.body.pageInfo?.nextPageToken);
 const overflowLast=await salesV2("ListStageDeals",viewer,{
   pipelineId:"pipeline.other",stageId:"lead",
@@ -1653,12 +1655,101 @@ const overflowLast=await salesV2("ListStageDeals",viewer,{
 assert.equal(overflowLast.status,200);
 assert.equal(overflowLast.body.deals.length,2);
 assert.equal(overflowLast.body.totalCount,27n);
+assert.deepEqual(overflowLast.body.currencyTotals,overflow.body.currencyTotals);
 const stageCount=await salesV2("ListStageDeals",viewer,{
   pipelineId:"pipeline.enterprise",stageId:"lead",page:{pageSize:1}});
 assert.equal(stageCount.status,200,describeProtobuf(stageCount.body));
 assert.equal(stageCount.body.totalCount,1n);
 assert.equal(stageCount.body.deals.length,1);
 assert.equal(stageCount.body.deals[0]?.dealId,dealLast);
+assert.deepEqual(stageCount.body.currencyTotals,[]);
+const qualifiedTotals=await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.enterprise",stageId:"qualified",page:{pageSize:1}});
+assert.equal(qualifiedTotals.status,200,describeProtobuf(qualifiedTotals.body));
+assert.deepEqual(qualifiedTotals.body.currencyTotals.map(t=>[
+  t.currencyCode,t.totalMinorUnits,t.amountDealCount
+]),[["PLN","98765",1n]],
+  "closed money is included unless the caller selects a status filter");
+assert.deepEqual((await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.enterprise",stageId:"qualified",status:1
+})).body.currencyTotals,[],
+  "status filter is applied to BOTH stage counts and summaries");
+
+// Five monetary Deals are added AFTER the 27-row pagination fixture:
+// 2 USD amounts exceed int64 when aggregated, while individually valid.
+// USD, PLN, JPY and KWD must never be added across currencies.
+const currencyCases=[
+  ["USD",9223372036854775807n],
+  ["USD",1n],
+  ["PLN",2345n],
+  ["JPY",345n],
+  ["KWD",4567n],
+];
+for(const [index,[currencyCode,minorUnits]] of currencyCases.entries()){
+  const made=await salesV2("CreateDeal",admin,{
+    dealId:"r7-totals-"+String(index).padStart(2,"0"),
+    name:"Currency Deal "+index,accountId,
+    stage:{pipelineId:"pipeline.other",stageId:"lead",ordinal:999},
+    amount:{minorUnits,currencyCode},probabilityBasisPoints:2000,
+    precondition:{idempotencyKey:"r7-stage-totals-"+index}
+  });
+  assert.equal(made.status,200,describeProtobuf(made.body));
+}
+const totalView=await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.other",stageId:"lead",page:{pageSize:1}});
+assert.equal(totalView.status,200,describeProtobuf(totalView.body));
+assert.equal(totalView.body.totalCount,32n);
+assert.equal(totalView.body.deals.length,1);
+assert.ok(totalView.body.pageInfo?.nextPageToken);
+assert.deepEqual(totalView.body.currencyTotals.map(t=>[
+  t.currencyCode,t.totalMinorUnits,t.amountDealCount
+]),[
+  ["JPY","345",1n],["KWD","4567",1n],["PLN","2345",1n],
+  ["USD","9223372036854775808",2n]
+], "full-stage exact totals must not overflow int64 or mix currencies");
+const totalNext=await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.other",stageId:"lead",
+  page:{pageSize:1,pageToken:totalView.body.pageInfo.nextPageToken}});
+assert.equal(totalNext.status,200);
+assert.equal(totalNext.body.deals.length,1);
+assert.equal(totalNext.body.totalCount,32n);
+assert.deepEqual(totalNext.body.currencyTotals,totalView.body.currencyTotals,
+  "summary must not depend on independently paginated Deal cards");
+assert.equal((await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.other",stageId:"lead",status:2
+})).body.totalCount,0n);
+assert.deepEqual((await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.other",stageId:"lead",status:2
+})).body.currencyTotals,[]);
+const missingAccount=await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.other",stageId:"lead",accountId:randomUUID()});
+assert.equal(missingAccount.status,200);
+assert.equal(missingAccount.body.totalCount,0n);
+assert.deepEqual(missingAccount.body.currencyTotals,[]);
+const updatedCurrency=await salesV2("UpdateDeal",admin,{
+  dealId:"r7-totals-01",
+  amount:{operation:{case:"set",value:{minorUnits:2n,currencyCode:"USD"}}},
+  precondition:{expectedVersion:1n,idempotencyKey:"r7-stage-totals-update"}
+});
+assert.equal(updatedCurrency.status,200,describeProtobuf(updatedCurrency.body));
+assert.equal((await salesV2("UpdateDeal",admin,{
+  dealId:"r7-totals-01",
+  amount:{operation:{case:"set",value:{minorUnits:3n,currencyCode:"USD"}}},
+  precondition:{expectedVersion:1n,idempotencyKey:"r7-stage-totals-stale"}
+})).status,409);
+const afterCurrencyUpdate=await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.other",stageId:"lead",page:{pageSize:1}});
+assert.equal(afterCurrencyUpdate.body.totalCount,32n);
+assert.equal(afterCurrencyUpdate.body.currencyTotals
+  .find(t=>t.currencyCode==="USD")?.totalMinorUnits,"9223372036854775809",
+  "failed CAS cannot affect exact full-stage sum");
+assert.equal((await salesV2("ListStageDeals",tenantB,{
+  pipelineId:"pipeline.other",stageId:"lead"
+})).status,404, "no cross-tenant summaries");
+console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:"PASS",
+  full_stage_count:32,visible_page:1,distinct_currencies:4,
+  amount_exceeds_int64:true,missing_amount:true,
+  status_account_filters:true,tenant_isolation:true,stale_cas:true}));
 assert.equal((await salesV2("ListStageDeals",tenantB,{
   pipelineId:"pipeline.enterprise",stageId:"lead"
 })).status,404,"tenant B cannot read tenant A pipeline");
