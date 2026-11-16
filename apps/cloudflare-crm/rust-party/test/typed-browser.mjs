@@ -466,10 +466,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      tenantSql+"' AND id='"+dealId+"'"))[0].version,2,
      "Keyboard fallback cancellation must not mutate a Deal");
 
-   // HTML5 native DnD opens the SAME typed CAS/receipt confirmation form.
+   // HTML5 DnD uses the always visible, sticky drop target on long
+   // columns. The board itself is one keyboard-focusable scroll region.
+   const kanban=page.getByRole("region",{name:"Kanban — этапы и сделки"});
+   await expect(kanban).toHaveAttribute("tabindex","0");
    const dragHandle=dealCard.getByText("Перетащить",{exact:true});
-   const targetColumn=page.locator('section[aria-label="Этап Квалификация"]');
-   await dragHandle.dragTo(targetColumn);
+   const targetDrop=page.getByRole("group",{name:"Зона переноса в этап Квалификация"});
+   await expect(targetDrop).toBeVisible();
+   await dragHandle.dragTo(targetDrop);
    await page.getByRole("heading",{name:"Этап сделки: Browser Deal "+runId,exact:true}).waitFor();
    assert.equal(await page.getByLabel("Следующий этап",{exact:true}).inputValue(),
      ownStageIds[1],"Native DnD must preselect the dropped stage");
@@ -741,8 +745,25 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.reload();
    assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
    await page.setViewportSize({width:390,height:844});
+   await navigate("sales","Сделки");
+   await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
+   const mobileKanban=page.getByRole("region",{name:"Kanban — этапы и сделки"});
+   await expect(mobileKanban).toHaveAttribute("tabindex","0");
+   const scrollMetrics=await mobileKanban.evaluate(element=>({
+     clientWidth:element.clientWidth,scrollWidth:element.scrollWidth,
+     clientHeight:element.clientHeight,scrollHeight:element.scrollHeight
+   }));
+   assert.ok(scrollMetrics.scrollWidth>scrollMetrics.clientWidth,
+     "mobile Kanban must scroll horizontally inside its named region");
+   await mobileKanban.focus();
+   assert.equal(await mobileKanban.evaluate(element=>element===document.activeElement),true,
+     "mobile Kanban scroll region must be keyboard focusable");
+   await page.keyboard.press("ArrowRight");
+   await expect.poll(()=>mobileKanban.evaluate(element=>element.scrollLeft))
+     .toBeGreaterThan(0);
    await page.screenshot({path:resolve(directory,"crm-mobile-dark.png"),fullPage:true});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),"mobile horizontal overflow");
+   steps.push("Mobile Kanban: named keyboard-focusable horizontal scroll region without viewport overflow");
    await navigate("accounts","Клиенты");
    await page.getByRole("button",{name:"Создать клиента",exact:true}).click();
    const mobilePanel=page.getByRole("dialog");

@@ -189,7 +189,8 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
     {!activePipeline&&pipelines.length>0&&<p>Для работы с Kanban выберите конкретную воронку. Общий обзор показывает все сделки без выбора этапа.</p>}
     {activePipeline&&<>
       <p>Перетащите открытую сделку в следующий этап. Для клавиатуры или сенсорного экрана используйте «Изменить этап» и подтвердите переход в единой форме. Суммы по валютам рассчитаны сервером по всем подходящим сделкам этапа, независимо от страницы карточек.</p>
-      <div className={styles.board}>
+      <div className={styles.board} role="region"
+        aria-label="Kanban — этапы и сделки" tabIndex={0}>
       {columns.map(stage=>{
         const boardPage=query.data?.find(entry=>entry.stageId===stage.stageId);
         const source=columns.find(s=>s.stageId===draggingDeal?.stageId);
@@ -197,7 +198,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
           !activePipeline.archived&&!stage.archived&&!!source&&
           stage.ordinal>source.ordinal;
         return <section key={stage.stageId} aria-label={"Этап "+stage.name}
-          className={acceptsDrop?styles.boardDropReady:undefined}
+          className={styles.boardColumn+(acceptsDrop?" "+styles.boardDropReady:"")}
           onDragOver={event=>{
             if(acceptsDrop){event.preventDefault();event.dataTransfer.dropEffect="move";}
           }}
@@ -210,6 +211,10 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
             void open(moving.dealId,"advance",stage.stageId);
           }}>
           <h2>{stage.name}{stage.archived?" (архив)":""} · {boardPage?.totalCount.toString()??"—"}</h2>
+          {!stage.archived&&<div className={styles.boardStageDropTarget}
+            role="group" aria-label={"Зона переноса в этап "+stage.name}>
+            {acceptsDrop?"Отпустите сделку здесь":"Зона переноса"}
+          </div>}
           {boardPage&&<div role="group" aria-label={"Итоги этапа "+stage.name}>
             {boardPage.currencyTotals.map(total=><p key={total.currencyCode}>
               {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode)} {total.currencyCode}
