@@ -26,7 +26,7 @@ const allowedBrowserPackages=new Set(["react","react-dom","@ultimate-crm/ui","@u
 // Whitelist exact runtime names: no ad-hoc transports, wrappers or DTO factories.
 const allowedClientValues=new Set([
  "createCloudflareCrmClient","AccountStatus","PartyKind","ContactPointKind","ContactPointStatus",
- "RelationshipDirectionality","RelationshipStatus","TaskPriority","TaskStatus","DealStatus",
+ "RelationshipDirectionality","RelationshipStatus","TaskPriority","TaskStatus","DealStatus","DealEventKind",
  "CommunicationChannel","ConsentEffect","ConsentStatus","EvaluationReason",
  "PrivacyCaseKind","PrivacyCaseStatus","RawPayloadPolicy"
 ]);
