@@ -57,9 +57,7 @@ fn fail(code: impl Into<String>, status: u16) -> Failure {
 fn digest<T: Serialize>(kind: &str, input: &T) -> String {
     format!(
         "{:x}",
-        Sha256::digest(
-            serde_json::to_vec(&json!([kind, input])).expect("typed pipeline request")
-        )
+        Sha256::digest(serde_json::to_vec(&json!([kind, input])).expect("typed pipeline request"))
     )
 }
 async fn receipt(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receipt>> {
@@ -71,11 +69,7 @@ async fn receipt(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Rece
     .first::<Receipt>(None)
     .await
 }
-pub(super) async fn get(
-    db: &D1Database,
-    tenant: &str,
-    id: &str,
-) -> Result<Option<SalesPipeline>> {
+pub(super) async fn get(db: &D1Database, tenant: &str, id: &str) -> Result<Option<SalesPipeline>> {
     bind(
         db,
         "SELECT state FROM crm_sales_pipeline_records WHERE tenant=? AND id=?",
@@ -225,7 +219,10 @@ pub(super) async fn update(
     let Ok(done) = result else {
         // D1 BEFORE UPDATE guard protects referenced stages from concurrent
         // reorder, archive, and deletion even if the earlier read was stale.
-        return Ok(Err(fail("SALES_PIPELINE_REFERENCED_STAGE_OR_WRITE_CONFLICT", 409)));
+        return Ok(Err(fail(
+            "SALES_PIPELINE_REFERENCED_STAGE_OR_WRITE_CONFLICT",
+            409,
+        )));
     };
     if done.meta()?.and_then(|meta| meta.changes).unwrap_or(0) == 0 {
         return Ok(Err(fail("SALES_PIPELINE_VERSION_CONFLICT", 409)));

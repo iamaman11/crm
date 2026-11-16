@@ -583,7 +583,8 @@ pub(super) async fn list_stage_page(
         condition.push_str(" AND account_id=?");
         arguments.push(JsValue::from_str(account));
     }
-    let count_sql = format!("SELECT COUNT(*) AS total FROM crm_sales_deal_records WHERE {condition}");
+    let count_sql =
+        format!("SELECT COUNT(*) AS total FROM crm_sales_deal_records WHERE {condition}");
     let counted = bind(db, &count_sql, &arguments)?
         .first::<CountRow>(None)
         .await?

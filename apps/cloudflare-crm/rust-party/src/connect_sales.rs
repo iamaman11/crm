@@ -749,8 +749,9 @@ impl SalesV2Service {
         input
             .iter()
             .map(|stage| {
-                let probability = u16::try_from(stage.probability_basis_points)
-                    .map_err(|_| ConnectError::invalid_argument("SALES_PIPELINE_PROBABILITY_INVALID"))?;
+                let probability = u16::try_from(stage.probability_basis_points).map_err(|_| {
+                    ConnectError::invalid_argument("SALES_PIPELINE_PROBABILITY_INVALID")
+                })?;
                 Ok(crm_sales::PipelineStageInput {
                     stage_id: stage.stage_id.clone(),
                     name: stage.name.clone(),
