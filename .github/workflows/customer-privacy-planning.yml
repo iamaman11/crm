@@ -23,8 +23,6 @@ on:
       - "database/tests/0045_customer_privacy_plan_reads.sql"
       - "contracts/customer-privacy-planning-implementation.json"
       - "contracts/customer-privacy-plan-reads-implementation.json"
-      - "docs/CUSTOMER_PRIVACY_PLANNING_IMPLEMENTATION.md"
-      - "docs/CUSTOMER_PRIVACY_PLAN_READS_IMPLEMENTATION.md"
       - ".github/workflows/customer-privacy-planning.yml"
   pull_request:
     branches:
@@ -48,8 +46,6 @@ on:
       - "database/tests/0045_customer_privacy_plan_reads.sql"
       - "contracts/customer-privacy-planning-implementation.json"
       - "contracts/customer-privacy-plan-reads-implementation.json"
-      - "docs/CUSTOMER_PRIVACY_PLANNING_IMPLEMENTATION.md"
-      - "docs/CUSTOMER_PRIVACY_PLAN_READS_IMPLEMENTATION.md"
       - ".github/workflows/customer-privacy-planning.yml"
 
 concurrency:

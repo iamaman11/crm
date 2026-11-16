@@ -20,7 +20,6 @@ on:
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0043_customer_privacy_discovery_scope.sql"
       - "contracts/customer-privacy-discovery-snapshot-implementation.json"
-      - "docs/CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md"
       - ".github/workflows/customer-privacy-discovery.yml"
   pull_request:
     branches:
@@ -41,7 +40,6 @@ on:
       - "database/tests/0001_platform_foundation.sql"
       - "database/tests/0043_customer_privacy_discovery_scope.sql"
       - "contracts/customer-privacy-discovery-snapshot-implementation.json"
-      - "docs/CUSTOMER_PRIVACY_DISCOVERY_SNAPSHOT_IMPLEMENTATION.md"
       - ".github/workflows/customer-privacy-discovery.yml"
 
 concurrency:

@@ -8,7 +8,6 @@ on:
       - ".github/workflows/ci-telemetry-baseline.yml"
       - "scripts/analyze_ci_telemetry.py"
       - "tests/test_ci_telemetry.py"
-      - "docs/CI_TELEMETRY_BASELINE.md"
   pull_request:
     branches:
       - main
@@ -16,7 +15,6 @@ on:
       - ".github/workflows/ci-telemetry-baseline.yml"
       - "scripts/analyze_ci_telemetry.py"
       - "tests/test_ci_telemetry.py"
-      - "docs/CI_TELEMETRY_BASELINE.md"
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:

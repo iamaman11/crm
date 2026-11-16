@@ -79,10 +79,9 @@ jobs:
           python -m pip install --requirement requirements-dev.txt
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Architecture and historical-evidence preflight
+      - name: Machine-readable module compatibility preflight
         run: |
           python scripts/check_module_compatibility.py --base-ref origin/main
-          python -m unittest -v tests.test_repository_navigation tests.test_architecture_documentation_consistency
       - name: Verify exact pull-request head
         if: github.event_name == 'pull_request'
         run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"

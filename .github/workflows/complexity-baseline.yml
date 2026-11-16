@@ -30,7 +30,6 @@ on:
       - "tests/test_step13_suppression_baseline.py"
       - "tests/test_workspace_governance.py"
       - "tests/test_workspace_dependency_policy.py"
-      - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
   pull_request:
     branches:
       - main
@@ -60,7 +59,6 @@ on:
       - "tests/test_step13_suppression_baseline.py"
       - "tests/test_workspace_governance.py"
       - "tests/test_workspace_dependency_policy.py"
-      - "docs/WORKSPACE_COMPLEXITY_BASELINE.md"
   workflow_dispatch:
 
 concurrency:
