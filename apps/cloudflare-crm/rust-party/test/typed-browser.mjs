@@ -148,8 +148,41 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(await page.evaluate(()=>document.activeElement?.id),"main-content",
      "skip-link must focus main without changing the typed route");
    assert.equal(new URL(await page.url()).hash,"#parties");
-   await page.getByRole("heading",{name:"Browser Party "+runId,exact:true}).waitFor();
-   const partyCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Party "+runId,exact:true})});
+   const partyHeading=page.getByRole("heading",{name:"Browser Party "+runId,exact:true});
+   // Workers.dev route can transiently return its OWN HTML 404 on an
+   // independently reloaded read-only Connect ListParties POST. Recover via
+   // the shipped UI Retry control ONLY after proving the response did not
+   // originate from the Rust Worker. Never retry a mutation, 409 or 401/403.
+   let edgeReadRecoveries=0;
+   for(let attempt=0;attempt<5;attempt++){
+     try {await partyHeading.waitFor({timeout:8000});break;}
+     catch(error){
+       const notice=page.getByRole("heading",{name:"Ошибка сервиса. HTTP 404",exact:true});
+       if(!await notice.isVisible())throw error;
+       await Promise.all(headerReads);
+       const last=requests.findLast(entry=>entry.path.endsWith("/ListParties"));
+       if(last?.status!==404||last.source_sha||last.runtime)
+         throw Error("ListParties failed inside CRM; no edge-only recovery allowed: "+
+           JSON.stringify(last));
+       const pending=page.waitForResponse(r=>r.url().endsWith("/ListParties")&&
+         r.request().method()==="POST");
+       await page.getByRole("button",{name:"Повторить чтение",exact:true}).click();
+       const response=await pending;
+       const headers=await response.allHeaders();
+       if(response.status()===200)
+         assert.equal(headers["x-crm-source-sha"],sourceSha,
+           "Recovered read must come from the exact native Worker");
+       else {
+         assert.equal(response.status(),404,"Retry cannot bypass a Worker read error");
+         assert.equal(headers["x-crm-source-sha"],undefined,
+           "Worker-owned 404 must fail rather than retry");
+       }
+       edgeReadRecoveries++;
+     }
+   }
+   await partyHeading.waitFor({timeout:10000});
+   if(edgeReadRecoveries)steps.push("Cloudflare edge-only read 404 recovered through typed UI Retry");
+   const partyCard=page.locator("section").filter({has:partyHeading});
    const partyEdit=partyCard.getByRole("button",{name:"Редактировать",exact:true});
    await partyEdit.click();
    await page.getByRole("heading",{name:"Изменить участника",exact:true}).waitFor();
