@@ -14,6 +14,7 @@ async function subprocessEntry(){
  const {mode,variant,sha,database,audit,requestId,rpcPath}=JSON.parse(process.env.CRM_RELEASE_TEST_FIXTURE);
  const posts=[];
  let enabled=mode==="deploy",migrated=variant!=="migration-fails",published=false,edgeAttempts=0,role="viewer";
+ let auditAttempts=0,telemetryAttempts=0;
  const commands=[];
  let db;
  if(mode==="deploy"){
@@ -46,6 +47,8 @@ async function subprocessEntry(){
  globalThis.fetch=async(url,options={})=>{
    const path=new URL(url).pathname;
    const json=value=>new Response(JSON.stringify(value),{headers:{"content-type":"application/json"}});
+   const html=status=>new Response("<!DOCTYPE html><title>Cloudflare edge error</title>",{
+     status,headers:{"content-type":"text/html","cf-ray":"fixture-ray-123"}});
    if(new URL(url).hostname==="crm-dev.crm-5bd5e1e1.workers.dev"){
      if(mode==="fail-closed")return new Response("disabled",{status:404});
      if(mode==="deploy"){
@@ -79,11 +82,24 @@ async function subprocessEntry(){
      if(options.method==="POST")assert.deepEqual(JSON.parse(options.body),{enabled:false,previews_enabled:false});
      return wrap({enabled:false,previews_enabled:false});
    }
-   if(path.endsWith("/telemetry/query"))return wrap({events:{events:variant==="missing-logs"?[]:[{
-     source:{event:"crm.native.request",request_id:requestId,operation:rpcPath,status:200,
-       error_code:variant==="wrong-error-code"?"aborted":null},$workers:{scriptVersion:{id:"version-new"}}
-   }]}});
+   if(path.endsWith("/telemetry/query")){
+     telemetryAttempts++;
+     if(mode==="verify-data"&&variant==="transient-html-telemetry"&&telemetryAttempts===1)
+       return html(503);
+     if(mode==="verify-data"&&variant==="persistent-html-telemetry")
+       return html(503);
+     if(mode==="verify-data"&&variant==="html-success-telemetry")
+       return html(200);
+     return wrap({events:{events:variant==="missing-logs"?[]:[{
+       source:{event:"crm.native.request",request_id:requestId,operation:rpcPath,status:200,
+         error_code:variant==="wrong-error-code"?"aborted":null},$workers:{scriptVersion:{id:"version-new"}}
+     }]}});
+   }
    if(path.endsWith("/query")){
+     if(mode==="verify-data"){
+       auditAttempts++;
+       if(variant==="transient-html-audit"&&auditAttempts===1)return html(502);
+     }
      if(mode==="fail-closed"&&variant==="restore-role"){
        const {sql,params}=JSON.parse(options.body);
        assert.deepEqual(params,["service:synthetic.access","crm-e2e-123-1-a"]);
@@ -171,6 +187,24 @@ test("matching browser, D1 and version-specific Logs evidence passes the release
  const result=run("verify-data");
  assert.equal(result.status,0,result.error);assert.equal(result.accepted,true);
 });
+for(const variant of ["transient-html-audit","transient-html-telemetry"])
+ test("transient HTML Cloudflare API readback is retried without replaying a mutation: "+variant,()=>{
+   const result=run("verify-data",variant);
+   assert.equal(result.status,0,result.error);
+   assert.equal(result.accepted,true);
+   assert.equal(result.posts.filter(p=>p.endsWith("/subdomain")).length,0,
+     "readback retries must not change public entry or redeploy");
+ });
+for(const variant of ["persistent-html-telemetry","html-success-telemetry"])
+ test("non-recoverable HTML Cloudflare response remains fail-closed: "+variant,()=>{
+   const result=run("verify-data",variant);
+   assert.notEqual(result.status,0);
+   assert.equal(result.accepted,false);
+   assert.match(result.error,/NON_JSON/);
+   assert.match(result.error,/cf_ray=fixture-ray-123/);
+   assert.ok(!result.error.includes("<!DOCTYPE"),
+     "never print an HTML error body or upstream credentials");
+ });
 for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-error-code","wrong-actor"])test("release rejects "+variant,()=>{
  const result=run("verify-data",variant);
  assert.notEqual(result.status,0);assert.equal(result.accepted,false);
