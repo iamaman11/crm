@@ -1470,13 +1470,23 @@ assert.equal(advanceReplayed.status,200);
 assert.equal(advanceReplayed.body.receipt?.replayed,true);
 assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
   "WHERE tenant='tenant-a'")[0].n,taskCountAfter);
-const closeSale={dealId,targetStage:{pipelineId:"pipeline.enterprise",
-  stageId:"won",ordinal:3},targetStatus:2,closeReasonCode:"contract-signed",
+const closeSale={dealId,targetStage:stageQualified,targetStatus:2,closeReasonCode:"contract-signed",
   precondition:{expectedVersion:3n,idempotencyKey:"connect-sales-close-main"}};
 const closedSale=await salesV2("AdvanceStage",admin,closeSale);
 assert.equal(closedSale.status,200,describeProtobuf(closedSale.body));
 assert.equal(closedSale.body.deal?.status,2);
+assert.equal(closedSale.body.deal?.stage?.stageId,"qualified",
+  "closing must preserve the real current stage");
 assert.equal(closedSale.body.deal?.version,4n);
+assert.equal((await salesV2("UpdateDeal",admin,{
+  dealId,name:{operation:{case:"set",value:"Forbidden post-close edit"}},
+  precondition:{expectedVersion:4n,idempotencyKey:"connect-sales-update-closed"}
+})).status,409,"closed Deal must be immutable");
+assert.equal((await salesV2("AdvanceStage",admin,{
+  dealId,targetStage:{pipelineId:"pipeline.enterprise",stageId:"fictional-won",ordinal:3},
+  targetStatus:2,closeReasonCode:"contract-signed",
+  precondition:{expectedVersion:4n,idempotencyKey:"connect-sales-double-close"}
+})).status,409,"closed Deal cannot transition again");
 assert.ok(closedSale.body.deal?.closedAt);
 assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
   "WHERE tenant='tenant-a'")[0].n,taskCountAfter,

@@ -15,14 +15,14 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const [accountId,setAccountId]=useState(initialAccountId);
   const [selected,setSelected]=useState<Deal>();
   const [advance,setAdvance]=useState<Deal>();
-  const [editorMode,setEditorMode]=useState<"create"|"edit"|"advance"|null>(null);
+  const [editorMode,setEditorMode]=useState<"create"|"edit"|"advance"|"close"|null>(null);
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
   const query=useQuery(useCallback(()=>api.deals.listDeals({page:{pageSize:25,pageToken:cursor},
     ...(accountId?{accountId}:{}),...(status?{status:enumValue(status,[DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки")}:{})}),[cursor,status,accountId]));
-  const open=async(dealId:string,mode:"edit"|"advance")=>{
+  const open=async(dealId:string,mode:"edit"|"advance"|"close")=>{
     try {const value=(await api.deals.getDeal({dealId})).deal;
-      setSelected(mode==="edit"?value:undefined);setAdvance(mode==="advance"?value:undefined);setEditorMode(mode);mutation.changed();}
+      setSelected(mode==="edit"?value:undefined);setAdvance(mode==="edit"?undefined:value);setEditorMode(mode);mutation.changed();}
     catch(error){await mutation.run(()=>Promise.reject(error));}
   };
   const columns=[...new Set(query.data?.deals.map(d=>d.stage?.stageId??"Без этапа")??[])];
@@ -36,26 +36,41 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
       {query.data?.deals.filter(d=>(d.stage?.stageId??"Без этапа")===stage).map(d=><Card key={d.dealId} title={d.name}>
         <p>{moneyText(d.amount)} · {percent(d.probabilityBasisPoints)}%</p><p>Клиент: {d.accountId}</p>
         <p>{d.status===DealStatus.WON?"Выиграна":d.status===DealStatus.LOST?"Проиграна":d.status===DealStatus.OPEN?"Открыта":"Неизвестный статус"} · версия {d.version.toString()}</p>
-        <Button variant="secondary" onClick={()=>void open(d.dealId,"edit")}>Изменить сделку</Button>{" "}
-        {d.status===DealStatus.OPEN&&<Button variant="secondary" onClick={()=>void open(d.dealId,"advance")}>Изменить этап</Button>}
+        {d.status===DealStatus.OPEN&&<>
+          <Button variant="secondary" onClick={()=>void open(d.dealId,"edit")}>Изменить сделку</Button>{" "}
+          <Button variant="secondary" onClick={()=>void open(d.dealId,"advance")}>Изменить этап</Button>{" "}
+          <Button variant="secondary" onClick={()=>void open(d.dealId,"close")}>Завершить сделку</Button>
+        </>}
       </Card>)}
     </section>)}</div>
     {!query.busy&&query.data?.deals.length===0&&<p>Сделок пока нет.</p>}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
-    <RecordPanel open={editorMode!==null} title={advance?"Этап сделки: "+advance.name:selected?"Изменить сделку":"Новая сделка"} onClose={()=>{setEditorMode(null);setSelected(undefined);setAdvance(undefined);}}>{advance?<form key={advance.dealId+advance.version} onChange={mutation.changed} onSubmit={e=>{
+    <RecordPanel open={editorMode!==null} title={advance?(editorMode==="close"?"Завершить сделку: ":"Этап сделки: ")+advance.name:selected?"Изменить сделку":"Новая сделка"} onClose={()=>{setEditorMode(null);setSelected(undefined);setAdvance(undefined);}}>{advance?<form key={advance.dealId+advance.version} onChange={mutation.changed} onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
-      void mutation.run(()=>api.deals.advanceStage({dealId:advance.dealId,
-        targetStage:{pipelineId:field(data,"pipeline"),stageId:field(data,"stage"),ordinal:boundedInt(field(data,"ordinal"),1,65535,"Порядок этапа")},
-        targetStatus:enumValue(field(data,"targetStatus"),[DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"),...(field(data,"reason")?{closeReasonCode:field(data,"reason")}:{}),
-        precondition:{idempotencyKey:mutation.key,expectedVersion:advance.version}
-      }),async()=>{setEditorMode(null);setAdvance(undefined);await query.reload();});
-    }}><FormGrid>
+      void mutation.run(()=>{
+        const closing=editorMode==="close";
+        const currentStage=advance.stage;
+        if(closing&&!currentStage)throw Error("У сделки отсутствует текущий этап");
+        return api.deals.advanceStage({dealId:advance.dealId,
+          targetStage:closing&&currentStage?currentStage:{
+            pipelineId:field(data,"pipeline"),stageId:field(data,"stage"),
+            ordinal:boundedInt(field(data,"ordinal"),1,65535,"Порядок этапа")},
+          targetStatus:closing?enumValue(field(data,"targetStatus"),[DealStatus.WON,DealStatus.LOST],"Результат сделки"):DealStatus.OPEN,
+          ...(closing?{closeReasonCode:field(data,"reason")}:{}),
+          precondition:{idempotencyKey:mutation.key,expectedVersion:advance.version}
+        });
+      },async()=>{setEditorMode(null);setAdvance(undefined);await query.reload();});
+    }}><FormGrid>{editorMode==="close"?<>
+      <p>Текущий этап сохраняется: {advance.stage?.stageId??"неизвестен"}.</p>
+      <SelectField label="Результат сделки" name="targetStatus" defaultValue={DealStatus.WON}>
+        <option value={DealStatus.WON}>Выиграна</option><option value={DealStatus.LOST}>Проиграна</option>
+      </SelectField>
+      <TextField label="Причина закрытия" name="reason" required/>
+    </>:<>
       <TextField label="Воронка" name="pipeline" defaultValue={advance.stage?.pipelineId??""} required/>
       <TextField label="Код следующего этапа" name="stage" required/>
       <TextField label="Порядок этапа" name="ordinal" type="number" min="1" max="65535" defaultValue={(advance.stage?.ordinal??0)+1} required/>
-      <SelectField label="Результат" name="targetStatus" defaultValue="1"><option value={DealStatus.OPEN}>Продолжить</option><option value={DealStatus.WON}>Выиграна</option><option value={DealStatus.LOST}>Проиграна</option></SelectField>
-      <TextField label="Код причины закрытия" name="reason"/>
-    </FormGrid><Button type="submit" disabled={mutation.busy}>Сохранить этап</Button>{" "}
+    </>}</FormGrid><Button type="submit" disabled={mutation.busy}>{editorMode==="close"?"Завершить сделку":"Сохранить этап"}</Button>{" "}
       <Button variant="secondary" onClick={()=>{setEditorMode(null);setAdvance(undefined);mutation.changed();}}>Отмена</Button>
     </form>:<>
       <form key={selected?selected.dealId+selected.version:draftId} onChange={mutation.changed} onSubmit={e=>{

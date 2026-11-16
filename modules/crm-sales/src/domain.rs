@@ -401,6 +401,22 @@ impl Deal {
 
     pub fn apply_update(&mut self, command: UpdateDeal) -> Result<(), SdkError> {
         self.require_version(command.expected_version)?;
+        if self.status != DealStatus::Open {
+            return Err(conflict(
+                "SALES_DEAL_ALREADY_CLOSED",
+                "a closed deal cannot be edited before explicit reopening",
+            ));
+        }
+        // Validate every patch against a candidate before changing authoritative
+        // aggregate state. A later invalid patch must not leave an earlier edit.
+        let mut candidate = self.clone();
+        candidate.apply_update_checked(command)?;
+        *self = candidate;
+        Ok(())
+    }
+
+    fn apply_update_checked(&mut self, command: UpdateDeal) -> Result<(), SdkError> {
+        self.require_version(command.expected_version)?;
         self.require_monotonic_time(command.occurred_at_unix_nanos)?;
 
         match command.name {
@@ -486,27 +502,42 @@ impl Deal {
                 "stage advancement cannot change the deal pipeline",
             ));
         }
-        if self.stage.stage_id == command.target_stage.stage_id
-            || self.stage.ordinal == command.target_stage.ordinal
+        // A terminal outcome is independent of pipeline progression: closing
+        // must preserve the actual current stage, not invent a synthetic one.
+        // Open-stage transitions still require a distinct stage and obey policy.
+        if command.target_status == DealStatus::Open {
+            if self.stage.stage_id == command.target_stage.stage_id
+                || self.stage.ordinal == command.target_stage.ordinal
+            {
+                return Err(invalid(
+                    "SALES_STAGE_UNCHANGED",
+                    "deal.target_stage",
+                    "target stage must differ from the current stage",
+                ));
+            }
+            if command.target_stage.ordinal < self.stage.ordinal
+                && !command.policy.allow_regression
+            {
+                return Err(conflict(
+                    "SALES_STAGE_REGRESSION_FORBIDDEN",
+                    "stage regression requires an explicit transition policy",
+                ));
+            }
+            if command.target_stage.ordinal > self.stage.ordinal.saturating_add(1)
+                && !command.policy.allow_skip
+            {
+                return Err(conflict(
+                    "SALES_STAGE_SKIP_FORBIDDEN",
+                    "skipping intermediate stages is not permitted by the transition policy",
+                ));
+            }
+        } else if self.stage.stage_id != command.target_stage.stage_id
+            || self.stage.ordinal != command.target_stage.ordinal
         {
             return Err(invalid(
-                "SALES_STAGE_UNCHANGED",
+                "SALES_CLOSE_STAGE_MISMATCH",
                 "deal.target_stage",
-                "target stage must differ from the current stage",
-            ));
-        }
-        if command.target_stage.ordinal < self.stage.ordinal && !command.policy.allow_regression {
-            return Err(conflict(
-                "SALES_STAGE_REGRESSION_FORBIDDEN",
-                "stage regression requires an explicit transition policy",
-            ));
-        }
-        if command.target_stage.ordinal > self.stage.ordinal.saturating_add(1)
-            && !command.policy.allow_skip
-        {
-            return Err(conflict(
-                "SALES_STAGE_SKIP_FORBIDDEN",
-                "skipping intermediate stages is not permitted by the transition policy",
+                "closing a deal must preserve the current stage",
             ));
         }
 
@@ -778,7 +809,7 @@ mod tests {
         let missing_reason = deal
             .advance_stage(AdvanceDealStage {
                 expected_version: 1,
-                target_stage: stage("closed_won", 4),
+                target_stage: stage("qualification", 1),
                 target_status: DealStatus::Won,
                 close_reason_code: None,
                 occurred_at_unix_nanos: 30,
@@ -789,7 +820,7 @@ mod tests {
 
         deal.advance_stage(AdvanceDealStage {
             expected_version: 1,
-            target_stage: stage("closed_won", 4),
+            target_stage: stage("qualification", 1),
             target_status: DealStatus::Won,
             close_reason_code: Some(ReasonCode::try_new("customer_selected_us").unwrap()),
             occurred_at_unix_nanos: 30,
@@ -812,6 +843,76 @@ mod tests {
             })
             .unwrap_err();
         assert_eq!(error.code, "SALES_DEAL_ALREADY_CLOSED");
+    }
+
+    #[test]
+    fn closes_at_current_stage_and_rejects_terminal_edits() {
+        let mut deal = open_deal();
+        let before_stage = deal.stage.clone();
+        let baseline_version = deal.version();
+        let mismatch = deal
+            .advance_stage(AdvanceDealStage {
+                expected_version: baseline_version,
+                target_stage: stage("synthetic_won", 4),
+                target_status: DealStatus::Won,
+                close_reason_code: Some(ReasonCode::try_new("signed").unwrap()),
+                occurred_at_unix_nanos: 30,
+                policy: StageTransitionPolicy::default(),
+            })
+            .unwrap_err();
+        assert_eq!(mismatch.code, "SALES_CLOSE_STAGE_MISMATCH");
+        assert_eq!(deal.version(), baseline_version);
+        assert_eq!(deal.stage(), &before_stage);
+
+        deal.advance_stage(AdvanceDealStage {
+            expected_version: baseline_version,
+            target_stage: before_stage.clone(),
+            target_status: DealStatus::Won,
+            close_reason_code: Some(ReasonCode::try_new("signed").unwrap()),
+            occurred_at_unix_nanos: 30,
+            policy: StageTransitionPolicy::default(),
+        })
+        .unwrap();
+        assert_eq!(deal.stage(), &before_stage);
+        assert_eq!(deal.status(), DealStatus::Won);
+        assert_eq!(deal.version(), baseline_version + 1);
+        let result = deal.apply_update(UpdateDeal {
+            expected_version: deal.version(),
+            name: Patch::Set("Must remain unchanged".into()),
+            owner: Patch::Keep,
+            account: Patch::Keep,
+            primary_contact: Patch::Keep,
+            amount: Patch::Keep,
+            expected_close_date: Patch::Keep,
+            probability: Patch::Keep,
+            occurred_at_unix_nanos: 40,
+        });
+        assert_eq!(result.unwrap_err().code, "SALES_DEAL_ALREADY_CLOSED");
+        assert_ne!(deal.name(), "Must remain unchanged");
+        assert_eq!(deal.version(), baseline_version + 1);
+    }
+
+    #[test]
+    fn invalid_late_patch_does_not_partially_change_deal() {
+        let mut deal = open_deal();
+        let previous_name = deal.name().to_owned();
+        let previous_version = deal.version();
+        let error = deal
+            .apply_update(UpdateDeal {
+                expected_version: previous_version,
+                name: Patch::Set("Would corrupt earlier field".into()),
+                owner: Patch::Keep,
+                account: Patch::Keep,
+                primary_contact: Patch::Keep,
+                amount: Patch::Keep,
+                expected_close_date: Patch::Keep,
+                probability: Patch::Clear,
+                occurred_at_unix_nanos: 20,
+            })
+            .unwrap_err();
+        assert_eq!(error.code, "SALES_DEAL_PROBABILITY_REQUIRED");
+        assert_eq!(deal.name(), previous_name);
+        assert_eq!(deal.version(), previous_version);
     }
 
     #[test]
