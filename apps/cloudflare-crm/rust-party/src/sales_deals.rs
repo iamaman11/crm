@@ -22,7 +22,6 @@ pub(super) struct CreateInput {
     pub(super) account_id: String,
     pub(super) pipeline_id: String,
     pub(super) stage_id: String,
-    pub(super) ordinal: u16,
     pub(super) probability_bps: u16,
     // Minor units are exact integers. Floating point money is never accepted.
     pub(super) amount_minor_units: Option<i64>,
@@ -184,21 +183,15 @@ pub(super) async fn create_typed(
         Ok(x) => DealOwner::Actor(x),
         Err(_) => return Ok(rejected("SALES_OWNER_INVALID", 422)),
     };
-    let stage = match stage(input.pipeline_id, input.stage_id, input.ordinal) {
+    let Some(ordinal) = super::sales_pipelines::active_stage_ordinal(
+        db, tenant, &input.pipeline_id, &input.stage_id,
+    ).await? else {
+        return Ok(rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
+    };
+    let stage = match stage(input.pipeline_id, input.stage_id, ordinal) {
         Ok(x) => x,
         Err(code) => return Ok(rejected(code, 422)),
     };
-    if !super::sales_pipelines::active_stage(
-        db,
-        tenant,
-        stage.pipeline_id().as_str(),
-        stage.stage_id().as_str(),
-        stage.ordinal(),
-    )
-    .await?
-    {
-        return Ok(rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
-    }
     let probability = match BasisPoints::try_new(input.probability_bps) {
         Ok(x) => x,
         Err(e) => return Ok(rejected(e.code, 422)),
@@ -399,21 +392,15 @@ pub(super) async fn advance_typed(
         return Ok(advance_rejected("NOT_FOUND", 404));
     };
     let before = deal.clone();
-    let target = match stage(input.pipeline_id, input.stage_id, input.ordinal) {
+    let Some(ordinal) = super::sales_pipelines::active_stage_ordinal(
+        db, tenant, &input.pipeline_id, &input.stage_id,
+    ).await? else {
+        return Ok(advance_rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
+    };
+    let target = match stage(input.pipeline_id, input.stage_id, ordinal) {
         Ok(x) => x,
         Err(code) => return Ok(advance_rejected(code, 422)),
     };
-    if !super::sales_pipelines::active_stage(
-        db,
-        tenant,
-        target.pipeline_id().as_str(),
-        target.stage_id().as_str(),
-        target.ordinal(),
-    )
-    .await?
-    {
-        return Ok(advance_rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
-    }
     let reason = match input.close_reason_code {
         Some(code) => match ReasonCode::try_new(code) {
             Ok(v) => Some(v),

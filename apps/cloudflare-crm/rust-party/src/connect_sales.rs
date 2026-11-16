@@ -674,12 +674,9 @@ impl SalesV2Service {
             .map(|x| x.as_str().to_owned())
             .map_err(|_| ConnectError::invalid_argument("SALES_DEAL_ID_INVALID"))
     }
-    fn stage(
-        wire: &sale_wire::DealStage,
-    ) -> std::result::Result<(String, String, u16), ConnectError> {
-        let ordinal = u16::try_from(wire.ordinal)
-            .map_err(|_| ConnectError::invalid_argument("invalid stage ordinal"))?;
-        Ok((wire.pipeline_id.clone(), wire.stage_id.clone(), ordinal))
+    // The incoming rank is ignored: the domain catalog owns it on writes.
+    fn stage(wire: &sale_wire::DealStage) -> (String, String) {
+        (wire.pipeline_id.clone(), wire.stage_id.clone())
     }
     fn deal_status(
         raw: buffa::EnumValue<sale_wire::DealStatus>,

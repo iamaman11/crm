@@ -81,20 +81,23 @@ pub(super) async fn get(db: &D1Database, tenant: &str, id: &str) -> Result<Optio
     .transpose()
     .map_err(|e| worker::Error::RustError(e.code))
 }
-pub(super) async fn active_stage(
+/// The original Rust sales catalog alone assigns the current stage rank.
+pub(super) async fn active_stage_ordinal(
     db: &D1Database,
     tenant: &str,
     pipeline_id: &str,
     stage_id: &str,
-    ordinal: u16,
-) -> Result<bool> {
+) -> Result<Option<u16>> {
     let Some(pipeline) = get(db, tenant, pipeline_id).await? else {
-        return Ok(false);
+        return Ok(None);
     };
-    Ok(!pipeline.archived
-        && pipeline
-            .stage(stage_id)
-            .is_some_and(|stage| !stage.archived && stage.ordinal == ordinal))
+    if pipeline.archived {
+        return Ok(None);
+    }
+    Ok(pipeline
+        .stage(stage_id)
+        .filter(|stage| !stage.archived)
+        .map(|stage| stage.ordinal))
 }
 pub(super) async fn create(
     input: CreateInput,
@@ -217,8 +220,8 @@ pub(super) async fn update(
     .run()
     .await;
     let Ok(done) = result else {
-        // D1 BEFORE UPDATE guard protects referenced stages from concurrent
-        // reorder, archive, and deletion even if the earlier read was stale.
+        // D1 prohibits removal/archive of referenced stages and atomically
+        // rebases occupied ranks inside the same catalog update.
         return Ok(Err(fail(
             "SALES_PIPELINE_REFERENCED_STAGE_OR_WRITE_CONFLICT",
             409,

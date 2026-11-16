@@ -201,7 +201,7 @@ impl sale_wire::DealService for SalesV2Service {
             .stage
             .as_option()
             .ok_or_else(|| ConnectError::invalid_argument("stage required"))?;
-        let (pipeline_id, stage_id, ordinal) = Self::stage(stage)?;
+        let (pipeline_id, stage_id) = Self::stage(stage);
         let probability_bps = u16::try_from(input.probability_basis_points)
             .map_err(|_| ConnectError::invalid_argument("invalid probability basis points"))?;
         let (amount_minor_units, currency) = match input.amount.as_option() {
@@ -216,7 +216,6 @@ impl sale_wire::DealService for SalesV2Service {
                 account_id: input.account_id,
                 pipeline_id,
                 stage_id,
-                ordinal,
                 probability_bps,
                 amount_minor_units,
                 currency,
