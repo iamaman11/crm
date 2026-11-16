@@ -1864,7 +1864,14 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(new Set(mappings.map(x=>x.mappingVersionId)).size,3);
  for(const [method,field] of [["ListProviderProfiles","profiles"],["ListMappings","mappings"]]){
    assert.equal((await enrichment(method,viewer,{page:{pageSize:101}})).body.code,"invalid_argument");
-   assert.equal((await enrichment(method,tenantB,{page:{pageSize:1}})).body[field].length,0);
+   const isolated=await enrichment(method,tenantB,{page:{pageSize:1}});
+   assert.equal(isolated.status,200,describeProtobuf(isolated.body));
+   assert.equal(isolated.body[field].length,method==="ListProviderProfiles"?1:0,
+     "Tenant B sees only its own deliberate profile fixture, never A's mappings");
+   if(method==="ListProviderProfiles"){
+     assert.equal(isolated.body.profiles[0].profileVersionId,profileId,
+       "Content-addressed version ID may match across independently scoped tenants");
+   }
    assert.equal((await enrichment(method,viewer,{page:{pageToken:"bad/id"}})).body.code,"invalid_argument");
  }
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_receipts WHERE tenant='tenant-a'")[0].n,6);
