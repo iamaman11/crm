@@ -1540,10 +1540,10 @@ assert.equal((await salesV2("UpdateDeal",admin,{
   precondition:{expectedVersion:4n,idempotencyKey:"connect-sales-update-closed"}
 })).status,409,"closed Deal must be immutable");
 assert.equal((await salesV2("AdvanceStage",admin,{
-  dealId,targetStage:{pipelineId:"pipeline.enterprise",stageId:"fictional-won",ordinal:3},
+  dealId,targetStage:stageLead,
   targetStatus:2,closeReasonCode:"contract-signed",
   precondition:{expectedVersion:4n,idempotencyKey:"connect-sales-double-close"}
-})).status,409,"closed Deal cannot transition again");
+})).status,409,"a closed Deal cannot transition even to a valid catalog stage");
 assert.ok(closedSale.body.deal?.closedAt);
 assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
   "WHERE tenant='tenant-a'")[0].n,taskCountAfter,
