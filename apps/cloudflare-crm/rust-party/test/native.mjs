@@ -1810,24 +1810,21 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await enrichment("PublishMapping",knownService,mappingInput)).status,403,
    "Permission must precede replay of immutable mapping");
  sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
- assert.equal((await enrichment("PublishProviderProfile",tenantB,profileInput)).status,200,
-   "Separate tenant may publish its own independent immutable definition");
- assert.equal((await enrichment("GetMapping",tenantB,{mappingVersionId:mappingId})).body.code,"not_found");
- // The independent tenant write above must not modify tenant-a's source, receipts or audit.
- assert.deepEqual(sql("SELECT created_by FROM crm_enrichment_profiles "+
-   "WHERE tenant='tenant-a' AND id='"+profileId+"'"),[
-   {created_by:"native-a@example.test"}
- ]);
  const tenantAEnrichment=()=>sql("SELECT "+
    "(SELECT COUNT(*) FROM crm_enrichment_profiles WHERE tenant='tenant-a') AS profiles,"+
    "(SELECT COUNT(*) FROM crm_enrichment_mappings WHERE tenant='tenant-a') AS mappings,"+
    "(SELECT COUNT(*) FROM crm_enrichment_receipts WHERE tenant='tenant-a') AS receipts,"+
    "(SELECT COUNT(*) FROM crm_audit WHERE tenant_id='tenant-a') AS audits");
- assert.deepEqual(tenantAEnrichment(),[
-   {profiles:1,mappings:1,receipts:2,
-     audits:enrichmentBeforeDenials[0].audits-(
-       sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-b'")[0].n)}
- ],"Tenant B must not mutate tenant A");
+ const tenantABeforeOtherTenant=tenantAEnrichment();
+ assert.equal((await enrichment("PublishProviderProfile",tenantB,profileInput)).status,200,
+   "Separate tenant may publish its own independent immutable definition");
+ assert.equal((await enrichment("GetMapping",tenantB,{mappingVersionId:mappingId})).body.code,"not_found");
+ assert.deepEqual(tenantAEnrichment(),tenantABeforeOtherTenant,
+   "Tenant B must not mutate tenant A's state, receipts or audit");
+ assert.deepEqual(sql("SELECT created_by FROM crm_enrichment_profiles "+
+   "WHERE tenant='tenant-a' AND id='"+profileId+"'"),[
+   {created_by:"native-a@example.test"}
+ ]);
  // Failing audit INSERT must roll back immutable definition + receipt, for both kinds.
  // No test hook in production Worker; fixture trigger is installed only in isolated D1.
  sql("CREATE TRIGGER fixture_fail_enrichment_audit BEFORE INSERT ON crm_audit "+
