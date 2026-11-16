@@ -53,7 +53,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const pipelines=pipelinesQuery.data??[];
   useEffect(()=>{
     if(!pipelineId&&pipelines.length) {
-      setPipelineId(pipelines[0].pipelineId);
+      setPipelineId(pipelines[0]?.pipelineId??"");
     }
   },[pipelineId,pipelines]);
   const activePipeline=pipelines.find(p=>p.pipelineId===pipelineId);
@@ -87,7 +87,9 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
       const target=index+offset;
       if(target<0||target>=before.length)return before;
       const next=[...before];
-      [next[index],next[target]]=[next[target],next[index]];
+      const first=next[index],second=next[target];
+      if(!first||!second)return before;
+      next[index]=second;next[target]=first;
       return next;
     });pipelineMutation.changed();
   };
