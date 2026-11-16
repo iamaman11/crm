@@ -675,6 +675,24 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
         },
     ),
     (
+        "/crm.sales.v2.DealService/CloseDeal",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ReopenDeal",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListDealEvents",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
         "/crm.sales.v2.DealService/GetDeal",
         RpcPolicy {
             permission: RpcPermission::Read,
