@@ -90,6 +90,64 @@ WHEN NEW.last_action='sales_deals.advance' BEGIN
  ) THEN RAISE(ABORT,'SALES_DEAL_STAGE_NOT_IN_CATALOG') END;
 END;
 
+-- Reconcile pre-catalog Deal snapshots without changing a single Deal/version.
+-- Legacy tenants may have only a rank-2 stage: fill missing ranks with explicit
+-- placeholders so the original aggregate remains valid and links stay intact.
+-- Ambiguous stage IDs/ranks and >24-stage legacy pipelines are NOT guessed:
+-- those are skipped for explicit operator reconciliation (no silent mutation).
+-- The provenance is a system migration identity, never a forged human actor.
+WITH RECURSIVE
+ legacy(tenant,pipeline,stage,ordinal) AS (
+  SELECT tenant,
+    json_extract(state,'$.stage.pipeline_id'),
+    json_extract(state,'$.stage.stage_id'),
+    json_extract(state,'$.stage.ordinal')
+  FROM crm_sales_deal_records
+ ),
+ candidates(tenant,pipeline,max_rank) AS (
+  SELECT tenant,pipeline,MAX(ordinal)
+  FROM legacy
+  WHERE pipeline IS NOT NULL AND stage IS NOT NULL
+  GROUP BY tenant,pipeline
+  HAVING MIN(ordinal)>=1 AND MAX(ordinal)<=24
+     AND COUNT(DISTINCT stage||'#'||ordinal)=COUNT(DISTINCT ordinal)
+     AND COUNT(DISTINCT stage||'#'||ordinal)=COUNT(DISTINCT stage)
+ ),
+ slot(tenant,pipeline,ordinal,max_rank) AS (
+  SELECT tenant,pipeline,1,max_rank FROM candidates
+  UNION ALL
+  SELECT tenant,pipeline,ordinal+1,max_rank FROM slot WHERE ordinal<max_rank
+ ),
+ stage_slot(tenant,pipeline,ordinal,stage_id) AS (
+  SELECT slot.tenant,slot.pipeline,slot.ordinal,
+    COALESCE((SELECT stage FROM legacy
+      WHERE tenant=slot.tenant AND pipeline=slot.pipeline AND ordinal=slot.ordinal
+      LIMIT 1),'legacy_unassigned_'||slot.ordinal)
+  FROM slot
+ ),
+ assembled(tenant,pipeline,step,stages) AS (
+  SELECT tenant,pipeline,0,json('[]') FROM candidates
+  UNION ALL
+  SELECT assembled.tenant,assembled.pipeline,assembled.step+1,
+    json_insert(assembled.stages,'$[#]',json_object(
+      'stage_id',stage_slot.stage_id,'name',stage_slot.stage_id,
+      'ordinal',stage_slot.ordinal,'probability_basis_points',0,
+      'archived',json('false')))
+  FROM assembled JOIN stage_slot ON
+    stage_slot.tenant=assembled.tenant AND stage_slot.pipeline=assembled.pipeline
+    AND stage_slot.ordinal=assembled.step+1
+ )
+INSERT INTO crm_sales_pipeline_records
+ (tenant,id,state,version,idem_key,idem_digest,request_id,actor,last_action)
+SELECT assembled.tenant,assembled.pipeline,
+  json_object('pipeline_id',assembled.pipeline,'name',assembled.pipeline,
+    'version',1,'archived',json('false'),'stages',json(assembled.stages)),
+  1,'migration:0011:'||lower(hex(randomblob(12))),'legacy-reconciliation',
+  'migration-0011','system:migration-0011','sales_pipeline.create'
+FROM assembled JOIN candidates ON assembled.tenant=candidates.tenant
+  AND assembled.pipeline=candidates.pipeline
+WHERE assembled.step=candidates.max_rank;
+
 -- Stage-local keyset queries use a single tenant/pipeline/stage covering prefix.
 CREATE INDEX idx_crm_sales_board_stage
 ON crm_sales_deal_records(
