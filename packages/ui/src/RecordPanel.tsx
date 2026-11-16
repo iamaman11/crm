@@ -23,8 +23,23 @@ export function RecordPanel({open,title,onClose,dirty,children}:{
       element.dataset.crmPanelLastClose="escape";
       onCloseRef.current();
     };
+    // Chromium can still close the dialog after a *second* rejected
+    // Escape/confirm despite the cancel listener. Handle the keyboard
+    // default before it becomes a dialog cancel event. The same onClose
+    // remains the sole decision-maker, including dirty-form confirmation.
+    const onNativeEscape=(event:KeyboardEvent)=>{
+      if(event.key!=="Escape"||!element.open)return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      element.dataset.crmPanelLastClose="escape";
+      onCloseRef.current();
+    };
+    element.addEventListener("keydown",onNativeEscape,true);
     element.addEventListener("cancel",onNativeCancel);
-    return ()=>element.removeEventListener("cancel",onNativeCancel);
+    return ()=>{
+      element.removeEventListener("keydown",onNativeEscape,true);
+      element.removeEventListener("cancel",onNativeCancel);
+    };
   },[]);
   useEffect(()=>{
     const element=dialog.current;
