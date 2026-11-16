@@ -42,6 +42,8 @@ mod sales_activities_link;
 mod sales_contract;
 #[cfg(feature = "native")]
 mod sales_deals;
+#[cfg(feature = "native")]
+mod sales_pipelines;
 
 fn native_request_id() -> Result<String> {
     use js_sys::{Function, Reflect};
@@ -112,6 +114,8 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
         "crm_activity_task_receipts",
         "crm_sales_deal_records",
         "crm_sales_deal_receipts",
+        "crm_sales_pipeline_records",
+        "crm_sales_pipeline_receipts",
         "crm_consent_records",
         "crm_consent_receipts",
         "crm_sales_link_delivery_records",
@@ -152,6 +156,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
             ),
             ("activity-tasks", "crm_activity_task_records", "tenant"),
             ("sales-deals", "crm_sales_deal_records", "tenant"),
+            ("sales-pipelines", "crm_sales_pipeline_records", "tenant"),
             ("consents", "crm_consent_records", "tenant"),
             (
                 "sales-activities-link",
@@ -617,6 +622,36 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     ),
     (
         "/crm.consents.v2.ConsentAuthorizationService/ListConsentAuthorizations",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/CreatePipeline",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/UpdatePipeline",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetPipeline",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListPipelines",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListStageDeals",
         RpcPolicy {
             permission: RpcPermission::Read,
         },

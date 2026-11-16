@@ -1386,6 +1386,46 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  // Original crm-sales v2: generated binary Connect, original Deal aggregate,
 // one tenant D1, exact money, CAS, receipt replay, and atomic stage->Activity.
 const salesV2=signedReadOnly(salesV2Path,binarySalesV2,decodeSalesV2);
+// The authoritative pipeline catalog is created before any new Deal write.
+// Stage order is owner-assigned, never supplied as an untrusted rank.
+const pipelineSeed={pipelineId:"pipeline.enterprise",name:"Enterprise",
+  stages:[
+    {stageId:"lead",name:"Lead",probabilityBasisPoints:1000},
+    {stageId:"qualified",name:"Qualified",probabilityBasisPoints:4500},
+    {stageId:"won",name:"Historical terminal",probabilityBasisPoints:10000}
+  ],precondition:{idempotencyKey:"connect-r7-pipeline-create-1"}};
+assert.equal((await salesV2("CreatePipeline",viewer,pipelineSeed)).status,403);
+assert.equal((await salesV2("CreatePipeline",admin,{
+  ...pipelineSeed,stages:[pipelineSeed.stages[0],pipelineSeed.stages[0]],
+  precondition:{idempotencyKey:"connect-r7-pipeline-duplicate-stage"}
+})).status,400);
+const pipelineCreated=await salesV2("CreatePipeline",admin,pipelineSeed);
+assert.equal(pipelineCreated.status,200,describeProtobuf(pipelineCreated.body));
+assert.equal(pipelineCreated.body.pipeline?.version,1n);
+assert.deepEqual(pipelineCreated.body.pipeline?.stages.map(s=>s.ordinal),[1,2,3]);
+assert.equal((await salesV2("CreatePipeline",admin,pipelineSeed)).body.receipt?.replayed,true);
+assert.equal((await salesV2("CreatePipeline",admin,{...pipelineSeed,name:"modified"})).status,409);
+assert.equal((await salesV2("GetPipeline",tenantB,{pipelineId:"pipeline.enterprise"})).status,404);
+assert.equal((await salesV2("GetPipeline",viewer,{pipelineId:"pipeline.enterprise"})).status,200);
+const pipelineOther=await salesV2("CreatePipeline",admin,{
+  pipelineId:"pipeline.other",name:"Other",stages:[pipelineSeed.stages[0]],
+  precondition:{idempotencyKey:"connect-r7-pipeline-create-2"}});
+assert.equal(pipelineOther.status,200,describeProtobuf(pipelineOther.body));
+const pipelineList=await salesV2("ListPipelines",viewer,{page:{pageSize:1}});
+assert.equal(pipelineList.status,200,describeProtobuf(pipelineList.body));
+assert.equal(pipelineList.body.pipelines.length,1);
+assert.ok(pipelineList.body.pageInfo?.nextPageToken);
+const pipelineUpdated=await salesV2("UpdatePipeline",admin,{
+  pipelineId:"pipeline.enterprise",name:"Enterprise managed",
+  stages:pipelineSeed.stages,archived:false,
+  precondition:{expectedVersion:1n,idempotencyKey:"connect-r7-pipeline-rename-1"}});
+assert.equal(pipelineUpdated.status,200,describeProtobuf(pipelineUpdated.body));
+assert.equal(pipelineUpdated.body.pipeline?.version,2n);
+assert.equal((await salesV2("UpdatePipeline",admin,{
+  pipelineId:"pipeline.enterprise",name:"stale",
+  stages:pipelineSeed.stages,archived:false,
+  precondition:{expectedVersion:1n,idempotencyKey:"connect-r7-pipeline-stale"}
+})).status,409);
 const dealId="sales-mid-"+randomUUID();
 const stageLead={pipelineId:"pipeline.enterprise",stageId:"lead",ordinal:1};
 const stageQualified={pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:2};
@@ -1404,6 +1444,12 @@ assert.equal((await salesV2("CreateDeal",admin,{
 assert.equal((await salesV2("CreateDeal",admin,{
   ...saleCreate,probabilityBasisPoints:10001,
   precondition:{idempotencyKey:"connect-sales-invalid-probability"}})).status,400);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,stage:{pipelineId:"pipeline.enterprise",stageId:"unknown",ordinal:1},
+  precondition:{idempotencyKey:"connect-sales-invalid-catalog-stage"}})).status,400);
+assert.equal((await salesV2("CreateDeal",admin,{
+  ...saleCreate,stage:{pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:999},
+  precondition:{idempotencyKey:"connect-sales-untrusted-ordinal"}})).status,400);
 assert.equal((await salesV2("CreateDeal",admin,{
   ...saleCreate,precondition:{idempotencyKey:"connect-sales-create-invalid-version",
     expectedVersion:1n}})).status,400);
@@ -1504,6 +1550,14 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
   "Won closure must not create a second follow-up Task");
 assert.equal((await salesV2("AdvanceStage",admin,closeSale))
   .body.receipt?.replayed,true);
+assert.equal((await salesV2("UpdatePipeline",admin,{
+  pipelineId:"pipeline.enterprise",name:"Unsafe reorder",
+  stages:[pipelineSeed.stages[1],pipelineSeed.stages[0],pipelineSeed.stages[2]],
+  archived:false,
+  precondition:{expectedVersion:2n,idempotencyKey:"connect-r7-reorder-used-stage"}
+})).status,409,"referenced stage reorder must fail atomically");
+assert.equal((await salesV2("GetPipeline",viewer,{pipelineId:"pipeline.enterprise"}))
+  .body.pipeline?.version,2n);
 assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
   "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'")[0].n,2,
   "two original one-batch Sales->Activities delivery receipts");
@@ -1530,6 +1584,41 @@ const filteredSales=await collectPages(salesV2,"ListDeals","deals",{
 assert.deepEqual(filteredSales.map(x=>x.dealId),[dealId,dealLast]);
 assert.equal((await collectPages(salesV2,"ListDeals","deals",{
   pipelineId:"pipeline.other"})).length,1);
+// A non-UI test pipeline has more than one board page. The server count must
+// be 27, not the 25 records rendered in a stage column.
+for(let index=0;index<26;index++){
+  const created=await salesV2("CreateDeal",admin,{
+    dealId:"r7-overflow-"+String(index).padStart(2,"0"),name:"Pagination Deal "+index,
+    accountId,stage:{pipelineId:"pipeline.other",stageId:"lead",ordinal:1},
+    probabilityBasisPoints:1000,
+    precondition:{idempotencyKey:"r7-stage-pagination-"+index}
+  });
+  assert.equal(created.status,200,describeProtobuf(created.body));
+}
+const overflow=await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.other",stageId:"lead",page:{pageSize:25}});
+assert.equal(overflow.status,200,describeProtobuf(overflow.body));
+assert.equal(overflow.body.totalCount,27n,"board count must include all 27, not the page");
+assert.equal(overflow.body.deals.length,25);
+assert.ok(overflow.body.pageInfo?.nextPageToken);
+const overflowLast=await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.other",stageId:"lead",
+  page:{pageSize:25,pageToken:overflow.body.pageInfo.nextPageToken}});
+assert.equal(overflowLast.status,200);
+assert.equal(overflowLast.body.deals.length,2);
+assert.equal(overflowLast.body.totalCount,27n);
+const stageCount=await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.enterprise",stageId:"lead",page:{pageSize:1}});
+assert.equal(stageCount.status,200,describeProtobuf(stageCount.body));
+assert.equal(stageCount.body.totalCount,1n);
+assert.equal(stageCount.body.deals.length,1);
+assert.equal(stageCount.body.deals[0]?.dealId,dealLast);
+assert.equal((await salesV2("ListStageDeals",tenantB,{
+  pipelineId:"pipeline.enterprise",stageId:"lead"
+})).status,404,"tenant B cannot read tenant A pipeline");
+assert.equal((await salesV2("ListStageDeals",viewer,{
+  pipelineId:"pipeline.enterprise",stageId:"not-a-stage"
+})).status,404,"unmanaged stage is not a valid board column");
 assert.equal((await salesV2("ListDeals",viewer,{
   page:{pageSize:1,pageToken:dealLast},pipelineId:"pipeline.enterprise"})
   ).body.deals.length,0);
@@ -1597,7 +1686,8 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
   console.log(JSON.stringify({event:"crm.native-r2a-sales-linked-actor-audit",result:"PASS",
     all_sales_actions:true,linked_task_delivery:true,late_batch_rollback:true}));
 console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
-  rpc_methods:["CreateDeal","UpdateDeal","AdvanceStage","GetDeal","ListDeals"],
+  rpc_methods:["CreatePipeline","UpdatePipeline","GetPipeline","ListPipelines","ListStageDeals",
+    "CreateDeal","UpdateDeal","AdvanceStage","GetDeal","ListDeals"],
   generated_binary:true,original_owner:"crm.sales",signed_access:true,tenant_ab:true,
   viewer_read:true,viewer_write_denied:true,exact_money:true,
   before_limit_filters:true,cas:true,idempotent_receipts:true,

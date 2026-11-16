@@ -386,6 +386,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    steps.push("Task UpdateTask via React, D1 audit action, priority filter and reload");
    steps.push("Contact and Task create/complete; priority/status filters preserve records and audit");
    await navigate("sales","Сделки");
+   await page.getByRole("button",{name:"Создать воронку",exact:true}).click();
+   await page.getByLabel("Название воронки",{exact:true}).fill("Browser Pipeline "+runId);
+   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"CreatePipeline");
+   const newPipelineId=await firstId("crm_sales_pipeline_records","name","Browser Pipeline "+runId);
+   assert.equal((await sql("SELECT version FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].version,1);
+   const recordedPipelines=await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+newPipelineId+"' AND action='sales_pipeline.create'");
+   assert.equal(recordedPipelines[0].n,1);
+   await page.getByLabel("Воронка продаж",{exact:true}).selectOption("pipeline.enterprise");
    await page.getByRole("button",{name:"Новая сделка",exact:true}).click();
    await page.getByLabel("Название сделки",{exact:true}).fill("Browser Deal "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
@@ -408,7 +416,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(savedDeal.version,2);assert.equal(savedDeal.probability,3850);
    await page.getByText("90071992547409.93 USD · 38.50%",{exact:true}).waitFor();
    await dealCard.getByRole("button",{name:"Изменить этап",exact:true}).click();
-   await page.getByLabel("Код следующего этапа",{exact:true}).fill("qualified");
+   await page.getByLabel("Следующий этап",{exact:true}).selectOption("qualified");
    await mutation(page.getByRole("button",{name:"Сохранить этап",exact:true}),"AdvanceStage");
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,1);
    // Closing is independent of stage movement: retain the real stage and do
