@@ -28,8 +28,12 @@ const base="http://127.0.0.1:18789";
 let child,stderr="",workerReady=false;
 const successfulCalls=new Set();
 const rpcFetch=async(path,options)=>{
+ // Keep every CI RPC on a fresh HTTP connection. Workerd may close an idle
+ // socket between requests; reusing that socket fails with UND_ERR_SOCKET.
+ // This does NOT retry a mutation with an unknown outcome.
+ const requestOptions={...options,headers:{...options?.headers,connection:"close"}};
  let response;
- try {response=await globalThis.fetch(base+path,options);}
+ try {response=await globalThis.fetch(base+path,requestOptions);}
  catch(error) {
    if(!workerReady)throw error; // Startup probes are expected to fail until Wrangler binds.
    // No mutation retry: an interrupted Connect request can have an unknown outcome.
