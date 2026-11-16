@@ -566,7 +566,6 @@ async fn stage_mutation(
         return Ok(advance_rejected("NOT_FOUND", 404));
     };
     let before = deal.clone();
-    let closing = matches!(&input, StageMutation::Close(_));
     let expected_version = match &input {
         StageMutation::Move(value) => value.expected_version,
         StageMutation::Close(value) => value.expected_version,
@@ -668,11 +667,7 @@ async fn stage_mutation(
             JsValue::from_str(&digest),
             JsValue::from_str(trace),
             JsValue::from_str(actor),
-            JsValue::from_str(if closing {
-                "sales_deals.advance"
-            } else {
-                "sales_deals.advance"
-            }),
+            JsValue::from_str("sales_deals.advance"),
             JsValue::from_str(tenant),
             JsValue::from_str(id),
             JsValue::from_f64(expected_version as f64),
