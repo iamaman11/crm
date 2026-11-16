@@ -38,7 +38,7 @@ pub(super) struct DateInput {
     pub(super) day: u32,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
+#[serde(rename_all = "snake_case")]
 pub(super) enum FieldChange<T> {
     Keep,
     Set(T),
@@ -176,8 +176,11 @@ async fn valid_contact(
     let Some(account) = super::accounts::load(db, tenant, account_id).await? else {
         return Ok(Err("SALES_ACCOUNT_NOT_FOUND"));
     };
-    if !account.party_associations().iter()
-        .any(|assoc| assoc.party().as_str() == contact.party_ref().as_str()) {
+    if !account
+        .party_associations()
+        .iter()
+        .any(|assoc| assoc.party().as_str() == contact.party_ref().as_str())
+    {
         return Ok(Err("SALES_PRIMARY_CONTACT_ACCOUNT_MISMATCH"));
     }
     Ok(Ok(ResourceRef {
@@ -395,7 +398,7 @@ pub(super) async fn update_typed(
                 Ok(v) => Patch::Set(v),
                 Err(code) => return Ok(rejected(code, 422)),
             }
-        },
+        }
     };
     let date_patch = match input.expected_close_date {
         FieldChange::Keep => Patch::Keep,
