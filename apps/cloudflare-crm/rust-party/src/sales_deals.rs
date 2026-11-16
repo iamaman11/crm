@@ -553,16 +553,27 @@ struct CountRow {
 
 /// The count is over the full bounded tenant/pipeline/stage filter, not merely
 /// the current 25 visible cards. Every column has an independent keyset cursor.
+pub(super) struct StageListQuery<'a> {
+    pub pipeline_id: &'a str,
+    pub stage_id: &'a str,
+    pub after: &'a str,
+    pub limit: usize,
+    pub status: Option<DealStatus>,
+    pub account: Option<&'a str>,
+}
 pub(super) async fn list_stage_page(
     db: &D1Database,
     tenant: &str,
-    pipeline_id: &str,
-    stage_id: &str,
-    after: &str,
-    limit: usize,
-    status: Option<DealStatus>,
-    account: Option<&str>,
+    query: StageListQuery<'_>,
 ) -> Result<(Vec<Deal>, Option<String>, u64)> {
+    let StageListQuery {
+        pipeline_id,
+        stage_id,
+        after,
+        limit,
+        status,
+        account,
+    } = query;
     let mut condition = String::from(
         "tenant=? AND json_extract(state,'$.stage.pipeline_id')=? AND json_extract(state,'$.stage.stage_id')=?",
     );

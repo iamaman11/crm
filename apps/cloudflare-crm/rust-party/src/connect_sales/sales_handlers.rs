@@ -162,12 +162,14 @@ impl sale_wire::DealService for SalesV2Service {
         let (list, next, total_count) = sales_deals::list_stage_page(
             &db,
             &self.tenant,
-            req.pipeline_id,
-            req.stage_id,
-            cursor,
-            size as usize,
-            status,
-            req.account_id,
+            sales_deals::StageListQuery {
+                pipeline_id: req.pipeline_id,
+                stage_id: req.stage_id,
+                after: cursor,
+                limit: size as usize,
+                status,
+                account: req.account_id,
+            },
         )
         .await
         .map_err(|_| ConnectError::internal("Sales D1 stage list failed"))?;
