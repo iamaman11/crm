@@ -114,6 +114,8 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
         "crm_activity_task_receipts",
         "crm_sales_deal_records",
         "crm_sales_deal_receipts",
+        "crm_sales_pipeline_records",
+        "crm_sales_pipeline_receipts",
         "crm_consent_records",
         "crm_consent_receipts",
         "crm_sales_link_delivery_records",
@@ -154,6 +156,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
             ),
             ("activity-tasks", "crm_activity_task_records", "tenant"),
             ("sales-deals", "crm_sales_deal_records", "tenant"),
+            ("sales-pipelines", "crm_sales_pipeline_records", "tenant"),
             ("consents", "crm_consent_records", "tenant"),
             (
                 "sales-activities-link",
