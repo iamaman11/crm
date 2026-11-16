@@ -655,7 +655,7 @@ pub(super) async fn list_stage_page(
                 ));
             }
             let currency = CurrencyCode::try_new(row.currency_code.clone())
-                .map_err(|e| worker::Error::RustError(e.code))?;
+                .map_err(|e| worker::Error::RustError(e.code.to_owned()))?;
             let total = summary.entry(currency.to_string()).or_insert((0, 0));
             total.0 = total
                 .0
