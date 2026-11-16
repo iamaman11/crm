@@ -515,8 +515,7 @@ impl Deal {
                     "target stage must differ from the current stage",
                 ));
             }
-            if command.target_stage.ordinal < self.stage.ordinal
-                && !command.policy.allow_regression
+            if command.target_stage.ordinal < self.stage.ordinal && !command.policy.allow_regression
             {
                 return Err(conflict(
                     "SALES_STAGE_REGRESSION_FORBIDDEN",
