@@ -143,7 +143,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
       </option>)}
     </SelectField>
     <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setStageCursors({});setAccountCursor("");}}/>
-    <SelectField label="Статус сделки" value={status} onChange={e=>{setStatus(e.target.value);setStageCursors({});}}>
+    <SelectField label="Статус сделки" value={status} onChange={e=>{setStatus(e.target.value);setStageCursors({});setAccountCursor("");}}>
       <option value="">Все</option><option value={DealStatus.OPEN}>Открытые</option>
       <option value={DealStatus.WON}>Выигранные</option><option value={DealStatus.LOST}>Проигранные</option>
     </SelectField>
