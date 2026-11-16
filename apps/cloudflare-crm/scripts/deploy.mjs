@@ -41,7 +41,7 @@ async function cf(path,method="GET",body,timeoutMs=0){
 // business request. A failing 401/403/400 or HTML 200 remains fail-closed.
 async function cfReadback(path,body){
   const audit=path==="/d1/database/"+database+"/query"&&
-    typeof body?.sql==="string"&&/^SELECT\\b/i.test(body.sql.trim())&&
+    typeof body?.sql==="string"&&/^SELECT\b/i.test(body.sql.trim())&&
     !body.sql.includes(";");
   const traces=path==="/workers/observability/telemetry/query"&&
     body?.view==="events"&&typeof body?.parameters?.needle?.value==="string";
