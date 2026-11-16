@@ -450,7 +450,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      "Occupied reorder must not increment Deal versions");
    await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
    steps.push("Occupied stage reorder in real React keeps Deal version and stable ID");
+   const currentCatalog=page.waitForResponse(r=>r.url().endsWith("/GetPipeline")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
+   assert.equal((await currentCatalog).status(),200,
+     "Editor must read latest authoritative Pipeline version after reorder");
    await page.getByLabel("Архивировать воронку",{exact:true}).check();
    await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
    assert.equal(JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].state).archived,true);
