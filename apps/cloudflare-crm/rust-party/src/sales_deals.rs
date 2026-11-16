@@ -2,7 +2,7 @@
 //! Stage progression, closing rules, money and version invariants belong to
 //! crm-sales and crm-core-contracts, never the test pilot's crm_deals model.
 use super::{bind, now_nanos};
-use crm_core_contracts::{BasisPoints, CurrencyCode, Money, Patch};
+use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money, Patch};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef};
 use crm_sales::{
     AdvanceDealStage, CreateDeal, Deal, DealOwner, DealStage, DealStatus, PipelineId, ReasonCode,
@@ -27,6 +27,22 @@ pub(super) struct CreateInput {
     // Minor units are exact integers. Floating point money is never accepted.
     pub(super) amount_minor_units: Option<i64>,
     pub(super) currency: Option<String>,
+    pub(super) primary_contact_id: Option<String>,
+    pub(super) expected_close_date: Option<DateInput>,
+}
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct DateInput {
+    pub(super) year: i32,
+    pub(super) month: u32,
+    pub(super) day: u32,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
+pub(super) enum FieldChange<T> {
+    Keep,
+    Set(T),
+    Clear,
 }
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -64,6 +80,8 @@ pub(super) struct UpdateInput {
     pub(super) currency: Option<String>,
     pub(super) clear_amount: Option<bool>,
     pub(super) probability_bps: Option<u16>,
+    pub(super) primary_contact: FieldChange<String>,
+    pub(super) expected_close_date: FieldChange<DateInput>,
 }
 #[derive(Deserialize)]
 struct Row {
@@ -131,6 +149,44 @@ async fn account_exists(db: &D1Database, tenant: &str, id: &str) -> Result<bool>
     .await?
     .is_some())
 }
+fn typed_date(date: DateInput) -> std::result::Result<CalendarDate, &'static str> {
+    let month = u8::try_from(date.month).map_err(|_| "CONTRACT_DATE_MONTH_INVALID")?;
+    let day = u8::try_from(date.day).map_err(|_| "CONTRACT_DATE_DAY_INVALID")?;
+    CalendarDate::try_new(date.year, month, day).map_err(|e| e.code)
+}
+
+// The contact endpoint is owned by a Party belonging to the selected Account.
+// Read the two ORIGINAL aggregates with the same tenant, never trust a browser
+// assertion or accept a foreign/inactive contact.
+async fn valid_contact(
+    db: &D1Database,
+    tenant: &str,
+    account_id: &str,
+    contact_id: &str,
+) -> Result<std::result::Result<ResourceRef, &'static str>> {
+    let Ok(point_id) = crm_contact_points::ContactPointId::try_new(contact_id) else {
+        return Ok(Err("SALES_PRIMARY_CONTACT_ID_INVALID"));
+    };
+    let Some(contact) = super::contact_points::load(db, tenant, point_id.as_str()).await? else {
+        return Ok(Err("SALES_PRIMARY_CONTACT_NOT_FOUND"));
+    };
+    if contact.status() != crm_contact_points::ContactPointStatus::Active {
+        return Ok(Err("SALES_PRIMARY_CONTACT_INACTIVE"));
+    }
+    let Some(account) = super::accounts::load(db, tenant, account_id).await? else {
+        return Ok(Err("SALES_ACCOUNT_NOT_FOUND"));
+    };
+    if !account.party_associations().iter()
+        .any(|assoc| assoc.party().as_str() == contact.party_ref().as_str()) {
+        return Ok(Err("SALES_PRIMARY_CONTACT_ACCOUNT_MISMATCH"));
+    }
+    Ok(Ok(ResourceRef {
+        resource_type: "crm.contact-points".into(),
+        resource_id: point_id.as_str().into(),
+        version: None,
+    }))
+}
+
 fn stage(
     pipeline_id: String,
     stage_id: String,
@@ -221,6 +277,20 @@ pub(super) async fn create_typed(
         }
         _ => return Ok(rejected("SALES_AMOUNT_CURRENCY_PAIR_REQUIRED", 422)),
     };
+    let primary_contact = match input.primary_contact_id.as_ref() {
+        None => None,
+        Some(id) => match valid_contact(db, tenant, account_id.as_str(), id).await? {
+            Ok(v) => Some(v),
+            Err(code) => return Ok(rejected(code, 422)),
+        },
+    };
+    let expected_close_date = match input.expected_close_date {
+        None => None,
+        Some(date) => match typed_date(date) {
+            Ok(v) => Some(v),
+            Err(code) => return Ok(rejected(code, 422)),
+        },
+    };
     let deal = match Deal::create(CreateDeal {
         deal_id: id,
         name: input.name,
@@ -230,10 +300,10 @@ pub(super) async fn create_typed(
             resource_id: account_id.as_str().into(),
             version: None,
         }),
-        primary_contact: None,
+        primary_contact,
         stage,
         amount,
-        expected_close_date: None,
+        expected_close_date,
         probability,
         occurred_at_unix_nanos: now_nanos(),
     }) {
@@ -314,9 +384,32 @@ pub(super) async fn update_typed(
         },
         None => Patch::Keep,
     };
+    let contact_patch = match input.primary_contact {
+        FieldChange::Keep => Patch::Keep,
+        FieldChange::Clear => Patch::Clear,
+        FieldChange::Set(id) => {
+            let Some(account) = deal.account() else {
+                return Ok(rejected("SALES_ACCOUNT_NOT_FOUND", 422));
+            };
+            match valid_contact(db, tenant, &account.resource_id, &id).await? {
+                Ok(v) => Patch::Set(v),
+                Err(code) => return Ok(rejected(code, 422)),
+            }
+        },
+    };
+    let date_patch = match input.expected_close_date {
+        FieldChange::Keep => Patch::Keep,
+        FieldChange::Clear => Patch::Clear,
+        FieldChange::Set(date) => match typed_date(date) {
+            Ok(v) => Patch::Set(v),
+            Err(code) => return Ok(rejected(code, 422)),
+        },
+    };
     if matches!(name, Patch::Keep)
         && matches!(amount, Patch::Keep)
         && matches!(probability, Patch::Keep)
+        && matches!(contact_patch, Patch::Keep)
+        && matches!(date_patch, Patch::Keep)
     {
         return Ok(rejected("SALES_EMPTY_UPDATE", 422));
     }
@@ -325,9 +418,9 @@ pub(super) async fn update_typed(
         name,
         owner: Patch::Keep,
         account: Patch::Keep,
-        primary_contact: Patch::Keep,
+        primary_contact: contact_patch,
         amount,
-        expected_close_date: Patch::Keep,
+        expected_close_date: date_patch,
         probability,
         occurred_at_unix_nanos: now_nanos(),
     }) {

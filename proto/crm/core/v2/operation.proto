@@ -42,6 +42,14 @@ message MoneyPatch {
   }
 }
 
+// Explicit Keep/Set/Clear calendar intent; a date never carries a timezone.
+message CalendarDatePatch {
+  oneof operation {
+    CalendarDate set = 1;
+    bool clear = 2;
+  }
+}
+
 message TimestampPatch {
   oneof operation {
     google.protobuf.Timestamp set = 1;

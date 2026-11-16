@@ -30,6 +30,11 @@ message Deal {
   uint32 probability_basis_points = 7;
   int64 version = 8;
   google.protobuf.Timestamp closed_at = 9;
+  string primary_contact_id = 10;
+  crm.core.v2.CalendarDate expected_close_date = 11;
+  string close_reason_code = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
 }
 
 message CreateDealRequest {
@@ -40,6 +45,8 @@ message CreateDealRequest {
   crm.core.v2.ExactMoney amount = 5;
   uint32 probability_basis_points = 6;
   crm.core.v2.MutationPrecondition precondition = 7;
+  optional string primary_contact_id = 8;
+  crm.core.v2.CalendarDate expected_close_date = 9;
 }
 
 message CreateDealResponse {
@@ -53,6 +60,8 @@ message UpdateDealRequest {
   crm.core.v2.MoneyPatch amount = 3;
   optional uint32 probability_basis_points = 4;
   crm.core.v2.MutationPrecondition precondition = 5;
+  crm.core.v2.StringPatch primary_contact_id = 6;
+  crm.core.v2.CalendarDatePatch expected_close_date = 7;
 }
 
 message UpdateDealResponse {
