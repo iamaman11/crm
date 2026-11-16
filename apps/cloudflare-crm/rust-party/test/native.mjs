@@ -1470,6 +1470,15 @@ assert.equal(advanceReplayed.status,200);
 assert.equal(advanceReplayed.body.receipt?.replayed,true);
 assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
   "WHERE tenant='tenant-a'")[0].n,taskCountAfter);
+assert.equal((await salesV2("AdvanceStage",admin,{
+  dealId,targetStage:{pipelineId:"pipeline.enterprise",stageId:"fictional-won",ordinal:3},
+  targetStatus:2,closeReasonCode:"contract-signed",
+  precondition:{expectedVersion:3n,idempotencyKey:"connect-sales-fake-stage-close"}
+})).status,400,"closing cannot fabricate a terminal stage");
+assert.equal((await salesV2("AdvanceStage",admin,{
+  dealId,targetStage:stageQualified,targetStatus:2,
+  precondition:{expectedVersion:3n,idempotencyKey:"connect-sales-missing-close-reason"}
+})).status,400,"closing requires an explicit reason");
 const closeSale={dealId,targetStage:stageQualified,targetStatus:2,closeReasonCode:"contract-signed",
   precondition:{expectedVersion:3n,idempotencyKey:"connect-sales-close-main"}};
 const closedSale=await salesV2("AdvanceStage",admin,closeSale);
