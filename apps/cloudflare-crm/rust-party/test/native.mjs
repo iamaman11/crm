@@ -241,7 +241,11 @@ try{
  const collectPages=async(rpc,method,field,filter={})=>{
    let token="",items=[];
    const cursors=new Set();
-   for(let attempt=0;attempt<16;attempt++){
+   // R7's real board creates more than 25 Deals before the Account 360
+   // composition scan. Retain a finite guard and strict cursor-cycle checks,
+   // but never mistake the former 16-page fixture cap for a server failure.
+   const maxPages=256;
+   for(let attempt=0;attempt<maxPages;attempt++){
      const result=await rpc(method,viewer,{...filter,page:{pageSize:1,pageToken:token}});
      assert.equal(result.status,200,describeProtobuf(result.body));
      const found=result.body[field]??[];
@@ -256,7 +260,8 @@ try{
      if(!next)return items;
      token=next;
    }
-   throw Error("filtered pagination never reached its last page");
+   throw Error("filtered pagination never reached its last page: "+
+     JSON.stringify({method,field,rows:items.length,lastCursor:token}));
  };
  const id="native-v3-"+randomUUID();
  const creation={partyId:id,kind:2,displayName:"  Connect   Native  Rust ",
