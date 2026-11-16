@@ -4,6 +4,9 @@
   grid-auto-columns:minmax(min(85vw,18rem),1fr);
   gap:1rem;
   align-items:stretch;
+  width:100%;
+  min-width:0;
+  max-width:100%;
   max-height:min(72vh,52rem);
   padding:.35rem;
   overflow:auto;
