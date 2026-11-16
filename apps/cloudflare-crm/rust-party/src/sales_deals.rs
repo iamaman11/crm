@@ -188,6 +188,17 @@ pub(super) async fn create_typed(
         Ok(x) => x,
         Err(code) => return Ok(rejected(code, 422)),
     };
+    if !super::sales_pipelines::active_stage(
+        db,
+        tenant,
+        stage.pipeline_id().as_str(),
+        stage.stage_id().as_str(),
+        stage.ordinal(),
+    )
+    .await?
+    {
+        return Ok(rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
+    }
     let probability = match BasisPoints::try_new(input.probability_bps) {
         Ok(x) => x,
         Err(e) => return Ok(rejected(e.code, 422)),
@@ -392,6 +403,17 @@ pub(super) async fn advance_typed(
         Ok(x) => x,
         Err(code) => return Ok(advance_rejected(code, 422)),
     };
+    if !super::sales_pipelines::active_stage(
+        db,
+        tenant,
+        target.pipeline_id().as_str(),
+        target.stage_id().as_str(),
+        target.ordinal(),
+    )
+    .await?
+    {
+        return Ok(advance_rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
+    }
     let reason = match input.close_reason_code {
         Some(code) => match ReasonCode::try_new(code) {
             Ok(v) => Some(v),
