@@ -2097,6 +2097,22 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      panelTransitions.push({title,result:"CLOSED",desired:observed?.desired,
        nativeOpen:observed?.nativeOpen,dirty:observed?.dirty,
        closeSource:observed?.closeSource});
+     if(hash==="accounts"){
+       // A dirty draft rejected twice and later discarded must never leave a
+       // closed native dialog behind a stale React open=true on the next click.
+       await page.getByRole("button",{name:createAction,exact:true}).click();
+       const reopened=await assertUiPanel({page,panel,panelId,title:"Новый клиент",
+         expected:"open",scenario:"account-reopen-after-escape",
+         evidenceDirectory:join(cwd,"../e2e-evidence-native")});
+       const reopenedPanel=reopened.panels.find(p=>p.panelId===panelId);
+       assert.equal(reopenedPanel?.dirty,"false");
+       assert.equal(await panel.getByLabel("Название клиента",{exact:true}).inputValue(),"");
+       panelTransitions.push({title,result:"REOPENED",desired:reopenedPanel?.desired,
+         nativeOpen:reopenedPanel?.nativeOpen});
+       await panel.getByRole("button",{name:"Отмена",exact:true}).click();
+       await assertUiPanel({page,panel,panelId,title:"Новый клиент",expected:"closed",
+         scenario:"account-reopened-cancel",evidenceDirectory:join(cwd,"../e2e-evidence-native")});
+     }
    }
    await page.setViewportSize({width:390,height:844});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1));
@@ -2105,7 +2121,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      scenarios:["search after first unfiltered page","Party picker beyond 100 rows","Account picker beyond 100 rows",
        "selection reset","keyboard Enter does not submit mutation","mobile layout","read-only",
        "native dialog and React state matched on close","dirty draft close rejection retained dialog",
-       "second rejected Escape preserves native modal before accepted close"],
+       "second rejected Escape preserves native modal before accepted close",
+       "Account modal reopens cleanly after confirmed native Escape"],
      panel_transitions:panelTransitions,requests:searchRequests},null,2)+"\n");
  }finally{await searchBrowser.close();}
  // Write evidence only after every scenario assertion above has completed.
