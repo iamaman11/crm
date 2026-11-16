@@ -437,7 +437,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Название сделки",{exact:true}).fill("Browser Deal "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
    const dealContact=page.getByLabel("Основной контакт сделки",{exact:true});
-   await dealContact.locator('option[value="'+browserSalesContactId+'"]').waitFor();
+   await dealContact.locator('option[value="'+browserSalesContactId+'"]').waitFor({state:"attached"});
    await dealContact.selectOption(browserSalesContactId);
    await page.getByLabel("Ожидаемая дата закрытия",{exact:true}).fill("2030-05-21");
    await page.getByLabel("Сумма",{exact:true}).fill("90071992547409.93");
