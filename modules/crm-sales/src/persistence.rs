@@ -375,8 +375,8 @@ mod tests {
                 expected_version: 1,
                 target_stage: DealStage::try_new(
                     PipelineId::try_new("pipeline.enterprise").unwrap(),
-                    StageId::try_new("closed_won").unwrap(),
-                    4,
+                    StageId::try_new("qualification").unwrap(),
+                    1,
                 )
                 .unwrap(),
                 target_status: DealStatus::Won,
