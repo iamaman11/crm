@@ -24,18 +24,18 @@ export function PartyPicker({name="partyId",label="Участник",initialPart
     {cursor&&<Button variant="secondary" onClick={()=>{setValue("");setCursor("");}}>В начало списка</Button>}
   </div>;
 }
-export function AccountPicker() {
+export function AccountPicker({onSelect}:{onSelect?:(id:string)=>void}={}) {
   const [cursor,setCursor]=useState("");
   const [value,setValue]=useState("");
   const [search,setSearch]=useState("");
   const query=useQuery(useCallback(()=>api.accounts.listAccounts({page:{pageSize:100,pageToken:cursor},search}),[cursor,search]));
-  return <div><SearchField label="Поиск: Клиент" onSearch={text=>{setSearch(text);setCursor("");setValue("");}}/>
-    <SelectField label="Клиент" name="accountId" value={value} required disabled={query.busy||!!query.error} onChange={e=>setValue(e.target.value)}>
+  return <div><SearchField label="Поиск: Клиент" onSearch={text=>{setSearch(text);setCursor("");setValue("");onSelect?.("");}}/>
+    <SelectField label="Клиент" name="accountId" value={value} required disabled={query.busy||!!query.error} onChange={e=>{setValue(e.target.value);onSelect?.(e.target.value);}}>
     <option value="">Выберите клиента</option>
     {!query.busy&&!query.error&&query.data?.accounts.map(a=><option value={a.accountId} key={a.accountId}>{a.name} · {a.accountId}</option>)}
   </SelectField><QueryNotice query={query}/>
     {!query.busy&&!query.error&&query.data?.accounts.length===0&&<p>Клиенты не найдены.</p>}
-    {query.data?.pageInfo?.nextPageToken&&<Button variant="secondary" disabled={query.busy||!!query.error} onClick={()=>{setValue("");setCursor(query.data?.pageInfo?.nextPageToken??"");}}>Другие клиенты</Button>}
-    {cursor&&<Button variant="secondary" onClick={()=>{setValue("");setCursor("");}}>В начало списка</Button>}
+    {query.data?.pageInfo?.nextPageToken&&<Button variant="secondary" disabled={query.busy||!!query.error} onClick={()=>{setValue("");onSelect?.("");setCursor(query.data?.pageInfo?.nextPageToken??"");}}>Другие клиенты</Button>}
+    {cursor&&<Button variant="secondary" onClick={()=>{setValue("");onSelect?.("");setCursor("");}}>В начало списка</Button>}
   </div>;
 }
