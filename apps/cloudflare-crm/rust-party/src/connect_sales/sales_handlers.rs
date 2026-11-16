@@ -228,6 +228,14 @@ impl sale_wire::DealService for SalesV2Service {
                 probability_bps,
                 amount_minor_units,
                 currency,
+                primary_contact_id: input.primary_contact_id,
+                expected_close_date: input.expected_close_date.as_option().map(|d| {
+                    sales_deals::DateInput {
+                        year: d.year,
+                        month: d.month,
+                        day: d.day,
+                    }
+                }),
             },
             &key,
             &db,
@@ -280,6 +288,42 @@ impl sale_wire::DealService for SalesV2Service {
                     .map_err(|_| ConnectError::invalid_argument("invalid probability basis points"))
             })
             .transpose()?;
+        let primary_contact = match input.primary_contact_id.as_option() {
+            None => sales_deals::FieldChange::Keep,
+            Some(p) => match p.operation.as_ref() {
+                Some(core_v2::string_patch::Operation::Set(value)) => {
+                    sales_deals::FieldChange::Set(value.clone())
+                }
+                Some(core_v2::string_patch::Operation::Clear(true)) => {
+                    sales_deals::FieldChange::Clear
+                }
+                _ => {
+                    return Err(ConnectError::invalid_argument(
+                        "invalid primary contact patch",
+                    ));
+                }
+            },
+        };
+        let expected_close_date = match input.expected_close_date.as_option() {
+            None => sales_deals::FieldChange::Keep,
+            Some(p) => match p.operation.as_ref() {
+                Some(core_v2::calendar_date_patch::Operation::Set(d)) => {
+                    sales_deals::FieldChange::Set(sales_deals::DateInput {
+                        year: d.year,
+                        month: d.month,
+                        day: d.day,
+                    })
+                }
+                Some(core_v2::calendar_date_patch::Operation::Clear(true)) => {
+                    sales_deals::FieldChange::Clear
+                }
+                _ => {
+                    return Err(ConnectError::invalid_argument(
+                        "invalid expected date patch",
+                    ));
+                }
+            },
+        };
         let saved = sales_deals::update_typed(
             sales_deals::UpdateInput {
                 expected_version: version.unwrap_or_default(),
@@ -289,6 +333,8 @@ impl sale_wire::DealService for SalesV2Service {
                 currency,
                 clear_amount,
                 probability_bps,
+                primary_contact,
+                expected_close_date,
             },
             &key,
             &self.d1()?,

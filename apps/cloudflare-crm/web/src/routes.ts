@@ -7,6 +7,7 @@ export type Route =
   | ({kind:"accounts"} & AccountFilters)
   | {kind:"account";accountId:string}
   | {kind:"account-create";partyId:string}
+  | {kind:"deal";dealId:string}
   | {kind:"section";screen:Section;partyId:string;accountId:string}
   | {kind:"not-found";path:string};
 
@@ -45,6 +46,13 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
       if(id&&!id.includes("/")&&!id.includes("\\")&&id!=="."&&id!=="..")return {kind:"account",accountId:id};
     }catch {/* Invalid percent-encoding must never crash React. */}
   }
+  if(path.startsWith("sales/")&&question<0){
+    try {
+      const id=decodeURIComponent(path.slice("sales/".length));
+      if(id&&id.length<=128&&!id.includes("/")&&!id.includes("\\")&&id!=="."&&id!=="..")
+        return {kind:"deal",dealId:id};
+    }catch {/* Malformed URLs do not reach API. */}
+  }
   if(isSection(path))return {kind:"section",screen:path,partyId:params.get("partyId")??"",accountId:params.get("accountId")??""};
   return {kind:"not-found",path:source};
 }
@@ -66,4 +74,8 @@ export function partyHref(partyId:string):string {
 export function scopeHref(screen:"contacts"|"relationships"|"sales"|"tasks",id:string):string {
   const parameter=screen==="sales"||screen==="tasks"?"accountId":"partyId";
   return "#"+screen+"?"+new URLSearchParams({[parameter]:id}).toString();
+}
+
+export function dealHref(dealId:string):string {
+  return "#sales/"+encodeURIComponent(dealId);
 }

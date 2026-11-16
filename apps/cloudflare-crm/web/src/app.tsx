@@ -31,10 +31,11 @@ const screens=[
 function App() {
   const hash=useSyncExternalStore(subscribeNavigation,currentRouteHash);
   const route=useMemo(()=>parseRoute(hash,accountFilterStatuses),[hash]);
-  const current=route.kind==="accounts"||route.kind==="account"||route.kind==="account-create"?"accounts":route.kind==="section"?route.screen:"";
+  const current=route.kind==="accounts"||route.kind==="account"||route.kind==="account-create"?"accounts":route.kind==="deal"?"sales":route.kind==="section"?route.screen:"";
   const content=route.kind==="accounts"?<AccountScreen registerBlocker={registerNavigationBlocker} filters={{search:route.search,status:route.status,cursor:route.cursor}}/>:
     route.kind==="account"?<AccountPage registerBlocker={registerNavigationBlocker} accountId={route.accountId}/>:
     route.kind==="account-create"?<AccountCreatePage key={route.partyId} registerBlocker={registerNavigationBlocker} partyId={route.partyId}/>:
+    route.kind==="deal"?<SalesScreen key={route.dealId} focusedDealId={route.dealId}/>:
     route.kind==="not-found"?<><PageHeader title="Страница не найдена"/><a href="#accounts">К списку клиентов</a></>:
     route.screen==="parties"?<PartyScreen key={route.partyId} initialPartyId={route.partyId}/>:
     route.screen==="contacts"?<ContactScreen key={route.partyId} initialPartyId={route.partyId}/>:
