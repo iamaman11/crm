@@ -48,6 +48,7 @@ class RepositoryNavigationTests(unittest.TestCase):
         )
 
     def test_generated_navigation_is_deterministic_and_current(self) -> None:
+        self.maxDiff = None
         first = generated_documents(ROOT)
         second = generated_documents(ROOT)
         self.assertEqual(first, second)
@@ -67,6 +68,10 @@ class RepositoryNavigationTests(unittest.TestCase):
         )
         self.assertIn("**Workspace packages:** 112", first[REPOSITORY_MAP_PATH])
         self.assertIn("`crm.customer-privacy`", first[REPOSITORY_MAP_PATH])
+        self.assertEqual(
+            (ROOT / REPOSITORY_MAP_PATH).read_text(encoding="utf-8"),
+            first[REPOSITORY_MAP_PATH],
+        )
         self.assertEqual(stale_generated_documents(ROOT), [])
 
     def test_module_and_capability_explanations_remain_resolvable(self) -> None:
