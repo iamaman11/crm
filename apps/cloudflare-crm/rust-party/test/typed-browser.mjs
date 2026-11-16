@@ -411,6 +411,20 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Код следующего этапа",{exact:true}).fill("qualified");
    await mutation(page.getByRole("button",{name:"Сохранить этап",exact:true}),"AdvanceStage");
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,1);
+   // Closing is independent of stage movement: retain the real stage and do
+   // not create a fictitious terminal stage or a second follow-up Task.
+   const actualStage=(await sql("SELECT json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0].stage;
+   const movedDealCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Deal "+runId,exact:true})}).last();
+   await movedDealCard.getByRole("button",{name:"Завершить сделку",exact:true}).click();
+   await page.getByRole("heading",{name:"Завершить сделку: Browser Deal "+runId,exact:true}).waitFor();
+   await page.getByLabel("Причина закрытия",{exact:true}).fill("contract-signed");
+   await mutation(page.getByRole("button",{name:"Завершить сделку",exact:true}).last(),"AdvanceStage");
+   const terminal=(await sql("SELECT version,json_extract(state,'$.status') AS status,json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+   assert.deepEqual(terminal,{version:4,status:"won",stage:actualStage});
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,2);
+   await page.getByText("Выиграна · версия 4",{exact:true}).waitFor();
+   assert.equal(await movedDealCard.getByRole("button",{name:"Изменить сделку",exact:true}).count(),0);
+   steps.push("CloseDeal: Won at unchanged stage, terminal read-only, D1 linked receipt");
    await navigate("accounts","Клиенты");
    await page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,level:2,exact:true})})
      .getByRole("button",{name:"Открыть карточку",exact:true}).click();
