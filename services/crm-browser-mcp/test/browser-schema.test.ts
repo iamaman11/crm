@@ -43,3 +43,12 @@ test("every published MCP tool has the correct workspace contract", () => {
   assert.match(code, /selectWorkspaceId\(payload.op, payload.workspaceId\)/);
   assert.doesNotMatch(code, /idFromName\("owner:/);
 });
+
+test("published action and scenario schemas both expose official Playwright drag_to", () => {
+  const index = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  const session = readFileSync(new URL("../src/session.ts", import.meta.url), "utf8");
+  assert.match(index, /"drag_to"/);
+  assert.match(index, /destination: target\.optional\(\)/);
+  assert.match(session, /case "drag_to":/);
+  assert.match(session, /locator\.dragTo\(this\.target\(command\.destination\)/);
+});
