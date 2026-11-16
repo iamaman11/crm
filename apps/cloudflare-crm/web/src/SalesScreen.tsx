@@ -95,14 +95,21 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
       setEditorMode(mode);mutation.changed();
     } catch(error) {await mutation.run(()=>Promise.reject(error));}
   };
-  const editPipeline=(pipeline?:SalesPipeline)=>{
-    setPipelineEditor(pipeline??"new");
-    setPipelineDraftId(pipeline?.pipelineId??newId());
-    setPipelineName(pipeline?.name??"");
-    setPipelineArchived(pipeline?.archived??false);
-    setStageEdits(stageDrafts(pipeline));
-    setPipelineDirty(false);
-    pipelineMutation.changed();
+  const editPipeline=async(pipeline?:SalesPipeline)=>{
+    try {
+      // A catalog mutation may have committed before the React list re-renders.
+      // Always open an existing editor with the current CAS version from Rust,
+      // never with a stale render's SalesPipeline snapshot.
+      const current=pipeline?(await api.deals.getPipeline({pipelineId:pipeline.pipelineId})).pipeline:undefined;
+      if(pipeline&&!current)throw Error("Воронка не найдена");
+      setPipelineEditor(current??"new");
+      setPipelineDraftId(current?.pipelineId??newId());
+      setPipelineName(current?.name??"");
+      setPipelineArchived(current?.archived??false);
+      setStageEdits(stageDrafts(current));
+      setPipelineDirty(false);
+      pipelineMutation.changed();
+    } catch(error) {await pipelineMutation.run(()=>Promise.reject(error));}
   };
   const changeStage=(index:number,change:Partial<StageDraft>)=>{
     setStageEdits(before=>before.map((s,i)=>i===index?{...s,...change}:s));
@@ -125,8 +132,8 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const readyStage=!activePipeline?.archived?activePipeline?.stages.find(s=>!s.archived):undefined;
   return <>
     <PageHeader title="Сделки" description="Количество сделок по каждому этапу вычисляется на сервере. Колонки имеют независимую пагинацию." actions={<>
-      <Button variant="secondary" onClick={()=>editPipeline()}>Создать воронку</Button>{" "}
-      {activePipeline&&<Button variant="secondary" onClick={()=>editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
+      <Button variant="secondary" onClick={()=>void editPipeline()}>Создать воронку</Button>{" "}
+      {activePipeline&&<Button variant="secondary" onClick={()=>void editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
       <Button disabled={!activePipeline||!readyStage} onClick={()=>{
         setSelected(undefined);setAdvance(undefined);
         setEditorMode("create");mutation.changed();
