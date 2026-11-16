@@ -460,20 +460,41 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("region",{name:"Подробности сделки "+dealId}).getByText(
      "Ожидаемое закрытие: 2030-05-21",{exact:true}).waitFor();
    await page.getByRole("button",{name:"Свернуть",exact:true}).last().click();
+   // Force the exact LIVE race: GetDeal has loaded but ContactPoint choices
+   // have not. A pending read must never turn an unchanged association
+   // into a missing FormData field or silently Clear the selected contact.
+   let releaseContactRead=()=>{};
+   const pendingContactRead=new Promise(resolve=>{releaseContactRead=resolve;});
+   let blockedContactRead=false;
+   const blockContactRead=async route=>{
+     if(!blockedContactRead) {
+       blockedContactRead=true;
+       await pendingContactRead;
+     }
+     await route.continue();
+   };
+   await page.route("**/crm.accounts.v2.AccountService/GetAccount",blockContactRead);
    await dealCard.getByRole("button",{name:"Изменить сделку",exact:true}).click();
    // GetDeal completes asynchronously and replaces the create form. Editing the
    // old field before this heading appears would lose the entered value.
    await page.getByRole("heading",{name:"Изменить сделку",exact:true}).waitFor();
    assert.equal(await page.getByLabel("Вероятность, %",{exact:true}).inputValue(),"37.45");
+   await expect(page.getByLabel("Основной контакт сделки",{exact:true})).toBeDisabled();
+   assert.equal(blockedContactRead,true,"Account/Contact read must still be pending during edit");
    await page.getByLabel("Вероятность, %",{exact:true}).fill("38.5");
    await page.getByLabel("Ожидаемая дата закрытия",{exact:true}).fill("2030-06-01");
    assert.equal(await page.getByLabel("Вероятность, %",{exact:true}).inputValue(),"38.5");
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"UpdateDeal");
+   releaseContactRead();
+   await page.unroute("**/crm.accounts.v2.AccountService/GetAccount",blockContactRead);
    const savedDeal=(await sql("SELECT version,json_extract(state,'$.probability_basis_points') AS probability FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
    assert.equal(savedDeal.version,2);assert.equal(savedDeal.probability,3850);
-   const expectedAfterUpdate=(await sql("SELECT json_extract(state,'$.expected_close_date.day') AS day "+
+   const expectedAfterUpdate=(await sql("SELECT json_extract(state,'$.expected_close_date.day') AS day, "+
+     "json_extract(state,'$.primary_contact.resource_id') AS contact_id "+
      "FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
    assert.equal(expectedAfterUpdate.day,1);
+   assert.equal(expectedAfterUpdate.contact_id,browserSalesContactId,
+     "async Account/Contact lookup must not erase unchanged Deal primary contact");
    steps.push("R7.2 contact/date via real React, GetDeal/detail and original D1");
    await page.getByText("90071992547409.93 USD · 38.50%",{exact:true}).waitFor();
    // Keyboard/select fallback remains the original mutation form; verify

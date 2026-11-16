@@ -406,7 +406,13 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
             minorUnits:minorUnits(amountText,currencyCode),currencyCode
           }:undefined;
           const common={probabilityBasisPoints:basisPoints(field(data,"probability"))};
-          const contactId=field(data,"primaryContactId");
+          // A disabled native <select> is excluded from FormData while
+          // Account/ContactPoint choices are loading. Keep the original
+          // association on edit, rather than treating a pending read as Clear.
+          // Rust crm-sales remains the authoritative contact/account validator.
+          const contactField=data.get("primaryContactId");
+          const contactId=typeof contactField==="string"?
+            contactField:(selected?.primaryContactId??"");
           const expectedCloseDate=parseDate(field(data,"expectedCloseDate"));
           if(selected) {
             const dateBefore=inputDate(selected.expectedCloseDate);
