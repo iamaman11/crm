@@ -150,7 +150,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       <Button variant="secondary" onClick={()=>void editPipeline()}>Создать воронку</Button>{" "}
       {activePipeline&&<Button variant="secondary" onClick={()=>void editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
       <Button disabled={!activePipeline||!readyStage} onClick={()=>{
-        setSelected(undefined);setAdvance(undefined);
+        setSelected(undefined);setAdvance(undefined);setFormAccountId("");
         setEditorMode("create");mutation.changed();
       }}>Новая сделка</Button>
     </>}/>
