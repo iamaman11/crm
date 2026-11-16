@@ -132,9 +132,12 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const readyStage=!activePipeline?.archived?activePipeline?.stages.find(s=>!s.archived):undefined;
   return <>
     <PageHeader title="Сделки" description="Количество сделок по каждому этапу вычисляется на сервере. Колонки имеют независимую пагинацию." actions={<>
-      <Button variant="secondary" onClick={()=>void editPipeline()}>Создать воронку</Button>{" "}
-      {activePipeline&&<Button variant="secondary" onClick={()=>void editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
-      <Button disabled={!activePipeline||!readyStage} onClick={()=>{
+      <Button variant="secondary" disabled={pipelineMutation.busy||pipelinesQuery.busy}
+        onClick={()=>void editPipeline()}>Создать воронку</Button>{" "}
+      {activePipeline&&<Button variant="secondary"
+        disabled={pipelineMutation.busy||pipelinesQuery.busy}
+        onClick={()=>void editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
+      <Button disabled={!activePipeline||!readyStage||pipelineMutation.busy||pipelinesQuery.busy} onClick={()=>{
         setSelected(undefined);setAdvance(undefined);
         setEditorMode("create");mutation.changed();
       }}>Новая сделка</Button>
