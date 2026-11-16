@@ -124,11 +124,11 @@ pub(super) async fn create_typed(
     };
     let state = encode(&case)?;
     let inserted=bind(db,
-        "INSERT INTO crm_privacy_case_records(tenant,id,state,version,idem_key,idem_digest,request_id,created_by) VALUES(?,?,?,?,?,?,?,?)",
+        "INSERT INTO crm_privacy_case_records(tenant,id,state,version,idem_key,idem_digest,request_id,created_by,actor) VALUES(?,?,?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant),JsValue::from_str(case.case_id().as_str()),
           JsValue::from_str(&state),JsValue::from_str(&case.version().to_string()),
           JsValue::from_str(key),JsValue::from_str(&hash),JsValue::from_str(trace),
-          JsValue::from_str(actor)])?.run().await;
+          JsValue::from_str(actor),JsValue::from_str(actor)])?.run().await;
     if inserted.is_err() {
         if let Some(saved) = replay(db, tenant, key, &hash).await? {
             return Ok(saved);
@@ -147,6 +147,7 @@ pub(super) async fn transition_typed(
     key: &str,
     db: &D1Database,
     tenant: &str,
+    actor: &str,
     trace: &str,
 ) -> Result<std::result::Result<Saved, Failure>> {
     if !(8..=120).contains(&key.len()) {
@@ -179,10 +180,10 @@ pub(super) async fn transition_typed(
     }
     let state = encode(&case)?;
     let result=bind(db,
-        "UPDATE crm_privacy_case_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=? WHERE tenant=? AND id=? AND version=?",
+        "UPDATE crm_privacy_case_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&state),JsValue::from_str(&case.version().to_string()),
           JsValue::from_str(key),JsValue::from_str(&hash),JsValue::from_str(trace),
-          JsValue::from_str(tenant),JsValue::from_str(id),
+          JsValue::from_str(actor),JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_str(&expected_version.to_string())])?.run().await;
     let changed = match result {
         Ok(result) => result.meta()?.and_then(|m| m.changes).unwrap_or(0) > 0,

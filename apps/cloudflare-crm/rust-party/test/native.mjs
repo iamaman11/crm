@@ -1079,9 +1079,9 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
 
  // Original read-only DataQuality and Identity Resolution, signed binary
  // Connect from the exact generated descriptor, with tenant A/B and viewer.
- const signedReadOnly=(path,encode,decode)=>async(method,token,payload)=>{
+ const signedReadOnly=(path,encode,decode)=>async(method,token,payload,extraHeaders={})=>{
    const r=await rpcFetch(path(method),{method:"POST",headers:{
-     "content-type":"application/proto","connect-protocol-version":"1",
+     ...extraHeaders,"content-type":"application/proto","connect-protocol-version":"1",
      ...(token?{"cf-access-jwt-assertion":token}:{})},
      body:encode(method,payload)});
    return {status:r.status,headers:r.headers,
@@ -1599,7 +1599,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await privacy("CreatePrivacyCase",admin,{...draftInput,kind:999})).body.code,"invalid_argument");
  assert.equal((await privacy("CreatePrivacyCase",admin,{...draftInput,
    precondition:{idempotencyKey:"privacy-create-invalid",expectedVersion:1n}})).body.code,"invalid_argument");
- const draft=await privacy("CreatePrivacyCase",admin,draftInput);
+ const draft=await privacy("CreatePrivacyCase",admin,draftInput,{
+   "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
+   "cf-access-authenticated-user-email":"forged@example.test",
+   "x-request-id":"forged-privacy-request"});
  assert.equal(draft.status,200,describeProtobuf(draft.body));
  assert.equal(draft.body.privacyCase?.caseId,caseId);
  assert.equal(draft.body.privacyCase?.status,1);
@@ -1618,7 +1621,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await privacy("SubmitPrivacyCase",tenantB,submit)).body.code,"not_found");
  assert.equal((await privacy("SubmitPrivacyCase",admin,{...submit,
    precondition:{expectedVersion:9n,idempotencyKey:"privacy-submit-stale"}})).body.code,"aborted");
- const submitted=await privacy("SubmitPrivacyCase",admin,submit);
+ const submitted=await privacy("SubmitPrivacyCase",knownService,submit);
  assert.equal(submitted.status,200,describeProtobuf(submitted.body));
  assert.equal(submitted.body.privacyCase?.status,2);
  assert.equal(submitted.body.receipt?.resourceVersion,2n);
@@ -1640,6 +1643,67 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(sql("SELECT version FROM crm_privacy_case_records WHERE tenant='tenant-a' AND id='"+caseId+"'")[0].version,3);
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_privacy_case_receipts WHERE tenant='tenant-a'")[0].n,3);
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'")[0].n,3);
+ assert.deepEqual(sql("SELECT action,subject_id,request_id,actor FROM crm_audit WHERE "+
+   "tenant_id='tenant-a' AND subject_id='"+caseId+"' ORDER BY rowid"),[
+   {action:"customer_privacy.create",subject_id:caseId,
+     request_id:draft.headers.get("x-request-id"),actor:"native-a@example.test"},
+   {action:"customer_privacy.submit",subject_id:caseId,
+     request_id:submitted.headers.get("x-request-id"),actor:"service:ci-fixture.access"},
+   {action:"customer_privacy.cancel",subject_id:caseId,
+     request_id:cancelled.headers.get("x-request-id"),actor:"native-a@example.test"},
+ ],"Committed actions must preserve their own verified Access actor and request");
+ assert.deepEqual(sql("SELECT created_by,actor FROM crm_privacy_case_records "+
+   "WHERE tenant='tenant-a' AND id='"+caseId+"'"),[
+   {created_by:"native-a@example.test",actor:"native-a@example.test"},
+ ],"Creator is immutable and the last transition actor is separate");
+ const failingTransitionId="privacy-audit-transition-"+randomUUID();
+ assert.equal((await privacy("CreatePrivacyCase",admin,{
+   caseId:failingTransitionId,kind:1,
+   precondition:{idempotencyKey:"privacy-audit-ready-transition"}})).status,200);
+ const privacySnapshot=()=>sql("SELECT "+
+   "(SELECT json_group_array(json_array(tenant,id,state,version,created_by,actor)) "+
+   "FROM crm_privacy_case_records) AS states,"+
+   "(SELECT COUNT(*) FROM crm_privacy_case_receipts) AS receipts,"+
+   "(SELECT COUNT(*) FROM crm_audit WHERE tenant_id='tenant-a') AS audits");
+ const privacyBeforeDenials=privacySnapshot();
+ for(const token of [null,viewer,unknownService]){
+   assert.ok((await privacy("CreatePrivacyCase",token,draftInput)).status>=400);
+   assert.ok((await privacy("SubmitPrivacyCase",token,submit)).status>=400);
+   assert.ok((await privacy("CancelPrivacyCase",token,cancel)).status>=400);
+ }
+ sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
+ assert.equal((await privacy("SubmitPrivacyCase",knownService,submit)).status,401,
+   "Inactive service cannot replay a committed Privacy write");
+ sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
+ assert.equal((await privacy("SubmitPrivacyCase",knownService,submit)).status,403,
+   "Authorization must precede idempotent replay");
+ sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
+ assert.equal((await privacy("SubmitPrivacyCase",tenantB,submit)).body.code,"not_found");
+ assert.equal((await privacy("SubmitPrivacyCase",admin,{
+   ...submit,precondition:{expectedVersion:1n,idempotencyKey:"privacy-audit-denied-stale"}
+ })).body.code,"aborted");
+ assert.deepEqual(privacySnapshot(),privacyBeforeDenials,
+   "Denied, cross-tenant and stale Privacy writes cannot alter state, receipts or audit");
+ // Reject audit INSERT after the owner wrote state and receipt.
+ // No failure injection is compiled into the production Worker.
+ sql("CREATE TRIGGER fixture_fail_privacy_audit BEFORE INSERT ON crm_audit "+
+   "WHEN NEW.subject_id IN ('privacy-audit-failed-create','"+failingTransitionId+"') "+
+   "BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;");
+ try{
+   assert.equal((await privacy("CreatePrivacyCase",admin,{
+     caseId:"privacy-audit-failed-create",kind:1,
+     precondition:{idempotencyKey:"privacy-audit-failed-create-key"}})).body.code,"aborted");
+   assert.equal((await privacy("SubmitPrivacyCase",knownService,{
+     caseId:failingTransitionId,
+     precondition:{expectedVersion:1n,idempotencyKey:"privacy-audit-failed-submit-key"}
+   })).body.code,"aborted");
+   assert.deepEqual(privacySnapshot(),privacyBeforeDenials,
+     "Audit failure must roll back Privacy state, receipt and audit together");
+ }finally{sql("DROP TRIGGER fixture_fail_privacy_audit");}
+ console.log(JSON.stringify({event:"crm.native-r2a-privacy-actor-audit",result:"PASS",
+   human_create:true,service_submit:true,human_cancel:true,cross_actor_replay:true,
+   authorization_before_replay:true,forged_headers_ignored:true,tenant_ab:true,
+   stale_no_write:true,sql_failure_rollback:true}));
  for(const suffix of ["aaa","zzz"]){
    const result=await privacy("CreatePrivacyCase",admin,{caseId:"privacy-"+suffix,kind:4,
      precondition:{idempotencyKey:"privacy-page-"+suffix}});
@@ -1647,8 +1711,9 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  }
  assert.equal((await privacy("ListPrivacyCases",viewer,{page:{pageSize:101}})).body.code,"invalid_argument");
  const allCases=await collectPages(privacy,"ListPrivacyCases","cases");
- assert.equal(allCases.length,3);
- assert.deepEqual(allCases.map(x=>x.caseId),["privacy-aaa",caseId,"privacy-zzz"].sort());
+ assert.equal(allCases.length,4);
+ assert.deepEqual(allCases.map(x=>x.caseId),
+   ["privacy-aaa",caseId,"privacy-zzz",failingTransitionId].sort());
  assert.equal((await privacy("ListPrivacyCases",tenantB,{page:{pageSize:1}})).body.cases.length,0);
  assert.equal((await privacy("ListPrivacyCases",viewer,{page:{pageSize:1,pageToken:"privacy-zzz"}})).body.cases.length,0);
  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'")[0].n,3,

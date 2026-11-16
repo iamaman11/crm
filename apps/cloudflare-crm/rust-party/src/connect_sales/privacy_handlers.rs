@@ -129,6 +129,7 @@ impl PrivacyV2Service {
             &key,
             &self.d1()?,
             &self.tenant,
+            &self.actor,
             &self.request_id,
         )
         .await
