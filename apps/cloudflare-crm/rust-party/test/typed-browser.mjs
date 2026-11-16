@@ -471,7 +471,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        blockedContactRead=true;
        await pendingContactRead;
      }
-     await route.continue();
+     try {
+       await route.continue();
+     } catch(error) {
+       // Successful Deal update unmounts the editor and cancels its
+       // pending ContactPoint lookup. Playwright has already handled that
+       // specific route; unrelated errors must still fail the test.
+       if(!/Route is already handled!/.test(String(error)))throw error;
+     }
    };
    await page.route("**/crm.accounts.v2.AccountService/GetAccount",blockContactRead);
    await dealCard.getByRole("button",{name:"Изменить сделку",exact:true}).click();
