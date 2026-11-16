@@ -546,6 +546,74 @@ pub(super) async fn advance_typed(
         link,
     }))
 }
+#[derive(Deserialize)]
+struct CountRow {
+    total: i64,
+}
+
+/// The count is over the full bounded tenant/pipeline/stage filter, not merely
+/// the current 25 visible cards. Every column has an independent keyset cursor.
+pub(super) async fn list_stage_page(
+    db: &D1Database,
+    tenant: &str,
+    pipeline_id: &str,
+    stage_id: &str,
+    after: &str,
+    limit: usize,
+    status: Option<DealStatus>,
+    account: Option<&str>,
+) -> Result<(Vec<Deal>, Option<String>, u64)> {
+    let mut condition = String::from(
+        "tenant=? AND json_extract(state,'$.stage.pipeline_id')=? AND json_extract(state,'$.stage.stage_id')=?",
+    );
+    let mut arguments = vec![
+        JsValue::from_str(tenant),
+        JsValue::from_str(pipeline_id),
+        JsValue::from_str(stage_id),
+    ];
+    if let Some(status) = status {
+        condition.push_str(" AND json_extract(state,'$.status')=?");
+        arguments.push(JsValue::from_str(match status {
+            DealStatus::Open => "open",
+            DealStatus::Won => "won",
+            DealStatus::Lost => "lost",
+        }));
+    }
+    if let Some(account) = account {
+        condition.push_str(" AND account_id=?");
+        arguments.push(JsValue::from_str(account));
+    }
+    let count_sql = format!("SELECT COUNT(*) AS total FROM crm_sales_deal_records WHERE {condition}");
+    let counted = bind(db, &count_sql, &arguments)?
+        .first::<CountRow>(None)
+        .await?
+        .ok_or_else(|| worker::Error::RustError("SALES_BOARD_COUNT_MISSING".into()))?;
+    let total = u64::try_from(counted.total)
+        .map_err(|_| worker::Error::RustError("SALES_BOARD_COUNT_INVALID".into()))?;
+    condition.push_str(" AND id>?");
+    arguments.push(JsValue::from_str(after));
+    arguments.push(JsValue::from_f64((limit + 1) as f64));
+    let list_sql = format!(
+        "SELECT id,state FROM crm_sales_deal_records WHERE {condition} ORDER BY id LIMIT ?"
+    );
+    let mut rows = bind(db, &list_sql, &arguments)?
+        .all()
+        .await?
+        .results::<PagedRow>()?;
+    let more = rows.len() > limit;
+    rows.truncate(limit);
+    let next = if more {
+        rows.last().map(|item| item.id.clone())
+    } else {
+        None
+    };
+    let deals = rows
+        .iter()
+        .map(|item| decode(&item.state))
+        .collect::<Result<Vec<_>>>()?;
+    Ok((deals, next, total))
+}
+
 pub(super) async fn list_page_typed(
     db: &D1Database,
     tenant: &str,
