@@ -18,9 +18,9 @@ export function parseDate(value:string):Calendar|undefined {
   const [year,month,day]=value.split("-").map(Number);
   if(year===undefined||month===undefined||day===undefined||year<1||year>9999)
     throw Error("Неверная дата закрытия");
-  const parsed=new Date(Date.UTC(year,month-1,day));
-  if(parsed.getUTCFullYear()!==year||parsed.getUTCMonth()!==month-1||
-    parsed.getUTCDate()!==day)throw Error("Неверная дата закрытия");
+  const leap=year%4===0&&(year%100!==0||year%400===0);
+  const maximum=[31,leap?29:28,31,30,31,30,31,31,30,31,30,31][month-1];
+  if(maximum===undefined||day<1||day>maximum)throw Error("Неверная дата закрытия");
   return {year,month,day};
 }
 
