@@ -149,16 +149,10 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
             effective_at_unix_ms: Self::millis(effective)?,
             expires_at_unix_ms: input.expires_at.as_option().map(Self::millis).transpose()?,
         };
-        let saved = owner::publish_profile(
-            draft,
-            &key,
-            &self.d1()?,
-            &self.actor,
-            &self.request_id,
-        )
-        .await
-        .map_err(|_| ConnectError::internal("profile D1 publish failed"))?
-        .map_err(Self::failed)?;
+        let saved = owner::publish_profile(draft, &key, &self.d1()?, &self.actor, &self.request_id)
+            .await
+            .map_err(|_| ConnectError::internal("profile D1 publish failed"))?
+            .map_err(Self::failed)?;
         RpcResponse::ok(enrichment_wire::PublishProviderProfileResponse {
             profile: Some(Self::profile(&saved.value)?).into(),
             receipt: Some(self.receipt(saved.replayed)).into(),
@@ -181,16 +175,10 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
             maximum_suggestions_per_response: input.maximum_suggestions_per_response,
             confidence_required: input.confidence_required,
         };
-        let saved = owner::publish_mapping(
-            draft,
-            &key,
-            &self.d1()?,
-            &self.actor,
-            &self.request_id,
-        )
-        .await
-        .map_err(|_| ConnectError::internal("mapping D1 publish failed"))?
-        .map_err(Self::failed)?;
+        let saved = owner::publish_mapping(draft, &key, &self.d1()?, &self.actor, &self.request_id)
+            .await
+            .map_err(|_| ConnectError::internal("mapping D1 publish failed"))?
+            .map_err(Self::failed)?;
         RpcResponse::ok(enrichment_wire::PublishMappingResponse {
             mapping: Some(Self::mapping(&saved.value)).into(),
             receipt: Some(self.receipt(saved.replayed)).into(),
@@ -236,9 +224,10 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         req: ServiceRequest<'_, enrichment_wire::ListProviderProfilesRequest>,
     ) -> ServiceResult<enrichment_wire::ListProviderProfilesResponse> {
         let size = Self::page(req.page.page_size, req.page.page_token)?;
-        let (items, next) = owner::profiles(&self.d1()?, &self.actor.tenant, req.page.page_token, size)
-            .await
-            .map_err(|_| ConnectError::internal("profile D1 list failed"))?;
+        let (items, next) =
+            owner::profiles(&self.d1()?, &self.actor.tenant, req.page.page_token, size)
+                .await
+                .map_err(|_| ConnectError::internal("profile D1 list failed"))?;
         RpcResponse::ok(enrichment_wire::ListProviderProfilesResponse {
             profiles: items
                 .iter()
@@ -259,9 +248,10 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         req: ServiceRequest<'_, enrichment_wire::ListMappingsRequest>,
     ) -> ServiceResult<enrichment_wire::ListMappingsResponse> {
         let size = Self::page(req.page.page_size, req.page.page_token)?;
-        let (items, next) = owner::mappings(&self.d1()?, &self.actor.tenant, req.page.page_token, size)
-            .await
-            .map_err(|_| ConnectError::internal("mapping D1 list failed"))?;
+        let (items, next) =
+            owner::mappings(&self.d1()?, &self.actor.tenant, req.page.page_token, size)
+                .await
+                .map_err(|_| ConnectError::internal("mapping D1 list failed"))?;
         RpcResponse::ok(enrichment_wire::ListMappingsResponse {
             mappings: items.iter().map(Self::mapping).collect(),
             page_info: Some(core_v2::PageInfo {
