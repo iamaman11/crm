@@ -46,6 +46,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const [pipelineDraftId,setPipelineDraftId]=useState(newId);
   const [pipelineName,setPipelineName]=useState("");
   const [pipelineArchived,setPipelineArchived]=useState(false);
+  const [pipelineDirty,setPipelineDirty]=useState(false);
   const [stageEdits,setStageEdits]=useState<StageDraft[]>([]);
   const mutation=useMutation();
   const pipelineMutation=useMutation();
@@ -85,11 +86,12 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
     setPipelineName(pipeline?.name??"");
     setPipelineArchived(pipeline?.archived??false);
     setStageEdits(stageDrafts(pipeline));
+    setPipelineDirty(false);
     pipelineMutation.changed();
   };
   const changeStage=(index:number,change:Partial<StageDraft>)=>{
     setStageEdits(before=>before.map((s,i)=>i===index?{...s,...change}:s));
-    pipelineMutation.changed();
+    pipelineMutation.changed();setPipelineDirty(true);
   };
   const shiftStage=(index:number,offset:number)=>{
     setStageEdits(before=>{
@@ -100,7 +102,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
       if(!first||!second)return before;
       next[index]=second;next[target]=first;
       return next;
-    });pipelineMutation.changed();
+    });pipelineMutation.changed();setPipelineDirty(true);
   };
   const columns=activePipeline?.stages??[];
   const advancePipeline=pipelines.find(p=>p.pipelineId===advance?.stage?.pipelineId);
@@ -158,10 +160,13 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
     </div>}
     {!query.busy&&query.data?.every(entry=>entry.totalCount===0n)&&<p>Сделок пока нет.</p>}
 
-    <RecordPanel open={pipelineEditor!==null} dirty={false}
+    <RecordPanel open={pipelineEditor!==null} dirty={pipelineDirty}
       title={pipelineEditor==="new"?"Новая воронка":"Настройка воронки"}
-      onClose={()=>setPipelineEditor(null)}>
-      <form onChange={pipelineMutation.changed} onSubmit={e=>{
+      onClose={()=>{
+        if(!pipelineDirty||window.confirm("Несохранённые изменения воронки будут потеряны. Закрыть?"))
+          setPipelineEditor(null);
+      }}>
+      <form onChange={()=>{pipelineMutation.changed();setPipelineDirty(true);}} onSubmit={e=>{
         e.preventDefault();
         void pipelineMutation.run(()=>{
           const stages=stageEdits.map(stage=>({
@@ -183,7 +188,7 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
               Promise.reject(Error("Воронка не выбрана"));
         },async()=>{
           const destination=pipelineEditor==="new"?pipelineDraftId:pipelineEditor?.pipelineId;
-          setPipelineEditor(null);
+          setPipelineDirty(false);setPipelineEditor(null);
           await pipelinesQuery.reload();
           if(destination)setPipelineId(destination);
           setStageCursors({});await query.reload();
@@ -207,15 +212,18 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
           <Button type="button" variant="secondary" disabled={index===stageEdits.length-1}
             onClick={()=>shiftStage(index,1)}>Ниже</Button>{" "}
           <Button type="button" variant="secondary" disabled={stageEdits.length===1}
-            onClick={()=>{setStageEdits(before=>before.filter((_,i)=>i!==index));pipelineMutation.changed();}}>
+            onClick={()=>{setStageEdits(before=>before.filter((_,i)=>i!==index));pipelineMutation.changed();setPipelineDirty(true);}}>
             Удалить этап</Button>
         </Card>)}
         <Button type="button" variant="secondary" disabled={stageEdits.length>=24} onClick={()=>{
           setStageEdits(before=>[...before,{stageId:newId(),name:"",probability:"10",archived:false}]);
-          pipelineMutation.changed();
+          pipelineMutation.changed();setPipelineDirty(true);
         }}>Добавить этап</Button>{" "}
         <Button type="submit" disabled={pipelineMutation.busy}>Сохранить воронку</Button>{" "}
-        <Button type="button" variant="secondary" onClick={()=>setPipelineEditor(null)}>Отмена</Button>
+        <Button type="button" variant="secondary" onClick={()=>{
+          if(!pipelineDirty||window.confirm("Несохранённые изменения воронки будут потеряны. Закрыть?"))
+            setPipelineEditor(null);
+        }}>Отмена</Button>
       </form>
     </RecordPanel>
     <MutationNotice state={pipelineMutation}/>
