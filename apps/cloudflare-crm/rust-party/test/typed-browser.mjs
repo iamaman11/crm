@@ -460,8 +460,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
    assert.equal(JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].state).archived,false);
    steps.push("Pipeline archive and restore using real React, Connect and D1");
-   // Prove that a Customer360 Account has Deals in TWO different pipelines.
-   await page.getByLabel("Воронка продаж",{exact:true}).selectOption("pipeline.enterprise");
+   // The live tenant may have ZERO seeded pipelines. Create the second
+   // pipeline through React; never depend on CI-only pipeline.enterprise.
+   await page.getByRole("button",{name:"Создать воронку",exact:true}).click();
+   await page.getByLabel("Название воронки",{exact:true}).fill("Browser Alternate Pipeline "+runId);
+   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"CreatePipeline");
+   const alternatePipelineId=await firstId("crm_sales_pipeline_records","name",
+     "Browser Alternate Pipeline "+runId);
+   assert.ok(alternatePipelineId,"Second pipeline must be persisted");
+   await page.getByLabel("Воронка продаж",{exact:true}).selectOption(alternatePipelineId);
    await page.getByRole("button",{name:"Новая сделка",exact:true}).click();
    await page.getByLabel("Название сделки",{exact:true}).fill("Browser Alternate Deal "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
