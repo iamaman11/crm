@@ -422,7 +422,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const terminal=(await sql("SELECT version,json_extract(state,'$.status') AS status,json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
    assert.deepEqual(terminal,{version:4,status:"won",stage:actualStage});
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,2);
-   await page.getByText("Выиграна · версия 4",{exact:true}).waitFor();
+   await movedDealCard.getByText("Выиграна · версия 4",{exact:true}).waitFor();
    assert.equal(await movedDealCard.getByRole("button",{name:"Изменить сделку",exact:true}).count(),0);
    steps.push("CloseDeal: Won at unchanged stage, terminal read-only, D1 linked receipt");
    await navigate("accounts","Клиенты");
