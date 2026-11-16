@@ -49,7 +49,6 @@ pub(super) struct StageInput {
     pub(super) expected_version: i64,
     pub(super) pipeline_id: String,
     pub(super) stage_id: String,
-    pub(super) ordinal: u16,
     pub(super) status: StatusInput,
     pub(super) close_reason_code: Option<String>,
 }

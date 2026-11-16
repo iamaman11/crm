@@ -310,14 +310,13 @@ impl sale_wire::DealService for SalesV2Service {
             .target_stage
             .as_option()
             .ok_or_else(|| ConnectError::invalid_argument("target_stage required"))?;
-        let (pipeline_id, stage_id, ordinal) = Self::stage(stage)?;
+        let (pipeline_id, stage_id) = Self::stage(stage);
         let status = Self::deal_status(input.target_status)?;
         let advanced = sales_deals::advance_typed(
             sales_deals::StageInput {
                 expected_version: version.unwrap_or_default(),
                 pipeline_id,
                 stage_id,
-                ordinal,
                 status,
                 close_reason_code: input.close_reason_code,
             },
