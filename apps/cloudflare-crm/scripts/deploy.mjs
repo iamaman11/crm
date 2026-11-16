@@ -260,11 +260,38 @@ async function prepareE2e(){
   for(const n of ["A","B"]){
     const id=required("CRM_E2E_"+n+"_CLIENT_ID");
     const secret=required("CRM_E2E_"+n+"_CLIENT_SECRET");
-    const reply=await fetch(url+"/api/session",{
-      headers:{"CF-Access-Client-Id":id,"CF-Access-Client-Secret":secret},
-      redirect:"manual",cache:"no-store"});
-    if(reply.status!==200 || (await reply.json()).role!=="admin")
-      throw Error("Explicitly enrolled signed E2E service "+n+" failed Access verification: HTTP "+reply.status);
+    const started=Date.now(),deadline=started+120000;
+    let attempts=0;
+    for(;;){
+      attempts++;
+      const reply=await fetch(url+"/api/session?readback="+Date.now()+"-"+n,{
+        headers:{"CF-Access-Client-Id":id,"CF-Access-Client-Secret":secret,
+          "cache-control":"no-cache"},
+        redirect:"manual",cache:"no-store"});
+      const source=reply.headers.get("x-crm-source-sha");
+      if(reply.status===200){
+        const session=await reply.json();
+        if(source!==sha||session.authenticated!==true||session.role!=="admin")
+          throw Error("Signed E2E service "+n+" returned a non-authoritative session");
+        console.log(JSON.stringify({event:"crm.e2e-access-readback",service:n,
+          result:"PASS",attempts,elapsed_ms:Date.now()-started,sha:source}));
+        break;
+      }
+      // The Workers.dev route may still be converging on another Cloudflare
+      // edge after /api/version succeeds. Retry only its non-Worker 404 page:
+      // never retry an authenticated Worker error or bypass Access verification.
+      if(reply.status!==404||source!==null)
+        throw Error("Signed E2E service "+n+" failed Access verification: HTTP "+
+          reply.status+" source="+(source||"none"));
+      if(Date.now()>=deadline)
+        throw Error("Signed E2E service "+n+" Workers.dev route not ready after "+
+          attempts+" attempts and "+(Date.now()-started)+"ms");
+      if(attempts===1||attempts%5===0)
+        console.log(JSON.stringify({event:"crm.e2e-access-readback",service:n,
+          result:"RETRY",http_status:reply.status,attempts,
+          elapsed_ms:Date.now()-started}));
+      await new Promise(resolve=>setTimeout(resolve,Math.min(attempts*600,3500)));
+    }
   }
   const clean=await query(
     "SELECT COUNT(*) AS existing FROM crm_party_records WHERE tenant IN (?,?)",[ta,tb]);
