@@ -200,8 +200,8 @@ export function SalesScreen({initialAccountId=""}:{initialAccountId?:string}) {
         <Button type="submit" disabled={pipelineMutation.busy}>Сохранить воронку</Button>{" "}
         <Button type="button" variant="secondary" onClick={()=>setPipelineEditor(null)}>Отмена</Button>
       </form>
-      <MutationNotice state={pipelineMutation}/>
     </RecordPanel>
+    <MutationNotice state={pipelineMutation}/>
 
     <RecordPanel open={editorMode!==null}
       title={advance?(editorMode==="close"?"Завершить сделку: ":"Этап сделки: ")+advance.name:
