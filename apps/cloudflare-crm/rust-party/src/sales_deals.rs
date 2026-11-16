@@ -669,7 +669,7 @@ async fn stage_mutation(
             JsValue::from_str(trace),
             JsValue::from_str(actor),
             JsValue::from_str(if closing {
-                "sales_deals.close"
+                "sales_deals.advance"
             } else {
                 "sales_deals.advance"
             }),
@@ -811,7 +811,7 @@ pub(super) async fn reopen_typed(
     }
     let state = encode(&deal)?;
     let result = bind(db,
-        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.reopen',last_reason_code=? WHERE tenant=? AND id=? AND version=?",
+        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.update',last_reason_code=? WHERE tenant=? AND id=? AND version=?",
         &[
             JsValue::from_str(&state),
             JsValue::from_f64(deal.version() as f64),

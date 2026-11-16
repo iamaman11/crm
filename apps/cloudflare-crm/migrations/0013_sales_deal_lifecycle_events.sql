@@ -4,6 +4,27 @@
 -- No fabricated backfill for pre-migration test deals.
 ALTER TABLE crm_sales_deal_records ADD COLUMN last_reason_code TEXT;
 
+-- Preserve the existing single receipt/audit owner and D1 CHECK constraint.
+-- Close/reopen are distinguished by the ORIGINAL persisted status transition,
+-- not by inventing unsupported last_action column values.
+DROP TRIGGER crm_sales_deal_update_audit;
+CREATE TRIGGER crm_sales_deal_update_audit
+AFTER UPDATE ON crm_sales_deal_records WHEN NEW.version>OLD.version BEGIN
+ SELECT CASE WHEN NEW.actor IS NULL OR length(trim(NEW.actor))=0
+  THEN RAISE(ABORT,'ACTOR_AUDIT_REQUIRED') END;
+ INSERT INTO crm_sales_deal_receipts(tenant,key,digest,state)
+ VALUES(NEW.tenant,NEW.idem_key,NEW.idem_digest,NEW.state);
+ INSERT INTO crm_audit(id,tenant_id,action,subject_id,created_at,request_id,actor)
+ VALUES(lower(hex(randomblob(16))),NEW.tenant,
+   CASE
+     WHEN json_extract(OLD.state,'$.status')='open'
+      AND json_extract(NEW.state,'$.status') IN ('won','lost') THEN 'sales_deals.close'
+     WHEN json_extract(OLD.state,'$.status') IN ('won','lost')
+      AND json_extract(NEW.state,'$.status')='open' THEN 'sales_deals.reopen'
+     ELSE NEW.last_action
+   END,NEW.id,datetime('now'),NEW.request_id,NEW.actor);
+END;
+
 CREATE TABLE crm_sales_deal_events (
  tenant TEXT NOT NULL REFERENCES crm_tenants(id),
  deal_id TEXT NOT NULL,
@@ -30,7 +51,9 @@ CREATE TABLE crm_sales_deal_events (
 -- invalid stage. This guard is in the same D1 transaction as the CAS write.
 CREATE TRIGGER crm_sales_deal_reopen_catalog_guard
 BEFORE UPDATE ON crm_sales_deal_records
-WHEN NEW.last_action='sales_deals.reopen' AND NEW.version>OLD.version BEGIN
+WHEN NEW.version>OLD.version
+ AND json_extract(OLD.state,'$.status') IN ('won','lost')
+ AND json_extract(NEW.state,'$.status')='open' BEGIN
  SELECT CASE WHEN NOT EXISTS (
    SELECT 1 FROM crm_sales_pipeline_records p
    JOIN json_each(p.state,'$.stages') s
@@ -70,10 +93,12 @@ AFTER UPDATE ON crm_sales_deal_records WHEN NEW.version>OLD.version BEGIN
    reason_code,actor,request_id,occurred_at_unix_nanos,catalog_version
  ) VALUES(
    NEW.tenant,NEW.id,NEW.version,
-   CASE NEW.last_action
-     WHEN 'sales_deals.advance' THEN 'moved'
-     WHEN 'sales_deals.close' THEN 'closed'
-     WHEN 'sales_deals.reopen' THEN 'reopened'
+   CASE
+     WHEN json_extract(OLD.state,'$.status')='open'
+      AND json_extract(NEW.state,'$.status') IN ('won','lost') THEN 'closed'
+     WHEN json_extract(OLD.state,'$.status') IN ('won','lost')
+      AND json_extract(NEW.state,'$.status')='open' THEN 'reopened'
+     WHEN NEW.last_action='sales_deals.advance' THEN 'moved'
      ELSE 'updated'
    END,
    json_extract(NEW.state,'$.stage.pipeline_id'),
@@ -83,9 +108,13 @@ AFTER UPDATE ON crm_sales_deal_records WHEN NEW.version>OLD.version BEGIN
    json_extract(NEW.state,'$.stage.ordinal'),
    json_extract(OLD.state,'$.status'),
    json_extract(NEW.state,'$.status'),
-   CASE NEW.last_action
-     WHEN 'sales_deals.close' THEN json_extract(NEW.state,'$.close_outcome.reason_code')
-     WHEN 'sales_deals.reopen' THEN NEW.last_reason_code
+   CASE
+     WHEN json_extract(OLD.state,'$.status')='open'
+      AND json_extract(NEW.state,'$.status') IN ('won','lost')
+      THEN json_extract(NEW.state,'$.close_outcome.reason_code')
+     WHEN json_extract(OLD.state,'$.status') IN ('won','lost')
+      AND json_extract(NEW.state,'$.status')='open'
+      THEN NEW.last_reason_code
      ELSE NULL END,
    NEW.actor,NEW.request_id,
    json_extract(NEW.state,'$.updated_at_unix_nanos'),
