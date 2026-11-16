@@ -751,10 +751,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(mobileKanban).toHaveAttribute("tabindex","0");
    const scrollMetrics=await mobileKanban.evaluate(element=>({
      clientWidth:element.clientWidth,scrollWidth:element.scrollWidth,
-     clientHeight:element.clientHeight,scrollHeight:element.scrollHeight
+     clientHeight:element.clientHeight,scrollHeight:element.scrollHeight,
+     viewportWidth:window.innerWidth,
+     documentWidth:document.documentElement.scrollWidth
    }));
+   assert.ok(scrollMetrics.viewportWidth<=391&&scrollMetrics.documentWidth<=391,
+     "the mobile page itself must remain at 390 px: "+JSON.stringify(scrollMetrics));
    assert.ok(scrollMetrics.scrollWidth>scrollMetrics.clientWidth,
-     "mobile Kanban must scroll horizontally inside its named region");
+     "mobile Kanban must scroll horizontally inside its named region: "+JSON.stringify(scrollMetrics));
    await mobileKanban.focus();
    assert.equal(await mobileKanban.evaluate(element=>element===document.activeElement),true,
      "mobile Kanban scroll region must be keyboard focusable");
