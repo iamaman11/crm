@@ -437,6 +437,19 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await movedDealCard.getByText("Выиграна · версия 4",{exact:true}).waitFor();
    assert.equal(await movedDealCard.getByRole("button",{name:"Изменить сделку",exact:true}).count(),0);
    steps.push("CloseDeal: Won at unchanged stage, terminal read-only, D1 linked receipt");
+   // The same visible editor may reorder stages already used by closed Deals.
+   await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
+   await page.getByRole("button",{name:"Выше",exact:true}).last().click();
+   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
+   const newCatalog=JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+
+     tenantSql+"' AND id='"+newPipelineId+"'"))[0].state);
+   assert.deepEqual(newCatalog.stages.map(s=>s.stage_id),[ownStageIds[1],ownStageIds[0]]);
+   const rebased=(await sql("SELECT version,json_extract(state,'$.stage.ordinal') AS rank "+
+     "FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+   assert.deepEqual(rebased,{version:4,rank:1},
+     "Occupied reorder must not increment Deal versions");
+   await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+   steps.push("Occupied stage reorder in real React keeps Deal version and stable ID");
    await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
    await page.getByLabel("Архивировать воронку",{exact:true}).check();
    await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
@@ -447,6 +460,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
    assert.equal(JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].state).archived,false);
    steps.push("Pipeline archive and restore using real React, Connect and D1");
+   // Prove that a Customer360 Account has Deals in TWO different pipelines.
+   await page.getByLabel("Воронка продаж",{exact:true}).selectOption("pipeline.enterprise");
+   await page.getByRole("button",{name:"Новая сделка",exact:true}).click();
+   await page.getByLabel("Название сделки",{exact:true}).fill("Browser Alternate Deal "+runId);
+   await selectPagedPicker(page,"Клиент",accountId,"account");
+   await page.getByLabel("Сумма",{exact:true}).fill("100.00");
+   await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
+   await page.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
+   steps.push("Second pipeline Deal under same Account persisted in D1");
    await navigate("accounts","Клиенты");
    await page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,level:2,exact:true})})
      .getByRole("button",{name:"Открыть карточку",exact:true}).click();
@@ -622,10 +644,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value);
      assert.equal(new URL(await page.url()).hash,"#"+screen+"?"+(screen==="sales"||screen==="tasks"?"accountId":"partyId")+"="+encodeURIComponent(value));
      if(salesBoard){
-       // The link scopes all pipeline reads to the account; select the
-       // pipeline owning our test Deal rather than relying on a default ID.
+       const all=page.locator('section[aria-label="Сделки клиента во всех воронках"]');
+       await all.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+       await all.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
        await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
-       await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+       await all.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
      }
      const reloadedStage=salesBoard?page.waitForResponse(r=>r.url().endsWith("/ListStageDeals")&&r.request().method()==="POST"):null;
      const reloaded=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
@@ -634,7 +657,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value,"Reload must retain the linked scope");
      if(salesBoard){
        await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
-       await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+       const all=page.locator('section[aria-label="Сделки клиента во всех воронках"]');
+       await all.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+       await all.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
      }
      if(screen==="tasks")await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor();
    }

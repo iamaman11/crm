@@ -1483,7 +1483,7 @@ const dealId="sales-mid-"+randomUUID();
 const stageLead={pipelineId:"pipeline.enterprise",stageId:"lead",ordinal:1};
 const stageQualified={pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:2};
 const saleCreate={dealId,name:"Connect Deal",accountId,
-  stage:stageLead,amount:{minorUnits:12500n,currencyCode:"USD"},
+  stage:{...stageLead,ordinal:999},amount:{minorUnits:12500n,currencyCode:"USD"},
   probabilityBasisPoints:2500,
   precondition:{idempotencyKey:"connect-sales-create-main"}};
 assert.equal((await salesV2("CreateDeal",null,saleCreate)).status,401);
@@ -1501,15 +1501,14 @@ assert.equal((await salesV2("CreateDeal",admin,{
   ...saleCreate,stage:{pipelineId:"pipeline.enterprise",stageId:"unknown",ordinal:1},
   precondition:{idempotencyKey:"connect-sales-invalid-catalog-stage"}})).status,400);
 assert.equal((await salesV2("CreateDeal",admin,{
-  ...saleCreate,stage:{pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:999},
-  precondition:{idempotencyKey:"connect-sales-untrusted-ordinal"}})).status,400);
-assert.equal((await salesV2("CreateDeal",admin,{
   ...saleCreate,precondition:{idempotencyKey:"connect-sales-create-invalid-version",
     expectedVersion:1n}})).status,400);
 const salesCreated=await salesV2("CreateDeal",admin,saleCreate);
 assert.equal(salesCreated.status,200,describeProtobuf(salesCreated.body));
 assert.equal(salesCreated.body.deal?.dealId,dealId);
 assert.equal(salesCreated.body.deal?.name,"Connect Deal");
+assert.equal(salesCreated.body.deal?.stage?.ordinal,1,
+  "The catalog, not caller ordinal 999, assigns the rank");
 assert.equal(salesCreated.body.deal?.amount?.minorUnits,12500n);
 assert.equal(salesCreated.body.deal?.amount?.currencyCode,"USD");
 assert.equal(salesCreated.body.deal?.status,1);
@@ -1603,12 +1602,6 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
   "Won closure must not create a second follow-up Task");
 assert.equal((await salesV2("AdvanceStage",admin,closeSale))
   .body.receipt?.replayed,true);
-assert.equal((await salesV2("UpdatePipeline",admin,{
-  pipelineId:"pipeline.enterprise",name:"Unsafe reorder",
-  stages:[pipelineSeed.stages[1],pipelineSeed.stages[0],pipelineSeed.stages[2]],
-  archived:false,
-  precondition:{expectedVersion:2n,idempotencyKey:"connect-r7-reorder-used-stage"}
-})).status,409,"referenced stage reorder must fail atomically");
 assert.equal((await salesV2("GetPipeline",viewer,{pipelineId:"pipeline.enterprise"}))
   .body.pipeline?.version,2n);
 assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
@@ -1736,6 +1729,77 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
     assert.deepEqual(salesActorSnapshot(),beforeSalesFault,
       "Late link audit failure rolls back Deal, new Task, receipt, delivery and audit");
   }finally{sql("DROP TRIGGER fixture_fail_sales_link_actor");}
+  // Reconfigure a populated pipeline: stable stage IDs, atomic rank rebase.
+  const oldRank=sql("SELECT id,version,state FROM crm_sales_deal_records WHERE tenant='tenant-a' "+
+    "AND id IN ('"+dealId+"','"+dealLast+"') ORDER BY id");
+  const oldDealAudit=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+    "AND subject_id IN ('"+dealId+"','"+dealLast+"')")[0].n;
+  const oldDealReceipts=sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
+    "WHERE tenant='tenant-a'")[0].n;
+  const reorder={pipelineId:"pipeline.enterprise",name:"Occupied stage reorder",
+    stages:[pipelineSeed.stages[1],pipelineSeed.stages[0],pipelineSeed.stages[2]],
+    archived:false,
+    precondition:{expectedVersion:2n,idempotencyKey:"connect-r7-reorder-used-stage"}};
+  // A late D1 failure after the catalog CAS must roll back BOTH the
+  // Pipeline audit/receipt and every Deal rank projection.
+  const failedRebaseSnapshot=()=>sql("SELECT (SELECT state FROM crm_sales_pipeline_records "+
+    "WHERE tenant='tenant-a' AND id='pipeline.enterprise') AS catalog, "+
+    "(SELECT state FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id='"+dealId+"') AS closed, "+
+    "(SELECT state FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id='"+dealLast+"') AS opened, "+
+    "(SELECT COUNT(*) FROM crm_sales_pipeline_receipts WHERE tenant='tenant-a') AS receipts, "+
+    "(SELECT COUNT(*) FROM crm_audit WHERE tenant_id='tenant-a') AS audits");
+  const beforeFailedRebase=failedRebaseSnapshot();
+  sql("CREATE TRIGGER fixture_deny_rank_rebase BEFORE UPDATE ON crm_sales_deal_records "+
+    "WHEN NEW.id='"+dealLast+"' AND NEW.version=OLD.version "+
+    "BEGIN SELECT RAISE(ABORT,'fixture rank rollback'); END;");
+  try {
+    const denied=await salesV2("UpdatePipeline",admin,{
+      ...reorder,precondition:{expectedVersion:2n,idempotencyKey:"r7-rebase-rollback"}
+    });
+    assert.equal(denied.status,409,describeProtobuf(denied.body));
+    assert.deepEqual(failedRebaseSnapshot(),beforeFailedRebase,
+      "Late D1 failure must roll back catalog, both Deals, receipts and audit");
+  }finally{sql("DROP TRIGGER fixture_deny_rank_rebase");}
+  const reordered=await salesV2("UpdatePipeline",admin,reorder);
+  assert.equal(reordered.status,200,describeProtobuf(reordered.body));
+  assert.equal(reordered.body.pipeline?.version,3n);
+  assert.deepEqual(reordered.body.pipeline?.stages.map(s=>s.stageId),["qualified","lead","won"]);
+  assert.deepEqual(reordered.body.pipeline?.stages.map(s=>s.ordinal),[1,2,3]);
+  assert.equal((await salesV2("UpdatePipeline",admin,reorder)).body.receipt?.replayed,true);
+  const rankAfter=sql("SELECT id,version,state FROM crm_sales_deal_records WHERE tenant='tenant-a' "+
+    "AND id IN ('"+dealId+"','"+dealLast+"') ORDER BY id");
+  assert.deepEqual(rankAfter.map(x=>x.version),oldRank.map(x=>x.version),
+    "Rank-only metadata must not change Deal versions");
+  assert.equal(JSON.parse(rankAfter.find(x=>x.id===dealId).state).stage.ordinal,1);
+  assert.equal(JSON.parse(rankAfter.find(x=>x.id===dealLast).state).stage.ordinal,2);
+  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+    "AND subject_id IN ('"+dealId+"','"+dealLast+"')")[0].n,oldDealAudit,
+    "No fictional Deal audit for catalog reorder");
+  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
+    "WHERE tenant='tenant-a'")[0].n,oldDealReceipts,
+    "No fictional Deal receipt for catalog reorder");
+  assert.equal((await salesV2("UpdatePipeline",admin,{
+    ...reorder,stages:[pipelineSeed.stages[1],pipelineSeed.stages[2]],
+    precondition:{expectedVersion:3n,idempotencyKey:"r7-deny-delete-occupied"}
+  })).status,409,"Referenced stage deletion must fail");
+  assert.equal((await salesV2("UpdatePipeline",admin,{
+    ...reorder,archived:true,
+    precondition:{expectedVersion:3n,idempotencyKey:"r7-deny-archive-open"}
+  })).status,409,"Open Deals must forbid pipeline archive");
+  assert.equal((await salesV2("GetPipeline",viewer,{pipelineId:"pipeline.enterprise"}))
+    .body.pipeline?.version,3n,"Failed catalog writes must roll back");
+  const fresh=await salesV2("CreateDeal",admin,{
+    dealId:"r7-catalog-rank-"+randomUUID(),name:"Owner ordered",accountId,
+    stage:{pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:999},
+    probabilityBasisPoints:1000,
+    precondition:{idempotencyKey:"r7-new-rank-after-reorder"}
+  });
+  assert.equal(fresh.status,200,describeProtobuf(fresh.body));
+  assert.equal(fresh.body.deal?.stage?.ordinal,1);
+  console.log(JSON.stringify({event:"crm.native-r7-occupied-stage-reorder",result:"PASS",
+    stable_ids:true,open_closed_rebased:true,versions_preserved:true,
+    audit_receipt_single_owner:true,cas:true,invalid_deletion_denied:true,
+    catalog_assigned_ordinal:true}));
   console.log(JSON.stringify({event:"crm.native-r2a-sales-linked-actor-audit",result:"PASS",
     all_sales_actions:true,linked_task_delivery:true,late_batch_rollback:true}));
 console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
