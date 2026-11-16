@@ -1750,6 +1750,93 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
   full_stage_count:32,visible_page:1,distinct_currencies:4,
   amount_exceeds_int64:true,missing_amount:true,
   status_account_filters:true,tenant_isolation:true,stale_cas:true}));
+
+// Deterministic 100 and 1000 Deal load probes against the SAME workerd +
+// persisted native D1, with all reads flowing through the original Rust
+// ListStageDeals. This one-time isolated load fixture clones an existing valid
+// Deal's serialized domain state; it does not become another app mutation path.
+// Remove its records, receipts and audit immediately after the read-only probes.
+{
+  const sourceId="r7-totals-02";
+  const [source]=sql("SELECT state,account_id,version,actor FROM crm_sales_deal_records "+
+    "WHERE tenant='tenant-a' AND id='"+sourceId+"'");
+  assert.ok(source?.state.includes('"'+sourceId+'"'),
+    "load fixture must clone a valid domain-serialized Deal");
+  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_records "+
+    "WHERE tenant='tenant-a' AND id LIKE 'r7-scale-%'")[0].n,0);
+  const insert=fixtureDb.prepare("INSERT INTO crm_sales_deal_records "+
+    "(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor,last_action) "+
+    "VALUES(?,?,?,?,?,?,?,?,?,?)");
+  let inserted=0;
+  const seedTo=n=>{
+    fixtureDb.exec("BEGIN IMMEDIATE");
+    try{
+      for(;inserted<n;inserted++){
+        const id="r7-scale-"+String(inserted).padStart(4,"0");
+        const state=source.state.replaceAll('"'+sourceId+'"','"'+id+'"');
+        assert.ok(state!==source.state);
+        insert.run("tenant-a",id,source.account_id,state,source.version,
+          "r7-scale-key-"+inserted,"load-fixture",randomUUID(),source.actor,
+          "sales_deals.create");
+      }
+      fixtureDb.exec("COMMIT");
+    }catch(error){fixtureDb.exec("ROLLBACK");throw error;}
+  };
+  const benchmark=async n=>{
+    seedTo(n);
+    const began=performance.now();
+    const first=await salesV2("ListStageDeals",viewer,{
+      pipelineId:"pipeline.other",stageId:"lead",page:{pageSize:25}});
+    const latencyMs=Math.round(performance.now()-began);
+    assert.equal(first.status,200,describeProtobuf(first.body));
+    assert.equal(first.body.totalCount,BigInt(n+32));
+    assert.equal(first.body.deals.length,25);
+    assert.ok(first.body.pageInfo?.nextPageToken);
+    assert.deepEqual(first.body.currencyTotals.map(t=>[
+      t.currencyCode,t.totalMinorUnits,t.amountDealCount
+    ]),[
+      ["JPY","345",1n],["KWD","4567",1n],
+      ["PLN",String(BigInt(n+1)*2345n),BigInt(n+1)],
+      ["USD","9223372036854775809",2n]
+    ],"summary must cover all "+n+" added Deals, not the 25-card page");
+    const second=await salesV2("ListStageDeals",viewer,{
+      pipelineId:"pipeline.other",stageId:"lead",
+      page:{pageSize:25,pageToken:first.body.pageInfo.nextPageToken}});
+    assert.equal(second.status,200);
+    assert.equal(second.body.deals.length,25);
+    assert.equal(second.body.totalCount,BigInt(n+32));
+    assert.deepEqual(second.body.currencyTotals,first.body.currencyTotals);
+    assert.ok(latencyMs<15000,
+      "bounded indexed native D1 summary exceeded 15 s at "+n+" Deals: "+latencyMs+" ms");
+    console.log(JSON.stringify({event:"crm.native-r71-kanban-scale",result:"PASS",
+      added_deals:n,stage_total_count:n+32,rendered_per_page:25,
+      full_stage_currencies:4,latency_ms:latencyMs,cursor_stable:true,
+      original_rust_owner:true,exact_i128:true}));
+  };
+  try {
+    const plan=sql("EXPLAIN QUERY PLAN SELECT id, "+
+      "json_extract(state,'$.amount.currency') AS currency_code, "+
+      "CAST(json_extract(state,'$.amount.minor_units') AS TEXT) AS minor_units "+
+      "FROM crm_sales_deal_records WHERE tenant='tenant-a' "+
+      "AND json_extract(state,'$.stage.pipeline_id')='pipeline.other' "+
+      "AND json_extract(state,'$.stage.stage_id')='lead' "+
+      "AND json_type(state,'$.amount')='object' AND id>'' ORDER BY id LIMIT 256");
+    assert.ok(plan.some(row=>row.detail.includes("idx_crm_sales_board_stage")),
+      "the 1000+ row summary must use the existing indexed stage/ID keyset");
+    await benchmark(100);
+    await benchmark(1000);
+  }finally{
+    fixtureDb.exec("BEGIN IMMEDIATE");
+    try{
+      sql("DELETE FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id LIKE 'r7-scale-%'");
+      sql("DELETE FROM crm_sales_deal_receipts WHERE tenant='tenant-a' AND key LIKE 'r7-scale-key-%'");
+      sql("DELETE FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id LIKE 'r7-scale-%'");
+      fixtureDb.exec("COMMIT");
+    }catch(error){fixtureDb.exec("ROLLBACK");throw error;}
+    assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_records "+
+      "WHERE tenant='tenant-a' AND id LIKE 'r7-scale-%'")[0].n,0);
+  }
+}
 assert.equal((await salesV2("ListStageDeals",tenantB,{
   pipelineId:"pipeline.enterprise",stageId:"lead"
 })).status,404,"tenant B cannot read tenant A pipeline");
