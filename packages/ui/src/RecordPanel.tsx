@@ -8,7 +8,24 @@ export function RecordPanel({open,title,onClose,dirty,children}:{
   open:boolean;title:string;onClose:()=>void;dirty?:boolean;children:ReactNode;
 }) {
   const dialog=useRef<HTMLDialogElement>(null);
+  const onCloseRef=useRef(onClose);
+  onCloseRef.current=onClose;
   const heading=useId();
+  useEffect(()=>{
+    const element=dialog.current;
+    if(!element)return;
+    // The native "cancel" event can fire again after a rejected window.confirm.
+    // React's synthetic onCancel does not consistently prevent that second
+    // default close. One native listener always prevents it synchronously;
+    // the existing parent onClose remains the only decision maker.
+    const onNativeCancel=(event:Event)=>{
+      event.preventDefault();
+      element.dataset.crmPanelLastClose="escape";
+      onCloseRef.current();
+    };
+    element.addEventListener("cancel",onNativeCancel);
+    return ()=>element.removeEventListener("cancel",onNativeCancel);
+  },[]);
   useEffect(()=>{
     const element=dialog.current;
     if(!element)return;
@@ -24,13 +41,7 @@ export function RecordPanel({open,title,onClose,dirty,children}:{
   };
   return <dialog ref={dialog} className={styles.panel} aria-labelledby={heading}
     data-crm-panel-desired={open?"open":"closed"}
-    data-crm-panel-dirty={dirty===undefined?undefined:dirty?"true":"false"}
-    onCancel={event=>{
-      // Escape would otherwise close the native dialog before a dirty-form
-      // guard can reject the request, leaving React open=true but dialog.open=false.
-      event.preventDefault();
-      requestClose("escape");
-    }}>
+    data-crm-panel-dirty={dirty===undefined?undefined:dirty?"true":"false"}>
     <header className={styles.header}>
       <h2 id={heading}>{title}</h2>
       <button type="button" className={styles.close} onClick={()=>requestClose("button")}
