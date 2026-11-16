@@ -184,8 +184,13 @@ pub(super) async fn create_typed(
         Err(_) => return Ok(rejected("SALES_OWNER_INVALID", 422)),
     };
     let Some(ordinal) = super::sales_pipelines::active_stage_ordinal(
-        db, tenant, &input.pipeline_id, &input.stage_id,
-    ).await? else {
+        db,
+        tenant,
+        &input.pipeline_id,
+        &input.stage_id,
+    )
+    .await?
+    else {
         return Ok(rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
     };
     let stage = match stage(input.pipeline_id, input.stage_id, ordinal) {
@@ -393,8 +398,13 @@ pub(super) async fn advance_typed(
     };
     let before = deal.clone();
     let Some(ordinal) = super::sales_pipelines::active_stage_ordinal(
-        db, tenant, &input.pipeline_id, &input.stage_id,
-    ).await? else {
+        db,
+        tenant,
+        &input.pipeline_id,
+        &input.stage_id,
+    )
+    .await?
+    else {
         return Ok(advance_rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
     };
     let target = match stage(input.pipeline_id, input.stage_id, ordinal) {
