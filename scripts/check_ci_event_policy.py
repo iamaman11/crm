@@ -110,6 +110,20 @@ def check_workflow(path: Path) -> WorkflowPolicyResult:
     if branch_lines != [f"- {expected}"] or "    branches-ignore:" in push_section:
         errors.append(f"push must be restricted to branch {expected}")
 
+    # Fail closed on any CI workflow that treats .md documentation as a
+    # source of truth. GitHub Issues own the prose; only typed code and
+    # machine-readable contracts can select a workflow.
+    for event in ("push", "pull_request"):
+        section = _event_section(lines, event_start, event_end, event)
+        if "    paths:" in section:
+            for line in section[section.index("    paths:") + 1:]:
+                if line.startswith("      - "):
+                    path_pattern = line.strip()[2:].strip("\"'")
+                    if path_pattern.lower().endswith(".md") or path_pattern.startswith("docs/"):
+                        errors.append("CI must not select Markdown documentation inputs")
+                        break
+                elif line.strip():
+                    break
     if crm_dev_workflow:
         # Native GitHub path filtering only excludes documentation. YAML/SQL,
         # tests, source, lockfiles and unknown non-Markdown inputs remain checked.

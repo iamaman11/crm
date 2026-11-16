@@ -119,6 +119,15 @@ jobs:
             ("push must be restricted to branch main",),
         )
 
+    def test_repository_workflows_never_select_markdown_inputs(self) -> None:
+        workflows = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+        for path in sorted(workflows.glob("*.yml")):
+            with self.subTest(workflow=path.name):
+                self.assertNotIn(
+                    "CI must not select Markdown documentation inputs",
+                    check_workflow(path).errors,
+                )
+
     def test_crm_actual_workflow_and_regressions(self) -> None:
         source = Path(__file__).resolve().parents[1] / ".github/workflows/cloudflare-crm-spike.yml"
         original = source.read_text(encoding="utf-8")
@@ -129,6 +138,8 @@ jobs:
         path.parent.mkdir(parents=True)
         cases = (
             (original.replace("'**/*.md'", "'apps/**'"), "CRM may ignore only **/*.md documentation"),
+            (original.replace("      - '*.md'", "      - 'docs/PROJECT_STATUS.md'\n      - '*.md'"),
+             "CRM may ignore only **/*.md documentation"),
             (original.replace("    paths-ignore:", "    paths:"), "CRM may ignore only **/*.md documentation"),
             (original.replace("cancel-in-progress: false", "cancel-in-progress: true"), "CRM must not cancel an active release"),
             (original.replace("python scripts/crm-module-coverage.py",
