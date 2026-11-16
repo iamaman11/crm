@@ -4,6 +4,121 @@ use super::*;
 
 impl sale_wire::DealService for SalesV2Service {
     #[worker::send]
+    async fn create_pipeline(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::CreatePipelineRequest>,
+    ) -> ServiceResult<sale_wire::CreatePipelineResponse> {
+        let input = req.to_owned_message();
+        Self::pipeline_id(&input.pipeline_id)?;
+        let (key, _) = wire_precondition(input.precondition.as_option(), true)?;
+        let saved = sales_pipelines::create(
+            sales_pipelines::CreateInput {
+                pipeline_id: input.pipeline_id,
+                name: input.name,
+                stages: Self::stage_inputs(&input.stages)?,
+            },
+            &key,
+            &self.d1()?,
+            &self.tenant,
+            &self.actor,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Pipeline D1 create failed"))?
+        .map_err(Self::pipeline_failed)?;
+        RpcResponse::ok(sale_wire::CreatePipelineResponse {
+            pipeline: Some(Self::pipeline(&saved.value)).into(),
+            receipt: Some(self.pipeline_receipt(&saved)).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn update_pipeline(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::UpdatePipelineRequest>,
+    ) -> ServiceResult<sale_wire::UpdatePipelineResponse> {
+        let input = req.to_owned_message();
+        Self::pipeline_id(&input.pipeline_id)?;
+        let (key, version) = wire_precondition(input.precondition.as_option(), false)?;
+        let saved = sales_pipelines::update(
+            sales_pipelines::UpdateInput {
+                pipeline_id: input.pipeline_id,
+                expected_version: version.unwrap_or_default(),
+                name: input.name,
+                stages: Self::stage_inputs(&input.stages)?,
+                archived: input.archived,
+            },
+            &key,
+            &self.d1()?,
+            &self.tenant,
+            &self.actor,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Pipeline D1 update failed"))?
+        .map_err(Self::pipeline_failed)?;
+        RpcResponse::ok(sale_wire::UpdatePipelineResponse {
+            pipeline: Some(Self::pipeline(&saved.value)).into(),
+            receipt: Some(self.pipeline_receipt(&saved)).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn get_pipeline(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::GetPipelineRequest>,
+    ) -> ServiceResult<sale_wire::GetPipelineResponse> {
+        Self::pipeline_id(req.pipeline_id)?;
+        let pipeline = sales_pipelines::get(&self.d1()?, &self.tenant, req.pipeline_id)
+            .await
+            .map_err(|_| ConnectError::internal("Pipeline D1 get failed"))?
+            .ok_or_else(|| ConnectError::not_found("SALES_PIPELINE_NOT_FOUND"))?;
+        RpcResponse::ok(sale_wire::GetPipelineResponse {
+            pipeline: Some(Self::pipeline(&pipeline)).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn list_pipelines(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::ListPipelinesRequest>,
+    ) -> ServiceResult<sale_wire::ListPipelinesResponse> {
+        let size = if req.page.page_size == 0 {
+            25
+        } else {
+            req.page.page_size
+        };
+        if size > 100 {
+            return Err(ConnectError::invalid_argument("page_size exceeds 100"));
+        }
+        let cursor = &req.page.page_token;
+        if !cursor.is_empty() {
+            Self::pipeline_id(cursor)?;
+        }
+        let (pipelines, next) = sales_pipelines::list(
+            &self.d1()?,
+            &self.tenant,
+            cursor,
+            size as usize,
+            req.include_archived,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Pipeline D1 list failed"))?;
+        RpcResponse::ok(sale_wire::ListPipelinesResponse {
+            pipelines: pipelines.iter().map(Self::pipeline).collect(),
+            page_info: Some(core_v2::PageInfo {
+                next_page_token: next.unwrap_or_default(),
+                ..Default::default()
+            })
+            .into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
     async fn create_deal(
         &self,
         _ctx: RequestContext,

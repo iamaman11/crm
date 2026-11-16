@@ -3,7 +3,7 @@
 //! Domain rules and storage belong exclusively to existing crm-sales and D1.
 use super::{
     access, accounts, activity_tasks, consents, contact_points, data_quality, identity_resolution,
-    parties, party_relationships, sales_deals,
+    parties, party_relationships, sales_deals, sales_pipelines,
 };
 use axum::Router;
 use buffa_types::google::protobuf::Timestamp;
@@ -734,6 +734,68 @@ impl SalesV2Service {
                 .into(),
             ..Default::default()
         })
+    }
+    fn pipeline_id(raw: &str) -> std::result::Result<(), ConnectError> {
+        if raw != raw.trim() || raw.contains('/') {
+            return Err(ConnectError::invalid_argument("SALES_PIPELINE_ID_INVALID"));
+        }
+        crm_sales::PipelineId::try_new(raw.to_owned())
+            .map_err(|_| ConnectError::invalid_argument("SALES_PIPELINE_ID_INVALID"))?;
+        Ok(())
+    }
+    fn stage_inputs(
+        input: &[sale_wire::PipelineStageInput],
+    ) -> std::result::Result<Vec<crm_sales::PipelineStageInput>, ConnectError> {
+        input
+            .iter()
+            .map(|stage| {
+                let probability = u16::try_from(stage.probability_basis_points)
+                    .map_err(|_| ConnectError::invalid_argument("SALES_PIPELINE_PROBABILITY_INVALID"))?;
+                Ok(crm_sales::PipelineStageInput {
+                    stage_id: stage.stage_id.clone(),
+                    name: stage.name.clone(),
+                    probability_basis_points: probability,
+                    archived: stage.archived,
+                })
+            })
+            .collect()
+    }
+    fn pipeline(pipeline: &crm_sales::SalesPipeline) -> sale_wire::SalesPipeline {
+        sale_wire::SalesPipeline {
+            pipeline_id: pipeline.pipeline_id.clone(),
+            name: pipeline.name.clone(),
+            version: pipeline.version,
+            archived: pipeline.archived,
+            stages: pipeline
+                .stages
+                .iter()
+                .map(|stage| sale_wire::PipelineStage {
+                    stage_id: stage.stage_id.clone(),
+                    name: stage.name.clone(),
+                    ordinal: u32::from(stage.ordinal),
+                    probability_basis_points: u32::from(stage.probability_basis_points),
+                    archived: stage.archived,
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+    fn pipeline_receipt(&self, saved: &sales_pipelines::Saved) -> core_v2::MutationReceipt {
+        core_v2::MutationReceipt {
+            request_id: self.request_id.clone(),
+            resource_version: saved.value.version,
+            replayed: saved.replayed,
+            ..Default::default()
+        }
+    }
+    fn pipeline_failed(f: sales_pipelines::Failure) -> ConnectError {
+        match f.status {
+            404 => ConnectError::not_found(f.code),
+            409 => ConnectError::aborted(f.code),
+            422 => ConnectError::invalid_argument(f.code),
+            _ => ConnectError::internal(f.code),
+        }
     }
     fn receipt(&self, saved: &sales_deals::SalesSaved) -> core_v2::MutationReceipt {
         core_v2::MutationReceipt {
