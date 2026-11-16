@@ -680,7 +680,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    for(const [link,screen,title,filter,value,method] of [
      ["Все контакты участника","contacts","Контакты","Фильтр по ID участника",partyId,"ListContactPoints"],
      ["Все связи участника","relationships","Связи","Фильтр по ID участника",partyId,"ListPartyRelationships"],
-     ["Все сделки клиента","sales","Сделки","Фильтр по ID клиента",accountId,"ListPipelines"],
+     ["Все сделки клиента","sales","Сделки","Фильтр по ID клиента",accountId,"ListDeals"],
      ["Все задачи клиента","tasks","Задачи","Фильтр по ID клиента",accountId,"ListTasks"],
    ]){
      await navigate("accounts","Клиенты");
@@ -692,30 +692,35 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
          .getByRole("button",{name:"Открыть карточку",exact:true}).click(),
      ]);
      assert.equal(overviewResult.status(),200);
-     // Sales has a catalog read plus per-stage Connect pages, not ListDeals.
+     // The new global Sales overview is backed by ListDeals regardless of
+     // tenant pipeline selection. Stage pages are fetched only when a board
+     // is explicitly selected.
      const salesBoard=screen==="sales";
-     const stagePage=salesBoard?page.waitForResponse(r=>r.url().endsWith("/ListStageDeals")&&r.request().method()==="POST"):null;
      const pending=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
      await page.getByRole("link",{name:link,exact:true}).click();
      assert.equal((await pending).status(),200);
-     if(stagePage)assert.equal((await stagePage).status(),200,"Sales board must query real stage pages");
      await page.getByRole("heading",{name:title,exact:true}).waitFor();
      assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value);
      assert.equal(new URL(await page.url()).hash,"#"+screen+"?"+(screen==="sales"||screen==="tasks"?"accountId":"partyId")+"="+encodeURIComponent(value));
      if(salesBoard){
+       assert.equal(await page.getByLabel("Воронка продаж",{exact:true}).inputValue(),"",
+         "Customer360 must open the all-pipelines overview by default");
        const all=page.locator('section[aria-label="Сделки клиента во всех воронках"]');
        await all.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
        await all.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
+       // Selecting a specific Kanban must not hide Account Deals in other pipelines.
+       const stageRead=page.waitForResponse(r=>r.url().endsWith("/ListStageDeals")&&
+         r.request().method()==="POST");
        await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
+       assert.equal((await stageRead).status(),200);
        await all.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
      }
-     const reloadedStage=salesBoard?page.waitForResponse(r=>r.url().endsWith("/ListStageDeals")&&r.request().method()==="POST"):null;
      const reloaded=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
      await page.reload();assert.equal((await reloaded).status(),200);
-     if(reloadedStage)assert.equal((await reloadedStage).status(),200,"Reload must fetch scoped stage pages");
      assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value,"Reload must retain the linked scope");
      if(salesBoard){
-       await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
+       assert.equal(await page.getByLabel("Воронка продаж",{exact:true}).inputValue(),"",
+         "Reload must keep the global all-pipelines default");
        const all=page.locator('section[aria-label="Сделки клиента во всех воронках"]');
        await all.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
        await all.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
