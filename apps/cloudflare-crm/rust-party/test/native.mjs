@@ -1479,6 +1479,8 @@ assert.equal((await salesV2("AdvanceStage",admin,{
   dealId,targetStage:stageQualified,targetStatus:2,
   precondition:{expectedVersion:3n,idempotencyKey:"connect-sales-missing-close-reason"}
 })).status,400,"closing requires an explicit reason");
+assert.equal((await salesV2("GetDeal",viewer,{dealId})).body.deal?.version,3n,
+  "rejected synthetic stage and missing reason cannot change the open deal");
 const closeSale={dealId,targetStage:stageQualified,targetStatus:2,closeReasonCode:"contract-signed",
   precondition:{expectedVersion:3n,idempotencyKey:"connect-sales-close-main"}};
 const closedSale=await salesV2("AdvanceStage",admin,closeSale);
