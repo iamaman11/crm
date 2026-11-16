@@ -353,6 +353,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Значение контакта",{exact:true}).fill("browser-"+runId+"@example.org");
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].n,1);
+   const browserSalesContactId=await firstId("crm_contact_point_records","normalized_value",
+     "browser-"+runId+"@example.org");
    await page.locator("section").filter({has:page.getByRole("heading",{name:"browser-"+runId+"@example.org",exact:true})})
      .getByRole("button",{name:"Редактировать контакт",exact:true}).click();
    await page.getByRole("heading",{name:"Изменить контакт",exact:true}).waitFor();
@@ -434,26 +436,45 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Новая сделка",exact:true}).click();
    await page.getByLabel("Название сделки",{exact:true}).fill("Browser Deal "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
+   const dealContact=page.getByLabel("Основной контакт сделки",{exact:true});
+   await dealContact.locator('option[value="'+browserSalesContactId+'"]').waitFor();
+   await dealContact.selectOption(browserSalesContactId);
+   await page.getByLabel("Ожидаемая дата закрытия",{exact:true}).fill("2030-05-21");
    await page.getByLabel("Сумма",{exact:true}).fill("90071992547409.93");
    await page.getByLabel("Вероятность, %",{exact:true}).fill("37.45");
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
    const dealId=await firstId("crm_sales_deal_records","name","Browser Deal "+runId);
    assert.ok(dealId);
+   const saleCreatedR72=(await sql("SELECT json_extract(state,'$.primary_contact.resource_id') AS contact_id, "+
+     "json_extract(state,'$.expected_close_date.year') AS year, "+
+     "json_extract(state,'$.expected_close_date.month') AS month, "+
+     "json_extract(state,'$.expected_close_date.day') AS day "+
+     "FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+   assert.deepEqual(saleCreatedR72,{contact_id:browserSalesContactId,year:2030,month:5,day:21});
    await page.getByText("90071992547409.93 USD · 37.45%",{exact:true}).waitFor();
    const leadTotals=page.getByRole("group",{name:"Итоги этапа Первичный контакт"});
    await leadTotals.getByText("90071992547409.93 USD · сделок с суммой: 1",
      {exact:true}).waitFor();
    const dealCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Deal "+runId,exact:true})}).last();
+   await dealCard.getByRole("button",{name:"Раскрыть карточку",exact:true}).click();
+   await page.getByRole("region",{name:"Подробности сделки "+dealId}).getByText(
+     "Ожидаемое закрытие: 2030-05-21",{exact:true}).waitFor();
+   await dealCard.getByRole("button",{name:"Свернуть",exact:true}).click();
    await dealCard.getByRole("button",{name:"Изменить сделку",exact:true}).click();
    // GetDeal completes asynchronously and replaces the create form. Editing the
    // old field before this heading appears would lose the entered value.
    await page.getByRole("heading",{name:"Изменить сделку",exact:true}).waitFor();
    assert.equal(await page.getByLabel("Вероятность, %",{exact:true}).inputValue(),"37.45");
    await page.getByLabel("Вероятность, %",{exact:true}).fill("38.5");
+   await page.getByLabel("Ожидаемая дата закрытия",{exact:true}).fill("2030-06-01");
    assert.equal(await page.getByLabel("Вероятность, %",{exact:true}).inputValue(),"38.5");
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"UpdateDeal");
    const savedDeal=(await sql("SELECT version,json_extract(state,'$.probability_basis_points') AS probability FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
    assert.equal(savedDeal.version,2);assert.equal(savedDeal.probability,3850);
+   const expectedAfterUpdate=(await sql("SELECT json_extract(state,'$.expected_close_date.day') AS day "+
+     "FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
+   assert.equal(expectedAfterUpdate.day,1);
+   steps.push("R7.2 contact/date via real React, GetDeal/detail and original D1");
    await page.getByText("90071992547409.93 USD · 38.50%",{exact:true}).waitFor();
    // Keyboard/select fallback remains the original mutation form; verify
    // it opens and can be cancelled without a write before testing native DnD.
@@ -539,6 +560,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
    await page.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
    steps.push("Second pipeline Deal under same Account persisted in D1");
+   // Full-page Deal URL and inline expansion share the same original GetDeal
+   // read component. This is a real route, not a second Deal editor/store.
+   await page.getByRole("link",{name:"Полная страница",exact:true}).last().click();
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   assert.equal((await page.evaluate(()=>location.hash)).startsWith("#sales/"),true);
+   await page.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
+   await page.goBack();
+   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+   steps.push("R7.2 addressable full Deal card via shared GetDeal and Back");
    await navigate("accounts","Клиенты");
    await page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,level:2,exact:true})})
      .getByRole("button",{name:"Открыть карточку",exact:true}).click();
