@@ -2,7 +2,6 @@
 //! Stage progression, closing rules, money and version invariants belong to
 //! crm-sales and crm-core-contracts, never the test pilot's crm_deals model.
 use super::{bind, now_nanos};
-use std::collections::BTreeMap;
 use crm_core_contracts::{BasisPoints, CurrencyCode, Money, Patch};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef};
 use crm_sales::{
@@ -12,6 +11,7 @@ use crm_sales::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use wasm_bindgen::JsValue;
 use worker::{D1Database, Result};
 
@@ -632,24 +632,29 @@ pub(super) async fn list_stage_page(
         }
         for row in &rows {
             let deal = decode(&row.state)?;
-            let amount = deal.amount().ok_or_else(|| {
-                worker::Error::RustError("SALES_BOARD_AMOUNT_INVALID".into())
-            })?;
+            let amount = deal
+                .amount()
+                .ok_or_else(|| worker::Error::RustError("SALES_BOARD_AMOUNT_INVALID".into()))?;
             let total = summary
                 .entry(amount.currency().to_string())
                 .or_insert((0, 0));
-            total.0 = total.0.checked_add(amount.minor_units()).ok_or_else(|| {
-                worker::Error::RustError("SALES_BOARD_AMOUNT_OVERFLOW".into())
-            })?;
+            total.0 = total
+                .0
+                .checked_add(amount.minor_units())
+                .ok_or_else(|| worker::Error::RustError("SALES_BOARD_AMOUNT_OVERFLOW".into()))?;
             total.1 = total.1.checked_add(1).ok_or_else(|| {
                 worker::Error::RustError("SALES_BOARD_AMOUNT_COUNT_OVERFLOW".into())
             })?;
         }
-        let next_after = rows.last().ok_or_else(|| {
-            worker::Error::RustError("SALES_BOARD_SUMMARY_CURSOR_MISSING".into())
-        })?.id.clone();
+        let next_after = rows
+            .last()
+            .ok_or_else(|| worker::Error::RustError("SALES_BOARD_SUMMARY_CURSOR_MISSING".into()))?
+            .id
+            .clone();
         if next_after <= summary_after {
-            return Err(worker::Error::RustError("SALES_BOARD_SUMMARY_CURSOR_INVALID".into()));
+            return Err(worker::Error::RustError(
+                "SALES_BOARD_SUMMARY_CURSOR_INVALID".into(),
+            ));
         }
         summary_after = next_after;
         if rows.len() < SUMMARY_BATCH {
@@ -658,11 +663,13 @@ pub(super) async fn list_stage_page(
     }
     let currency_totals = summary
         .into_iter()
-        .map(|(currency_code, (total_minor_units, amount_deal_count))| StageCurrencyTotal {
-            currency_code,
-            total_minor_units,
-            amount_deal_count,
-        })
+        .map(
+            |(currency_code, (total_minor_units, amount_deal_count))| StageCurrencyTotal {
+                currency_code,
+                total_minor_units,
+                amount_deal_count,
+            },
+        )
         .collect();
     condition.push_str(" AND id>?");
     arguments.push(JsValue::from_str(after));
