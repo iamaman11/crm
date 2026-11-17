@@ -1,6 +1,7 @@
 use crate::domain::{
-    Deal, DealCloseOutcomeSnapshot, DealOwner, DealSnapshot, DealStage, DealStatus, ForecastCategory,
-    PipelineId, ProbabilityEstimate, ProbabilitySource, ReasonCode, StageId, TeamId,
+    Deal, DealCloseOutcomeSnapshot, DealOwner, DealSnapshot, DealStage, DealStatus,
+    ForecastCategory, PipelineId, ProbabilityEstimate, ProbabilitySource, ReasonCode, StageId,
+    TeamId,
 };
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef, SdkError};

@@ -16,8 +16,8 @@ use crm_sales::{
     AdvanceDealStage, CreateDeal, DEAL_STATE_MAXIMUM_BYTES, DEAL_STATE_RETENTION_POLICY_ID,
     DEAL_STATE_SCHEMA_ID, DEAL_STATE_SCHEMA_VERSION, Deal, DealCloseOutcome, DealOwner, DealStage,
     DealStatus, ForecastCategory, PipelineId, ProbabilityEstimate, ReasonCode, StageId,
-    StageTransitionPolicy, TeamId, UpdateDeal,
-    deal_state_descriptor_hash, decode_deal_state, encode_deal_state,
+    StageTransitionPolicy, TeamId, UpdateDeal, deal_state_descriptor_hash, decode_deal_state,
+    encode_deal_state,
 };
 
 pub const MODULE_ID: &str = "crm.sales";
@@ -633,7 +633,9 @@ fn probability_patch(
         return Ok(Patch::Keep);
     };
     match patch.operation {
-        Some(Operation::Set(value)) => Ok(Patch::Set(ProbabilityEstimate::Manual(probability(value, field)?))),
+        Some(Operation::Set(value)) => Ok(Patch::Set(ProbabilityEstimate::Manual(probability(
+            value, field,
+        )?))),
         Some(Operation::Clear(true)) => Ok(Patch::Clear),
         Some(Operation::Clear(false)) => {
             Err(SdkError::invalid_argument(field, "clear must be true"))

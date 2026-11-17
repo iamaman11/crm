@@ -973,7 +973,9 @@ mod tests {
             primary_contact: Patch::Keep,
             amount: Patch::Keep,
             expected_close_date: Patch::Clear,
-            probability: Patch::Set(ProbabilityEstimate::Manual(BasisPoints::try_new(5_000).unwrap())),
+            probability: Patch::Set(ProbabilityEstimate::Manual(
+                BasisPoints::try_new(5_000).unwrap(),
+            )),
             forecast_category: None,
             occurred_at_unix_nanos: 20,
         })
