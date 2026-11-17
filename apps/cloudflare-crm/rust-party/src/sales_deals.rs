@@ -7,8 +7,7 @@ use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef};
 use crm_sales::{
     AdvanceDealStage, CloseDeal, CreateDeal, Deal, DealOwner, DealStage, DealStatus,
     ForecastCategory, PipelineId, ProbabilityEstimate, ProbabilitySource, ReasonCode, ReopenDeal,
-    StageId, StageTransitionPolicy, UpdateDeal, decode_deal_state,
-    encode_deal_state,
+    StageId, StageTransitionPolicy, UpdateDeal, decode_deal_state, encode_deal_state,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -273,7 +272,7 @@ pub(super) async fn create_typed(
     };
     let Some(catalog_stage) =
         super::sales_pipelines::active_stage(db, tenant, &input.pipeline_id, &input.stage_id)
-    .await?
+            .await?
     else {
         return Ok(rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
     };
@@ -607,8 +606,12 @@ async fn stage_mutation(
                     422,
                 ));
             }
-            let Some(catalog_stage) =
-                super::sales_pipelines::active_stage(db, tenant, &value.pipeline_id, &value.stage_id)
+            let Some(catalog_stage) = super::sales_pipelines::active_stage(
+                db,
+                tenant,
+                &value.pipeline_id,
+                &value.stage_id,
+            )
             .await?
             else {
                 return Ok(advance_rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
@@ -1094,7 +1097,9 @@ pub(super) async fn pipeline_metrics(
             .checked_add(1)
             .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
         if status == DealStatus::Open {
-            let counts = forecast_categories.entry(deal.forecast_category()).or_default();
+            let counts = forecast_categories
+                .entry(deal.forecast_category())
+                .or_default();
             count_one(&mut counts.0)?;
             match deal.probability_source() {
                 ProbabilitySource::StageDefault => count_one(&mut counts.1)?,
@@ -1219,26 +1224,28 @@ pub(super) async fn pipeline_metrics(
             .collect(),
         forecast_categories: forecast_categories
             .into_iter()
-            .map(|(category, (deal_count, stage_default_count, manual_count))| {
-                ForecastCategoryMetric {
-                    category,
-                    deal_count,
-                    stage_default_count,
-                    manual_count,
-                }
-            })
+            .map(
+                |(category, (deal_count, stage_default_count, manual_count))| {
+                    ForecastCategoryMetric {
+                        category,
+                        deal_count,
+                        stage_default_count,
+                        manual_count,
+                    }
+                },
+            )
             .collect(),
         forecast_currencies: forecast_money
             .into_iter()
-            .map(|((category, currency_code), (total, weighted, count))| {
-                ForecastCurrencyMetric {
+            .map(
+                |((category, currency_code), (total, weighted, count))| ForecastCurrencyMetric {
                     category,
                     currency_code,
                     total_minor_units: total,
                     weighted_minor_units_times_basis_points: weighted,
                     amount_deal_count: count,
-                }
-            })
+                },
+            )
             .collect(),
         as_of_unix_seconds,
     })
