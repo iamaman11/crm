@@ -26,7 +26,7 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryOverviewV2,decodeOverviewV2,overviewV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-connect-"));
-let base,runtime,fixtureDb,workerReady=false;
+let base,runtime,fixtureDb;
 const successfulCalls=new Set();
 // The CLI migrations finish before the runtime starts. Every live fixture
 // read/write and the actual Rust Worker use one native D1 binding.
@@ -54,7 +54,6 @@ const rpcFetch=async(path,options)=>{
  let response;
  try {response=await globalThis.fetch(base+path,requestOptions);}
  catch(error) {
-   if(!workerReady)throw error; // Startup probes are expected to fail until Wrangler binds.
    // No mutation retry: an interrupted Connect request can have an unknown outcome.
    // A separate read-only probe distinguishes a closed keepalive connection
    // from a stopped workerd process, without hiding the original failure.
@@ -152,6 +151,8 @@ try{
    log:new Log(LogLevel.INFO),
    workers:[{
      ...workerOptions,name:config.name,scriptPath,modules:true,modulesRoot:dirname(scriptPath),
+     // workers-rs emits ESM with .js names; Miniflare defaults .js to CommonJS.
+     modulesRules:[{type:"ESModule",include:["**/*.js","**/*.mjs"]},...workerOptions.modulesRules],
      bindings:{...workerOptions.bindings,CRM_NATIVE_CI_JWKS:jwks,GIT_SHA:sourceSha},
    }],
  });
@@ -159,7 +160,6 @@ try{
  fixtureDb=await runtime.getD1Database("DB",config.name);
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_tenants"))[0].n,2,
    "runtime must bind the exact Wrangler-migrated isolated test database");
- workerReady=true;
  console.log(JSON.stringify({event:"crm.native-ci.d1-runtime",source_sha:sourceSha,
    runtime:"Miniflare/workerd",fixture_access:"D1 binding",worker_count:1,d1_count:1}));
  async function call(path,token,method="GET"){
@@ -336,13 +336,13 @@ try{
    assert.ok((await v3("CreateParty",token,creation)).status>=400);
    assert.ok((await v3("UpdateParty",token,updatedInput)).status>=400);
  }
- (await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
  assert.equal((await v3("CreateParty",knownService,creation)).status,401,
    "Inactive actor cannot retrieve a previously committed mutation by replay");
- (await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
  assert.equal((await v3("UpdateParty",knownService,updatedInput)).status,403,
    "Current permission is required before replay");
- (await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
  assert.equal((await v3("UpdateParty",tenantB,updatedInput)).status,404);
  assert.equal((await v3("UpdateParty",admin,{...updatedInput,displayName:"   ",
    precondition:{expectedVersion:2n,idempotencyKey:"party-invalid-name"}})).status,400);
@@ -359,7 +359,7 @@ try{
    assert.equal((await v3("UpdateParty",admin,{...updatedInput,displayName:"Must roll back",
      precondition:{expectedVersion:2n,idempotencyKey:"party-audit-failed-update"}})).status,409);
    assert.deepEqual((await partySnapshot()),partyBeforeDenials,"SQL audit failure must roll back the state and receipt too");
- }finally{(await sql("DROP TRIGGER fixture_fail_party_audit"));}
+ }finally{await sql("DROP TRIGGER fixture_fail_party_audit");}
  console.log(JSON.stringify({event:"crm.native-party-actor-audit",result:"PASS",
    human_create:true,service_update:true,cross_actor_replay:true,authorization_before_replay:true,
    forged_headers_ignored:true,sql_failure_rollback:true,tenant_ab:true}));
@@ -473,13 +473,13 @@ try{
    assert.ok((await accountV2("UpdateAccount",token,accountUpdate)).status>=400);
  }
  assert.equal((await accountV2("UpdateAccount",tenantB,accountUpdate)).status,404);
- (await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
  assert.equal((await accountV2("CreateAccount",knownService,accountInput)).status,401,
    "Deactivated service cannot replay Account creation");
- (await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
  assert.equal((await accountV2("UpdateAccount",knownService,accountUpdate)).status,403,
    "Current permission must be checked before Account replay");
- (await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
  assert.deepEqual((await accountSnapshot()),beforeAccountDenials,
    "Denied/stale/invalid Account commands cannot change state, receipts or audit");
  (await sql("CREATE TRIGGER fixture_fail_account_audit BEFORE INSERT ON crm_audit "+
@@ -494,7 +494,7 @@ try{
      precondition:{expectedVersion:2n,idempotencyKey:"account-audit-failed-update"}})).status,409);
    assert.deepEqual((await accountSnapshot()),beforeAccountDenials,
      "Account audit INSERT failure rolls back state and receipt");
- }finally{(await sql("DROP TRIGGER fixture_fail_account_audit"));}
+ }finally{await sql("DROP TRIGGER fixture_fail_account_audit");}
  console.log(JSON.stringify({event:"crm.native-account-actor-audit",result:"PASS",
    human_create:true,service_update:true,cross_actor_replay:true,forged_headers_ignored:true,
    authorization_before_replay:true,tenant_ab:true,sql_failure_rollback:true}));
@@ -635,13 +635,13 @@ try{
    assert.ok((await contactV2("UpdateContactPoint",token,contactUpdate)).status>=400);
  }
  assert.equal((await contactV2("UpdateContactPoint",tenantB,contactUpdate)).status,404);
- (await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
  assert.equal((await contactV2("CreateContactPoint",knownService,contactInput)).status,401,
    "Inactive service cannot replay ContactPoint create");
- (await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
  assert.equal((await contactV2("UpdateContactPoint",knownService,contactUpdate)).status,403,
    "Current permission is required before ContactPoint replay");
- (await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
  assert.deepEqual((await contactSnapshot()),beforeContactDenials,
    "Denied, stale and validation errors cannot change contact state, receipts or audit");
  (await sql("CREATE TRIGGER fixture_fail_contact_audit BEFORE INSERT ON crm_audit "+
@@ -657,7 +657,7 @@ try{
      precondition:{expectedVersion:2n,idempotencyKey:"contact-audit-failed-update"}})).status,409);
    assert.deepEqual((await contactSnapshot()),beforeContactDenials,
      "Contact audit SQL failure must roll back both state and receipt");
- }finally{(await sql("DROP TRIGGER fixture_fail_contact_audit"));}
+ }finally{await sql("DROP TRIGGER fixture_fail_contact_audit");}
  console.log(JSON.stringify({event:"crm.native-contact-actor-audit",result:"PASS",
    human_create:true,service_update:true,cross_actor_replay:true,forged_headers_ignored:true,
    authorization_before_replay:true,tenant_ab:true,sql_failure_rollback:true}));
@@ -887,7 +887,7 @@ try{
     assert.equal((await relationV2("UpdatePartyRelationship",admin,{relationshipId:rMid,status:1,
       precondition:{expectedVersion:4n,idempotencyKey:"candidate-rel-actor-failed"}})).status,409);
     assert.deepEqual((await relSnapshot()),beforeRelFault);
-  }finally{(await sql("DROP TRIGGER fixture_fail_rel_actor"));}
+  }finally{await sql("DROP TRIGGER fixture_fail_rel_actor");}
   console.log(JSON.stringify({event:"crm.native-r2a-relationship-actor-audit",result:"PASS",
     signed_cross_actor:true,failed_audit_rollback:true}));
 console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
@@ -1115,7 +1115,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
       subject:patchSubject("Must not persist"),
       precondition:{expectedVersion:3n,idempotencyKey:"candidate-task-actor-failed"}})).status,409);
     assert.deepEqual((await taskActorSnapshot()),beforeTaskFault);
-  }finally{(await sql("DROP TRIGGER fixture_fail_task_actor"));}
+  }finally{await sql("DROP TRIGGER fixture_fail_task_actor");}
   console.log(JSON.stringify({event:"crm.native-r2a-task-actor-audit",result:"PASS",
     update_complete_actor:true,no_op:true,failed_audit_rollback:true}));
 console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
@@ -1362,7 +1362,7 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
      "(SELECT COUNT(*) FROM crm_consent_receipts) AS receipts,"+
      "(SELECT COUNT(*) FROM crm_audit) AS audits")),beforeGrantFault,
      "Consent state, receipt and audit must roll back together on late audit failure");
- } finally {(await sql("DROP TRIGGER fixture_fail_r3_grant_audit"));}
+ } finally {await sql("DROP TRIGGER fixture_fail_r3_grant_audit");}
  const changed=await contactV2("UpdateContactPoint",admin,{
    contactPointId:r3Contact,value:"other@example.org",status:1,preferred:false,
    precondition:{idempotencyKey:"r3-change-"+r3Contact,expectedVersion:2n}});
@@ -1553,7 +1553,7 @@ try {
     "WHERE tenant='tenant-a' AND id='"+viewAId+"'")),beforeFailedView);
   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_saved_view_receipts "+
     "WHERE tenant='tenant-a'"))[0].n,beforeFailedReceipts);
-} finally {(await sql("DROP TRIGGER fixture_fail_saved_view_audit"));}
+} finally {await sql("DROP TRIGGER fixture_fail_saved_view_audit");}
 const archivedView=await salesV2("UpdateSalesView",admin,{
   ...viewUpdate,archived:true,precondition:{
     expectedVersion:2n,idempotencyKey:"r73-view-archive"}
@@ -2306,7 +2306,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
       precondition:{expectedVersion:1n,idempotencyKey:"connect-sales-linked-actor-fail"}})).status,409);
     assert.deepEqual((await salesActorSnapshot()),beforeSalesFault,
       "Late link audit failure rolls back Deal, new Task, receipt, delivery and audit");
-  }finally{(await sql("DROP TRIGGER fixture_fail_sales_link_actor"));}
+  }finally{await sql("DROP TRIGGER fixture_fail_sales_link_actor");}
   // Reconfigure a populated pipeline: stable stage IDs, atomic rank rebase.
   const oldRank=(await sql("SELECT id,version,state FROM crm_sales_deal_records WHERE tenant='tenant-a' "+
     "AND id IN ('"+dealId+"','"+dealLast+"') ORDER BY id"));
@@ -2337,7 +2337,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
     assert.equal(denied.status,409,describeProtobuf(denied.body));
     assert.deepEqual((await failedRebaseSnapshot()),beforeFailedRebase,
       "Late D1 failure must roll back catalog, both Deals, receipts and audit");
-  }finally{(await sql("DROP TRIGGER fixture_deny_rank_rebase"));}
+  }finally{await sql("DROP TRIGGER fixture_deny_rank_rebase");}
   const reordered=await salesV2("UpdatePipeline",admin,reorder);
   assert.equal(reordered.status,200,describeProtobuf(reordered.body));
   assert.equal(reordered.body.pipeline?.version,3n);
@@ -2424,7 +2424,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
   try{
     assert.equal((await salesV2("ReopenDeal",admin,{dealId,reasonCode:"revisit",
       precondition:{expectedVersion:6n,idempotencyKey:"r72-failed-reopen"}})).status,409);
-  }finally{(await sql("DROP TRIGGER fixture_fail_reopen_audit"));}
+  }finally{await sql("DROP TRIGGER fixture_fail_reopen_audit");}
   assert.equal((await salesV2("GetDeal",viewer,{dealId})).body.deal?.version,6n);
   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
     "AND subject_id='"+dealId+"'"))[0].n,reopenAuditBefore);
@@ -2536,13 +2536,13 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.ok((await privacy("SubmitPrivacyCase",token,submit)).status>=400);
    assert.ok((await privacy("CancelPrivacyCase",token,cancel)).status>=400);
  }
- (await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
  assert.equal((await privacy("SubmitPrivacyCase",knownService,submit)).status,401,
    "Inactive service cannot replay a committed Privacy write");
- (await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
  assert.equal((await privacy("SubmitPrivacyCase",knownService,submit)).status,403,
    "Authorization must precede idempotent replay");
- (await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
  assert.equal((await privacy("SubmitPrivacyCase",tenantB,submit)).body.code,"not_found");
  assert.equal((await privacy("SubmitPrivacyCase",admin,{
    ...submit,precondition:{expectedVersion:1n,idempotencyKey:"privacy-audit-denied-terminal"}
@@ -2565,7 +2565,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    })).body.code,"aborted");
    assert.deepEqual((await privacySnapshot()),privacyBeforeDenials,
      "Audit failure must roll back Privacy state, receipt and audit together");
- }finally{(await sql("DROP TRIGGER fixture_fail_privacy_audit"));}
+ }finally{await sql("DROP TRIGGER fixture_fail_privacy_audit");}
  console.log(JSON.stringify({event:"crm.native-r2a-privacy-actor-audit",result:"PASS",
    human_create:true,service_submit:true,human_cancel:true,cross_actor_replay:true,
    authorization_before_replay:true,forged_headers_ignored:true,tenant_ab:true,
@@ -2668,13 +2668,13 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.ok((await enrichment("PublishProviderProfile",token,profileInput)).status>=400);
    assert.ok((await enrichment("PublishMapping",token,mappingInput)).status>=400);
  }
- (await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
  assert.equal((await enrichment("PublishMapping",knownService,mappingInput)).status,401,
    "Inactive service cannot replay a committed Enrichment mapping");
- (await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
  assert.equal((await enrichment("PublishMapping",knownService,mappingInput)).status,403,
    "Permission must precede replay of immutable mapping");
- (await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'"));
+ await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
  const tenantAEnrichment=async()=>(await sql("SELECT "+
    "(SELECT COUNT(*) FROM crm_enrichment_profiles WHERE tenant='tenant-a') AS profiles,"+
    "(SELECT COUNT(*) FROM crm_enrichment_mappings WHERE tenant='tenant-a') AS mappings,"+
@@ -2707,7 +2707,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    })).body.code,"aborted");
    assert.deepEqual((await enrichmentSnapshot()),beforeAuditFailure,
      "Audit failure must atomically roll back published state and receipt");
- }finally{(await sql("DROP TRIGGER fixture_fail_enrichment_audit"));}
+ }finally{await sql("DROP TRIGGER fixture_fail_enrichment_audit");}
  console.log(JSON.stringify({event:"crm.native-r2a-enrichment-actor-audit",result:"PASS",
    human_profile:true,service_mapping:true,cross_actor_replay:true,
    forged_headers_ignored:true,authorization_before_replay:true,
@@ -2895,7 +2895,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  try{
    assert.equal((await csv("ApplyPartyImport",knownService,rollbackInput)).status,409);
    assert.deepEqual((await partySnapshot()),beforeRollback,"Late batch failure must remove every state, receipt and audit");
- }finally{(await sql("DROP TRIGGER fixture_fail_import_audit"));}
+ }finally{await sql("DROP TRIGGER fixture_fail_import_audit");}
  const retryImport=await csv("ApplyPartyImport",knownService,rollbackInput);
  assert.equal(retryImport.status,200,describeProtobuf(retryImport.body));
  assert.equal(retryImport.body.createdCount,2,"Failed batch must not reserve its idempotency key");
@@ -2934,7 +2934,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      created_at_unix_nanos:10,updated_at_unix_nanos:10,version:1});
    return "('tenant-b','csv-boundary-"+i+"','"+state+"',1,'csv-boundary-key-"+i+"','fixture','fixture','native-b@example.test')";
  }).join(",");
- (await sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES "+boundaryRows));
+ await sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES "+boundaryRows);
  assert.equal((await csv("PreviewPartyExport",tenantB,{kind:2})).body.code,"failed_precondition");
  assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv?kind=organization",{
    headers:{"cf-access-jwt-assertion":tenantB}})).status,409);
@@ -3144,7 +3144,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    successful_rpc_calls:[...successfulCalls].sort(),
    unauthenticated_denials:unauthenticatedDenials.sort(),
    viewer_denials:viewerDenials.sort(),
-   scenarios:"existing signed workerd assertions completed"
+   fixture_access:"D1 binding",runtime:"Miniflare/workerd",
+  scenarios:"existing signed workerd assertions completed"
  },null,2)+"\n");
  console.log(JSON.stringify({event:"crm.signed-connect-acceptance",
    result:"PASS",admin:true,viewer:true,unauthenticated_denied:true,

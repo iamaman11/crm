@@ -8,5 +8,12 @@
     "/api/session",
     "/api/version",
     "/api/customer-data-operations/parties.csv"
-  ]
+  ],
+  "integration_runtime": {
+    "owner": "Miniflare/workerd",
+    "fixture_binding": "DB",
+    "direct_sqlite": false,
+    "production_worker_count": 1,
+    "local_d1_count": 1
+  }
 }

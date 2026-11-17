@@ -26,3 +26,8 @@ test("active D1 fixtures cannot use an independent SQLite connection",()=>{
  for(const source of ['import {DatabaseSync} from "node:sqlite";','import SQLite from "better-sqlite3";','db.exec("BEGIN IMMEDIATE")','open("private.sqlite")'])
   assert.throws(()=>validateNativeFixtureSource(source,"fixture.mjs"),/direct SQLite access/);
 });
+
+test("native integration must never use the production D1 database",()=>{
+ assert.throws(()=>validateWorkerConfig(config,{...local,d1_databases:config.d1_databases}),/isolated test D1/);
+ assert.throws(()=>validateWorkerConfig(config,{...local,main:"./fixture-worker.js"}),/built Rust Worker/);
+});

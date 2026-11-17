@@ -68,6 +68,10 @@ export function validateWorkerConfig(production,local){
    "exactly one native D1 binding");
  check(production.d1_databases[0].database_id==="35fc7ee9-9710-485f-8fb3-f5a398b229b4","unexpected D1");
  check(local.d1_databases?.length===1&&local.d1_databases[0].binding==="DB","one local D1 required");
+ check(local.d1_databases[0].database_id==="00000000-0000-4000-8000-000000000001"&&
+   local.vars?.CRM_CI_LOCAL_ONLY==="yes","integration runtime must use isolated test D1");
+ check(local.main==="./build/index.js"&&local.assets?.binding===production.assets?.binding,
+   "integration runtime must use built Rust Worker and canonical ASSETS binding");
  const routes=["/api/*","/crm.*/*"];
  check(JSON.stringify(production.assets?.run_worker_first)===JSON.stringify(routes),"production Worker-first namespace differs");
  check(JSON.stringify(local.assets?.run_worker_first)===JSON.stringify(routes),"local Worker-first namespace differs");
@@ -83,7 +87,11 @@ validateWorkerConfig(production,local);
    .filter(file=>/\.(?:mjs|js|ts|mts)$/.test(file));
  for(const file of sources)validateNativeFixtureSource(read(scope+"/"+file),file);
  const native=read(scope+"/native.mjs");
- check((native.match(/new Miniflare\(/g)||[]).length===1&&
+ const integration=policy.integration_runtime;
+ check(integration?.owner==="Miniflare/workerd"&&integration.fixture_binding==="DB"&&
+   integration.direct_sqlite===false&&integration.production_worker_count===1&&integration.local_d1_count===1,
+   "one canonical integration runtime policy required");
+ check(sources.reduce((count,file)=>count+(read(scope+"/"+file).match(/new Miniflare\(/g)||[]).length,0)===1&&
    native.includes('getD1Database("DB",config.name)'),
    "one integration runtime must own the canonical D1 fixture binding");
 }
