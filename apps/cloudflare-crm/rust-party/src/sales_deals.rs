@@ -152,6 +152,26 @@ async fn prior(db: &D1Database, tenant: &str, k: &str) -> Result<Option<Receipt>
     .first::<Receipt>(None)
     .await
 }
+// Read the existing immutable receipt; never infer a commit from the
+// current Deal version and never disclose a receipt for another record.
+pub(super) async fn confirmed_receipt(
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+    key: &str,
+) -> Result<Option<(String, i64)>> {
+    let Some(receipt) = prior(db, tenant, key).await? else {
+        return Ok(None);
+    };
+    let Some(original) = receipt.original_request_id else {
+        return Ok(None);
+    };
+    let deal = decode(&receipt.state)?;
+    if deal.deal_id().as_str() != id || original.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some((original, deal.version())))
+}
 pub(super) async fn load(db: &D1Database, tenant: &str, id: &str) -> Result<Option<Deal>> {
     bind(
         db,

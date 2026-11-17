@@ -678,7 +678,38 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await movedDealCard.getByRole("button",{name:"Завершить сделку",exact:true}).click();
    await page.getByRole("heading",{name:"Завершить сделку: Browser Deal "+runId,exact:true}).waitFor();
    await page.getByLabel("Причина закрытия",{exact:true}).fill("contract-signed");
-   await mutation(page.getByRole("button",{name:"Завершить сделку",exact:true}).last(),"CloseDeal");
+   // A different real write loses its response and the page is reloaded.
+   // Only opaque identifiers survive; lookup must not issue CloseDeal again.
+   const closeRoute="**/crm.sales.v2.DealService/CloseDeal";
+   let closeCalls=0, originalCloseRequestId;
+   await page.route(closeRoute,async route=>{
+     closeCalls++;
+     const committed=await route.fetch();
+     recordResponse(committed);
+     await assertMutation(committed,"CloseDeal");
+     originalCloseRequestId=committed.headers()["x-request-id"];
+     await route.abort("failed");
+   });
+   await page.getByRole("button",{name:"Завершить сделку",exact:true}).last().click();
+   await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   const mark=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.deal.pending.v1")));
+   assert.deepEqual(Object.keys(mark).sort(),["dealId","expectedVersion","key"]);
+   assert.equal(mark.dealId,dealId);
+   assert.equal(mark.expectedVersion,"3");
+   assert.match(mark.key,/^[a-f0-9-]{36}$/i);
+   const acceptReload=dialog=>void dialog.accept();
+   page.on("dialog",acceptReload);
+   try{await page.reload();}finally{page.off("dialog",acceptReload);}
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeDisabled();
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   await page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}).waitFor();
+   assert.equal(closeCalls,1,"Reload recovery must not re-execute a write");
+   assert.ok(originalCloseRequestId);
+   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.deal.pending.v1")),null);
+   await page.unroute(closeRoute);
+   await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
+   steps.push("S1 reload: opaque marker, read original receipt, no second CloseDeal");
    const terminal=(await sql("SELECT version,json_extract(state,'$.status') AS status,json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
    assert.deepEqual(terminal,{version:4,status:"won",stage:actualStage});
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,2);

@@ -881,13 +881,36 @@ impl sale_wire::DealService for SalesV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, sale_wire::GetDealRequest>,
     ) -> ServiceResult<sale_wire::GetDealResponse> {
-        let id = Self::id(req.deal_id)?;
-        let deal = sales_deals::load(&self.d1()?, &self.tenant, &id)
+        let input = req.to_owned_message();
+        let id = Self::id(&input.deal_id)?;
+        let db = self.d1()?;
+        let deal = sales_deals::load(&db, &self.tenant, &id)
             .await
             .map_err(|_| ConnectError::internal("Sales original D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("SALES_DEAL_NOT_FOUND"))?;
+        let confirmed_mutation = match input.receipt_idempotency_key.as_deref() {
+            None => None,
+            Some(key) if (8..=120).contains(&key.len()) => {
+                sales_deals::confirmed_receipt(&db, &self.tenant, &id, key)
+                    .await
+                    .map_err(|error| {
+                        diagnostics::read_failure(&self.request_id, "sales_receipt_lookup", &error);
+                        ConnectError::unavailable("SALES_RECEIPT_READ_FAILED")
+                    })?
+                    .map(|(original, version)| core_v2::MutationReceipt {
+                        request_id: self.request_id.clone(),
+                        resource_version: version,
+                        original_request_id: Some(original),
+                        // Receipt lookup is a read, not another execution or replay.
+                        replayed: false,
+                        ..Default::default()
+                    })
+            }
+            Some(_) => return Err(ConnectError::invalid_argument("IDEMPOTENCY_KEY_REQUIRED")),
+        };
         RpcResponse::ok(sale_wire::GetDealResponse {
             deal: Some(Self::convert(&deal)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }

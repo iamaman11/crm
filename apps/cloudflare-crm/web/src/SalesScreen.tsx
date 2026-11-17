@@ -80,7 +80,11 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const [pipelineArchived,setPipelineArchived]=useState(false);
   const [pipelineDirty,setPipelineDirty]=useState(false);
   const [stageEdits,setStageEdits]=useState<StageDraft[]>([]);
-  const mutation=useMutation();
+  const mutation=useMutation({
+    storageKey:"crm.deal.pending.v1",
+    lookup:async({dealId,key})=>(await api.deals.getDeal({dealId,receiptIdempotencyKey:key})).confirmedMutation,
+    refresh:async()=>{setDetailRevision(v=>v+1);await refreshSales();}
+  });
   const pipelineMutation=useMutation();
   const viewMutation=useMutation();
   const savedViewsQuery=useQuery(useCallback(allSalesViews,[]));
