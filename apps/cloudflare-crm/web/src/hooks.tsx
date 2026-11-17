@@ -2,6 +2,7 @@ import {useCallback,useEffect,useRef,useState} from "react";
 import {Button,FeedbackPanel} from "@ultimate-crm/ui";
 import type {MutationReceipt} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
+import {registerNavigationBlocker} from "./navigation";
 
 export function useQuery<T>(load:()=>Promise<T>) {
   const [data,setData]=useState<T>();
@@ -93,8 +94,12 @@ export function useMutation() {
   useEffect(()=>{
     if(!pending)return;
     const guard=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue="";};
+    registerNavigationBlocker(()=>false);
     window.addEventListener("beforeunload",guard);
-    return ()=>window.removeEventListener("beforeunload",guard);
+    return ()=>{
+      registerNavigationBlocker(null);
+      window.removeEventListener("beforeunload",guard);
+    };
   },[pending]);
   return {key,busy,notice,pending,changed,run,runIntent,retryPending};
 }

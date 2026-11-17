@@ -9,16 +9,16 @@ let acceptedHash=window.location.hash;
 let leaveGuard:LeaveGuard|null=null;
 let reversing=false;
 
-export function currentRouteHash():string{return window.location.hash;}
+export function currentRouteHash():string{return acceptedHash;}
 function notify():void {for(const listener of listeners)listener();}
 function acceptLocation():void {
-  const hash=currentRouteHash();
+  const hash=window.location.hash;
   if(hash===acceptedHash)return;
   acceptedHash=hash;
   notify();
 }
 function onLocationChanged(event:Event):void {
-  const next=currentRouteHash();
+  const next=window.location.hash;
    if(reversing) {
     // A rejected browser Back/hash change is being undone without rewriting history.
     if(next===acceptedHash)reversing=false;

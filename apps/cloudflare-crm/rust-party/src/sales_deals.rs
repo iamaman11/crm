@@ -3,7 +3,7 @@
 //! crm-sales and crm-core-contracts, never the test pilot's crm_deals model.
 use super::{bind, now_nanos};
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money, Patch};
-use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef};
+use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef, SdkError};
 use crm_sales::{
     AdvanceDealStage, CloseDeal, CreateDeal, Deal, DealOwner, DealStage, DealStatus,
     ForecastCategory, PipelineId, ProbabilityEstimate, ProbabilitySource, ReasonCode, ReopenDeal,
@@ -229,11 +229,8 @@ pub(super) struct SalesSaved {
 
 #[derive(Debug, thiserror::Error)]
 pub(super) enum SalesFailure {
-    #[error("{code}")]
-    Rejected {
-        code: String,
-        category: ErrorCategory,
-    },
+    #[error(transparent)]
+    Rejected(Box<SdkError>),
     #[error("SALES_COMMIT_UNCONFIRMED")]
     CommitUnconfirmed,
 }
@@ -242,10 +239,17 @@ fn rejected<T>(
     code: impl Into<String>,
     category: ErrorCategory,
 ) -> std::result::Result<T, SalesFailure> {
-    Err(SalesFailure::Rejected {
-        code: code.into(),
+    let code = code.into();
+    Err(SalesFailure::Rejected(Box::new(SdkError::new(
+        code.clone(),
         category,
-    })
+        false,
+        code,
+    ))))
+}
+
+fn rejected_sdk<T>(error: SdkError) -> std::result::Result<T, SalesFailure> {
+    Err(SalesFailure::Rejected(Box::new(error)))
 }
 
 // The digest includes operation, record ID and typed input. Older receipts
@@ -434,7 +438,7 @@ pub(super) async fn create_typed(
         occurred_at_unix_nanos: now_nanos(),
     }) {
         Ok(x) => x,
-        Err(e) => return Ok(rejected(e.code, ErrorCategory::InvalidArgument)),
+        Err(e) => return Ok(rejected_sdk(e)),
     };
     let saved = encode(&deal)?;
     let r=bind(db,"INSERT INTO crm_sales_deal_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?)",
@@ -593,7 +597,7 @@ pub(super) async fn update_typed(
         forecast_category: input.forecast_category,
         occurred_at_unix_nanos: now_nanos(),
     }) {
-        return Ok(rejected(e.code, e.category));
+        return Ok(rejected_sdk(e));
     }
     let saved = encode(&deal)?;
     let result=bind(db,"UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.update' WHERE tenant=? AND id=? AND version=?",
@@ -750,7 +754,7 @@ async fn stage_mutation(
             }
             let reason_code = match ReasonCode::try_new(value.reason_code) {
                 Ok(v) => v,
-                Err(e) => return Ok(rejected(e.code, ErrorCategory::InvalidArgument)),
+                Err(e) => return Ok(rejected_sdk(e)),
             };
             deal.close(CloseDeal {
                 expected_version,
@@ -761,7 +765,7 @@ async fn stage_mutation(
         }
     };
     if let Err(e) = outcome {
-        return Ok(rejected(e.code, e.category));
+        return Ok(rejected_sdk(e));
     }
     let saved = encode(&deal)?;
     let prepared = match super::sales_activities_link::prepare(
@@ -776,7 +780,7 @@ async fn stage_mutation(
     {
         Ok(x) => x,
         Err(e) => {
-            return Ok(rejected(e.code, e.category));
+            return Ok(rejected_sdk(e));
         }
     };
     let update = bind(
@@ -934,7 +938,7 @@ pub(super) async fn reopen_typed(
         reason_code,
         occurred_at_unix_nanos: now_nanos(),
     }) {
-        return Ok(rejected(e.code, e.category));
+        return Ok(rejected_sdk(e));
     }
     let state = encode(&deal)?;
     let result = bind(db,

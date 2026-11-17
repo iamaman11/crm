@@ -23,7 +23,7 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryPrivacyV2,decodePrivacyV2,privacyV2Path,
   binaryEnrichmentV2,decodeEnrichmentV2,enrichmentV2Path,
   binaryCsvV2,decodeCsvV2,csvV2Path,
-  binaryOverviewV2,decodeOverviewV2,overviewV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  binaryOverviewV2,decodeOverviewV2,overviewV2Path,decodeDomainErrorDetail} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-connect-"));
 let base,runtime,fixtureDb;
@@ -1617,6 +1617,14 @@ assert.equal((await salesV2("CreateDeal",admin,{
 assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
   "AND subject_id='"+dealId+"'"))[0].n,denialAuditBefore,
   "invalid Contact/CalendarDate must not create a Deal or append audit");
+const invalidDealName=await salesV2("CreateDeal",admin,{
+  ...saleCreate,name:"",precondition:{idempotencyKey:"r471-invalid-deal-name"}});
+assert.equal(invalidDealName.status,400);
+const invalidNameDetail=decodeDomainErrorDetail(invalidDealName.body.details.find(d=>d.type==="crm.core.v2.DomainErrorDetail"));
+assert.equal(invalidNameDetail.domainCode,"SALES_DEAL_NAME_INVALID");
+assert.equal(invalidNameDetail.commitOutcome,1);
+assert.equal(invalidNameDetail.requestId,invalidDealName.headers.get("x-request-id"));
+assert.equal(invalidNameDetail.fieldViolations[0].fieldPath,"deal.name");
 const salesCreated=await salesV2("CreateDeal",admin,saleCreate);
 assert.equal(salesCreated.status,200,describeProtobuf(salesCreated.body));
 assert.equal(salesCreated.body.deal?.dealId,dealId);
@@ -2332,7 +2340,9 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
     assert.equal(failed.status,503);
     assert.equal(failed.body.code,"unavailable");
     assert.equal(failed.body.message,"SALES_COMMIT_UNCONFIRMED");
-    assert.ok(failed.body.details?.some(detail=>detail.type==="crm.core.v2.DomainErrorDetail"));
+    const outcomeDetail=decodeDomainErrorDetail(failed.body.details.find(d=>d.type==="crm.core.v2.DomainErrorDetail"));
+    assert.equal(outcomeDetail.commitOutcome,2);
+    assert.equal(outcomeDetail.requestId,failed.headers.get("x-request-id"));
     assert.deepEqual((await salesActorSnapshot()),beforeSalesFault,
       "Late link audit failure rolls back Deal, new Task, receipt, delivery and audit");
   }finally{await sql("DROP TRIGGER fixture_fail_sales_link_actor");}

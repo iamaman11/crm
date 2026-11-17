@@ -197,3 +197,10 @@ if(!overviewMethod)throw Error("compiled GetAccountOverview missing");
 export const overviewV2Path=()=>"/crm.customer_360.v2.Customer360Service/GetAccountOverview";
 export const binaryOverviewV2=(_name,payload)=>toBinary(overviewMethod.input,create(overviewMethod.input,payload));
 export const decodeOverviewV2=(_name,bytes)=>fromBinary(overviewMethod.output,bytes);
+
+// Decode the real standard Connect detail from the same compiled descriptor.
+export function decodeDomainErrorDetail(detail){
+ const schema=registry.getMessage("crm.core.v2.DomainErrorDetail");
+ if(!schema||detail.type!==schema.typeName)throw Error("missing generated DomainErrorDetail");
+ return fromBinary(schema,Buffer.from(detail.value,"base64"));
+}

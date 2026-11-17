@@ -506,10 +506,10 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales original D1 create failed"))?
-        .map_err(|failure| self.failed(failure))?;
+        .map_err(|failure| self.failed("CreateDeal", failure))?;
         RpcResponse::ok(sale_wire::CreateDealResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
-            receipt: Some(self.receipt(&saved)).into(),
+            receipt: Some(self.receipt("CreateDeal", &saved)).into(),
             ..Default::default()
         })
     }
@@ -608,10 +608,10 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales original D1 update failed"))?
-        .map_err(|failure| self.failed(failure))?;
+        .map_err(|failure| self.failed("UpdateDeal", failure))?;
         RpcResponse::ok(sale_wire::UpdateDealResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
-            receipt: Some(self.receipt(&saved)).into(),
+            receipt: Some(self.receipt("UpdateDeal", &saved)).into(),
             ..Default::default()
         })
     }
@@ -652,10 +652,10 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales original D1 stage advance failed"))?
-        .map_err(|failure| self.failed(failure))?;
+        .map_err(|failure| self.failed("AdvanceStage", failure))?;
         RpcResponse::ok(sale_wire::AdvanceStageResponse {
             deal: Some(Self::convert(&advanced.saved.deal)?).into(),
-            receipt: Some(self.receipt(&advanced.saved)).into(),
+            receipt: Some(self.receipt("AdvanceStage", &advanced.saved)).into(),
             ..Default::default()
         })
     }
@@ -694,10 +694,10 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales original D1 close failed"))?
-        .map_err(|failure| self.failed(failure))?;
+        .map_err(|failure| self.failed("CloseDeal", failure))?;
         RpcResponse::ok(sale_wire::CloseDealResponse {
             deal: Some(Self::convert(&saved.saved.deal)?).into(),
-            receipt: Some(self.receipt(&saved.saved)).into(),
+            receipt: Some(self.receipt("CloseDeal", &saved.saved)).into(),
             ..Default::default()
         })
     }
@@ -729,10 +729,10 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales original D1 reopen failed"))?
-        .map_err(|failure| self.failed(failure))?;
+        .map_err(|failure| self.failed("ReopenDeal", failure))?;
         RpcResponse::ok(sale_wire::ReopenDealResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
-            receipt: Some(self.receipt(&saved)).into(),
+            receipt: Some(self.receipt("ReopenDeal", &saved)).into(),
             ..Default::default()
         })
     }

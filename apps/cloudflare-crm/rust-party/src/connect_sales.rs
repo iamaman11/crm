@@ -907,7 +907,23 @@ impl SalesV2Service {
             _ => ConnectError::internal(f.code),
         }
     }
-    fn receipt(&self, saved: &sales_deals::SalesSaved) -> core_v2::MutationReceipt {
+    fn receipt(
+        &self,
+        operation: &'static str,
+        saved: &sales_deals::SalesSaved,
+    ) -> core_v2::MutationReceipt {
+        worker::console_log!(
+            "{}",
+            serde_json::json!({
+                "event": "crm.native.mutation.outcome",
+                "operation": operation,
+                "phase": "receipt",
+                "request_id": self.request_id,
+                "original_request_id": saved.original_request_id,
+                "outcome": if saved.replayed { "replayed" } else { "committed" },
+                "version": saved.deal.version()
+            })
+        );
         core_v2::MutationReceipt {
             request_id: self.request_id.clone(),
             resource_version: saved.deal.version(),
@@ -916,13 +932,14 @@ impl SalesV2Service {
             ..Default::default()
         }
     }
-    fn failed(&self, failure: sales_deals::SalesFailure) -> ConnectError {
+    fn failed(&self, operation: &'static str, failure: sales_deals::SalesFailure) -> ConnectError {
         use buffa::MessageName;
         use crm_module_sdk::ErrorCategory;
         use sales_deals::SalesFailure;
-        let (error, code, outcome) = match failure {
-            SalesFailure::Rejected { code, category } => {
-                let error = match category {
+        let (error, code, outcome, field_violations) = match failure {
+            SalesFailure::Rejected(failure) => {
+                let code = failure.code;
+                let error = match failure.category {
                     ErrorCategory::InvalidArgument => ConnectError::invalid_argument(&code),
                     ErrorCategory::Authentication => ConnectError::unauthenticated(&code),
                     ErrorCategory::Authorization => ConnectError::permission_denied(&code),
@@ -934,7 +951,21 @@ impl SalesV2Service {
                     }
                     ErrorCategory::Internal => ConnectError::internal(&code),
                 };
-                (error, code, core_v2::MutationCommitOutcome::Rejected)
+                let field_violations = failure
+                    .field_violations
+                    .into_iter()
+                    .map(|field| core_v2::FieldViolation {
+                        field_path: field.field.as_str().to_owned(),
+                        description: field.safe_message,
+                        ..Default::default()
+                    })
+                    .collect();
+                (
+                    error,
+                    code,
+                    core_v2::MutationCommitOutcome::Rejected,
+                    field_violations,
+                )
             }
             SalesFailure::CommitUnconfirmed => {
                 let code = "SALES_COMMIT_UNCONFIRMED".to_owned();
@@ -942,11 +973,29 @@ impl SalesV2Service {
                     ConnectError::unavailable(&code),
                     code,
                     core_v2::MutationCommitOutcome::Unconfirmed,
+                    Vec::new(),
                 )
             }
         };
+        worker::console_log!(
+            "{}",
+            serde_json::json!({
+                "event": "crm.native.mutation.outcome",
+                "operation": operation,
+                "phase": "result",
+                "request_id": self.request_id,
+                "domain_code": code,
+                "connect_code": error.code.as_str(),
+                "outcome": if outcome == core_v2::MutationCommitOutcome::Rejected {
+                    "rejected"
+                } else {
+                    "unconfirmed"
+                }
+            })
+        );
         let detail = core_v2::DomainErrorDetail {
             domain_code: code,
+            field_violations,
             request_id: self.request_id.clone(),
             commit_outcome: outcome.into(),
             ..Default::default()
