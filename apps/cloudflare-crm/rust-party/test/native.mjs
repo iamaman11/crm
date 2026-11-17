@@ -3156,7 +3156,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    if(child.exitCode===null)await Promise.race([new Promise(resolve=>child.once("exit",resolve)),
      new Promise(resolve=>setTimeout(resolve,1400))]);
    try{process.kill(-child.pid,"SIGKILL");}catch(e){if(e.code!=="ESRCH")throw e;}
-   child.stderr.destroy();child.unref();
+   child.stdout.destroy();child.stderr.destroy();child.unref();
  }
  if(fixtureDb){fixtureDb.close();fixtureDb=undefined;}
  rmSync(data,{recursive:true,force:true});

@@ -1225,7 +1225,9 @@ pub(super) async fn list_stage_page(
     for row in &rows {
         let deal = decode(&row.state)?;
         if let Some(amount) = deal.amount() {
-            let entry = summary.entry(amount.currency().to_string()).or_insert((0, 0));
+            let entry = summary
+                .entry(amount.currency().to_string())
+                .or_insert((0, 0));
             entry.0 = entry
                 .0
                 .checked_add(amount.minor_units())
