@@ -258,8 +258,7 @@ fn replay(receipt: Receipt, digest: &str) -> std::result::Result<SalesSaved, Mut
     if receipt.digest != digest {
         return rejected("IDEMPOTENCY_CONFLICT", ErrorCategory::Conflict);
     }
-    let deal =
-        decode(&receipt.state).map_err(|_| unconfirmed(ReceiptUncertainty::Invalid))?;
+    let deal = decode(&receipt.state).map_err(|_| unconfirmed(ReceiptUncertainty::Invalid))?;
     Ok(SalesSaved {
         deal,
         replayed: true,
