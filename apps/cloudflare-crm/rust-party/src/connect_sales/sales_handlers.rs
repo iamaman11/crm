@@ -266,6 +266,23 @@ impl sale_wire::DealService for SalesV2Service {
                     ..Default::default()
                 })
                 .collect(),
+            operational: metrics
+                .operational
+                .into_iter()
+                .map(|row| sale_wire::PipelineOperationalMetric {
+                    stage_id: row.stage_id,
+                    status: as_status(row.status).into(),
+                    overdue_expected_close_count: row.overdue_expected_close_count,
+                    due_next_30_days_count: row.due_next_30_days_count,
+                    due_later_count: row.due_later_count,
+                    no_expected_close_count: row.no_expected_close_count,
+                    known_stage_age_count: row.known_stage_age_count,
+                    total_stage_age_seconds: row.total_stage_age_seconds.to_string(),
+                    overdue_linked_task_count: row.overdue_linked_task_count,
+                    ..Default::default()
+                })
+                .collect(),
+            as_of_unix_seconds: metrics.as_of_unix_seconds,
             ..Default::default()
         })
     }

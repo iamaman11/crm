@@ -127,6 +127,11 @@ struct PipelineMoneyRow {
     currency_code: Option<String>,
     minor_units: Option<String>,
     probability_basis_points: i64,
+    expected_close_year: Option<i32>,
+    expected_close_month: Option<i64>,
+    expected_close_day: Option<i64>,
+    stage_entered_at_nanos: Option<String>,
+    has_overdue_linked_task: i64,
 }
 #[derive(Deserialize)]
 struct Receipt {
@@ -911,10 +916,48 @@ pub(super) struct PipelineCurrencyMetric {
     pub weighted_minor_units_times_basis_points: i128,
     pub amount_deal_count: u64,
 }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PipelineOperationalMetric {
+    pub stage_id: String,
+    pub status: DealStatus,
+    pub overdue_expected_close_count: u64,
+    pub due_next_30_days_count: u64,
+    pub due_later_count: u64,
+    pub no_expected_close_count: u64,
+    pub known_stage_age_count: u64,
+    pub total_stage_age_seconds: i128,
+    pub overdue_linked_task_count: u64,
+}
+#[derive(Default)]
+struct OperationalCounts {
+    overdue: u64,
+    due_soon: u64,
+    due_later: u64,
+    undated: u64,
+    known_age: u64,
+    age_seconds: i128,
+    overdue_tasks: u64,
+}
+fn count_one(value: &mut u64) -> Result<()> {
+    *value = value
+        .checked_add(1)
+        .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
+    Ok(())
+}
+// Proleptic Gregorian UTC day index; CalendarDate validates input first.
+fn gregorian_day_index(year: i32, month: u8, day: u8) -> i64 {
+    let y = i64::from(year) - 1;
+    const BEFORE_MONTH: [i64; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    365 * y + y / 4 - y / 100 + y / 400 + BEFORE_MONTH[usize::from(month - 1)] + i64::from(day) - 1
+        + i64::from(leap && month > 2)
+}
 pub(super) struct PipelineMetrics {
     pub total_deal_count: u64,
     pub statuses: Vec<PipelineStatusMetric>,
     pub currencies: Vec<PipelineCurrencyMetric>,
+    pub operational: Vec<PipelineOperationalMetric>,
+    pub as_of_unix_seconds: i64,
 }
 
 // One indexed keyset scan over the full filtered tenant pipeline. Stage
@@ -944,21 +987,40 @@ pub(super) async fn pipeline_metrics(
         filters.push(JsValue::from_str(account));
     }
     condition.push_str(&optional);
+    // One tenant-scoped keyset scan; event and Task lookups reuse composite
+    // indexes. Neither account-level tasks nor ordinary edits reset stage age.
     let sql = format!(
-        "SELECT id,json_extract(state,'$.stage.stage_id') AS stage_id,\
-         json_extract(state,'$.status') AS status,\
-         json_extract(state,'$.amount.currency') AS currency_code,\
-         CAST(json_extract(state,'$.amount.minor_units') AS TEXT) AS minor_units,\
-         CAST(json_extract(state,'$.probability_basis_points') AS INTEGER) AS probability_basis_points \
-         FROM crm_sales_deal_records WHERE {condition} ORDER BY id LIMIT ?"
+        "SELECT d.id,json_extract(d.state,'$.stage.stage_id') AS stage_id,\
+         json_extract(d.state,'$.status') AS status,\
+         json_extract(d.state,'$.amount.currency') AS currency_code,\
+         CAST(json_extract(d.state,'$.amount.minor_units') AS TEXT) AS minor_units,\
+         CAST(json_extract(d.state,'$.probability_basis_points') AS INTEGER) AS probability_basis_points,\
+         json_extract(d.state,'$.expected_close_date.year') AS expected_close_year,\
+         json_extract(d.state,'$.expected_close_date.month') AS expected_close_month,\
+         json_extract(d.state,'$.expected_close_date.day') AS expected_close_day,\
+         (SELECT CAST(e.occurred_at_unix_nanos AS TEXT) FROM crm_sales_deal_events e\
+          WHERE e.tenant=d.tenant AND e.deal_id=d.id AND e.action IN ('created','moved')\
+          ORDER BY e.deal_version DESC LIMIT 1) AS stage_entered_at_nanos,\
+         EXISTS(SELECT 1 FROM crm_sales_link_delivery_records l\
+           JOIN crm_activity_task_records t ON t.tenant=l.tenant AND t.id=l.task_id\
+           WHERE l.tenant=d.tenant AND l.deal_id=d.id\
+            AND json_extract(t.state,'$.status')='open'\
+            AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER) < CAST(? AS INTEGER))\
+           AS has_overdue_linked_task\
+         FROM crm_sales_deal_records d WHERE {condition} ORDER BY d.id LIMIT ?"
     );
     const METRICS_BATCH: usize = 256;
+    let as_of_nanos = now_nanos();
+    let as_of_unix_seconds = as_of_nanos.div_euclid(1_000_000_000);
+    let today = gregorian_day_index(1970, 1, 1) + as_of_unix_seconds.div_euclid(86_400);
     let mut after = String::new();
     let mut total_count = 0u64;
     let mut status_groups = BTreeMap::<(String, String), u64>::new();
     let mut money_groups = BTreeMap::<(String, String, String), (i128, i128, u64)>::new();
+    let mut operational_groups = BTreeMap::<(String, String), OperationalCounts>::new();
     loop {
         let mut arguments = vec![
+            JsValue::from_str(&as_of_nanos.to_string()),
             JsValue::from_str(tenant),
             JsValue::from_str(pipeline_id),
             JsValue::from_str(&after),
@@ -994,6 +1056,70 @@ pub(super) async fn pipeline_metrics(
             *status_group = status_group
                 .checked_add(1)
                 .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
+            if status == DealStatus::Open {
+                let group = operational_groups
+                    .entry((row.stage_id.clone(), row.status.clone()))
+                    .or_default();
+                match (
+                    row.expected_close_year,
+                    row.expected_close_month,
+                    row.expected_close_day,
+                ) {
+                    (None, None, None) => count_one(&mut group.undated)?,
+                    (Some(year), Some(month), Some(day)) => {
+                        let month = u8::try_from(month).map_err(|_| {
+                            worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
+                        })?;
+                        let day = u8::try_from(day).map_err(|_| {
+                            worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
+                        })?;
+                        CalendarDate::try_new(year, month, day).map_err(|_| {
+                            worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
+                        })?;
+                        let delta = gregorian_day_index(year, month, day) - today;
+                        if delta < 0 {
+                            count_one(&mut group.overdue)?;
+                        } else if delta <= 30 {
+                            count_one(&mut group.due_soon)?;
+                        } else {
+                            count_one(&mut group.due_later)?;
+                        }
+                    }
+                    _ => {
+                        return Err(worker::Error::RustError(
+                            "SALES_METRICS_DATE_INVALID".into(),
+                        ));
+                    }
+                }
+                // Pre-0013 Deals can have no immutable entry event. Never
+                // synthesize a historical timestamp from updated_at.
+                if let Some(start) = &row.stage_entered_at_nanos {
+                    let started = start.parse::<i64>().map_err(|_| {
+                        worker::Error::RustError("SALES_METRICS_STAGE_TIME_INVALID".into())
+                    })?;
+                    if started <= 0 || started > as_of_nanos {
+                        return Err(worker::Error::RustError(
+                            "SALES_METRICS_STAGE_TIME_INVALID".into(),
+                        ));
+                    }
+                    count_one(&mut group.known_age)?;
+                    group.age_seconds = group
+                        .age_seconds
+                        .checked_add(i128::from((as_of_nanos - started) / 1_000_000_000))
+                        .ok_or_else(|| {
+                            worker::Error::RustError("SALES_METRICS_STAGE_TIME_OVERFLOW".into())
+                        })?;
+                }
+                match row.has_overdue_linked_task {
+                    1 => count_one(&mut group.overdue_tasks)?,
+                    0 => (),
+                    _ => {
+                        return Err(worker::Error::RustError(
+                            "SALES_METRICS_TASK_FLAG_INVALID".into(),
+                        ));
+                    }
+                }
+            }
             let bps = u16::try_from(row.probability_basis_points).map_err(|_| {
                 worker::Error::RustError("SALES_METRICS_PROBABILITY_INVALID".into())
             })?;
@@ -1097,6 +1223,21 @@ pub(super) async fn pipeline_metrics(
                 },
             )
             .collect(),
+        operational: operational_groups
+            .into_iter()
+            .map(|((stage_id, kind), c)| PipelineOperationalMetric {
+                stage_id,
+                status: persisted_status(&kind),
+                overdue_expected_close_count: c.overdue,
+                due_next_30_days_count: c.due_soon,
+                due_later_count: c.due_later,
+                no_expected_close_count: c.undated,
+                known_stage_age_count: c.known_age,
+                total_stage_age_seconds: c.age_seconds,
+                overdue_linked_task_count: c.overdue_tasks,
+            })
+            .collect(),
+        as_of_unix_seconds,
     })
 }
 

@@ -1622,6 +1622,25 @@ assert.equal(advanceReplayed.status,200);
 assert.equal(advanceReplayed.body.receipt?.replayed,true);
 assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
   "WHERE tenant='tenant-a'")[0].n,taskCountAfter);
+// Signed workerd cross-owner operational check: a real stage move delivered
+// one original Task. Only its OPEN status and authoritative dueAt may mark
+// the Deal as having an overdue linked action.
+const movedEvent=(await salesV2("ListDealEvents",viewer,{
+  dealId,page:{pageSize:5}})).body.events[0];
+assert.ok(movedEvent.linkedTaskId);
+const overdueLinkedTask=await taskV2("UpdateTask",admin,{
+  taskId:movedEvent.linkedTaskId,
+  dueAt:{operation:{case:"set",value:{seconds:1577836800n,nanos:0}}},
+  precondition:{expectedVersion:1n,idempotencyKey:"r73b-linked-task-overdue"}
+});
+assert.equal(overdueLinkedTask.status,200,describeProtobuf(overdueLinkedTask.body));
+const operationalRead=await salesV2("GetPipelineMetrics",viewer,{
+  pipelineId:"pipeline.enterprise",status:1,accountId});
+assert.equal(operationalRead.status,200,describeProtobuf(operationalRead.body));
+const qualifiedOp=operationalRead.body.operational.find(x=>x.stageId==="qualified");
+assert.ok(qualifiedOp,"the moved OPEN Deal belongs to qualified");
+assert.equal(qualifiedOp.overdueLinkedTaskCount,1n);
+assert.equal(qualifiedOp.knownStageAgeCount,1n);
 assert.equal((await salesV2("AdvanceStage",admin,{
   dealId,targetStage:{pipelineId:"pipeline.enterprise",stageId:"fictional-won",ordinal:3},
   targetStatus:2,closeReasonCode:"contract-signed",
@@ -1764,6 +1783,8 @@ for(const [index,[currencyCode,minorUnits]] of currencyCases.entries()){
     name:"Currency Deal "+index,accountId,
     stage:{pipelineId:"pipeline.other",stageId:"lead",ordinal:999},
     amount:{minorUnits,currencyCode},probabilityBasisPoints:2000,
+    ...(index===0?{expectedCloseDate:{year:2020,month:1,day:1}}:
+      index===1?{expectedCloseDate:{year:2030,month:1,day:1}}:{}),
     precondition:{idempotencyKey:"r7-stage-totals-"+index}
   });
   assert.equal(made.status,200,describeProtobuf(made.body));
@@ -1794,6 +1815,20 @@ assert.deepEqual(initialMetric.body.currencies.map(x=>[
   ["PLN","2345","4690000",1n],
   ["USD","9223372036854775808","18446744073709551616000",2n]
 ], "exact 128-bit sums, exact weighted numerator and currency separation");
+// Dates are evaluated in UTC against one server snapshot, not by current
+// browser page or client timezone. The original 27 Deals have no expected date.
+const operational=initialMetric.body.operational;
+assert.equal(operational.length,1);
+assert.equal(operational[0].stageId,"lead");
+assert.equal(operational[0].status,1);
+assert.equal(operational[0].overdueExpectedCloseCount,1n);
+assert.equal(operational[0].dueNext30DaysCount,0n);
+assert.equal(operational[0].dueLaterCount,1n);
+assert.equal(operational[0].noExpectedCloseCount,30n);
+assert.equal(operational[0].knownStageAgeCount,32n);
+assert.ok(BigInt(operational[0].totalStageAgeSeconds)>=0n);
+assert.equal(operational[0].overdueLinkedTaskCount,0n);
+assert.ok(initialMetric.body.asOfUnixSeconds>0n);
 const metricsTenantDenied=await salesV2("GetPipelineMetrics",tenantB,{
   pipelineId:"pipeline.other"});
 assert.equal(metricsTenantDenied.status,404,"other tenant cannot read foreign Pipeline totals");
