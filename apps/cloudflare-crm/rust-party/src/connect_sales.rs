@@ -3,7 +3,7 @@
 //! Domain rules and storage belong exclusively to existing crm-sales and D1.
 use super::{
     access, accounts, activity_tasks, consents, contact_points, data_quality, identity_resolution,
-    parties, party_relationships, sales_deals, sales_pipelines,
+    parties, party_relationships, sales_deals, sales_pipelines, sales_views,
 };
 use axum::Router;
 use buffa_types::google::protobuf::Timestamp;
@@ -800,6 +800,53 @@ impl SalesV2Service {
                 })
                 .collect(),
             ..Default::default()
+        }
+    }
+    fn view_status(raw: Option<buffa::EnumValue<sale_wire::DealStatus>>)
+        -> std::result::Result<Option<crm_sales::SalesViewStatus>, ConnectError>
+    {
+        match raw {
+            None => Ok(None),
+            Some(value) if value == sale_wire::DealStatus::DEAL_STATUS_OPEN =>
+                Ok(Some(crm_sales::SalesViewStatus::Open)),
+            Some(value) if value == sale_wire::DealStatus::DEAL_STATUS_WON =>
+                Ok(Some(crm_sales::SalesViewStatus::Won)),
+            Some(value) if value == sale_wire::DealStatus::DEAL_STATUS_LOST =>
+                Ok(Some(crm_sales::SalesViewStatus::Lost)),
+            _ => Err(ConnectError::invalid_argument("SALES_VIEW_STATUS_INVALID")),
+        }
+    }
+    fn view(value: &crm_sales::SalesDealView) -> sale_wire::SalesDealView {
+        let status = value.status.map(|status| match status {
+            crm_sales::SalesViewStatus::Open => sale_wire::DealStatus::DEAL_STATUS_OPEN,
+            crm_sales::SalesViewStatus::Won => sale_wire::DealStatus::DEAL_STATUS_WON,
+            crm_sales::SalesViewStatus::Lost => sale_wire::DealStatus::DEAL_STATUS_LOST,
+        }.into());
+        sale_wire::SalesDealView {
+            view_id: value.view_id.clone(),
+            name: value.name.clone(),
+            pipeline_id: value.pipeline_id.clone(),
+            status,
+            account_id: value.account_id.clone(),
+            version: value.version,
+            archived: value.archived,
+            ..Default::default()
+        }
+    }
+    fn view_receipt(&self, saved: &sales_views::Saved) -> core_v2::MutationReceipt {
+        core_v2::MutationReceipt {
+            request_id: self.request_id.clone(),
+            resource_version: saved.value.version,
+            replayed: saved.replayed,
+            ..Default::default()
+        }
+    }
+    fn view_failed(f: sales_views::Failure) -> ConnectError {
+        match f.status {
+            404 => ConnectError::not_found(f.code),
+            409 => ConnectError::aborted(f.code),
+            422 => ConnectError::invalid_argument(f.code),
+            _ => ConnectError::internal(f.code),
         }
     }
     fn pipeline_receipt(&self, saved: &sales_pipelines::Saved) -> core_v2::MutationReceipt {
