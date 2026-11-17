@@ -888,7 +888,9 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             Err(cause) => {
                 log_read_failure(&request_id, "access", &cause);
                 let reply = if path.starts_with("/crm.") {
-                    rpc_error(connectrpc::ConnectError::unavailable("ACCESS_INTERNAL_ERROR"))
+                    rpc_error(connectrpc::ConnectError::unavailable(
+                        "ACCESS_INTERNAL_ERROR",
+                    ))
                 } else {
                     error("ACCESS_INTERNAL_ERROR", 503)
                 };
