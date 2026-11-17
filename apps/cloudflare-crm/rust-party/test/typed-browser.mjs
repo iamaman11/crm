@@ -459,6 +459,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await wholePipelineMetrics.getByText("Всего сделок: 1",{exact:true}).waitFor();
    const metricStage=wholePipelineMetrics.getByRole("group",{name:"Первичный контакт · Открытые"});
    await metricStage.getByText("Открытые: 1 сделок",{exact:true}).waitFor();
+   const operationalPanel=metricStage.getByRole("group",{name:"Операционные показатели"});
+   await operationalPanel.getByText("позднее 1",{exact:false}).waitFor();
+   await operationalPanel.getByText("дата не указана 0",{exact:false}).waitFor();
+   await operationalPanel.getByText("подтверждённая история у 1",{exact:false}).waitFor();
    await metricStage.getByText(
      "90071992547409.93 USD · взвешено: 33731961209005.018785 USD · сделок с суммой: 1",
      {exact:true}).waitFor();

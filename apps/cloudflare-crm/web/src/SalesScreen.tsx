@@ -190,9 +190,11 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
         Время этапа начинается с реального события создания или перемещения.</p>
       <QueryNotice query={metricsQuery}/>
       {metricsQuery.data&&<>
-        <p>Всего сделок: {metricsQuery.data.totalDealCount.toString()}
-          {" · срез по UTC: "}
-          {new Date(Number(metricsQuery.data.asOfUnixSeconds)*1000).toISOString().slice(0,16)}
+        <p>
+          <span>Всего сделок: {metricsQuery.data.totalDealCount.toString()}</span>
+          <span>{" · срез по UTC: "}
+            {new Date(Number(metricsQuery.data.asOfUnixSeconds)*1000).toISOString().slice(0,16)}
+          </span>
         </p>
         {activePipeline.stages.map(stage=>{
           const groups=metricsQuery.data?.statuses.filter(m=>m.stageId===stage.stageId)??[];
