@@ -14,7 +14,7 @@ async function subprocessEntry(){
  const {mode,variant,sha,database,audit,requestId,rpcPath}=JSON.parse(process.env.CRM_RELEASE_TEST_FIXTURE);
  const posts=[];
  let enabled=mode==="deploy",migrated=variant!=="migration-fails",published=false,edgeAttempts=0,role="viewer";
- let auditAttempts=0,telemetryAttempts=0;
+ let auditAttempts=0,telemetryAttempts=0,anonymousAttempts=0;
  const commands=[];
  let db;
  if(mode==="deploy"){
@@ -54,7 +54,15 @@ async function subprocessEntry(){
      if(mode==="deploy"){
        if(!enabled)return new Response("disabled",{status:404});
        if(path==="/api/version"){
-         if(!options.headers)return new Response("denied",{status:403});
+         if(!new Headers(options.headers).has("CF-Access-Client-Id")){
+           anonymousAttempts++;
+           if((variant==="anonymous-reset"&&anonymousAttempts===1)||
+              variant==="anonymous-persistent-reset"){
+             throw Object.assign(new TypeError("fetch failed"),{cause:{code:"ECONNRESET"}});
+           }
+           return new Response(variant==="anonymous-success"?"exposed":"denied",
+             {status:variant==="anonymous-success"?200:403});
+         }
          if(++edgeAttempts<=2)return new Response("propagating",{status:404});
        }
      }
@@ -126,7 +134,7 @@ async function subprocessEntry(){
  process.argv[2]=mode;
  try{await import("./deploy.mjs");}finally{
    writeFileSync("posts.json",JSON.stringify(posts));
-   writeFileSync("state.json",JSON.stringify({enabled,migrated,published,edgeAttempts,commands,role}));
+   writeFileSync("state.json",JSON.stringify({enabled,migrated,published,edgeAttempts,anonymousAttempts,commands,role}));
    db?.close();
  }
 }
@@ -134,7 +142,8 @@ function run(mode,variant="valid"){
  const dir=mkdtempSync(join(tmpdir(),"crm-release-test-"));
  const app=join(dir,"apps/cloudflare-crm"),out=join(app,".release");
  mkdirSync(out,{recursive:true});mkdirSync(join(app,"e2e-evidence"));
- copyFileSync(new URL("../scripts/deploy.mjs",import.meta.url),join(dir,"deploy.mjs"));
+ for(const name of ["deploy.mjs","release-readback.mjs"])
+   copyFileSync(new URL("../scripts/"+name,import.meta.url),join(dir,name));
  const save=(path,value)=>writeFileSync(path,JSON.stringify(value));
  if(variant!=="no-checkpoint")save(join(out,"checkpoint.json"),{git_sha:sha,previous_sha:previous,d1_database:database});
  save(join(out,"deployed.json"),{git_sha:sha,worker_version:"version-new",started_at:1});
@@ -218,6 +227,21 @@ test("unchanged D1 ledger keeps public entry online and signed version checks Ac
  assert.equal(result.posts.filter(path=>path.endsWith("/subdomain")).length,1,
    "Code-only release must not stop public entry before deployment");
 });
+test("anonymous transport reset recovers through real deploy script without replaying writes",()=>{
+ const result=run("deploy","anonymous-reset");
+ assert.equal(result.status,0,result.error);
+ assert.equal(result.deployed,true);
+ assert.equal(result.state.anonymousAttempts,2);
+ assert.equal(result.state.commands.filter(c=>c[2]==="deploy").length,1);
+});
+for(const variant of ["anonymous-persistent-reset","anonymous-success"])
+ test("release rejects "+variant+" without replaying deployment",()=>{
+   const result=run("deploy",variant);
+   assert.notEqual(result.status,0);
+   assert.equal(result.deployed,false);
+   assert.equal(result.state.anonymousAttempts,variant==="anonymous-success"?1:3);
+   assert.equal(result.state.commands.filter(c=>c[2]==="deploy").length,1);
+ });
 test("unknown D1 migration history rejects the release before changing public entry",()=>{
  const result=run("deploy","migration-history-drift");
  assert.notEqual(result.status,0);assert.equal(result.state.published,false);
