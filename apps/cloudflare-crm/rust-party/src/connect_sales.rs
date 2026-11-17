@@ -907,7 +907,6 @@ impl SalesV2Service {
             _ => ConnectError::internal(f.code),
         }
     }
-
 }
 
 // One constructor serves dispatch and the existing signed workerd diagnostic.

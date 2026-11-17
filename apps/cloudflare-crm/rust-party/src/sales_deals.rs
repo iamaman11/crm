@@ -1,7 +1,11 @@
 //! Cloudflare native HTTP/D1 boundary for the ORIGINAL crm-sales Deal aggregate.
 //! Stage progression, closing rules, money and version invariants belong to
 //! crm-sales and crm-core-contracts, never the test pilot's crm_deals model.
-use super::{bind, diagnostics::{MutationFailure, ReceiptUncertainty}, now_nanos};
+use super::{
+    bind,
+    diagnostics::{MutationFailure, ReceiptUncertainty},
+    now_nanos,
+};
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money, Patch};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef, SdkError};
 use crm_sales::{
@@ -276,7 +280,10 @@ fn changes(result: &worker::d1::D1Result) -> Option<usize> {
 }
 
 fn unconfirmed(reason: ReceiptUncertainty) -> MutationFailure {
-    MutationFailure::CommitUnconfirmed { code: "SALES_COMMIT_UNCONFIRMED", reason }
+    MutationFailure::CommitUnconfirmed {
+        code: "SALES_COMMIT_UNCONFIRMED",
+        reason,
+    }
 }
 
 // Read back the exact receipt. Never repeat a mutation here. No receipt after
@@ -315,9 +322,7 @@ pub(super) async fn probe_receipt_read(
     unused_key: &str,
 ) -> &'static str {
     match reconcile(db, tenant, unused_key, "", true).await {
-        Err(MutationFailure::Rejected(error))
-            if error.category == ErrorCategory::Conflict =>
-        {
+        Err(MutationFailure::Rejected(error)) if error.category == ErrorCategory::Conflict => {
             "PROVEN_NO_CHANGE"
         }
         Err(MutationFailure::CommitUnconfirmed {

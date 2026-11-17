@@ -133,7 +133,11 @@ pub(super) fn receipt(
         operation,
         phase: "receipt",
         request_id,
-        outcome: if replayed { Outcome::Replayed } else { Outcome::Committed },
+        outcome: if replayed {
+            Outcome::Replayed
+        } else {
+            Outcome::Committed
+        },
         original_request_id,
         version: Some(version),
         domain_code: None,
@@ -171,12 +175,23 @@ pub(super) fn mutation_error(
     let (error, code, outcome, wire_outcome, field_violations, reason) = match failure {
         MutationFailure::Rejected(failure) => {
             let error = sdk_connect(&failure);
-            let fields = failure.field_violations.into_iter().map(|field| core_v2::FieldViolation {
-                field_path: field.field.as_str().to_owned(),
-                description: field.safe_message,
-                ..Default::default()
-            }).collect();
-            (error, failure.code, Outcome::Rejected, core_v2::MutationCommitOutcome::Rejected, fields, None)
+            let fields = failure
+                .field_violations
+                .into_iter()
+                .map(|field| core_v2::FieldViolation {
+                    field_path: field.field.as_str().to_owned(),
+                    description: field.safe_message,
+                    ..Default::default()
+                })
+                .collect();
+            (
+                error,
+                failure.code,
+                Outcome::Rejected,
+                core_v2::MutationCommitOutcome::Rejected,
+                fields,
+                None,
+            )
         }
         MutationFailure::CommitUnconfirmed { code, reason } => (
             ConnectError::unavailable(code),

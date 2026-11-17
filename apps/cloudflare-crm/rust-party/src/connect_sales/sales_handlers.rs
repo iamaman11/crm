@@ -510,7 +510,14 @@ impl sale_wire::DealService for SalesV2Service {
         .map_err(|failure| diagnostics::mutation_error("CreateDeal", &self.request_id, failure))?;
         RpcResponse::ok(sale_wire::CreateDealResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
-            receipt: Some(diagnostics::receipt("CreateDeal", &self.request_id, saved.original_request_id.as_deref(), saved.deal.version(), saved.replayed)).into(),
+            receipt: Some(diagnostics::receipt(
+                "CreateDeal",
+                &self.request_id,
+                saved.original_request_id.as_deref(),
+                saved.deal.version(),
+                saved.replayed,
+            ))
+            .into(),
             ..Default::default()
         })
     }
@@ -612,7 +619,14 @@ impl sale_wire::DealService for SalesV2Service {
         .map_err(|failure| diagnostics::mutation_error("UpdateDeal", &self.request_id, failure))?;
         RpcResponse::ok(sale_wire::UpdateDealResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
-            receipt: Some(diagnostics::receipt("UpdateDeal", &self.request_id, saved.original_request_id.as_deref(), saved.deal.version(), saved.replayed)).into(),
+            receipt: Some(diagnostics::receipt(
+                "UpdateDeal",
+                &self.request_id,
+                saved.original_request_id.as_deref(),
+                saved.deal.version(),
+                saved.replayed,
+            ))
+            .into(),
             ..Default::default()
         })
     }
@@ -653,10 +667,19 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales original D1 stage advance failed"))?
-        .map_err(|failure| diagnostics::mutation_error("AdvanceStage", &self.request_id, failure))?;
+        .map_err(|failure| {
+            diagnostics::mutation_error("AdvanceStage", &self.request_id, failure)
+        })?;
         RpcResponse::ok(sale_wire::AdvanceStageResponse {
             deal: Some(Self::convert(&advanced.saved.deal)?).into(),
-            receipt: Some(diagnostics::receipt("AdvanceStage", &self.request_id, advanced.saved.original_request_id.as_deref(), advanced.saved.deal.version(), advanced.saved.replayed)).into(),
+            receipt: Some(diagnostics::receipt(
+                "AdvanceStage",
+                &self.request_id,
+                advanced.saved.original_request_id.as_deref(),
+                advanced.saved.deal.version(),
+                advanced.saved.replayed,
+            ))
+            .into(),
             ..Default::default()
         })
     }
@@ -698,7 +721,14 @@ impl sale_wire::DealService for SalesV2Service {
         .map_err(|failure| diagnostics::mutation_error("CloseDeal", &self.request_id, failure))?;
         RpcResponse::ok(sale_wire::CloseDealResponse {
             deal: Some(Self::convert(&saved.saved.deal)?).into(),
-            receipt: Some(diagnostics::receipt("CloseDeal", &self.request_id, saved.saved.original_request_id.as_deref(), saved.saved.deal.version(), saved.saved.replayed)).into(),
+            receipt: Some(diagnostics::receipt(
+                "CloseDeal",
+                &self.request_id,
+                saved.saved.original_request_id.as_deref(),
+                saved.saved.deal.version(),
+                saved.saved.replayed,
+            ))
+            .into(),
             ..Default::default()
         })
     }
@@ -733,7 +763,14 @@ impl sale_wire::DealService for SalesV2Service {
         .map_err(|failure| diagnostics::mutation_error("ReopenDeal", &self.request_id, failure))?;
         RpcResponse::ok(sale_wire::ReopenDealResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
-            receipt: Some(diagnostics::receipt("ReopenDeal", &self.request_id, saved.original_request_id.as_deref(), saved.deal.version(), saved.replayed)).into(),
+            receipt: Some(diagnostics::receipt(
+                "ReopenDeal",
+                &self.request_id,
+                saved.original_request_id.as_deref(),
+                saved.deal.version(),
+                saved.replayed,
+            ))
+            .into(),
             ..Default::default()
         })
     }
