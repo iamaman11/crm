@@ -1764,6 +1764,8 @@ for(const [index,[currencyCode,minorUnits]] of currencyCases.entries()){
     name:"Currency Deal "+index,accountId,
     stage:{pipelineId:"pipeline.other",stageId:"lead",ordinal:999},
     amount:{minorUnits,currencyCode},probabilityBasisPoints:2000,
+    ...(index===0?{expectedCloseDate:{year:2020,month:1,day:1}}:
+      index===1?{expectedCloseDate:{year:2030,month:1,day:1}}:{}),
     precondition:{idempotencyKey:"r7-stage-totals-"+index}
   });
   assert.equal(made.status,200,describeProtobuf(made.body));
@@ -1794,6 +1796,20 @@ assert.deepEqual(initialMetric.body.currencies.map(x=>[
   ["PLN","2345","4690000",1n],
   ["USD","9223372036854775808","18446744073709551616000",2n]
 ], "exact 128-bit sums, exact weighted numerator and currency separation");
+// Dates are evaluated in UTC against one server snapshot, not by current
+// browser page or client timezone. The original 27 Deals have no expected date.
+const operational=initialMetric.body.operational;
+assert.equal(operational.length,1);
+assert.equal(operational[0].stageId,"lead");
+assert.equal(operational[0].status,1);
+assert.equal(operational[0].overdueExpectedCloseCount,1n);
+assert.equal(operational[0].dueNext30DaysCount,0n);
+assert.equal(operational[0].dueLaterCount,1n);
+assert.equal(operational[0].noExpectedCloseCount,30n);
+assert.equal(operational[0].knownStageAgeCount,32n);
+assert.ok(BigInt(operational[0].totalStageAgeSeconds)>=0n);
+assert.equal(operational[0].overdueLinkedTaskCount,0n);
+assert.ok(initialMetric.body.asOfUnixSeconds>0n);
 const metricsTenantDenied=await salesV2("GetPipelineMetrics",tenantB,{
   pipelineId:"pipeline.other"});
 assert.equal(metricsTenantDenied.status,404,"other tenant cannot read foreign Pipeline totals");
