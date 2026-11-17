@@ -4,7 +4,7 @@ import type {Deal,SalesPipeline,SalesDealView} from "@ultimate-crm/client/cloudf
 import {DealStatus,ProbabilitySource,ForecastCategory} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
-import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
+import {useQuery,useReadAction,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
 import {AccountPicker} from "./Pickers";
 import {DealContactPicker,DealDetails,inputDate,parseDate,forecastCategoryText,probabilitySourceText} from "./DealRecord";
 import {dealHref} from "./routes";
@@ -22,12 +22,12 @@ function stageDrafts(pipeline?:SalesPipeline):StageDraft[] {
     {stageId:newId(),name:"Квалификация",probability:"40",archived:false}
   ];
 }
-async function allPipelines():Promise<SalesPipeline[]> {
+async function allPipelines(signal:AbortSignal):Promise<SalesPipeline[]> {
   const all:SalesPipeline[]=[];
   let cursor="";
   const seen=new Set<string>();
   do {
-    const page=await api.deals.listPipelines({page:{pageSize:100,pageToken:cursor},includeArchived:true});
+    const page=await api.deals.listPipelines({page:{pageSize:100,pageToken:cursor},includeArchived:true},{signal});
     all.push(...page.pipelines);
     cursor=page.pageInfo?.nextPageToken??"";
     if(cursor&&seen.has(cursor))throw Error("Повторный курсор воронок");
@@ -35,12 +35,12 @@ async function allPipelines():Promise<SalesPipeline[]> {
   } while(cursor);
   return all;
 }
-async function allSalesViews():Promise<SalesDealView[]> {
+async function allSalesViews(signal:AbortSignal):Promise<SalesDealView[]> {
   const all:SalesDealView[]=[];
   let cursor="";
   const seen=new Set<string>();
   do {
-    const page=await api.deals.listSalesViews({page:{pageSize:100,pageToken:cursor}});
+    const page=await api.deals.listSalesViews({page:{pageSize:100,pageToken:cursor}},{signal});
     all.push(...page.views);
     cursor=page.pageInfo?.nextPageToken??"";
     if(cursor&&seen.has(cursor))throw Error("Повторный курсор представлений");
@@ -82,9 +82,10 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const [stageEdits,setStageEdits]=useState<StageDraft[]>([]);
   const mutation=useMutation({
     storageKey:"crm.deal.pending.v1",
-    lookup:async({dealId,key})=>(await api.deals.getDeal({dealId,receiptIdempotencyKey:key})).confirmedMutation,
+    lookup:async({dealId,key},signal)=>(await api.deals.getDeal({dealId,receiptIdempotencyKey:key},{signal})).confirmedMutation,
     refresh:async()=>{setDetailRevision(v=>v+1);await refreshSales();}
   });
+  const editorRead=useReadAction<Deal>();
   const pipelineMutation=useMutation();
   const viewMutation=useMutation();
   const savedViewsQuery=useQuery(useCallback(allSalesViews,[]));
@@ -135,7 +136,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const pipelinesQuery=useQuery(useCallback(allPipelines,[]));
   const pipelines=pipelinesQuery.data??[];
   const activePipeline=pipelines.find(p=>p.pipelineId===pipelineId);
-  const query=useQuery(useCallback(async()=>{
+  const query=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!activePipeline)return [];
     const selectedStatus=status?enumValue(status,[DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"):undefined;
     return Promise.all(activePipeline.stages.map(async stage=>{
@@ -144,44 +145,46 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
         page:{pageSize:25,pageToken:stageCursors[stage.stageId]??""},
         ...(selectedStatus!==undefined?{status:selectedStatus}:{}),
         ...(accountId?{accountId}:{})
-      });
+      },{signal});
       return {stageId:stage.stageId,...result};
     }));
   },[activePipeline,stageCursors,status,accountId]));
-  const metricsQuery=useQuery(useCallback(async()=>{
+  const metricsQuery=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!activePipeline)return undefined;
     const selectedStatus=status?enumValue(status,[DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"):undefined;
     return api.deals.getPipelineMetrics({
       pipelineId:activePipeline.pipelineId,
       ...(accountId?{accountId}:{}),
       ...(selectedStatus!==undefined?{status:selectedStatus}:{})
-    });
+    },{signal});
   },[activePipeline,accountId,status]));
   // The canonical ListDeals RPC already supports a tenant-wide cursor and
   // optional Account/status filters. It is the default all-pipelines overview;
   // the independent ListStageDeals query is only for a selected Kanban board.
-  const allDealsQuery=useQuery(useCallback(async()=>{
+  const allDealsQuery=useQuery(useCallback(async(signal:AbortSignal)=>{
     const selectedStatus=status?enumValue(status,[DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"):undefined;
     return api.deals.listDeals({
       page:{pageSize:25,pageToken:allDealsCursor},
       ...(accountId?{accountId}:{}),
       ...(selectedStatus!==undefined?{status:selectedStatus}:{})
-    });
+    },{signal});
   },[accountId,allDealsCursor,status]));
   const refreshSales=async()=>{
     await Promise.all([query.reload(),allDealsQuery.reload(),metricsQuery.reload()]);
   };
   const open=async(dealId:string,mode:"edit"|"advance"|"close"|"reopen",droppedOn="")=>{
     if(mutation.busy||mutation.pending)return;
-    try {
-      const value=(await api.deals.getDeal({dealId})).deal;
-      if(!value)throw Error("Сделка не найдена");
-      setSelected(mode==="edit"?value:undefined);
-      if(mode==="edit")setProbabilityChoice(value.probabilitySource===ProbabilitySource.STAGE_DEFAULT?"keep":String(ProbabilitySource.MANUAL));
-      setAdvance(mode==="edit"?undefined:value);
-      setDroppedStageId(mode==="advance"?droppedOn:"");
-      setEditorMode(mode);mutation.changed();
-    } catch(error) {await mutation.run(()=>Promise.reject(error));}
+    const value=await editorRead.run(async signal=>{
+      const deal=(await api.deals.getDeal({dealId},{signal})).deal;
+      if(!deal)throw Error("Сделка не найдена");
+      return deal;
+    });
+    if(!value)return;
+    setSelected(mode==="edit"?value:undefined);
+    if(mode==="edit")setProbabilityChoice(value.probabilitySource===ProbabilitySource.STAGE_DEFAULT?"keep":String(ProbabilitySource.MANUAL));
+    setAdvance(mode==="edit"?undefined:value);
+    setDroppedStageId(mode==="advance"?droppedOn:"");
+    setEditorMode(mode);mutation.changed();
   };
   const editPipeline=async(pipeline?:SalesPipeline)=>{
     try {
@@ -219,6 +222,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const nextStages=!advancePipeline?.archived?advancePipeline?.stages.filter(s=>!s.archived&&s.ordinal>(advance?.stage?.ordinal??0))??[]:[];
   const readyStage=!activePipeline?.archived?activePipeline?.stages.find(s=>!s.archived):undefined;
   return <>
+    <QueryNotice query={editorRead}/>
     {focusedDealId?<section>
       <PageHeader title="Карточка сделки" actions={<a href="#sales">К списку сделок</a>}/>
       <DealDetails key={focusedDealId+":"+detailRevision} dealId={focusedDealId}
@@ -229,7 +233,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
     <PageHeader title="Сделки" description="Сначала все сделки из всех воронок. Выберите воронку для Kanban: количество по этапам вычисляется на сервере, колонки имеют независимую пагинацию." actions={<>
       <Button variant="secondary" onClick={()=>void editPipeline()}>Создать воронку</Button>{" "}
       {activePipeline&&<Button variant="secondary" onClick={()=>void editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
-      <Button disabled={mutation.busy||mutation.pending||!activePipeline||!readyStage} onClick={()=>{
+      <Button disabled={mutation.busy||mutation.pending||editorRead.busy||!activePipeline||!readyStage} onClick={()=>{
         setSelected(undefined);setAdvance(undefined);setFormAccountId("");
         setProbabilityChoice(String(ProbabilitySource.STAGE_DEFAULT));
         setEditorMode("create");mutation.changed();

@@ -47,9 +47,9 @@ export function DealContactPicker({accountId,initialContactId=""}:{
   accountId:string;initialContactId?:string;
 }) {
   const [value,setValue]=useState(initialContactId);
-  const contacts=useQuery(useCallback(async()=>{
+  const contacts=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!accountId)return [] as ContactPoint[];
-    const account=(await api.accounts.getAccount({accountId})).account;
+    const account=(await api.accounts.getAccount({accountId},{signal})).account;
     if(!account)throw Error("Клиент не найден");
     const result:ContactPoint[]=[];
     for(const party of account.parties) {
@@ -58,7 +58,7 @@ export function DealContactPicker({accountId,initialContactId=""}:{
       do {
         const page=await api.contactPoints.listContactPoints({
           partyId:party.partyId,page:{pageSize:100,pageToken:token}
-        });
+        },{signal});
         result.push(...page.contactPoints.filter(point=>point.status===ContactPointStatus.ACTIVE));
         token=page.pageInfo?.nextPageToken??"";
         if(token&&seen.has(token))throw Error("Повторный курсор контактов");
@@ -98,7 +98,7 @@ function eventLabel(kind:DealEventKind):string {
 export function DealHistory({dealId,accountId}:{dealId:string;accountId:string}){
   const [cursor,setCursor]=useState("");
   const history=useQuery(useCallback(
-    ()=>api.deals.listDealEvents({dealId,page:{pageSize:25,pageToken:cursor}}),
+    (signal:AbortSignal)=>api.deals.listDealEvents({dealId,page:{pageSize:25,pageToken:cursor}},{signal}),
     [dealId,cursor]
   ));
   const next=history.data?.pageInfo?.nextPageToken??"";
@@ -126,11 +126,11 @@ export function DealHistory({dealId,accountId}:{dealId:string;accountId:string})
 // One canonical GetDeal/ContactPoint read projection for inline/full page.
 export function DealDetails({dealId,onEdit,onClose,onReopen}:{dealId:string;
  onEdit?:()=>void;onClose?:()=>void;onReopen?:()=>void}) {
-  const details=useQuery(useCallback(async()=>{
-    const deal=(await api.deals.getDeal({dealId})).deal;
+  const details=useQuery(useCallback(async(signal:AbortSignal)=>{
+    const deal=(await api.deals.getDeal({dealId},{signal})).deal;
     if(!deal)throw Error("Сделка не найдена");
     const contact=deal.primaryContactId?
-      (await api.contactPoints.getContactPoint({contactPointId:deal.primaryContactId})).contactPoint:
+      (await api.contactPoints.getContactPoint({contactPointId:deal.primaryContactId},{signal})).contactPoint:
       undefined;
     return {deal,contact};
   },[dealId]));

@@ -1,29 +1,58 @@
-import {useCallback,useEffect,useRef,useState} from "react";
+import {useCallback,useEffect,useLayoutEffect,useRef,useState} from "react";
 import {Button,FeedbackPanel} from "@ultimate-crm/ui";
 import type {MutationReceipt, CrmFailure} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
 import {registerNavigationBlocker} from "./navigation";
 
-export function useQuery<T>(load:()=>Promise<T>) {
-  const [data,setData]=useState<T>();
-  const [error,setError]=useState("");
-  const [busy,setBusy]=useState(false);
-  const sequence=useRef(0);
-  const reload=useCallback(async()=>{
-    const current=++sequence.current;
-    setBusy(true);setError("");
+const READ_TIMEOUT_MS=15_000;
+type ReadLoad<T>=(signal:AbortSignal)=>Promise<T>;
+type ReadState<T>={load:ReadLoad<T>;data:T|undefined;busy:boolean;error:string};
+
+// One state owner for automatic queries and explicit read actions.
+function useRead<T>() {
+  const [state,setState]=useState<ReadState<T>>();
+  const active=useRef<AbortController|null>(null);
+  const cancel=useCallback(()=>{
+    const previous=active.current;
+    active.current=null;
+    previous?.abort();
+  },[]);
+  const execute=useCallback(async(load:ReadLoad<T>)=>{
+    cancel();
+    const controller=new AbortController();
+    active.current=controller;
+    const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(READ_TIMEOUT_MS)]);
+    setState(previous=>({load,data:previous?.load===load?previous.data:undefined,busy:true,error:""}));
     try {
-      const result=await load();
-      if(current===sequence.current)setData(result);
-      return result;
-    } catch(error) {
-      if(current===sequence.current)setError(api.describeError(error));
+      const data=await load(signal);
+      signal.throwIfAborted();
+      setState({load,data,busy:false,error:""});
+      return data;
+    }catch(error){
+      if(active.current===controller)
+        setState(previous=>({load,data:previous?.load===load?previous.data:undefined,busy:false,
+          error:signal.aborted&&!controller.signal.aborted?"Время ожидания чтения истекло.":api.describeError(error)}));
       throw error;
-    } finally {if(current===sequence.current)setBusy(false);}
-  },[load]);
-  useEffect(()=>{void reload().catch(()=>{});return()=>{sequence.current++;};},[reload]);
-  return {data,error,busy,reload};
+    }finally{
+      if(active.current===controller)active.current=null;
+    }
+  },[cancel]);
+  useLayoutEffect(()=>cancel,[cancel]);
+  return {state,execute,cancel};
 }
+
+export function useQuery<T>(load:ReadLoad<T>) {
+  const {state,execute,cancel}=useRead<T>();
+  const latest=useRef(load);
+  useLayoutEffect(()=>{latest.current=load;return cancel;},[load,cancel]);
+  const reload=useCallback(()=>execute(latest.current),[execute]);
+  useEffect(()=>{void reload().catch(()=>{});},[load,reload]);
+  // Never present an old filter/record/page result as the new key's data.
+  const current=state?.load===load?state:undefined;
+  return {data:current?.data,error:current?.error??"",busy:current?.busy??true,
+    stale:current?.data!==undefined&&(current.busy||!!current.error),reload};
+}
+
 type ReceiptProof=Pick<MutationReceipt,"requestId"|"originalRequestId"|"resourceVersion">;
 type MutationWrite=()=>Promise<{receipt?:MutationReceipt|undefined}>;
 type ReceiptMarker={dealId:string;key:string;expectedVersion:string};
@@ -38,7 +67,7 @@ type Pending={kind:"live";intent:Extract<MutationIntent,{preserve:true}>}|
   {kind:"stored";marker:ReceiptMarker}|{kind:"unreadable"};
 type RecoveryOptions={
   storageKey:string;
-  lookup:(marker:ReceiptMarker)=>Promise<ReceiptProof|undefined>;
+  lookup:(marker:ReceiptMarker,signal:AbortSignal)=>Promise<ReceiptProof|undefined>;
   refresh:()=>Promise<unknown>;
 };
 type MutationFeedback={tone:"success"|"warning"|"danger";text:string;fields?:CrmFailure["fieldViolations"]};
@@ -172,7 +201,7 @@ export function useMutation(recovery?:RecoveryOptions) {
     if(!recovery||inFlight.current)return;
     inFlight.current=true;setBusy(true);
     try {
-      const receipt=await recovery.lookup(marker);
+      const receipt=await recovery.lookup(marker,AbortSignal.timeout(READ_TIMEOUT_MS));
       if(!matchesReceipt(marker,receipt)){
         setNotice({tone:"warning",text:"Результат записи не подтверждён. Совпадающее подтверждение отсутствует. Это не доказывает откат записи."});
         return;
@@ -227,10 +256,11 @@ export function MutationNotice({state}:{state:ReturnType<typeof useMutation>}) {
     </FeedbackPanel>
   </div>:null;
 }
-export function QueryNotice({query}:{query:{busy:boolean;error:string;reload:()=>Promise<unknown>}}) {
-  return query.error?<FeedbackPanel tone="danger" title={query.error}
-    action={<Button onClick={()=>void query.reload().catch(()=>{})}>Повторить чтение</Button>}/>:
-    query.busy?<p role="status">Загрузка…</p>:null;
+export function QueryNotice({query}:{query:{busy:boolean;error:string;stale?:boolean;reload?:()=>Promise<unknown>}}) {
+  const {reload}=query;
+  return query.error?<FeedbackPanel tone="danger" title={(query.stale?"Данные устарели. ":"")+query.error}
+    action={reload?<Button onClick={()=>void reload().catch(()=>{})}>Повторить чтение</Button>:undefined}/>:
+    query.busy?<p role="status">{query.stale?"Обновление… Показаны предыдущие данные.":"Загрузка…"}</p>:null;
 }
 export function Paging({next,busy,onNext,onFirst}:{next:string;busy:boolean;onNext:()=>void;onFirst:()=>void}) {
   return <p><Button variant="secondary" disabled={busy} onClick={onFirst}>В начало</Button>{" "}
@@ -238,13 +268,9 @@ export function Paging({next,busy,onNext,onFirst}:{next:string;busy:boolean;onNe
 }
 
 export function useReadAction<T>() {
-  const [data,setData]=useState<T>();
-  const [error,setError]=useState("");
-  const [busy,setBusy]=useState(false);
-  const run=async(read:()=>Promise<T>)=>{
-    setBusy(true);setError("");setData(undefined);
-    try {setData(await read());}catch(error){setError(api.describeError(error));}
-    finally{setBusy(false);}
-  };
-  return {data,error,busy,run};
+  const {state,execute}=useRead<T>();
+  const run=useCallback(async(read:ReadLoad<T>)=>{
+    try{return await execute(read);}catch{return undefined;}
+  },[execute]);
+  return {data:state?.data,error:state?.error??"",busy:state?.busy??false,run};
 }
