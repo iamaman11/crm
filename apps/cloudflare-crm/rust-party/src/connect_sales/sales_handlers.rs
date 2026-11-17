@@ -897,12 +897,10 @@ impl sale_wire::DealService for SalesV2Service {
                         diagnostics::read_failure(&self.request_id, "sales_receipt_lookup", &error);
                         ConnectError::unavailable("SALES_RECEIPT_READ_FAILED")
                     })?
-                    .map(|(original, version)| core_v2::MutationReceipt {
+                    .map(|(original, version)| core_v2::MutationCommitEvidence {
                         request_id: self.request_id.clone(),
                         resource_version: version,
-                        original_request_id: Some(original),
-                        // Receipt lookup is a read, not another execution or replay.
-                        replayed: false,
+                        original_request_id: original,
                         ..Default::default()
                     })
             }

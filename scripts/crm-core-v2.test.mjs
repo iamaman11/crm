@@ -64,3 +64,14 @@ test("the commit outcome and original request ID have stable generated wire sema
   ["MUTATION_COMMIT_OUTCOME_UNCONFIRMED",2],
  ]);
 });
+
+test("read-only commit evidence never claims another write or replay",()=>{
+ assert.deepEqual(message("MutationCommitEvidence").field.map(x=>[x.name,x.number,x.type]),[
+  ["request_id",1,9],["resource_version",2,3],["original_request_id",3,9]
+ ]);
+ const sales=set.file.find(x=>x.package==="crm.sales.v2");
+ assert.ok(sales,"compiled Deal service required");
+ const result=sales.messageType.find(x=>x.name==="GetDealResponse");
+ assert.equal(result?.field.find(x=>x.name==="confirmed_mutation")?.typeName,
+  ".crm.core.v2.MutationCommitEvidence");
+});

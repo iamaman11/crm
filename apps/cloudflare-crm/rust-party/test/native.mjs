@@ -1661,7 +1661,7 @@ const receiptRead=await salesV2("GetDeal",admin,{dealId,
 assert.equal(receiptRead.status,200);
 assert.equal(receiptRead.body.confirmedMutation?.originalRequestId,salesCreated.headers.get("x-request-id"));
 assert.equal(receiptRead.body.confirmedMutation?.resourceVersion,1n);
-assert.equal(receiptRead.body.confirmedMutation?.replayed,false);
+assert.equal(Object.hasOwn(receiptRead.body.confirmedMutation,"replayed"),false);
 assert.equal(receiptRead.body.confirmedMutation?.requestId,receiptRead.headers.get("x-request-id"));
 assert.equal((await salesV2("GetDeal",admin,{dealId,receiptIdempotencyKey:"r471-unknown-key"})).body.confirmedMutation,undefined);
 assert.equal((await salesV2("GetDeal",tenantB,{dealId,receiptIdempotencyKey:saleCreate.precondition.idempotencyKey})).status,404);
