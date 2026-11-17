@@ -104,7 +104,10 @@ pub(crate) fn check() -> i32 {
         .unwrap(),
         amount: None,
         expected_close_date: None,
-        probability: crm_core_contracts::BasisPoints::try_new(1000).unwrap(),
+        probability: crm_sales::ProbabilityEstimate::Manual(
+            crm_core_contracts::BasisPoints::try_new(1000).unwrap(),
+        ),
+        forecast_category: crm_sales::ForecastCategory::Pipeline,
         occurred_at_unix_nanos: 100,
     }) {
         Ok(x) => x,

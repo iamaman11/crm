@@ -2078,6 +2078,7 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
         "FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id IN (?,?) ORDER BY id",
         ...ids)).map(row=>[row.kind,row.units]);
       const baseline=metrics.body.currencies;
+      const forecastBaseline=metrics.body.forecastCurrencies;
       assert.deepEqual(await readBalances(),[["text","2345"],["text","2345"]]);
       for(let attempt=0;attempt<12;attempt++){
         const amounts=attempt%2===0?["2346","2344"]:["2345","2345"];
@@ -2101,6 +2102,8 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
         assert.equal(snapshot.body.totalDealCount,1032n);
         assert.deepEqual(snapshot.body.currencies,baseline,
           "a concurrent atomic balance swap must not create a mixed money snapshot");
+        assert.deepEqual(snapshot.body.forecastCurrencies,forecastBaseline,
+          "forecast must share the same consistent snapshot");
       }
       const after=await salesV2("GetPipelineMetrics",viewer,filter);
       assert.equal(after.status,200,describeProtobuf(after.body));
@@ -2134,7 +2137,9 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
         ["$.amount.minor_units","2345",'"2345"'],
         ["$.amount.minor_units","2345.0",'"2345"'],
         ["$.probability_basis_points",'"2000"',"2000"],
-        ["$.probability_basis_points","2000.5","2000"]
+        ["$.probability_basis_points","2000.5","2000"],
+        ["$.probability_source",'"unknown"','"manual"'],
+        ["$.forecast_category",'"unknown"','"pipeline"']
       ]){
         try{
           await invalid(field,bad,invalidId);
@@ -2207,7 +2212,7 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
       assert.equal(final.status,200);
       assert.deepEqual(final.body.currencies,baseline);
       console.log(JSON.stringify({event:"crm.native-r73d-strict-persistence",result:"PASS",
-        invalid_money_types:2,invalid_probability_types:2,board_and_metrics:true,
+        invalid_money_types:2,invalid_probability_types:2,invalid_forecast_metadata_types:2,board_and_metrics:true,
         individual_persisted_i128:true,signed_concurrent_update:true,restored:true}));
     }
     console.log(JSON.stringify({event:"crm.native-r71-kanban-scale",result:"PASS",
@@ -3245,6 +3250,24 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    const persisted=await sql("SELECT json_extract(state,'$.probability_source') AS source,json_extract(state,'$.forecast_category') AS category FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id=?",ids[0]);
    assert.deepEqual(persisted,[{source:"stage_default",category:"commit"}]);
    assert.deepEqual((await metric()).body.forecastCurrencies,summary.body.forecastCurrencies);
+   // Catalog configuration changes must not silently edit existing Deals.
+   const updatedCatalog=await salesV2("UpdatePipeline",admin,{
+     pipelineId,name:"Forecast native",stages:stages.map(stage=>stage.stageId==="qualified"?
+       {...stage,probabilityBasisPoints:6000}:stage),archived:false,
+     precondition:pre("catalog-edit",pipeline.body.pipeline.version)
+   });
+   assert.equal(updatedCatalog.status,200,describeProtobuf(updatedCatalog.body));
+   const retained=await salesV2("GetDeal",viewer,{dealId:ids[0]});
+   assert.equal(retained.status,200);
+   assert.equal(retained.body.deal.probabilityBasisPoints,4500);
+   const refresh=await salesV2("UpdateDeal",admin,{
+     dealId:ids[0],useStageProbability:true,
+     precondition:pre("refresh-default",retained.body.deal.version)
+   });
+   assert.equal(refresh.status,200,describeProtobuf(refresh.body));
+   assert.equal(refresh.body.deal.probabilityBasisPoints,6000);
+   assert.equal(refresh.body.deal.probabilitySource,2);
+   assert.equal((await metric()).body.forecastCurrencies.find(x=>x.category===3&&x.currencyCode==="EUR").weightedMinorUnitsTimesBasisPoints,"60006000");
    assert.equal((await salesV2("GetPipelineMetrics",tenantB,{pipelineId})).status,404);
    console.log(JSON.stringify({event:"crm.native-r73-forecast",result:"PASS",stage_default:true,
      manual_zero:true,move:true,reset:true,category:true,currency:true,close_reopen:true,cas:true,tenant:true}));
