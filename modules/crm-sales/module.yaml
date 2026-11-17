@@ -152,6 +152,34 @@ provides:
         rpc: crm.sales.v2.DealService.GetPipelineMetrics
         request: crm.sales.v2.GetPipelineMetricsRequest
         response: crm.sales.v2.GetPipelineMetricsResponse
+    - id: sales.view.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CreateSalesView
+        request: crm.sales.v2.CreateSalesViewRequest
+        response: crm.sales.v2.CreateSalesViewResponse
+    - id: sales.view.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.UpdateSalesView
+        request: crm.sales.v2.UpdateSalesViewRequest
+        response: crm.sales.v2.UpdateSalesViewResponse
+    - id: sales.view.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetSalesView
+        request: crm.sales.v2.GetSalesViewRequest
+        response: crm.sales.v2.GetSalesViewResponse
+    - id: sales.view.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListSalesViews
+        request: crm.sales.v2.ListSalesViewsRequest
+        response: crm.sales.v2.ListSalesViewsResponse
   events:
     - id: sales.deal.created
       version: 1.0.0
