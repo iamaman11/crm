@@ -39,12 +39,28 @@ test("explicit Access redirect passes",async()=>{
   await x.result;
   assert.equal(x.calls.length,1);
 });
-test("anonymous success, edge 404, and unavailable service never pass",async()=>{
-  for(const status of [200,404,429,503]){
+test("anonymous success fails immediately without retry",async()=>{
+  const x=await run([200,403]);
+  await assert.rejects(x.result,/HTTP 200/);
+  assert.equal(x.calls.length,1);
+  assert.equal(x.events.length,0);
+});
+test("transient edge failure is retried but requires actual denial",async()=>{
+  for(const status of [404,429,502,503,504,524]){
     const x=await run([status,403]);
+    await x.result;
+    assert.equal(x.calls.length,2);
+    assert.deepEqual(x.delays,[1000]);
+    assert.deepEqual(x.events.map(e=>e.result),["RETRY","PASS"]);
+  }
+});
+test("persistent edge failure never passes the bounded readback",async()=>{
+  for(const status of [404,429,502,503,504,524]){
+    const x=await run([status,status,status,403]);
     await assert.rejects(x.result,new RegExp("HTTP "+status));
-    assert.equal(x.calls.length,1);
-    assert.equal(x.events.length,0);
+    assert.equal(x.calls.length,3);
+    assert.deepEqual(x.delays,[1000,2000]);
+    assert.ok(x.events.every(e=>e.result==="RETRY"));
   }
 });
 test("transport retry is bounded and does not turn failure into denial",async()=>{
