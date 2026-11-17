@@ -16,6 +16,32 @@ pub(super) enum ReceiptUncertainty {
     NotFound,
     #[serde(rename = "RECEIPT_DECODE_FAILED")]
     DecodeFailed,
+    #[serde(rename = "D1_ADAPTER_FAILED")]
+    AdapterFailed,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(super) enum ReadFailureReason {
+    AccessProviderFailed,
+    InternalReadError,
+    D1ReadFailed,
+    SalesStateDecodeFailed,
+    SalesMetricsCountOverflow,
+    SalesMetricsMoneyOverflow,
+    SalesMetricsWeightOverflow,
+    SalesMetricsSnapshotTimeInvalid,
+    SalesMetricsStageTimeInvalid,
+    SalesMetricsStageTimeOverflow,
+    SalesMetricsTaskFlagInvalid,
+    SalesBoardCountInvalid,
+    SalesBoardAmountOverflow,
+    SalesBoardAmountCountOverflow,
+}
+impl From<worker::Error> for ReadFailureReason {
+    fn from(_: worker::Error) -> Self {
+        Self::D1ReadFailed
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -54,7 +80,7 @@ enum Event<'a> {
     ReadFailure {
         request_id: &'a str,
         phase: &'static str,
-        reason: &'a str,
+        reason: ReadFailureReason,
     },
     #[serde(rename = "crm.native.mutation.outcome")]
     Mutation {
@@ -66,6 +92,8 @@ enum Event<'a> {
         original_request_id: Option<&'a str>,
         #[serde(skip_serializing_if = "Option::is_none")]
         version: Option<i64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        d1_deal_changes: Option<usize>,
         #[serde(skip_serializing_if = "Option::is_none")]
         domain_code: Option<&'a str>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -99,27 +127,30 @@ pub(super) fn request(
     });
 }
 
-pub(super) fn read_failure(request_id: &str, phase: &'static str, error: &worker::Error) {
-    let reason = match error {
-        worker::Error::RustError(code)
-            if (code.starts_with("SALES_") || code.starts_with("CONTRACT_"))
-                && code.bytes().all(|b| b.is_ascii_uppercase() || b == b'_') =>
-        {
-            code.as_str()
-        }
-        _ => "INTERNAL_READ_ERROR",
-    };
+pub(super) fn read_failure(
+    request_id: &str,
+    phase: &'static str,
+    reason: ReadFailureReason,
+) {
     emit(Event::ReadFailure {
         request_id,
         phase,
         reason,
     });
-    #[cfg(feature = "native-ci")]
-    worker::console_log!(
-        "{}",
-        serde_json::json!({"event":"crm.native-ci.read.failure","request_id":request_id,
-               "phase":phase,"detail":error.to_string()})
-    );
+}
+
+pub(super) fn mutation_adapter_failure(
+    operation: &'static str,
+    request_id: &str,
+) -> ConnectError {
+    mutation_error(
+        operation,
+        request_id,
+        MutationFailure::CommitUnconfirmed {
+            code: "SALES_COMMIT_UNCONFIRMED",
+            reason: ReceiptUncertainty::AdapterFailed,
+        },
+    )
 }
 
 pub(super) fn receipt(
@@ -128,6 +159,7 @@ pub(super) fn receipt(
     original_request_id: Option<&str>,
     version: i64,
     replayed: bool,
+    d1_deal_changes: Option<usize>,
 ) -> core_v2::MutationReceipt {
     emit(Event::Mutation {
         operation,
@@ -140,6 +172,7 @@ pub(super) fn receipt(
         },
         original_request_id,
         version: Some(version),
+        d1_deal_changes,
         domain_code: None,
         connect_code: None,
         reason: None,
@@ -209,6 +242,7 @@ pub(super) fn mutation_error(
         outcome,
         original_request_id: None,
         version: None,
+        d1_deal_changes: None,
         domain_code: Some(&code),
         connect_code: Some(error.code.as_str()),
         reason,

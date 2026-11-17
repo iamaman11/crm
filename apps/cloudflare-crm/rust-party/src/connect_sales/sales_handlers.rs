@@ -307,7 +307,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|error| {
-            diagnostics::read_failure(&self.request_id, "sales_stage_list", &error);
+            diagnostics::read_failure(&self.request_id, "sales_stage_list", error);
             ConnectError::internal("Sales D1 stage list failed")
         })?;
         let deals = list
@@ -370,7 +370,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|error| {
-            diagnostics::read_failure(&self.request_id, "sales_metrics", &error);
+            diagnostics::read_failure(&self.request_id, "sales_metrics", error);
             ConnectError::internal("Sales D1 metrics read failed")
         })?;
         let as_status = |value: DomainDealStatus| match value {
@@ -506,7 +506,7 @@ impl sale_wire::DealService for SalesV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::internal("Sales original D1 create failed"))?
+        .map_err(|_| diagnostics::mutation_adapter_failure("CreateDeal", &self.request_id))?
         .map_err(|failure| diagnostics::mutation_error("CreateDeal", &self.request_id, failure))?;
         RpcResponse::ok(sale_wire::CreateDealResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
@@ -516,6 +516,7 @@ impl sale_wire::DealService for SalesV2Service {
                 saved.original_request_id.as_deref(),
                 saved.deal.version(),
                 saved.replayed,
+                saved.d1_deal_changes,
             ))
             .into(),
             ..Default::default()
@@ -615,7 +616,7 @@ impl sale_wire::DealService for SalesV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::internal("Sales original D1 update failed"))?
+        .map_err(|_| diagnostics::mutation_adapter_failure("UpdateDeal", &self.request_id))?
         .map_err(|failure| diagnostics::mutation_error("UpdateDeal", &self.request_id, failure))?;
         RpcResponse::ok(sale_wire::UpdateDealResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
@@ -625,6 +626,7 @@ impl sale_wire::DealService for SalesV2Service {
                 saved.original_request_id.as_deref(),
                 saved.deal.version(),
                 saved.replayed,
+                saved.d1_deal_changes,
             ))
             .into(),
             ..Default::default()
@@ -666,7 +668,7 @@ impl sale_wire::DealService for SalesV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::internal("Sales original D1 stage advance failed"))?
+        .map_err(|_| diagnostics::mutation_adapter_failure("AdvanceStage", &self.request_id))?
         .map_err(|failure| {
             diagnostics::mutation_error("AdvanceStage", &self.request_id, failure)
         })?;
@@ -678,6 +680,7 @@ impl sale_wire::DealService for SalesV2Service {
                 advanced.saved.original_request_id.as_deref(),
                 advanced.saved.deal.version(),
                 advanced.saved.replayed,
+                advanced.saved.d1_deal_changes,
             ))
             .into(),
             ..Default::default()
@@ -717,7 +720,7 @@ impl sale_wire::DealService for SalesV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::internal("Sales original D1 close failed"))?
+        .map_err(|_| diagnostics::mutation_adapter_failure("CloseDeal", &self.request_id))?
         .map_err(|failure| diagnostics::mutation_error("CloseDeal", &self.request_id, failure))?;
         RpcResponse::ok(sale_wire::CloseDealResponse {
             deal: Some(Self::convert(&saved.saved.deal)?).into(),
@@ -727,6 +730,7 @@ impl sale_wire::DealService for SalesV2Service {
                 saved.saved.original_request_id.as_deref(),
                 saved.saved.deal.version(),
                 saved.saved.replayed,
+                saved.saved.d1_deal_changes,
             ))
             .into(),
             ..Default::default()
@@ -759,7 +763,7 @@ impl sale_wire::DealService for SalesV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::internal("Sales original D1 reopen failed"))?
+        .map_err(|_| diagnostics::mutation_adapter_failure("ReopenDeal", &self.request_id))?
         .map_err(|failure| diagnostics::mutation_error("ReopenDeal", &self.request_id, failure))?;
         RpcResponse::ok(sale_wire::ReopenDealResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
@@ -769,6 +773,7 @@ impl sale_wire::DealService for SalesV2Service {
                 saved.original_request_id.as_deref(),
                 saved.deal.version(),
                 saved.replayed,
+                saved.d1_deal_changes,
             ))
             .into(),
             ..Default::default()
@@ -807,14 +812,28 @@ impl sale_wire::DealService for SalesV2Service {
         let db = self.d1()?;
         if sales_deals::load(&db, &self.tenant, &id)
             .await
-            .map_err(|_| ConnectError::internal("Sales history owner lookup failed"))?
+            .map_err(|_| {
+            diagnostics::read_failure(
+                &self.request_id,
+                "sales_history_owner",
+                diagnostics::ReadFailureReason::InternalReadError,
+            );
+            ConnectError::internal("Sales history owner lookup failed")
+        })?
             .is_none()
         {
             return Err(ConnectError::not_found("SALES_DEAL_NOT_FOUND"));
         }
         let (rows, next) = sales_deals::list_events(&db, &self.tenant, &id, before, size as usize)
             .await
-            .map_err(|_| ConnectError::internal("Sales D1 history read failed"))?;
+            .map_err(|_| {
+            diagnostics::read_failure(
+                &self.request_id,
+                "sales_history_read",
+                diagnostics::ReadFailureReason::InternalReadError,
+            );
+            ConnectError::internal("Sales D1 history read failed")
+        })?;
         let events = rows
             .into_iter()
             .map(|row| {
@@ -886,7 +905,14 @@ impl sale_wire::DealService for SalesV2Service {
         let db = self.d1()?;
         let deal = sales_deals::load(&db, &self.tenant, &id)
             .await
-            .map_err(|_| ConnectError::internal("Sales original D1 read failed"))?
+            .map_err(|_| {
+            diagnostics::read_failure(
+                &self.request_id,
+                "sales_deal_read",
+                diagnostics::ReadFailureReason::InternalReadError,
+            );
+            ConnectError::internal("Sales original D1 read failed")
+        })?
             .ok_or_else(|| ConnectError::not_found("SALES_DEAL_NOT_FOUND"))?;
         let confirmed_mutation = match input.receipt_idempotency_key.as_deref() {
             None => None,
@@ -894,7 +920,7 @@ impl sale_wire::DealService for SalesV2Service {
                 sales_deals::confirmed_receipt(&db, &self.tenant, &id, key)
                     .await
                     .map_err(|error| {
-                        diagnostics::read_failure(&self.request_id, "sales_receipt_lookup", &error);
+                        diagnostics::read_failure(&self.request_id, "sales_receipt_lookup", error);
                         ConnectError::unavailable("SALES_RECEIPT_READ_FAILED")
                     })?
                     .map(|(original, version)| core_v2::MutationCommitEvidence {
@@ -958,7 +984,14 @@ impl sale_wire::DealService for SalesV2Service {
             account,
         )
         .await
-        .map_err(|_| ConnectError::internal("Sales original D1 list failed"))?;
+        .map_err(|_| {
+            diagnostics::read_failure(
+                &self.request_id,
+                "sales_deal_list",
+                diagnostics::ReadFailureReason::InternalReadError,
+            );
+            ConnectError::internal("Sales original D1 list failed")
+        })?;
         let deals = list
             .iter()
             .map(Self::convert)

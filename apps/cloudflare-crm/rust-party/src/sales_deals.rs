@@ -3,7 +3,7 @@
 //! crm-sales and crm-core-contracts, never the test pilot's crm_deals model.
 use super::{
     bind,
-    diagnostics::{MutationFailure, ReceiptUncertainty},
+    diagnostics::{MutationFailure, ReadFailureReason, ReceiptUncertainty},
     now_nanos,
 };
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money, Patch};
@@ -159,14 +159,14 @@ pub(super) async fn confirmed_receipt(
     tenant: &str,
     id: &str,
     key: &str,
-) -> Result<Option<(String, i64)>> {
+) -> std::result::Result<Option<(String, i64)>, ReadFailureReason> {
     let Some(receipt) = prior(db, tenant, key).await? else {
         return Ok(None);
     };
     let Some(original) = receipt.original_request_id else {
         return Ok(None);
     };
-    let deal = decode(&receipt.state)?;
+    let deal = decode(&receipt.state).map_err(|_| ReadFailureReason::SalesStateDecodeFailed)?;
     if deal.deal_id().as_str() != id || original.is_empty() {
         return Ok(None);
     }
@@ -249,6 +249,7 @@ pub(super) struct SalesSaved {
     pub(super) deal: Deal,
     pub(super) replayed: bool,
     pub(super) original_request_id: Option<String>,
+    pub(super) d1_deal_changes: Option<usize>,
 }
 
 fn rejected<T>(
@@ -279,14 +280,16 @@ fn replay(receipt: Receipt, digest: &str) -> std::result::Result<SalesSaved, Mut
         deal,
         replayed: true,
         original_request_id: receipt.original_request_id,
+        d1_deal_changes: None,
     })
 }
 
-fn acknowledged(deal: Deal, trace: &str) -> SalesSaved {
+fn acknowledged(deal: Deal, trace: &str, changes: usize) -> SalesSaved {
     SalesSaved {
         deal,
         replayed: false,
         original_request_id: Some(trace.to_owned()),
+        d1_deal_changes: Some(changes),
     }
 }
 
@@ -492,17 +495,13 @@ pub(super) async fn create_typed(
           JsValue::from_str(account_id.as_str()),JsValue::from_str(&saved),
           JsValue::from_f64(deal.version() as f64),JsValue::from_str(k),
           JsValue::from_str(&digest),JsValue::from_str(trace),JsValue::from_str(actor)])?.run().await;
-    if r.as_ref()
-        .ok()
-        .and_then(changes)
-        .is_some_and(|count| count > 0)
-    {
+    if let Some(count) = r.as_ref().ok().and_then(changes).filter(|count| *count > 0) {
         // Discard the genuine D1 write acknowledgement in isolated CI only.
         #[cfg(feature = "native-ci")]
         if matches!(k, "r471-ci-ack-lost" | "r471-ci-receipt-read-fail") {
             return Ok(reconcile(db, tenant, k, &digest, false).await);
         }
-        return Ok(Ok(acknowledged(deal, trace)));
+        return Ok(Ok(acknowledged(deal, trace, count)));
     }
     Ok(reconcile(db, tenant, k, &digest, false).await)
 }
@@ -657,8 +656,8 @@ pub(super) async fn update_typed(
           JsValue::from_str(actor),JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
     let count = result.as_ref().ok().and_then(changes);
-    if count.is_some_and(|value| value > 0) {
-        return Ok(Ok(acknowledged(deal, trace)));
+    if let Some(changed) = count.filter(|value| *value > 0) {
+        return Ok(Ok(acknowledged(deal, trace, changed)));
     }
     Ok(reconcile(db, tenant, key, &digest, count == Some(0)).await)
 }
@@ -908,19 +907,20 @@ async fn stage_mutation(
     writes.push(link_stmt);
     let count = writes.len();
     let result = db.batch(writes).await;
-    let committed = result.as_ref().ok().is_some_and(|results| {
-        results.len() == count
-            && results.iter().all(worker::d1::D1Result::success)
-            && results
-                .first()
-                .and_then(changes)
-                .is_some_and(|value| value > 0)
-    });
-    if !committed {
+    let changed = result
+        .as_ref()
+        .ok()
+        .filter(|results| {
+            results.len() == count && results.iter().all(worker::d1::D1Result::success)
+        })
+        .and_then(|results| results.first())
+        .and_then(changes)
+        .filter(|value| *value > 0);
+    let Some(changed) = changed else {
         return Ok(reconcile(db, tenant, key, &digest, false)
             .await
             .map(|saved| AdvanceSaved { saved, link: None }));
-    }
+    };
     let link = Some(LinkOutcome {
         delivery_id: prepared.delivery_id,
         applied: prepared.task.is_some(),
@@ -930,7 +930,7 @@ async fn stage_mutation(
             .map(|x| x.task_id().as_str().to_owned()),
     });
     Ok(Ok(AdvanceSaved {
-        saved: acknowledged(deal, trace),
+        saved: acknowledged(deal, trace, changed),
         link,
     }))
 }
@@ -1008,8 +1008,8 @@ pub(super) async fn reopen_typed(
         ],
     )?.run().await;
     let count = result.as_ref().ok().and_then(changes);
-    if count.is_some_and(|value| value > 0) {
-        return Ok(Ok(acknowledged(deal, trace)));
+    if let Some(changed) = count.filter(|value| *value > 0) {
+        return Ok(Ok(acknowledged(deal, trace, changed)));
     }
     Ok(reconcile(db, tenant, key, &digest, count == Some(0)).await)
 }
@@ -1098,21 +1098,21 @@ struct OperationalCounts {
     age_seconds: i128,
     overdue_tasks: u64,
 }
-fn count_one(value: &mut u64) -> Result<()> {
+fn count_one(value: &mut u64) -> std::result::Result<(), ReadFailureReason> {
     *value = value
         .checked_add(1)
-        .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
+        .ok_or(ReadFailureReason::SalesMetricsCountOverflow)?;
     Ok(())
 }
-fn add_money(entry: &mut (i128, i128, u64), units: i128, weighted: i128) -> Result<()> {
+fn add_money(entry: &mut (i128, i128, u64), units: i128, weighted: i128) -> std::result::Result<(), ReadFailureReason> {
     entry.0 = entry
         .0
         .checked_add(units)
-        .ok_or_else(|| worker::Error::RustError("SALES_METRICS_MONEY_OVERFLOW".into()))?;
+        .ok_or(ReadFailureReason::SalesMetricsMoneyOverflow)?;
     entry.1 = entry
         .1
         .checked_add(weighted)
-        .ok_or_else(|| worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into()))?;
+        .ok_or(ReadFailureReason::SalesMetricsWeightOverflow)?;
     count_one(&mut entry.2)
 }
 // Proleptic Gregorian UTC day index; CalendarDate validates input first.
@@ -1155,7 +1155,7 @@ pub(super) async fn pipeline_metrics(
     pipeline_id: &str,
     status: Option<DealStatus>,
     account: Option<&str>,
-) -> Result<PipelineMetrics> {
+) -> std::result::Result<PipelineMetrics, ReadFailureReason> {
     let mut condition =
         String::from("d.tenant=? AND json_extract(d.state,'$.stage.pipeline_id')=?");
     let mut arguments = vec![JsValue::from_str(tenant), JsValue::from_str(pipeline_id)];
@@ -1209,7 +1209,7 @@ pub(super) async fn pipeline_metrics(
         Some(row) => row
             .as_of_nanos
             .parse::<i64>()
-            .map_err(|_| worker::Error::RustError("SALES_METRICS_SNAPSHOT_TIME_INVALID".into()))?,
+            .map_err(|_| ReadFailureReason::SalesMetricsSnapshotTimeInvalid)?,
         None => now_nanos(),
     };
     let as_of_text = as_of_nanos.to_string();
@@ -1223,11 +1223,9 @@ pub(super) async fn pipeline_metrics(
     let mut forecast_money = BTreeMap::<(ForecastCategory, String), (i128, i128, u64)>::new();
     for row in &rows {
         if row.as_of_nanos != as_of_text {
-            return Err(worker::Error::RustError(
-                "SALES_METRICS_SNAPSHOT_TIME_INVALID".into(),
-            ));
+            return Err(ReadFailureReason::SalesMetricsSnapshotTimeInvalid);
         }
-        let deal = decode(&row.state)?;
+        let deal = decode(&row.state).map_err(|_| ReadFailureReason::SalesStateDecodeFailed)?;
         let stage_id = deal.stage().stage_id().as_str();
         let status = deal.status();
         let status_key = match status {
@@ -1237,13 +1235,13 @@ pub(super) async fn pipeline_metrics(
         };
         total_count = total_count
             .checked_add(1)
-            .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
+            .ok_or(ReadFailureReason::SalesMetricsCountOverflow)?;
         let status_group = status_groups
             .entry((stage_id.to_owned(), status_key.to_owned()))
             .or_default();
         *status_group = status_group
             .checked_add(1)
-            .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
+            .ok_or(ReadFailureReason::SalesMetricsCountOverflow)?;
         if status == DealStatus::Open {
             let counts = forecast_categories
                 .entry(deal.forecast_category())
@@ -1272,13 +1270,9 @@ pub(super) async fn pipeline_metrics(
             // Pre-0013 Deals can have no immutable entry event. Never
             // synthesize a historical timestamp from updated_at.
             if let Some(start) = &row.stage_entered_at_nanos {
-                let started = start.parse::<i64>().map_err(|_| {
-                    worker::Error::RustError("SALES_METRICS_STAGE_TIME_INVALID".into())
-                })?;
+                let started = start.parse::<i64>().map_err(|_| ReadFailureReason::SalesMetricsStageTimeInvalid)?;
                 if started <= 0 {
-                    return Err(worker::Error::RustError(
-                        "SALES_METRICS_STAGE_TIME_INVALID".into(),
-                    ));
+                    return Err(ReadFailureReason::SalesMetricsStageTimeInvalid);
                 }
                 // A Worker event may be ahead of the D1 clock; do not invent age.
                 if started <= as_of_nanos {
@@ -1286,18 +1280,14 @@ pub(super) async fn pipeline_metrics(
                     group.age_seconds = group
                         .age_seconds
                         .checked_add(i128::from((as_of_nanos - started) / 1_000_000_000))
-                        .ok_or_else(|| {
-                            worker::Error::RustError("SALES_METRICS_STAGE_TIME_OVERFLOW".into())
-                        })?;
+                        .ok_or(ReadFailureReason::SalesMetricsStageTimeOverflow)?;
                 }
             }
             match row.has_overdue_linked_task {
                 1 => count_one(&mut group.overdue_tasks)?,
                 0 => (),
                 _ => {
-                    return Err(worker::Error::RustError(
-                        "SALES_METRICS_TASK_FLAG_INVALID".into(),
-                    ));
+                    return Err(ReadFailureReason::SalesMetricsTaskFlagInvalid);
                 }
             }
         }
@@ -1305,7 +1295,7 @@ pub(super) async fn pipeline_metrics(
             let units = amount.minor_units();
             let weighted = units
                 .checked_mul(i128::from(deal.probability().get()))
-                .ok_or_else(|| worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into()))?;
+                .ok_or(ReadFailureReason::SalesMetricsWeightOverflow)?;
             let entry = money_groups
                 .entry((
                     stage_id.to_owned(),
@@ -1421,7 +1411,7 @@ pub(super) async fn list_stage_page(
     db: &D1Database,
     tenant: &str,
     query: StageListQuery<'_>,
-) -> Result<(Vec<Deal>, Option<String>, u64, Vec<StageCurrencyTotal>)> {
+) -> std::result::Result<(Vec<Deal>, Option<String>, u64, Vec<StageCurrencyTotal>), ReadFailureReason> {
     let StageListQuery {
         pipeline_id,
         stage_id,
@@ -1459,11 +1449,11 @@ pub(super) async fn list_stage_page(
         .await?
         .results::<PagedRow>()?;
     let total = u64::try_from(rows.len())
-        .map_err(|_| worker::Error::RustError("SALES_BOARD_COUNT_INVALID".into()))?;
+        .map_err(|_| ReadFailureReason::SalesBoardCountInvalid)?;
     let mut summary = BTreeMap::<String, (i128, u64)>::new();
     let mut page = Vec::with_capacity(limit + 1);
     for row in &rows {
-        let deal = decode(&row.state)?;
+        let deal = decode(&row.state).map_err(|_| ReadFailureReason::SalesStateDecodeFailed)?;
         if let Some(amount) = deal.amount() {
             let entry = summary
                 .entry(amount.currency().to_string())
@@ -1471,10 +1461,8 @@ pub(super) async fn list_stage_page(
             entry.0 = entry
                 .0
                 .checked_add(amount.minor_units())
-                .ok_or_else(|| worker::Error::RustError("SALES_BOARD_AMOUNT_OVERFLOW".into()))?;
-            entry.1 = entry.1.checked_add(1).ok_or_else(|| {
-                worker::Error::RustError("SALES_BOARD_AMOUNT_COUNT_OVERFLOW".into())
-            })?;
+                .ok_or(ReadFailureReason::SalesBoardAmountOverflow)?;
+            entry.1 = entry.1.checked_add(1).ok_or(ReadFailureReason::SalesBoardAmountCountOverflow)?;
         }
         if row.id.as_str() > after && page.len() <= limit {
             page.push((row.id.clone(), deal));
