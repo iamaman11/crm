@@ -990,24 +990,31 @@ pub(super) async fn pipeline_metrics(
     // One tenant-scoped keyset scan; event and Task lookups reuse composite
     // indexes. Neither account-level tasks nor ordinary edits reset stage age.
     let sql = format!(
-        "SELECT d.id,json_extract(d.state,'$.stage.stage_id') AS stage_id,\
-         json_extract(d.state,'$.status') AS status,\
-         json_extract(d.state,'$.amount.currency') AS currency_code,\
-         CAST(json_extract(d.state,'$.amount.minor_units') AS TEXT) AS minor_units,\
-         CAST(json_extract(d.state,'$.probability_basis_points') AS INTEGER) AS probability_basis_points,\
-         json_extract(d.state,'$.expected_close_date.year') AS expected_close_year,\
-         json_extract(d.state,'$.expected_close_date.month') AS expected_close_month,\
-         json_extract(d.state,'$.expected_close_date.day') AS expected_close_day,\
-         (SELECT CAST(e.occurred_at_unix_nanos AS TEXT) FROM crm_sales_deal_events e\
-          WHERE e.tenant=d.tenant AND e.deal_id=d.id AND e.action IN ('created','moved')\
-          ORDER BY e.deal_version DESC LIMIT 1) AS stage_entered_at_nanos,\
-         EXISTS(SELECT 1 FROM crm_sales_link_delivery_records l\
-           JOIN crm_activity_task_records t ON t.tenant=l.tenant AND t.id=l.task_id\
-           WHERE l.tenant=d.tenant AND l.deal_id=d.id\
-            AND json_extract(t.state,'$.status')='open'\
-            AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER) < CAST(? AS INTEGER))\
-           AS has_overdue_linked_task\
-         FROM crm_sales_deal_records d WHERE {condition} ORDER BY d.id LIMIT ?"
+        r#"SELECT d.id,
+           json_extract(d.state,'$.stage.stage_id') AS stage_id,
+           json_extract(d.state,'$.status') AS status,
+           json_extract(d.state,'$.amount.currency') AS currency_code,
+           CAST(json_extract(d.state,'$.amount.minor_units') AS TEXT) AS minor_units,
+           CAST(json_extract(d.state,'$.probability_basis_points') AS INTEGER) AS probability_basis_points,
+           json_extract(d.state,'$.expected_close_date.year') AS expected_close_year,
+           json_extract(d.state,'$.expected_close_date.month') AS expected_close_month,
+           json_extract(d.state,'$.expected_close_date.day') AS expected_close_day,
+           (SELECT CAST(e.occurred_at_unix_nanos AS TEXT)
+              FROM crm_sales_deal_events e
+             WHERE e.tenant=d.tenant AND e.deal_id=d.id
+               AND e.action IN ('created','moved')
+             ORDER BY e.deal_version DESC LIMIT 1) AS stage_entered_at_nanos,
+           EXISTS (SELECT 1
+                     FROM crm_sales_link_delivery_records l
+                     JOIN crm_activity_task_records t
+                       ON t.tenant=l.tenant AND t.id=l.task_id
+                    WHERE l.tenant=d.tenant AND l.deal_id=d.id
+                      AND json_extract(t.state,'$.status')='open'
+                      AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER)
+                        < CAST(? AS INTEGER)) AS has_overdue_linked_task
+         FROM crm_sales_deal_records d
+        WHERE {condition}
+        ORDER BY d.id LIMIT ?"#
     );
     const METRICS_BATCH: usize = 256;
     let as_of_nanos = now_nanos();
