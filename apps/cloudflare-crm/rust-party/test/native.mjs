@@ -2079,9 +2079,17 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
         await new Promise(resolve=>setTimeout(resolve,1));
         fixtureDb.exec("BEGIN IMMEDIATE");
         try{
-          const amounts=attempt%2===0?[2346,2344]:[2345,2345];
+          // node:sqlite binds JS Number as REAL even for whole numbers.
+          // The canonical Money minor-unit value must be a JSON integer.
+          const amounts=attempt%2===0?[2346n,2344n]:[2345n,2345n];
           for(const [i,id] of ids.entries())
             assert.equal(update.run(amounts[i],"r7-scale-key-swap-"+attempt+"-"+i,randomUUID(),id).changes,1);
+          const written=fixtureDb.prepare("SELECT json_type(state,'$.amount.minor_units') AS kind,"+
+            "CAST(json_extract(state,'$.amount.minor_units') AS TEXT) AS units "+
+            "FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id IN (?,?) ORDER BY id")
+            .all(...ids).map(row=>[row.kind,row.units]);
+          assert.deepEqual(written,amounts.map(n=>["integer",String(n)]),
+            "concurrent fixture must preserve exact domain Money representation");
           fixtureDb.exec("COMMIT");
         }catch(error){fixtureDb.exec("ROLLBACK");throw error;}
         const snapshot=await read;
