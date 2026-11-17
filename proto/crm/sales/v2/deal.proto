@@ -360,6 +360,7 @@ message PipelineOperationalMetric {
   // Not all Activities under the Account are implicitly Deal-related.
   uint64 overdue_linked_task_count = 9;
 }
+
 // Disjoint prospective buckets, only OPEN Deals. OMITTED is explicitly
 // excluded from forecasts; show its facts separately for reconciliation.
 message ForecastCategoryMetric {
