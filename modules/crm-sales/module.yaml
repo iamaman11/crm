@@ -145,6 +145,13 @@ provides:
         rpc: crm.sales.v2.DealService.ListStageDeals
         request: crm.sales.v2.ListStageDealsRequest
         response: crm.sales.v2.ListStageDealsResponse
+    - id: sales.pipeline.metrics
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetPipelineMetrics
+        request: crm.sales.v2.GetPipelineMetricsRequest
+        response: crm.sales.v2.GetPipelineMetricsResponse
   events:
     - id: sales.deal.created
       version: 1.0.0
