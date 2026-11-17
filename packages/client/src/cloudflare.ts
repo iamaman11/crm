@@ -34,7 +34,7 @@ export { PartyKind } from "../gen/crm/parties/v3/party_pb";
 export { ContactPointKind, ContactPointStatus } from "../gen/crm/contact_points/v2/contact_point_pb";
 export { RelationshipDirectionality, RelationshipStatus } from "../gen/crm/party_relationships/v2/relationship_pb";
 export { TaskPriority, TaskStatus } from "../gen/crm/activities/v2/task_pb";
-export { DealStatus, DealEventKind } from "../gen/crm/sales/v2/deal_pb";
+export { DealStatus, DealEventKind, ProbabilitySource, ForecastCategory } from "../gen/crm/sales/v2/deal_pb";
 export { CommunicationChannel, ConsentEffect, ConsentStatus, EvaluationReason } from "../gen/crm/consents/v2/consent_pb";
 export { PrivacyCaseKind, PrivacyCaseStatus } from "../gen/crm/customer_privacy/v2/case_pb";
 export { RawPayloadPolicy } from "../gen/crm/customer_enrichment/v2/config_pb";

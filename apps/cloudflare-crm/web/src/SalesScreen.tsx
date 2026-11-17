@@ -1,12 +1,12 @@
 import {useCallback,useState} from "react";
 import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import type {Deal,SalesPipeline,SalesDealView} from "@ultimate-crm/client/cloudflare";
-import {DealStatus} from "@ultimate-crm/client/cloudflare";
+import {DealStatus,ProbabilitySource,ForecastCategory} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,MutationNotice,QueryNotice} from "./hooks";
 import {AccountPicker} from "./Pickers";
-import {DealContactPicker,DealDetails,inputDate,parseDate} from "./DealRecord";
+import {DealContactPicker,DealDetails,inputDate,parseDate,forecastCategoryText,probabilitySourceText} from "./DealRecord";
 import {dealHref} from "./routes";
 import {minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText} from "./money";
 import styles from "./App.module.css";
@@ -71,6 +71,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const [editorMode,setEditorMode]=useState<EditorMode>(null);
   const [draftId,setDraftId]=useState(newId);
   const [formAccountId,setFormAccountId]=useState("");
+  const [probabilityChoice,setProbabilityChoice]=useState(String(ProbabilitySource.STAGE_DEFAULT));
   const [expandedDeal,setExpandedDeal]=useState("");
   const [detailRevision,setDetailRevision]=useState(0);
   const [pipelineEditor,setPipelineEditor]=useState<SalesPipeline|"new"|null>(null);
@@ -171,6 +172,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       const value=(await api.deals.getDeal({dealId})).deal;
       if(!value)throw Error("Сделка не найдена");
       setSelected(mode==="edit"?value:undefined);
+      if(mode==="edit")setProbabilityChoice(value.probabilitySource===ProbabilitySource.STAGE_DEFAULT?"keep":String(ProbabilitySource.MANUAL));
       setAdvance(mode==="edit"?undefined:value);
       setDroppedStageId(mode==="advance"?droppedOn:"");
       setEditorMode(mode);mutation.changed();
@@ -224,6 +226,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       {activePipeline&&<Button variant="secondary" onClick={()=>void editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
       <Button disabled={!activePipeline||!readyStage} onClick={()=>{
         setSelected(undefined);setAdvance(undefined);setFormAccountId("");
+        setProbabilityChoice(String(ProbabilitySource.STAGE_DEFAULT));
         setEditorMode("create");mutation.changed();
       }}>Новая сделка</Button>
     </>}/>
@@ -336,6 +339,25 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
         })}
       </>}
     </section>}
+    {activePipeline&&metricsQuery.data&&<section aria-label="Прогноз продаж">
+      <h2>Прогноз продаж · {activePipeline.name}</h2>
+      <p>Только открытые сделки выбранного фильтра, без ограничения по сроку.
+        Категории не пересекаются; исключённые показаны отдельно.
+        Взвешивание — арифметическая оценка, а не статистический прогноз.</p>
+      {[ForecastCategory.PIPELINE,ForecastCategory.BEST_CASE,ForecastCategory.COMMIT,ForecastCategory.OMITTED].map(category=>{
+        const group=metricsQuery.data?.forecastCategories.find(m=>m.category===category);
+        const totals=metricsQuery.data?.forecastCurrencies.filter(m=>m.category===category)??[];
+        return <div key={category} role="group" aria-label={forecastCategoryText(category)}>
+          <h3>{forecastCategoryText(category)}</h3>
+          <p>Сделок: {(group?.dealCount??0n).toString()} · по этапу: {(group?.stageDefaultCount??0n).toString()} · вручную: {(group?.manualCount??0n).toString()}</p>
+          {totals.length===0?<p>Суммы не указаны</p>:totals.map(total=><p key={total.currencyCode}>
+            {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode)} {total.currencyCode}
+            {" · взвешено: "}{weightedMoneyText(total.weightedMinorUnitsTimesBasisPoints,total.currencyCode)}
+            {" · сделок с суммой: "}{total.amountDealCount.toString()}
+          </p>)}
+        </div>;
+      })}
+    </section>}
     {(!pipelineId||accountId)&&<section aria-label={accountId?"Сделки клиента во всех воронках":"Сделки во всех воронках"}>
       <h2>{accountId?"Все сделки клиента во всех воронках":"Все сделки во всех воронках"}</h2>
       <p>Показано {allDealsQuery.data?.deals.length??0} сделок на текущей странице. Это общий список, независимо от выбранной доски; полный итог не подменяется размером страницы.</p>
@@ -351,6 +373,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           <p>Воронка: {pipeline?.name??deal.stage?.pipelineId??"неизвестна"} · Этап: {stage?.name??deal.stage?.stageId??"неизвестен"}</p>
           {pipeline&&<Button variant="secondary" onClick={()=>{setPipelineId(pipeline.pipelineId);setStageCursors({});}}>Открыть воронку</Button>}
           <p>{moneyText(deal.amount)} · {percent(deal.probabilityBasisPoints)}%</p>
+          {deal.status===DealStatus.OPEN&&<p>{probabilitySourceText(deal.probabilitySource)} · {forecastCategoryText(deal.forecastCategory)}</p>}
           <p>{deal.status===DealStatus.OPEN?"Открыта":deal.status===DealStatus.WON?"Выиграна":"Проиграна"} · версия {deal.version.toString()}</p>
           {deal.status===DealStatus.OPEN?<>
             <Button variant="secondary" onClick={()=>void open(deal.dealId,"edit")}>Редактировать</Button>{" "}
@@ -427,6 +450,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
                 Перетащить
               </span>}
             <p>{moneyText(d.amount)} · {percent(d.probabilityBasisPoints)}%</p>
+            {d.status===DealStatus.OPEN&&<p>{probabilitySourceText(d.probabilitySource)} · {forecastCategoryText(d.forecastCategory)}</p>}
             <p>Клиент: {d.accountId}</p>
             <p>{d.status===DealStatus.WON?"Выиграна":d.status===DealStatus.LOST?"Проиграна":
               d.status===DealStatus.OPEN?"Открыта":"Неизвестный статус"} · версия {d.version.toString()}</p>
@@ -583,7 +607,14 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           const amount=mode==="set"&&amountText?{
             minorUnits:minorUnits(amountText,currencyCode),currencyCode
           }:undefined;
-          const common={probabilityBasisPoints:basisPoints(field(data,"probability"))};
+          const sourceValue=field(data,"probabilitySource");
+          const source=selected&&sourceValue==="keep"?undefined:enumValue(sourceValue,
+            [ProbabilitySource.MANUAL,ProbabilitySource.STAGE_DEFAULT],"Источник вероятности");
+          const forecastCategory=enumValue(field(data,"forecastCategory"),
+            [ForecastCategory.PIPELINE,ForecastCategory.BEST_CASE,ForecastCategory.COMMIT,ForecastCategory.OMITTED],
+            "Категория прогноза");
+          const common={forecastCategory,...(source===ProbabilitySource.MANUAL?
+            {probabilityBasisPoints:basisPoints(field(data,"probability"))}:{})};
           // A disabled native <select> is excluded from FormData while
           // Account/ContactPoint choices are loading. Keep the original
           // association on edit, rather than treating a pending read as Clear.
@@ -606,6 +637,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
             return api.deals.updateDeal({
               dealId:selected.dealId,
               name:{operation:{case:"set",value:field(data,"name")}},...common,
+              ...(source===ProbabilitySource.STAGE_DEFAULT?{useStageProbability:true}:{}),
               ...contactPatch,...datePatch,
               ...(mode==="clear"?{amount:{operation:{case:"clear" as const,value:true}}}:
                 mode==="set"?(amount?{amount:{operation:{case:"set" as const,value:amount}}}:
@@ -647,8 +679,23 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
         <SelectField label="Валюта" name="currency" defaultValue={selected?.amount?.currencyCode??"USD"}>
           {["USD","EUR","PLN","JPY","KWD"].map(c=><option key={c} value={c}>{c}</option>)}
         </SelectField>
+        <SelectField label="Источник вероятности" name="probabilitySource"
+          value={probabilityChoice} onChange={e=>setProbabilityChoice(e.target.value)}>
+          {selected&&<option value="keep">Сохранить текущую оценку</option>}
+          <option value={ProbabilitySource.STAGE_DEFAULT}>По этапу (применить значение каталога)</option>
+          <option value={ProbabilitySource.MANUAL}>Вручную</option>
+        </SelectField>
         <TextField label="Вероятность, %" name="probability" inputMode="decimal"
-          defaultValue={selected?percent(selected.probabilityBasisPoints):"0"} required/>
+          disabled={probabilityChoice!==String(ProbabilitySource.MANUAL)}
+          defaultValue={selected?percent(selected.probabilityBasisPoints):"0"}
+          required={probabilityChoice===String(ProbabilitySource.MANUAL)}/>
+        <p>Значение этапа фиксируется при выборе и обновляется при переходе на новый этап.
+          Изменение каталога не пересчитывает прежние оценки. Индивидуальная вероятность сохраняется при переходе.</p>
+        <SelectField label="Категория прогноза" name="forecastCategory"
+          defaultValue={selected?.forecastCategory??ForecastCategory.PIPELINE}>
+          {[ForecastCategory.PIPELINE,ForecastCategory.BEST_CASE,ForecastCategory.COMMIT,ForecastCategory.OMITTED].map(category=>
+            <option key={category} value={category}>{forecastCategoryText(category)}</option>)}
+        </SelectField>
       </FormGrid>
         <Button type="submit" disabled={mutation.busy}>Сохранить сделку</Button>{" "}
         {selected&&<Button variant="secondary" type="button" onClick={()=>{

@@ -2,12 +2,28 @@ import {useCallback,useState} from "react";
 import {Button,SelectField} from "@ultimate-crm/ui";
 import type {ContactPoint,Deal} from "@ultimate-crm/client/cloudflare";
 import {DealEventKind} from "@ultimate-crm/client/cloudflare";
-import {ContactPointStatus,DealStatus} from "@ultimate-crm/client/cloudflare";
+import {ContactPointStatus,DealStatus,ForecastCategory,ProbabilitySource} from "@ultimate-crm/client/cloudflare";
 import {api,dateText} from "./api";
 import {useQuery,QueryNotice} from "./hooks";
 import {moneyText,percent} from "./money";
 import {accountHref,scopeHref,taskHref} from "./routes";
 
+export function forecastCategoryText(category:ForecastCategory):string {
+  switch(category){
+    case ForecastCategory.PIPELINE:return "Воронка";
+    case ForecastCategory.BEST_CASE:return "Оптимистичный";
+    case ForecastCategory.COMMIT:return "Обязательство";
+    case ForecastCategory.OMITTED:return "Исключено из прогноза";
+    default:return "Неизвестная категория";
+  }
+}
+export function probabilitySourceText(source:ProbabilitySource):string {
+  switch(source){
+    case ProbabilitySource.STAGE_DEFAULT:return "Вероятность этапа";
+    case ProbabilitySource.MANUAL:return "Индивидуальная вероятность";
+    default:return "Неизвестный источник";
+  }
+}
 export type Calendar={year:number;month:number;day:number};
 export function inputDate(date:Calendar|undefined):string {
   return date?String(date.year).padStart(4,"0")+"-"+String(date.month).padStart(2,"0")+
@@ -130,6 +146,7 @@ export function DealDetails({dealId,onEdit,onClose,onReopen}:{dealId:string;
           {details.data.contact.displayValue}</a>:"Не выбран"}</p>
       <p>Воронка: {deal.stage?.pipelineId??"—"} · этап: {deal.stage?.stageId??"—"}</p>
       <p>Сумма: {moneyText(deal.amount)} · вероятность: {percent(deal.probabilityBasisPoints)}%</p>
+      {deal.status===DealStatus.OPEN&&<p>{probabilitySourceText(deal.probabilitySource)} · {forecastCategoryText(deal.forecastCategory)}</p>}
       <p>Ожидаемое закрытие: {inputDate(deal.expectedCloseDate) || "Не назначено"}</p>
       <p>Статус: {deal.status===DealStatus.OPEN?"Открыта":
         deal.status===DealStatus.WON?"Выиграна":"Проиграна"}</p>
