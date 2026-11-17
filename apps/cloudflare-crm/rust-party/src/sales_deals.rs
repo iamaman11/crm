@@ -306,6 +306,28 @@ fn classify_receipt(
     }
 }
 
+// Existing CI-only signed diagnostic endpoint exercises the exact production
+// receipt query/classifier against the local D1 binding. It never writes.
+#[cfg(feature = "native-ci")]
+pub(super) async fn probe_receipt_read(
+    db: &D1Database,
+    tenant: &str,
+    unused_key: &str,
+) -> &'static str {
+    match reconcile(db, tenant, unused_key, "", true).await {
+        Err(MutationFailure::Rejected(error))
+            if error.category == ErrorCategory::Conflict =>
+        {
+            "PROVEN_NO_CHANGE"
+        }
+        Err(MutationFailure::CommitUnconfirmed {
+            reason: ReceiptUncertainty::ReceiptReadFailed,
+            ..
+        }) => "RECEIPT_READ_FAILED",
+        _ => "UNEXPECTED",
+    }
+}
+
 pub(super) async fn create_typed(
     input: CreateInput,
     k: &str,

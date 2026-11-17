@@ -3318,6 +3318,26 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    console.log(JSON.stringify({event:"crm.native-r73-forecast",result:"PASS",stage_default:true,
      manual_zero:true,move:true,reset:true,category:true,currency:true,close_reopen:true,cas:true,tenant:true}));
  }
+ // The exact production receipt query (not a mocked storage error) must
+ // distinguish a proven absent key from an inaccessible receipt table.
+ // Use only the existing signed native-ci read-only probe and local D1 fixture.
+ const receiptProbe=await call("/api/_ci/original-domain-check",admin);
+ assert.equal(receiptProbe.status,200);
+ assert.equal(receiptProbe.body.receipt_read_classification,"PROVEN_NO_CHANGE");
+ await sql("ALTER TABLE crm_sales_deal_receipts RENAME TO fixture_unavailable_deal_receipts");
+ try {
+   const unavailable=await call("/api/_ci/original-domain-check",admin);
+   assert.equal(unavailable.status,200);
+   assert.equal(unavailable.body.receipt_read_classification,"RECEIPT_READ_FAILED",
+     "An inaccessible receipt source must not become a proven CAS conflict");
+ } finally {
+   await sql("ALTER TABLE fixture_unavailable_deal_receipts RENAME TO crm_sales_deal_receipts");
+ }
+ const recoveredProbe=await call("/api/_ci/original-domain-check",admin);
+ assert.equal(recoveredProbe.status,200);
+ assert.equal(recoveredProbe.body.receipt_read_classification,"PROVEN_NO_CHANGE");
+ console.log(JSON.stringify({event:"crm.native-s1-reconciliation-read",result:"PASS",
+   actual_d1_read_failure:true,restore:true,production_receipt_query:true}));
  // Write evidence only after every scenario assertion above has completed.
  // A successful call is transport exercise coverage, not proof of all possible
  // business states. Domain/CAS/tenant assertions remain independently explicit.

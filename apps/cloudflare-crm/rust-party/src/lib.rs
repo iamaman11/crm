@@ -781,6 +781,7 @@ async fn dispatch(
     #[cfg(feature = "native-ci")]
     if path == "/api/_ci/original-domain-check" && method == Method::Get {
         let code = original_domain_probe::check();
+        let receipt_read = sales_deals::probe_receipt_read(&db, tenant, request_id).await;
         let router = connect_sales::router(env, actor, request_id);
         let mut methods: Vec<String> = router
             .methods()
@@ -806,6 +807,7 @@ async fn dispatch(
                     "crm.sales", "crm.activities"],
                 "original_modules_compiled": 13,
                 "d1_owner_persistence": "NOT_TESTED",
+                "receipt_read_classification": receipt_read,
                 "remaining_owners": "NOT_TESTED"
             }),
             if checked { 200 } else { 503 },
