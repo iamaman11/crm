@@ -1130,9 +1130,8 @@ pub(super) async fn pipeline_metrics(
                 }
             }
         }
-        let bps = u16::try_from(row.probability_basis_points).map_err(|_| {
-            worker::Error::RustError("SALES_METRICS_PROBABILITY_INVALID".into())
-        })?;
+        let bps = u16::try_from(row.probability_basis_points)
+            .map_err(|_| worker::Error::RustError("SALES_METRICS_PROBABILITY_INVALID".into()))?;
         if bps > 10_000 {
             return Err(worker::Error::RustError(
                 "SALES_METRICS_PROBABILITY_INVALID".into(),
@@ -1143,20 +1142,19 @@ pub(super) async fn pipeline_metrics(
             (Some(code), Some(raw_units)) => {
                 let currency = CurrencyCode::try_new(code.clone())
                     .map_err(|e| worker::Error::RustError(e.code.to_owned()))?;
-                let units = raw_units.parse::<i64>().map_err(|_| {
-                    worker::Error::RustError("SALES_METRICS_MONEY_INVALID".into())
-                })?;
+                let units = raw_units
+                    .parse::<i64>()
+                    .map_err(|_| worker::Error::RustError("SALES_METRICS_MONEY_INVALID".into()))?;
                 if units < 0 {
                     return Err(worker::Error::RustError(
                         "SALES_METRICS_MONEY_INVALID".into(),
                     ));
                 }
-                let weighted =
-                    i128::from(units)
-                        .checked_mul(i128::from(bps))
-                        .ok_or_else(|| {
-                            worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into())
-                        })?;
+                let weighted = i128::from(units)
+                    .checked_mul(i128::from(bps))
+                    .ok_or_else(|| {
+                        worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into())
+                    })?;
                 let entry = money_groups
                     .entry((
                         row.stage_id.clone(),
