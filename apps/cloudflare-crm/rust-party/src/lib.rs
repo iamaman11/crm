@@ -657,6 +657,12 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
         },
     ),
     (
+        "/crm.sales.v2.DealService/GetPipelineMetrics",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
         "/crm.sales.v2.DealService/CreateDeal",
         RpcPolicy {
             permission: RpcPermission::Write,

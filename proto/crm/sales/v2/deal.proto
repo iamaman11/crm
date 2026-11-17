@@ -248,6 +248,34 @@ message ListStageDealsResponse {
   repeated StageCurrencyTotal currency_totals = 4;
 }
 
+// Read-only full-pipeline statistics. No currency mixing, page-size leakage,
+// float money or predictive accuracy claims. Weighted numerator is exact:
+// sum(minor_units * individual_probability_basis_points).
+message GetPipelineMetricsRequest {
+  string pipeline_id = 1;
+  optional DealStatus status = 2;
+  optional string account_id = 3;
+}
+message PipelineStatusMetric {
+  string stage_id = 1;
+  DealStatus status = 2;
+  uint64 deal_count = 3;
+}
+message PipelineCurrencyMetric {
+  string stage_id = 1;
+  DealStatus status = 2;
+  string currency_code = 3;
+  string total_minor_units = 4;
+  string weighted_minor_units_times_basis_points = 5;
+  uint64 amount_deal_count = 6;
+}
+message GetPipelineMetricsResponse {
+  string pipeline_id = 1;
+  uint64 total_deal_count = 2;
+  repeated PipelineStatusMetric statuses = 3;
+  repeated PipelineCurrencyMetric currencies = 4;
+}
+
 service DealService {
   rpc CreatePipeline(CreatePipelineRequest) returns (CreatePipelineResponse) {
     option idempotency_level = IDEMPOTENT;
@@ -262,6 +290,9 @@ service DealService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc ListStageDeals(ListStageDealsRequest) returns (ListStageDealsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetPipelineMetrics(GetPipelineMetricsRequest) returns (GetPipelineMetricsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc CreateDeal(CreateDealRequest) returns (CreateDealResponse) {

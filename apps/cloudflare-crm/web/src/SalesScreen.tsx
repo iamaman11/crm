@@ -8,7 +8,7 @@ import {useQuery,useMutation,MutationNotice,QueryNotice} from "./hooks";
 import {AccountPicker} from "./Pickers";
 import {DealContactPicker,DealDetails,inputDate,parseDate} from "./DealRecord";
 import {dealHref} from "./routes";
-import {minorUnits,decimalUnits,moneyText,basisPoints,percent} from "./money";
+import {minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText} from "./money";
 import styles from "./App.module.css";
 
 type EditorMode="create"|"edit"|"advance"|"close"|"reopen"|null;
@@ -80,6 +80,15 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       return {stageId:stage.stageId,...result};
     }));
   },[activePipeline,stageCursors,status,accountId]));
+  const metricsQuery=useQuery(useCallback(async()=>{
+    if(!activePipeline)return undefined;
+    const selectedStatus=status?enumValue(status,[DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"):undefined;
+    return api.deals.getPipelineMetrics({
+      pipelineId:activePipeline.pipelineId,
+      ...(accountId?{accountId}:{}),
+      ...(selectedStatus!==undefined?{status:selectedStatus}:{})
+    });
+  },[activePipeline,accountId,status]));
   // The canonical ListDeals RPC already supports a tenant-wide cursor and
   // optional Account/status filters. It is the default all-pipelines overview;
   // the independent ListStageDeals query is only for a selected Kanban board.
@@ -92,7 +101,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
     });
   },[accountId,allDealsCursor,status]));
   const refreshSales=async()=>{
-    await Promise.all([query.reload(),allDealsQuery.reload()]);
+    await Promise.all([query.reload(),allDealsQuery.reload(),metricsQuery.reload()]);
   };
   const open=async(dealId:string,mode:"edit"|"advance"|"close"|"reopen",droppedOn="")=>{
     try {
@@ -172,6 +181,38 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       <option value={DealStatus.WON}>Выигранные</option><option value={DealStatus.LOST}>Проигранные</option>
     </SelectField>
     <QueryNotice query={query}/>
+    {activePipeline&&<section aria-label="Аналитика воронки">
+      <h2>Показатели всей воронки · {activePipeline.name}</h2>
+      <p>Весь выбранный фильтр, включая сделки вне текущих страниц Kanban.
+        Валюты и статусы не смешиваются. Взвешенная сумма = сумма × вероятность сделки;
+        это расчёт, а не статистический прогноз.</p>
+      <QueryNotice query={metricsQuery}/>
+      {metricsQuery.data&&<>
+        <p>Всего сделок: {metricsQuery.data.totalDealCount.toString()}</p>
+        {activePipeline.stages.map(stage=>{
+          const groups=metricsQuery.data?.statuses.filter(m=>m.stageId===stage.stageId)??[];
+          return <div key={stage.stageId}>
+            <h3>{stage.name}{stage.archived?" (архив)":""}</h3>
+            {groups.length===0?<p>Сделок нет</p>:groups.map(group=>{
+              const title=group.status===DealStatus.OPEN?"Открытые":
+                group.status===DealStatus.WON?"Выигранные":"Проигранные";
+              const currencies=metricsQuery.data?.currencies.filter(m=>
+                m.stageId===stage.stageId&&m.status===group.status)??[];
+              return <div key={String(group.status)} role="group"
+                aria-label={stage.name+" · "+title}>
+                <p>{title}: {group.dealCount.toString()} сделок</p>
+                {currencies.length===0?<p>Суммы не указаны</p>:currencies.map(total=>
+                  <p key={total.currencyCode}>
+                    {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode)} {total.currencyCode}
+                    {" · взвешено: "}{weightedMoneyText(total.weightedMinorUnitsTimesBasisPoints,total.currencyCode)}
+                    {" · сделок с суммой: "}{total.amountDealCount.toString()}
+                  </p>)}
+              </div>;
+            })}
+          </div>;
+        })}
+      </>}
+    </section>}
     {(!pipelineId||accountId)&&<section aria-label={accountId?"Сделки клиента во всех воронках":"Сделки во всех воронках"}>
       <h2>{accountId?"Все сделки клиента во всех воронках":"Все сделки во всех воронках"}</h2>
       <p>Показано {allDealsQuery.data?.deals.length??0} сделок на текущей странице. Это общий список, независимо от выбранной доски; полный итог не подменяется размером страницы.</p>

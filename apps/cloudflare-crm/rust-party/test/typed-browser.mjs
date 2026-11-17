@@ -455,6 +455,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const leadTotals=page.getByRole("group",{name:"Итоги этапа Первичный контакт"});
    await leadTotals.getByText("90071992547409.93 USD · сделок с суммой: 1",
      {exact:true}).waitFor();
+   const wholePipelineMetrics=page.getByRole("region",{name:"Аналитика воронки"});
+   await wholePipelineMetrics.getByText("Всего сделок: 1",{exact:true}).waitFor();
+   const metricStage=wholePipelineMetrics.getByRole("group",{name:"Первичный контакт · Открытые"});
+   await metricStage.getByText("Открытые: 1 сделок",{exact:true}).waitFor();
+   await metricStage.getByText(
+     "90071992547409.93 USD · взвешено: 33731961209005.018785 USD · сделок с суммой: 1",
+     {exact:true}).waitFor();
+   steps.push("R7.3 full-pipeline exact weighted multi-currency read model, React, D1");
    const dealCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Deal "+runId,exact:true})}).last();
    await dealCard.getByRole("button",{name:"Раскрыть карточку",exact:true}).click();
    await page.getByRole("region",{name:"Подробности сделки "+dealId}).getByText(

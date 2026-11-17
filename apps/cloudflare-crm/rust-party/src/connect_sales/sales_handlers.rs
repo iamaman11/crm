@@ -198,6 +198,78 @@ impl sale_wire::DealService for SalesV2Service {
         })
     }
     #[worker::send]
+    async fn get_pipeline_metrics(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::GetPipelineMetricsRequest>,
+    ) -> ServiceResult<sale_wire::GetPipelineMetricsResponse> {
+        Self::pipeline_id(req.pipeline_id)?;
+        let status = match req.status {
+            None => None,
+            Some(raw) => Some(match raw {
+                x if x == sale_wire::DealStatus::DEAL_STATUS_OPEN => DomainDealStatus::Open,
+                x if x == sale_wire::DealStatus::DEAL_STATUS_WON => DomainDealStatus::Won,
+                x if x == sale_wire::DealStatus::DEAL_STATUS_LOST => DomainDealStatus::Lost,
+                _ => return Err(ConnectError::invalid_argument("invalid DealStatus filter")),
+            }),
+        };
+        if let Some(id) = req.account_id {
+            AccountV2Service::valid_id(id)?;
+        }
+        let db = self.d1()?;
+        if sales_pipelines::get(&db, &self.tenant, req.pipeline_id)
+            .await
+            .map_err(|_| ConnectError::internal("Pipeline D1 read failed"))?
+            .is_none()
+        {
+            return Err(ConnectError::not_found("SALES_PIPELINE_NOT_FOUND"));
+        }
+        let metrics = sales_deals::pipeline_metrics(
+            &db,
+            &self.tenant,
+            req.pipeline_id,
+            status,
+            req.account_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Sales D1 metrics read failed"))?;
+        let as_status = |value: DomainDealStatus| match value {
+            DomainDealStatus::Open => sale_wire::DealStatus::DEAL_STATUS_OPEN,
+            DomainDealStatus::Won => sale_wire::DealStatus::DEAL_STATUS_WON,
+            DomainDealStatus::Lost => sale_wire::DealStatus::DEAL_STATUS_LOST,
+        };
+        RpcResponse::ok(sale_wire::GetPipelineMetricsResponse {
+            pipeline_id: req.pipeline_id.to_owned(),
+            total_deal_count: metrics.total_deal_count,
+            statuses: metrics
+                .statuses
+                .into_iter()
+                .map(|row| sale_wire::PipelineStatusMetric {
+                    stage_id: row.stage_id,
+                    status: as_status(row.status).into(),
+                    deal_count: row.deal_count,
+                    ..Default::default()
+                })
+                .collect(),
+            currencies: metrics
+                .currencies
+                .into_iter()
+                .map(|row| sale_wire::PipelineCurrencyMetric {
+                    stage_id: row.stage_id,
+                    status: as_status(row.status).into(),
+                    currency_code: row.currency_code,
+                    total_minor_units: row.total_minor_units.to_string(),
+                    weighted_minor_units_times_basis_points: row
+                        .weighted_minor_units_times_basis_points
+                        .to_string(),
+                    amount_deal_count: row.amount_deal_count,
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
     async fn create_deal(
         &self,
         _ctx: RequestContext,

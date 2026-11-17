@@ -34,3 +34,13 @@ export function basisPoints(value:string):number {
 export function percent(value:number):string {
   return Math.trunc(value/100)+"."+String(value%100).padStart(2,"0");
 }
+
+// Exact weighted numerator divided by 10_000 basis points; never use JS
+// Number for money, including sums larger than signed int64.
+export function weightedMoneyText(numerator:string,currency:string):string {
+  const digits=currencyDigits(currency)+4;
+  const scale=10n**BigInt(digits);
+  const raw=BigInt(numerator);
+  if(raw<0n)throw Error("Отрицательная взвешенная сумма");
+  return (raw/scale).toString()+"."+String(raw%scale).padStart(digits,"0")+" "+currency;
+}
