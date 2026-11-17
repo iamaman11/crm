@@ -161,14 +161,29 @@ jobs:
           linked = [module for module in report["modules"] if module["linked"]]
           if not linked:
               raise SystemExit("No linked original owners")
+          # Transitive dependencies are compiled, but Cargo does not run their
+          # own tests when testing a consumer. Test the shared foundation too.
+          owner_features = {"crm-core-contracts": [], "crm-module-sdk": []}
           for module in linked:
               dep = by_path[Path(module["crate_path"]).resolve()]
-              command = ["cargo", "test", "--locked", "-p", module["crate_name"]]
+              flags = []
               if not dep.get("default-features", True):
-                  command.append("--no-default-features")
+                  flags.append("--no-default-features")
               if dep.get("features"):
-                  command.extend(["--features", ",".join(dep["features"])])
-              subprocess.run(command, check=True)
+                  flags.extend(["--features", ",".join(dep["features"])])
+              owner_features[module["crate_name"]] = flags
+          native_graphs = {}
+          for owner, flags in sorted(owner_features.items()):
+              subprocess.run(["cargo", "test", "--locked", "-p", owner, *flags], check=True)
+              native_graphs[owner] = {
+                  "feature_flags": flags,
+                  "normal_build_dev": subprocess.check_output([
+                      "cargo", "tree", "--locked", "-p", owner, *flags,
+                      "--edges", "normal,build,dev", "--charset", "ascii",
+                  ], text=True),
+              }
+          Path("/tmp/crm-native-owner-dependency-trees.json").write_text(
+              json.dumps(native_graphs, sort_keys=True), encoding="utf-8")
           PY
       # Installer binaries are cached separately from Cargo compilation outputs.
       - name: Cache pinned native Rust tool CLIs
@@ -366,8 +381,19 @@ jobs:
           test -s .release/native-build/index_bg.wasm
           node --input-type=module -e '
             import {execFileSync} from "node:child_process";
-            import {writeFileSync} from "node:fs";
-            const run=(command,args)=>execFileSync(command,args,{encoding:"utf8"}).trim();
+            import {readFileSync,writeFileSync,readdirSync,statSync} from "node:fs";
+            import {createHash} from "node:crypto";
+            import {join} from "node:path";
+            const run=(command,args)=>execFileSync(command,args,{encoding:"utf8",maxBuffer:8*1024*1024}).trim();
+            const size=path=>statSync(path).size;
+            const treeBytes=path=>readdirSync(path,{withFileTypes:true}).reduce((total,entry)=>{
+              const child=join(path,entry.name);
+              return total+(entry.isDirectory()?treeBytes(child):size(child));
+            },0);
+            const hash=path=>createHash("sha256").update(readFileSync(path)).digest("hex");
+            const wasmGraph=(features,edges)=>run("cargo",["tree","--locked","--manifest-path",
+              "rust-party/Cargo.toml","--target","wasm32-unknown-unknown","--features",features,
+              "--edges",edges,"--charset","ascii"]);
             writeFileSync(".release/provenance.json",JSON.stringify({
               tested_sha:process.env.CRM_BUILD_SHA,
               tree:run("git",["rev-parse","HEAD^{tree}"]),
@@ -375,6 +401,16 @@ jobs:
               tools:{node:process.version,pnpm:run("pnpm",["--version"]),
                 rust:run("rustc",["--version"]),python:run("python",["--version"]),
                 buf:run("pnpm",["exec","buf","--version"])},
+              foundation_baseline:{
+                bytes:{production_wasm:size(".release/native-build/index_bg.wasm"),
+                  production_worker:treeBytes(".release/native-build"),react_dist:treeBytes("dist")},
+                lock_sha256:{root_cargo:hash("../../Cargo.lock"),worker_cargo:hash("rust-party/Cargo.lock"),
+                  pnpm:hash("../../pnpm-lock.yaml")},
+                native_owners:JSON.parse(readFileSync("/tmp/crm-native-owner-dependency-trees.json","utf8")),
+                worker_wasm:{production_normal:wasmGraph("native","normal"),
+                  production_normal_build:wasmGraph("native","normal,build"),
+                  ci_normal_build_dev:wasmGraph("native-ci","normal,build,dev")}
+              },
               independent_byte_reproducibility:"NOT_TESTED"
             },null,2)+"\n");
           '
