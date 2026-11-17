@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useRef,useState} from "react";
 import {Button,FeedbackPanel} from "@ultimate-crm/ui";
-import type {MutationReceipt} from "@ultimate-crm/client/cloudflare";
+import type {MutationReceipt, CrmFailure} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
 import {registerNavigationBlocker} from "./navigation";
 
@@ -41,7 +41,7 @@ export function useMutation() {
   const pendingRef=useRef<MutationIntent|null>(null);
   const [pending,setPending]=useState(false);
   const [busy,setBusy]=useState(false);
-  const [notice,setNotice]=useState<{tone:"success"|"warning"|"danger";text:string}>();
+  const [notice,setNotice]=useState<{tone:"success"|"warning"|"danger";text:string;fields?:CrmFailure["fieldViolations"]}>();
   const changed=()=>{if(!pendingRef.current)setKey(newId());};
   const perform=async(intent:MutationIntent)=>{
     if(inFlight.current)return;
@@ -72,7 +72,7 @@ export function useMutation() {
         setNotice({tone:"warning",text:"Результат записи не подтверждён. "+failure.text+
           " Повторите именно исходную операцию."});
       }else{
-        clearPending();setNotice({tone:"danger",text:failure.text});
+        clearPending();setNotice({tone:"danger",text:failure.text,fields:failure.fieldViolations});
       }
     } finally {inFlight.current=false;setBusy(false);}
   };
@@ -106,7 +106,10 @@ export function useMutation() {
 export function MutationNotice({state}:{state:ReturnType<typeof useMutation>}) {
   return state.notice?<div className="crm-mutation-notice">
     <FeedbackPanel tone={state.notice.tone} title={state.notice.text}
-      action={state.pending?<Button disabled={state.busy} onClick={()=>void state.retryPending()}>Повторить исходную операцию</Button>:undefined}/>
+      action={state.pending?<Button disabled={state.busy} onClick={()=>void state.retryPending()}>Повторить исходную операцию</Button>:undefined}>
+      {state.notice.fields?.length?<ul>{state.notice.fields.map((field,index)=>
+        <li key={field.fieldPath+":"+index}>{field.fieldPath}: {field.description}</li>)}</ul>:null}
+    </FeedbackPanel>
   </div>:null;
 }
 export function QueryNotice({query}:{query:{busy:boolean;error:string;reload:()=>Promise<unknown>}}) {
