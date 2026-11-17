@@ -688,6 +688,32 @@ impl SalesV2Service {
             _ => Err(ConnectError::invalid_argument("invalid DealStatus")),
         }
     }
+    fn forecast_category(
+        raw: Option<buffa::EnumValue<sale_wire::ForecastCategory>>,
+    ) -> std::result::Result<Option<crm_sales::ForecastCategory>, ConnectError> {
+        use crm_sales::ForecastCategory as Domain;
+        use sale_wire::ForecastCategory as Wire;
+        Ok(match raw {
+            None => None,
+            Some(x) if x == Wire::FORECAST_CATEGORY_PIPELINE => Some(Domain::Pipeline),
+            Some(x) if x == Wire::FORECAST_CATEGORY_BEST_CASE => Some(Domain::BestCase),
+            Some(x) if x == Wire::FORECAST_CATEGORY_COMMIT => Some(Domain::Commit),
+            Some(x) if x == Wire::FORECAST_CATEGORY_OMITTED => Some(Domain::Omitted),
+            _ => return Err(ConnectError::invalid_argument("invalid ForecastCategory")),
+        })
+    }
+
+    fn forecast_wire(value: crm_sales::ForecastCategory) -> sale_wire::ForecastCategory {
+        use crm_sales::ForecastCategory as Domain;
+        use sale_wire::ForecastCategory as Wire;
+        match value {
+            Domain::Pipeline => Wire::FORECAST_CATEGORY_PIPELINE,
+            Domain::BestCase => Wire::FORECAST_CATEGORY_BEST_CASE,
+            Domain::Commit => Wire::FORECAST_CATEGORY_COMMIT,
+            Domain::Omitted => Wire::FORECAST_CATEGORY_OMITTED,
+        }
+    }
+
     fn convert(deal: &DomainDeal) -> std::result::Result<sale_wire::Deal, ConnectError> {
         let stage = deal.stage();
         let status = match deal.status() {
@@ -724,6 +750,16 @@ impl SalesV2Service {
             status: status.into(),
             amount: amount.into(),
             probability_basis_points: u32::from(deal.probability().get()),
+            probability_source: match deal.probability_source() {
+                crm_sales::ProbabilitySource::Manual => {
+                    sale_wire::ProbabilitySource::PROBABILITY_SOURCE_MANUAL
+                }
+                crm_sales::ProbabilitySource::StageDefault => {
+                    sale_wire::ProbabilitySource::PROBABILITY_SOURCE_STAGE_DEFAULT
+                }
+            }
+            .into(),
+            forecast_category: Self::forecast_wire(deal.forecast_category()).into(),
             version: deal.version(),
             closed_at: deal
                 .close_outcome()

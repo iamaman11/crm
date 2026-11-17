@@ -15,7 +15,8 @@ use crm_proto_contracts::crm::{core::v1 as core, sales::v1 as wire};
 use crm_sales::{
     AdvanceDealStage, CreateDeal, DEAL_STATE_MAXIMUM_BYTES, DEAL_STATE_RETENTION_POLICY_ID,
     DEAL_STATE_SCHEMA_ID, DEAL_STATE_SCHEMA_VERSION, Deal, DealCloseOutcome, DealOwner, DealStage,
-    DealStatus, PipelineId, ReasonCode, StageId, StageTransitionPolicy, TeamId, UpdateDeal,
+    DealStatus, ForecastCategory, PipelineId, ProbabilityEstimate, ReasonCode, StageId,
+    StageTransitionPolicy, TeamId, UpdateDeal,
     deal_state_descriptor_hash, decode_deal_state, encode_deal_state,
 };
 
@@ -150,10 +151,11 @@ fn plan_create(
             .expected_close_date
             .map(|value| support::wire_date_to_domain(value, "deal.expected_close_date"))
             .transpose()?,
-        probability: probability(
+        probability: ProbabilityEstimate::Manual(probability(
             command.probability_basis_points,
             "deal.probability_basis_points",
-        )?,
+        )?),
+        forecast_category: ForecastCategory::Pipeline,
         occurred_at_unix_nanos: request.context.execution.request_started_at_unix_nanos,
     })?;
 
@@ -219,6 +221,7 @@ fn plan_update(
             command.probability_basis_points,
             "deal.probability_basis_points",
         )?,
+        forecast_category: None,
         occurred_at_unix_nanos: request.context.execution.request_started_at_unix_nanos,
     })?;
 
@@ -280,6 +283,7 @@ fn plan_advance(
             required(command.target_stage, "deal.target_stage")?,
             "deal.target_stage",
         )?,
+        target_stage_probability: None,
         target_status: status_from_wire(command.target_status, "deal.target_status")?,
         close_reason_code: command
             .close_reason_code
@@ -623,13 +627,13 @@ fn date_patch(
 fn probability_patch(
     value: Option<core::UInt32Patch>,
     field: &'static str,
-) -> Result<Patch<BasisPoints>, SdkError> {
+) -> Result<Patch<ProbabilityEstimate>, SdkError> {
     use core::u_int32_patch::Operation;
     let Some(patch) = value else {
         return Ok(Patch::Keep);
     };
     match patch.operation {
-        Some(Operation::Set(value)) => Ok(Patch::Set(probability(value, field)?)),
+        Some(Operation::Set(value)) => Ok(Patch::Set(ProbabilityEstimate::Manual(probability(value, field)?))),
         Some(Operation::Clear(true)) => Ok(Patch::Clear),
         Some(Operation::Clear(false)) => {
             Err(SdkError::invalid_argument(field, "clear must be true"))

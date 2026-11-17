@@ -1,6 +1,6 @@
 use crate::domain::{
-    Deal, DealCloseOutcomeSnapshot, DealOwner, DealSnapshot, DealStage, DealStatus, PipelineId,
-    ReasonCode, StageId, TeamId,
+    Deal, DealCloseOutcomeSnapshot, DealOwner, DealSnapshot, DealStage, DealStatus, ForecastCategory,
+    PipelineId, ProbabilityEstimate, ProbabilitySource, ReasonCode, StageId, TeamId,
 };
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef, SdkError};
@@ -8,10 +8,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub const DEAL_STATE_SCHEMA_ID: &str = "crm.sales.deal.state";
-pub const DEAL_STATE_SCHEMA_VERSION: &str = "1.0.0";
+pub const DEAL_STATE_SCHEMA_VERSION: &str = "1.1.0";
 pub const DEAL_STATE_MAXIMUM_BYTES: u64 = 256 * 1024;
 pub const DEAL_STATE_RETENTION_POLICY_ID: &str = "crm.sales.business_record";
-const DEAL_STATE_DESCRIPTOR: &[u8] = b"crm.sales.deal.state/v1:deal_id,name,owner,account,primary_contact,stage,status,amount,expected_close_date,probability_basis_points,close_outcome,created_at_unix_nanos,updated_at_unix_nanos,version";
+const DEAL_STATE_DESCRIPTOR: &[u8] = b"crm.sales.deal.state/v1.1:deal_id,name,owner,account,primary_contact,stage,status,amount,expected_close_date,probability_basis_points,probability_source,forecast_category,close_outcome,created_at_unix_nanos,updated_at_unix_nanos,version";
 
 pub fn deal_state_descriptor_hash() -> [u8; 32] {
     Sha256::digest(DEAL_STATE_DESCRIPTOR).into()
@@ -46,6 +46,11 @@ struct DealStateV1 {
     amount: Option<MoneyState>,
     expected_close_date: Option<DateState>,
     probability_basis_points: u16,
+    // Existing Deals were explicitly estimated and not categorized.
+    #[serde(default)]
+    probability_source: ProbabilitySource,
+    #[serde(default)]
+    forecast_category: ForecastCategory,
     close_outcome: Option<CloseOutcomeState>,
     created_at_unix_nanos: i64,
     updated_at_unix_nanos: i64,
@@ -118,7 +123,9 @@ impl From<DealSnapshot> for DealStateV1 {
             status: value.status.into(),
             amount: value.amount.map(Into::into),
             expected_close_date: value.expected_close_date.map(Into::into),
-            probability_basis_points: value.probability.get(),
+            probability_basis_points: value.probability.basis_points().get(),
+            probability_source: value.probability.source(),
+            forecast_category: value.forecast_category,
             close_outcome: value.close_outcome.map(Into::into),
             created_at_unix_nanos: value.created_at_unix_nanos,
             updated_at_unix_nanos: value.updated_at_unix_nanos,
@@ -144,8 +151,11 @@ impl TryFrom<DealStateV1> for DealSnapshot {
                 .expected_close_date
                 .map(TryInto::try_into)
                 .transpose()?,
-            probability: BasisPoints::try_new(value.probability_basis_points)
-                .map_err(contract_error)?,
+            probability: ProbabilityEstimate::from_parts(
+                value.probability_source,
+                BasisPoints::try_new(value.probability_basis_points).map_err(contract_error)?,
+            ),
+            forecast_category: value.forecast_category,
             close_outcome: value.close_outcome.map(TryInto::try_into).transpose()?,
             created_at_unix_nanos: value.created_at_unix_nanos,
             updated_at_unix_nanos: value.updated_at_unix_nanos,
@@ -361,7 +371,8 @@ mod tests {
                 CurrencyCode::try_new("USD").unwrap(),
             )),
             expected_close_date: Some(CalendarDate::try_new(2027, 2, 28).unwrap()),
-            probability: BasisPoints::try_new(4_250).unwrap(),
+            probability: ProbabilityEstimate::Manual(BasisPoints::try_new(4_250).unwrap()),
+            forecast_category: ForecastCategory::Pipeline,
             occurred_at_unix_nanos: 10,
         })
         .unwrap()
@@ -388,6 +399,19 @@ mod tests {
             9_999_999_999_999_999_999_i128
         );
         assert_ne!(deal_state_descriptor_hash(), [0; 32]);
+    }
+
+    #[test]
+    fn forecast_metadata_defaults_and_rejects_unknown_values() {
+        let mut state: serde_json::Value =
+            serde_json::from_slice(&encode_deal_state(&deal()).unwrap()).unwrap();
+        state.as_object_mut().unwrap().remove("probability_source");
+        state.as_object_mut().unwrap().remove("forecast_category");
+        let decoded = decode_deal_state(&serde_json::to_vec(&state).unwrap()).unwrap();
+        assert_eq!(decoded.probability_source(), ProbabilitySource::Manual);
+        assert_eq!(decoded.forecast_category(), ForecastCategory::Pipeline);
+        state["forecast_category"] = serde_json::json!("unknown");
+        assert!(decode_deal_state(&serde_json::to_vec(&state).unwrap()).is_err());
     }
 
     #[test]

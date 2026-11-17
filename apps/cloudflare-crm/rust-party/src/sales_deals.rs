@@ -5,8 +5,9 @@ use super::{bind, now_nanos};
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money, Patch};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef};
 use crm_sales::{
-    AdvanceDealStage, CloseDeal, CreateDeal, Deal, DealOwner, DealStage, DealStatus, PipelineId,
-    ReasonCode, ReopenDeal, StageId, StageTransitionPolicy, UpdateDeal, decode_deal_state,
+    AdvanceDealStage, CloseDeal, CreateDeal, Deal, DealOwner, DealStage, DealStatus,
+    ForecastCategory, PipelineId, ProbabilityEstimate, ProbabilitySource, ReasonCode, ReopenDeal,
+    StageId, StageTransitionPolicy, UpdateDeal, decode_deal_state,
     encode_deal_state,
 };
 use serde::{Deserialize, Serialize};
@@ -24,7 +25,8 @@ pub(super) struct CreateInput {
     pub(super) account_id: String,
     pub(super) pipeline_id: String,
     pub(super) stage_id: String,
-    pub(super) probability_bps: u16,
+    pub(super) probability_bps: Option<u16>,
+    pub(super) forecast_category: ForecastCategory,
     // Minor units are exact integers. Floating point money is never accepted.
     pub(super) amount_minor_units: Option<i64>,
     pub(super) currency: Option<String>,
@@ -95,6 +97,8 @@ pub(super) struct UpdateInput {
     pub(super) currency: Option<String>,
     pub(super) clear_amount: Option<bool>,
     pub(super) probability_bps: Option<u16>,
+    pub(super) use_stage_probability: bool,
+    pub(super) forecast_category: Option<ForecastCategory>,
     pub(super) primary_contact: FieldChange<String>,
     pub(super) expected_close_date: FieldChange<DateInput>,
 }
@@ -267,22 +271,23 @@ pub(super) async fn create_typed(
         Ok(x) => DealOwner::Actor(x),
         Err(_) => return Ok(rejected("SALES_OWNER_INVALID", 422)),
     };
-    let Some(ordinal) = super::sales_pipelines::active_stage_ordinal(
-        db,
-        tenant,
-        &input.pipeline_id,
-        &input.stage_id,
-    )
+    let Some(catalog_stage) =
+        super::sales_pipelines::active_stage(db, tenant, &input.pipeline_id, &input.stage_id)
     .await?
     else {
         return Ok(rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
     };
-    let stage = match stage(input.pipeline_id, input.stage_id, ordinal) {
+    let stage = match stage(input.pipeline_id, input.stage_id, catalog_stage.ordinal) {
         Ok(x) => x,
         Err(code) => return Ok(rejected(code, 422)),
     };
-    let probability = match BasisPoints::try_new(input.probability_bps) {
-        Ok(x) => x,
+    let probability = match BasisPoints::try_new(
+        input
+            .probability_bps
+            .unwrap_or(catalog_stage.probability_basis_points),
+    ) {
+        Ok(value) if input.probability_bps.is_some() => ProbabilityEstimate::Manual(value),
+        Ok(value) => ProbabilityEstimate::StageDefault(value),
         Err(e) => return Ok(rejected(e.code, 422)),
     };
     let amount = match (input.amount_minor_units, input.currency) {
@@ -324,6 +329,7 @@ pub(super) async fn create_typed(
         amount,
         expected_close_date,
         probability,
+        forecast_category: input.forecast_category,
         occurred_at_unix_nanos: now_nanos(),
     }) {
         Ok(x) => x,
@@ -396,12 +402,32 @@ pub(super) async fn update_typed(
             _ => return Ok(rejected("SALES_AMOUNT_CURRENCY_PAIR_REQUIRED", 422)),
         }
     };
-    let probability = match input.probability_bps {
-        Some(v) => match BasisPoints::try_new(v) {
-            Ok(x) => Patch::Set(x),
+    if input.use_stage_probability && input.probability_bps.is_some() {
+        return Ok(rejected("SALES_PROBABILITY_SOURCE_CONFLICT", 422));
+    }
+    let probability = if input.use_stage_probability {
+        let Some(catalog_stage) = super::sales_pipelines::active_stage(
+            db,
+            tenant,
+            deal.stage().pipeline_id().as_str(),
+            deal.stage().stage_id().as_str(),
+        )
+        .await?
+        else {
+            return Ok(rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
+        };
+        match BasisPoints::try_new(catalog_stage.probability_basis_points) {
+            Ok(value) => Patch::Set(ProbabilityEstimate::StageDefault(value)),
             Err(e) => return Ok(rejected(e.code, 422)),
-        },
-        None => Patch::Keep,
+        }
+    } else {
+        match input.probability_bps {
+            Some(value) => match BasisPoints::try_new(value) {
+                Ok(value) => Patch::Set(ProbabilityEstimate::Manual(value)),
+                Err(e) => return Ok(rejected(e.code, 422)),
+            },
+            None => Patch::Keep,
+        }
     };
     let contact_patch = match input.primary_contact {
         FieldChange::Keep => Patch::Keep,
@@ -429,6 +455,7 @@ pub(super) async fn update_typed(
         && matches!(probability, Patch::Keep)
         && matches!(contact_patch, Patch::Keep)
         && matches!(date_patch, Patch::Keep)
+        && input.forecast_category.is_none()
     {
         return Ok(rejected("SALES_EMPTY_UPDATE", 422));
     }
@@ -441,6 +468,7 @@ pub(super) async fn update_typed(
         amount,
         expected_close_date: date_patch,
         probability,
+        forecast_category: input.forecast_category,
         occurred_at_unix_nanos: now_nanos(),
     }) {
         return Ok(rejected(
@@ -579,17 +607,13 @@ async fn stage_mutation(
                     422,
                 ));
             }
-            let Some(ordinal) = super::sales_pipelines::active_stage_ordinal(
-                db,
-                tenant,
-                &value.pipeline_id,
-                &value.stage_id,
-            )
+            let Some(catalog_stage) =
+                super::sales_pipelines::active_stage(db, tenant, &value.pipeline_id, &value.stage_id)
             .await?
             else {
                 return Ok(advance_rejected("SALES_STAGE_NOT_IN_CATALOG", 422));
             };
-            let target = match stage(value.pipeline_id, value.stage_id, ordinal) {
+            let target = match stage(value.pipeline_id, value.stage_id, catalog_stage.ordinal) {
                 Ok(x) => x,
                 Err(code) => return Ok(advance_rejected(code, 422)),
             };
@@ -600,9 +624,15 @@ async fn stage_mutation(
                 },
                 None => None,
             };
+            let default_probability =
+                match BasisPoints::try_new(catalog_stage.probability_basis_points) {
+                    Ok(value) => value,
+                    Err(e) => return Ok(advance_rejected(e.code, 422)),
+                };
             deal.advance_stage(AdvanceDealStage {
                 expected_version,
                 target_stage: target,
+                target_stage_probability: Some(default_probability),
                 target_status: DealStatus::Open,
                 close_reason_code: reason,
                 occurred_at_unix_nanos: now_nanos(),
@@ -923,6 +953,17 @@ fn count_one(value: &mut u64) -> Result<()> {
         .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
     Ok(())
 }
+fn add_money(entry: &mut (i128, i128, u64), units: i128, weighted: i128) -> Result<()> {
+    entry.0 = entry
+        .0
+        .checked_add(units)
+        .ok_or_else(|| worker::Error::RustError("SALES_METRICS_MONEY_OVERFLOW".into()))?;
+    entry.1 = entry
+        .1
+        .checked_add(weighted)
+        .ok_or_else(|| worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into()))?;
+    count_one(&mut entry.2)
+}
 // Proleptic Gregorian UTC day index; CalendarDate validates input first.
 fn gregorian_day_index(year: i32, month: u8, day: u8) -> i64 {
     let y = i64::from(year) - 1;
@@ -931,11 +972,26 @@ fn gregorian_day_index(year: i32, month: u8, day: u8) -> i64 {
     365 * y + y / 4 - y / 100 + y / 400 + BEFORE_MONTH[usize::from(month - 1)] + i64::from(day) - 1
         + i64::from(leap && month > 2)
 }
+pub(super) struct ForecastCategoryMetric {
+    pub category: ForecastCategory,
+    pub deal_count: u64,
+    pub stage_default_count: u64,
+    pub manual_count: u64,
+}
+pub(super) struct ForecastCurrencyMetric {
+    pub category: ForecastCategory,
+    pub currency_code: String,
+    pub total_minor_units: i128,
+    pub weighted_minor_units_times_basis_points: i128,
+    pub amount_deal_count: u64,
+}
 pub(super) struct PipelineMetrics {
     pub total_deal_count: u64,
     pub statuses: Vec<PipelineStatusMetric>,
     pub currencies: Vec<PipelineCurrencyMetric>,
     pub operational: Vec<PipelineOperationalMetric>,
+    pub forecast_categories: Vec<ForecastCategoryMetric>,
+    pub forecast_currencies: Vec<ForecastCurrencyMetric>,
     pub as_of_unix_seconds: i64,
 }
 
@@ -1012,6 +1068,8 @@ pub(super) async fn pipeline_metrics(
     let mut status_groups = BTreeMap::<(String, String), u64>::new();
     let mut money_groups = BTreeMap::<(String, String, String), (i128, i128, u64)>::new();
     let mut operational_groups = BTreeMap::<(String, String), OperationalCounts>::new();
+    let mut forecast_categories = BTreeMap::<ForecastCategory, (u64, u64, u64)>::new();
+    let mut forecast_money = BTreeMap::<(ForecastCategory, String), (i128, i128, u64)>::new();
     for row in &rows {
         if row.as_of_nanos != as_of_text {
             return Err(worker::Error::RustError(
@@ -1036,6 +1094,12 @@ pub(super) async fn pipeline_metrics(
             .checked_add(1)
             .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
         if status == DealStatus::Open {
+            let counts = forecast_categories.entry(deal.forecast_category()).or_default();
+            count_one(&mut counts.0)?;
+            match deal.probability_source() {
+                ProbabilitySource::StageDefault => count_one(&mut counts.1)?,
+                ProbabilitySource::Manual => count_one(&mut counts.2)?,
+            }
             let group = operational_groups
                 .entry((stage_id.to_owned(), status_key.to_owned()))
                 .or_default();
@@ -1096,15 +1160,13 @@ pub(super) async fn pipeline_metrics(
                     amount.currency().to_string(),
                 ))
                 .or_default();
-            entry.0 = entry
-                .0
-                .checked_add(units)
-                .ok_or_else(|| worker::Error::RustError("SALES_METRICS_MONEY_OVERFLOW".into()))?;
-            entry.1 = entry
-                .1
-                .checked_add(weighted)
-                .ok_or_else(|| worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into()))?;
-            count_one(&mut entry.2)?;
+            add_money(entry, units, weighted)?;
+            if status == DealStatus::Open {
+                let entry = forecast_money
+                    .entry((deal.forecast_category(), amount.currency().to_string()))
+                    .or_default();
+                add_money(entry, units, weighted)?;
+            }
         }
     }
     fn persisted_status(raw: &str) -> DealStatus {
@@ -1153,6 +1215,29 @@ pub(super) async fn pipeline_metrics(
                 known_stage_age_count: c.known_age,
                 total_stage_age_seconds: c.age_seconds,
                 overdue_linked_task_count: c.overdue_tasks,
+            })
+            .collect(),
+        forecast_categories: forecast_categories
+            .into_iter()
+            .map(|(category, (deal_count, stage_default_count, manual_count))| {
+                ForecastCategoryMetric {
+                    category,
+                    deal_count,
+                    stage_default_count,
+                    manual_count,
+                }
+            })
+            .collect(),
+        forecast_currencies: forecast_money
+            .into_iter()
+            .map(|((category, currency_code), (total, weighted, count))| {
+                ForecastCurrencyMetric {
+                    category,
+                    currency_code,
+                    total_minor_units: total,
+                    weighted_minor_units_times_basis_points: weighted,
+                    amount_deal_count: count,
+                }
             })
             .collect(),
         as_of_unix_seconds,
