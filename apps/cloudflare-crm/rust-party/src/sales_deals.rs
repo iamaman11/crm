@@ -879,11 +879,6 @@ pub(super) async fn list_events(
     Ok((rows, next))
 }
 
-#[derive(Deserialize)]
-struct CountRow {
-    total: i64,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct PipelineStatusMetric {
     pub stage_id: String,
@@ -1101,12 +1096,14 @@ pub(super) async fn pipeline_metrics(
                     amount.currency().to_string(),
                 ))
                 .or_default();
-            entry.0 = entry.0.checked_add(units).ok_or_else(|| {
-                worker::Error::RustError("SALES_METRICS_MONEY_OVERFLOW".into())
-            })?;
-            entry.1 = entry.1.checked_add(weighted).ok_or_else(|| {
-                worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into())
-            })?;
+            entry.0 = entry
+                .0
+                .checked_add(units)
+                .ok_or_else(|| worker::Error::RustError("SALES_METRICS_MONEY_OVERFLOW".into()))?;
+            entry.1 = entry
+                .1
+                .checked_add(weighted)
+                .ok_or_else(|| worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into()))?;
             count_one(&mut entry.2)?;
         }
     }
@@ -1213,66 +1210,32 @@ pub(super) async fn list_stage_page(
         condition.push_str(" AND account_id=?");
         arguments.push(JsValue::from_str(account));
     }
-    let count_sql =
-        format!("SELECT COUNT(*) AS total FROM crm_sales_deal_records WHERE {condition}");
-    let counted = bind(db, &count_sql, &arguments)?
-        .first::<CountRow>(None)
+    // One indexed snapshot supplies counts, exact totals and the requested
+    // keyset page. The cursor limits returned cards, not the summary facts.
+    // There is no second read that can observe another committed Deal state.
+    let sql = format!("SELECT id,state FROM crm_sales_deal_records WHERE {condition} ORDER BY id");
+    let rows = bind(db, &sql, &arguments)?
+        .all()
         .await?
-        .ok_or_else(|| worker::Error::RustError("SALES_BOARD_COUNT_MISSING".into()))?;
-    let total = u64::try_from(counted.total)
+        .results::<PagedRow>()?;
+    let total = u64::try_from(rows.len())
         .map_err(|_| worker::Error::RustError("SALES_BOARD_COUNT_INVALID".into()))?;
-
-    // One bounded D1 keyset batch at a time, with the SAME tenant, pipeline,
-    // stage, status and account predicates as total_count. Pagination cursor
-    // is intentionally excluded so every column page reports the same totals.
-    // The existing stage index supplies the filter/id scan; no summary table
-    // or independently mutated aggregate state is introduced.
-    const SUMMARY_BATCH: usize = 256;
-    let totals_sql = format!(
-        "SELECT id,state FROM crm_sales_deal_records WHERE {condition} \
-         AND id>? ORDER BY id LIMIT ?"
-    );
-    let mut summary_after = String::new();
     let mut summary = BTreeMap::<String, (i128, u64)>::new();
-    loop {
-        let mut summary_args = arguments.clone();
-        summary_args.push(JsValue::from_str(&summary_after));
-        summary_args.push(JsValue::from_f64(SUMMARY_BATCH as f64));
-        let rows = bind(db, &totals_sql, &summary_args)?
-            .all()
-            .await?
-            .results::<PagedRow>()?;
-        if rows.is_empty() {
-            break;
-        }
-        for row in &rows {
-            let deal = decode(&row.state)?;
-            let Some(amount) = deal.amount() else {
-                continue;
-            };
-            let units = amount.minor_units();
-            let total = summary.entry(amount.currency().to_string()).or_insert((0, 0));
-            total.0 = total
+    let mut page = Vec::with_capacity(limit + 1);
+    for row in &rows {
+        let deal = decode(&row.state)?;
+        if let Some(amount) = deal.amount() {
+            let entry = summary.entry(amount.currency().to_string()).or_insert((0, 0));
+            entry.0 = entry
                 .0
-                .checked_add(units)
+                .checked_add(amount.minor_units())
                 .ok_or_else(|| worker::Error::RustError("SALES_BOARD_AMOUNT_OVERFLOW".into()))?;
-            total.1 = total.1.checked_add(1).ok_or_else(|| {
+            entry.1 = entry.1.checked_add(1).ok_or_else(|| {
                 worker::Error::RustError("SALES_BOARD_AMOUNT_COUNT_OVERFLOW".into())
             })?;
         }
-        let next_after = rows
-            .last()
-            .ok_or_else(|| worker::Error::RustError("SALES_BOARD_SUMMARY_CURSOR_MISSING".into()))?
-            .id
-            .clone();
-        if next_after <= summary_after {
-            return Err(worker::Error::RustError(
-                "SALES_BOARD_SUMMARY_CURSOR_INVALID".into(),
-            ));
-        }
-        summary_after = next_after;
-        if rows.len() < SUMMARY_BATCH {
-            break;
+        if row.id.as_str() > after && page.len() <= limit {
+            page.push((row.id.clone(), deal));
         }
     }
     let currency_totals = summary
@@ -1285,27 +1248,14 @@ pub(super) async fn list_stage_page(
             },
         )
         .collect();
-    condition.push_str(" AND id>?");
-    arguments.push(JsValue::from_str(after));
-    arguments.push(JsValue::from_f64((limit + 1) as f64));
-    let list_sql = format!(
-        "SELECT id,state FROM crm_sales_deal_records WHERE {condition} ORDER BY id LIMIT ?"
-    );
-    let mut rows = bind(db, &list_sql, &arguments)?
-        .all()
-        .await?
-        .results::<PagedRow>()?;
-    let more = rows.len() > limit;
-    rows.truncate(limit);
+    let more = page.len() > limit;
+    page.truncate(limit);
     let next = if more {
-        rows.last().map(|item| item.id.clone())
+        page.last().map(|(id, _)| id.clone())
     } else {
         None
     };
-    let deals = rows
-        .iter()
-        .map(|item| decode(&item.state))
-        .collect::<Result<Vec<_>>>()?;
+    let deals = page.into_iter().map(|(_, deal)| deal).collect();
     Ok((deals, next, total, currency_totals))
 }
 
