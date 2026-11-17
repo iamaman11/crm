@@ -207,9 +207,7 @@ pub(super) fn log_read_failure(request_id: &str, phase: &str, error: &worker::Er
     emit(&json!({"event":"crm.native.read.failure","request_id":request_id,
                "phase":phase,"reason":reason}));
     #[cfg(feature = "native-ci")]
-    console_log!(
-        "{}",
-        json!({"event":"crm.native-ci.read.failure","request_id":request_id,
+    emit(&json!({"event":"crm.native-ci.read.failure","request_id":request_id,
                "phase":phase,"detail":error.to_string()}));
 }
 
