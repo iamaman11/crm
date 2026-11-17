@@ -701,14 +701,23 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    page.on("dialog",acceptReload);
    try{await page.reload();}finally{page.off("dialog",acceptReload);}
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
    await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeDisabled();
+   const lookupResponse=page.waitForResponse(r=>r.url().endsWith("/GetDeal")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
-   await page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}).waitFor();
-   assert.equal(closeCalls,1,"Reload recovery must not re-execute a write");
+   const checked=await lookupResponse;
+   assert.equal(checked.status(),200);
+   const checkId=(await checked.allHeaders())["x-request-id"];
+   assert.match(checkId??"",/^[a-f0-9-]{36}$/i);
    assert.ok(originalCloseRequestId);
+   await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
+     .toContainText(originalCloseRequestId);
+   assert.equal(closeCalls,1,"Reload recovery must not re-execute a write");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+checkId+"'"))[0].n,0);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+originalCloseRequestId+
+     "' AND action='sales_deals.close'"))[0].n,1);
    assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.deal.pending.v1")),null);
    await page.unroute(closeRoute);
-   await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
    steps.push("S1 reload: opaque marker, read original receipt, no second CloseDeal");
    const terminal=(await sql("SELECT version,json_extract(state,'$.status') AS status,json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
    assert.deepEqual(terminal,{version:4,status:"won",stage:actualStage});
