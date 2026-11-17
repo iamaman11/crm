@@ -121,7 +121,7 @@ struct StageMoneyRow {
 // store or parallel Deal owner: summary is derived from the canonical records.
 #[derive(Deserialize)]
 struct PipelineMoneyRow {
-    id: String,
+    as_of_nanos: String,
     stage_id: String,
     status: String,
     currency_code: Option<String>,
@@ -960,9 +960,9 @@ pub(super) struct PipelineMetrics {
     pub as_of_unix_seconds: i64,
 }
 
-// One indexed keyset scan over the full filtered tenant pipeline. Stage
-// pagination cursors never participate. All monetary arithmetic stays integer
-// in original Rust, including sums above SQLite signed int64 SUM limits.
+// One indexed SELECT provides a single D1 read snapshot of Deals, Tasks
+// and events. Stage/page cursors never participate, and monetary arithmetic
+// remains exact in the original Rust owner.
 pub(super) async fn pipeline_metrics(
     db: &D1Database,
     tenant: &str,
@@ -971,26 +971,28 @@ pub(super) async fn pipeline_metrics(
     account: Option<&str>,
 ) -> Result<PipelineMetrics> {
     let mut condition =
-        String::from("tenant=? AND json_extract(state,'$.stage.pipeline_id')=? AND id>?");
-    let mut optional = String::new();
-    let mut filters = Vec::<JsValue>::new();
+        String::from("d.tenant=? AND json_extract(d.state,'$.stage.pipeline_id')=?");
+    let mut arguments = vec![JsValue::from_str(tenant), JsValue::from_str(pipeline_id)];
     if let Some(status) = status {
-        optional.push_str(" AND json_extract(state,'$.status')=?");
-        filters.push(JsValue::from_str(match status {
+        condition.push_str(" AND json_extract(d.state,'$.status')=?");
+        arguments.push(JsValue::from_str(match status {
             DealStatus::Open => "open",
             DealStatus::Won => "won",
             DealStatus::Lost => "lost",
         }));
     }
     if let Some(account) = account {
-        optional.push_str(" AND account_id=?");
-        filters.push(JsValue::from_str(account));
+        condition.push_str(" AND d.account_id=?");
+        arguments.push(JsValue::from_str(account));
     }
-    condition.push_str(&optional);
-    // One tenant-scoped keyset scan; event and Task lookups reuse composite
-    // indexes. Neither account-level tasks nor ordinary edits reset stage age.
+    // Materialize the database clock once; correlated indexed event/task
+    // lookups are evaluated inside the same read statement.
     let sql = format!(
-        r#"SELECT d.id,
+        r#"WITH snapshot_clock AS MATERIALIZED (
+           SELECT CAST(strftime('%s','now') AS INTEGER)*1000000000
+                + CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000 AS nanos
+         )
+         SELECT CAST(c.nanos AS TEXT) AS as_of_nanos,
            json_extract(d.state,'$.stage.stage_id') AS stage_id,
            json_extract(d.state,'$.status') AS status,
            json_extract(d.state,'$.amount.currency') AS currency_code,
@@ -1011,104 +1013,104 @@ pub(super) async fn pipeline_metrics(
                     WHERE l.tenant=d.tenant AND l.deal_id=d.id
                       AND json_extract(t.state,'$.status')='open'
                       AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER)
-                        < CAST(? AS INTEGER)) AS has_overdue_linked_task
-         FROM crm_sales_deal_records d
-        WHERE {condition}
-        ORDER BY d.id LIMIT ?"#
+                        < c.nanos) AS has_overdue_linked_task
+         FROM snapshot_clock c CROSS JOIN crm_sales_deal_records d
+        WHERE {condition}"#
     );
-    const METRICS_BATCH: usize = 256;
-    let as_of_nanos = now_nanos();
+    // Resource-limit errors fail the request; never emit a truncated summary.
+    // Empty results have no persisted facts to date.
+    let rows = bind(db, &sql, &arguments)?
+        .all()
+        .await?
+        .results::<PipelineMoneyRow>()?;
+    let as_of_nanos = match rows.first() {
+        Some(row) => row.as_of_nanos.parse::<i64>().map_err(|_| {
+            worker::Error::RustError("SALES_METRICS_SNAPSHOT_TIME_INVALID".into())
+        })?,
+        None => now_nanos(),
+    };
+    let as_of_text = as_of_nanos.to_string();
     let as_of_unix_seconds = as_of_nanos.div_euclid(1_000_000_000);
     let today = gregorian_day_index(1970, 1, 1) + as_of_unix_seconds.div_euclid(86_400);
-    let mut after = String::new();
     let mut total_count = 0u64;
     let mut status_groups = BTreeMap::<(String, String), u64>::new();
     let mut money_groups = BTreeMap::<(String, String, String), (i128, i128, u64)>::new();
     let mut operational_groups = BTreeMap::<(String, String), OperationalCounts>::new();
-    loop {
-        let mut arguments = vec![
-            JsValue::from_str(&as_of_nanos.to_string()),
-            JsValue::from_str(tenant),
-            JsValue::from_str(pipeline_id),
-            JsValue::from_str(&after),
-        ];
-        arguments.extend(filters.iter().cloned());
-        arguments.push(JsValue::from_f64(METRICS_BATCH as f64));
-        let rows = bind(db, &sql, &arguments)?
-            .all()
-            .await?
-            .results::<PipelineMoneyRow>()?;
-        if rows.is_empty() {
-            break;
+    for row in &rows {
+        if row.as_of_nanos != as_of_text {
+            return Err(worker::Error::RustError(
+                "SALES_METRICS_SNAPSHOT_TIME_INVALID".into(),
+            ));
         }
-        for row in &rows {
-            let status = match row.status.as_str() {
-                "open" => DealStatus::Open,
-                "won" => DealStatus::Won,
-                "lost" => DealStatus::Lost,
-                _ => {
-                    return Err(worker::Error::RustError(
-                        "SALES_METRICS_STATUS_INVALID".into(),
-                    ));
-                }
-            };
-            StageId::try_new(row.stage_id.clone())
-                .map_err(|e| worker::Error::RustError(e.code.to_owned()))?;
-            total_count = total_count
-                .checked_add(1)
-                .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
-            let status_group = status_groups
+        let status = match row.status.as_str() {
+            "open" => DealStatus::Open,
+            "won" => DealStatus::Won,
+            "lost" => DealStatus::Lost,
+            _ => {
+                return Err(worker::Error::RustError(
+                    "SALES_METRICS_STATUS_INVALID".into(),
+                ));
+            }
+        };
+        StageId::try_new(row.stage_id.clone())
+            .map_err(|e| worker::Error::RustError(e.code.to_owned()))?;
+        total_count = total_count
+            .checked_add(1)
+            .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
+        let status_group = status_groups
+            .entry((row.stage_id.clone(), row.status.clone()))
+            .or_default();
+        *status_group = status_group
+            .checked_add(1)
+            .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
+        if status == DealStatus::Open {
+            let group = operational_groups
                 .entry((row.stage_id.clone(), row.status.clone()))
                 .or_default();
-            *status_group = status_group
-                .checked_add(1)
-                .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
-            if status == DealStatus::Open {
-                let group = operational_groups
-                    .entry((row.stage_id.clone(), row.status.clone()))
-                    .or_default();
-                match (
-                    row.expected_close_year,
-                    row.expected_close_month,
-                    row.expected_close_day,
-                ) {
-                    (None, None, None) => count_one(&mut group.undated)?,
-                    (Some(year), Some(month), Some(day)) => {
-                        let month = u8::try_from(month).map_err(|_| {
-                            worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
-                        })?;
-                        let day = u8::try_from(day).map_err(|_| {
-                            worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
-                        })?;
-                        CalendarDate::try_new(year, month, day).map_err(|_| {
-                            worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
-                        })?;
-                        let delta = gregorian_day_index(year, month, day) - today;
-                        if delta < 0 {
-                            count_one(&mut group.overdue)?;
-                        } else if delta <= 30 {
-                            count_one(&mut group.due_soon)?;
-                        } else {
-                            count_one(&mut group.due_later)?;
-                        }
-                    }
-                    _ => {
-                        return Err(worker::Error::RustError(
-                            "SALES_METRICS_DATE_INVALID".into(),
-                        ));
+            match (
+                row.expected_close_year,
+                row.expected_close_month,
+                row.expected_close_day,
+            ) {
+                (None, None, None) => count_one(&mut group.undated)?,
+                (Some(year), Some(month), Some(day)) => {
+                    let month = u8::try_from(month).map_err(|_| {
+                        worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
+                    })?;
+                    let day = u8::try_from(day).map_err(|_| {
+                        worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
+                    })?;
+                    CalendarDate::try_new(year, month, day).map_err(|_| {
+                        worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
+                    })?;
+                    let delta = gregorian_day_index(year, month, day) - today;
+                    if delta < 0 {
+                        count_one(&mut group.overdue)?;
+                    } else if delta <= 30 {
+                        count_one(&mut group.due_soon)?;
+                    } else {
+                        count_one(&mut group.due_later)?;
                     }
                 }
-                // Pre-0013 Deals can have no immutable entry event. Never
-                // synthesize a historical timestamp from updated_at.
-                if let Some(start) = &row.stage_entered_at_nanos {
-                    let started = start.parse::<i64>().map_err(|_| {
-                        worker::Error::RustError("SALES_METRICS_STAGE_TIME_INVALID".into())
-                    })?;
-                    if started <= 0 || started > as_of_nanos {
-                        return Err(worker::Error::RustError(
-                            "SALES_METRICS_STAGE_TIME_INVALID".into(),
-                        ));
-                    }
+                _ => {
+                    return Err(worker::Error::RustError(
+                        "SALES_METRICS_DATE_INVALID".into(),
+                    ));
+                }
+            }
+            // Pre-0013 Deals can have no immutable entry event. Never
+            // synthesize a historical timestamp from updated_at.
+            if let Some(start) = &row.stage_entered_at_nanos {
+                let started = start.parse::<i64>().map_err(|_| {
+                    worker::Error::RustError("SALES_METRICS_STAGE_TIME_INVALID".into())
+                })?;
+                if started <= 0 {
+                    return Err(worker::Error::RustError(
+                        "SALES_METRICS_STAGE_TIME_INVALID".into(),
+                    ));
+                }
+                // A Worker event may be ahead of the D1 clock; do not invent age.
+                if started <= as_of_nanos {
                     count_one(&mut group.known_age)?;
                     group.age_seconds = group
                         .age_seconds
@@ -1117,84 +1119,70 @@ pub(super) async fn pipeline_metrics(
                             worker::Error::RustError("SALES_METRICS_STAGE_TIME_OVERFLOW".into())
                         })?;
                 }
-                match row.has_overdue_linked_task {
-                    1 => count_one(&mut group.overdue_tasks)?,
-                    0 => (),
-                    _ => {
-                        return Err(worker::Error::RustError(
-                            "SALES_METRICS_TASK_FLAG_INVALID".into(),
-                        ));
-                    }
-                }
             }
-            let bps = u16::try_from(row.probability_basis_points).map_err(|_| {
-                worker::Error::RustError("SALES_METRICS_PROBABILITY_INVALID".into())
-            })?;
-            if bps > 10_000 {
-                return Err(worker::Error::RustError(
-                    "SALES_METRICS_PROBABILITY_INVALID".into(),
-                ));
-            }
-            match (&row.currency_code, &row.minor_units) {
-                (None, None) => {}
-                (Some(code), Some(raw_units)) => {
-                    let currency = CurrencyCode::try_new(code.clone())
-                        .map_err(|e| worker::Error::RustError(e.code.to_owned()))?;
-                    let units = raw_units.parse::<i64>().map_err(|_| {
-                        worker::Error::RustError("SALES_METRICS_MONEY_INVALID".into())
-                    })?;
-                    if units < 0 {
-                        return Err(worker::Error::RustError(
-                            "SALES_METRICS_MONEY_INVALID".into(),
-                        ));
-                    }
-                    let weighted =
-                        i128::from(units)
-                            .checked_mul(i128::from(bps))
-                            .ok_or_else(|| {
-                                worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into())
-                            })?;
-                    let entry = money_groups
-                        .entry((
-                            row.stage_id.clone(),
-                            row.status.clone(),
-                            currency.to_string(),
-                        ))
-                        .or_default();
-                    entry.0 = entry.0.checked_add(i128::from(units)).ok_or_else(|| {
-                        worker::Error::RustError("SALES_METRICS_MONEY_OVERFLOW".into())
-                    })?;
-                    entry.1 = entry.1.checked_add(weighted).ok_or_else(|| {
-                        worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into())
-                    })?;
-                    entry.2 = entry.2.checked_add(1).ok_or_else(|| {
-                        worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into())
-                    })?;
-                }
+            match row.has_overdue_linked_task {
+                1 => count_one(&mut group.overdue_tasks)?,
+                0 => (),
                 _ => {
+                    return Err(worker::Error::RustError(
+                        "SALES_METRICS_TASK_FLAG_INVALID".into(),
+                    ));
+                }
+            }
+        }
+        let bps = u16::try_from(row.probability_basis_points).map_err(|_| {
+            worker::Error::RustError("SALES_METRICS_PROBABILITY_INVALID".into())
+        })?;
+        if bps > 10_000 {
+            return Err(worker::Error::RustError(
+                "SALES_METRICS_PROBABILITY_INVALID".into(),
+            ));
+        }
+        match (&row.currency_code, &row.minor_units) {
+            (None, None) => {}
+            (Some(code), Some(raw_units)) => {
+                let currency = CurrencyCode::try_new(code.clone())
+                    .map_err(|e| worker::Error::RustError(e.code.to_owned()))?;
+                let units = raw_units.parse::<i64>().map_err(|_| {
+                    worker::Error::RustError("SALES_METRICS_MONEY_INVALID".into())
+                })?;
+                if units < 0 {
                     return Err(worker::Error::RustError(
                         "SALES_METRICS_MONEY_INVALID".into(),
                     ));
                 }
+                let weighted =
+                    i128::from(units)
+                        .checked_mul(i128::from(bps))
+                        .ok_or_else(|| {
+                            worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into())
+                        })?;
+                let entry = money_groups
+                    .entry((
+                        row.stage_id.clone(),
+                        row.status.clone(),
+                        currency.to_string(),
+                    ))
+                    .or_default();
+                entry.0 = entry.0.checked_add(i128::from(units)).ok_or_else(|| {
+                    worker::Error::RustError("SALES_METRICS_MONEY_OVERFLOW".into())
+                })?;
+                entry.1 = entry.1.checked_add(weighted).ok_or_else(|| {
+                    worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into())
+                })?;
+                entry.2 = entry.2.checked_add(1).ok_or_else(|| {
+                    worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into())
+                })?;
             }
-            // The grouping key is the persisted status; no implicit stage->Won
-            // conversion and no cross-currency totals.
-            let _ = status;
+            _ => {
+                return Err(worker::Error::RustError(
+                    "SALES_METRICS_MONEY_INVALID".into(),
+                ));
+            }
         }
-        let last = rows
-            .last()
-            .ok_or_else(|| worker::Error::RustError("SALES_METRICS_CURSOR_MISSING".into()))?
-            .id
-            .clone();
-        if last <= after {
-            return Err(worker::Error::RustError(
-                "SALES_METRICS_CURSOR_INVALID".into(),
-            ));
-        }
-        after = last;
-        if rows.len() < METRICS_BATCH {
-            break;
-        }
+        // The grouping key is the persisted status; no implicit stage->Won
+        // conversion and no cross-currency totals.
+        let _ = status;
     }
     fn persisted_status(raw: &str) -> DealStatus {
         match raw {

@@ -1,7 +1,7 @@
 // Full generated binary Connect contract and actual React against signed workerd/D1.
 import {spawn,execFileSync} from "node:child_process";
 import {generateKeyPairSync,createSign,randomUUID,createHash} from "node:crypto";
-import {mkdtempSync,rmSync,writeFileSync,readdirSync} from "node:fs";
+import {mkdtempSync,rmSync,writeFileSync,readdirSync,readFileSync} from "node:fs";
 import {DatabaseSync} from "node:sqlite";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
@@ -2033,6 +2033,69 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
     assert.deepEqual(second.body.currencyTotals,first.body.currencyTotals);
     assert.ok(latencyMs<15000,
       "bounded indexed native D1 summary exceeded 15 s at "+n+" Deals: "+latencyMs+" ms");
+    // SQL readback keeps money as text, including sums beyond signed int64.
+    const filter={pipelineId:"pipeline.other",status:1,accountId};
+    const metricStart=performance.now();
+    const metrics=await salesV2("GetPipelineMetrics",viewer,filter);
+    const metricMs=Math.round(performance.now()-metricStart);
+    assert.equal(metrics.status,200,describeProtobuf(metrics.body));
+    const facts=fixtureDb.prepare("SELECT json_extract(state,'$.amount.currency') AS currency,"+
+      "CAST(json_extract(state,'$.amount.minor_units') AS TEXT) AS units,"+
+      "json_extract(state,'$.probability_basis_points') AS bps FROM crm_sales_deal_records "+
+      "WHERE tenant=? AND json_extract(state,'$.stage.pipeline_id')=? "+
+      "AND json_extract(state,'$.status')='open' AND account_id=?")
+      .all("tenant-a","pipeline.other",accountId);
+    assert.equal(facts.length,n+32);
+    assert.equal(metrics.body.totalDealCount,BigInt(facts.length));
+    const expected=new Map();
+    for(const row of facts){
+      if(row.currency===null)continue;
+      const v=expected.get(row.currency)??[0n,0n,0n];
+      v[0]+=BigInt(row.units);v[1]+=BigInt(row.units)*BigInt(row.bps);v[2]++;
+      expected.set(row.currency,v);
+    }
+    assert.deepEqual(metrics.body.currencies.map(x=>[
+      x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
+    ]),[...expected].sort(([a],[b])=>a.localeCompare(b)).map(([c,v])=>[c,String(v[0]),String(v[1]),v[2]]));
+    assert.deepEqual(metrics.body.statuses.map(x=>[x.stageId,x.status,x.dealCount]),
+      [["lead",1,BigInt(n+32)]]);
+    assert.equal(metrics.body.operational[0].knownStageAgeCount,BigInt(n+32));
+    assert.equal(metrics.body.operational[0].noExpectedCloseCount,BigInt(n+30));
+    assert.ok(metricMs<15000,"native pipeline metrics exceeded 15 s at "+n+" Deals: "+metricMs+" ms");
+    console.log(JSON.stringify({event:"crm.native-r73d-metrics-scale",result:"PASS",
+      added_deals:n,matched_deals:facts.length,latency_ms:metricMs,exact_sql_comparison:true,
+      nested_filters:true,exact_i128:true}));
+    if(n===1000){
+      // Both ends of the old paged scan change in a single fixture transaction.
+      // Every committed state has the same total and weighted amount.
+      const ids=["r7-scale-0000","r7-scale-0999"];
+      const update=fixtureDb.prepare("UPDATE crm_sales_deal_records SET "+
+        "state=json_set(state,'$.amount.minor_units',?,'$.version',version+1),version=version+1,"+
+        "idem_key=?,idem_digest='load-fixture',request_id=?,last_action='sales_deals.update' "+
+        "WHERE tenant='tenant-a' AND id=?");
+      const baseline=metrics.body.currencies;
+      for(let attempt=0;attempt<12;attempt++){
+        const read=salesV2("GetPipelineMetrics",viewer,filter);
+        await new Promise(resolve=>setTimeout(resolve,1));
+        fixtureDb.exec("BEGIN IMMEDIATE");
+        try{
+          const amounts=attempt%2===0?[2346,2344]:[2345,2345];
+          for(const [i,id] of ids.entries())
+            assert.equal(update.run(amounts[i],"r7-scale-key-swap-"+attempt+"-"+i,randomUUID(),id).changes,1);
+          fixtureDb.exec("COMMIT");
+        }catch(error){fixtureDb.exec("ROLLBACK");throw error;}
+        const snapshot=await read;
+        assert.equal(snapshot.status,200,describeProtobuf(snapshot.body));
+        assert.equal(snapshot.body.totalDealCount,1032n);
+        assert.deepEqual(snapshot.body.currencies,baseline,
+          "a concurrent atomic balance swap must not create a mixed money snapshot");
+      }
+      const after=await salesV2("GetPipelineMetrics",viewer,filter);
+      assert.equal(after.status,200,describeProtobuf(after.body));
+      assert.deepEqual(after.body.currencies,baseline);
+      console.log(JSON.stringify({event:"crm.native-r73d-concurrent-metrics",result:"PASS",
+        committed_atomic_swaps:12,concurrent_reads:12,final_read:true,exact_totals:true}));
+    }
     console.log(JSON.stringify({event:"crm.native-r71-kanban-scale",result:"PASS",
       added_deals:n,stage_total_count:n+32,rendered_per_page:25,
       full_stage_currencies:4,latency_ms:latencyMs,cursor_stable:true,
@@ -2048,6 +2111,18 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
       "AND json_type(state,'$.amount')='object' AND id>'' ORDER BY id LIMIT 256");
     assert.ok(plan.some(row=>row.detail.includes("idx_crm_sales_board_stage")),
       "the 1000+ row summary must use the existing indexed stage/ID keyset");
+    // EXPLAIN the actual native Rust statement, not an approximation.
+    const rust=readFileSync(join(cwd,"src","sales_deals.rs"),"utf8");
+    const query=rust.match(/r#"WITH snapshot_clock AS MATERIALIZED \([\s\S]*?WHERE \{condition\}"#/)?.[0];
+    assert.ok(query,"canonical metrics SELECT must be present");
+    const metricsSql=query.slice(3,-2).replace("{condition}",
+      "d.tenant=? AND json_extract(d.state,'$.stage.pipeline_id')=? "+
+      "AND json_extract(d.state,'$.status')=? AND d.account_id=?");
+    const metricsPlan=fixtureDb.prepare("EXPLAIN QUERY PLAN "+metricsSql)
+      .all("tenant-a","pipeline.other","open",accountId);
+    assert.ok(metricsPlan.some(row=>row.detail.includes("idx_crm_sales_board_stage")));
+    assert.ok(metricsPlan.some(row=>row.detail.includes("crm_sales_deal_events")));
+    assert.ok(metricsPlan.some(row=>row.detail.includes("idx_crm_sales_link_deal")));
     await benchmark(100);
     await benchmark(1000);
   }finally{
