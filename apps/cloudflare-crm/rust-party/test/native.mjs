@@ -1692,6 +1692,13 @@ assert.equal(saleUpdated.body.deal?.expectedCloseDate?.day,29);
 assert.ok(saleUpdated.body.deal?.updatedAt);
 assert.equal(saleUpdated.body.receipt?.resourceVersion,2n);
 assert.equal(saleUpdated.body.receipt?.replayed,false);
+// A later record version is not the original command's receipt version.
+const originalAfterUpdate=await salesV2("GetDeal",admin,{dealId,
+  receiptIdempotencyKey:saleCreate.precondition.idempotencyKey});
+assert.equal(originalAfterUpdate.status,200);
+assert.equal(originalAfterUpdate.body.deal?.version,2n);
+assert.equal(originalAfterUpdate.body.confirmedMutation?.resourceVersion,1n);
+assert.equal(originalAfterUpdate.body.confirmedMutation?.originalRequestId,salesCreated.headers.get("x-request-id"));
 const saleUpdateReplayed=await salesV2("UpdateDeal",admin,updateSale);
 assert.equal(saleUpdateReplayed.status,200);
 assert.equal(saleUpdateReplayed.body.receipt?.replayed,true);

@@ -703,6 +703,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
    await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeDisabled();
+   // A failed read cannot clear the marker or start another write.
+   const getDealRoute="**/crm.sales.v2.DealService/GetDeal";
+   const failLookup=route=>route.abort("failed");
+   await page.route(getDealRoute,failLookup);
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   await expect(page.getByRole("button",{name:"Проверить результат записи",exact:true})).toBeEnabled();
+   assert.deepEqual(await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.deal.pending.v1"))),mark);
+   assert.equal(closeCalls,1);
+   await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeDisabled();
+   await page.unroute(getDealRoute,failLookup);
    const lookupResponse=page.waitForResponse(r=>r.url().endsWith("/GetDeal")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const checked=await lookupResponse;
