@@ -269,6 +269,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Создать клиента",exact:true}).click();
    await page.getByLabel("Название клиента",{exact:true}).fill("Browser Account "+runId);
    await search("Поиск: Основной участник",partyId,"ListParties");
+   // HTTP completion precedes React query commit. Assert the exact filtered
+   // option entered the DOM before the generic paged picker checks cursors.
+   // A bad server result still fails (the expected option never appears).
+   await page.getByLabel("Основной участник",{exact:true})
+     .locator(`option[value="${partyId}"]`).waitFor({state:"attached"});
    await selectPagedPicker(page,"Основной участник",partyId);
    await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"CreateAccount");
    accountId=await firstId("crm_account_records","name","Browser Account "+runId);
