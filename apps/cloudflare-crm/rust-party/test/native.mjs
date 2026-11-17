@@ -1479,6 +1479,98 @@ assert.equal((await salesV2("UpdatePipeline",admin,{
   stages:pipelineSeed.stages,archived:false,
   precondition:{expectedVersion:1n,idempotencyKey:"connect-r7-pipeline-stale"}
 })).status,409);
+// R7.3 named views: one signed Rust owner, tenant D1, replay, CAS, archived
+// visibility, negative inputs and atomic audit rollback.
+const viewAId="sales-view-"+randomUUID();
+const viewBId="sales-view-"+randomUUID();
+const viewAInput={
+  viewId:viewAId,name:"Open enterprise",pipelineId:"pipeline.enterprise",
+  status:1,accountId,
+  precondition:{idempotencyKey:"r73-view-create-1"}
+};
+assert.equal((await salesV2("CreateSalesView",viewer,viewAInput)).status,403);
+assert.equal((await salesV2("CreateSalesView",admin,{
+  ...viewAInput,status:0,precondition:{idempotencyKey:"r73-view-invalid-status"}
+})).status,400);
+assert.equal((await salesV2("CreateSalesView",admin,{
+  ...viewAInput,pipelineId:"pipeline.unknown",
+  precondition:{idempotencyKey:"r73-view-unknown-pipeline"}
+})).status,404);
+assert.equal((await salesV2("CreateSalesView",admin,{
+  ...viewAInput,accountId:"bad/id",
+  precondition:{idempotencyKey:"r73-view-invalid-account"}
+})).status,400);
+const viewCreated=await salesV2("CreateSalesView",admin,viewAInput);
+assert.equal(viewCreated.status,200,describeProtobuf(viewCreated.body));
+assert.equal(viewCreated.body.view?.version,1n);
+assert.equal(viewCreated.body.view?.status,1);
+assert.equal(viewCreated.body.view?.accountId,accountId);
+assert.equal((await salesV2("CreateSalesView",admin,viewAInput)).body.receipt?.replayed,true);
+assert.equal((await salesV2("CreateSalesView",admin,{
+  ...viewAInput,name:"different"
+})).status,409);
+assert.equal((await salesV2("GetSalesView",tenantB,{viewId:viewAId})).status,404);
+assert.equal((await salesV2("ListSalesViews",tenantB,{page:{pageSize:10}})).body.views.length,0);
+assert.equal((await salesV2("GetSalesView",viewer,{viewId:viewAId})).body.view?.viewId,viewAId);
+const viewBCreated=await salesV2("CreateSalesView",admin,{
+  viewId:viewBId,name:"Won across pipelines",status:2,
+  precondition:{idempotencyKey:"r73-view-create-2"}
+});
+assert.equal(viewBCreated.status,200,describeProtobuf(viewBCreated.body));
+const firstViewsPage=await salesV2("ListSalesViews",viewer,{page:{pageSize:1}});
+assert.equal(firstViewsPage.status,200,describeProtobuf(firstViewsPage.body));
+assert.equal(firstViewsPage.body.views.length,1);
+assert.ok(firstViewsPage.body.pageInfo?.nextPageToken);
+const secondViewsPage=await salesV2("ListSalesViews",viewer,{
+  page:{pageSize:1,pageToken:firstViewsPage.body.pageInfo.nextPageToken}
+});
+assert.equal(secondViewsPage.body.views.length,1);
+assert.equal(secondViewsPage.body.pageInfo?.nextPageToken,"");
+assert.deepEqual(new Set([firstViewsPage.body.views[0].viewId,secondViewsPage.body.views[0].viewId]),
+  new Set([viewAId,viewBId]));
+const viewUpdate={
+  viewId:viewAId,name:"Won in enterprise",pipelineId:"pipeline.enterprise",
+  status:2,precondition:{expectedVersion:1n,idempotencyKey:"r73-view-update-1"}
+};
+const updatedView=await salesV2("UpdateSalesView",admin,viewUpdate);
+assert.equal(updatedView.status,200,describeProtobuf(updatedView.body));
+assert.equal(updatedView.body.view?.version,2n);
+assert.equal(updatedView.body.view?.accountId,undefined);
+assert.equal((await salesV2("UpdateSalesView",admin,viewUpdate)).body.receipt?.replayed,true);
+assert.equal((await salesV2("UpdateSalesView",admin,{
+  ...viewUpdate,name:"stale",precondition:{
+    expectedVersion:1n,idempotencyKey:"r73-view-update-stale"}
+})).status,409);
+const beforeFailedView=sql("SELECT state,version FROM crm_sales_saved_view_records WHERE tenant='tenant-a' AND id='"+viewAId+"'");
+const beforeFailedReceipts=sql("SELECT COUNT(*) AS n FROM crm_sales_saved_view_receipts WHERE tenant='tenant-a'")[0].n;
+sql("CREATE TRIGGER fixture_fail_saved_view_audit BEFORE INSERT ON crm_audit "+
+  "WHEN NEW.action='sales_view.update' AND NEW.subject_id='"+viewAId+"' "+
+  "BEGIN SELECT RAISE(ABORT,'fixture view audit rollback'); END;");
+try {
+  const failed=await salesV2("UpdateSalesView",admin,{
+    ...viewUpdate,name:"Failed write",precondition:{
+      expectedVersion:2n,idempotencyKey:"r73-view-audit-rollback"}
+  });
+  assert.notEqual(failed.status,200,describeProtobuf(failed.body));
+  assert.deepEqual(sql("SELECT state,version FROM crm_sales_saved_view_records "+
+    "WHERE tenant='tenant-a' AND id='"+viewAId+"'"),beforeFailedView);
+  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_saved_view_receipts "+
+    "WHERE tenant='tenant-a'")[0].n,beforeFailedReceipts);
+} finally {sql("DROP TRIGGER fixture_fail_saved_view_audit");}
+const archivedView=await salesV2("UpdateSalesView",admin,{
+  ...viewUpdate,archived:true,precondition:{
+    expectedVersion:2n,idempotencyKey:"r73-view-archive"}
+});
+assert.equal(archivedView.status,200,describeProtobuf(archivedView.body));
+assert.equal(archivedView.body.view?.archived,true);
+assert.deepEqual((await salesV2("ListSalesViews",viewer,{})).body.views.map(x=>x.viewId),[viewBId]);
+assert.equal((await salesV2("ListSalesViews",viewer,{includeArchived:true})).body.views.length,2);
+assert.deepEqual(sql("SELECT action,actor FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+viewAId+"' ORDER BY rowid").map(x=>x.action),
+  ["sales_view.create","sales_view.update","sales_view.update"]);
+console.log(JSON.stringify({event:"crm.native-r73-saved-views",result:"PASS",
+  typed_filters:true,tenant_isolation:true,keyset:true,cas:true,
+  replay:true,signed_audit:true,archive:true,atomic_rollback:true}));
 const dealId="sales-mid-"+randomUUID();
 const stageLead={pipelineId:"pipeline.enterprise",stageId:"lead",ordinal:1};
 const stageQualified={pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:2};
