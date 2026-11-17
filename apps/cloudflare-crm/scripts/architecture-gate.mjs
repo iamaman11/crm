@@ -53,6 +53,11 @@ function validateModuleReport(report){
   }
 }
 
+// Active CRM integration fixtures use the shared D1 binding, never raw files.
+export function validateNativeFixtureSource(source,file){
+ check(!/(?:node:sqlite|better-sqlite3|DatabaseSync|\.sqlite["']|BEGIN\s+IMMEDIATE)/i.test(source),
+   "direct SQLite access bypasses native D1 binding: "+file);
+}
 export function validateWorkerConfig(production,local){
  check(production.name==="crm-dev","unexpected Worker");
  check(production.main==="./rust-party/build/index.js","Worker must be native workers-rs");
@@ -72,6 +77,16 @@ export function validateWorkerConfig(production,local){
 const production=JSON.parse(read("apps/cloudflare-crm/wrangler.jsonc"));
 const local=JSON.parse(read("apps/cloudflare-crm/rust-party/wrangler.jsonc"));
 validateWorkerConfig(production,local);
+{
+ const scope="apps/cloudflare-crm/rust-party/test";
+ const sources=readdirSync(resolve(repo,scope),{recursive:true})
+   .filter(file=>/\.(?:mjs|js|ts|mts)$/.test(file));
+ for(const file of sources)validateNativeFixtureSource(read(scope+"/"+file),file);
+ const native=read(scope+"/native.mjs");
+ check((native.match(/new Miniflare\(/g)||[]).length===1&&
+   native.includes('getD1Database("DB",config.name)'),
+   "one integration runtime must own the canonical D1 fixture binding");
+}
 const reportPath=process.env.CRM_MODULE_COVERAGE_REPORT;
 check(!!reportPath,"canonical manifest/Cargo report required");
 const report=JSON.parse(readFileSync(reportPath,"utf8"));
