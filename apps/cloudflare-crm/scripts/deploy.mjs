@@ -5,6 +5,7 @@ import {createHash} from "node:crypto";
 import {join,relative} from "node:path";
 import {spawnSync} from "node:child_process";
 import {DatabaseSync} from "node:sqlite";
+import {verifyAnonymousDenial} from "./release-readback.mjs";
 const required=n=>{if(!process.env[n])throw Error("Missing "+n);return process.env[n];};
 const sha=required("GITHUB_SHA");
 if(!/^[0-9a-f]{40}$/.test(sha)||process.env.GITHUB_REF!=="refs/heads/dev"||process.env.GITHUB_EVENT_NAME!=="push")throw Error("Untrusted deployment");
@@ -222,10 +223,7 @@ async function deploy(){
   await waitForPublicSha(sha,"deploy");
   // Signed exact-SHA /api/version above already establishes Access plus Worker
   // availability. Require the same endpoint to reject anonymous requests.
-  const anonymous=await fetch(url+"/api/version",{redirect:"manual",cache:"no-store"});
-  if(anonymous.status===200||anonymous.status>=500)
-    throw Error("Cloudflare Access anonymous denial failed: HTTP "+anonymous.status+
-      " ray="+(anonymous.headers.get("cf-ray")||"missing"));
+  await verifyAnonymousDenial(url+"/api/version");
   record("deployed.json",{git_sha:sha,worker_version:newVersion,d1_database:database,rust,started_at:startedAt,result:"E2E_PENDING"});
   console.log(JSON.stringify({event:"crm.deploy",sha,result:"E2E_PENDING",version:newVersion}));
 }
