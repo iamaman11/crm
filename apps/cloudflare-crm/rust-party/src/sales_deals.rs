@@ -1063,7 +1063,7 @@ pub(super) async fn pipeline_metrics(
             break;
         }
     }
-    fn status(raw: &str) -> DealStatus {
+    fn persisted_status(raw: &str) -> DealStatus {
         match raw {
             "open" => DealStatus::Open,
             "won" => DealStatus::Won,
@@ -1077,7 +1077,7 @@ pub(super) async fn pipeline_metrics(
             .into_iter()
             .map(|((stage_id, kind), deal_count)| PipelineStatusMetric {
                 stage_id,
-                status: status(&kind),
+                status: persisted_status(&kind),
                 deal_count,
             })
             .collect(),
@@ -1089,7 +1089,7 @@ pub(super) async fn pipeline_metrics(
                     (total_minor_units, weighted_minor_units_times_basis_points, amount_deal_count),
                 )| PipelineCurrencyMetric {
                     stage_id,
-                    status: status(&kind),
+                    status: persisted_status(&kind),
                     currency_code,
                     total_minor_units,
                     weighted_minor_units_times_basis_points,
