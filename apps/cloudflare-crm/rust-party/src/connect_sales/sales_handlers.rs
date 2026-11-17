@@ -4,6 +4,139 @@ use super::*;
 
 impl sale_wire::DealService for SalesV2Service {
     #[worker::send]
+    async fn create_sales_view(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::CreateSalesViewRequest>,
+    ) -> ServiceResult<sale_wire::CreateSalesViewResponse> {
+        let input = req.to_owned_message();
+        Self::id(&input.view_id)?;
+        let status = Self::view_status(input.status)?;
+        if let Some(id) = &input.account_id {
+            AccountV2Service::valid_id(id)?;
+        }
+        if let Some(id) = &input.pipeline_id {
+            Self::pipeline_id(id)?;
+        }
+        let (key, _) = wire_precondition(input.precondition.as_option(), true)?;
+        let saved = sales_views::create(
+            sales_views::CreateInput {
+                view_id: input.view_id,
+                name: input.name,
+                pipeline_id: input.pipeline_id,
+                status,
+                account_id: input.account_id,
+            },
+            &key,
+            &self.d1()?,
+            &self.tenant,
+            &self.actor,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Sales view D1 create failed"))?
+        .map_err(Self::view_failed)?;
+        RpcResponse::ok(sale_wire::CreateSalesViewResponse {
+            view: Some(Self::view(&saved.value)).into(),
+            receipt: Some(self.view_receipt(&saved)).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn update_sales_view(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::UpdateSalesViewRequest>,
+    ) -> ServiceResult<sale_wire::UpdateSalesViewResponse> {
+        let input = req.to_owned_message();
+        Self::id(&input.view_id)?;
+        let status = Self::view_status(input.status)?;
+        if let Some(id) = &input.account_id {
+            AccountV2Service::valid_id(id)?;
+        }
+        if let Some(id) = &input.pipeline_id {
+            Self::pipeline_id(id)?;
+        }
+        let (key, version) = wire_precondition(input.precondition.as_option(), false)?;
+        let saved = sales_views::update(
+            sales_views::UpdateInput {
+                view_id: input.view_id,
+                expected_version: version.unwrap_or_default(),
+                name: input.name,
+                pipeline_id: input.pipeline_id,
+                status,
+                account_id: input.account_id,
+                archived: input.archived,
+            },
+            &key,
+            &self.d1()?,
+            &self.tenant,
+            &self.actor,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Sales view D1 update failed"))?
+        .map_err(Self::view_failed)?;
+        RpcResponse::ok(sale_wire::UpdateSalesViewResponse {
+            view: Some(Self::view(&saved.value)).into(),
+            receipt: Some(self.view_receipt(&saved)).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn get_sales_view(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::GetSalesViewRequest>,
+    ) -> ServiceResult<sale_wire::GetSalesViewResponse> {
+        Self::id(req.view_id)?;
+        let value = sales_views::get(&self.d1()?, &self.tenant, req.view_id)
+            .await
+            .map_err(|_| ConnectError::internal("Sales view D1 read failed"))?
+            .ok_or_else(|| ConnectError::not_found("SALES_VIEW_NOT_FOUND"))?;
+        RpcResponse::ok(sale_wire::GetSalesViewResponse {
+            view: Some(Self::view(&value)).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn list_sales_views(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::ListSalesViewsRequest>,
+    ) -> ServiceResult<sale_wire::ListSalesViewsResponse> {
+        let size = if req.page.page_size == 0 {
+            25
+        } else {
+            req.page.page_size
+        };
+        if size > 100 {
+            return Err(ConnectError::invalid_argument("page_size exceeds 100"));
+        }
+        let cursor = &req.page.page_token;
+        if !cursor.is_empty() {
+            Self::id(cursor)?;
+        }
+        let (views, next) = sales_views::list(
+            &self.d1()?,
+            &self.tenant,
+            cursor,
+            size as usize,
+            req.include_archived,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Sales view D1 list failed"))?;
+        RpcResponse::ok(sale_wire::ListSalesViewsResponse {
+            views: views.iter().map(Self::view).collect(),
+            page_info: Some(core_v2::PageInfo {
+                next_page_token: next.unwrap_or_default(),
+                ..Default::default()
+            })
+            .into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
     async fn create_pipeline(
         &self,
         _ctx: RequestContext,

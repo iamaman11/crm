@@ -1,4 +1,5 @@
 use crm_core_contracts::{BasisPoints, CalendarDate, Money, PageRequest, Patch};
+use serde::{Deserialize, Serialize};
 use crm_module_sdk::{
     ActorId, ErrorCategory, FieldName, FieldViolation, RecordId, ResourceRef, SdkError,
 };
@@ -77,7 +78,8 @@ impl DealStage {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum DealStatus {
     Open,
     Won,

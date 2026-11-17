@@ -44,6 +44,8 @@ mod sales_contract;
 mod sales_deals;
 #[cfg(feature = "native")]
 mod sales_pipelines;
+#[cfg(feature = "native")]
+mod sales_views;
 
 fn native_request_id() -> Result<String> {
     use js_sys::{Function, Reflect};
@@ -622,6 +624,30 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     ),
     (
         "/crm.consents.v2.ConsentAuthorizationService/ListConsentAuthorizations",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/CreateSalesView",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/UpdateSalesView",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetSalesView",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListSalesViews",
         RpcPolicy {
             permission: RpcPermission::Read,
         },

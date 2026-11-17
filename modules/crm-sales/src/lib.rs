@@ -3,10 +3,12 @@
 pub mod domain;
 pub mod persistence;
 pub mod pipeline;
+pub mod views;
 
 pub use domain::*;
 pub use persistence::*;
 pub use pipeline::*;
+pub use views::*;
 
 use crm_module_sdk::{Clock, ModuleExecutionContext, SdkError};
 
