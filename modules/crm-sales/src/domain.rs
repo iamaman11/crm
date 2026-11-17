@@ -1,8 +1,8 @@
 use crm_core_contracts::{BasisPoints, CalendarDate, Money, PageRequest, Patch};
-use serde::{Deserialize, Serialize};
 use crm_module_sdk::{
     ActorId, ErrorCategory, FieldName, FieldViolation, RecordId, ResourceRef, SdkError,
 };
+use serde::{Deserialize, Serialize};
 
 const MAX_NAME_BYTES: usize = 240;
 const MAX_IDENTIFIER_BYTES: usize = 180;
