@@ -1,6 +1,7 @@
 //! Generated Connect trait for the existing SalesV2Service Rust domain owner.
 //! Access, tenant, and the single native router are defined by the parent.
 use super::*;
+use crate::diagnostics;
 
 impl sale_wire::DealService for SalesV2Service {
     #[worker::send]
@@ -306,7 +307,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|error| {
-            super::super::log_read_failure(&self.request_id, "sales_stage_list", &error);
+            diagnostics::read_failure(&self.request_id, "sales_stage_list", &error);
             ConnectError::internal("Sales D1 stage list failed")
         })?;
         let deals = list
@@ -369,7 +370,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|error| {
-            super::super::log_read_failure(&self.request_id, "sales_metrics", &error);
+            diagnostics::read_failure(&self.request_id, "sales_metrics", &error);
             ConnectError::internal("Sales D1 metrics read failed")
         })?;
         let as_status = |value: DomainDealStatus| match value {

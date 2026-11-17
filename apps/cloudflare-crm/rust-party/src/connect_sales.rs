@@ -5,7 +5,6 @@ use super::{
     access, accounts, activity_tasks, consents, contact_points, data_quality, identity_resolution,
     parties, party_relationships, sales_deals, sales_pipelines, sales_views,
 };
-use super::diagnostics;
 use axum::Router;
 use buffa_types::google::protobuf::Timestamp;
 use connectrpc::{

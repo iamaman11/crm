@@ -250,7 +250,7 @@ fn replay(receipt: Receipt, digest: &str) -> std::result::Result<SalesSaved, Mut
     if receipt.digest != digest {
         return rejected("IDEMPOTENCY_CONFLICT", ErrorCategory::Conflict);
     }
-    let deal = decode(&receipt.state).map_err(|_| unconfirmed(ReceiptUncertainty::ReceiptDecodeFailed))?;
+    let deal = decode(&receipt.state).map_err(|_| unconfirmed(ReceiptUncertainty::DecodeFailed))?;
     Ok(SalesSaved {
         deal,
         replayed: true,
@@ -301,8 +301,8 @@ fn classify_receipt(
         Ok(None) if proven_no_change => {
             rejected("SALES_DEAL_VERSION_CONFLICT", ErrorCategory::Conflict)
         }
-        Ok(None) => Err(unconfirmed(ReceiptUncertainty::ReceiptNotFound)),
-        Err(_) => Err(unconfirmed(ReceiptUncertainty::ReceiptReadFailed)),
+        Ok(None) => Err(unconfirmed(ReceiptUncertainty::NotFound)),
+        Err(_) => Err(unconfirmed(ReceiptUncertainty::ReadFailed)),
     }
 }
 
@@ -321,7 +321,7 @@ pub(super) async fn probe_receipt_read(
             "PROVEN_NO_CHANGE"
         }
         Err(MutationFailure::CommitUnconfirmed {
-            reason: ReceiptUncertainty::ReceiptReadFailed,
+            reason: ReceiptUncertainty::ReadFailed,
             ..
         }) => "RECEIPT_READ_FAILED",
         _ => "UNEXPECTED",
