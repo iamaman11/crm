@@ -1811,8 +1811,15 @@ for(const [index,nextId,pipe] of [
     dealId:nextId,name:"Sales page "+index,accountId,
     stage:{pipelineId:pipe,stageId:"lead",ordinal:1},
     probabilityBasisPoints:1000,
-    precondition:{idempotencyKey:"connect-sales-paging-"+index}});
+    precondition:{idempotencyKey:index===0?"r471-ci-ack-lost":"connect-sales-paging-"+index}});
   assert.equal(created.status,200,describeProtobuf(created.body));
+  if(index===0){
+    assert.equal(created.body.receipt.replayed,true);
+    assert.equal(created.body.receipt.originalRequestId,created.headers.get("x-request-id"));
+    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND subject_id=?",
+      "tenant-a",nextId))[0].n,1);
+    console.log(JSON.stringify({event:"crm.native.s1-ack-reconciled",result:"PASS",receipt:true,single_audit:true}));
+  }
 }
 assert.equal((await salesV2("ListDeals",viewer,{page:{pageSize:101}})).status,400);
 assert.equal((await salesV2("ListDeals",viewer,{status:0})).status,400);
@@ -2405,13 +2412,27 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
   })).status,409,"Open Deals must forbid pipeline archive");
   assert.equal((await salesV2("GetPipeline",viewer,{pipelineId:"pipeline.enterprise"}))
     .body.pipeline?.version,3n,"Failed catalog writes must roll back");
-  const fresh=await salesV2("CreateDeal",admin,{
+  const freshInput={
     dealId:"r7-catalog-rank-"+randomUUID(),name:"Owner ordered",accountId,
     stage:{pipelineId:"pipeline.enterprise",stageId:"qualified",ordinal:999},
     probabilityBasisPoints:1000,
-    precondition:{idempotencyKey:"r7-new-rank-after-reorder"}
-  });
+    precondition:{idempotencyKey:"r471-ci-receipt-read-fail"}
+  };
+  const unreadableCommit=await salesV2("CreateDeal",admin,freshInput);
+  assert.equal(unreadableCommit.status,503);
+  const unreadableDetail=decodeDomainErrorDetail(unreadableCommit.body.details.find(d=>d.type==="crm.core.v2.DomainErrorDetail"));
+  assert.equal(unreadableDetail.commitOutcome,2);
+  assert.equal(unreadableDetail.requestId,unreadableCommit.headers.get("x-request-id"));
+  assert.equal((await sql("SELECT version FROM crm_sales_deal_records WHERE tenant=? AND id=?",
+    "tenant-a",freshInput.dealId))[0].version,1);
+  const fresh=await salesV2("CreateDeal",admin,freshInput);
   assert.equal(fresh.status,200,describeProtobuf(fresh.body));
+  assert.equal(fresh.body.receipt.replayed,true);
+  assert.equal(fresh.body.receipt.originalRequestId,unreadableCommit.headers.get("x-request-id"));
+  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND subject_id=?",
+    "tenant-a",freshInput.dealId))[0].n,1);
+  console.log(JSON.stringify({event:"crm.native.s1-receipt-read-failure",result:"PASS",
+    committed_before_failed_read:true,unconfirmed:true,same_intent_replay:true,single_audit:true}));
   assert.equal(fresh.body.deal?.stage?.ordinal,1);
   // An ordinary UpdateDeal wins version 2 without a stage link.
   // Simulate the losing CAS's remaining batch against the actual D1 binding.

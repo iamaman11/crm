@@ -450,6 +450,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Источник вероятности",{exact:true}).selectOption("1");
    await page.getByLabel("Категория прогноза",{exact:true}).selectOption("3");
    await page.getByLabel("Вероятность, %",{exact:true}).fill("37.45");
+   await page.getByLabel("Название сделки",{exact:true}).fill("   ");
+   const invalidCreate=page.waitForResponse(r=>r.url().endsWith("/CreateDeal")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Сохранить сделку",exact:true}).click();
+   assert.equal((await invalidCreate).status(),400);
+   await expect(page.getByRole("dialog").getByText(/^deal\.name:/)).toBeVisible();
+   await page.getByLabel("Название сделки",{exact:true}).fill("Browser Deal "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
    const dealId=await firstId("crm_sales_deal_records","name","Browser Deal "+runId);
    assert.ok(dealId);
@@ -642,6 +648,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page).toHaveURL(beforePendingNavigation);
    await expect(page.getByRole("dialog")).toBeVisible();
    await expect(page.getByRole("button",{name:"Повторить исходную операцию",exact:true})).toBeVisible();
+   // The rejected hash entry remains in native history. Forward must restore
+   // the same accepted entry, too, not merely repair the first hash change.
+   assert.equal(await page.evaluate(()=>window.navigation.canGoForward),true);
+   const attemptedForward=await page.evaluate(()=>new Promise(resolve=>{
+     window.addEventListener("popstate",()=>resolve(location.hash),{once:true});
+     history.forward();
+   }));
+   assert.equal(attemptedForward,"#accounts");
+   await expect(page).toHaveURL(beforePendingNavigation);
+   await expect(page.getByRole("dialog")).toBeVisible();
    const retryAdvance=page.waitForResponse(r=>r.url().endsWith("/AdvanceStage")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Повторить исходную операцию",exact:true}).click();
    await assertMutation(await retryAdvance,"AdvanceStage",{replay:true});

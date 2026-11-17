@@ -295,6 +295,16 @@ async fn reconcile(
     digest: &str,
     proven_no_change: bool,
 ) -> std::result::Result<SalesSaved, MutationFailure> {
+    // Signed workerd-only fault injection. The production artifact never
+    // contains this key or the deliberately missing test relation.
+    #[cfg(feature = "native-ci")]
+    if key == "r471-ci-receipt-read-fail" {
+        let observed = db
+            .prepare("SELECT digest,state,original_request_id FROM crm_ci_missing_receipt_table")
+            .first::<Receipt>(None)
+            .await;
+        return classify_receipt(observed, digest, proven_no_change);
+    }
     classify_receipt(prior(db, tenant, key).await, digest, proven_no_change)
 }
 
@@ -467,6 +477,11 @@ pub(super) async fn create_typed(
         .and_then(changes)
         .is_some_and(|count| count > 0)
     {
+        // Discard the genuine D1 write acknowledgement in isolated CI only.
+        #[cfg(feature = "native-ci")]
+        if matches!(k, "r471-ci-ack-lost" | "r471-ci-receipt-read-fail") {
+            return Ok(reconcile(db, tenant, k, &digest, false).await);
+        }
         return Ok(Ok(acknowledged(deal, trace)));
     }
     Ok(reconcile(db, tenant, k, &digest, false).await)

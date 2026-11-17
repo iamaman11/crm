@@ -6,6 +6,8 @@ type LeaveGuard=()=>boolean;
 const listeners=new Set<Listener>();
 let subscribed=false;
 let acceptedHash=window.location.hash;
+let acceptedKey=window.navigation?.currentEntry?.key;
+let acceptedState:unknown=window.history.state;
 let leaveGuard:LeaveGuard|null=null;
 let reversing=false;
 
@@ -13,22 +15,46 @@ export function currentRouteHash():string{return acceptedHash;}
 function notify():void {for(const listener of listeners)listener();}
 function acceptLocation():void {
   const hash=window.location.hash;
+  acceptedKey=window.navigation?.currentEntry?.key;
+  acceptedState=window.history.state;
   if(hash===acceptedHash)return;
   acceptedHash=hash;
   notify();
 }
-function onLocationChanged(event:Event):void {
+function restoreAcceptedLocation():void {
+  // Both a newly assigned hash and Back/Forward can emit popstate.
+  // Use the browser's actual entry identity instead of guessing direction.
+  reversing=true;
+  const navigation=window.navigation;
+  const restoreUrl=()=>{
+    if(!reversing)return;
+    window.history.replaceState(acceptedState,"",pathWithHash(acceptedHash));
+    acceptedKey=window.navigation?.currentEntry?.key;
+    reversing=false;
+  };
+  if(navigation&&acceptedKey&&navigation.entries().some(entry=>entry.key===acceptedKey)){
+    try {
+      const traversal=navigation.traverseTo(acceptedKey);
+      void traversal.committed.catch(restoreUrl);
+      void traversal.finished.catch(restoreUrl);
+    } catch {
+      restoreUrl();
+    }
+  }else{
+    // Fail closed for an unavailable/evicted entry: retain the form and URL,
+    // rather than risk navigating away by guessing a history direction.
+    restoreUrl();
+  }
+}
+function onLocationChanged():void {
   const next=window.location.hash;
-   if(reversing) {
-    // A rejected browser Back/hash change is being undone without rewriting history.
+  if(reversing) {
     if(next===acceptedHash)reversing=false;
     return;
   }
-  if(next===acceptedHash)return; // popstate + hashchange may both fire for one transition
+  if(next===acceptedHash)return;
   if(leaveGuard!==null&&!leaveGuard()) {
-    reversing=true;
-    if(event.type==="popstate")window.history.forward();
-    else window.history.back();
+    restoreAcceptedLocation();
     return;
   }
   leaveGuard=null;
