@@ -40,7 +40,8 @@ function App() {
     route.screen==="parties"?<PartyScreen key={route.partyId} initialPartyId={route.partyId}/>:
     route.screen==="contacts"?<ContactScreen key={route.partyId} initialPartyId={route.partyId}/>:
     route.screen==="relationships"?<RelationshipScreen key={route.partyId} initialPartyId={route.partyId}/>:
-    route.screen==="tasks"?<TaskScreen key={route.accountId} initialAccountId={route.accountId}/>:
+    route.screen==="tasks"?<TaskScreen key={route.accountId+"/"+route.taskId}
+      initialAccountId={route.accountId} focusedTaskId={route.taskId}/>:
     route.screen==="sales"?<SalesScreen key={route.accountId} initialAccountId={route.accountId}/>:
     route.screen==="consents"?<ConsentScreen/>:
     route.screen==="review"?<ReviewScreen/>:

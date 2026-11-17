@@ -8,8 +8,11 @@ import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {AccountPicker} from "./Pickers";
 import {TimeFields} from "./TimeFields";
 import {timePatch} from "./timePatch";
+import {scopeHref} from "./routes";
 
-export function TaskScreen({initialAccountId=""}:{initialAccountId?:string}) {
+export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
+  initialAccountId?:string;focusedTaskId?:string;
+}) {
   const [cursor,setCursor]=useState("");
   const [status,setStatus]=useState("");
   const [priority,setPriority]=useState("");
@@ -18,18 +21,39 @@ export function TaskScreen({initialAccountId=""}:{initialAccountId?:string}) {
   const [selected,setSelected]=useState<Task>();
   const [editorMode,setEditorMode]=useState<"create"|"edit"|null>(null);
   const mutation=useMutation();
-  const query=useQuery(useCallback(()=>api.tasks.listTasks({page:{pageSize:25,pageToken:cursor},
-    ...(accountId?{accountId}:{}),...(status?{status:enumValue(status,[TaskStatus.OPEN,TaskStatus.COMPLETED],"Статус задачи")}:{}),...(priority?{priority:enumValue(priority,[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи")}:{})}),[cursor,status,priority,accountId]));
+  const query=useQuery(useCallback(async()=>{
+    if(focusedTaskId)return undefined; // Direct-link view never loads a full task list.
+    return api.tasks.listTasks({page:{pageSize:25,pageToken:cursor},
+      ...(accountId?{accountId}:{}),
+      ...(status?{status:enumValue(status,[TaskStatus.OPEN,TaskStatus.COMPLETED],"Статус задачи")}:{}),
+      ...(priority?{priority:enumValue(priority,[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи")}:{})});
+  },[cursor,status,priority,accountId,focusedTaskId]));
+  const focused=useQuery(useCallback(async()=>{
+    if(!focusedTaskId)return undefined;
+    const task=(await api.tasks.getTask({taskId:focusedTaskId})).task;
+    if(!task)throw Error("Задача не найдена");
+    if(initialAccountId&&task.accountId!==initialAccountId)
+      throw Error("Задача не принадлежит выбранному клиенту");
+    return task;
+  },[focusedTaskId,initialAccountId]));
+  const visibleTasks=focusedTaskId?(focused.data?[focused.data]:[]):query.data?.tasks??[];
   return <>
-    <PageHeader title="Задачи" description="Работа по клиентам и задачи, созданные из сделок." actions={<Button onClick={()=>{setSelected(undefined);setEditorMode("create");mutation.changed();}}>Новая задача</Button>}/>
+    <PageHeader title={focusedTaskId?"Карточка задачи":"Задачи"}
+      description="Работа по клиентам и задачи, созданные из сделок."
+      actions={focusedTaskId
+        ?<a href={scopeHref("tasks",initialAccountId||focused.data?.accountId||"")}>К задачам клиента</a>
+        :<Button onClick={()=>{setSelected(undefined);setEditorMode("create");mutation.changed();}}>Новая задача</Button>}/>
+    {!focusedTaskId&&<>
     <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setCursor("");}}/>
     <SelectField label="Статус задачи" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>
       <option value="">Все</option><option value={TaskStatus.OPEN}>Открытые</option><option value={TaskStatus.COMPLETED}>Выполненные</option>
     </SelectField>
     <SelectField label="Приоритет задач" value={priority} onChange={e=>{setPriority(e.target.value);setCursor("");}}>
       <option value="">Все приоритеты</option><option value={TaskPriority.LOW}>Низкий</option><option value={TaskPriority.NORMAL}>Обычный</option><option value={TaskPriority.HIGH}>Высокий</option><option value={TaskPriority.URGENT}>Срочный</option>
-    </SelectField><QueryNotice query={query}/>
-    {query.data?.tasks.map(t=><Card title={t.subject} key={t.taskId}>
+    </SelectField></>}
+    <QueryNotice query={focusedTaskId?focused:query}/>
+    {visibleTasks.map(t=><Card title={t.subject} key={t.taskId}>
+      {focusedTaskId&&<p>ID: {t.taskId} · версия {t.version.toString()}</p>}
       <p>{t.description}</p><p>Клиент: {t.accountId}</p>
       <p>Срок: {dateText(t.dueAt)} · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?"Открыта":"Неизвестный статус"}</p>
       <p>Напоминание: {dateText(t.reminderAt)}</p>
@@ -46,10 +70,13 @@ export function TaskScreen({initialAccountId=""}:{initialAccountId?:string}) {
         if(!fresh.task)throw Error("Задача не найдена");
         return api.tasks.completeTask({taskId:t.taskId,
           precondition:{idempotencyKey:mutation.key,expectedVersion:t.version}});
-      },query.reload)}>Выполнить задачу</Button>}
+      },async()=>{await query.reload();await focused.reload();})}>Выполнить задачу</Button>}
     </Card>)}
-    {!query.busy&&query.data?.tasks.length===0&&<p>Задач пока нет.</p>}
-    <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
+    {!focusedTaskId&&<>
+      {!query.busy&&query.data?.tasks.length===0&&<p>Задач пока нет.</p>}
+      <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
+        onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
+    </>}
     <RecordPanel open={editorMode==="edit"&&!!selected} title="Изменить задачу" onClose={()=>{setEditorMode(null);setSelected(undefined);}}>{selected&&<>
       <p>Текущий срок: {dateText(selected.dueAt)} · Напоминание: {dateText(selected.reminderAt)}</p>
       <form key={selected.taskId+selected.version.toString()} onChange={mutation.changed} onSubmit={e=>{
@@ -66,7 +93,8 @@ export function TaskScreen({initialAccountId=""}:{initialAccountId?:string}) {
             ...(dueAt?{dueAt}:{}),
             precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
           });
-        },async()=>{setSelected(undefined);setEditorMode(null);await query.reload();});
+        },async()=>{setSelected(undefined);setEditorMode(null);
+          await query.reload();await focused.reload();});
       }}><FormGrid>
         <TextField label="Тема задачи: изменение" name="editSubject" defaultValue={selected.subject} required/>
         <TextField label="Описание задачи: изменение" name="editDescription" defaultValue={selected.description}/>

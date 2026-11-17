@@ -6,7 +6,7 @@ import {ContactPointStatus,DealStatus} from "@ultimate-crm/client/cloudflare";
 import {api,dateText} from "./api";
 import {useQuery,QueryNotice} from "./hooks";
 import {moneyText,percent} from "./money";
-import {accountHref,scopeHref} from "./routes";
+import {accountHref,scopeHref,taskHref} from "./routes";
 
 export type Calendar={year:number;month:number;day:number};
 export function inputDate(date:Calendar|undefined):string {
@@ -97,7 +97,7 @@ export function DealHistory({dealId,accountId}:{dealId:string;accountId:string})
         <p>Этап: {event.previousStageId?event.previousStageId+" → ":""}{event.stageId}</p>
         {event.reasonCode&&<p>Причина: {event.reasonCode}</p>}
         <p>Исполнитель: {event.actor} · запрос: {event.requestId}</p>
-        {event.linkedTaskId&&<p>Связанная задача: <a href={scopeHref("tasks",accountId)}>
+        {event.linkedTaskId&&<p>Связанная задача: <a href={taskHref(event.linkedTaskId,accountId)}>
           {event.linkedTaskId}</a></p>}
       </li>)}
     </ol>
