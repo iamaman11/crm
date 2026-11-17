@@ -7,17 +7,17 @@ use serde::Serialize;
 use serde_json::json;
 
 #[derive(Debug, Clone, Copy)]
-pub(super) enum UnconfirmedReason {
-    ReceiptNotFound,
-    ReceiptReadFailed,
-    ReceiptInvalid,
+pub(super) enum ReceiptUncertainty {
+    NotFound,
+    ReadFailed,
+    Invalid,
 }
-impl UnconfirmedReason {
+impl ReceiptUncertainty {
     const fn as_str(self) -> &'static str {
         match self {
-            Self::ReceiptNotFound => "RECEIPT_NOT_FOUND",
-            Self::ReceiptReadFailed => "RECEIPT_READ_FAILED",
-            Self::ReceiptInvalid => "RECEIPT_INVALID",
+            Self::NotFound => "RECEIPT_NOT_FOUND",
+            Self::ReadFailed => "RECEIPT_READ_FAILED",
+            Self::Invalid => "RECEIPT_INVALID",
         }
     }
 }
@@ -29,7 +29,7 @@ pub(super) enum MutationFailure {
     #[error("{code}")]
     Unconfirmed {
         code: &'static str,
-        reason: UnconfirmedReason,
+        reason: ReceiptUncertainty,
     },
 }
 

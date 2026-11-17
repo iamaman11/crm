@@ -1,7 +1,7 @@
 //! Cloudflare native HTTP/D1 boundary for the ORIGINAL crm-sales Deal aggregate.
 //! Stage progression, closing rules, money and version invariants belong to
 //! crm-sales and crm-core-contracts, never the test pilot's crm_deals model.
-use super::diagnostics::{MutationFailure, UnconfirmedReason};
+use super::diagnostics::{MutationFailure, ReceiptUncertainty};
 use super::{bind, now_nanos};
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money, Patch};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef, SdkError};
@@ -228,7 +228,7 @@ pub(super) struct SalesSaved {
     pub(super) original_request_id: Option<String>,
 }
 
-fn unconfirmed(reason: UnconfirmedReason) -> MutationFailure {
+fn unconfirmed(reason: ReceiptUncertainty) -> MutationFailure {
     MutationFailure::Unconfirmed {
         code: "SALES_COMMIT_UNCONFIRMED",
         reason,
@@ -259,7 +259,7 @@ fn replay(receipt: Receipt, digest: &str) -> std::result::Result<SalesSaved, Mut
         return rejected("IDEMPOTENCY_CONFLICT", ErrorCategory::Conflict);
     }
     let deal =
-        decode(&receipt.state).map_err(|_| unconfirmed(UnconfirmedReason::ReceiptInvalid))?;
+        decode(&receipt.state).map_err(|_| unconfirmed(ReceiptUncertainty::Invalid))?;
     Ok(SalesSaved {
         deal,
         replayed: true,
@@ -310,8 +310,8 @@ async fn reconcile(
         Ok(None) if proven_no_change => {
             rejected("SALES_DEAL_VERSION_CONFLICT", ErrorCategory::Conflict)
         }
-        Ok(None) => Err(unconfirmed(UnconfirmedReason::ReceiptNotFound)),
-        Err(_) => Err(unconfirmed(UnconfirmedReason::ReceiptReadFailed)),
+        Ok(None) => Err(unconfirmed(ReceiptUncertainty::NotFound)),
+        Err(_) => Err(unconfirmed(ReceiptUncertainty::ReadFailed)),
     }
 }
 
