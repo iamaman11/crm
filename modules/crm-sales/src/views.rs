@@ -1,16 +1,8 @@
 //! Tenant-scoped named Sales Deal filters. Business validation and CAS live in
 //! original crm-sales; D1 and Connect are adapters, never parallel owners.
-use crate::PipelineId;
+use crate::{DealStatus, PipelineId};
 use crm_module_sdk::{ErrorCategory, RecordId, SdkError};
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SalesViewStatus {
-    Open,
-    Won,
-    Lost,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -18,7 +10,7 @@ pub struct SalesDealView {
     pub view_id: String,
     pub name: String,
     pub pipeline_id: Option<String>,
-    pub status: Option<SalesViewStatus>,
+    pub status: Option<DealStatus>,
     pub account_id: Option<String>,
     pub version: i64,
     pub archived: bool,
@@ -67,7 +59,7 @@ impl SalesDealView {
         view_id: String,
         name: String,
         pipeline_id: Option<String>,
-        status: Option<SalesViewStatus>,
+        status: Option<DealStatus>,
         account_id: Option<String>,
     ) -> Result<Self, SdkError> {
         validate(&view_id, &name, &pipeline_id, &account_id)?;
@@ -87,7 +79,7 @@ impl SalesDealView {
         expected_version: i64,
         name: String,
         pipeline_id: Option<String>,
-        status: Option<SalesViewStatus>,
+        status: Option<DealStatus>,
         account_id: Option<String>,
         archived: bool,
     ) -> Result<Self, SdkError> {
@@ -143,7 +135,7 @@ mod tests {
             "view-1".into(),
             "Открытые сделки".into(),
             Some("pipeline.enterprise".into()),
-            Some(SalesViewStatus::Open),
+            Some(DealStatus::Open),
             Some("account-1".into()),
         )
         .unwrap();
@@ -156,14 +148,14 @@ mod tests {
                 1,
                 "Только выигранные".into(),
                 None,
-                Some(SalesViewStatus::Won),
+                Some(DealStatus::Won),
                 None,
                 false,
             )
             .unwrap();
         assert_eq!(second.version, 2);
         assert_eq!(second.pipeline_id, None);
-        assert_eq!(second.status, Some(SalesViewStatus::Won));
+        assert_eq!(second.status, Some(DealStatus::Won));
         assert_eq!(
             second
                 .reconfigure(1, second.name.clone(), None, None, None, true)
