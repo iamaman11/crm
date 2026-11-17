@@ -99,7 +99,7 @@ export function useMutation(recovery?:RecoveryOptions) {
       }
       try {
         if(stored?.kind==="unreadable"&&marker){
-          changePending({kind:"stored",marker});return false;
+          changePending(stored);return false;
         }
         sessionStorage.removeItem(recovery.storageKey);
       } catch {
@@ -155,6 +155,13 @@ export function useMutation(recovery?:RecoveryOptions) {
     try {
       prepared=prepare();
       if(!recovery)throw Error("Отсутствует настройка восстановления операции.");
+      // A newly mounted owner must not overwrite a previously pending key.
+      const existing=restoredPending(recovery.storageKey);
+      if(existing){
+        changePending(existing);
+        setNotice({tone:"warning",text:"Результат предыдущей записи не подтверждён. Сначала завершите восстановление."});
+        return;
+      }
       // If the marker cannot be written, do not send the command.
       sessionStorage.setItem(recovery.storageKey,JSON.stringify(prepared.marker));
     }catch(error){setNotice({tone:"danger",text:api.describeError(error)});return;}
