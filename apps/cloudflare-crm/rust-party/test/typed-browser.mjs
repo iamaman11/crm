@@ -456,7 +456,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await leadTotals.getByText("90071992547409.93 USD · сделок с суммой: 1",
      {exact:true}).waitFor();
    const wholePipelineMetrics=page.getByRole("region",{name:"Аналитика воронки"});
-   await wholePipelineMetrics.getByText("Всего сделок: 1",{exact:true}).waitFor();
+   await wholePipelineMetrics.getByText(/^Всего сделок: 1 · срез по UTC: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/).waitFor();
    const metricStage=wholePipelineMetrics.getByRole("group",{name:"Первичный контакт · Открытые"});
    await metricStage.getByText("Открытые: 1 сделок",{exact:true}).waitFor();
    const operationalPanel=metricStage.getByRole("group",{name:"Операционные показатели"});
