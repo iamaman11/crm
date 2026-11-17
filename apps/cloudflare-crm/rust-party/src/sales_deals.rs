@@ -939,19 +939,17 @@ struct OperationalCounts {
     overdue_tasks: u64,
 }
 fn count_one(value: &mut u64) -> Result<()> {
-    *value = value.checked_add(1).ok_or_else(|| {
-        worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into())
-    })?;
+    *value = value
+        .checked_add(1)
+        .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
     Ok(())
 }
 // Proleptic Gregorian UTC day index; CalendarDate validates input first.
 fn gregorian_day_index(year: i32, month: u8, day: u8) -> i64 {
     let y = i64::from(year) - 1;
-    const BEFORE_MONTH: [i64; 12] = [0,31,59,90,120,151,181,212,243,273,304,334];
+    const BEFORE_MONTH: [i64; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
     let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
-    365 * y + y / 4 - y / 100 + y / 400
-        + BEFORE_MONTH[usize::from(month - 1)]
-        + i64::from(day) - 1
+    365 * y + y / 4 - y / 100 + y / 400 + BEFORE_MONTH[usize::from(month - 1)] + i64::from(day) - 1
         + i64::from(leap && month > 2)
 }
 pub(super) struct PipelineMetrics {
@@ -1014,8 +1012,7 @@ pub(super) async fn pipeline_metrics(
     const METRICS_BATCH: usize = 256;
     let as_of_nanos = now_nanos();
     let as_of_unix_seconds = as_of_nanos.div_euclid(1_000_000_000);
-    let today = gregorian_day_index(1970, 1, 1)
-        + as_of_unix_seconds.div_euclid(86_400);
+    let today = gregorian_day_index(1970, 1, 1) + as_of_unix_seconds.div_euclid(86_400);
     let mut after = String::new();
     let mut total_count = 0u64;
     let mut status_groups = BTreeMap::<(String, String), u64>::new();
@@ -1063,7 +1060,11 @@ pub(super) async fn pipeline_metrics(
                 let group = operational_groups
                     .entry((row.stage_id.clone(), row.status.clone()))
                     .or_default();
-                match (row.expected_close_year, row.expected_close_month, row.expected_close_day) {
+                match (
+                    row.expected_close_year,
+                    row.expected_close_month,
+                    row.expected_close_day,
+                ) {
                     (None, None, None) => count_one(&mut group.undated)?,
                     (Some(year), Some(month), Some(day)) => {
                         let month = u8::try_from(month).map_err(|_| {
@@ -1084,9 +1085,11 @@ pub(super) async fn pipeline_metrics(
                             count_one(&mut group.due_later)?;
                         }
                     }
-                    _ => return Err(worker::Error::RustError(
-                        "SALES_METRICS_DATE_INVALID".into()
-                    )),
+                    _ => {
+                        return Err(worker::Error::RustError(
+                            "SALES_METRICS_DATE_INVALID".into(),
+                        ));
+                    }
                 }
                 // Pre-0013 Deals can have no immutable entry event. Never
                 // synthesize a historical timestamp from updated_at.
@@ -1096,22 +1099,25 @@ pub(super) async fn pipeline_metrics(
                     })?;
                     if started <= 0 || started > as_of_nanos {
                         return Err(worker::Error::RustError(
-                            "SALES_METRICS_STAGE_TIME_INVALID".into()
+                            "SALES_METRICS_STAGE_TIME_INVALID".into(),
                         ));
                     }
                     count_one(&mut group.known_age)?;
-                    group.age_seconds = group.age_seconds
+                    group.age_seconds = group
+                        .age_seconds
                         .checked_add(i128::from((as_of_nanos - started) / 1_000_000_000))
-                        .ok_or_else(|| worker::Error::RustError(
-                            "SALES_METRICS_STAGE_TIME_OVERFLOW".into()
-                        ))?;
+                        .ok_or_else(|| {
+                            worker::Error::RustError("SALES_METRICS_STAGE_TIME_OVERFLOW".into())
+                        })?;
                 }
                 match row.has_overdue_linked_task {
                     1 => count_one(&mut group.overdue_tasks)?,
                     0 => (),
-                    _ => return Err(worker::Error::RustError(
-                        "SALES_METRICS_TASK_FLAG_INVALID".into()
-                    )),
+                    _ => {
+                        return Err(worker::Error::RustError(
+                            "SALES_METRICS_TASK_FLAG_INVALID".into(),
+                        ));
+                    }
                 }
             }
             let bps = u16::try_from(row.probability_basis_points).map_err(|_| {
