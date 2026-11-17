@@ -1780,6 +1780,31 @@ assert.deepEqual(totalView.body.currencyTotals.map(t=>[
   ["JPY","345",1n],["KWD","4567",1n],["PLN","2345",1n],
   ["USD","9223372036854775808",2n]
 ], "full-stage exact totals must not overflow int64 or mix currencies");
+const initialMetric=await salesV2("GetPipelineMetrics",viewer,{
+  pipelineId:"pipeline.other"});
+assert.equal(initialMetric.status,200,describeProtobuf(initialMetric.body));
+assert.equal(initialMetric.body.totalDealCount,32n);
+assert.deepEqual(initialMetric.body.statuses.map(x=>[x.stageId,x.status,x.dealCount]),
+  [["lead",1,32n]],"metrics must count all Deals beyond one 25-row page");
+assert.deepEqual(initialMetric.body.currencies.map(x=>[
+  x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount
+]),[
+  ["JPY","345","690000",1n],
+  ["KWD","4567","9134000",1n],
+  ["PLN","2345","4690000",1n],
+  ["USD","9223372036854775808","18446744073709551616000",2n]
+], "exact 128-bit sums, exact weighted numerator and currency separation");
+const metricsTenantDenied=await salesV2("GetPipelineMetrics",tenantB,{
+  pipelineId:"pipeline.other"});
+assert.equal(metricsTenantDenied.status,404,"other tenant cannot read foreign Pipeline totals");
+assert.equal((await salesV2("GetPipelineMetrics",viewer,{
+  pipelineId:"pipeline.other",status:2})).body.totalDealCount,0n);
+assert.equal((await salesV2("GetPipelineMetrics",viewer,{
+  pipelineId:"pipeline.other",accountId:randomUUID()})).body.totalDealCount,0n);
+assert.equal((await salesV2("GetPipelineMetrics",viewer,{
+  pipelineId:"pipeline.other",status:0})).status,400);
+assert.equal((await salesV2("GetPipelineMetrics",viewer,{
+  pipelineId:"pipeline.missing"})).status,404);
 const totalNext=await salesV2("ListStageDeals",viewer,{
   pipelineId:"pipeline.other",stageId:"lead",
   page:{pageSize:1,pageToken:totalView.body.pageInfo.nextPageToken}});

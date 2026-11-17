@@ -116,6 +116,18 @@ struct StageMoneyRow {
     currency_code: String,
     minor_units: String,
 }
+
+// A compact D1 projection of the original Deal state. No duplicate metrics
+// store or parallel Deal owner: summary is derived from the canonical records.
+#[derive(Deserialize)]
+struct PipelineMoneyRow {
+    id: String,
+    stage_id: String,
+    status: String,
+    currency_code: Option<String>,
+    minor_units: Option<String>,
+    probability_basis_points: i64,
+}
 #[derive(Deserialize)]
 struct Receipt {
     digest: String,
@@ -881,6 +893,211 @@ pub(super) async fn list_events(
 #[derive(Deserialize)]
 struct CountRow {
     total: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PipelineStatusMetric {
+    pub stage_id: String,
+    pub status: DealStatus,
+    pub deal_count: u64,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PipelineCurrencyMetric {
+    pub stage_id: String,
+    pub status: DealStatus,
+    pub currency_code: String,
+    pub total_minor_units: i128,
+    // Not rounded: the numerator / 10_000 is the weighted minor-unit amount.
+    pub weighted_minor_units_times_basis_points: i128,
+    pub amount_deal_count: u64,
+}
+pub(super) struct PipelineMetrics {
+    pub total_deal_count: u64,
+    pub statuses: Vec<PipelineStatusMetric>,
+    pub currencies: Vec<PipelineCurrencyMetric>,
+}
+
+// One indexed keyset scan over the full filtered tenant pipeline. Stage
+// pagination cursors never participate. All monetary arithmetic stays integer
+// in original Rust, including sums above SQLite signed int64 SUM limits.
+pub(super) async fn pipeline_metrics(
+    db: &D1Database,
+    tenant: &str,
+    pipeline_id: &str,
+    status: Option<DealStatus>,
+    account: Option<&str>,
+) -> Result<PipelineMetrics> {
+    let mut condition =
+        String::from("tenant=? AND json_extract(state,'$.stage.pipeline_id')=? AND id>?");
+    let mut optional = String::new();
+    let mut filters = Vec::<JsValue>::new();
+    if let Some(status) = status {
+        optional.push_str(" AND json_extract(state,'$.status')=?");
+        filters.push(JsValue::from_str(match status {
+            DealStatus::Open => "open",
+            DealStatus::Won => "won",
+            DealStatus::Lost => "lost",
+        }));
+    }
+    if let Some(account) = account {
+        optional.push_str(" AND account_id=?");
+        filters.push(JsValue::from_str(account));
+    }
+    condition.push_str(&optional);
+    let sql = format!(
+        "SELECT id,json_extract(state,'$.stage.stage_id') AS stage_id,\
+         json_extract(state,'$.status') AS status,\
+         json_extract(state,'$.amount.currency') AS currency_code,\
+         CAST(json_extract(state,'$.amount.minor_units') AS TEXT) AS minor_units,\
+         CAST(json_extract(state,'$.probability_basis_points') AS INTEGER) AS probability_basis_points \
+         FROM crm_sales_deal_records WHERE {condition} ORDER BY id LIMIT ?"
+    );
+    const METRICS_BATCH: usize = 256;
+    let mut after = String::new();
+    let mut total_count = 0u64;
+    let mut status_groups = BTreeMap::<(String, String), u64>::new();
+    let mut money_groups = BTreeMap::<(String, String, String), (i128, i128, u64)>::new();
+    loop {
+        let mut arguments = vec![
+            JsValue::from_str(tenant),
+            JsValue::from_str(pipeline_id),
+            JsValue::from_str(&after),
+        ];
+        arguments.extend(filters.iter().cloned());
+        arguments.push(JsValue::from_f64(METRICS_BATCH as f64));
+        let rows = bind(db, &sql, &arguments)?
+            .all()
+            .await?
+            .results::<PipelineMoneyRow>()?;
+        if rows.is_empty() {
+            break;
+        }
+        for row in &rows {
+            let status = match row.status.as_str() {
+                "open" => DealStatus::Open,
+                "won" => DealStatus::Won,
+                "lost" => DealStatus::Lost,
+                _ => {
+                    return Err(worker::Error::RustError(
+                        "SALES_METRICS_STATUS_INVALID".into(),
+                    ));
+                }
+            };
+            StageId::try_new(row.stage_id.clone())
+                .map_err(|e| worker::Error::RustError(e.code.to_owned()))?;
+            total_count = total_count
+                .checked_add(1)
+                .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
+            let status_group = status_groups
+                .entry((row.stage_id.clone(), row.status.clone()))
+                .or_default();
+            *status_group = status_group
+                .checked_add(1)
+                .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
+            let bps = u16::try_from(row.probability_basis_points).map_err(|_| {
+                worker::Error::RustError("SALES_METRICS_PROBABILITY_INVALID".into())
+            })?;
+            if bps > 10_000 {
+                return Err(worker::Error::RustError(
+                    "SALES_METRICS_PROBABILITY_INVALID".into(),
+                ));
+            }
+            match (&row.currency_code, &row.minor_units) {
+                (None, None) => {}
+                (Some(code), Some(raw_units)) => {
+                    let currency = CurrencyCode::try_new(code.clone())
+                        .map_err(|e| worker::Error::RustError(e.code.to_owned()))?;
+                    let units = raw_units.parse::<i64>().map_err(|_| {
+                        worker::Error::RustError("SALES_METRICS_MONEY_INVALID".into())
+                    })?;
+                    if units < 0 {
+                        return Err(worker::Error::RustError(
+                            "SALES_METRICS_MONEY_INVALID".into(),
+                        ));
+                    }
+                    let weighted =
+                        i128::from(units)
+                            .checked_mul(i128::from(bps))
+                            .ok_or_else(|| {
+                                worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into())
+                            })?;
+                    let entry = money_groups
+                        .entry((
+                            row.stage_id.clone(),
+                            row.status.clone(),
+                            currency.to_string(),
+                        ))
+                        .or_default();
+                    entry.0 = entry.0.checked_add(i128::from(units)).ok_or_else(|| {
+                        worker::Error::RustError("SALES_METRICS_MONEY_OVERFLOW".into())
+                    })?;
+                    entry.1 = entry.1.checked_add(weighted).ok_or_else(|| {
+                        worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into())
+                    })?;
+                    entry.2 = entry.2.checked_add(1).ok_or_else(|| {
+                        worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into())
+                    })?;
+                }
+                _ => {
+                    return Err(worker::Error::RustError(
+                        "SALES_METRICS_MONEY_INVALID".into(),
+                    ));
+                }
+            }
+            // The grouping key is the persisted status; no implicit stage->Won
+            // conversion and no cross-currency totals.
+            let _ = status;
+        }
+        let last = rows
+            .last()
+            .ok_or_else(|| worker::Error::RustError("SALES_METRICS_CURSOR_MISSING".into()))?
+            .id
+            .clone();
+        if last <= after {
+            return Err(worker::Error::RustError(
+                "SALES_METRICS_CURSOR_INVALID".into(),
+            ));
+        }
+        after = last;
+        if rows.len() < METRICS_BATCH {
+            break;
+        }
+    }
+    fn status(raw: &str) -> DealStatus {
+        match raw {
+            "open" => DealStatus::Open,
+            "won" => DealStatus::Won,
+            "lost" => DealStatus::Lost,
+            _ => unreachable!("Validated during the original D1 row scan"),
+        }
+    }
+    Ok(PipelineMetrics {
+        total_deal_count: total_count,
+        statuses: status_groups
+            .into_iter()
+            .map(|((stage_id, kind), deal_count)| PipelineStatusMetric {
+                stage_id,
+                status: status(&kind),
+                deal_count,
+            })
+            .collect(),
+        currencies: money_groups
+            .into_iter()
+            .map(
+                |(
+                    (stage_id, kind, currency_code),
+                    (total_minor_units, weighted_minor_units_times_basis_points, amount_deal_count),
+                )| PipelineCurrencyMetric {
+                    stage_id,
+                    status: status(&kind),
+                    currency_code,
+                    total_minor_units,
+                    weighted_minor_units_times_basis_points,
+                    amount_deal_count,
+                },
+            )
+            .collect(),
+    })
 }
 
 /// Both count and currency sums refer to the full tenant/pipeline/stage filter,
