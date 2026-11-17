@@ -14,6 +14,20 @@ enum DealStatus {
   DEAL_STATUS_LOST = 3;
 }
 
+enum ProbabilitySource {
+  PROBABILITY_SOURCE_UNSPECIFIED = 0;
+  PROBABILITY_SOURCE_MANUAL = 1;
+  PROBABILITY_SOURCE_STAGE_DEFAULT = 2;
+}
+
+enum ForecastCategory {
+  FORECAST_CATEGORY_UNSPECIFIED = 0;
+  FORECAST_CATEGORY_PIPELINE = 1;
+  FORECAST_CATEGORY_BEST_CASE = 2;
+  FORECAST_CATEGORY_COMMIT = 3;
+  FORECAST_CATEGORY_OMITTED = 4;
+}
+
 message DealStage {
   string pipeline_id = 1;
   string stage_id = 2;
@@ -35,6 +49,8 @@ message Deal {
   string close_reason_code = 12;
   google.protobuf.Timestamp created_at = 13;
   google.protobuf.Timestamp updated_at = 14;
+  ProbabilitySource probability_source = 15;
+  ForecastCategory forecast_category = 16;
 }
 
 message CreateDealRequest {
@@ -43,10 +59,12 @@ message CreateDealRequest {
   string account_id = 3;
   DealStage stage = 4;
   crm.core.v2.ExactMoney amount = 5;
-  uint32 probability_basis_points = 6;
+  // Absent copies the stage default; explicit zero is a manual estimate.
+  optional uint32 probability_basis_points = 6;
   crm.core.v2.MutationPrecondition precondition = 7;
   optional string primary_contact_id = 8;
   crm.core.v2.CalendarDate expected_close_date = 9;
+  optional ForecastCategory forecast_category = 10;
 }
 
 message CreateDealResponse {
@@ -62,6 +80,9 @@ message UpdateDealRequest {
   crm.core.v2.MutationPrecondition precondition = 5;
   crm.core.v2.StringPatch primary_contact_id = 6;
   crm.core.v2.CalendarDatePatch expected_close_date = 7;
+  // Mutually exclusive with probability_basis_points. False means Keep.
+  bool use_stage_probability = 8;
+  optional ForecastCategory forecast_category = 9;
 }
 
 message UpdateDealResponse {
@@ -339,6 +360,21 @@ message PipelineOperationalMetric {
   // Not all Activities under the Account are implicitly Deal-related.
   uint64 overdue_linked_task_count = 9;
 }
+// Disjoint prospective buckets, only OPEN Deals. OMITTED is explicitly
+// excluded from forecasts; show its facts separately for reconciliation.
+message ForecastCategoryMetric {
+  ForecastCategory category = 1;
+  uint64 deal_count = 2;
+  uint64 stage_default_count = 3;
+  uint64 manual_count = 4;
+}
+message ForecastCurrencyMetric {
+  ForecastCategory category = 1;
+  string currency_code = 2;
+  string total_minor_units = 3;
+  string weighted_minor_units_times_basis_points = 4;
+  uint64 amount_deal_count = 5;
+}
 message GetPipelineMetricsResponse {
   string pipeline_id = 1;
   uint64 total_deal_count = 2;
@@ -346,6 +382,8 @@ message GetPipelineMetricsResponse {
   repeated PipelineCurrencyMetric currencies = 4;
   repeated PipelineOperationalMetric operational = 5;
   int64 as_of_unix_seconds = 6;
+  repeated ForecastCategoryMetric forecast_categories = 7;
+  repeated ForecastCurrencyMetric forecast_currencies = 8;
 }
 
 service DealService {

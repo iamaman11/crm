@@ -421,6 +421,31 @@ impl sale_wire::DealService for SalesV2Service {
                     ..Default::default()
                 })
                 .collect(),
+            forecast_categories: metrics
+                .forecast_categories
+                .into_iter()
+                .map(|row| sale_wire::ForecastCategoryMetric {
+                    category: Self::forecast_wire(row.category).into(),
+                    deal_count: row.deal_count,
+                    stage_default_count: row.stage_default_count,
+                    manual_count: row.manual_count,
+                    ..Default::default()
+                })
+                .collect(),
+            forecast_currencies: metrics
+                .forecast_currencies
+                .into_iter()
+                .map(|row| sale_wire::ForecastCurrencyMetric {
+                    category: Self::forecast_wire(row.category).into(),
+                    currency_code: row.currency_code,
+                    total_minor_units: row.total_minor_units.to_string(),
+                    weighted_minor_units_times_basis_points: row
+                        .weighted_minor_units_times_basis_points
+                        .to_string(),
+                    amount_deal_count: row.amount_deal_count,
+                    ..Default::default()
+                })
+                .collect(),
             as_of_unix_seconds: metrics.as_of_unix_seconds,
             ..Default::default()
         })
@@ -439,8 +464,15 @@ impl sale_wire::DealService for SalesV2Service {
             .as_option()
             .ok_or_else(|| ConnectError::invalid_argument("stage required"))?;
         let (pipeline_id, stage_id) = Self::stage(stage);
-        let probability_bps = u16::try_from(input.probability_basis_points)
-            .map_err(|_| ConnectError::invalid_argument("invalid probability basis points"))?;
+        let probability_bps = input
+            .probability_basis_points
+            .map(|value| {
+                u16::try_from(value)
+                    .map_err(|_| ConnectError::invalid_argument("invalid probability basis points"))
+            })
+            .transpose()?;
+        let forecast_category =
+            Self::forecast_category(input.forecast_category)?.unwrap_or_default();
         let (amount_minor_units, currency) = match input.amount.as_option() {
             Some(money) => (Some(money.minor_units), Some(money.currency_code.clone())),
             None => (None, None),
@@ -454,6 +486,7 @@ impl sale_wire::DealService for SalesV2Service {
                 pipeline_id,
                 stage_id,
                 probability_bps,
+                forecast_category,
                 amount_minor_units,
                 currency,
                 primary_contact_id: input.primary_contact_id,
@@ -561,6 +594,8 @@ impl sale_wire::DealService for SalesV2Service {
                 currency,
                 clear_amount,
                 probability_bps,
+                use_stage_probability: input.use_stage_probability,
+                forecast_category: Self::forecast_category(input.forecast_category)?,
                 primary_contact,
                 expected_close_date,
             },

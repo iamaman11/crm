@@ -1,6 +1,6 @@
 //! One Cloudflare D1 boundary for the original crm_sales::SalesPipeline owner.
 use super::bind;
-use crm_sales::{PipelineStageInput, SalesPipeline};
+use crm_sales::{PipelineStage, PipelineStageInput, SalesPipeline};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -82,12 +82,12 @@ pub(super) async fn get(db: &D1Database, tenant: &str, id: &str) -> Result<Optio
     .map_err(|e| worker::Error::RustError(e.code))
 }
 /// The original Rust sales catalog alone assigns the current stage rank.
-pub(super) async fn active_stage_ordinal(
+pub(super) async fn active_stage(
     db: &D1Database,
     tenant: &str,
     pipeline_id: &str,
     stage_id: &str,
-) -> Result<Option<u16>> {
+) -> Result<Option<PipelineStage>> {
     let Some(pipeline) = get(db, tenant, pipeline_id).await? else {
         return Ok(None);
     };
@@ -97,6 +97,16 @@ pub(super) async fn active_stage_ordinal(
     Ok(pipeline
         .stage(stage_id)
         .filter(|stage| !stage.archived)
+        .cloned())
+}
+pub(super) async fn active_stage_ordinal(
+    db: &D1Database,
+    tenant: &str,
+    pipeline_id: &str,
+    stage_id: &str,
+) -> Result<Option<u16>> {
+    Ok(active_stage(db, tenant, pipeline_id, stage_id)
+        .await?
         .map(|stage| stage.ordinal))
 }
 pub(super) async fn create(

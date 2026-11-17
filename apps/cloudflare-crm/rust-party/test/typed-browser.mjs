@@ -446,6 +446,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await dealContact.selectOption(browserSalesContactId);
    await page.getByLabel("Ожидаемая дата закрытия",{exact:true}).fill("2030-05-21");
    await page.getByLabel("Сумма",{exact:true}).fill("90071992547409.93");
+   await page.getByLabel("Источник вероятности",{exact:true}).selectOption("1");
+   await page.getByLabel("Категория прогноза",{exact:true}).selectOption("3");
    await page.getByLabel("Вероятность, %",{exact:true}).fill("37.45");
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
    const dealId=await firstId("crm_sales_deal_records","name","Browser Deal "+runId);
@@ -471,6 +473,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await metricStage.getByText(
      "90071992547409.93 USD · взвешено: 33731961209005.018785 USD · сделок с суммой: 1",
      {exact:true}).waitFor();
+   const forecast=page.getByRole("region",{name:"Прогноз продаж"}).getByRole("group",{name:"Обязательство",exact:true});
+   await forecast.getByText("Сделок: 1 · по этапу: 0 · вручную: 1",{exact:true}).waitFor();
+   await forecast.getByText("90071992547409.93 USD · взвешено: 33731961209005.018785 USD · сделок с суммой: 1",{exact:true}).waitFor();
+   const forecastRow=(await sql("SELECT json_extract(state,'$.probability_source') AS source,json_extract(state,'$.forecast_category') AS category FROM crm_sales_deal_records WHERE id='"+dealId+"'"))[0];
+   assert.deepEqual(forecastRow,{source:"manual",category:"commit"});
    steps.push("R7.3 full-pipeline exact weighted multi-currency read model, React, D1");
    // R7.3 saved views through REAL React -> generated Connect -> Rust domain
    // -> D1 audit/receipt. Reload must not lose a named shared filter.

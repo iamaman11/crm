@@ -86,6 +86,55 @@ pub enum DealStatus {
     Lost,
 }
 
+/// An exact probability with explicit provenance, not an inferred value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProbabilityEstimate {
+    Manual(BasisPoints),
+    StageDefault(BasisPoints),
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProbabilitySource {
+    #[default]
+    Manual,
+    StageDefault,
+}
+
+impl ProbabilityEstimate {
+    pub const fn from_parts(source: ProbabilitySource, value: BasisPoints) -> Self {
+        match source {
+            ProbabilitySource::Manual => Self::Manual(value),
+            ProbabilitySource::StageDefault => Self::StageDefault(value),
+        }
+    }
+
+    pub const fn basis_points(self) -> BasisPoints {
+        match self {
+            Self::Manual(value) | Self::StageDefault(value) => value,
+        }
+    }
+
+    pub const fn source(self) -> ProbabilitySource {
+        match self {
+            Self::Manual(_) => ProbabilitySource::Manual,
+            Self::StageDefault(_) => ProbabilitySource::StageDefault,
+        }
+    }
+}
+
+/// Explicit operator assessment; closed Deals retain it for reopening but
+/// do not enter prospective forecast totals.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ForecastCategory {
+    #[default]
+    Pipeline,
+    BestCase,
+    Commit,
+    Omitted,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DealCloseOutcome {
     status: DealStatus,
@@ -118,7 +167,8 @@ pub struct Deal {
     status: DealStatus,
     amount: Option<Money>,
     expected_close_date: Option<CalendarDate>,
-    probability: BasisPoints,
+    probability: ProbabilityEstimate,
+    forecast_category: ForecastCategory,
     close_outcome: Option<DealCloseOutcome>,
     created_at_unix_nanos: i64,
     updated_at_unix_nanos: i64,
@@ -136,7 +186,8 @@ pub struct DealSnapshot {
     pub status: DealStatus,
     pub amount: Option<Money>,
     pub expected_close_date: Option<CalendarDate>,
-    pub probability: BasisPoints,
+    pub probability: ProbabilityEstimate,
+    pub forecast_category: ForecastCategory,
     pub close_outcome: Option<DealCloseOutcomeSnapshot>,
     pub created_at_unix_nanos: i64,
     pub updated_at_unix_nanos: i64,
@@ -160,7 +211,8 @@ pub struct CreateDeal {
     pub stage: DealStage,
     pub amount: Option<Money>,
     pub expected_close_date: Option<CalendarDate>,
-    pub probability: BasisPoints,
+    pub probability: ProbabilityEstimate,
+    pub forecast_category: ForecastCategory,
     pub occurred_at_unix_nanos: i64,
 }
 
@@ -173,7 +225,8 @@ pub struct UpdateDeal {
     pub primary_contact: Patch<ResourceRef>,
     pub amount: Patch<Money>,
     pub expected_close_date: Patch<CalendarDate>,
-    pub probability: Patch<BasisPoints>,
+    pub probability: Patch<ProbabilityEstimate>,
+    pub forecast_category: Option<ForecastCategory>,
     pub occurred_at_unix_nanos: i64,
 }
 
@@ -196,6 +249,7 @@ impl Default for StageTransitionPolicy {
 pub struct AdvanceDealStage {
     pub expected_version: i64,
     pub target_stage: DealStage,
+    pub target_stage_probability: Option<BasisPoints>,
     pub target_status: DealStatus,
     pub close_reason_code: Option<ReasonCode>,
     pub occurred_at_unix_nanos: i64,
@@ -262,7 +316,13 @@ impl Deal {
         self.expected_close_date
     }
     pub const fn probability(&self) -> BasisPoints {
-        self.probability
+        self.probability.basis_points()
+    }
+    pub const fn probability_source(&self) -> ProbabilitySource {
+        self.probability.source()
+    }
+    pub const fn forecast_category(&self) -> ForecastCategory {
+        self.forecast_category
     }
     pub fn close_outcome(&self) -> Option<&DealCloseOutcome> {
         self.close_outcome.as_ref()
@@ -355,6 +415,7 @@ impl Deal {
             amount: snapshot.amount,
             expected_close_date: snapshot.expected_close_date,
             probability: snapshot.probability,
+            forecast_category: snapshot.forecast_category,
             close_outcome,
             created_at_unix_nanos: snapshot.created_at_unix_nanos,
             updated_at_unix_nanos: snapshot.updated_at_unix_nanos,
@@ -374,6 +435,7 @@ impl Deal {
             amount: self.amount.clone(),
             expected_close_date: self.expected_close_date,
             probability: self.probability,
+            forecast_category: self.forecast_category,
             close_outcome: self
                 .close_outcome
                 .as_ref()
@@ -409,6 +471,7 @@ impl Deal {
             amount: command.amount,
             expected_close_date: command.expected_close_date,
             probability: command.probability,
+            forecast_category: command.forecast_category,
             close_outcome: None,
             created_at_unix_nanos: command.occurred_at_unix_nanos,
             updated_at_unix_nanos: command.occurred_at_unix_nanos,
@@ -497,6 +560,9 @@ impl Deal {
             }
         }
 
+        if let Some(category) = command.forecast_category {
+            self.forecast_category = category;
+        }
         self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
         self.version += 1;
         Ok(())
@@ -593,7 +659,21 @@ impl Deal {
             }
         };
 
+        let probability = match self.probability {
+            ProbabilityEstimate::Manual(_) => self.probability,
+            ProbabilityEstimate::StageDefault(_) => {
+                let value = command.target_stage_probability.ok_or_else(|| {
+                    invalid(
+                        "SALES_STAGE_PROBABILITY_REQUIRED",
+                        "deal.target_stage",
+                        "stage-derived probability requires the authoritative target default",
+                    )
+                })?;
+                ProbabilityEstimate::StageDefault(value)
+            }
+        };
         self.stage = command.target_stage;
+        self.probability = probability;
         self.status = command.target_status;
         self.close_outcome = close_outcome;
         self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
@@ -824,7 +904,8 @@ mod tests {
             stage: stage("qualification", 1),
             amount: Some(Money::new(1_250_000, CurrencyCode::try_new("USD").unwrap())),
             expected_close_date: Some(CalendarDate::try_new(2026, 12, 31).unwrap()),
-            probability: BasisPoints::try_new(2_500).unwrap(),
+            probability: ProbabilityEstimate::Manual(BasisPoints::try_new(2_500).unwrap()),
+            forecast_category: ForecastCategory::Pipeline,
             occurred_at_unix_nanos: 10,
         })
         .unwrap()
@@ -839,6 +920,49 @@ mod tests {
     }
 
     #[test]
+    fn forecast_source_and_stage_change_are_atomic() {
+        let mut deal = open_deal();
+        deal.apply_update(UpdateDeal {
+            expected_version: 1,
+            name: Patch::Keep,
+            owner: Patch::Keep,
+            account: Patch::Keep,
+            primary_contact: Patch::Keep,
+            amount: Patch::Keep,
+            expected_close_date: Patch::Keep,
+            probability: Patch::Set(ProbabilityEstimate::StageDefault(
+                BasisPoints::try_new(1_000).unwrap(),
+            )),
+            forecast_category: Some(ForecastCategory::Commit),
+            occurred_at_unix_nanos: 20,
+        })
+        .unwrap();
+        let command = AdvanceDealStage {
+            expected_version: 2,
+            target_stage: stage("proposal", 2),
+            target_stage_probability: None,
+            target_status: DealStatus::Open,
+            close_reason_code: None,
+            occurred_at_unix_nanos: 30,
+            policy: StageTransitionPolicy::default(),
+        };
+        let before = deal.clone();
+        assert_eq!(
+            deal.advance_stage(command.clone()).unwrap_err().code,
+            "SALES_STAGE_PROBABILITY_REQUIRED"
+        );
+        assert_eq!(deal, before);
+        deal.advance_stage(AdvanceDealStage {
+            target_stage_probability: Some(BasisPoints::try_new(6_000).unwrap()),
+            ..command
+        })
+        .unwrap();
+        assert_eq!(deal.probability_source(), ProbabilitySource::StageDefault);
+        assert_eq!(deal.probability().get(), 6_000);
+        assert_eq!(deal.forecast_category(), ForecastCategory::Commit);
+    }
+
+    #[test]
     fn update_uses_explicit_clear_and_optimistic_version() {
         let mut deal = open_deal();
         deal.apply_update(UpdateDeal {
@@ -849,13 +973,16 @@ mod tests {
             primary_contact: Patch::Keep,
             amount: Patch::Keep,
             expected_close_date: Patch::Clear,
-            probability: Patch::Set(BasisPoints::try_new(5_000).unwrap()),
+            probability: Patch::Set(ProbabilityEstimate::Manual(
+                BasisPoints::try_new(5_000).unwrap(),
+            )),
+            forecast_category: None,
             occurred_at_unix_nanos: 20,
         })
         .unwrap();
         assert!(deal.account.is_none());
         assert!(deal.expected_close_date.is_none());
-        assert_eq!(deal.probability.get(), 5_000);
+        assert_eq!(deal.probability().get(), 5_000);
         assert_eq!(deal.version, 2);
 
         let error = deal
@@ -868,6 +995,7 @@ mod tests {
                 amount: Patch::Keep,
                 expected_close_date: Patch::Keep,
                 probability: Patch::Keep,
+                forecast_category: None,
                 occurred_at_unix_nanos: 21,
             })
             .unwrap_err();
@@ -882,6 +1010,7 @@ mod tests {
             deal.advance_stage(AdvanceDealStage {
                 expected_version: 1,
                 target_stage: stage.clone(),
+                target_stage_probability: None,
                 target_status: DealStatus::Won,
                 close_reason_code: Some(ReasonCode::try_new("won").unwrap()),
                 occurred_at_unix_nanos: 30,
@@ -988,6 +1117,7 @@ mod tests {
                 amount: Patch::Keep,
                 expected_close_date: Patch::Keep,
                 probability: Patch::Keep,
+                forecast_category: None,
                 occurred_at_unix_nanos: 40,
             })
             .unwrap_err()
@@ -998,6 +1128,7 @@ mod tests {
             deal.advance_stage(AdvanceDealStage {
                 expected_version: 2,
                 target_stage: stage("negotiation", 3),
+                target_stage_probability: None,
                 target_status: DealStatus::Open,
                 close_reason_code: None,
                 occurred_at_unix_nanos: 40,
@@ -1025,6 +1156,7 @@ mod tests {
                 amount: Patch::Keep,
                 expected_close_date: Patch::Keep,
                 probability: Patch::Clear,
+                forecast_category: None,
                 occurred_at_unix_nanos: 20,
             })
             .unwrap_err();
@@ -1039,6 +1171,7 @@ mod tests {
         deal.advance_stage(AdvanceDealStage {
             expected_version: 1,
             target_stage: stage("proposal", 3),
+            target_stage_probability: None,
             target_status: DealStatus::Open,
             close_reason_code: None,
             occurred_at_unix_nanos: 20,
@@ -1050,6 +1183,7 @@ mod tests {
             .advance_stage(AdvanceDealStage {
                 expected_version: 2,
                 target_stage: stage("qualification", 1),
+                target_stage_probability: None,
                 target_status: DealStatus::Open,
                 close_reason_code: None,
                 occurred_at_unix_nanos: 30,
