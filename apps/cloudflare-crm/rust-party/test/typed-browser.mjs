@@ -580,6 +580,19 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByText("Сделка завершена",{exact:true}).waitFor();
    await page.getByText("contract-signed",{exact:false}).first().waitFor();
    await page.getByText("Связанная задача:",{exact:false}).first().waitFor();
+   const linkedTask=page.locator('section[aria-label^="История сделки"] a[href^="#tasks?"]').first();
+   const linkedTaskHref=await linkedTask.getAttribute("href");
+   assert.ok(linkedTaskHref?.includes("&taskId=delivery-"),"History must link the exact Task, not merely the Account task list");
+   const linkedTaskId=new URLSearchParams(linkedTaskHref.slice("#tasks?".length)).get("taskId");
+   assert.ok(linkedTaskId);
+   await linkedTask.click();
+   await page.getByRole("heading",{name:"Карточка задачи",exact:true}).waitFor();
+   await page.getByText("ID: "+linkedTaskId,{exact:false}).waitFor();
+   await page.getByRole("heading",{name:"Follow up deal after stage change",exact:true}).waitFor();
+   await page.goBack();
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   steps.push("R7.2 linked Task opens exact original GetTask through typed route, then Back");
+
    await page.getByRole("button",{name:"Открыть повторно",exact:true}).last().click();
    await page.getByRole("heading",{name:"Повторно открыть сделку: Browser Deal "+runId,exact:true}).waitFor();
    await page.getByLabel("Причина повторного открытия",{exact:true}).fill("reconsidered");
