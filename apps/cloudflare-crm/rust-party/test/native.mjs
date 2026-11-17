@@ -1,10 +1,11 @@
 // Full generated binary Connect contract and actual React against signed workerd/D1.
-import {spawn,execFileSync} from "node:child_process";
+import {execFileSync} from "node:child_process";
 import {generateKeyPairSync,createSign,randomUUID,createHash} from "node:crypto";
-import {mkdtempSync,rmSync,writeFileSync,readdirSync,readFileSync} from "node:fs";
-import {DatabaseSync} from "node:sqlite";
+import {mkdtempSync,rmSync,writeFileSync,readFileSync} from "node:fs";
+import {Miniflare,Log,LogLevel} from "miniflare";
+import {unstable_getMiniflareWorkerOptions} from "wrangler";
 import {tmpdir} from "node:os";
-import {dirname,join} from "node:path";
+import {dirname,join,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
 import {chromium} from "playwright";
@@ -25,40 +26,25 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryOverviewV2,decodeOverviewV2,overviewV2Path} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-connect-"));
-const base="http://127.0.0.1:18789";
-let child,stderr="",workerOutput="",workerReady=false,fixtureDb;
+let base,runtime,fixtureDb;
 const successfulCalls=new Set();
-// Wrangler migrations and initial fixture seed run BEFORE the Worker starts.
-// For live SQL readback and deliberate fault injection, attach one native SQLite
-// connection to the same persisted D1. A separate 'wrangler d1 execute --local'
-// spawns another Miniflare and can restart a Worker during an unknown POST.
-const openFixtureDb=()=>{
- const pending=[join(data,"v3","d1")],files=[];
- while(pending.length){
-   const directory=pending.pop();
-   for(const entry of readdirSync(directory,{withFileTypes:true})){
-     const path=join(directory,entry.name);
-     if(entry.isDirectory())pending.push(path);
-     else if(entry.isFile()&&entry.name.endsWith(".sqlite"))files.push(path);
-   }
- }
- const candidates=[];
- for(const path of files){
-   const db=new DatabaseSync(path,{timeout:15000});
-   if(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='crm_party_records'").get()){
-     candidates.push(db);
-   }else db.close();
- }
- assert.equal(candidates.length,1,"expected one initialized native D1 SQLite store");
- fixtureDb=candidates[0];
- fixtureDb.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=15000;");
- assert.equal(fixtureDb.prepare("SELECT COUNT(*) AS n FROM crm_tenants").get().n,2,
-   "the D1 native fixture must contain the exact two test tenants");
-};
-const sql=query=>{
+// The CLI migrations finish before the runtime starts. Every live fixture
+// read/write and the actual Rust Worker use one native D1 binding.
+const statement=(query,...params)=>{
  assert.ok(fixtureDb,"D1 fixture is not initialized");
- const statement=fixtureDb.prepare(query);
- return statement.columns().length?statement.all().map(row=>({...row})):(statement.run(),[]);
+ const prepared=fixtureDb.prepare(query);
+ return params.length?prepared.bind(...params):prepared;
+};
+const sql=async(query,...params)=>{
+ const result=await statement(query,...params).all();
+ assert.equal(result.success,true);
+ return result.results.map(row=>({...row}));
+};
+const batch=async(statements)=>{
+ const results=await fixtureDb.batch(statements);
+ assert.equal(results.length,statements.length);
+ assert.ok(results.every(result=>result.success));
+ return results;
 };
 const rpcFetch=async(path,options)=>{
  // Keep every CI RPC on a fresh HTTP connection. Workerd may close an idle
@@ -68,7 +54,6 @@ const rpcFetch=async(path,options)=>{
  let response;
  try {response=await globalThis.fetch(base+path,requestOptions);}
  catch(error) {
-   if(!workerReady)throw error; // Startup probes are expected to fail until Wrangler binds.
    // No mutation retry: an interrupted Connect request can have an unknown outcome.
    // A separate read-only probe distinguishes a closed keepalive connection
    // from a stopped workerd process, without hiding the original failure.
@@ -81,8 +66,7 @@ const rpcFetch=async(path,options)=>{
    }catch(failure){probe={reachable:false,error:String(failure)};}
    const evidence={event:"crm.native-ci.transport-failure",result:"FAIL",
      method:options?.method??"GET",path,
-     process_exit:child?.exitCode??null,process_signal:child?.signalCode??null,
-     probe,stderr_tail:stderr.slice(-1200),
+     probe,
      error:error instanceof Error?error.message:String(error),
      cause:error instanceof Error&&error.cause?String(error.cause):null};
    console.error(JSON.stringify(evidence));
@@ -97,8 +81,7 @@ const rpcFetch=async(path,options)=>{
      const evidence={event:"crm.native-ci.non-connect-response",path,
        method:options?.method??"GET",status:response.status,
        content_type:response.headers.get("content-type"),
-       body_excerpt:raw.slice(0,600),worker_exit:child?.exitCode??null,
-       worker_signal:child?.signalCode??null,stderr_tail:stderr.slice(-1200)};
+       body_excerpt:raw.slice(0,600),request_id:response.headers.get("x-request-id")};
      console.error(JSON.stringify(evidence));
      throw new Error("Non-Connect RPC response: "+JSON.stringify(evidence));
    }
@@ -111,12 +94,12 @@ const sourceSha=execFileSync("git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).t
 assert.equal(process.env.CRM_SOURCE_SHA,sourceSha,"runtime evidence must identify tested checkout");
 assert.ok(process.env.CRM_RPC_RUNTIME_PROOF,"CI runtime output path required");
 const run=(args)=>execFileSync("npx",["wrangler",...args],{cwd,encoding:"utf8"});
-// SQL fixture access is native, using the single previously created D1 file.
-const partySnapshot=()=>sql("SELECT "+
+// SQL fixture access goes through the same native D1 binding as CRM.
+const partySnapshot=async()=>(await sql("SELECT "+
   "(SELECT json_group_array(json_array(tenant,id,state,version,actor)) FROM crm_party_records) AS states,"+
   "(SELECT COUNT(*) FROM crm_party_receipts) AS receipts,"+
   "(SELECT COUNT(*) FROM crm_party_import_receipts) AS imports,"+
-  "(SELECT COUNT(*) FROM crm_audit) AS audits");
+  "(SELECT COUNT(*) FROM crm_audit) AS audits"));
 const {privateKey,publicKey}=generateKeyPairSync("rsa",{modulusLength:2048});
 const kid="local-signed-rsa-fixture";
 const jwks=JSON.stringify({keys:[{...publicKey.export({format:"jwk"}),kid,alg:"RS256",use:"sig"}]});
@@ -152,20 +135,33 @@ try{
      "',1,'fixture-key-01','fixture-digest-01',NULL,'native-a@example.test');"]);
  // Wrangler's applied-migration ledger must prevent a second reset.
  run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
- openFixtureDb();
- child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
-  "--var","CRM_NATIVE_CI_JWKS:"+jwks,"--var","GIT_SHA:"+sourceSha],
-  {cwd,detached:true,stdio:["ignore","pipe","pipe"]});
-  child.stdout.on("data",b=>workerOutput=(workerOutput+b.toString()).slice(-12000));
- child.stderr.on("data",b=>stderr=(stderr+b.toString()).slice(-2500));
- let ready=false;
- for(let i=0;i<120;i++){
-   if(child.exitCode!==null)throw Error("native-ci exited "+stderr);
-   try{if((await rpcFetch("/api/parties")).status===401){ready=true;break;}}catch{}
-   await new Promise(resolve=>setTimeout(resolve,250));
- }
- assert(ready,"native-ci not ready: "+stderr);
- workerReady=true;
+ // Use the pinned Wrangler config translator: no second routing or asset
+ // configuration, no testing Worker, no direct access to storage files.
+ const configPath=join(cwd,"wrangler.jsonc");
+ const config=JSON.parse(readFileSync(configPath,"utf8"));
+ const {workerOptions,externalWorkers}=unstable_getMiniflareWorkerOptions(configPath);
+ assert.deepEqual(externalWorkers,[],"one CRM Worker; no external fixture Worker");
+ assert.equal(config.d1_databases.length,1);
+ assert.equal(config.d1_databases[0].binding,"DB");
+ assert.equal(config.d1_databases[0].database_id,"00000000-0000-4000-8000-000000000001");
+ assert.equal(config.vars.CRM_CI_LOCAL_ONLY,"yes");
+ const scriptPath=resolve(cwd,config.main);
+ runtime=new Miniflare({
+   host:"127.0.0.1",port:0,defaultPersistRoot:join(data,"v3"),
+   log:new Log(LogLevel.INFO),
+   workers:[{
+     ...workerOptions,name:config.name,scriptPath,modules:true,modulesRoot:dirname(scriptPath),
+     // workers-rs emits ESM with .js names; Miniflare defaults .js to CommonJS.
+     modulesRules:[{type:"ESModule",include:["**/*.js","**/*.mjs"]},...workerOptions.modulesRules],
+     bindings:{...workerOptions.bindings,CRM_NATIVE_CI_JWKS:jwks,GIT_SHA:sourceSha},
+   }],
+ });
+ base=(await runtime.ready).origin;
+ fixtureDb=await runtime.getD1Database("DB",config.name);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_tenants"))[0].n,2,
+   "runtime must bind the exact Wrangler-migrated isolated test database");
+ console.log(JSON.stringify({event:"crm.native-ci.d1-runtime",source_sha:sourceSha,
+   runtime:"Miniflare/workerd",fixture_access:"D1 binding",worker_count:1,d1_count:1}));
  async function call(path,token,method="GET"){
    const response=await rpcFetch(path,{method,
      headers:{...(token?{"cf-access-jwt-assertion":token}:{}),"content-type":"application/json"},
@@ -314,56 +310,56 @@ try{
  assert.equal((await v3("UpdateParty",admin,{...updatedInput,
    precondition:{expectedVersion:1n,
       idempotencyKey:"candidate-v3-stale-version"}})).status,409);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_tenants")[0].n,2,
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_tenants"))[0].n,2,
    "Unknown signed service must not create another tenant");
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_users")[0].n,4,
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_users"))[0].n,4,
    "Unknown signed service must not insert an admin actor");
- assert.equal(sql("SELECT tenant_id FROM crm_users WHERE email='service:ci-fixture.access'")[0].tenant_id,
+ assert.equal((await sql("SELECT tenant_id FROM crm_users WHERE email='service:ci-fixture.access'"))[0].tenant_id,
    "tenant-a","Explicit service enrollment must retain the owner's tenant");
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE id='binary-rpc-proof-01'")[0].n,1,
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE id='binary-rpc-proof-01'"))[0].n,1,
    "Repeated migrations apply must preserve existing business data");
- assert.equal(sql("SELECT COUNT(*) AS n FROM d1_migrations WHERE name='0002_hard_cutover.sql'")[0].n,1);
- assert.equal(sql("SELECT version FROM crm_party_records WHERE id='"+id+"'")[0].version,2);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_receipts WHERE tenant='tenant-a' "+
-   "AND key IN ('candidate-v3-create-001','candidate-v3-update-001')")[0].n,2);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-   "AND subject_id='"+id+"'")[0].n,2);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM d1_migrations WHERE name='0002_hard_cutover.sql'"))[0].n,1);
+ assert.equal((await sql("SELECT version FROM crm_party_records WHERE id='"+id+"'"))[0].version,2);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_receipts WHERE tenant='tenant-a' "+
+   "AND key IN ('candidate-v3-create-001','candidate-v3-update-001')"))[0].n,2);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+id+"'"))[0].n,2);
  assert.equal((await v3("GetParty",admin,{partyId:id})).body.party?.version,2n);
- assert.deepEqual(sql("SELECT action,tenant_id,subject_id,request_id,actor FROM crm_audit WHERE subject_id='"+id+"' ORDER BY rowid"),[
+ assert.deepEqual((await sql("SELECT action,tenant_id,subject_id,request_id,actor FROM crm_audit WHERE subject_id='"+id+"' ORDER BY rowid")),[
    {action:"parties.create",tenant_id:"tenant-a",subject_id:id,
      request_id:created.headers.get("x-request-id"),actor:"native-a@example.test"},
    {action:"parties.update",tenant_id:"tenant-a",subject_id:id,
      request_id:updated.headers.get("x-request-id"),actor:"service:ci-fixture.access"},
  ],"Cross-actor replay must retain the original audit identity and request");
- const partyBeforeDenials=partySnapshot();
+ const partyBeforeDenials=(await partySnapshot());
  for(const token of [null,viewer,unknownService]){
    assert.ok((await v3("CreateParty",token,creation)).status>=400);
    assert.ok((await v3("UpdateParty",token,updatedInput)).status>=400);
  }
- sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
+ await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
  assert.equal((await v3("CreateParty",knownService,creation)).status,401,
    "Inactive actor cannot retrieve a previously committed mutation by replay");
- sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
+ await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
  assert.equal((await v3("UpdateParty",knownService,updatedInput)).status,403,
    "Current permission is required before replay");
- sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
+ await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
  assert.equal((await v3("UpdateParty",tenantB,updatedInput)).status,404);
  assert.equal((await v3("UpdateParty",admin,{...updatedInput,displayName:"   ",
    precondition:{expectedVersion:2n,idempotencyKey:"party-invalid-name"}})).status,400);
- assert.deepEqual(partySnapshot(),partyBeforeDenials,"Denied/invalid operations must not change Party state, receipts or audit");
+ assert.deepEqual((await partySnapshot()),partyBeforeDenials,"Denied/invalid operations must not change Party state, receipts or audit");
 
  // This fixture rejects the audit INSERT after the owner has written state and receipt.
  // No test hook or failure path is compiled into the production Worker.
- sql("CREATE TRIGGER fixture_fail_party_audit BEFORE INSERT ON crm_audit "+
+ (await sql("CREATE TRIGGER fixture_fail_party_audit BEFORE INSERT ON crm_audit "+
    "WHEN NEW.subject_id IN ('party-audit-failure','"+id+"') "+
-   "BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;");
+   "BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;"));
  try{
    assert.equal((await v3("CreateParty",admin,{partyId:"party-audit-failure",kind:1,displayName:"Rollback",
      precondition:{idempotencyKey:"party-audit-failed-create"}})).status,409);
    assert.equal((await v3("UpdateParty",admin,{...updatedInput,displayName:"Must roll back",
      precondition:{expectedVersion:2n,idempotencyKey:"party-audit-failed-update"}})).status,409);
-   assert.deepEqual(partySnapshot(),partyBeforeDenials,"SQL audit failure must roll back the state and receipt too");
- }finally{sql("DROP TRIGGER fixture_fail_party_audit");}
+   assert.deepEqual((await partySnapshot()),partyBeforeDenials,"SQL audit failure must roll back the state and receipt too");
+ }finally{await sql("DROP TRIGGER fixture_fail_party_audit");}
  console.log(JSON.stringify({event:"crm.native-party-actor-audit",result:"PASS",
    human_create:true,service_update:true,cross_actor_replay:true,authorization_before_replay:true,
    forged_headers_ignored:true,sql_failure_rollback:true,tenant_ab:true}));
@@ -455,40 +451,40 @@ try{
    .body.accounts.length,0);
  assert.equal((await accountV2("ListAccounts",viewer,{page:{pageSize:1},status:2}))
    .body.accounts.length,1);
- assert.equal(sql("SELECT version FROM crm_account_records WHERE tenant='tenant-a' "+
-   "AND id='"+accountId+"'")[0].version,2);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_account_receipts WHERE tenant='tenant-a' "+
-   "AND key IN ('candidate-v2-account-create-001','candidate-v2-account-update-001')")[0].n,2);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-   "AND subject_id='"+accountId+"' AND action LIKE 'accounts.%'")[0].n,2);
- assert.deepEqual(sql("SELECT action,tenant_id,subject_id,request_id,actor FROM crm_audit WHERE subject_id='"+accountId+"' ORDER BY rowid"),[
+ assert.equal((await sql("SELECT version FROM crm_account_records WHERE tenant='tenant-a' "+
+   "AND id='"+accountId+"'"))[0].version,2);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_account_receipts WHERE tenant='tenant-a' "+
+   "AND key IN ('candidate-v2-account-create-001','candidate-v2-account-update-001')"))[0].n,2);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+accountId+"' AND action LIKE 'accounts.%'"))[0].n,2);
+ assert.deepEqual((await sql("SELECT action,tenant_id,subject_id,request_id,actor FROM crm_audit WHERE subject_id='"+accountId+"' ORDER BY rowid")),[
    {action:"accounts.create",tenant_id:"tenant-a",subject_id:accountId,
      request_id:accountCreated.headers.get("x-request-id"),actor:"native-a@example.test"},
    {action:"accounts.update",tenant_id:"tenant-a",subject_id:accountId,
      request_id:accountUpdated.headers.get("x-request-id"),actor:"service:ci-fixture.access"},
  ],"Cross-actor Account replay preserves original verified actor/request ID");
- const accountSnapshot=()=>sql("SELECT "+
+ const accountSnapshot=async()=>(await sql("SELECT "+
    "(SELECT json_group_array(json_array(tenant,id,state,version,actor)) FROM crm_account_records) AS states,"+
    "(SELECT COUNT(*) FROM crm_account_receipts) AS receipts,"+
-   "(SELECT COUNT(*) FROM crm_audit) AS audits");
- const beforeAccountDenials=accountSnapshot();
+   "(SELECT COUNT(*) FROM crm_audit) AS audits"));
+ const beforeAccountDenials=(await accountSnapshot());
  for(const token of [null,viewer,unknownService]){
    assert.ok((await accountV2("CreateAccount",token,accountInput)).status>=400);
    assert.ok((await accountV2("UpdateAccount",token,accountUpdate)).status>=400);
  }
  assert.equal((await accountV2("UpdateAccount",tenantB,accountUpdate)).status,404);
- sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
+ await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
  assert.equal((await accountV2("CreateAccount",knownService,accountInput)).status,401,
    "Deactivated service cannot replay Account creation");
- sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
+ await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
  assert.equal((await accountV2("UpdateAccount",knownService,accountUpdate)).status,403,
    "Current permission must be checked before Account replay");
- sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
- assert.deepEqual(accountSnapshot(),beforeAccountDenials,
+ await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
+ assert.deepEqual((await accountSnapshot()),beforeAccountDenials,
    "Denied/stale/invalid Account commands cannot change state, receipts or audit");
- sql("CREATE TRIGGER fixture_fail_account_audit BEFORE INSERT ON crm_audit "+
+ (await sql("CREATE TRIGGER fixture_fail_account_audit BEFORE INSERT ON crm_audit "+
    "WHEN NEW.subject_id IN ('account-audit-rollback','"+accountId+"') "+
-   "BEGIN SELECT RAISE(ABORT,'fixture account audit failure'); END;");
+   "BEGIN SELECT RAISE(ABORT,'fixture account audit failure'); END;"));
  try{
    assert.equal((await accountV2("CreateAccount",admin,{
      accountId:"account-audit-rollback",name:"Must roll back",primaryPartyId:id,
@@ -496,9 +492,9 @@ try{
    assert.equal((await accountV2("UpdateAccount",admin,{
      ...accountUpdate,name:"Must roll back",
      precondition:{expectedVersion:2n,idempotencyKey:"account-audit-failed-update"}})).status,409);
-   assert.deepEqual(accountSnapshot(),beforeAccountDenials,
+   assert.deepEqual((await accountSnapshot()),beforeAccountDenials,
      "Account audit INSERT failure rolls back state and receipt");
- }finally{sql("DROP TRIGGER fixture_fail_account_audit");}
+ }finally{await sql("DROP TRIGGER fixture_fail_account_audit");}
  console.log(JSON.stringify({event:"crm.native-account-actor-audit",result:"PASS",
    human_create:true,service_update:true,cross_actor_replay:true,forged_headers_ignored:true,
    authorization_before_replay:true,tenant_ab:true,sql_failure_rollback:true}));
@@ -617,40 +613,40 @@ try{
  assert.equal((await contactV2("UpdateContactPoint",admin,{...contactUpdate,
    precondition:{expectedVersion:1n,
      idempotencyKey:"candidate-v2-contact-stale"}})).status,409);
- assert.equal(sql("SELECT version FROM crm_contact_point_records WHERE tenant='tenant-a' "+
-   "AND id='"+contactId+"'")[0].version,2);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_contact_point_receipts WHERE tenant='tenant-a' "+
-   "AND key IN ('candidate-v2-contact-create-001','candidate-v2-contact-update-001')")[0].n,2);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-   "AND subject_id='"+contactId+"' AND action LIKE 'contact_points.%'")[0].n,2);
- assert.deepEqual(sql("SELECT action,tenant_id,subject_id,request_id,actor FROM crm_audit WHERE subject_id='"+contactId+"' ORDER BY rowid"),[
+ assert.equal((await sql("SELECT version FROM crm_contact_point_records WHERE tenant='tenant-a' "+
+   "AND id='"+contactId+"'"))[0].version,2);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_contact_point_receipts WHERE tenant='tenant-a' "+
+   "AND key IN ('candidate-v2-contact-create-001','candidate-v2-contact-update-001')"))[0].n,2);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+contactId+"' AND action LIKE 'contact_points.%'"))[0].n,2);
+ assert.deepEqual((await sql("SELECT action,tenant_id,subject_id,request_id,actor FROM crm_audit WHERE subject_id='"+contactId+"' ORDER BY rowid")),[
    {action:"contact_points.create",tenant_id:"tenant-a",subject_id:contactId,
      request_id:contactCreated.headers.get("x-request-id"),actor:"native-a@example.test"},
    {action:"contact_points.update",tenant_id:"tenant-a",subject_id:contactId,
      request_id:contactUpdated.headers.get("x-request-id"),actor:"service:ci-fixture.access"},
  ],"Cross-actor contact replay must preserve signed author/request ID");
- const contactSnapshot=()=>sql("SELECT "+
+ const contactSnapshot=async()=>(await sql("SELECT "+
    "(SELECT json_group_array(json_array(tenant,id,state,version,actor)) FROM crm_contact_point_records) AS states,"+
    "(SELECT COUNT(*) FROM crm_contact_point_receipts) AS receipts,"+
-   "(SELECT COUNT(*) FROM crm_audit) AS audits");
- const beforeContactDenials=contactSnapshot();
+   "(SELECT COUNT(*) FROM crm_audit) AS audits"));
+ const beforeContactDenials=(await contactSnapshot());
  for(const token of [null,viewer,unknownService]){
    assert.ok((await contactV2("CreateContactPoint",token,contactInput)).status>=400);
    assert.ok((await contactV2("UpdateContactPoint",token,contactUpdate)).status>=400);
  }
  assert.equal((await contactV2("UpdateContactPoint",tenantB,contactUpdate)).status,404);
- sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
+ await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
  assert.equal((await contactV2("CreateContactPoint",knownService,contactInput)).status,401,
    "Inactive service cannot replay ContactPoint create");
- sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
+ await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
  assert.equal((await contactV2("UpdateContactPoint",knownService,contactUpdate)).status,403,
    "Current permission is required before ContactPoint replay");
- sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
- assert.deepEqual(contactSnapshot(),beforeContactDenials,
+ await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
+ assert.deepEqual((await contactSnapshot()),beforeContactDenials,
    "Denied, stale and validation errors cannot change contact state, receipts or audit");
- sql("CREATE TRIGGER fixture_fail_contact_audit BEFORE INSERT ON crm_audit "+
+ (await sql("CREATE TRIGGER fixture_fail_contact_audit BEFORE INSERT ON crm_audit "+
    "WHEN NEW.subject_id IN ('contact-audit-rollback','"+contactId+"') "+
-   "BEGIN SELECT RAISE(ABORT,'fixture contact audit failure'); END;");
+   "BEGIN SELECT RAISE(ABORT,'fixture contact audit failure'); END;"));
  try{
    assert.equal((await contactV2("CreateContactPoint",admin,{
      contactPointId:"contact-audit-rollback",partyId:id,kind:1,
@@ -659,9 +655,9 @@ try{
    assert.equal((await contactV2("UpdateContactPoint",admin,{
      ...contactUpdate,value:"rollback@example.org",
      precondition:{expectedVersion:2n,idempotencyKey:"contact-audit-failed-update"}})).status,409);
-   assert.deepEqual(contactSnapshot(),beforeContactDenials,
+   assert.deepEqual((await contactSnapshot()),beforeContactDenials,
      "Contact audit SQL failure must roll back both state and receipt");
- }finally{sql("DROP TRIGGER fixture_fail_contact_audit");}
+ }finally{await sql("DROP TRIGGER fixture_fail_contact_audit");}
  console.log(JSON.stringify({event:"crm.native-contact-actor-audit",result:"PASS",
    human_create:true,service_update:true,cross_actor_replay:true,forged_headers_ignored:true,
    authorization_before_replay:true,tenant_ab:true,sql_failure_rollback:true}));
@@ -709,8 +705,8 @@ try{
    precondition:{expectedVersion:3n,idempotencyKey:"candidate-v2-contact-later-001"}});
  assert.equal(later.status,200,describeProtobuf(later.body));
  assert.equal(later.body.contactPoint?.version,4n);
- const beforeReplay=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-   "AND subject_id='"+contactId+"'")[0].n;
+ const beforeReplay=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+contactId+"'"))[0].n;
  const restoredReceipt=await contactV2("UpdateContactPoint",admin,keepRequest);
  assert.equal(restoredReceipt.status,200,describeProtobuf(restoredReceipt.body));
  assert.equal(restoredReceipt.body.receipt?.replayed,true);
@@ -727,13 +723,13 @@ try{
  assert.equal(currentPoint.body.contactPoint?.version,4n);
  assert.equal(currentPoint.body.contactPoint?.validFrom?.seconds,1770000000n);
  assert.equal(currentPoint.body.contactPoint?.validUntil?.seconds,1870000000n);
- assert.equal(sql("SELECT version FROM crm_contact_point_records WHERE tenant='tenant-a' "+
-   "AND id='"+contactId+"'")[0].version,4);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-   "AND subject_id='"+contactId+"'")[0].n,beforeReplay);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_contact_point_receipts "+
+ assert.equal((await sql("SELECT version FROM crm_contact_point_records WHERE tenant='tenant-a' "+
+   "AND id='"+contactId+"'"))[0].version,4);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+contactId+"'"))[0].n,beforeReplay);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_contact_point_receipts "+
    "WHERE tenant='tenant-a' AND key IN ("+
-   "'candidate-v2-contact-keep-001','candidate-v2-contact-later-001')")[0].n,2);
+   "'candidate-v2-contact-keep-001','candidate-v2-contact-later-001')"))[0].n,2);
  console.log(JSON.stringify({event:"crm.native-g3-contact-pagination-interleaved-replay",
    result:"PASS",same_original_receipt:true,no_extra_write:true,tenant_isolated:true}));
 
@@ -843,8 +839,8 @@ try{
    precondition:{expectedVersion:3n,idempotencyKey:"candidate-rel-later-03"}});
  assert.equal(relLater.status,200,describeProtobuf(relLater.body));
  assert.equal(relLater.body.relationship?.version,4n);
- const relAuditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"+
-   " AND subject_id='"+rMid+"'")[0].n;
+ const relAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"+
+   " AND subject_id='"+rMid+"'"))[0].n;
  const relKeepReplay=await relationV2("UpdatePartyRelationship",admin,relKeep);
  assert.equal(relKeepReplay.status,200,describeProtobuf(relKeepReplay.body));
  assert.equal(relKeepReplay.body.receipt?.replayed,true);
@@ -860,17 +856,17 @@ try{
  assert.equal(currentRel.body.relationship?.version,4n);
  assert.equal(currentRel.body.relationship?.validFrom?.seconds,1720000000n);
  assert.equal(currentRel.body.relationship?.validUntil?.seconds,1820000000n);
- assert.equal(sql("SELECT version FROM crm_party_relationship_records WHERE tenant='tenant-a'"+
-   " AND id='"+rMid+"'")[0].version,4);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"+
-   " AND subject_id='"+rMid+"'")[0].n,relAuditBefore);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_relationship_receipts WHERE tenant='tenant-a'"+
+ assert.equal((await sql("SELECT version FROM crm_party_relationship_records WHERE tenant='tenant-a'"+
+   " AND id='"+rMid+"'"))[0].version,4);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"+
+   " AND subject_id='"+rMid+"'"))[0].n,relAuditBefore);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_relationship_receipts WHERE tenant='tenant-a'"+
    " AND key IN ('candidate-rel-create-mid','candidate-rel-update-01',"+
-   " 'candidate-rel-keep-02','candidate-rel-later-03')")[0].n,4);
+   " 'candidate-rel-keep-02','candidate-rel-later-03')"))[0].n,4);
  
   // R2a #408: real signed human/service authors, replay and atomic SQL rollback.
-  assert.deepEqual(sql("SELECT action,actor,request_id FROM crm_audit "+
-    "WHERE tenant_id='tenant-a' AND subject_id='"+rMid+"' ORDER BY rowid"),[
+  assert.deepEqual((await sql("SELECT action,actor,request_id FROM crm_audit "+
+    "WHERE tenant_id='tenant-a' AND subject_id='"+rMid+"' ORDER BY rowid")),[
     {action:"party_relationships.create",actor:"native-a@example.test",
       request_id:midCreated.headers.get("x-request-id")},
     {action:"party_relationships.update",actor:"service:ci-fixture.access",
@@ -880,18 +876,18 @@ try{
     {action:"party_relationships.update",actor:"native-a@example.test",
       request_id:relLater.headers.get("x-request-id")}
   ],"Cross-actor replay never replaces original Relationship audit author");
-  const relSnapshot=()=>sql("SELECT "+
+  const relSnapshot=async()=>(await sql("SELECT "+
     "(SELECT state FROM crm_party_relationship_records WHERE tenant='tenant-a' AND id='"+rMid+"') AS state,"+
     "(SELECT COUNT(*) FROM crm_party_relationship_receipts) AS receipts,"+
-    "(SELECT COUNT(*) FROM crm_audit) AS audits");
-  const beforeRelFault=relSnapshot();
-  sql("CREATE TRIGGER fixture_fail_rel_actor BEFORE INSERT ON crm_audit "+
-    "WHEN NEW.subject_id='"+rMid+"' BEGIN SELECT RAISE(ABORT,'fixture relation audit'); END;");
+    "(SELECT COUNT(*) FROM crm_audit) AS audits"));
+  const beforeRelFault=(await relSnapshot());
+  (await sql("CREATE TRIGGER fixture_fail_rel_actor BEFORE INSERT ON crm_audit "+
+    "WHEN NEW.subject_id='"+rMid+"' BEGIN SELECT RAISE(ABORT,'fixture relation audit'); END;"));
   try{
     assert.equal((await relationV2("UpdatePartyRelationship",admin,{relationshipId:rMid,status:1,
       precondition:{expectedVersion:4n,idempotencyKey:"candidate-rel-actor-failed"}})).status,409);
-    assert.deepEqual(relSnapshot(),beforeRelFault);
-  }finally{sql("DROP TRIGGER fixture_fail_rel_actor");}
+    assert.deepEqual((await relSnapshot()),beforeRelFault);
+  }finally{await sql("DROP TRIGGER fixture_fail_rel_actor");}
   console.log(JSON.stringify({event:"crm.native-r2a-relationship-actor-audit",result:"PASS",
     signed_cross_actor:true,failed_audit_rollback:true}));
 console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
@@ -963,7 +959,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
  assert.equal(taskOtherCreated.body.task?.description,"",
    "optional CreateTask.description absent is canonical empty Task.description");
  assert.equal((await taskV2("CreateTask",admin,taskLastInput)).status,200);
- const taskAuditBeforeFilters=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n;
+ const taskAuditBeforeFilters=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
  assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{priority:2})).map(t=>t.taskId),[taskMid,taskLast]);
  assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{priority:4})).map(t=>t.taskId),[taskOther]);
  assert.equal((await collectPages(taskV2,"ListTasks","tasks",{priority:4,accountId})).length,0);
@@ -975,7 +971,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
    assert.equal(invalid.body.message,"invalid TaskPriority filter");
    assert.ok(invalid.headers.get("x-request-id"));
  }
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n,taskAuditBeforeFilters,
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,taskAuditBeforeFilters,
    "Priority filters and invalid read requests must not create audit writes");
  const taskFilter=await collectPages(taskV2,"ListTasks","tasks",
    {accountId,status:1});
@@ -989,9 +985,9 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
  // UpdateTask: original Rust invariants and atomic state/receipt/audit.
  const updateKey="candidate-task-update-other";
  const baseUpdate={taskId:taskOther,precondition:{expectedVersion:1n,idempotencyKey:updateKey}};
- const taskRow=()=>sql("SELECT state,version FROM crm_activity_task_records WHERE tenant='tenant-a' AND id='"+taskOther+"'")[0];
- const taskAudits=()=>sql("SELECT action,request_id FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+taskOther+"' ORDER BY rowid");
- const beforeTask=taskRow(),beforeTaskAudit=taskAudits();
+ const taskRow=async()=>(await sql("SELECT state,version FROM crm_activity_task_records WHERE tenant='tenant-a' AND id='"+taskOther+"'"))[0];
+ const taskAudits=async()=>(await sql("SELECT action,request_id FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+taskOther+"' ORDER BY rowid"));
+ const beforeTask=(await taskRow()),beforeTaskAudit=(await taskAudits());
  const patchSubject=value=>({operation:{case:"set",value}});
  assert.equal((await taskV2("UpdateTask",null,{...baseUpdate,subject:patchSubject("No auth")})).status,401);
  assert.equal((await taskV2("UpdateTask",viewer,{...baseUpdate,subject:patchSubject("No permission")})).status,403);
@@ -1005,9 +1001,9 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
    priority:1,
    dueAt:{operation:{case:"set",value:{seconds:1840000000n,nanos:0}}}});
  assert.equal(rejected.status,400,describeProtobuf(rejected.body));
- assert.deepEqual(taskRow(),beforeTask,"late rejection must not persist an earlier field change");
- assert.deepEqual(taskAudits(),beforeTaskAudit,"rejection must not create audit");
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts WHERE tenant='tenant-a' AND key='"+updateKey+"'")[0].n,0);
+ assert.deepEqual((await taskRow()),beforeTask,"late rejection must not persist an earlier field change");
+ assert.deepEqual((await taskAudits()),beforeTaskAudit,"rejection must not create audit");
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts WHERE tenant='tenant-a' AND key='"+updateKey+"'"))[0].n,0);
  const updateTask={...baseUpdate,subject:patchSubject("Edited original Task"),
    description:{operation:{case:"set",value:"Edited through Connect"}},
    priority:3,dueAt:{operation:{case:"clear",value:true}}};
@@ -1020,18 +1016,18 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
  assert.equal(updatedTask.body.task.version,2n);
  assert.equal(updatedTask.body.receipt.resourceVersion,2n);
  assert.equal(updatedTask.body.receipt.requestId,updatedTask.headers.get("x-request-id"));
- assert.deepEqual(taskAudits().map(x=>x.action),["activity_tasks.create","activity_tasks.update"]);
- assert.equal(taskAudits()[1].request_id,updatedTask.headers.get("x-request-id"));
+ assert.deepEqual((await taskAudits()).map(x=>x.action),["activity_tasks.create","activity_tasks.update"]);
+ assert.equal((await taskAudits())[1].request_id,updatedTask.headers.get("x-request-id"));
  assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{priority:3,accountId:accountNextId})).map(x=>x.taskId),[taskOther]);
  assert.equal((await collectPages(taskV2,"ListTasks","tasks",{priority:4,accountId:accountNextId})).length,0);
  const replayTask=await taskV2("UpdateTask",admin,updateTask);
  assert.equal(replayTask.status,200);
  assert.equal(replayTask.body.receipt.replayed,true);
- assert.equal(taskAudits().length,2,"replay cannot duplicate audit");
+ assert.equal((await taskAudits()).length,2,"replay cannot duplicate audit");
  assert.equal((await taskV2("UpdateTask",admin,{...updateTask,subject:patchSubject("Same key, different payload")})).status,409);
  assert.equal((await taskV2("UpdateTask",admin,{...updateTask,
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-task-update-stale"}})).status,409);
- assert.equal(taskAudits().length,2,"stale version must not create audit");
+ assert.equal((await taskAudits()).length,2,"stale version must not create audit");
  const secondTaskEdit=await taskV2("UpdateTask",admin,{taskId:taskOther,
    description:{operation:{case:"clear",value:true}},priority:2,
    dueAt:{operation:{case:"set",value:{seconds:1870000000n,nanos:987654321}}},
@@ -1040,8 +1036,8 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
  assert.equal(secondTaskEdit.body.task.description,"");
  assert.equal(secondTaskEdit.body.task.dueAt.nanos,987654321);
  assert.equal(secondTaskEdit.body.task.version,3n);
- assert.deepEqual(taskAudits().map(x=>x.action),["activity_tasks.create","activity_tasks.update","activity_tasks.update"]);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts WHERE tenant='tenant-a' AND key IN ('candidate-task-create-other','candidate-task-update-other','candidate-task-update-second')")[0].n,3);
+ assert.deepEqual((await taskAudits()).map(x=>x.action),["activity_tasks.create","activity_tasks.update","activity_tasks.update"]);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts WHERE tenant='tenant-a' AND key IN ('candidate-task-create-other','candidate-task-update-other','candidate-task-update-second')"))[0].n,3);
  const taskComplete={taskId:taskMid,
    precondition:{expectedVersion:1n,idempotencyKey:"candidate-task-complete-mid"}};
  assert.equal((await taskV2("CompleteTask",viewer,taskComplete)).status,403);
@@ -1060,8 +1056,8 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
  assert.equal(completedReplay.status,200,describeProtobuf(completedReplay.body));
  assert.equal(completedReplay.body.receipt?.replayed,true);
  assert.equal(completedReplay.body.task?.version,2n);
- const beforeNoop=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-   "AND subject_id='"+taskMid+"'")[0].n;
+ const beforeNoop=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+taskMid+"'"))[0].n;
  const unchangedTask=await taskV2("CompleteTask",admin,{
    taskId:taskMid,
    precondition:{expectedVersion:2n,idempotencyKey:"candidate-task-unchanged"}});
@@ -1085,16 +1081,16 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
    {accountId,status:1})).length,0);
  assert.equal((await collectPages(taskV2,"ListTasks","tasks",
    {accountId:accountNextId,status:1})).length,1);
- assert.equal(sql("SELECT version FROM crm_activity_task_records WHERE tenant='tenant-a' "+
-   "AND id='"+taskMid+"'")[0].version,2);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-   "AND subject_id='"+taskMid+"'")[0].n,beforeNoop);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts "+
+ assert.equal((await sql("SELECT version FROM crm_activity_task_records WHERE tenant='tenant-a' "+
+   "AND id='"+taskMid+"'"))[0].version,2);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+taskMid+"'"))[0].n,beforeNoop);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_task_receipts "+
    "WHERE tenant='tenant-a' AND key IN ('candidate-task-create-mid',"+
-   "'candidate-task-complete-mid')")[0].n,2);
+   "'candidate-task-complete-mid')"))[0].n,2);
  
-  assert.deepEqual(sql("SELECT action,actor,request_id FROM crm_audit "+
-    "WHERE tenant_id='tenant-a' AND subject_id='"+taskOther+"' ORDER BY rowid"),[
+  assert.deepEqual((await sql("SELECT action,actor,request_id FROM crm_audit "+
+    "WHERE tenant_id='tenant-a' AND subject_id='"+taskOther+"' ORDER BY rowid")),[
     {action:"activity_tasks.create",actor:"native-a@example.test",
       request_id:taskOtherCreated.headers.get("x-request-id")},
     {action:"activity_tasks.update",actor:"service:ci-fixture.access",
@@ -1102,24 +1098,24 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
     {action:"activity_tasks.update",actor:"native-a@example.test",
       request_id:secondTaskEdit.headers.get("x-request-id")}
   ],"Task update replay keeps first signed author and trace");
-  assert.deepEqual(sql("SELECT action,actor FROM crm_audit "+
-    "WHERE tenant_id='tenant-a' AND subject_id='"+taskMid+"' ORDER BY rowid"),[
+  assert.deepEqual((await sql("SELECT action,actor FROM crm_audit "+
+    "WHERE tenant_id='tenant-a' AND subject_id='"+taskMid+"' ORDER BY rowid")),[
     {action:"activity_tasks.create",actor:"native-a@example.test"},
     {action:"activity_tasks.complete",actor:"service:ci-fixture.access"}
   ],"Task complete and update stay distinct; no-op produces no extra audit");
-  const taskActorSnapshot=()=>sql("SELECT "+
+  const taskActorSnapshot=async()=>(await sql("SELECT "+
     "(SELECT state FROM crm_activity_task_records WHERE tenant='tenant-a' AND id='"+taskOther+"') AS state,"+
     "(SELECT COUNT(*) FROM crm_activity_task_receipts) AS receipts,"+
-    "(SELECT COUNT(*) FROM crm_audit) AS audits");
-  const beforeTaskFault=taskActorSnapshot();
-  sql("CREATE TRIGGER fixture_fail_task_actor BEFORE INSERT ON crm_audit "+
-    "WHEN NEW.subject_id='"+taskOther+"' BEGIN SELECT RAISE(ABORT,'fixture task audit'); END;");
+    "(SELECT COUNT(*) FROM crm_audit) AS audits"));
+  const beforeTaskFault=(await taskActorSnapshot());
+  (await sql("CREATE TRIGGER fixture_fail_task_actor BEFORE INSERT ON crm_audit "+
+    "WHEN NEW.subject_id='"+taskOther+"' BEGIN SELECT RAISE(ABORT,'fixture task audit'); END;"));
   try{
     assert.equal((await taskV2("UpdateTask",admin,{taskId:taskOther,
       subject:patchSubject("Must not persist"),
       precondition:{expectedVersion:3n,idempotencyKey:"candidate-task-actor-failed"}})).status,409);
-    assert.deepEqual(taskActorSnapshot(),beforeTaskFault);
-  }finally{sql("DROP TRIGGER fixture_fail_task_actor");}
+    assert.deepEqual((await taskActorSnapshot()),beforeTaskFault);
+  }finally{await sql("DROP TRIGGER fixture_fail_task_actor");}
   console.log(JSON.stringify({event:"crm.native-r2a-task-actor-audit",result:"PASS",
     update_complete_actor:true,no_op:true,failed_audit_rollback:true}));
 console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
@@ -1163,8 +1159,8 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
  assert.equal(poorQuality.status,200,describeProtobuf(poorQuality.body));
  assert.equal(poorQuality.body.failedCount,1);
  assert.equal(poorQuality.body.checks.filter(x=>!x.passed).length,1);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-   "AND subject_id='"+shortQualityId+"'")[0].n,1,
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND subject_id='"+shortQualityId+"'"))[0].n,1,
    "quality read must not append audit or finding");
  console.log(JSON.stringify({event:"crm.native-g3-data-quality-v2",
    result:"PASS",rpc_methods:["EvaluatePartyName"],generated_binary:true,
@@ -1174,7 +1170,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
  const beforeCandidates=await identityV2("FindSharedEmailCandidates",viewer,{page:{pageSize:1}});
  assert.equal(beforeCandidates.status,200,describeProtobuf(beforeCandidates.body));
  assert.equal(beforeCandidates.body.candidates.length,0);
- const auditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n;
+ const auditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
  for(const [index,partyId] of [pagingPersonId,"binary-rpc-proof-01"].entries()){
    const contact=await contactV2("CreateContactPoint",admin,{
      contactPointId:"shared-email-"+index+"-"+randomUUID(),
@@ -1183,7 +1179,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
    assert.equal(contact.status,200,describeProtobuf(contact.body));
    assert.equal(contact.body.contactPoint?.verified,false);
  }
- const auditAfter=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n;
+ const auditAfter=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
  assert.equal(auditAfter,auditBefore+2);
  assert.equal((await identityV2("FindSharedEmailCandidates",null,{})).status,401);
  assert.equal((await identityV2("FindSharedEmailCandidates",viewer,{page:{pageSize:101}})).status,400);
@@ -1210,7 +1206,7 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
  assert.equal(compared.body.secondParty?.partyId,id);
  assert.equal(compared.body.samePartyId,false);
  assert.equal(compared.body.identityConfirmed,false);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'")[0].n,
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
    auditAfter,"read-only identity operations must not write audit");
  console.log(JSON.stringify({event:"crm.native-g3-identity-resolution-v2",
    result:"PASS",rpc_methods:["FindSharedEmailCandidates","CompareParties"],
@@ -1263,8 +1259,8 @@ const otherScope=await consentV2("EvaluateConsent",admin,{
 assert.equal(otherScope.status,200);
 assert.equal(otherScope.body.allowed,false);
 assert.equal(otherScope.body.reason,4);
-assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-  "AND subject_id='"+denyInput.authorizationId+"'")[0].n,1,
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+denyInput.authorizationId+"'"))[0].n,1,
   "repeat suppression and consent evaluation must not duplicate audit");
 const originalList=await consentV2("ListConsentAuthorizations",viewer,{page:{pageSize:1}});
 assert.equal(originalList.status,200,describeProtobuf(originalList.body));
@@ -1350,23 +1346,23 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  assert.equal((await consentV2("EvaluateConsent",viewer,r3Scope)).body.allowed,true);
  const failingGrantId="r3-audit-fault-"+randomUUID();
  const failingKey="r3-audit-fault-key-"+failingGrantId;
- const beforeGrantFault=sql("SELECT "+
+ const beforeGrantFault=(await sql("SELECT "+
    "(SELECT COUNT(*) FROM crm_consent_records) AS records,"+
    "(SELECT COUNT(*) FROM crm_consent_receipts) AS receipts,"+
-   "(SELECT COUNT(*) FROM crm_audit) AS audits");
- sql("CREATE TRIGGER fixture_fail_r3_grant_audit BEFORE INSERT ON crm_audit "+
+   "(SELECT COUNT(*) FROM crm_audit) AS audits"));
+ (await sql("CREATE TRIGGER fixture_fail_r3_grant_audit BEFORE INSERT ON crm_audit "+
    "WHEN NEW.subject_id='"+failingGrantId+"' AND NEW.action='consents.grant' "+
-   "BEGIN SELECT RAISE(ABORT,'fixture R3 consent grant audit failure'); END;");
+   "BEGIN SELECT RAISE(ABORT,'fixture R3 consent grant audit failure'); END;"));
  try{
    assert.equal((await consentV2("GrantVerifiedEmailConsent",admin,{
      ...r3Grant,authorizationId:failingGrantId,
      precondition:{idempotencyKey:failingKey}})).status,409);
-   assert.deepEqual(sql("SELECT "+
+   assert.deepEqual((await sql("SELECT "+
      "(SELECT COUNT(*) FROM crm_consent_records) AS records,"+
      "(SELECT COUNT(*) FROM crm_consent_receipts) AS receipts,"+
-     "(SELECT COUNT(*) FROM crm_audit) AS audits"),beforeGrantFault,
+     "(SELECT COUNT(*) FROM crm_audit) AS audits")),beforeGrantFault,
      "Consent state, receipt and audit must roll back together on late audit failure");
- } finally {sql("DROP TRIGGER fixture_fail_r3_grant_audit");}
+ } finally {await sql("DROP TRIGGER fixture_fail_r3_grant_audit");}
  const changed=await contactV2("UpdateContactPoint",admin,{
    contactPointId:r3Contact,value:"other@example.org",status:1,preferred:false,
    precondition:{idempotencyKey:"r3-change-"+r3Contact,expectedVersion:2n}});
@@ -1374,11 +1370,11 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  assert.equal(changed.body.contactPoint?.verified,false);
  assert.equal((await consentV2("EvaluateConsent",viewer,r3Scope)).body.allowed,false,
    "Old grant must be ineffective after email change");
- assert.deepEqual(sql("SELECT action,actor FROM crm_audit WHERE subject_id='"+r3Id+"' ORDER BY rowid"),[
+ assert.deepEqual((await sql("SELECT action,actor FROM crm_audit WHERE subject_id='"+r3Id+"' ORDER BY rowid")),[
    {action:"consents.grant",actor:"native-a@example.test"},
    {action:"consents.withdraw",actor:"service:ci-fixture.access"}
  ]);
- assert.deepEqual(sql("SELECT action,actor FROM crm_audit WHERE subject_id='"+r3Contact+"' ORDER BY rowid"),[
+ assert.deepEqual((await sql("SELECT action,actor FROM crm_audit WHERE subject_id='"+r3Contact+"' ORDER BY rowid")),[
    {action:"contact_points.create",actor:"native-a@example.test"},
    {action:"contact_points.verify",actor:"native-a@example.test"},
    {action:"contact_points.update",actor:"native-a@example.test"}
@@ -1419,17 +1415,17 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  assert.equal(agentGranted.body.authorization?.effect,1);
  assert.equal((await consentV2("GrantVerifiedEmailConsent",knownService,agentGrant)).body.receipt?.replayed,true);
  assert.equal((await consentV2("EvaluateConsent",viewer,agentScope)).body.allowed,true);
- const agentState=sql("SELECT state FROM crm_consent_records WHERE id='"+agentId+"'")[0].state;
+ const agentState=(await sql("SELECT state FROM crm_consent_records WHERE id='"+agentId+"'"))[0].state;
  assert.ok(agentState.includes("crm.dev.agent"),"Service grant requires distinct test-agent provenance");
  const agentWithdraw={authorizationId:agentId,
    precondition:{expectedVersion:1n,idempotencyKey:"r3-agent-withdraw-"+agentId}};
  assert.equal((await consentV2("WithdrawConsentAuthorization",knownService,agentWithdraw)).status,200);
  assert.equal((await consentV2("EvaluateConsent",viewer,agentScope)).body.allowed,false);
- assert.deepEqual(sql("SELECT action,actor FROM crm_audit WHERE subject_id='"+agentId+"' ORDER BY rowid"),[
+ assert.deepEqual((await sql("SELECT action,actor FROM crm_audit WHERE subject_id='"+agentId+"' ORDER BY rowid")),[
    {action:"consents.grant",actor:"service:ci-fixture.access"},
    {action:"consents.withdraw",actor:"service:ci-fixture.access"}
  ]);
- assert.deepEqual(sql("SELECT action,actor FROM crm_audit WHERE subject_id='"+agentContact+"' ORDER BY rowid"),[
+ assert.deepEqual((await sql("SELECT action,actor FROM crm_audit WHERE subject_id='"+agentContact+"' ORDER BY rowid")),[
    {action:"contact_points.create",actor:"service:ci-fixture.access"},
    {action:"contact_points.verify",actor:"service:ci-fixture.access"}
  ]);
@@ -1542,22 +1538,22 @@ assert.equal((await salesV2("UpdateSalesView",admin,{
   ...viewUpdate,name:"stale",precondition:{
     expectedVersion:1n,idempotencyKey:"r73-view-update-stale"}
 })).status,409);
-const beforeFailedView=sql("SELECT state,version FROM crm_sales_saved_view_records WHERE tenant='tenant-a' AND id='"+viewAId+"'");
-const beforeFailedReceipts=sql("SELECT COUNT(*) AS n FROM crm_sales_saved_view_receipts WHERE tenant='tenant-a'")[0].n;
-sql("CREATE TRIGGER fixture_fail_saved_view_audit BEFORE INSERT ON crm_audit "+
+const beforeFailedView=(await sql("SELECT state,version FROM crm_sales_saved_view_records WHERE tenant='tenant-a' AND id='"+viewAId+"'"));
+const beforeFailedReceipts=(await sql("SELECT COUNT(*) AS n FROM crm_sales_saved_view_receipts WHERE tenant='tenant-a'"))[0].n;
+(await sql("CREATE TRIGGER fixture_fail_saved_view_audit BEFORE INSERT ON crm_audit "+
   "WHEN NEW.action='sales_view.update' AND NEW.subject_id='"+viewAId+"' "+
-  "BEGIN SELECT RAISE(ABORT,'fixture view audit rollback'); END;");
+  "BEGIN SELECT RAISE(ABORT,'fixture view audit rollback'); END;"));
 try {
   const failed=await salesV2("UpdateSalesView",admin,{
     ...viewUpdate,name:"Failed write",precondition:{
       expectedVersion:2n,idempotencyKey:"r73-view-audit-rollback"}
   });
   assert.notEqual(failed.status,200,describeProtobuf(failed.body));
-  assert.deepEqual(sql("SELECT state,version FROM crm_sales_saved_view_records "+
-    "WHERE tenant='tenant-a' AND id='"+viewAId+"'"),beforeFailedView);
-  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_saved_view_receipts "+
-    "WHERE tenant='tenant-a'")[0].n,beforeFailedReceipts);
-} finally {sql("DROP TRIGGER fixture_fail_saved_view_audit");}
+  assert.deepEqual((await sql("SELECT state,version FROM crm_sales_saved_view_records "+
+    "WHERE tenant='tenant-a' AND id='"+viewAId+"'")),beforeFailedView);
+  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_saved_view_receipts "+
+    "WHERE tenant='tenant-a'"))[0].n,beforeFailedReceipts);
+} finally {await sql("DROP TRIGGER fixture_fail_saved_view_audit");}
 const archivedView=await salesV2("UpdateSalesView",admin,{
   ...viewUpdate,archived:true,precondition:{
     expectedVersion:2n,idempotencyKey:"r73-view-archive"}
@@ -1566,8 +1562,8 @@ assert.equal(archivedView.status,200,describeProtobuf(archivedView.body));
 assert.equal(archivedView.body.view?.archived,true);
 assert.deepEqual((await salesV2("ListSalesViews",viewer,{})).body.views.map(x=>x.viewId),[viewBId]);
 assert.equal((await salesV2("ListSalesViews",viewer,{includeArchived:true})).body.views.length,2);
-assert.deepEqual(sql("SELECT action,actor FROM crm_audit WHERE tenant_id='tenant-a' "+
-  "AND subject_id='"+viewAId+"' ORDER BY rowid").map(x=>x.action),
+assert.deepEqual((await sql("SELECT action,actor FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+viewAId+"' ORDER BY rowid")).map(x=>x.action),
   ["sales_view.create","sales_view.update","sales_view.update"]);
 console.log(JSON.stringify({event:"crm.native-r73-saved-views",result:"PASS",
   typed_filters:true,tenant_isolation:true,keyset:true,cas:true,
@@ -1587,8 +1583,8 @@ const foreignSaleContact=await contactV2("CreateContactPoint",admin,{
   precondition:{idempotencyKey:"connect-r72-foreign-contact-create"}
 });
 assert.equal(foreignSaleContact.status,200,describeProtobuf(foreignSaleContact.body));
-const denialAuditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-  "AND subject_id='"+dealId+"'")[0].n;
+const denialAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+dealId+"'"))[0].n;
 assert.equal((await salesV2("CreateDeal",null,saleCreate)).status,401);
 assert.equal((await salesV2("CreateDeal",viewer,saleCreate)).status,403);
 assert.equal((await salesV2("CreateDeal",admin,{
@@ -1618,8 +1614,8 @@ assert.equal((await salesV2("CreateDeal",admin,{
   ...saleCreate,expectedCloseDate:{year:2027,month:2,day:29},
   precondition:{idempotencyKey:"connect-r72-bad-leapdate-denied"}
 })).status,400,"calendar validation must be in original Rust, not a JS Date");
-assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-  "AND subject_id='"+dealId+"'")[0].n,denialAuditBefore,
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+dealId+"'"))[0].n,denialAuditBefore,
   "invalid Contact/CalendarDate must not create a Deal or append audit");
 const salesCreated=await salesV2("CreateDeal",admin,saleCreate);
 assert.equal(salesCreated.status,200,describeProtobuf(salesCreated.body));
@@ -1685,8 +1681,8 @@ assert.equal((await salesV2("UpdateDeal",admin,{
   precondition:{expectedVersion:2n,idempotencyKey:"connect-r72-invalid-month-update"}
 })).status,400);
 assert.equal((await salesV2("GetDeal",viewer,{dealId})).body.deal?.version,2n);
-assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-  "AND subject_id='"+dealId+"'")[0].n,2,
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+dealId+"'"))[0].n,2,
   "failed sales contact/date updates do not append audit");
 console.log(JSON.stringify({event:"crm.native-r72-linked-contact-date",result:"PASS",
   create_contact:true,create_expected_close_date:true,update_contact_clear:true,
@@ -1698,23 +1694,23 @@ assert.equal((await salesV2("AdvanceStage",viewer,advanceSale)).status,403);
 assert.equal((await salesV2("AdvanceStage",admin,{
   ...advanceSale,targetStage:stageLead,
   precondition:{expectedVersion:2n,idempotencyKey:"connect-sales-regress"}})).status,400);
-const taskCountBefore=sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
-  "WHERE tenant='tenant-a'")[0].n;
+const taskCountBefore=(await sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
+  "WHERE tenant='tenant-a'"))[0].n;
 const advancedSale=await salesV2("AdvanceStage",admin,advanceSale);
 assert.equal(advancedSale.status,200,describeProtobuf(advancedSale.body));
 assert.equal(advancedSale.body.deal?.stage?.stageId,"qualified");
 assert.equal(advancedSale.body.deal?.version,3n);
 assert.equal(advancedSale.body.receipt?.resourceVersion,3n);
 assert.equal(advancedSale.body.receipt?.replayed,false);
-const taskCountAfter=sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
-  "WHERE tenant='tenant-a'")[0].n;
+const taskCountAfter=(await sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
+  "WHERE tenant='tenant-a'"))[0].n;
 assert.equal(taskCountAfter,taskCountBefore+1,
   "original Sales stage event must create one Activities Task atomically");
 const advanceReplayed=await salesV2("AdvanceStage",admin,advanceSale);
 assert.equal(advanceReplayed.status,200);
 assert.equal(advanceReplayed.body.receipt?.replayed,true);
-assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
-  "WHERE tenant='tenant-a'")[0].n,taskCountAfter);
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
+  "WHERE tenant='tenant-a'"))[0].n,taskCountAfter);
 // Signed workerd cross-owner operational check: a real stage move delivered
 // one original Task. Only its OPEN status and authoritative dueAt may mark
 // the Deal as having an overdue linked action.
@@ -1762,15 +1758,15 @@ assert.equal((await salesV2("CloseDeal",admin,{
   precondition:{expectedVersion:4n,idempotencyKey:"connect-sales-double-close"}
 })).status,409,"double-close must be rejected");
 assert.ok(closedSale.body.deal?.closedAt);
-assert.equal(sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
-  "WHERE tenant='tenant-a'")[0].n,taskCountAfter,
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
+  "WHERE tenant='tenant-a'"))[0].n,taskCountAfter,
   "Won closure must not create a second follow-up Task");
 assert.equal((await salesV2("CloseDeal",admin,closeSale))
   .body.receipt?.replayed,true);
 assert.equal((await salesV2("GetPipeline",viewer,{pipelineId:"pipeline.enterprise"}))
   .body.pipeline?.version,2n);
-assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
-  "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'")[0].n,2,
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
+  "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'"))[0].n,2,
   "two original one-batch Sales->Activities delivery receipts");
 const dealHistory=await salesV2("ListDealEvents",viewer,{dealId,page:{pageSize:25}});
 assert.equal(dealHistory.status,200,describeProtobuf(dealHistory.body));
@@ -1984,32 +1980,34 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
 // Remove its records, receipts and audit immediately after the read-only probes.
 {
   const sourceId="r7-totals-02";
-  const [source]=sql("SELECT state,account_id,version,actor FROM crm_sales_deal_records "+
-    "WHERE tenant='tenant-a' AND id='"+sourceId+"'");
+  const [source]=(await sql("SELECT state,account_id,version,actor FROM crm_sales_deal_records "+
+    "WHERE tenant='tenant-a' AND id='"+sourceId+"'"));
   assert.ok(source?.state.includes('"'+sourceId+'"'),
     "load fixture must clone a valid domain-serialized Deal");
-  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_records "+
-    "WHERE tenant='tenant-a' AND id LIKE 'r7-scale-%'")[0].n,0);
-  const insert=fixtureDb.prepare("INSERT INTO crm_sales_deal_records "+
+  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_records "+
+    "WHERE tenant='tenant-a' AND id LIKE 'r7-scale-%'"))[0].n,0);
+  const insertSql="INSERT INTO crm_sales_deal_records "+
     "(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor,last_action) "+
-    "VALUES(?,?,?,?,?,?,?,?,?,?)");
+    "VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id";
   let inserted=0;
-  const seedTo=n=>{
-    fixtureDb.exec("BEGIN IMMEDIATE");
-    try{
-      for(;inserted<n;inserted++){
-        const id="r7-scale-"+String(inserted).padStart(4,"0");
+  const seedTo=async n=>{
+    while(inserted<n){
+      const ids=[],statements=[];
+      for(let i=inserted;i<Math.min(n,inserted+100);i++){
+        const id="r7-scale-"+String(i).padStart(4,"0");
         const state=source.state.replaceAll('"'+sourceId+'"','"'+id+'"');
         assert.ok(state!==source.state);
-        insert.run("tenant-a",id,source.account_id,state,source.version,
-          "r7-scale-key-"+inserted,"load-fixture",randomUUID(),source.actor,
-          "sales_deals.create");
+        ids.push(id);
+        statements.push(statement(insertSql,"tenant-a",id,source.account_id,state,source.version,
+          "r7-scale-key-"+i,"load-fixture",randomUUID(),source.actor,"sales_deals.create"));
       }
-      fixtureDb.exec("COMMIT");
-    }catch(error){fixtureDb.exec("ROLLBACK");throw error;}
+      const results=await batch(statements);
+      assert.deepEqual(results.map(result=>result.results[0]?.id),ids);
+      inserted+=ids.length;
+    }
   };
   const benchmark=async n=>{
-    seedTo(n);
+    await seedTo(n);
     const began=performance.now();
     const first=await salesV2("ListStageDeals",viewer,{
       pipelineId:"pipeline.other",stageId:"lead",page:{pageSize:25}});
@@ -2040,12 +2038,12 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
     const metrics=await salesV2("GetPipelineMetrics",viewer,filter);
     const metricMs=Math.round(performance.now()-metricStart);
     assert.equal(metrics.status,200,describeProtobuf(metrics.body));
-    const facts=fixtureDb.prepare("SELECT json_extract(state,'$.amount.currency') AS currency,"+
-      "CAST(json_extract(state,'$.amount.minor_units') AS TEXT) AS units,"+
+    const facts=await sql("SELECT json_extract(state,'$.amount.currency') AS currency,"+
+      "json_extract(state,'$.amount.minor_units') AS units,"+
       "json_extract(state,'$.probability_basis_points') AS bps FROM crm_sales_deal_records "+
       "WHERE tenant=? AND json_extract(state,'$.stage.pipeline_id')=? "+
-      "AND json_extract(state,'$.status')='open' AND account_id=?")
-      .all("tenant-a","pipeline.other",accountId);
+      "AND json_extract(state,'$.status')='open' AND account_id=?",
+      "tenant-a","pipeline.other",accountId);
     assert.equal(facts.length,n+32);
     assert.equal(metrics.body.totalDealCount,BigInt(facts.length));
     const expected=new Map();
@@ -2070,35 +2068,35 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
       // Both ends of the old paged scan change in a single fixture transaction.
       // Every committed state has the same total and weighted amount.
       const ids=["r7-scale-0000","r7-scale-0999"];
-      // One autocommit statement changes both rows atomically. Never hold an
-      // external SQLite write transaction across workerd's signed Access read.
-      // The original Rust MoneyState stores base-10 i128 as a JSON string.
-      const update=fixtureDb.prepare("UPDATE crm_sales_deal_records SET "+
-        "state=json_set(state,'$.amount.minor_units',CASE id WHEN ? THEN ? ELSE ? END,"+
-        "'$.version',version+1),version=version+1,"+
-        "idem_key=?||id,idem_digest='load-fixture',request_id=CASE id WHEN ? THEN ? ELSE ? END,"+
-        "last_action='sales_deals.update' WHERE tenant='tenant-a' AND id IN (?,?)");
-      const readBalances=()=>fixtureDb.prepare("SELECT json_type(state,'$.amount.minor_units') AS kind,"+
+      // Atomic D1 batch competes with signed RPCs via the same binding.
+      const updateSql="UPDATE crm_sales_deal_records SET "+
+        "state=json_set(state,'$.amount.minor_units',?,'$.version',version+1),version=version+1,"+
+        "idem_key=?,idem_digest='load-fixture',request_id=?,last_action='sales_deals.update' "+
+        "WHERE tenant='tenant-a' AND id=? RETURNING id";
+      const readBalances=async()=>(await sql("SELECT json_type(state,'$.amount.minor_units') AS kind,"+
         "json_extract(state,'$.amount.minor_units') AS units "+
-        "FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id IN (?,?) ORDER BY id")
-        .all(...ids).map(row=>[row.kind,row.units]);
+        "FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id IN (?,?) ORDER BY id",
+        ...ids)).map(row=>[row.kind,row.units]);
       const baseline=metrics.body.currencies;
-      assert.deepEqual(readBalances(),[["text","2345"],["text","2345"]]);
+      assert.deepEqual(await readBalances(),[["text","2345"],["text","2345"]]);
       for(let attempt=0;attempt<12;attempt++){
-        const read=salesV2("GetPipelineMetrics",viewer,filter);
-        await new Promise(resolve=>setTimeout(resolve,1));
         const amounts=attempt%2===0?["2346","2344"]:["2345","2345"];
-        assert.equal(update.run(ids[0],...amounts,"r7-scale-key-swap-"+attempt+"-",ids[0],
-          randomUUID(),randomUUID(),...ids).changes,2);
-        assert.deepEqual(readBalances(),amounts.map(value=>["text",value]));
-        const snapshot=await read;
-        if(snapshot.status!==200){
-          await new Promise(resolve=>setTimeout(resolve,50));
-          console.error(JSON.stringify({event:"crm.native-r73d-concurrent-failure",
-            attempt,status:snapshot.status,request_id:snapshot.headers.get("x-request-id"),
-            journal_mode:fixtureDb.prepare("PRAGMA journal_mode").get().journal_mode,
-            worker_output:workerOutput.slice(-6000),worker_stderr:stderr}));
+        const statements=ids.map((id,i)=>statement(updateSql,amounts[i],
+          "r7-scale-key-swap-"+attempt+"-"+i,randomUUID(),id));
+        let read,write;
+        if(attempt%2===0){
+          read=salesV2("GetPipelineMetrics",viewer,filter);
+          write=batch(statements);
+        }else{
+          write=batch(statements);
+          read=salesV2("GetPipelineMetrics",viewer,filter);
         }
+        const [snapshot,changed]=await Promise.all([read,write]);
+        assert.deepEqual(changed.map(result=>result.results[0]?.id),ids);
+        assert.deepEqual(await readBalances(),amounts.map(value=>["text",value]));
+        if(snapshot.status!==200)
+          console.error(JSON.stringify({event:"crm.native-r73d-concurrent-failure",
+            attempt,status:snapshot.status,request_id:snapshot.headers.get("x-request-id")}));
         assert.equal(snapshot.status,200,describeProtobuf(snapshot.body));
         assert.equal(snapshot.body.totalDealCount,1032n);
         assert.deepEqual(snapshot.body.currencies,baseline,
@@ -2108,11 +2106,15 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
       assert.equal(after.status,200,describeProtobuf(after.body));
       assert.deepEqual(after.body.currencies,baseline);
       console.log(JSON.stringify({event:"crm.native-r73d-concurrent-metrics",result:"PASS",
-        committed_atomic_swaps:12,concurrent_reads:12,final_read:true,exact_totals:true}));
+        committed_atomic_swaps:12,concurrent_reads:12,final_read:true,exact_totals:true,d1_binding:true}));
       // Corrupt a disposable record outside the visible page. Both analytics
       // and Kanban must reject it through the original Rust persistence owner.
-      const invalid=fixtureDb.prepare("UPDATE crm_sales_deal_records SET "+
-        "state=json_set(state,?,json(?)) WHERE tenant='tenant-a' AND id=?");
+      const invalid=async(field,value,id)=>{
+        const rows=await sql("UPDATE crm_sales_deal_records SET "+
+          "state=json_set(state,?,json(?)) WHERE tenant='tenant-a' AND id=? RETURNING id",
+          field,value,id);
+        assert.deepEqual(rows,[{id}]);
+      };
       const invalidId=ids[1];
       for(const [field,bad,good] of [
         ["$.amount.minor_units","2345",'"2345"'],
@@ -2121,7 +2123,7 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
         ["$.probability_basis_points","2000.5","2000"]
       ]){
         try{
-          assert.equal(invalid.run(field,bad,invalidId).changes,1);
+          await invalid(field,bad,invalidId);
           const brokenMetrics=await salesV2("GetPipelineMetrics",viewer,filter);
           assert.equal(brokenMetrics.status,500);
           assert.equal(brokenMetrics.body.message,"Sales D1 metrics read failed");
@@ -2130,7 +2132,7 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
           assert.equal(brokenBoard.status,500);
           assert.equal(brokenBoard.body.message,"Sales D1 stage list failed");
         }finally{
-          assert.equal(invalid.run(field,good,invalidId).changes,1);
+          await invalid(field,good,invalidId);
         }
       }
       const restored=await salesV2("GetPipelineMetrics",viewer,filter);
@@ -2140,7 +2142,7 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
       // of the individual public Deal wire amount is i64. Test off-page facts.
       const largeUnits=9223372036854775808n;
       try{
-        assert.equal(invalid.run("$.amount.minor_units",JSON.stringify(String(largeUnits)),invalidId).changes,1);
+        await invalid("$.amount.minor_units",JSON.stringify(String(largeUnits)),invalidId);
         const large=await salesV2("GetPipelineMetrics",viewer,filter);
         const largeBoard=await salesV2("ListStageDeals",viewer,{...filter,stageId:"lead",page:{pageSize:1}});
         assert.equal(large.status,200,describeProtobuf(large.body));
@@ -2154,7 +2156,7 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
         assert.equal(largeBoard.body.currencyTotals.find(x=>x.currencyCode==="PLN").totalMinorUnits,
           newPln.totalMinorUnits);
       }finally{
-        assert.equal(invalid.run("$.amount.minor_units",'"2345"',invalidId).changes,1);
+        await invalid("$.amount.minor_units",'"2345"',invalidId);
       }
       // Exercise ordinary signed Connect mutations concurrently with reads.
       // Each capture must match one entire committed state, not a hybrid.
@@ -2207,8 +2209,8 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
     const stageSql=stageQuery.slice(1,-1).replace("{condition}",
       "tenant=? AND json_extract(state,'$.stage.pipeline_id')=? "+
       "AND json_extract(state,'$.stage.stage_id')=? AND json_extract(state,'$.status')=? AND account_id=?");
-    const plan=fixtureDb.prepare("EXPLAIN QUERY PLAN "+stageSql)
-      .all("tenant-a","pipeline.other","lead","open",accountId);
+    const plan=await sql("EXPLAIN QUERY PLAN "+stageSql,
+      "tenant-a","pipeline.other","lead","open",accountId);
     assert.ok(plan.some(row=>row.detail.includes("idx_crm_sales_board_stage")),
       "the 1000+ row snapshot must use the existing stage/ID index");
     const query=rust.match(/r#"WITH snapshot_clock AS MATERIALIZED \([\s\S]*?WHERE \{condition\}"#/)?.[0];
@@ -2216,26 +2218,23 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
     const metricsSql=query.slice(3,-2).replace("{condition}",
       "d.tenant=? AND json_extract(d.state,'$.stage.pipeline_id')=? "+
       "AND json_extract(d.state,'$.status')=? AND d.account_id=?");
-    const metricsPlan=fixtureDb.prepare("EXPLAIN QUERY PLAN "+metricsSql)
-      .all("tenant-a","pipeline.other","open",accountId);
+    const metricsPlan=await sql("EXPLAIN QUERY PLAN "+metricsSql,
+      "tenant-a","pipeline.other","open",accountId);
     assert.ok(metricsPlan.some(row=>row.detail.includes("idx_crm_sales_board_stage")));
     assert.ok(metricsPlan.some(row=>row.detail.includes("crm_sales_deal_events")));
     assert.ok(metricsPlan.some(row=>row.detail.includes("idx_crm_sales_link_deal")));
     await benchmark(100);
     await benchmark(1000);
   }finally{
-    fixtureDb.exec("BEGIN IMMEDIATE");
-    try{
-      // Immutable lifecycle events reference their Deal: purge only disposable
-      // scale-test children before removing the matching test parent rows.
-      sql("DELETE FROM crm_sales_deal_events WHERE tenant='tenant-a' AND deal_id LIKE 'r7-scale-%'");
-      sql("DELETE FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id LIKE 'r7-scale-%'");
-      sql("DELETE FROM crm_sales_deal_receipts WHERE tenant='tenant-a' AND key LIKE 'r7-scale-key-%'");
-      sql("DELETE FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id LIKE 'r7-scale-%'");
-      fixtureDb.exec("COMMIT");
-    }catch(error){fixtureDb.exec("ROLLBACK");throw error;}
-    assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_records "+
-      "WHERE tenant='tenant-a' AND id LIKE 'r7-scale-%'")[0].n,0);
+    // Only disposable scale fixtures; preserve the same atomic cleanup.
+    await batch([
+      statement("DELETE FROM crm_sales_deal_events WHERE tenant='tenant-a' AND deal_id LIKE 'r7-scale-%'"),
+      statement("DELETE FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id LIKE 'r7-scale-%'"),
+      statement("DELETE FROM crm_sales_deal_receipts WHERE tenant='tenant-a' AND key LIKE 'r7-scale-key-%'"),
+      statement("DELETE FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id LIKE 'r7-scale-%'"),
+    ]);
+    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_records "+
+      "WHERE tenant='tenant-a' AND id LIKE 'r7-scale-%'"))[0].n,0);
   }
 }
 assert.equal((await salesV2("ListStageDeals",tenantB,{
@@ -2247,16 +2246,16 @@ assert.equal((await salesV2("ListStageDeals",viewer,{
 assert.equal((await salesV2("ListDeals",viewer,{
   page:{pageSize:1,pageToken:dealLast},pipelineId:"pipeline.enterprise"})
   ).body.deals.length,0);
-assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
   "WHERE tenant='tenant-a' AND key IN ('connect-sales-create-main',"+
   "'connect-sales-update-main','connect-sales-advance-main','connect-sales-close-main')"
-  )[0].n,4,"original Deal receipt owners and D1 triggers remain singular");
-assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-  "AND subject_id='"+dealId+"'")[0].n,4,
+  ))[0].n,4,"original Deal receipt owners and D1 triggers remain singular");
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+dealId+"'"))[0].n,4,
   "create + update + two stage transitions each write exactly one audit");
 
-  assert.deepEqual(sql("SELECT action,actor,request_id FROM crm_audit "+
-    "WHERE tenant_id='tenant-a' AND subject_id='"+dealId+"' ORDER BY rowid"),[
+  assert.deepEqual((await sql("SELECT action,actor,request_id FROM crm_audit "+
+    "WHERE tenant_id='tenant-a' AND subject_id='"+dealId+"' ORDER BY rowid")),[
     {action:"sales_deals.create",actor:"native-a@example.test",
       request_id:salesCreated.headers.get("x-request-id")},
     {action:"sales_deals.update",actor:"service:ci-fixture.access",
@@ -2266,8 +2265,8 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
     {action:"sales_deals.close",actor:"native-a@example.test",
       request_id:closedSale.headers.get("x-request-id")}
   ],"Sales create/update/stage actor and action survive cross-actor replay");
-  const linked=sql("SELECT delivery_id,task_id,disposition,CASE WHEN task_id IS NULL THEN 1 ELSE 0 END AS no_task,actor,request_id FROM crm_sales_link_delivery_records "+
-    "WHERE tenant='tenant-a' AND deal_id='"+dealId+"' ORDER BY deal_version");
+  const linked=(await sql("SELECT delivery_id,task_id,disposition,CASE WHEN task_id IS NULL THEN 1 ELSE 0 END AS no_task,actor,request_id FROM crm_sales_link_delivery_records "+
+    "WHERE tenant='tenant-a' AND deal_id='"+dealId+"' ORDER BY deal_version"));
   assert.equal(linked.length,2);
   // One signed server request atomically writes Deal, linked Task (if any),
   // and linked-delivery audits. Distinguish their actions AND subject IDs.
@@ -2286,76 +2285,76 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
       ...(row.disposition==="applied"?[{action:"activity_tasks.create",subject_id:row.task_id,
         actor:"native-a@example.test",request_id:row.request_id}]:[])
     ].sort((a,b)=>a.action.localeCompare(b.action));
-    const actual=sql("SELECT action,subject_id,actor,request_id FROM crm_audit "+
-      "WHERE tenant_id='tenant-a' AND request_id='"+row.request_id+"' ORDER BY action");
+    const actual=(await sql("SELECT action,subject_id,actor,request_id FROM crm_audit "+
+      "WHERE tenant_id='tenant-a' AND request_id='"+row.request_id+"' ORDER BY action"));
     assert.deepEqual(actual,expected,
       "One AdvanceStage request must commit attributed Deal + Task + delivery audit together");
   }
-  const salesActorSnapshot=()=>sql("SELECT "+
+  const salesActorSnapshot=async()=>(await sql("SELECT "+
     "(SELECT state FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id='"+dealLast+"') AS deal,"+
     "(SELECT COUNT(*) FROM crm_activity_task_records) AS tasks,"+
     "(SELECT COUNT(*) FROM crm_sales_link_delivery_records) AS deliveries,"+
     "(SELECT COUNT(*) FROM crm_sales_deal_receipts) AS receipts,"+
-    "(SELECT COUNT(*) FROM crm_audit) AS audits");
-  const beforeSalesFault=salesActorSnapshot();
-  sql("CREATE TRIGGER fixture_fail_sales_link_actor BEFORE INSERT ON crm_audit "+
+    "(SELECT COUNT(*) FROM crm_audit) AS audits"));
+  const beforeSalesFault=(await salesActorSnapshot());
+  (await sql("CREATE TRIGGER fixture_fail_sales_link_actor BEFORE INSERT ON crm_audit "+
     "WHEN NEW.action='sales_activities_link.applied' "+
-    "BEGIN SELECT RAISE(ABORT,'fixture linked audit'); END;");
+    "BEGIN SELECT RAISE(ABORT,'fixture linked audit'); END;"));
   try{
     assert.equal((await salesV2("AdvanceStage",admin,{dealId:dealLast,
       targetStage:stageQualified,targetStatus:1,
       precondition:{expectedVersion:1n,idempotencyKey:"connect-sales-linked-actor-fail"}})).status,409);
-    assert.deepEqual(salesActorSnapshot(),beforeSalesFault,
+    assert.deepEqual((await salesActorSnapshot()),beforeSalesFault,
       "Late link audit failure rolls back Deal, new Task, receipt, delivery and audit");
-  }finally{sql("DROP TRIGGER fixture_fail_sales_link_actor");}
+  }finally{await sql("DROP TRIGGER fixture_fail_sales_link_actor");}
   // Reconfigure a populated pipeline: stable stage IDs, atomic rank rebase.
-  const oldRank=sql("SELECT id,version,state FROM crm_sales_deal_records WHERE tenant='tenant-a' "+
-    "AND id IN ('"+dealId+"','"+dealLast+"') ORDER BY id");
-  const oldDealAudit=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-    "AND subject_id IN ('"+dealId+"','"+dealLast+"')")[0].n;
-  const oldDealReceipts=sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
-    "WHERE tenant='tenant-a'")[0].n;
+  const oldRank=(await sql("SELECT id,version,state FROM crm_sales_deal_records WHERE tenant='tenant-a' "+
+    "AND id IN ('"+dealId+"','"+dealLast+"') ORDER BY id"));
+  const oldDealAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+    "AND subject_id IN ('"+dealId+"','"+dealLast+"')"))[0].n;
+  const oldDealReceipts=(await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
+    "WHERE tenant='tenant-a'"))[0].n;
   const reorder={pipelineId:"pipeline.enterprise",name:"Occupied stage reorder",
     stages:[pipelineSeed.stages[1],pipelineSeed.stages[0],pipelineSeed.stages[2]],
     archived:false,
     precondition:{expectedVersion:2n,idempotencyKey:"connect-r7-reorder-used-stage"}};
   // A late D1 failure after the catalog CAS must roll back BOTH the
   // Pipeline audit/receipt and every Deal rank projection.
-  const failedRebaseSnapshot=()=>sql("SELECT (SELECT state FROM crm_sales_pipeline_records "+
+  const failedRebaseSnapshot=async()=>(await sql("SELECT (SELECT state FROM crm_sales_pipeline_records "+
     "WHERE tenant='tenant-a' AND id='pipeline.enterprise') AS catalog, "+
     "(SELECT state FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id='"+dealId+"') AS closed, "+
     "(SELECT state FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id='"+dealLast+"') AS opened, "+
     "(SELECT COUNT(*) FROM crm_sales_pipeline_receipts WHERE tenant='tenant-a') AS receipts, "+
-    "(SELECT COUNT(*) FROM crm_audit WHERE tenant_id='tenant-a') AS audits");
-  const beforeFailedRebase=failedRebaseSnapshot();
-  sql("CREATE TRIGGER fixture_deny_rank_rebase BEFORE UPDATE ON crm_sales_deal_records "+
+    "(SELECT COUNT(*) FROM crm_audit WHERE tenant_id='tenant-a') AS audits"));
+  const beforeFailedRebase=(await failedRebaseSnapshot());
+  (await sql("CREATE TRIGGER fixture_deny_rank_rebase BEFORE UPDATE ON crm_sales_deal_records "+
     "WHEN NEW.id='"+dealLast+"' AND NEW.version=OLD.version "+
-    "BEGIN SELECT RAISE(ABORT,'fixture rank rollback'); END;");
+    "BEGIN SELECT RAISE(ABORT,'fixture rank rollback'); END;"));
   try {
     const denied=await salesV2("UpdatePipeline",admin,{
       ...reorder,precondition:{expectedVersion:2n,idempotencyKey:"r7-rebase-rollback"}
     });
     assert.equal(denied.status,409,describeProtobuf(denied.body));
-    assert.deepEqual(failedRebaseSnapshot(),beforeFailedRebase,
+    assert.deepEqual((await failedRebaseSnapshot()),beforeFailedRebase,
       "Late D1 failure must roll back catalog, both Deals, receipts and audit");
-  }finally{sql("DROP TRIGGER fixture_deny_rank_rebase");}
+  }finally{await sql("DROP TRIGGER fixture_deny_rank_rebase");}
   const reordered=await salesV2("UpdatePipeline",admin,reorder);
   assert.equal(reordered.status,200,describeProtobuf(reordered.body));
   assert.equal(reordered.body.pipeline?.version,3n);
   assert.deepEqual(reordered.body.pipeline?.stages.map(s=>s.stageId),["qualified","lead","won"]);
   assert.deepEqual(reordered.body.pipeline?.stages.map(s=>s.ordinal),[1,2,3]);
   assert.equal((await salesV2("UpdatePipeline",admin,reorder)).body.receipt?.replayed,true);
-  const rankAfter=sql("SELECT id,version,state FROM crm_sales_deal_records WHERE tenant='tenant-a' "+
-    "AND id IN ('"+dealId+"','"+dealLast+"') ORDER BY id");
+  const rankAfter=(await sql("SELECT id,version,state FROM crm_sales_deal_records WHERE tenant='tenant-a' "+
+    "AND id IN ('"+dealId+"','"+dealLast+"') ORDER BY id"));
   assert.deepEqual(rankAfter.map(x=>x.version),oldRank.map(x=>x.version),
     "Rank-only metadata must not change Deal versions");
   assert.equal(JSON.parse(rankAfter.find(x=>x.id===dealId).state).stage.ordinal,1);
   assert.equal(JSON.parse(rankAfter.find(x=>x.id===dealLast).state).stage.ordinal,2);
-  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-    "AND subject_id IN ('"+dealId+"','"+dealLast+"')")[0].n,oldDealAudit,
+  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+    "AND subject_id IN ('"+dealId+"','"+dealLast+"')"))[0].n,oldDealAudit,
     "No fictional Deal audit for catalog reorder");
-  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
-    "WHERE tenant='tenant-a'")[0].n,oldDealReceipts,
+  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
+    "WHERE tenant='tenant-a'"))[0].n,oldDealReceipts,
     "No fictional Deal receipt for catalog reorder");
   assert.equal((await salesV2("UpdatePipeline",admin,{
     ...reorder,stages:[pipelineSeed.stages[1],pipelineSeed.stages[2]],
@@ -2401,8 +2400,8 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
   assert.deepEqual(afterReopen.body.events.map(e=>e.dealVersion),[5n,4n,3n,2n,1n]);
   assert.equal(afterReopen.body.events[0].kind,5);
   assert.equal(afterReopen.body.events[0].reasonCode,"customer-revisited");
-  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
-    "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'")[0].n,2,
+  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
+    "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'"))[0].n,2,
     "reopen must not invent a stage-change delivery");
   const reclosed=await salesV2("CloseDeal",admin,{
     dealId,outcome:3,reasonCode:"customer-cancelled",
@@ -2413,26 +2412,26 @@ assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'
   assert.equal(reclosed.body.deal?.version,6n);
   assert.equal((await salesV2("CloseDeal",admin,closeSale)).body.receipt?.replayed,true,
     "first CloseDeal must replay unchanged after stage reorder and reopen");
-  const reopenAuditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-    "AND subject_id='"+dealId+"'")[0].n;
-  const reopenReceiptBefore=sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
-    "WHERE tenant='tenant-a'")[0].n;
-  const reopenEventsBefore=sql("SELECT COUNT(*) AS n FROM crm_sales_deal_events "+
-    "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'")[0].n;
-  sql("CREATE TRIGGER fixture_fail_reopen_audit BEFORE INSERT ON crm_audit "+
+  const reopenAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+    "AND subject_id='"+dealId+"'"))[0].n;
+  const reopenReceiptBefore=(await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
+    "WHERE tenant='tenant-a'"))[0].n;
+  const reopenEventsBefore=(await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_events "+
+    "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'"))[0].n;
+  (await sql("CREATE TRIGGER fixture_fail_reopen_audit BEFORE INSERT ON crm_audit "+
     "WHEN NEW.action='sales_deals.reopen' "+
-    "BEGIN SELECT RAISE(ABORT,'fixture reopen audit'); END;");
+    "BEGIN SELECT RAISE(ABORT,'fixture reopen audit'); END;"));
   try{
     assert.equal((await salesV2("ReopenDeal",admin,{dealId,reasonCode:"revisit",
       precondition:{expectedVersion:6n,idempotencyKey:"r72-failed-reopen"}})).status,409);
-  }finally{sql("DROP TRIGGER fixture_fail_reopen_audit");}
+  }finally{await sql("DROP TRIGGER fixture_fail_reopen_audit");}
   assert.equal((await salesV2("GetDeal",viewer,{dealId})).body.deal?.version,6n);
-  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
-    "AND subject_id='"+dealId+"'")[0].n,reopenAuditBefore);
-  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
-    "WHERE tenant='tenant-a'")[0].n,reopenReceiptBefore);
-  assert.equal(sql("SELECT COUNT(*) AS n FROM crm_sales_deal_events "+
-    "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'")[0].n,reopenEventsBefore);
+  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+    "AND subject_id='"+dealId+"'"))[0].n,reopenAuditBefore);
+  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts "+
+    "WHERE tenant='tenant-a'"))[0].n,reopenReceiptBefore);
+  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_events "+
+    "WHERE tenant='tenant-a' AND deal_id='"+dealId+"'"))[0].n,reopenEventsBefore);
   console.log(JSON.stringify({event:"crm.native-r72-deal-lifecycle",result:"PASS",
     separate_close_reopen:true,closed_readonly:true,actor_audit:true,
     append_only_history:true,cursor:true,linked_task:true,
@@ -2476,7 +2475,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(draft.body.privacyCase?.subjectVerified,false);
  assert.equal(draft.body.receipt?.requestId,draft.headers.get("x-request-id"));
  assert.equal(draft.body.receipt?.replayed,false);
- const originalAudit=sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'")[0].n;
+ const originalAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'"))[0].n;
  assert.equal(originalAudit,1);
  assert.equal((await privacy("CreatePrivacyCase",admin,draftInput)).body.receipt?.replayed,true);
  assert.equal((await privacy("CreatePrivacyCase",admin,{...draftInput,kind:4})).body.code,"aborted");
@@ -2506,11 +2505,11 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(submitReplay.body.receipt?.replayed,true);
  assert.equal(submitReplay.body.privacyCase?.status,2);
  assert.equal((await privacy("GetPrivacyCase",viewer,{caseId})).body.privacyCase?.status,15);
- assert.equal(sql("SELECT version FROM crm_privacy_case_records WHERE tenant='tenant-a' AND id='"+caseId+"'")[0].version,3);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_privacy_case_receipts WHERE tenant='tenant-a'")[0].n,3);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'")[0].n,3);
- assert.deepEqual(sql("SELECT action,subject_id,request_id,actor FROM crm_audit WHERE "+
-   "tenant_id='tenant-a' AND subject_id='"+caseId+"' ORDER BY rowid"),[
+ assert.equal((await sql("SELECT version FROM crm_privacy_case_records WHERE tenant='tenant-a' AND id='"+caseId+"'"))[0].version,3);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_privacy_case_receipts WHERE tenant='tenant-a'"))[0].n,3);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'"))[0].n,3);
+ assert.deepEqual((await sql("SELECT action,subject_id,request_id,actor FROM crm_audit WHERE "+
+   "tenant_id='tenant-a' AND subject_id='"+caseId+"' ORDER BY rowid")),[
    {action:"customer_privacy.create",subject_id:caseId,
      request_id:draft.headers.get("x-request-id"),actor:"native-a@example.test"},
    {action:"customer_privacy.submit",subject_id:caseId,
@@ -2518,44 +2517,44 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    {action:"customer_privacy.cancel",subject_id:caseId,
      request_id:cancelled.headers.get("x-request-id"),actor:"native-a@example.test"},
  ],"Committed actions must preserve their own verified Access actor and request");
- assert.deepEqual(sql("SELECT created_by,actor FROM crm_privacy_case_records "+
-   "WHERE tenant='tenant-a' AND id='"+caseId+"'"),[
+ assert.deepEqual((await sql("SELECT created_by,actor FROM crm_privacy_case_records "+
+   "WHERE tenant='tenant-a' AND id='"+caseId+"'")),[
    {created_by:"native-a@example.test",actor:"native-a@example.test"},
  ],"Creator is immutable and the last transition actor is separate");
  const failingTransitionId="privacy-audit-transition-"+randomUUID();
  assert.equal((await privacy("CreatePrivacyCase",admin,{
    caseId:failingTransitionId,kind:1,
    precondition:{idempotencyKey:"privacy-audit-ready-transition"}})).status,200);
- const privacySnapshot=()=>sql("SELECT "+
+ const privacySnapshot=async()=>(await sql("SELECT "+
    "(SELECT json_group_array(json_array(tenant,id,state,version,created_by,actor)) "+
    "FROM crm_privacy_case_records) AS states,"+
    "(SELECT COUNT(*) FROM crm_privacy_case_receipts) AS receipts,"+
-   "(SELECT COUNT(*) FROM crm_audit WHERE tenant_id='tenant-a') AS audits");
- const privacyBeforeDenials=privacySnapshot();
+   "(SELECT COUNT(*) FROM crm_audit WHERE tenant_id='tenant-a') AS audits"));
+ const privacyBeforeDenials=(await privacySnapshot());
  for(const token of [null,viewer,unknownService]){
    assert.ok((await privacy("CreatePrivacyCase",token,draftInput)).status>=400);
    assert.ok((await privacy("SubmitPrivacyCase",token,submit)).status>=400);
    assert.ok((await privacy("CancelPrivacyCase",token,cancel)).status>=400);
  }
- sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
+ await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
  assert.equal((await privacy("SubmitPrivacyCase",knownService,submit)).status,401,
    "Inactive service cannot replay a committed Privacy write");
- sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
+ await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
  assert.equal((await privacy("SubmitPrivacyCase",knownService,submit)).status,403,
    "Authorization must precede idempotent replay");
- sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
+ await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
  assert.equal((await privacy("SubmitPrivacyCase",tenantB,submit)).body.code,"not_found");
  assert.equal((await privacy("SubmitPrivacyCase",admin,{
    ...submit,precondition:{expectedVersion:1n,idempotencyKey:"privacy-audit-denied-terminal"}
  })).body.code,"failed_precondition",
    "A cancelled case must reject a second Submit before version conflict");
- assert.deepEqual(privacySnapshot(),privacyBeforeDenials,
+ assert.deepEqual((await privacySnapshot()),privacyBeforeDenials,
    "Denied, cross-tenant and stale Privacy writes cannot alter state, receipts or audit");
  // Reject audit INSERT after the owner wrote state and receipt.
  // No failure injection is compiled into the production Worker.
- sql("CREATE TRIGGER fixture_fail_privacy_audit BEFORE INSERT ON crm_audit "+
+ (await sql("CREATE TRIGGER fixture_fail_privacy_audit BEFORE INSERT ON crm_audit "+
    "WHEN NEW.subject_id IN ('privacy-audit-failed-create','"+failingTransitionId+"') "+
-   "BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;");
+   "BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;"));
  try{
    assert.equal((await privacy("CreatePrivacyCase",admin,{
      caseId:"privacy-audit-failed-create",kind:1,
@@ -2564,9 +2563,9 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      caseId:failingTransitionId,
      precondition:{expectedVersion:1n,idempotencyKey:"privacy-audit-failed-submit-key"}
    })).body.code,"aborted");
-   assert.deepEqual(privacySnapshot(),privacyBeforeDenials,
+   assert.deepEqual((await privacySnapshot()),privacyBeforeDenials,
      "Audit failure must roll back Privacy state, receipt and audit together");
- }finally{sql("DROP TRIGGER fixture_fail_privacy_audit");}
+ }finally{await sql("DROP TRIGGER fixture_fail_privacy_audit");}
  console.log(JSON.stringify({event:"crm.native-r2a-privacy-actor-audit",result:"PASS",
    human_create:true,service_submit:true,human_cancel:true,cross_actor_replay:true,
    authorization_before_replay:true,forged_headers_ignored:true,tenant_ab:true,
@@ -2583,7 +2582,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    ["privacy-aaa",caseId,"privacy-zzz",failingTransitionId].sort());
  assert.equal((await privacy("ListPrivacyCases",tenantB,{page:{pageSize:1}})).body.cases.length,0);
  assert.equal((await privacy("ListPrivacyCases",viewer,{page:{pageSize:1,pageToken:"privacy-zzz"}})).body.cases.length,0);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'")[0].n,3,
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id='"+caseId+"'"))[0].n,3,
    "read and denied requests must not write audit for the case");
  console.log(JSON.stringify({event:"crm.native-privacy-v2",result:"PASS",
    original_owner:"crm.customer-privacy",tenant_ab:true,cas:true,replay:true,
@@ -2600,8 +2599,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    effectiveAt:{seconds:1n,nanos:123000000},expiresAt:{seconds:2n},
    precondition:{idempotencyKey:"enrichment-profile-main"}
  };
- const enrichmentAuditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
- const partyCountBefore=sql("SELECT COUNT(*) AS n FROM crm_party_records")[0].n;
+ const enrichmentAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
+ const partyCountBefore=(await sql("SELECT COUNT(*) AS n FROM crm_party_records"))[0].n;
  for(const bad of [
    {rawPayloadPolicy:0},{rawPayloadPolicy:999},{effectiveAt:undefined},
    {effectiveAt:{seconds:1n,nanos:1}},{effectiveAt:{seconds:-1n}},
@@ -2646,57 +2645,57 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    precondition:{idempotencyKey:"enrichment-profile-main"}})).body.code,"aborted");
  assert.equal((await enrichment("GetMapping",viewer,{mappingVersionId:mappingId})).body.mapping.mappingVersionId,mappingId);
  assert.equal((await enrichment("GetMapping",tenantB,{mappingVersionId:mappingId})).body.code,"not_found");
- assert.deepEqual(sql("SELECT action,subject_id,request_id,actor FROM crm_audit WHERE "+
-   "tenant_id='tenant-a' AND subject_id IN ('"+profileId+"','"+mappingId+"') ORDER BY rowid"),[
+ assert.deepEqual((await sql("SELECT action,subject_id,request_id,actor FROM crm_audit WHERE "+
+   "tenant_id='tenant-a' AND subject_id IN ('"+profileId+"','"+mappingId+"') ORDER BY rowid")),[
    {action:"customer_enrichment.profile_publish",subject_id:profileId,
      request_id:profileResult.headers.get("x-request-id"),actor:"native-a@example.test"},
    {action:"customer_enrichment.mapping_publish",subject_id:mappingId,
      request_id:mappingResult.headers.get("x-request-id"),actor:"service:ci-fixture.access"},
  ],"Immutable definition audit must retain each original signed Access actor and request");
- assert.deepEqual(sql("SELECT created_by FROM crm_enrichment_profiles WHERE id='"+profileId+"'"),
+ assert.deepEqual((await sql("SELECT created_by FROM crm_enrichment_profiles WHERE id='"+profileId+"'")),
    [{created_by:"native-a@example.test"}]);
- assert.deepEqual(sql("SELECT created_by FROM crm_enrichment_mappings WHERE id='"+mappingId+"'"),
+ assert.deepEqual((await sql("SELECT created_by FROM crm_enrichment_mappings WHERE id='"+mappingId+"'")),
    [{created_by:"service:ci-fixture.access"}]);
- const enrichmentSnapshot=()=>sql("SELECT "+
+ const enrichmentSnapshot=async()=>(await sql("SELECT "+
    "(SELECT json_group_array(json_array(id,tenant,state,created_by)) "+
    " FROM crm_enrichment_profiles ORDER BY id) AS profiles,"+
    "(SELECT json_group_array(json_array(id,tenant,state,created_by)) "+
    " FROM crm_enrichment_mappings ORDER BY id) AS mappings,"+
    "(SELECT COUNT(*) FROM crm_enrichment_receipts) AS receipts,"+
-   "(SELECT COUNT(*) FROM crm_audit) AS audits");
- const enrichmentBeforeDenials=enrichmentSnapshot();
+   "(SELECT COUNT(*) FROM crm_audit) AS audits"));
+ const enrichmentBeforeDenials=(await enrichmentSnapshot());
  for(const token of [null,viewer,unknownService]){
    assert.ok((await enrichment("PublishProviderProfile",token,profileInput)).status>=400);
    assert.ok((await enrichment("PublishMapping",token,mappingInput)).status>=400);
  }
- sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
+ await sql("UPDATE crm_users SET active=0 WHERE email='service:ci-fixture.access'");
  assert.equal((await enrichment("PublishMapping",knownService,mappingInput)).status,401,
    "Inactive service cannot replay a committed Enrichment mapping");
- sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
+ await sql("UPDATE crm_users SET active=1,role='viewer' WHERE email='service:ci-fixture.access'");
  assert.equal((await enrichment("PublishMapping",knownService,mappingInput)).status,403,
    "Permission must precede replay of immutable mapping");
- sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
- const tenantAEnrichment=()=>sql("SELECT "+
+ await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
+ const tenantAEnrichment=async()=>(await sql("SELECT "+
    "(SELECT COUNT(*) FROM crm_enrichment_profiles WHERE tenant='tenant-a') AS profiles,"+
    "(SELECT COUNT(*) FROM crm_enrichment_mappings WHERE tenant='tenant-a') AS mappings,"+
    "(SELECT COUNT(*) FROM crm_enrichment_receipts WHERE tenant='tenant-a') AS receipts,"+
-   "(SELECT COUNT(*) FROM crm_audit WHERE tenant_id='tenant-a') AS audits");
- const tenantABeforeOtherTenant=tenantAEnrichment();
+   "(SELECT COUNT(*) FROM crm_audit WHERE tenant_id='tenant-a') AS audits"));
+ const tenantABeforeOtherTenant=(await tenantAEnrichment());
  assert.equal((await enrichment("PublishProviderProfile",tenantB,profileInput)).status,200,
    "Separate tenant may publish its own independent immutable definition");
  assert.equal((await enrichment("GetMapping",tenantB,{mappingVersionId:mappingId})).body.code,"not_found");
- assert.deepEqual(tenantAEnrichment(),tenantABeforeOtherTenant,
+ assert.deepEqual((await tenantAEnrichment()),tenantABeforeOtherTenant,
    "Tenant B must not mutate tenant A's state, receipts or audit");
- assert.deepEqual(sql("SELECT created_by FROM crm_enrichment_profiles "+
-   "WHERE tenant='tenant-a' AND id='"+profileId+"'"),[
+ assert.deepEqual((await sql("SELECT created_by FROM crm_enrichment_profiles "+
+   "WHERE tenant='tenant-a' AND id='"+profileId+"'")),[
    {created_by:"native-a@example.test"}
  ]);
  // Failing audit INSERT must roll back immutable definition + receipt, for both kinds.
  // No test hook in production Worker; fixture trigger is installed only in isolated D1.
- sql("CREATE TRIGGER fixture_fail_enrichment_audit BEFORE INSERT ON crm_audit "+
+ (await sql("CREATE TRIGGER fixture_fail_enrichment_audit BEFORE INSERT ON crm_audit "+
    "WHEN NEW.action LIKE 'customer_enrichment.%' "+
-   "BEGIN SELECT RAISE(ABORT,'fixture enrichment audit failure'); END;");
- const beforeAuditFailure=enrichmentSnapshot();
+   "BEGIN SELECT RAISE(ABORT,'fixture enrichment audit failure'); END;"));
+ const beforeAuditFailure=(await enrichmentSnapshot());
  try{
    assert.equal((await enrichment("PublishProviderProfile",admin,{
      ...profileInput,retentionDays:37,
@@ -2706,9 +2705,9 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      ...mappingInput,providerResponseFieldPath:"organization.alternate_legal_name",
      precondition:{idempotencyKey:"enrichment-mapping-audit-failure"}
    })).body.code,"aborted");
-   assert.deepEqual(enrichmentSnapshot(),beforeAuditFailure,
+   assert.deepEqual((await enrichmentSnapshot()),beforeAuditFailure,
      "Audit failure must atomically roll back published state and receipt");
- }finally{sql("DROP TRIGGER fixture_fail_enrichment_audit");}
+ }finally{await sql("DROP TRIGGER fixture_fail_enrichment_audit");}
  console.log(JSON.stringify({event:"crm.native-r2a-enrichment-actor-audit",result:"PASS",
    human_profile:true,service_mapping:true,cross_actor_replay:true,
    forged_headers_ignored:true,authorization_before_replay:true,
@@ -2740,12 +2739,12 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    }
    assert.equal((await enrichment(method,viewer,{page:{pageToken:"bad/id"}})).body.code,"invalid_argument");
  }
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_receipts WHERE tenant='tenant-a'")[0].n,6);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_profiles WHERE tenant='tenant-a'")[0].n,3);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_enrichment_mappings WHERE tenant='tenant-a'")[0].n,3);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,enrichmentAuditBefore+7,
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_enrichment_receipts WHERE tenant='tenant-a'"))[0].n,6);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_enrichment_profiles WHERE tenant='tenant-a'"))[0].n,3);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_enrichment_mappings WHERE tenant='tenant-a'"))[0].n,3);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,enrichmentAuditBefore+7,
    "six tenant-a publishes and one isolated tenant-b publish write audit; replay and denials never do");
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_records")[0].n,partyCountBefore);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records"))[0].n,partyCountBefore);
  console.log(JSON.stringify({event:"crm.native-enrichment-v2",result:"PASS",
    original_owner:"crm.customer-enrichment",immutable:true,tenant_ab:true,replay:true,
    page_bounds:true,d1_audit:true,timestamp_precision:true,provider_execution:"NOT_CONNECTED"}));
@@ -2753,7 +2752,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
 
  // Account-rooted composition uses the original owner values and never writes.
  const overviewCall=signedReadOnly(overviewV2Path,binaryOverviewV2,decodeOverviewV2);
- const overviewAudit=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ const overviewAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  assert.equal((await overviewCall("GetAccountOverview",tenantB,{accountId})).body.code,"not_found");
  assert.equal((await overviewCall("GetAccountOverview",viewer,{accountId:"bad/id"})).body.code,"invalid_argument");
  assert.equal((await overviewCall("GetAccountOverview",viewer,{accountId:"missing-account"})).body.code,"not_found");
@@ -2777,10 +2776,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.ok(card.deals.some(item=>item.dealId===dealId));
  assert.ok(card.tasks.some(item=>item.taskId===taskMid));
  assert.ok(card.tasks.every(item=>item.taskId!==taskOther));
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,overviewAudit);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,overviewAudit);
  // Sales-created tasks retain their original Deal reference, and their D1 Account.
- const linkedTaskId=sql("SELECT task_id FROM crm_sales_link_delivery_records WHERE tenant='tenant-a' AND deal_id='"+
-   dealId+"' AND task_id IS NOT NULL ORDER BY task_id LIMIT 1")[0]?.task_id;
+ const linkedTaskId=(await sql("SELECT task_id FROM crm_sales_link_delivery_records WHERE tenant='tenant-a' AND deal_id='"+
+   dealId+"' AND task_id IS NOT NULL ORDER BY task_id LIMIT 1"))[0]?.task_id;
  assert.ok(linkedTaskId,"Sales fixture must create a linked Task");
  const linkedTask=await taskV2("GetTask",viewer,{taskId:linkedTaskId});
  assert.equal(linkedTask.status,200,describeProtobuf(linkedTask.body));
@@ -2800,12 +2799,12 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      precondition:{idempotencyKey:"overview-contact-"+String(index).padStart(3,"0")}});
    assert.equal(created.status,200,describeProtobuf(created.body));
  }
- const boundedAudit=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ const boundedAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  const boundedCard=(await overviewCall("GetAccountOverview",viewer,{accountId})).body.overview;
  assert.equal(boundedCard.contactPoints.length,100);
  assert.equal(boundedCard.truncated.contactPoints,true);
  assert.equal(boundedCard.truncated.tasks,false);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,boundedAudit);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,boundedAudit);
  console.log(JSON.stringify({event:"crm.native-account-overview-v2",result:"PASS",
    owner:"crm.customer360",account_rooted:true,original_owners:true,
    tenant_ab:true,read_only:true,bounded:true}));
@@ -2814,7 +2813,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const csv=signedReadOnly(csvV2Path,binaryCsvV2,decodeCsvV2);
  const csvBytes=new TextEncoder().encode(
    'party_id,kind,display_name,resource_version\r\nexternal-one,person,CSV One,1\r\nexternal-two,organization,CSV Two,1\r\n');
- const importAuditBefore=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ const importAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  const importPreview=await csv("PreviewPartyImport",admin,{csv:csvBytes});
  assert.equal(importPreview.status,200,describeProtobuf(importPreview.body));
  assert.equal(importPreview.body.count,2);
@@ -2830,7 +2829,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,expectedSha256Hex:"0".repeat(64)})).body.code,"aborted");
  assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,
    precondition:{idempotencyKey:"csv-import-invalid-version",expectedVersion:1n}})).body.code,"invalid_argument");
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,importAuditBefore,"previews and invalid input are read-only");
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,importAuditBefore,"previews and invalid input are read-only");
  const applied=await csv("ApplyPartyImport",admin,applyInput);
  assert.equal(applied.status,200,describeProtobuf(applied.body));
  assert.equal(applied.body.createdCount,2);assert.equal(applied.body.replayedCount,0);
@@ -2846,12 +2845,12 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  for(const target of importPreview.body.targetPartyIds){
    assert.equal((await v3("GetParty",viewer,{partyId:target})).status,200);
    assert.equal((await v3("GetParty",tenantB,{partyId:target})).body.code,"not_found");
-   assert.deepEqual(sql("SELECT action,tenant_id,actor,request_id FROM crm_audit WHERE subject_id='"+target+"'"),[
+   assert.deepEqual((await sql("SELECT action,tenant_id,actor,request_id FROM crm_audit WHERE subject_id='"+target+"'")),[
      {action:"parties.create",tenant_id:"tenant-a",actor:"native-a@example.test",request_id:applied.headers.get("x-request-id")},
    ],"Import replay by another actor must retain the original attribution");
  }
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,importAuditBefore+2,"replays never duplicate Party audit");
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE tenant='tenant-a'")[0].n,2);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,importAuditBefore+2,"replays never duplicate Party audit");
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE tenant='tenant-a'"))[0].n,2);
  const changedBytes=new TextEncoder().encode(new TextDecoder().decode(csvBytes).replace("CSV One","CSV Changed"));
  assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,csv:changedBytes,
    expectedSha256Hex:createHash("sha256").update(changedBytes).digest("hex")})).body.code,"aborted");
@@ -2878,8 +2877,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    expectedSha256Hex:conflictPreview.body.csvSha256Hex,precondition:{idempotencyKey:"csv-conflict-operation"}});
  assert.equal(failedImport.body.code,"aborted");
  assert.equal((await v3("GetParty",viewer,{partyId:firstTarget})).body.code,"not_found");
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE key='csv-conflict-operation'")[0].n,0);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,importAuditBefore+3);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts WHERE key='csv-conflict-operation'"))[0].n,0);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,importAuditBefore+3);
  // Unlike the preflight target conflict above, this fails inside the second SQL
  // audit INSERT, after the first row has executed in the same D1 batch.
  const rollbackBytes=new TextEncoder().encode(
@@ -2888,26 +2887,26 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(rollbackPreview.status,200);
  const rollbackInput={csv:rollbackBytes,expectedSha256Hex:rollbackPreview.body.csvSha256Hex,
    precondition:{idempotencyKey:"csv-audit-rollback"}};
- const beforeRollback=partySnapshot();
+ const beforeRollback=(await partySnapshot());
  for(const token of [null,viewer,unknownService])assert.ok((await csv("ApplyPartyImport",token,rollbackInput)).status>=400);
- sql("CREATE TRIGGER fixture_fail_import_audit BEFORE INSERT ON crm_audit "+
+ (await sql("CREATE TRIGGER fixture_fail_import_audit BEFORE INSERT ON crm_audit "+
    "WHEN NEW.subject_id='"+rollbackPreview.body.targetPartyIds[1]+"' "+
-   "BEGIN SELECT RAISE(ABORT,'fixture late import audit failure'); END;");
+   "BEGIN SELECT RAISE(ABORT,'fixture late import audit failure'); END;"));
  try{
    assert.equal((await csv("ApplyPartyImport",knownService,rollbackInput)).status,409);
-   assert.deepEqual(partySnapshot(),beforeRollback,"Late batch failure must remove every state, receipt and audit");
- }finally{sql("DROP TRIGGER fixture_fail_import_audit");}
+   assert.deepEqual((await partySnapshot()),beforeRollback,"Late batch failure must remove every state, receipt and audit");
+ }finally{await sql("DROP TRIGGER fixture_fail_import_audit");}
  const retryImport=await csv("ApplyPartyImport",knownService,rollbackInput);
  assert.equal(retryImport.status,200,describeProtobuf(retryImport.body));
  assert.equal(retryImport.body.createdCount,2,"Failed batch must not reserve its idempotency key");
  for(const target of rollbackPreview.body.targetPartyIds){
-   assert.deepEqual(sql("SELECT actor,request_id FROM crm_audit WHERE subject_id='"+target+"'"),[
+   assert.deepEqual((await sql("SELECT actor,request_id FROM crm_audit WHERE subject_id='"+target+"'")),[
      {actor:"service:ci-fixture.access",request_id:retryImport.headers.get("x-request-id")},
    ]);
  }
  assert.equal((await csv("PreviewPartyExport",admin,{kind:0})).body.code,"invalid_argument");
  assert.equal((await csv("PreviewPartyExport",admin,{kind:999})).body.code,"invalid_argument");
- const exportBefore=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ const exportBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  const exported=await csv("PreviewPartyExport",admin,{});
  assert.equal(exported.status,200,describeProtobuf(exported.body));
  assert.equal(exported.body.maximumTenantParties,100);
@@ -2927,7 +2926,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(filteredExport.status,200,describeProtobuf(filteredExport.body));
  assert.ok(filteredExport.body.count<exported.body.count);
  assert.equal((await csv("PreviewPartyExport",tenantB,{})).body.count,0);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,exportBefore);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,exportBefore);
  // Explicit boundary fixture in tenant B: the 101st row must prevent partial export,
  // even when a filter would reduce the returned data below the limit.
  const boundaryRows=Array.from({length:101},(_,i)=>{
@@ -2935,7 +2934,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      created_at_unix_nanos:10,updated_at_unix_nanos:10,version:1});
    return "('tenant-b','csv-boundary-"+i+"','"+state+"',1,'csv-boundary-key-"+i+"','fixture','fixture','native-b@example.test')";
  }).join(",");
- sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES "+boundaryRows);
+ await sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES "+boundaryRows);
  assert.equal((await csv("PreviewPartyExport",tenantB,{kind:2})).body.code,"failed_precondition");
  assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv?kind=organization",{
    headers:{"cf-access-jwt-assertion":tenantB}})).status,409);
@@ -2943,13 +2942,13 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    original_owner:"crm.customer-data-operations",party_owner:"crm.parties",
    tenant_ab:true,atomic:true,replay:true,audit:true,verified_actor:true,sql_failure_rollback:true,csv_bytes_sha256:true,bounded:true}));
  await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
- const salesAuditBeforeFilter=sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n;
+ const salesAuditBeforeFilter=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  assert.deepEqual((await collectPages(salesV2,"ListDeals","deals",{accountId})).map(d=>d.dealId),
    (await collectPages(salesV2,"ListDeals","deals")).filter(d=>d.accountId===accountId).map(d=>d.dealId));
  assert.deepEqual((await salesV2("ListDeals",tenantB,{accountId})).body.deals,[]);
  assert.deepEqual((await salesV2("ListDeals",viewer,{accountId:"missing-account"})).body.deals,[]);
  assert.equal((await salesV2("ListDeals",viewer,{accountId:"bad/id"})).status,400);
- assert.equal(sql("SELECT COUNT(*) AS n FROM crm_audit")[0].n,salesAuditBeforeFilter);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,salesAuditBeforeFilter);
  // Search is part of the existing List RPCs. Put matching rows after an entire
  // unfiltered page; literal punctuation and Unicode must not become SQL patterns.
  for(let index=0;index<101;index++){
@@ -2968,10 +2967,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await accountV2("CreateAccount",admin,{accountId:target,name,primaryPartyId:id,
      precondition:{idempotencyKey:"search-account-"+index}})).status,200);
  }
- const searchSnapshot=()=>({party:partySnapshot(),
-   accounts:sql("SELECT id,state,version FROM crm_account_records ORDER BY tenant,id"),
-   accountReceipts:sql("SELECT COUNT(*) AS n FROM crm_account_receipts")});
- const searchBefore=searchSnapshot();
+ const searchSnapshot=async()=>({party:(await partySnapshot()),
+   accounts:(await sql("SELECT id,state,version FROM crm_account_records ORDER BY tenant,id")),
+   accountReceipts:(await sql("SELECT COUNT(*) AS n FROM crm_account_receipts"))});
+ const searchBefore=(await searchSnapshot());
  for(const [rpcCall,method,field,idField,filter,opposite] of [
    [v3,"ListParties","parties","partyId",{kind:2},{kind:1}],
    [accountV2,"ListAccounts","accounts","accountId",{status:1},{status:2}],
@@ -2992,7 +2991,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(tooLong.status,400);assert.equal(tooLong.body.code,"invalid_argument");
    assert.equal((await rpcCall(method,null,{search:"Поиск"})).status,401);
  }
- assert.deepEqual(searchSnapshot(),searchBefore,"Search cannot mutate state, receipts or audit");
+ assert.deepEqual((await searchSnapshot()),searchBefore,"Search cannot mutate state, receipts or audit");
  console.log(JSON.stringify({event:"crm.native-party-account-search",result:"PASS",
    before_limit:true,unicode_literal:true,tenant_ab:true,read_only:true,existing_rpcs:true}));
  // Actual React search and both pickers find a target beyond 100 existing rows.
@@ -3126,7 +3125,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    }
    await page.setViewportSize({width:390,height:844});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1));
-   assert.deepEqual(searchSnapshot(),searchBefore,"Search and Enter inside pickers must never submit the enclosing mutation form");
+   assert.deepEqual((await searchSnapshot()),searchBefore,"Search and Enter inside pickers must never submit the enclosing mutation form");
    writeFileSync(join(cwd,"../e2e-evidence-native/search-browser.json"),JSON.stringify({result:"PASS",source_sha:sourceSha,
      scenarios:["search after first unfiltered page","Party picker beyond 100 rows","Account picker beyond 100 rows",
        "selection reset","keyboard Enter does not submit mutation","mobile layout","read-only",
@@ -3145,19 +3144,13 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    successful_rpc_calls:[...successfulCalls].sort(),
    unauthenticated_denials:unauthenticatedDenials.sort(),
    viewer_denials:viewerDenials.sort(),
-   scenarios:"existing signed workerd assertions completed"
+   fixture_access:"D1 binding",runtime:"Miniflare/workerd",
+  scenarios:"existing signed workerd assertions completed"
  },null,2)+"\n");
  console.log(JSON.stringify({event:"crm.signed-connect-acceptance",
    result:"PASS",admin:true,viewer:true,unauthenticated_denied:true,
    legacy_mutations:0,verified_auth:true}));
 }finally{
- if(child){
-   try{process.kill(-child.pid,"SIGTERM");}catch(e){if(e.code!=="ESRCH")throw e;}
-   if(child.exitCode===null)await Promise.race([new Promise(resolve=>child.once("exit",resolve)),
-     new Promise(resolve=>setTimeout(resolve,1400))]);
-   try{process.kill(-child.pid,"SIGKILL");}catch(e){if(e.code!=="ESRCH")throw e;}
-   child.stdout.destroy();child.stderr.destroy();child.unref();
- }
- if(fixtureDb){fixtureDb.close();fixtureDb=undefined;}
+ if(runtime)await runtime.dispose();
  rmSync(data,{recursive:true,force:true});
 }
