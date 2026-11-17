@@ -636,6 +636,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByRole("button",{name:"Сохранить этап",exact:true})).toBeDisabled();
    await page.keyboard.press("Escape");
    await expect(page.getByRole("dialog")).toBeVisible();
+   const pendingHash=new URL(page.url()).hash;
+   await page.getByRole("navigation",{name:"Primary navigation"}).getByRole("link",{name:"Клиенты",exact:true}).click();
+   await expect(page).toHaveURL(url=>url.hash===pendingHash);
+   await expect(page.getByRole("dialog")).toBeVisible();
    const retryAdvance=page.waitForResponse(r=>r.url().endsWith("/AdvanceStage")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Повторить исходную операцию",exact:true}).click();
    await assertMutation(await retryAdvance,"AdvanceStage",{replay:true});

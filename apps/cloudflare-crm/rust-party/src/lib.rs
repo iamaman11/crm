@@ -31,6 +31,10 @@ mod customer_privacy;
 #[cfg(feature = "native")]
 mod data_quality;
 #[cfg(feature = "native")]
+mod diagnostics;
+#[cfg(feature = "native")]
+use diagnostics::log_read_failure;
+#[cfg(feature = "native")]
 mod identity_resolution;
 #[cfg(feature = "native-ci")]
 mod original_domain_probe;
@@ -833,32 +837,6 @@ async fn dispatch(
     error("NOT_FOUND", 404)
 }
 
-// Log structured, non-payload diagnostic evidence at the failed boundary.
-// Detailed provider errors are restricted to isolated native CI fixtures.
-#[cfg(feature = "native")]
-fn log_read_failure(request_id: &str, phase: &str, error: &worker::Error) {
-    let reason = match error {
-        worker::Error::RustError(code)
-            if (code.starts_with("SALES_") || code.starts_with("CONTRACT_"))
-                && code.bytes().all(|b| b.is_ascii_uppercase() || b == b'_') =>
-        {
-            code.as_str()
-        }
-        _ => "INTERNAL_READ_ERROR",
-    };
-    console_log!(
-        "{}",
-        json!({"event":"crm.native.read.failure","request_id":request_id,
-               "phase":phase,"reason":reason})
-    );
-    #[cfg(feature = "native-ci")]
-    console_log!(
-        "{}",
-        json!({"event":"crm.native-ci.read.failure","request_id":request_id,
-               "phase":phase,"detail":error.to_string()})
-    );
-}
-
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     #[cfg(feature = "native")]
@@ -916,13 +894,13 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         }
         let elapsed = Date::now().as_millis().saturating_sub(started);
         let error_code = reply.headers().get("x-crm-error-code").ok().flatten();
-        console_log!(
-            "{}",
-            json!({
-                "event":"crm.native.request", "request_id":request_id,
-                "operation":operation, "phase":phase,
-                "status":reply.status_code(), "error_code":error_code, "duration_ms":elapsed
-            })
+        diagnostics::request_completed(
+            &request_id,
+            operation,
+            phase,
+            reply.status_code(),
+            error_code.as_deref(),
+            elapsed,
         );
         Ok(reply)
     }

@@ -912,98 +912,17 @@ impl SalesV2Service {
         operation: &'static str,
         saved: &sales_deals::SalesSaved,
     ) -> core_v2::MutationReceipt {
-        worker::console_log!(
-            "{}",
-            serde_json::json!({
-                "event": "crm.native.mutation.outcome",
-                "operation": operation,
-                "phase": "receipt",
-                "request_id": self.request_id,
-                "original_request_id": saved.original_request_id,
-                "outcome": if saved.replayed { "replayed" } else { "committed" },
-                "version": saved.deal.version()
-            })
-        );
-        core_v2::MutationReceipt {
-            request_id: self.request_id.clone(),
-            resource_version: saved.deal.version(),
-            replayed: saved.replayed,
-            original_request_id: saved.original_request_id.clone(),
-            ..Default::default()
-        }
+        super::diagnostics::mutation_receipt(
+            &self.request_id,
+            operation,
+            saved.deal.version(),
+            saved.replayed,
+            saved.original_request_id.as_deref(),
+        )
     }
-    fn failed(&self, operation: &'static str, failure: sales_deals::SalesFailure) -> ConnectError {
-        use buffa::MessageName;
-        use crm_module_sdk::ErrorCategory;
-        use sales_deals::SalesFailure;
-        let (error, code, outcome, field_violations) = match failure {
-            SalesFailure::Rejected(failure) => {
-                let code = failure.code;
-                let error = match failure.category {
-                    ErrorCategory::InvalidArgument => ConnectError::invalid_argument(&code),
-                    ErrorCategory::Authentication => ConnectError::unauthenticated(&code),
-                    ErrorCategory::Authorization => ConnectError::permission_denied(&code),
-                    ErrorCategory::Conflict => ConnectError::aborted(&code),
-                    ErrorCategory::NotFound => ConnectError::not_found(&code),
-                    ErrorCategory::RateLimit => ConnectError::resource_exhausted(&code),
-                    ErrorCategory::Dependency | ErrorCategory::Unavailable => {
-                        ConnectError::unavailable(&code)
-                    }
-                    ErrorCategory::Internal => ConnectError::internal(&code),
-                };
-                let field_violations = failure
-                    .field_violations
-                    .into_iter()
-                    .map(|field| core_v2::FieldViolation {
-                        field_path: field.field.as_str().to_owned(),
-                        description: field.safe_message,
-                        ..Default::default()
-                    })
-                    .collect();
-                (
-                    error,
-                    code,
-                    core_v2::MutationCommitOutcome::Rejected,
-                    field_violations,
-                )
-            }
-            SalesFailure::CommitUnconfirmed => {
-                let code = "SALES_COMMIT_UNCONFIRMED".to_owned();
-                (
-                    ConnectError::unavailable(&code),
-                    code,
-                    core_v2::MutationCommitOutcome::Unconfirmed,
-                    Vec::new(),
-                )
-            }
-        };
-        worker::console_log!(
-            "{}",
-            serde_json::json!({
-                "event": "crm.native.mutation.outcome",
-                "operation": operation,
-                "phase": "result",
-                "request_id": self.request_id,
-                "domain_code": code,
-                "connect_code": error.code.as_str(),
-                "outcome": if outcome == core_v2::MutationCommitOutcome::Rejected {
-                    "rejected"
-                } else {
-                    "unconfirmed"
-                }
-            })
-        );
-        let detail = core_v2::DomainErrorDetail {
-            domain_code: code,
-            field_violations,
-            request_id: self.request_id.clone(),
-            commit_outcome: outcome.into(),
-            ..Default::default()
-        };
-        error.with_detail(connectrpc::ErrorDetail::from_message(
-            core_v2::DomainErrorDetail::FULL_NAME,
-            &detail,
-        ))
+
+    fn failed(&self, operation: &'static str, failure: super::diagnostics::MutationFailure) -> ConnectError {
+        super::diagnostics::mutation_error(&self.request_id, operation, failure)
     }
 }
 

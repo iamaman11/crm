@@ -2,6 +2,7 @@
 //! Stage progression, closing rules, money and version invariants belong to
 //! crm-sales and crm-core-contracts, never the test pilot's crm_deals model.
 use super::{bind, now_nanos};
+use super::diagnostics::{MutationFailure, UnconfirmedReason};
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money, Patch};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef, SdkError};
 use crm_sales::{
@@ -227,20 +228,19 @@ pub(super) struct SalesSaved {
     pub(super) original_request_id: Option<String>,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(super) enum SalesFailure {
-    #[error(transparent)]
-    Rejected(Box<SdkError>),
-    #[error("SALES_COMMIT_UNCONFIRMED")]
-    CommitUnconfirmed,
+fn unconfirmed(reason: UnconfirmedReason) -> MutationFailure {
+    MutationFailure::Unconfirmed {
+        code: "SALES_COMMIT_UNCONFIRMED",
+        reason,
+    }
 }
 
 fn rejected<T>(
     code: impl Into<String>,
     category: ErrorCategory,
-) -> std::result::Result<T, SalesFailure> {
+) -> std::result::Result<T, MutationFailure> {
     let code = code.into();
-    Err(SalesFailure::Rejected(Box::new(SdkError::new(
+    Err(MutationFailure::Rejected(Box::new(SdkError::new(
         code.clone(),
         category,
         false,
@@ -248,17 +248,17 @@ fn rejected<T>(
     ))))
 }
 
-fn rejected_sdk<T>(error: SdkError) -> std::result::Result<T, SalesFailure> {
-    Err(SalesFailure::Rejected(Box::new(error)))
+fn rejected_sdk<T>(error: SdkError) -> std::result::Result<T, MutationFailure> {
+    Err(MutationFailure::Rejected(Box::new(error)))
 }
 
 // The digest includes operation, record ID and typed input. Older receipts
 // deliberately have no original_request_id rather than invented provenance.
-fn replay(receipt: Receipt, digest: &str) -> std::result::Result<SalesSaved, SalesFailure> {
+fn replay(receipt: Receipt, digest: &str) -> std::result::Result<SalesSaved, MutationFailure> {
     if receipt.digest != digest {
         return rejected("IDEMPOTENCY_CONFLICT", ErrorCategory::Conflict);
     }
-    let deal = decode(&receipt.state).map_err(|_| SalesFailure::CommitUnconfirmed)?;
+    let deal = decode(&receipt.state).map_err(|_| unconfirmed(UnconfirmedReason::ReceiptInvalid))?;
     Ok(SalesSaved {
         deal,
         replayed: true,
@@ -291,29 +291,26 @@ async fn reconcile(
     key: &str,
     digest: &str,
     proven_no_change: bool,
-    trace: &str,
-) -> std::result::Result<SalesSaved, SalesFailure> {
-    match prior(db, tenant, key).await {
+) -> std::result::Result<SalesSaved, MutationFailure> {
+    // In the isolated CI artifact only, force a real failed D1 read after
+    // the write. This branch cannot be compiled into the production artifact.
+    #[cfg(feature = "native-ci")]
+    let observed = if key == "r471-ci-receipt-read-fail" {
+        db.prepare("SELECT digest,state,original_request_id FROM crm_ci_missing_receipt_table")
+            .first::<Receipt>(None)
+            .await
+    } else {
+        prior(db, tenant, key).await
+    };
+    #[cfg(not(feature = "native-ci"))]
+    let observed = prior(db, tenant, key).await;
+    match observed {
         Ok(Some(receipt)) => replay(receipt, digest),
         Ok(None) if proven_no_change => {
             rejected("SALES_DEAL_VERSION_CONFLICT", ErrorCategory::Conflict)
         }
-        observed => {
-            worker::console_log!(
-                "{}",
-                json!({
-                    "event": "crm.native.mutation.unconfirmed",
-                    "phase": "sales_deal_receipt",
-                    "request_id": trace,
-                    "reason": if observed.is_err() {
-                        "RECEIPT_READ_FAILED"
-                    } else {
-                        "RECEIPT_NOT_FOUND"
-                    }
-                })
-            );
-            Err(SalesFailure::CommitUnconfirmed)
-        }
+        Ok(None) => Err(unconfirmed(UnconfirmedReason::ReceiptNotFound)),
+        Err(_) => Err(unconfirmed(UnconfirmedReason::ReceiptReadFailed)),
     }
 }
 
@@ -324,7 +321,7 @@ pub(super) async fn create_typed(
     tenant: &str,
     actor: &str,
     trace: &str,
-) -> Result<std::result::Result<SalesSaved, SalesFailure>> {
+) -> Result<std::result::Result<SalesSaved, MutationFailure>> {
     if !(8..=120).contains(&k.len()) {
         return Ok(rejected(
             "IDEMPOTENCY_KEY_REQUIRED",
@@ -451,9 +448,15 @@ pub(super) async fn create_typed(
         .and_then(changes)
         .is_some_and(|count| count > 0)
     {
+        #[cfg(feature = "native-ci")]
+        if matches!(k, "r471-ci-ack-lost" | "r471-ci-receipt-read-fail") {
+            // Discard a genuine successful D1 write acknowledgement; the
+            // production reconciliation path must prove the exact receipt.
+            return Ok(reconcile(db, tenant, k, &digest, false).await);
+        }
         return Ok(Ok(acknowledged(deal, trace)));
     }
-    Ok(reconcile(db, tenant, k, &digest, false, trace).await)
+    Ok(reconcile(db, tenant, k, &digest, false).await)
 }
 pub(super) async fn update_typed(
     input: UpdateInput,
@@ -463,7 +466,7 @@ pub(super) async fn update_typed(
     id: &str,
     actor: &str,
     trace: &str,
-) -> Result<std::result::Result<SalesSaved, SalesFailure>> {
+) -> Result<std::result::Result<SalesSaved, MutationFailure>> {
     if !(8..=120).contains(&key.len()) {
         return Ok(rejected(
             "IDEMPOTENCY_KEY_REQUIRED",
@@ -609,7 +612,7 @@ pub(super) async fn update_typed(
     if count.is_some_and(|value| value > 0) {
         return Ok(Ok(acknowledged(deal, trace)));
     }
-    Ok(reconcile(db, tenant, key, &digest, count == Some(0), trace).await)
+    Ok(reconcile(db, tenant, key, &digest, count == Some(0)).await)
 }
 pub(super) struct LinkOutcome {
     pub(super) delivery_id: String,
@@ -634,7 +637,7 @@ pub(super) async fn advance_typed(
     id: &str,
     actor: &str,
     trace: &str,
-) -> Result<std::result::Result<AdvanceSaved, SalesFailure>> {
+) -> Result<std::result::Result<AdvanceSaved, MutationFailure>> {
     stage_mutation(
         StageMutation::Move(input),
         key,
@@ -654,7 +657,7 @@ pub(super) async fn close_typed(
     id: &str,
     actor: &str,
     trace: &str,
-) -> Result<std::result::Result<AdvanceSaved, SalesFailure>> {
+) -> Result<std::result::Result<AdvanceSaved, MutationFailure>> {
     stage_mutation(
         StageMutation::Close(input),
         key,
@@ -674,7 +677,7 @@ async fn stage_mutation(
     id: &str,
     actor: &str,
     trace: &str,
-) -> Result<std::result::Result<AdvanceSaved, SalesFailure>> {
+) -> Result<std::result::Result<AdvanceSaved, MutationFailure>> {
     if !(8..=120).contains(&key.len()) {
         return Ok(rejected(
             "IDEMPOTENCY_KEY_REQUIRED",
@@ -866,7 +869,7 @@ async fn stage_mutation(
                 .is_some_and(|value| value > 0)
     });
     if !committed {
-        return Ok(reconcile(db, tenant, key, &digest, false, trace)
+        return Ok(reconcile(db, tenant, key, &digest, false)
             .await
             .map(|saved| AdvanceSaved { saved, link: None }));
     }
@@ -894,7 +897,7 @@ pub(super) async fn reopen_typed(
     id: &str,
     actor: &str,
     trace: &str,
-) -> Result<std::result::Result<SalesSaved, SalesFailure>> {
+) -> Result<std::result::Result<SalesSaved, MutationFailure>> {
     if !(8..=120).contains(&key.len()) {
         return Ok(rejected(
             "IDEMPOTENCY_KEY_REQUIRED",
@@ -960,7 +963,7 @@ pub(super) async fn reopen_typed(
     if count.is_some_and(|value| value > 0) {
         return Ok(Ok(acknowledged(deal, trace)));
     }
-    Ok(reconcile(db, tenant, key, &digest, count == Some(0), trace).await)
+    Ok(reconcile(db, tenant, key, &digest, count == Some(0)).await)
 }
 
 #[derive(Deserialize)]
