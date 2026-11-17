@@ -2,7 +2,7 @@
 //! The signed transport supplies tenant/actor; D1 trigger commits audit and
 //! replay receipt atomically with exactly one insert/update.
 use super::bind;
-use crm_sales::{SalesDealView, SalesViewStatus};
+use crm_sales::{DealStatus, SalesDealView};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -15,7 +15,7 @@ pub(super) struct CreateInput {
     pub view_id: String,
     pub name: String,
     pub pipeline_id: Option<String>,
-    pub status: Option<SalesViewStatus>,
+    pub status: Option<DealStatus>,
     pub account_id: Option<String>,
 }
 #[derive(Clone, Serialize, Deserialize)]
@@ -25,7 +25,7 @@ pub(super) struct UpdateInput {
     pub expected_version: i64,
     pub name: String,
     pub pipeline_id: Option<String>,
-    pub status: Option<SalesViewStatus>,
+    pub status: Option<DealStatus>,
     pub account_id: Option<String>,
     pub archived: bool,
 }
