@@ -921,7 +921,11 @@ impl SalesV2Service {
         )
     }
 
-    fn failed(&self, operation: &'static str, failure: super::diagnostics::MutationFailure) -> ConnectError {
+    fn failed(
+        &self,
+        operation: &'static str,
+        failure: super::diagnostics::MutationFailure,
+    ) -> ConnectError {
         super::diagnostics::mutation_error(&self.request_id, operation, failure)
     }
 }

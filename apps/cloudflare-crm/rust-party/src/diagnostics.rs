@@ -204,11 +204,13 @@ pub(super) fn log_read_failure(request_id: &str, phase: &str, error: &worker::Er
         }
         _ => "INTERNAL_READ_ERROR",
     };
-    emit(&json!({"event":"crm.native.read.failure","request_id":request_id,
-               "phase":phase,"reason":reason}));
+    emit(
+        &json!({"event":"crm.native.read.failure","request_id":request_id,
+               "phase":phase,"reason":reason}),
+    );
     #[cfg(feature = "native-ci")]
-    emit(&json!({"event":"crm.native-ci.read.failure","request_id":request_id,
-               "phase":phase,"detail":error.to_string()}));
+    emit(
+        &json!({"event":"crm.native-ci.read.failure","request_id":request_id,
+               "phase":phase,"detail":error.to_string()}),
+    );
 }
-
-

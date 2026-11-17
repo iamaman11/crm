@@ -1,8 +1,8 @@
 //! Cloudflare native HTTP/D1 boundary for the ORIGINAL crm-sales Deal aggregate.
 //! Stage progression, closing rules, money and version invariants belong to
 //! crm-sales and crm-core-contracts, never the test pilot's crm_deals model.
-use super::{bind, now_nanos};
 use super::diagnostics::{MutationFailure, UnconfirmedReason};
+use super::{bind, now_nanos};
 use crm_core_contracts::{BasisPoints, CalendarDate, CurrencyCode, Money, Patch};
 use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef, SdkError};
 use crm_sales::{
@@ -258,7 +258,8 @@ fn replay(receipt: Receipt, digest: &str) -> std::result::Result<SalesSaved, Mut
     if receipt.digest != digest {
         return rejected("IDEMPOTENCY_CONFLICT", ErrorCategory::Conflict);
     }
-    let deal = decode(&receipt.state).map_err(|_| unconfirmed(UnconfirmedReason::ReceiptInvalid))?;
+    let deal =
+        decode(&receipt.state).map_err(|_| unconfirmed(UnconfirmedReason::ReceiptInvalid))?;
     Ok(SalesSaved {
         deal,
         replayed: true,
