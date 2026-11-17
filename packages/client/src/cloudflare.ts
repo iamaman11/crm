@@ -1,6 +1,7 @@
 import { createClient, ConnectError, Code } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { DomainErrorDetailSchema, MutationCommitOutcome } from "../gen/crm/core/v2/operation_pb";
+import type { FieldViolation } from "../gen/crm/core/v2/operation_pb";
 import { PartyService as PartyV3 } from "../gen/crm/parties/v3/party_pb";
 import { AccountService } from "../gen/crm/accounts/v2/account_pb";
 import { ContactPointService } from "../gen/crm/contact_points/v2/contact_point_pb";
@@ -70,12 +71,13 @@ export type CrmFailure = {
   text: string;
   requestId: string | undefined;
   domainCode: string | undefined;
+  fieldViolations: readonly FieldViolation[];
 };
 
 export function decodeCrmError(error: unknown): CrmFailure {
   if (!(error instanceof ConnectError)) {
     return {outcome:"unconfirmed",text:error instanceof Error?error.message:"Не удалось выполнить запрос.",
-      requestId:undefined,domainCode:undefined};
+      requestId:undefined,domainCode:undefined,fieldViolations:[]};
   }
   const detail = error.findDetails(DomainErrorDetailSchema)[0];
   const requestId = error.metadata.get("x-request-id") ?? undefined;
@@ -97,5 +99,5 @@ export function decodeCrmError(error: unknown): CrmFailure {
   };
   const text = [explanations[error.code] ?? "Ошибка сервиса.", error.rawMessage,
     requestId ? "Запрос: " + requestId : ""].filter(Boolean).join(" ");
-  return {outcome,text,requestId,domainCode:detail?.domainCode};
+  return {outcome,text,requestId,domainCode:detail?.domainCode,fieldViolations:detail?.fieldViolations??[]};
 }
