@@ -79,7 +79,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  };
  const assertMutation=async(response,method,{replay=false}={})=>{
    assert.equal(response.status(),200,method+" "+await response.text());
-   const requestId=response.headers()["x-request-id"];
+   const headers=typeof response.allHeaders==="function"?await response.allHeaders():response.headers();
+   const requestId=headers["x-request-id"];
    assert.match(requestId??"",/^[a-f0-9-]{36}$/i);
    const audit=await sql("SELECT action,subject_id,actor FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND request_id='"+requestId+"'");
    if(replay)assert.equal(audit.length,0,"Replay must not append audit");
@@ -498,8 +499,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const viewPicker=page.getByLabel("Сохранённое представление",{exact:true});
    await viewPicker.locator('option[value="'+viewId+'"]').waitFor({state:"attached"});
    await viewPicker.selectOption(viewId);
-   assert.equal(await page.getByLabel("Воронка продаж",{exact:true}).inputValue(),newPipelineId);
-   assert.equal(await page.getByLabel("Статус сделки",{exact:true}).inputValue(),"1");
+   // Views and pipelines are independent asynchronous reads on reload.
+   // Wait for the controlled React selection AND its catalog option, not a
+   // same-tick inputValue before the ListPipelines response is rendered.
+   await expect(viewPicker).toHaveValue(viewId);
+   const selectedPipeline=page.getByLabel("Воронка продаж",{exact:true});
+   await expect(selectedPipeline.locator('option[value="'+newPipelineId+'"]').first()).toBeAttached();
+   await expect(selectedPipeline).toHaveValue(newPipelineId);
+   await expect(page.getByLabel("Статус сделки",{exact:true})).toHaveValue("1");
    await page.getByRole("region",{name:"Аналитика воронки"})
      .getByText(/^Всего сделок: 1 · срез по UTC:/).waitFor();
    // Save the changed selected filters under the same stable view ID.
@@ -517,11 +524,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      "UpdateSalesView");
    assert.equal((await sql("SELECT json_extract(state,'$.archived') AS archived "+
      "FROM crm_sales_saved_view_records WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0].archived,1);
+   const viewsAfterArchive=page.waitForResponse(r=>r.url().endsWith("/ListSalesViews")&&r.request().method()==="POST");
    await page.reload();
+   assert.equal((await viewsAfterArchive).status(),200);
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
-   assert.equal(await page.getByLabel("Сохранённое представление",{exact:true})
-     .locator('option[value="'+viewId+'"]').count(),0,
-     "Archived view must remain audited but not appear as selectable");
+   const viewsSection=page.getByRole("region",{name:"Сохранённые представления"});
+   await expect(viewsSection.getByRole("status")).toHaveCount(0);
+   await expect(viewsSection.getByLabel("Сохранённое представление",{exact:true})
+     .locator('option[value="'+viewId+'"]'),
+     "Archived view must remain audited but not appear as selectable").toHaveCount(0);
    assert.deepEqual((await sql("SELECT action FROM crm_audit WHERE tenant_id='"+tenantSql+
      "' AND subject_id='"+viewId+"' ORDER BY rowid")).map(x=>x.action),
      ["sales_view.create","sales_view.update","sales_view.update"]);
@@ -811,8 +822,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await stalePage.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    const conflictResponse=await conflict;
    assert.equal(conflictResponse.status(),409);
-   assert.equal(conflictResponse.headers()["x-crm-error-code"],"aborted");
-   const conflictRequestId=conflictResponse.headers()["x-request-id"];
+   const conflictHeaders=await conflictResponse.allHeaders();
+   assert.equal(conflictHeaders["x-crm-error-code"],"aborted");
+   const conflictRequestId=conflictHeaders["x-request-id"];
    assert.match(conflictRequestId??"",/^[a-f0-9-]{36}$/i);
    await stalePage.getByRole("heading",{name:new RegExp("Конфликт изменения.*"+conflictRequestId)}).waitFor();
     assert.equal(await stalePage.getByRole("heading",{name:new RegExp("Конфликт изменения.*"+conflictRequestId)}).count(),1,
