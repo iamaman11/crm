@@ -269,6 +269,7 @@ message PipelineCurrencyMetric {
   string weighted_minor_units_times_basis_points = 5;
   uint64 amount_deal_count = 6;
 }
+
 // Operational measures are evaluated as of one UTC instant. Only OPEN Deals
 // enter due-date and active-stage-age buckets. The stage clock starts at the
 // latest immutable Created/Moved event (never an ordinary edit or reopen).
