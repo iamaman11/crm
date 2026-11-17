@@ -2412,8 +2412,8 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
   });
   assert.equal(winner.status,200,describeProtobuf(winner.body));
   assert.equal(winner.body.deal.version,2n);
-  const receiptBefore=await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts");
-  const auditBefore=await sql("SELECT COUNT(*) AS n FROM crm_audit");
+  const casWinnerReceiptsBefore=await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts");
+  const casWinnerAuditsBefore=await sql("SELECT COUNT(*) AS n FROM crm_audit");
   await assert.rejects(()=>batch([
     statement("UPDATE crm_sales_deal_records SET request_id=? WHERE tenant=? AND id=? AND version=?",
       "r471-losing-request","tenant-a",winnerId,1),
@@ -2423,8 +2423,8 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
   ]),/SALES_LINK_SOURCE_COMMIT_MISMATCH/);
   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant=? AND deal_id=?",
     "tenant-a",winnerId))[0].n,0);
-  assert.deepEqual(await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts"),receiptBefore);
-  assert.deepEqual(await sql("SELECT COUNT(*) AS n FROM crm_audit"),auditBefore);
+  assert.deepEqual(await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts"),casWinnerReceiptsBefore);
+  assert.deepEqual(await sql("SELECT COUNT(*) AS n FROM crm_audit"),casWinnerAuditsBefore);
   assert.deepEqual(await sql("SELECT original_request_id FROM crm_sales_deal_receipts WHERE tenant=? AND key=?",
     "tenant-a","r471-cas-winner"),[{original_request_id:winner.headers.get("x-request-id")}]);
   console.log(JSON.stringify({event:"crm.native-r7-occupied-stage-reorder",result:"PASS",

@@ -272,11 +272,11 @@ fn acknowledged(deal: Deal, trace: &str) -> SalesSaved {
 
 // A successful transport is not sufficient; missing change metadata is not
 // proof of a version conflict.
-fn changes(result: &worker::d1::D1Result) -> Option<u64> {
+fn changes(result: &worker::d1::D1Result) -> Option<usize> {
     if !result.success() {
         return None;
     }
-    result.meta().ok().flatten()?.changes.map(|value| value as u64)
+    result.meta().ok().flatten()?.changes
 }
 
 // Read back the exact receipt. Never repeat a mutation here. No receipt after
@@ -322,7 +322,10 @@ pub(super) async fn create_typed(
     trace: &str,
 ) -> Result<std::result::Result<SalesSaved, SalesFailure>> {
     if !(8..=120).contains(&k.len()) {
-        return Ok(rejected("IDEMPOTENCY_KEY_REQUIRED", ErrorCategory::InvalidArgument));
+        return Ok(rejected(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     let digest = hash("create", &input.id, &input)?;
     if let Some(p) = prior(db, tenant, k).await? {
@@ -330,24 +333,45 @@ pub(super) async fn create_typed(
     }
     let id = match RecordId::try_new(&input.id) {
         Ok(x) => x,
-        Err(_) => return Ok(rejected("SALES_DEAL_ID_INVALID", ErrorCategory::InvalidArgument)),
+        Err(_) => {
+            return Ok(rejected(
+                "SALES_DEAL_ID_INVALID",
+                ErrorCategory::InvalidArgument,
+            ));
+        }
     };
     let account_id = match RecordId::try_new(&input.account_id) {
         Ok(x) => x,
-        Err(_) => return Ok(rejected("SALES_ACCOUNT_ID_INVALID", ErrorCategory::InvalidArgument)),
+        Err(_) => {
+            return Ok(rejected(
+                "SALES_ACCOUNT_ID_INVALID",
+                ErrorCategory::InvalidArgument,
+            ));
+        }
     };
     if !account_exists(db, tenant, account_id.as_str()).await? {
-        return Ok(rejected("SALES_ACCOUNT_NOT_FOUND", ErrorCategory::InvalidArgument));
+        return Ok(rejected(
+            "SALES_ACCOUNT_NOT_FOUND",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     let owner = match ActorId::try_new(actor) {
         Ok(x) => DealOwner::Actor(x),
-        Err(_) => return Ok(rejected("SALES_OWNER_INVALID", ErrorCategory::InvalidArgument)),
+        Err(_) => {
+            return Ok(rejected(
+                "SALES_OWNER_INVALID",
+                ErrorCategory::InvalidArgument,
+            ));
+        }
     };
     let Some(catalog_stage) =
         super::sales_pipelines::active_stage(db, tenant, &input.pipeline_id, &input.stage_id)
             .await?
     else {
-        return Ok(rejected("SALES_STAGE_NOT_IN_CATALOG", ErrorCategory::InvalidArgument));
+        return Ok(rejected(
+            "SALES_STAGE_NOT_IN_CATALOG",
+            ErrorCategory::InvalidArgument,
+        ));
     };
     let stage = match stage(input.pipeline_id, input.stage_id, catalog_stage.ordinal) {
         Ok(x) => x,
@@ -371,7 +395,12 @@ pub(super) async fn create_typed(
             };
             Some(Money::new(i128::from(units), currency))
         }
-        _ => return Ok(rejected("SALES_AMOUNT_CURRENCY_PAIR_REQUIRED", ErrorCategory::InvalidArgument)),
+        _ => {
+            return Ok(rejected(
+                "SALES_AMOUNT_CURRENCY_PAIR_REQUIRED",
+                ErrorCategory::InvalidArgument,
+            ));
+        }
     };
     let primary_contact = match input.primary_contact_id.as_ref() {
         None => None,
@@ -413,7 +442,11 @@ pub(super) async fn create_typed(
           JsValue::from_str(account_id.as_str()),JsValue::from_str(&saved),
           JsValue::from_f64(deal.version() as f64),JsValue::from_str(k),
           JsValue::from_str(&digest),JsValue::from_str(trace),JsValue::from_str(actor)])?.run().await;
-    if r.as_ref().ok().and_then(changes).is_some_and(|count| count > 0) {
+    if r.as_ref()
+        .ok()
+        .and_then(changes)
+        .is_some_and(|count| count > 0)
+    {
         return Ok(Ok(acknowledged(deal, trace)));
     }
     Ok(reconcile(db, tenant, k, &digest, false, trace).await)
@@ -428,7 +461,10 @@ pub(super) async fn update_typed(
     trace: &str,
 ) -> Result<std::result::Result<SalesSaved, SalesFailure>> {
     if !(8..=120).contains(&key.len()) {
-        return Ok(rejected("IDEMPOTENCY_KEY_REQUIRED", ErrorCategory::InvalidArgument));
+        return Ok(rejected(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     let digest = hash("update", id, &input)?;
     if let Some(p) = prior(db, tenant, key).await? {
@@ -438,7 +474,10 @@ pub(super) async fn update_typed(
         return Ok(rejected("NOT_FOUND", ErrorCategory::NotFound));
     };
     if input.clear_name == Some(true) && input.name.is_some() {
-        return Ok(rejected("SALES_NAME_UPDATE_CONFLICT", ErrorCategory::InvalidArgument));
+        return Ok(rejected(
+            "SALES_NAME_UPDATE_CONFLICT",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     let name = if input.clear_name == Some(true) {
         Patch::Clear
@@ -448,7 +487,10 @@ pub(super) async fn update_typed(
     if input.clear_amount == Some(true)
         && (input.amount_minor_units.is_some() || input.currency.is_some())
     {
-        return Ok(rejected("SALES_AMOUNT_UPDATE_CONFLICT", ErrorCategory::InvalidArgument));
+        return Ok(rejected(
+            "SALES_AMOUNT_UPDATE_CONFLICT",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     let amount = if input.clear_amount == Some(true) {
         Patch::Clear
@@ -462,11 +504,19 @@ pub(super) async fn update_typed(
                 };
                 Patch::Set(Money::new(i128::from(units), currency))
             }
-            _ => return Ok(rejected("SALES_AMOUNT_CURRENCY_PAIR_REQUIRED", ErrorCategory::InvalidArgument)),
+            _ => {
+                return Ok(rejected(
+                    "SALES_AMOUNT_CURRENCY_PAIR_REQUIRED",
+                    ErrorCategory::InvalidArgument,
+                ));
+            }
         }
     };
     if input.use_stage_probability && input.probability_bps.is_some() {
-        return Ok(rejected("SALES_PROBABILITY_SOURCE_CONFLICT", ErrorCategory::InvalidArgument));
+        return Ok(rejected(
+            "SALES_PROBABILITY_SOURCE_CONFLICT",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     let probability = if input.use_stage_probability {
         let Some(catalog_stage) = super::sales_pipelines::active_stage(
@@ -477,7 +527,10 @@ pub(super) async fn update_typed(
         )
         .await?
         else {
-            return Ok(rejected("SALES_STAGE_NOT_IN_CATALOG", ErrorCategory::InvalidArgument));
+            return Ok(rejected(
+                "SALES_STAGE_NOT_IN_CATALOG",
+                ErrorCategory::InvalidArgument,
+            ));
         };
         match BasisPoints::try_new(catalog_stage.probability_basis_points) {
             Ok(value) => Patch::Set(ProbabilityEstimate::StageDefault(value)),
@@ -497,7 +550,10 @@ pub(super) async fn update_typed(
         FieldChange::Clear => Patch::Clear,
         FieldChange::Set(id) => {
             let Some(account) = deal.account() else {
-                return Ok(rejected("SALES_ACCOUNT_NOT_FOUND", ErrorCategory::InvalidArgument));
+                return Ok(rejected(
+                    "SALES_ACCOUNT_NOT_FOUND",
+                    ErrorCategory::InvalidArgument,
+                ));
             };
             match valid_contact(db, tenant, &account.resource_id, &id).await? {
                 Ok(v) => Patch::Set(v),
@@ -520,7 +576,10 @@ pub(super) async fn update_typed(
         && matches!(date_patch, Patch::Keep)
         && input.forecast_category.is_none()
     {
-        return Ok(rejected("SALES_EMPTY_UPDATE", ErrorCategory::InvalidArgument));
+        return Ok(rejected(
+            "SALES_EMPTY_UPDATE",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     if let Err(e) = deal.apply_update(UpdateDeal {
         expected_version: input.expected_version,
@@ -534,10 +593,7 @@ pub(super) async fn update_typed(
         forecast_category: input.forecast_category,
         occurred_at_unix_nanos: now_nanos(),
     }) {
-        return Ok(rejected(
-            e.code,
-            e.category,
-        ));
+        return Ok(rejected(e.code, e.category));
     }
     let saved = encode(&deal)?;
     let result=bind(db,"UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.update' WHERE tenant=? AND id=? AND version=?",
@@ -616,7 +672,10 @@ async fn stage_mutation(
     trace: &str,
 ) -> Result<std::result::Result<AdvanceSaved, SalesFailure>> {
     if !(8..=120).contains(&key.len()) {
-        return Ok(rejected("IDEMPOTENCY_KEY_REQUIRED", ErrorCategory::InvalidArgument));
+        return Ok(rejected(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     // Only client-owned typed input contributes to the digest. The stage at
     // replay time cannot alter the idempotent identity of a CloseDeal request.
@@ -639,7 +698,8 @@ async fn stage_mutation(
         StageMutation::Move(value) => {
             if !matches!(value.status, StatusInput::Open) {
                 return Ok(rejected(
-                    "SALES_CLOSE_SEPARATE_ACTION_REQUIRED", ErrorCategory::InvalidArgument,
+                    "SALES_CLOSE_SEPARATE_ACTION_REQUIRED",
+                    ErrorCategory::InvalidArgument,
                 ));
             }
             let Some(catalog_stage) = super::sales_pipelines::active_stage(
@@ -650,7 +710,10 @@ async fn stage_mutation(
             )
             .await?
             else {
-                return Ok(rejected("SALES_STAGE_NOT_IN_CATALOG", ErrorCategory::InvalidArgument));
+                return Ok(rejected(
+                    "SALES_STAGE_NOT_IN_CATALOG",
+                    ErrorCategory::InvalidArgument,
+                ));
             };
             let target = match stage(value.pipeline_id, value.stage_id, catalog_stage.ordinal) {
                 Ok(x) => x,
@@ -680,7 +743,10 @@ async fn stage_mutation(
         }
         StageMutation::Close(value) => {
             if matches!(value.outcome, StatusInput::Open) {
-                return Ok(rejected("SALES_CLOSE_OUTCOME_REQUIRED", ErrorCategory::InvalidArgument));
+                return Ok(rejected(
+                    "SALES_CLOSE_OUTCOME_REQUIRED",
+                    ErrorCategory::InvalidArgument,
+                ));
             }
             let reason_code = match ReasonCode::try_new(value.reason_code) {
                 Ok(v) => v,
@@ -695,10 +761,7 @@ async fn stage_mutation(
         }
     };
     if let Err(e) = outcome {
-        return Ok(rejected(
-            e.code,
-            e.category,
-        ));
+        return Ok(rejected(e.code, e.category));
     }
     let saved = encode(&deal)?;
     let prepared = match super::sales_activities_link::prepare(
@@ -713,10 +776,7 @@ async fn stage_mutation(
     {
         Ok(x) => x,
         Err(e) => {
-            return Ok(rejected(
-                e.code,
-                e.category,
-            ));
+            return Ok(rejected(e.code, e.category));
         }
     };
     let update = bind(
@@ -739,7 +799,12 @@ async fn stage_mutation(
     if let Some(task) = &prepared.task {
         let account_id = match deal.account() {
             Some(x) => &x.resource_id,
-            None => return Ok(rejected("SALES_LINK_ACCOUNT_REQUIRED", ErrorCategory::InvalidArgument)),
+            None => {
+                return Ok(rejected(
+                    "SALES_LINK_ACCOUNT_REQUIRED",
+                    ErrorCategory::InvalidArgument,
+                ));
+            }
         };
         let task_state = String::from_utf8(
             crm_activities::encode_task_state(task)
@@ -791,7 +856,10 @@ async fn stage_mutation(
     let committed = result.as_ref().ok().is_some_and(|results| {
         results.len() == count
             && results.iter().all(worker::d1::D1Result::success)
-            && results.first().and_then(changes).is_some_and(|value| value > 0)
+            && results
+                .first()
+                .and_then(changes)
+                .is_some_and(|value| value > 0)
     });
     if !committed {
         return Ok(reconcile(db, tenant, key, &digest, false, trace)
@@ -824,7 +892,10 @@ pub(super) async fn reopen_typed(
     trace: &str,
 ) -> Result<std::result::Result<SalesSaved, SalesFailure>> {
     if !(8..=120).contains(&key.len()) {
-        return Ok(rejected("IDEMPOTENCY_KEY_REQUIRED", ErrorCategory::InvalidArgument));
+        return Ok(rejected(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     let digest = hash("reopen", id, &input)?;
     if let Some(p) = prior(db, tenant, key).await? {
@@ -843,10 +914,16 @@ pub(super) async fn reopen_typed(
     )
     .await?
     else {
-        return Ok(rejected("SALES_REOPEN_INACTIVE_STAGE", ErrorCategory::Conflict));
+        return Ok(rejected(
+            "SALES_REOPEN_INACTIVE_STAGE",
+            ErrorCategory::Conflict,
+        ));
     };
     if ordinal != deal.stage().ordinal() {
-        return Ok(rejected("SALES_REOPEN_CATALOG_RANK_CONFLICT", ErrorCategory::Conflict));
+        return Ok(rejected(
+            "SALES_REOPEN_CATALOG_RANK_CONFLICT",
+            ErrorCategory::Conflict,
+        ));
     }
     let reason_code = match ReasonCode::try_new(&input.reason_code) {
         Ok(reason) => reason,
@@ -857,10 +934,7 @@ pub(super) async fn reopen_typed(
         reason_code,
         occurred_at_unix_nanos: now_nanos(),
     }) {
-        return Ok(rejected(
-            e.code,
-            e.category,
-        ));
+        return Ok(rejected(e.code, e.category));
     }
     let state = encode(&deal)?;
     let result = bind(db,
