@@ -802,26 +802,32 @@ impl SalesV2Service {
             ..Default::default()
         }
     }
-    fn view_status(raw: Option<buffa::EnumValue<sale_wire::DealStatus>>)
-        -> std::result::Result<Option<crm_sales::SalesViewStatus>, ConnectError>
-    {
+    fn view_status(
+        raw: Option<buffa::EnumValue<sale_wire::DealStatus>>,
+    ) -> std::result::Result<Option<crm_sales::SalesViewStatus>, ConnectError> {
         match raw {
             None => Ok(None),
-            Some(value) if value == sale_wire::DealStatus::DEAL_STATUS_OPEN =>
-                Ok(Some(crm_sales::SalesViewStatus::Open)),
-            Some(value) if value == sale_wire::DealStatus::DEAL_STATUS_WON =>
-                Ok(Some(crm_sales::SalesViewStatus::Won)),
-            Some(value) if value == sale_wire::DealStatus::DEAL_STATUS_LOST =>
-                Ok(Some(crm_sales::SalesViewStatus::Lost)),
+            Some(value) if value == sale_wire::DealStatus::DEAL_STATUS_OPEN => {
+                Ok(Some(crm_sales::SalesViewStatus::Open))
+            }
+            Some(value) if value == sale_wire::DealStatus::DEAL_STATUS_WON => {
+                Ok(Some(crm_sales::SalesViewStatus::Won))
+            }
+            Some(value) if value == sale_wire::DealStatus::DEAL_STATUS_LOST => {
+                Ok(Some(crm_sales::SalesViewStatus::Lost))
+            }
             _ => Err(ConnectError::invalid_argument("SALES_VIEW_STATUS_INVALID")),
         }
     }
     fn view(value: &crm_sales::SalesDealView) -> sale_wire::SalesDealView {
-        let status = value.status.map(|status| match status {
-            crm_sales::SalesViewStatus::Open => sale_wire::DealStatus::DEAL_STATUS_OPEN,
-            crm_sales::SalesViewStatus::Won => sale_wire::DealStatus::DEAL_STATUS_WON,
-            crm_sales::SalesViewStatus::Lost => sale_wire::DealStatus::DEAL_STATUS_LOST,
-        }.into());
+        let status = value.status.map(|status| {
+            match status {
+                crm_sales::SalesViewStatus::Open => sale_wire::DealStatus::DEAL_STATUS_OPEN,
+                crm_sales::SalesViewStatus::Won => sale_wire::DealStatus::DEAL_STATUS_WON,
+                crm_sales::SalesViewStatus::Lost => sale_wire::DealStatus::DEAL_STATUS_LOST,
+            }
+            .into()
+        });
         sale_wire::SalesDealView {
             view_id: value.view_id.clone(),
             name: value.name.clone(),
