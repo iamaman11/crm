@@ -168,7 +168,7 @@ message GetDealResponse {
   Deal deal = 1;
   // Positive proof for this tenant, record and key only. Absence is not
   // proof that a previously uncertain command was rejected or rolled back.
-  crm.core.v2.MutationReceipt confirmed_mutation = 2;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
 }
 
 message ListDealsRequest {

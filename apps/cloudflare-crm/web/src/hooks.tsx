@@ -24,6 +24,7 @@ export function useQuery<T>(load:()=>Promise<T>) {
   useEffect(()=>{void reload().catch(()=>{});return()=>{sequence.current++;};},[reload]);
   return {data,error,busy,reload};
 }
+type ReceiptProof=Pick<MutationReceipt,"requestId"|"originalRequestId"|"resourceVersion">;
 type MutationWrite=()=>Promise<{receipt?:MutationReceipt|undefined}>;
 type ReceiptMarker={dealId:string;key:string;expectedVersion:string};
 type MutationIntent={write:MutationWrite;refresh:(()=>Promise<unknown>)|undefined}&
@@ -37,7 +38,7 @@ type Pending={kind:"live";intent:Extract<MutationIntent,{preserve:true}>}|
   {kind:"stored";marker:ReceiptMarker}|{kind:"unreadable"};
 type RecoveryOptions={
   storageKey:string;
-  lookup:(marker:ReceiptMarker)=>Promise<MutationReceipt|undefined>;
+  lookup:(marker:ReceiptMarker)=>Promise<ReceiptProof|undefined>;
   refresh:()=>Promise<unknown>;
 };
 type MutationFeedback={tone:"success"|"warning"|"danger";text:string;fields?:CrmFailure["fieldViolations"]};
@@ -60,8 +61,8 @@ function restoredPending(storageKey:string|undefined):Pending|null {
   return {kind:"unreadable"};
 }
 
-function matchesReceipt(marker:ReceiptMarker,receipt:MutationReceipt|undefined):
-  receipt is MutationReceipt&{originalRequestId:string} {
+function matchesReceipt(marker:ReceiptMarker,receipt:ReceiptProof|undefined):
+  receipt is ReceiptProof&{originalRequestId:string} {
   return !!receipt?.requestId&&!!receipt.originalRequestId&&
     receipt.resourceVersion===BigInt(marker.expectedVersion)+1n;
 }
