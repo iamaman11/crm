@@ -8,7 +8,7 @@ export type Route =
   | {kind:"account";accountId:string}
   | {kind:"account-create";partyId:string}
   | {kind:"deal";dealId:string}
-  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId:string}
+  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string}
   | {kind:"not-found";path:string};
 
 const sections:readonly Section[]=["parties","contacts","relationships","sales","tasks","consents","review","privacy","enrichment","data"];
@@ -60,7 +60,7 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
        taskId.includes("\\")||taskId==="."||taskId==="..")
       return {kind:"not-found",path:source};
     return {kind:"section",screen:path,partyId:params.get("partyId")??"",
-      accountId:params.get("accountId")??"",taskId};
+      accountId:params.get("accountId")??"",...(taskId?{taskId}:{})};
   }
   return {kind:"not-found",path:source};
 }
