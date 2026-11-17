@@ -2109,13 +2109,27 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
         committed_atomic_swaps:12,concurrent_reads:12,final_read:true,exact_totals:true,d1_binding:true}));
       // Corrupt a disposable record outside the visible page. Both analytics
       // and Kanban must reject it through the original Rust persistence owner.
-      const invalid=async(field,value,id)=>{
-        const rows=await sql("UPDATE crm_sales_deal_records SET "+
-          "state=json_set(state,?,json(?)) WHERE tenant='tenant-a' AND id=? RETURNING id",
-          field,value,id);
-        assert.deepEqual(rows,[{id}]);
-      };
+      // D1 permits only a catalog rank rebase without a version increment.
+      // Use a disposable versioned fixture mutation, with unique receipt and
+      // request identity, to exercise malformed persistence without bypassing
+      // the real D1 guards or audit/history triggers.
       const invalidId=ids[1];
+      await assert.rejects(sql("UPDATE crm_sales_deal_records SET "+
+        "state=json_set(state,'$.amount.minor_units',2345) WHERE tenant='tenant-a' AND id=?",
+        invalidId),/SALES_CATALOG_RANK_ONLY_REQUIRED/);
+      let faultSequence=0;
+      const invalid=async(field,value,id)=>{
+        const [before]=await sql("SELECT version FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id=?",id);
+        const key="r7-scale-key-fault-"+(++faultSequence);
+        const rows=await sql("UPDATE crm_sales_deal_records SET "+
+          "state=json_set(state,?,json(?),'$.version',version+1),version=version+1,"+
+          "idem_key=?,idem_digest='load-fixture',request_id=?,last_action='sales_deals.update' "+
+          "WHERE tenant='tenant-a' AND id=? AND version=? RETURNING id,version",
+          field,value,key,randomUUID(),id,before.version);
+        assert.deepEqual(rows,[{id,version:before.version+1}]);
+        const [receipt]=await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts WHERE tenant='tenant-a' AND key=?",key);
+        assert.equal(receipt.n,1);
+      };
       for(const [field,bad,good] of [
         ["$.amount.minor_units","2345",'"2345"'],
         ["$.amount.minor_units","2345.0",'"2345"'],
