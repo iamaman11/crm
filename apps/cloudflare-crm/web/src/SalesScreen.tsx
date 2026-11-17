@@ -87,11 +87,14 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const selectedView=savedViews.find(view=>view.viewId===selectedViewId);
   const viewStatus=()=>status?enumValue(status,
     [DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"):undefined;
-  const currentViewFilters=()=>({
-    ...(pipelineId?{pipelineId}:{}),
-    ...(viewStatus()!==undefined?{status:viewStatus()}:{}),
-    ...(accountId?{accountId}:{})
-  });
+  const currentViewFilters=()=>{
+    const selectedStatus=viewStatus();
+    return {
+      ...(pipelineId?{pipelineId}:{}),
+      ...(selectedStatus!==undefined?{status:selectedStatus}:{}),
+      ...(accountId?{accountId}:{})
+    };
+  };
   const applySavedView=(id:string)=>{
     const view=savedViews.find(entry=>entry.viewId===id);
     if(!view){setSelectedViewId("");return;}
