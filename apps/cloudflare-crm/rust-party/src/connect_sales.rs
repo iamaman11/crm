@@ -804,17 +804,17 @@ impl SalesV2Service {
     }
     fn view_status(
         raw: Option<buffa::EnumValue<sale_wire::DealStatus>>,
-    ) -> std::result::Result<Option<crm_sales::SalesViewStatus>, ConnectError> {
+    ) -> std::result::Result<Option<crm_sales::DealStatus>, ConnectError> {
         match raw {
             None => Ok(None),
             Some(value) if value == sale_wire::DealStatus::DEAL_STATUS_OPEN => {
-                Ok(Some(crm_sales::SalesViewStatus::Open))
+                Ok(Some(crm_sales::DealStatus::Open))
             }
             Some(value) if value == sale_wire::DealStatus::DEAL_STATUS_WON => {
-                Ok(Some(crm_sales::SalesViewStatus::Won))
+                Ok(Some(crm_sales::DealStatus::Won))
             }
             Some(value) if value == sale_wire::DealStatus::DEAL_STATUS_LOST => {
-                Ok(Some(crm_sales::SalesViewStatus::Lost))
+                Ok(Some(crm_sales::DealStatus::Lost))
             }
             _ => Err(ConnectError::invalid_argument("SALES_VIEW_STATUS_INVALID")),
         }
@@ -822,9 +822,9 @@ impl SalesV2Service {
     fn view(value: &crm_sales::SalesDealView) -> sale_wire::SalesDealView {
         let status = value.status.map(|status| {
             match status {
-                crm_sales::SalesViewStatus::Open => sale_wire::DealStatus::DEAL_STATUS_OPEN,
-                crm_sales::SalesViewStatus::Won => sale_wire::DealStatus::DEAL_STATUS_WON,
-                crm_sales::SalesViewStatus::Lost => sale_wire::DealStatus::DEAL_STATUS_LOST,
+                crm_sales::DealStatus::Open => sale_wire::DealStatus::DEAL_STATUS_OPEN,
+                crm_sales::DealStatus::Won => sale_wire::DealStatus::DEAL_STATUS_WON,
+                crm_sales::DealStatus::Lost => sale_wire::DealStatus::DEAL_STATUS_LOST,
             }
             .into()
         });
