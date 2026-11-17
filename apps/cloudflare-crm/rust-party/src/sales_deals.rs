@@ -1059,6 +1059,61 @@ pub(super) async fn pipeline_metrics(
             *status_group = status_group
                 .checked_add(1)
                 .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
+            if status == DealStatus::Open {
+                let group = operational_groups
+                    .entry((row.stage_id.clone(), row.status.clone()))
+                    .or_default();
+                match (row.expected_close_year, row.expected_close_month, row.expected_close_day) {
+                    (None, None, None) => count_one(&mut group.undated)?,
+                    (Some(year), Some(month), Some(day)) => {
+                        let month = u8::try_from(month).map_err(|_| {
+                            worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
+                        })?;
+                        let day = u8::try_from(day).map_err(|_| {
+                            worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
+                        })?;
+                        CalendarDate::try_new(year, month, day).map_err(|_| {
+                            worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
+                        })?;
+                        let delta = gregorian_day_index(year, month, day) - today;
+                        if delta < 0 {
+                            count_one(&mut group.overdue)?;
+                        } else if delta <= 30 {
+                            count_one(&mut group.due_soon)?;
+                        } else {
+                            count_one(&mut group.due_later)?;
+                        }
+                    }
+                    _ => return Err(worker::Error::RustError(
+                        "SALES_METRICS_DATE_INVALID".into()
+                    )),
+                }
+                // Pre-0013 Deals can have no immutable entry event. Never
+                // synthesize a historical timestamp from updated_at.
+                if let Some(start) = &row.stage_entered_at_nanos {
+                    let started = start.parse::<i64>().map_err(|_| {
+                        worker::Error::RustError("SALES_METRICS_STAGE_TIME_INVALID".into())
+                    })?;
+                    if started <= 0 || started > as_of_nanos {
+                        return Err(worker::Error::RustError(
+                            "SALES_METRICS_STAGE_TIME_INVALID".into()
+                        ));
+                    }
+                    count_one(&mut group.known_age)?;
+                    group.age_seconds = group.age_seconds
+                        .checked_add(i128::from((as_of_nanos - started) / 1_000_000_000))
+                        .ok_or_else(|| worker::Error::RustError(
+                            "SALES_METRICS_STAGE_TIME_OVERFLOW".into()
+                        ))?;
+                }
+                match row.has_overdue_linked_task {
+                    1 => count_one(&mut group.overdue_tasks)?,
+                    0 => (),
+                    _ => return Err(worker::Error::RustError(
+                        "SALES_METRICS_TASK_FLAG_INVALID".into()
+                    )),
+                }
+            }
             let bps = u16::try_from(row.probability_basis_points).map_err(|_| {
                 worker::Error::RustError("SALES_METRICS_PROBABILITY_INVALID".into())
             })?;
@@ -1162,6 +1217,21 @@ pub(super) async fn pipeline_metrics(
                 },
             )
             .collect(),
+        operational: operational_groups
+            .into_iter()
+            .map(|((stage_id, kind), c)| PipelineOperationalMetric {
+                stage_id,
+                status: persisted_status(&kind),
+                overdue_expected_close_count: c.overdue,
+                due_next_30_days_count: c.due_soon,
+                due_later_count: c.due_later,
+                no_expected_close_count: c.undated,
+                known_stage_age_count: c.known_age,
+                total_stage_age_seconds: c.age_seconds,
+                overdue_linked_task_count: c.overdue_tasks,
+            })
+            .collect(),
+        as_of_unix_seconds,
     })
 }
 
