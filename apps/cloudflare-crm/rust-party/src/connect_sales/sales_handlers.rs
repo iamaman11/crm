@@ -21,14 +21,21 @@ impl sale_wire::DealService for SalesV2Service {
         let (key, _) = wire_precondition(input.precondition.as_option(), true)?;
         let saved = sales_views::create(
             sales_views::CreateInput {
-                view_id: input.view_id, name: input.name,
-                pipeline_id: input.pipeline_id, status,
+                view_id: input.view_id,
+                name: input.name,
+                pipeline_id: input.pipeline_id,
+                status,
                 account_id: input.account_id,
             },
-            &key, &self.d1()?, &self.tenant, &self.actor, &self.request_id,
-        ).await
-            .map_err(|_| ConnectError::internal("Sales view D1 create failed"))?
-            .map_err(Self::view_failed)?;
+            &key,
+            &self.d1()?,
+            &self.tenant,
+            &self.actor,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Sales view D1 create failed"))?
+        .map_err(Self::view_failed)?;
         RpcResponse::ok(sale_wire::CreateSalesViewResponse {
             view: Some(Self::view(&saved.value)).into(),
             receipt: Some(self.view_receipt(&saved)).into(),
@@ -55,13 +62,21 @@ impl sale_wire::DealService for SalesV2Service {
             sales_views::UpdateInput {
                 view_id: input.view_id,
                 expected_version: version.unwrap_or_default(),
-                name: input.name, pipeline_id: input.pipeline_id, status,
-                account_id: input.account_id, archived: input.archived,
+                name: input.name,
+                pipeline_id: input.pipeline_id,
+                status,
+                account_id: input.account_id,
+                archived: input.archived,
             },
-            &key, &self.d1()?, &self.tenant, &self.actor, &self.request_id,
-        ).await
-            .map_err(|_| ConnectError::internal("Sales view D1 update failed"))?
-            .map_err(Self::view_failed)?;
+            &key,
+            &self.d1()?,
+            &self.tenant,
+            &self.actor,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Sales view D1 update failed"))?
+        .map_err(Self::view_failed)?;
         RpcResponse::ok(sale_wire::UpdateSalesViewResponse {
             view: Some(Self::view(&saved.value)).into(),
             receipt: Some(self.view_receipt(&saved)).into(),
@@ -90,7 +105,11 @@ impl sale_wire::DealService for SalesV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, sale_wire::ListSalesViewsRequest>,
     ) -> ServiceResult<sale_wire::ListSalesViewsResponse> {
-        let size = if req.page.page_size == 0 { 25 } else { req.page.page_size };
+        let size = if req.page.page_size == 0 {
+            25
+        } else {
+            req.page.page_size
+        };
         if size > 100 {
             return Err(ConnectError::invalid_argument("page_size exceeds 100"));
         }
@@ -99,14 +118,21 @@ impl sale_wire::DealService for SalesV2Service {
             Self::id(cursor)?;
         }
         let (views, next) = sales_views::list(
-            &self.d1()?, &self.tenant, cursor, size as usize, req.include_archived,
-        ).await.map_err(|_| ConnectError::internal("Sales view D1 list failed"))?;
+            &self.d1()?,
+            &self.tenant,
+            cursor,
+            size as usize,
+            req.include_archived,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Sales view D1 list failed"))?;
         RpcResponse::ok(sale_wire::ListSalesViewsResponse {
             views: views.iter().map(Self::view).collect(),
             page_info: Some(core_v2::PageInfo {
                 next_page_token: next.unwrap_or_default(),
                 ..Default::default()
-            }).into(),
+            })
+            .into(),
             ..Default::default()
         })
     }
