@@ -60,6 +60,9 @@ async function subprocessEntry(){
               variant==="anonymous-persistent-reset"){
              throw Object.assign(new TypeError("fetch failed"),{cause:{code:"ECONNRESET"}});
            }
+           if((variant==="anonymous-edge-404"&&anonymousAttempts===1)||
+              variant==="anonymous-persistent-404")
+             return new Response("propagating",{status:404,headers:{"cf-ray":"fixture-ray-123"}});
            return new Response(variant==="anonymous-success"?"exposed":"denied",
              {status:variant==="anonymous-success"?200:403});
          }
@@ -98,6 +101,10 @@ async function subprocessEntry(){
        return html(503);
      if(mode==="verify-data"&&variant==="html-success-telemetry")
        return html(200);
+     if(mode==="verify-data"&&((variant==="transient-invalid-json-telemetry"&&telemetryAttempts===1)||
+        variant==="persistent-invalid-json-telemetry"))
+       return new Response('{"success":true,"result":',{status:200,
+         headers:{"content-type":"application/json","cf-ray":"fixture-ray-123"}});
      return wrap({events:{events:variant==="missing-logs"?[]:[{
        source:{event:"crm.native.request",request_id:requestId,operation:rpcPath,status:200,
          error_code:variant==="wrong-error-code"?"aborted":null},$workers:{scriptVersion:{id:"version-new"}}
@@ -134,7 +141,7 @@ async function subprocessEntry(){
  process.argv[2]=mode;
  try{await import("./deploy.mjs");}finally{
    writeFileSync("posts.json",JSON.stringify(posts));
-   writeFileSync("state.json",JSON.stringify({enabled,migrated,published,edgeAttempts,anonymousAttempts,commands,role}));
+   writeFileSync("state.json",JSON.stringify({enabled,migrated,published,edgeAttempts,anonymousAttempts,telemetryAttempts,commands,role}));
    db?.close();
  }
 }
@@ -196,7 +203,7 @@ test("matching browser, D1 and version-specific Logs evidence passes the release
  const result=run("verify-data");
  assert.equal(result.status,0,result.error);assert.equal(result.accepted,true);
 });
-for(const variant of ["transient-html-audit","transient-html-telemetry"])
+for(const variant of ["transient-html-audit","transient-html-telemetry","transient-invalid-json-telemetry"])
  test("transient HTML Cloudflare API readback is retried without replaying a mutation: "+variant,()=>{
    const result=run("verify-data",variant);
    assert.equal(result.status,0,result.error);
@@ -204,13 +211,15 @@ for(const variant of ["transient-html-audit","transient-html-telemetry"])
    assert.equal(result.posts.filter(p=>p.endsWith("/subdomain")).length,0,
      "readback retries must not change public entry or redeploy");
  });
-for(const variant of ["persistent-html-telemetry","html-success-telemetry"])
+for(const variant of ["persistent-html-telemetry","html-success-telemetry","persistent-invalid-json-telemetry"])
  test("non-recoverable HTML Cloudflare response remains fail-closed: "+variant,()=>{
    const result=run("verify-data",variant);
    assert.notEqual(result.status,0);
    assert.equal(result.accepted,false);
    assert.match(result.error,/NON_JSON/);
    assert.match(result.error,/cf_ray=fixture-ray-123/);
+    if(variant==="persistent-invalid-json-telemetry")assert.equal(result.state.telemetryAttempts,3);
+    if(variant==="html-success-telemetry")assert.equal(result.state.telemetryAttempts,1);
    assert.ok(!result.error.includes("<!DOCTYPE"),
      "never print an HTML error body or upstream credentials");
  });
@@ -234,7 +243,14 @@ test("anonymous transport reset recovers through real deploy script without repl
  assert.equal(result.state.anonymousAttempts,2);
  assert.equal(result.state.commands.filter(c=>c[2]==="deploy").length,1);
 });
-for(const variant of ["anonymous-persistent-reset","anonymous-success"])
+test("temporary anonymous edge 404 requires a later positive denial without redeploying",()=>{
+ const result=run("deploy","anonymous-edge-404");
+ assert.equal(result.status,0,result.error);
+ assert.equal(result.deployed,true);
+ assert.equal(result.state.anonymousAttempts,2);
+ assert.equal(result.state.commands.filter(c=>c[2]==="deploy").length,1);
+});
+for(const variant of ["anonymous-persistent-reset","anonymous-persistent-404","anonymous-success"])
  test("release rejects "+variant+" without replaying deployment",()=>{
    const result=run("deploy",variant);
    assert.notEqual(result.status,0);

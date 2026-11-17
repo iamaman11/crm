@@ -23,13 +23,15 @@ async function cf(path,method="GET",body,timeoutMs=0){
   // The API can return an HTML edge error (502/503/524) instead of JSON.
   // Never echo its body, request headers, Access credentials or bearer token.
   const ray=r.headers.get("cf-ray");
+  const contentType=r.headers.get("content-type")||"";
   let j;
   try{j=await r.json();}
   catch{
     throw Object.assign(new Error("Cloudflare "+method+" "+path+
       " HTTP "+r.status+" NON_JSON content_type="+
-      (r.headers.get("content-type")||"none").slice(0,80)+" cf_ray="+(ray||"none")),
-      {cfHttpStatus:r.status,cfRay:ray});
+      (contentType||"none").slice(0,80)+" cf_ray="+(ray||"none")),
+      {cfHttpStatus:r.status,cfRay:ray,cfInvalidJson:true,
+        cfJsonContent:/^application\/(?:json|[^;]+\+json)(?:\s*;|\s*$)/i.test(contentType)});
   }
   if(!r.ok||!j?.success)throw Object.assign(new Error(
     "Cloudflare "+method+" "+path+" HTTP "+r.status+" cf_ray="+(ray||"none")+
@@ -40,6 +42,8 @@ async function cf(path,method="GET",body,timeoutMs=0){
 // Only explicitly read-only D1 audit SELECT and telemetry search are replayable.
 // Never retry a D1 mutation, Worker deploy, subdomain POST or an ambiguous
 // business request. A failing 401/403/400 or HTML 200 remains fail-closed.
+// A malformed/truncated declared JSON 200 from read-only telemetry can
+// be replayed within the same existing bounded readback budget.
 async function cfReadback(path,body){
   const audit=path==="/d1/database/"+database+"/query"&&
     typeof body?.sql==="string"&&/^SELECT\b/i.test(body.sql.trim())&&
@@ -54,11 +58,13 @@ async function cfReadback(path,body){
     catch(error){
       const status=error?.cfHttpStatus;
       const retryable=status===429||(typeof status==="number"&&status>=500&&status<=599)||
-        (status===undefined&&["TimeoutError","AbortError","TypeError"].includes(error?.name));
+        (status===undefined&&["TimeoutError","AbortError","TypeError"].includes(error?.name))||
+        (traces&&status===200&&error?.cfInvalidJson===true&&error.cfJsonContent===true);
       if(!retryable||attempt>=3||Date.now()-started>=90000)throw error;
       const delayMs=Math.min(attempt*2500,5000);
       console.log(JSON.stringify({event:"crm.cf-readback-retry",target,attempt,
-        http_status:status??"transport",cf_ray:error?.cfRay??null,delay_ms:delayMs}));
+        http_status:status??"transport",cf_ray:error?.cfRay??null,
+        ...(error?.cfInvalidJson?{reason:"NON_JSON"}:{}),delay_ms:delayMs}));
       await new Promise(resolve=>setTimeout(resolve,delayMs));
     }
   }
