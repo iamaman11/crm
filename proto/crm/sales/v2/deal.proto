@@ -248,6 +248,58 @@ message ListStageDealsResponse {
   repeated StageCurrencyTotal currency_totals = 4;
 }
 
+// Tenant-scoped named filters are presentation state, not a second Deal
+// read/mutation owner. Applying a view uses existing ListDeals,
+// ListStageDeals and GetPipelineMetrics with exactly these typed filters.
+message SalesDealView {
+  string view_id = 1;
+  string name = 2;
+  optional string pipeline_id = 3;
+  optional DealStatus status = 4;
+  optional string account_id = 5;
+  int64 version = 6;
+  bool archived = 7;
+}
+message CreateSalesViewRequest {
+  string view_id = 1;
+  string name = 2;
+  optional string pipeline_id = 3;
+  optional DealStatus status = 4;
+  optional string account_id = 5;
+  crm.core.v2.MutationPrecondition precondition = 6;
+}
+message CreateSalesViewResponse {
+  SalesDealView view = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message UpdateSalesViewRequest {
+  string view_id = 1;
+  string name = 2;
+  optional string pipeline_id = 3;
+  optional DealStatus status = 4;
+  optional string account_id = 5;
+  bool archived = 6;
+  crm.core.v2.MutationPrecondition precondition = 7;
+}
+message UpdateSalesViewResponse {
+  SalesDealView view = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message GetSalesViewRequest {
+  string view_id = 1;
+}
+message GetSalesViewResponse {
+  SalesDealView view = 1;
+}
+message ListSalesViewsRequest {
+  crm.core.v2.PageRequest page = 1;
+  bool include_archived = 2;
+}
+message ListSalesViewsResponse {
+  repeated SalesDealView views = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
 // Read-only full-pipeline statistics. No currency mixing, page-size leakage,
 // float money or predictive accuracy claims. Weighted numerator is exact:
 // sum(minor_units * individual_probability_basis_points).
@@ -297,6 +349,18 @@ message GetPipelineMetricsResponse {
 }
 
 service DealService {
+  rpc CreateSalesView(CreateSalesViewRequest) returns (CreateSalesViewResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateSalesView(UpdateSalesViewRequest) returns (UpdateSalesViewResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetSalesView(GetSalesViewRequest) returns (GetSalesViewResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListSalesViews(ListSalesViewsRequest) returns (ListSalesViewsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc CreatePipeline(CreatePipelineRequest) returns (CreatePipelineResponse) {
     option idempotency_level = IDEMPOTENT;
   }
