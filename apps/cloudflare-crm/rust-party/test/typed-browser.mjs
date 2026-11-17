@@ -467,6 +467,56 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      "90071992547409.93 USD · взвешено: 33731961209005.018785 USD · сделок с суммой: 1",
      {exact:true}).waitFor();
    steps.push("R7.3 full-pipeline exact weighted multi-currency read model, React, D1");
+   // R7.3 saved views through REAL React -> generated Connect -> Rust domain
+   // -> D1 audit/receipt. Reload must not lose a named shared filter.
+   const savedViewName="Browser Saved View "+runId;
+   await page.getByLabel("Статус сделки",{exact:true}).selectOption("1");
+   await page.getByRole("button",{name:"Сохранить как новое",exact:true}).click();
+   await page.getByLabel("Название представления",{exact:true}).fill(savedViewName);
+   await mutation(page.getByRole("button",{name:"Сохранить новое представление",exact:true}),
+     "CreateSalesView");
+   const viewId=await firstId("crm_sales_saved_view_records","name",savedViewName);
+   const createdView=JSON.parse((await sql("SELECT state FROM crm_sales_saved_view_records "+
+     "WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0].state);
+   assert.equal(createdView.pipeline_id,newPipelineId);
+   assert.equal(createdView.status,"open");
+   assert.equal(createdView.version,1);
+   await page.reload();
+   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+   const viewPicker=page.getByLabel("Сохранённое представление",{exact:true});
+   await viewPicker.locator('option[value="'+viewId+'"]').waitFor({state:"attached"});
+   await viewPicker.selectOption(viewId);
+   assert.equal(await page.getByLabel("Воронка продаж",{exact:true}).inputValue(),newPipelineId);
+   assert.equal(await page.getByLabel("Статус сделки",{exact:true}).inputValue(),"1");
+   await page.getByRole("region",{name:"Аналитика воронки"})
+     .getByText(/^Всего сделок: 1 · срез по UTC:/).waitFor();
+   // Save the changed selected filters under the same stable view ID.
+   await page.getByLabel("Статус сделки",{exact:true}).selectOption("2");
+   await page.getByLabel("Название представления",{exact:true})
+     .fill("Browser Won View "+runId);
+   await mutation(page.getByRole("button",{name:"Обновить представление",exact:true}),
+     "UpdateSalesView");
+   const updatedView=JSON.parse((await sql("SELECT state FROM crm_sales_saved_view_records "+
+     "WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0].state);
+   assert.equal(updatedView.version,2);
+   assert.equal(updatedView.status,"won");
+   assert.equal(updatedView.name,"Browser Won View "+runId);
+   await mutation(page.getByRole("button",{name:"Архивировать представление",exact:true}),
+     "UpdateSalesView");
+   assert.equal((await sql("SELECT json_extract(state,'$.archived') AS archived "+
+     "FROM crm_sales_saved_view_records WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0].archived,1);
+   await page.reload();
+   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+   assert.equal(await page.getByLabel("Сохранённое представление",{exact:true})
+     .locator('option[value="'+viewId+'"]').count(),0,
+     "Archived view must remain audited but not appear as selectable");
+   assert.deepEqual((await sql("SELECT action FROM crm_audit WHERE tenant_id='"+tenantSql+
+     "' AND subject_id='"+viewId+"' ORDER BY rowid")).map(x=>x.action),
+     ["sales_view.create","sales_view.update","sales_view.update"]);
+   await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
+   await page.getByLabel("Статус сделки",{exact:true}).selectOption("");
+   await page.getByText("90071992547409.93 USD · 37.45%",{exact:true}).waitFor();
+   steps.push("R7.3 saved view create, reload/apply, update, archive and D1 audit");
    const dealCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Deal "+runId,exact:true})}).last();
    await dealCard.getByRole("button",{name:"Раскрыть карточку",exact:true}).click();
    await page.getByRole("region",{name:"Подробности сделки "+dealId}).getByText(
