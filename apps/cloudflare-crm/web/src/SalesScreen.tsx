@@ -185,10 +185,15 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       <h2>Показатели всей воронки · {activePipeline.name}</h2>
       <p>Весь выбранный фильтр, включая сделки вне текущих страниц Kanban.
         Валюты и статусы не смешиваются. Взвешенная сумма = сумма × вероятность сделки;
-        это расчёт, а не статистический прогноз.</p>
+        это расчёт, а не статистический прогноз. Просроченные даты, открытые связанные
+        задачи и длительность текущего этапа учитываются только для открытых сделок.
+        Время этапа начинается с реального события создания или перемещения.</p>
       <QueryNotice query={metricsQuery}/>
       {metricsQuery.data&&<>
-        <p>Всего сделок: {metricsQuery.data.totalDealCount.toString()}</p>
+        <p>Всего сделок: {metricsQuery.data.totalDealCount.toString()}
+          {" · срез по UTC: "}
+          {new Date(Number(metricsQuery.data.asOfUnixSeconds)*1000).toISOString().slice(0,16)}
+        </p>
         {activePipeline.stages.map(stage=>{
           const groups=metricsQuery.data?.statuses.filter(m=>m.stageId===stage.stageId)??[];
           return <div key={stage.stageId}>
@@ -198,9 +203,29 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
                 group.status===DealStatus.WON?"Выигранные":"Проигранные";
               const currencies=metricsQuery.data?.currencies.filter(m=>
                 m.stageId===stage.stageId&&m.status===group.status)??[];
+              const operational=metricsQuery.data?.operational.find(m=>
+                m.stageId===stage.stageId&&m.status===group.status);
               return <div key={String(group.status)} role="group"
                 aria-label={stage.name+" · "+title}>
                 <p>{title}: {group.dealCount.toString()} сделок</p>
+                {operational&&<div role="group" aria-label="Операционные показатели">
+                  <p>Ожидаемое закрытие: просрочено {operational.overdueExpectedCloseCount.toString()}
+                    {" · в ближайшие 30 дней "}{operational.dueNext30DaysCount.toString()}
+                    {" · позднее "}{operational.dueLaterCount.toString()}
+                    {" · дата не указана "}{operational.noExpectedCloseCount.toString()}
+                  </p>
+                  <p>Просроченная открытая связанная задача:
+                    {" "}{operational.overdueLinkedTaskCount.toString()} сделок
+                  </p>
+                  <p>Среднее время на текущем этапе:
+                    {" "}{operational.knownStageAgeCount>0n
+                      ?(BigInt(operational.totalStageAgeSeconds)/
+                          operational.knownStageAgeCount/86400n).toString()+" полных дней"
+                      :"нет проверенной истории"}
+                    {" · подтверждённая история у "}{operational.knownStageAgeCount.toString()}
+                    {" из "}{group.dealCount.toString()} сделок
+                  </p>
+                </div>}
                 {currencies.length===0?<p>Суммы не указаны</p>:currencies.map(total=>
                   <p key={total.currencyCode}>
                     {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode)} {total.currencyCode}
