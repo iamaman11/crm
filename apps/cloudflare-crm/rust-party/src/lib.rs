@@ -44,6 +44,8 @@ mod sales_contract;
 mod sales_deals;
 #[cfg(feature = "native")]
 mod sales_pipelines;
+#[cfg(feature = "native")]
+mod sales_views;
 
 fn native_request_id() -> Result<String> {
     use js_sys::{Function, Reflect};
