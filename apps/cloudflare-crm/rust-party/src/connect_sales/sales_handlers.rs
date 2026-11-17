@@ -506,7 +506,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales original D1 create failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| self.failed(failure))?;
         RpcResponse::ok(sale_wire::CreateDealResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
             receipt: Some(self.receipt(&saved)).into(),
@@ -608,7 +608,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales original D1 update failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| self.failed(failure))?;
         RpcResponse::ok(sale_wire::UpdateDealResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
             receipt: Some(self.receipt(&saved)).into(),
@@ -652,7 +652,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales original D1 stage advance failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| self.failed(failure))?;
         RpcResponse::ok(sale_wire::AdvanceStageResponse {
             deal: Some(Self::convert(&advanced.saved.deal)?).into(),
             receipt: Some(self.receipt(&advanced.saved)).into(),
@@ -694,7 +694,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales original D1 close failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| self.failed(failure))?;
         RpcResponse::ok(sale_wire::CloseDealResponse {
             deal: Some(Self::convert(&saved.saved.deal)?).into(),
             receipt: Some(self.receipt(&saved.saved)).into(),
@@ -729,7 +729,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales original D1 reopen failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| self.failed(failure))?;
         RpcResponse::ok(sale_wire::ReopenDealResponse {
             deal: Some(Self::convert(&saved.deal)?).into(),
             receipt: Some(self.receipt(&saved)).into(),

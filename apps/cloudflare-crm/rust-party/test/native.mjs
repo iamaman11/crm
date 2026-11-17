@@ -1638,6 +1638,10 @@ assert.equal(salesCreated.body.receipt?.requestId,salesCreated.headers.get("x-re
 const saleReplayed=await salesV2("CreateDeal",admin,saleCreate);
 assert.equal(saleReplayed.status,200);
 assert.equal(saleReplayed.body.receipt?.replayed,true);
+assert.equal(salesCreated.body.receipt?.originalRequestId,salesCreated.headers.get("x-request-id"));
+assert.equal(saleReplayed.body.receipt?.originalRequestId,salesCreated.headers.get("x-request-id"));
+assert.equal(saleReplayed.body.receipt?.requestId,saleReplayed.headers.get("x-request-id"));
+assert.notEqual(saleReplayed.body.receipt?.requestId,saleReplayed.body.receipt?.originalRequestId);
 assert.equal((await salesV2("CreateDeal",admin,{
   ...saleCreate,name:"changed idempotency payload"})).status,409);
 assert.equal((await salesV2("GetDeal",tenantB,{dealId})).status,404);
@@ -1670,6 +1674,7 @@ assert.equal(saleUpdated.body.receipt?.replayed,false);
 const saleUpdateReplayed=await salesV2("UpdateDeal",admin,updateSale);
 assert.equal(saleUpdateReplayed.status,200);
 assert.equal(saleUpdateReplayed.body.receipt?.replayed,true);
+assert.equal(saleUpdateReplayed.body.receipt?.originalRequestId,saleUpdated.headers.get("x-request-id"));
 assert.equal((await salesV2("UpdateDeal",admin,{
   ...updateSale,probabilityBasisPoints:100})).status,409);
 assert.equal((await salesV2("UpdateDeal",admin,{
@@ -1709,6 +1714,7 @@ assert.equal(taskCountAfter,taskCountBefore+1,
 const advanceReplayed=await salesV2("AdvanceStage",admin,advanceSale);
 assert.equal(advanceReplayed.status,200);
 assert.equal(advanceReplayed.body.receipt?.replayed,true);
+assert.equal(advanceReplayed.body.receipt?.originalRequestId,advancedSale.headers.get("x-request-id"));
 assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_task_records "+
   "WHERE tenant='tenant-a'"))[0].n,taskCountAfter);
 // Signed workerd cross-owner operational check: a real stage move delivered
@@ -2320,9 +2326,13 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
     "WHEN NEW.action='sales_activities_link.applied' "+
     "BEGIN SELECT RAISE(ABORT,'fixture linked audit'); END;"));
   try{
-    assert.equal((await salesV2("AdvanceStage",admin,{dealId:dealLast,
+    const failed=await salesV2("AdvanceStage",admin,{dealId:dealLast,
       targetStage:stageQualified,targetStatus:1,
-      precondition:{expectedVersion:1n,idempotencyKey:"connect-sales-linked-actor-fail"}})).status,409);
+      precondition:{expectedVersion:1n,idempotencyKey:"connect-sales-linked-actor-fail"}});
+    assert.equal(failed.status,503);
+    assert.equal(failed.body.code,"unavailable");
+    assert.equal(failed.body.message,"SALES_COMMIT_UNCONFIRMED");
+    assert.ok(failed.body.details?.some(detail=>detail.type==="crm.core.v2.DomainErrorDetail"));
     assert.deepEqual((await salesActorSnapshot()),beforeSalesFault,
       "Late link audit failure rolls back Deal, new Task, receipt, delivery and audit");
   }finally{await sql("DROP TRIGGER fixture_fail_sales_link_actor");}
@@ -2393,6 +2403,30 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
   });
   assert.equal(fresh.status,200,describeProtobuf(fresh.body));
   assert.equal(fresh.body.deal?.stage?.ordinal,1);
+  // An ordinary UpdateDeal wins version 2 without a stage link.
+  // Simulate the losing CAS's remaining batch against the actual D1 binding.
+  const winnerId=fresh.body.deal.dealId;
+  const winner=await salesV2("UpdateDeal",admin,{
+    dealId:winnerId,name:{operation:{case:"set",value:"CAS winner"}},
+    precondition:{expectedVersion:1n,idempotencyKey:"r471-cas-winner"}
+  });
+  assert.equal(winner.status,200,describeProtobuf(winner.body));
+  assert.equal(winner.body.deal.version,2n);
+  const receiptBefore=await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts");
+  const auditBefore=await sql("SELECT COUNT(*) AS n FROM crm_audit");
+  await assert.rejects(()=>batch([
+    statement("UPDATE crm_sales_deal_records SET request_id=? WHERE tenant=? AND id=? AND version=?",
+      "r471-losing-request","tenant-a",winnerId,1),
+    statement("INSERT INTO crm_sales_link_delivery_records(tenant,delivery_id,event_id,deal_id,deal_version,disposition,state_json,request_id,actor) "+
+      "VALUES(?,?,?,?,?,'ignored','{}',?,?)","tenant-a","r471-losing-delivery","r471-losing-event",
+      winnerId,2,"r471-losing-request","native-a@example.test")
+  ]),/SALES_LINK_SOURCE_COMMIT_MISMATCH/);
+  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant=? AND deal_id=?",
+    "tenant-a",winnerId))[0].n,0);
+  assert.deepEqual(await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts"),receiptBefore);
+  assert.deepEqual(await sql("SELECT COUNT(*) AS n FROM crm_audit"),auditBefore);
+  assert.deepEqual(await sql("SELECT original_request_id FROM crm_sales_deal_receipts WHERE tenant=? AND key=?",
+    "tenant-a","r471-cas-winner"),[{original_request_id:winner.headers.get("x-request-id")}]);
   console.log(JSON.stringify({event:"crm.native-r7-occupied-stage-reorder",result:"PASS",
     stable_ids:true,open_closed_rebased:true,versions_preserved:true,
     audit_receipt_single_owner:true,cas:true,invalid_deletion_denied:true,
@@ -2441,8 +2475,10 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
     "WHEN NEW.action='sales_deals.reopen' "+
     "BEGIN SELECT RAISE(ABORT,'fixture reopen audit'); END;"));
   try{
-    assert.equal((await salesV2("ReopenDeal",admin,{dealId,reasonCode:"revisit",
-      precondition:{expectedVersion:6n,idempotencyKey:"r72-failed-reopen"}})).status,409);
+    const failed=await salesV2("ReopenDeal",admin,{dealId,reasonCode:"revisit",
+      precondition:{expectedVersion:6n,idempotencyKey:"r72-failed-reopen"}});
+    assert.equal(failed.status,503);
+    assert.equal(failed.body.message,"SALES_COMMIT_UNCONFIRMED");
   }finally{await sql("DROP TRIGGER fixture_fail_reopen_audit");}
   assert.equal((await salesV2("GetDeal",viewer,{dealId})).body.deal?.version,6n);
   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+

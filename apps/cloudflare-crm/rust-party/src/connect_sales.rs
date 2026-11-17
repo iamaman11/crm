@@ -912,16 +912,49 @@ impl SalesV2Service {
             request_id: self.request_id.clone(),
             resource_version: saved.deal.version(),
             replayed: saved.replayed,
+            original_request_id: saved.original_request_id.clone(),
             ..Default::default()
         }
     }
-    fn failed(f: sales_deals::SalesFailure) -> ConnectError {
-        match f.status {
-            404 => ConnectError::not_found(f.code),
-            409 => ConnectError::aborted(f.code),
-            422 => ConnectError::invalid_argument(f.code),
-            _ => ConnectError::internal(f.code),
-        }
+    fn failed(&self, failure: sales_deals::SalesFailure) -> ConnectError {
+        use buffa::MessageName;
+        use crm_module_sdk::ErrorCategory;
+        use sales_deals::SalesFailure;
+        let (error, code, outcome) = match failure {
+            SalesFailure::Rejected { code, category } => {
+                let error = match category {
+                    ErrorCategory::InvalidArgument => ConnectError::invalid_argument(&code),
+                    ErrorCategory::Authentication => ConnectError::unauthenticated(&code),
+                    ErrorCategory::Authorization => ConnectError::permission_denied(&code),
+                    ErrorCategory::Conflict => ConnectError::aborted(&code),
+                    ErrorCategory::NotFound => ConnectError::not_found(&code),
+                    ErrorCategory::RateLimit => ConnectError::resource_exhausted(&code),
+                    ErrorCategory::Dependency | ErrorCategory::Unavailable => {
+                        ConnectError::unavailable(&code)
+                    }
+                    ErrorCategory::Internal => ConnectError::internal(&code),
+                };
+                (error, code, core_v2::MutationCommitOutcome::Rejected)
+            }
+            SalesFailure::CommitUnconfirmed => {
+                let code = "SALES_COMMIT_UNCONFIRMED".to_owned();
+                (
+                    ConnectError::unavailable(&code),
+                    code,
+                    core_v2::MutationCommitOutcome::Unconfirmed,
+                )
+            }
+        };
+        let detail = core_v2::DomainErrorDetail {
+            domain_code: code,
+            request_id: self.request_id.clone(),
+            commit_outcome: outcome.into(),
+            ..Default::default()
+        };
+        error.with_detail(connectrpc::ErrorDetail::from_message(
+            core_v2::DomainErrorDetail::FULL_NAME,
+            &detail,
+        ))
     }
 }
 
