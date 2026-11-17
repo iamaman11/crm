@@ -46,3 +46,21 @@ test("receipt and errors retain server request correlation",()=>{
  assert.equal(field("DomainErrorDetail","request_id").type,9);
  assert.equal(field("DomainErrorDetail","field_violations").label,3);
 });
+
+test("the commit outcome and original request ID have stable generated wire semantics",()=>{
+ const original=field("MutationReceipt","original_request_id");
+ assert.equal(original.number,4);
+ assert.equal(original.type,9);
+ assert.equal(original.proto3Optional,true);
+ const outcome=field("DomainErrorDetail","commit_outcome");
+ assert.equal(outcome.number,4);
+ assert.equal(outcome.type,14);
+ assert.equal(outcome.typeName,".crm.core.v2.MutationCommitOutcome");
+ const enumeration=core.enumType.find(value=>value.name==="MutationCommitOutcome");
+ assert.ok(enumeration);
+ assert.deepEqual(enumeration.value.map(value=>[value.name,value.number]),[
+  ["MUTATION_COMMIT_OUTCOME_UNSPECIFIED",0],
+  ["MUTATION_COMMIT_OUTCOME_REJECTED",1],
+  ["MUTATION_COMMIT_OUTCOME_UNCONFIRMED",2],
+ ]);
+});

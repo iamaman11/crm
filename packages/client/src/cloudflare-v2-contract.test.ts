@@ -61,7 +61,7 @@ describe("S1 generated mutation outcomes and correlation",()=>{
    const detail=create(DomainErrorDetailSchema,{
      domainCode:"SALES_COMMIT_UNCONFIRMED",requestId:"attempt-id",
      commitOutcome:MutationCommitOutcome.UNCONFIRMED});
-   const error=new ConnectError("write acknowledgement missing",Code.Aborted,meta,[detail]);
+   const error=new ConnectError("write acknowledgement missing",Code.Aborted,meta,[{desc:DomainErrorDetailSchema,value:detail}]);
    expect(decodeCrmError(error)).toMatchObject({outcome:"unconfirmed",domainCode:"SALES_COMMIT_UNCONFIRMED",
      requestId:"attempt-id"});
  });
@@ -70,10 +70,16 @@ describe("S1 generated mutation outcomes and correlation",()=>{
      domainCode:"INVALID_DEAL",requestId:"attempt-id",
      commitOutcome:MutationCommitOutcome.REJECTED,
      fieldViolations:[{fieldPath:"amount.currency_code",description:"Unsupported currency"}]});
-   const error=new ConnectError("invalid",Code.InvalidArgument,meta,[detail]);
+   const error=new ConnectError("invalid",Code.InvalidArgument,meta,[{desc:DomainErrorDetailSchema,value:detail}]);
    const failure=decodeCrmError(error);
    expect(failure).toMatchObject({outcome:"rejected",domainCode:"INVALID_DEAL",requestId:"attempt-id"});
    expect(failure.fieldViolations[0]).toMatchObject({fieldPath:"amount.currency_code"});
+   const received=new ConnectError("invalid wire response",Code.InvalidArgument,meta);
+   received.details=[{type:DomainErrorDetailSchema.typeName,value:toBinary(DomainErrorDetailSchema,detail)}];
+   expect(decodeCrmError(received)).toMatchObject({
+     outcome:"rejected",domainCode:"INVALID_DEAL",requestId:"attempt-id",
+     fieldViolations:[{fieldPath:"amount.currency_code",description:"Unsupported currency"}]
+   });
  });
  it("treats edge errors, lost responses and internal exceptions conservatively",()=>{
    expect(decodeCrmError(new ConnectError("HTTP 404",Code.NotFound)).outcome).toBe("unconfirmed");
