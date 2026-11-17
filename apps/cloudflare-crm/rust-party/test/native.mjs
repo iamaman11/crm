@@ -1901,6 +1901,9 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
   }finally{
     fixtureDb.exec("BEGIN IMMEDIATE");
     try{
+      // Immutable lifecycle events reference their Deal: purge only disposable
+      // scale-test children before removing the matching test parent rows.
+      sql("DELETE FROM crm_sales_deal_events WHERE tenant='tenant-a' AND deal_id LIKE 'r7-scale-%'");
       sql("DELETE FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id LIKE 'r7-scale-%'");
       sql("DELETE FROM crm_sales_deal_receipts WHERE tenant='tenant-a' AND key LIKE 'r7-scale-key-%'");
       sql("DELETE FROM crm_audit WHERE tenant_id='tenant-a' AND subject_id LIKE 'r7-scale-%'");
