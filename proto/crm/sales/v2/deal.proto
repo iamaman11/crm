@@ -269,11 +269,30 @@ message PipelineCurrencyMetric {
   string weighted_minor_units_times_basis_points = 5;
   uint64 amount_deal_count = 6;
 }
+// Operational measures are evaluated as of one UTC instant. Only OPEN Deals
+// enter due-date and active-stage-age buckets. The stage clock starts at the
+// latest immutable Created/Moved event (never an ordinary edit or reopen).
+// A legacy Deal with no corresponding entry event has unknown stage age.
+message PipelineOperationalMetric {
+  string stage_id = 1;
+  DealStatus status = 2;
+  uint64 overdue_expected_close_count = 3;
+  uint64 due_next_30_days_count = 4;
+  uint64 due_later_count = 5;
+  uint64 no_expected_close_count = 6;
+  uint64 known_stage_age_count = 7;
+  string total_stage_age_seconds = 8;
+  // Counts Deals with at least one overdue OPEN Task linked to a stage move.
+  // Not all Activities under the Account are implicitly Deal-related.
+  uint64 overdue_linked_task_count = 9;
+}
 message GetPipelineMetricsResponse {
   string pipeline_id = 1;
   uint64 total_deal_count = 2;
   repeated PipelineStatusMetric statuses = 3;
   repeated PipelineCurrencyMetric currencies = 4;
+  repeated PipelineOperationalMetric operational = 5;
+  int64 as_of_unix_seconds = 6;
 }
 
 service DealService {
