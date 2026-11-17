@@ -45,7 +45,9 @@ fn validate(
     if !valid_record_id(view_id) {
         return Err(invalid("SALES_VIEW_ID_INVALID"));
     }
-    if name.trim().is_empty() || name != name.trim() || name.len() > 240
+    if name.trim().is_empty()
+        || name != name.trim()
+        || name.len() > 240
         || name.chars().any(char::is_control)
     {
         return Err(invalid("SALES_VIEW_NAME_INVALID"));
@@ -70,8 +72,13 @@ impl SalesDealView {
     ) -> Result<Self, SdkError> {
         validate(&view_id, &name, &pipeline_id, &account_id)?;
         Ok(Self {
-            view_id, name, pipeline_id, status, account_id,
-            version: 1, archived: false,
+            view_id,
+            name,
+            pipeline_id,
+            status,
+            account_id,
+            version: 1,
+            archived: false,
         })
     }
 
@@ -85,23 +92,36 @@ impl SalesDealView {
         archived: bool,
     ) -> Result<Self, SdkError> {
         if self.version != expected_version {
-            return Err(failure("SALES_VIEW_VERSION_CONFLICT", ErrorCategory::Conflict));
+            return Err(failure(
+                "SALES_VIEW_VERSION_CONFLICT",
+                ErrorCategory::Conflict,
+            ));
         }
         validate(&self.view_id, &name, &pipeline_id, &account_id)?;
         Ok(Self {
-            view_id: self.view_id.clone(), name, pipeline_id, status, account_id,
-            version: self.version.checked_add(1).ok_or_else(|| {
-                failure("SALES_VIEW_VERSION_OVERFLOW", ErrorCategory::Conflict)
-            })?,
+            view_id: self.view_id.clone(),
+            name,
+            pipeline_id,
+            status,
+            account_id,
+            version: self
+                .version
+                .checked_add(1)
+                .ok_or_else(|| failure("SALES_VIEW_VERSION_OVERFLOW", ErrorCategory::Conflict))?,
             archived,
         })
     }
 
     pub fn decode(bytes: &[u8]) -> Result<Self, SdkError> {
-        let value: Self = serde_json::from_slice(bytes)
-            .map_err(|_| invalid("SALES_VIEW_STATE_INVALID"))?;
-        validate(&value.view_id, &value.name, &value.pipeline_id, &value.account_id)
-            .map_err(|_| invalid("SALES_VIEW_STATE_INVALID"))?;
+        let value: Self =
+            serde_json::from_slice(bytes).map_err(|_| invalid("SALES_VIEW_STATE_INVALID"))?;
+        validate(
+            &value.view_id,
+            &value.name,
+            &value.pipeline_id,
+            &value.account_id,
+        )
+        .map_err(|_| invalid("SALES_VIEW_STATE_INVALID"))?;
         if value.version < 1 {
             return Err(invalid("SALES_VIEW_STATE_INVALID"));
         }
@@ -120,39 +140,82 @@ mod tests {
     #[test]
     fn saved_views_validate_all_filters_and_exact_roundtrip() {
         let first = SalesDealView::create(
-            "view-1".into(), "Открытые сделки".into(),
-            Some("pipeline.enterprise".into()), Some(SalesViewStatus::Open),
+            "view-1".into(),
+            "Открытые сделки".into(),
+            Some("pipeline.enterprise".into()),
+            Some(SalesViewStatus::Open),
             Some("account-1".into()),
-        ).unwrap();
-        assert_eq!(SalesDealView::decode(first.encode().unwrap().as_bytes()).unwrap(), first);
-        let second = first.reconfigure(
-            1, "Только выигранные".into(), None,
-            Some(SalesViewStatus::Won), None, false,
-        ).unwrap();
+        )
+        .unwrap();
+        assert_eq!(
+            SalesDealView::decode(first.encode().unwrap().as_bytes()).unwrap(),
+            first
+        );
+        let second = first
+            .reconfigure(
+                1,
+                "Только выигранные".into(),
+                None,
+                Some(SalesViewStatus::Won),
+                None,
+                false,
+            )
+            .unwrap();
         assert_eq!(second.version, 2);
         assert_eq!(second.pipeline_id, None);
         assert_eq!(second.status, Some(SalesViewStatus::Won));
-        assert_eq!(second.reconfigure(1, second.name.clone(), None, None, None, true)
-            .unwrap_err().code, "SALES_VIEW_VERSION_CONFLICT");
-        let archived = second.reconfigure(2, second.name.clone(), None, None, None, true).unwrap();
+        assert_eq!(
+            second
+                .reconfigure(1, second.name.clone(), None, None, None, true)
+                .unwrap_err()
+                .code,
+            "SALES_VIEW_VERSION_CONFLICT"
+        );
+        let archived = second
+            .reconfigure(2, second.name.clone(), None, None, None, true)
+            .unwrap();
         assert!(archived.archived);
         assert_eq!(archived.version, 3);
     }
 
     #[test]
     fn invalid_views_do_not_enter_persistence() {
-        assert_eq!(SalesDealView::create(
-            "bad/id".into(), "Название".into(), None, None, None
-        ).unwrap_err().code, "SALES_VIEW_ID_INVALID");
-        assert_eq!(SalesDealView::create(
-            "view-1".into(), " ".into(), None, None, None
-        ).unwrap_err().code, "SALES_VIEW_NAME_INVALID");
-        assert_eq!(SalesDealView::create(
-            "view-1".into(), "Название".into(), Some("bad/id".into()), None, None
-        ).unwrap_err().code, "SALES_VIEW_PIPELINE_ID_INVALID");
-        assert_eq!(SalesDealView::create(
-            "view-1".into(), "Название".into(), None, None, Some("bad/id".into())
-        ).unwrap_err().code, "SALES_VIEW_ACCOUNT_ID_INVALID");
+        assert_eq!(
+            SalesDealView::create("bad/id".into(), "Название".into(), None, None, None)
+                .unwrap_err()
+                .code,
+            "SALES_VIEW_ID_INVALID"
+        );
+        assert_eq!(
+            SalesDealView::create("view-1".into(), " ".into(), None, None, None)
+                .unwrap_err()
+                .code,
+            "SALES_VIEW_NAME_INVALID"
+        );
+        assert_eq!(
+            SalesDealView::create(
+                "view-1".into(),
+                "Название".into(),
+                Some("bad/id".into()),
+                None,
+                None
+            )
+            .unwrap_err()
+            .code,
+            "SALES_VIEW_PIPELINE_ID_INVALID"
+        );
+        assert_eq!(
+            SalesDealView::create(
+                "view-1".into(),
+                "Название".into(),
+                None,
+                None,
+                Some("bad/id".into())
+            )
+            .unwrap_err()
+            .code,
+            "SALES_VIEW_ACCOUNT_ID_INVALID"
+        );
         assert_eq!(SalesDealView::decode(br#"{"view_id":"view-1","name":"x","pipeline_id":null,"status":"wrong","account_id":null,"version":1,"archived":false}"#)
             .unwrap_err().code, "SALES_VIEW_STATE_INVALID");
     }
