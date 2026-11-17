@@ -22,7 +22,7 @@ export type { PartyRelationship } from "../gen/crm/party_relationships/v2/relati
 export type { Task } from "../gen/crm/activities/v2/task_pb";
 export type { Deal } from "../gen/crm/sales/v2/deal_pb";
 export type { DealEvent } from "../gen/crm/sales/v2/deal_pb";
-export type { SalesPipeline } from "../gen/crm/sales/v2/deal_pb";
+export type { SalesPipeline, SalesDealView } from "../gen/crm/sales/v2/deal_pb";
 export type { AccountOverview } from "../gen/crm/customer_360/v2/customer_360_pb";
 export type { PrivacyCase } from "../gen/crm/customer_privacy/v2/case_pb";
 export type { ProviderProfileVersion, MappingVersion } from "../gen/crm/customer_enrichment/v2/config_pb";
