@@ -26,7 +26,7 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 const data=mkdtempSync(join(tmpdir(),"crm-native-connect-"));
 const base="http://127.0.0.1:18789";
-let child,stderr="",workerReady=false,fixtureDb;
+let child,stderr="",workerOutput="",workerReady=false,fixtureDb;
 const successfulCalls=new Set();
 // Wrangler migrations and initial fixture seed run BEFORE the Worker starts.
 // For live SQL readback and deliberate fault injection, attach one native SQLite
@@ -155,7 +155,8 @@ try{
  openFixtureDb();
  child=spawn("npx",["wrangler","dev","--local","--port","18789","--persist-to",data,
   "--var","CRM_NATIVE_CI_JWKS:"+jwks,"--var","GIT_SHA:"+sourceSha],
-  {cwd,detached:true,stdio:["ignore","ignore","pipe"]});
+  {cwd,detached:true,stdio:["ignore","pipe","pipe"]});
+  child.stdout.on("data",b=>workerOutput=(workerOutput+b.toString()).slice(-12000));
  child.stderr.on("data",b=>stderr=(stderr+b.toString()).slice(-2500));
  let ready=false;
  for(let i=0;i<120;i++){
@@ -2069,30 +2070,35 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
       // Both ends of the old paged scan change in a single fixture transaction.
       // Every committed state has the same total and weighted amount.
       const ids=["r7-scale-0000","r7-scale-0999"];
+      // One autocommit statement changes both rows atomically. Never hold an
+      // external SQLite write transaction across workerd's signed Access read.
+      // The original Rust MoneyState stores base-10 i128 as a JSON string.
       const update=fixtureDb.prepare("UPDATE crm_sales_deal_records SET "+
-        "state=json_set(state,'$.amount.minor_units',?,'$.version',version+1),version=version+1,"+
-        "idem_key=?,idem_digest='load-fixture',request_id=?,last_action='sales_deals.update' "+
-        "WHERE tenant='tenant-a' AND id=?");
+        "state=json_set(state,'$.amount.minor_units',CASE id WHEN ? THEN ? ELSE ? END,"+
+        "'$.version',version+1),version=version+1,"+
+        "idem_key=?||id,idem_digest='load-fixture',request_id=CASE id WHEN ? THEN ? ELSE ? END,"+
+        "last_action='sales_deals.update' WHERE tenant='tenant-a' AND id IN (?,?)");
+      const readBalances=()=>fixtureDb.prepare("SELECT json_type(state,'$.amount.minor_units') AS kind,"+
+        "json_extract(state,'$.amount.minor_units') AS units "+
+        "FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id IN (?,?) ORDER BY id")
+        .all(...ids).map(row=>[row.kind,row.units]);
       const baseline=metrics.body.currencies;
+      assert.deepEqual(readBalances(),[["text","2345"],["text","2345"]]);
       for(let attempt=0;attempt<12;attempt++){
         const read=salesV2("GetPipelineMetrics",viewer,filter);
         await new Promise(resolve=>setTimeout(resolve,1));
-        fixtureDb.exec("BEGIN IMMEDIATE");
-        try{
-          // node:sqlite binds JS Number as REAL even for whole numbers.
-          // The canonical Money minor-unit value must be a JSON integer.
-          const amounts=attempt%2===0?[2346n,2344n]:[2345n,2345n];
-          for(const [i,id] of ids.entries())
-            assert.equal(update.run(amounts[i],"r7-scale-key-swap-"+attempt+"-"+i,randomUUID(),id).changes,1);
-          const written=fixtureDb.prepare("SELECT json_type(state,'$.amount.minor_units') AS kind,"+
-            "CAST(json_extract(state,'$.amount.minor_units') AS TEXT) AS units "+
-            "FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id IN (?,?) ORDER BY id")
-            .all(...ids).map(row=>[row.kind,row.units]);
-          assert.deepEqual(written,amounts.map(n=>["integer",String(n)]),
-            "concurrent fixture must preserve exact domain Money representation");
-          fixtureDb.exec("COMMIT");
-        }catch(error){fixtureDb.exec("ROLLBACK");throw error;}
+        const amounts=attempt%2===0?["2346","2344"]:["2345","2345"];
+        assert.equal(update.run(ids[0],...amounts,"r7-scale-key-swap-"+attempt+"-",ids[0],
+          randomUUID(),randomUUID(),...ids).changes,2);
+        assert.deepEqual(readBalances(),amounts.map(value=>["text",value]));
         const snapshot=await read;
+        if(snapshot.status!==200){
+          await new Promise(resolve=>setTimeout(resolve,50));
+          console.error(JSON.stringify({event:"crm.native-r73d-concurrent-failure",
+            attempt,status:snapshot.status,request_id:snapshot.headers.get("x-request-id"),
+            journal_mode:fixtureDb.prepare("PRAGMA journal_mode").get().journal_mode,
+            worker_output:workerOutput.slice(-6000),worker_stderr:stderr}));
+        }
         assert.equal(snapshot.status,200,describeProtobuf(snapshot.body));
         assert.equal(snapshot.body.totalDealCount,1032n);
         assert.deepEqual(snapshot.body.currencies,baseline,
@@ -2103,6 +2109,31 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
       assert.deepEqual(after.body.currencies,baseline);
       console.log(JSON.stringify({event:"crm.native-r73d-concurrent-metrics",result:"PASS",
         committed_atomic_swaps:12,concurrent_reads:12,final_read:true,exact_totals:true}));
+      // Corrupt a disposable record outside the visible page. Both analytics
+      // and Kanban must reject it through the original Rust persistence owner.
+      const invalid=fixtureDb.prepare("UPDATE crm_sales_deal_records SET "+
+        "state=json_set(state,?,json(?)) WHERE tenant='tenant-a' AND id=?");
+      const invalidId=ids[1];
+      for(const [field,bad,good] of [
+        ["$.amount.minor_units","2345",'"2345"'],
+        ["$.amount.minor_units","2345.0",'"2345"'],
+        ["$.probability_basis_points",'"2000"',"2000"],
+        ["$.probability_basis_points","2000.5","2000"]
+      ]){
+        try{
+          assert.equal(invalid.run(field,bad,invalidId).changes,1);
+          assert.equal((await salesV2("GetPipelineMetrics",viewer,filter)).status,500);
+          assert.equal((await salesV2("ListStageDeals",viewer,{...filter,stageId:"lead",
+            page:{pageSize:1}})).status,500);
+        }finally{
+          assert.equal(invalid.run(field,good,invalidId).changes,1);
+        }
+      }
+      const restored=await salesV2("GetPipelineMetrics",viewer,filter);
+      assert.equal(restored.status,200);
+      assert.deepEqual(restored.body.currencies,baseline);
+      console.log(JSON.stringify({event:"crm.native-r73d-strict-persistence",result:"PASS",
+        invalid_money_types:2,invalid_probability_types:2,board_and_metrics:true,restored:true}));
     }
     console.log(JSON.stringify({event:"crm.native-r71-kanban-scale",result:"PASS",
       added_deals:n,stage_total_count:n+32,rendered_per_page:25,
@@ -2116,7 +2147,7 @@ console.log(JSON.stringify({event:"crm.native-r71-board-currency-totals",result:
       "FROM crm_sales_deal_records WHERE tenant='tenant-a' "+
       "AND json_extract(state,'$.stage.pipeline_id')='pipeline.other' "+
       "AND json_extract(state,'$.stage.stage_id')='lead' "+
-      "AND json_type(state,'$.amount')='object' AND id>'' ORDER BY id LIMIT 256");
+      "AND id>'' ORDER BY id LIMIT 256");
     assert.ok(plan.some(row=>row.detail.includes("idx_crm_sales_board_stage")),
       "the 1000+ row summary must use the existing indexed stage/ID keyset");
     // EXPLAIN the actual native Rust statement, not an approximation.

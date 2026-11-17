@@ -305,7 +305,10 @@ impl sale_wire::DealService for SalesV2Service {
             },
         )
         .await
-        .map_err(|_| ConnectError::internal("Sales D1 stage list failed"))?;
+        .map_err(|error| {
+            super::super::log_read_failure(&self.request_id, "sales_stage_list", &error);
+            ConnectError::internal("Sales D1 stage list failed")
+        })?;
         let deals = list
             .iter()
             .map(Self::convert)
@@ -365,7 +368,10 @@ impl sale_wire::DealService for SalesV2Service {
             req.account_id,
         )
         .await
-        .map_err(|_| ConnectError::internal("Sales D1 metrics read failed"))?;
+        .map_err(|error| {
+            super::super::log_read_failure(&self.request_id, "sales_metrics", &error);
+            ConnectError::internal("Sales D1 metrics read failed")
+        })?;
         let as_status = |value: DomainDealStatus| match value {
             DomainDealStatus::Open => sale_wire::DealStatus::DEAL_STATUS_OPEN,
             DomainDealStatus::Won => sale_wire::DealStatus::DEAL_STATUS_WON,
