@@ -35,8 +35,9 @@ function restoreAcceptedLocation():void {
   if(navigation&&acceptedKey&&navigation.entries().some(entry=>entry.key===acceptedKey)){
     try {
       const traversal=navigation.traverseTo(acceptedKey);
-      void traversal.committed.catch(restoreUrl);
-      void traversal.finished.catch(restoreUrl);
+      void traversal.committed?.catch(restoreUrl);
+      void traversal.finished?.catch(restoreUrl);
+      if(!traversal.committed&&!traversal.finished)restoreUrl();
     } catch {
       restoreUrl();
     }
