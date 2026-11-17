@@ -3268,6 +3268,17 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(openSummary.body.totalDealCount,3n);
    assert.equal(openSummary.body.forecastCategories.find(x=>x.category===3).dealCount,1n);
    assert.equal(openSummary.body.forecastCurrencies.some(x=>x.category===3&&x.currencyCode==="EUR"),false);
+   const lost=await salesV2("CloseDeal",admin,{
+     dealId:ids[2],outcome:3,reasonCode:"forecast-lost",precondition:pre("close-lost",third.body.deal.version)
+   });
+   assert.equal(lost.status,200,describeProtobuf(lost.body));
+   const bothClosed=(await metric()).body.closedOutcomes;
+   assert.deepEqual([bothClosed.wonCount,bothClosed.lostCount,bothClosed.denominator,bothClosed.winRateBasisPoints],
+     [1n,1n,2n,5000]);
+   const lostReopened=await salesV2("ReopenDeal",admin,{
+     dealId:ids[2],reasonCode:"forecast-lost-reopened",precondition:pre("reopen-lost",lost.body.deal.version)
+   });
+   assert.equal(lostReopened.status,200,describeProtobuf(lostReopened.body));
    const reopened=await salesV2("ReopenDeal",admin,{
      dealId:ids[0],reasonCode:"forecast-reopened",precondition:pre("reopen",closed.body.deal.version)
    });

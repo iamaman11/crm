@@ -398,17 +398,16 @@ impl sale_wire::DealService for SalesV2Service {
             DomainDealStatus::Won => sale_wire::DealStatus::DEAL_STATUS_WON,
             DomainDealStatus::Lost => sale_wire::DealStatus::DEAL_STATUS_LOST,
         };
-        let forecast_category_metric = |row: sales_deals::ForecastCategoryMetric| {
-            sale_wire::ForecastCategoryMetric {
+        let forecast_category_metric =
+            |row: sales_deals::ForecastCategoryMetric| sale_wire::ForecastCategoryMetric {
                 category: Self::forecast_wire(row.category).into(),
                 deal_count: row.deal_count,
                 stage_default_count: row.stage_default_count,
                 manual_count: row.manual_count,
                 ..Default::default()
-            }
-        };
-        let forecast_currency_metric = |row: sales_deals::ForecastCurrencyMetric| {
-            sale_wire::ForecastCurrencyMetric {
+            };
+        let forecast_currency_metric =
+            |row: sales_deals::ForecastCurrencyMetric| sale_wire::ForecastCurrencyMetric {
                 category: Self::forecast_wire(row.category).into(),
                 currency_code: row.currency_code,
                 total_minor_units: row.total_minor_units.to_string(),
@@ -417,8 +416,7 @@ impl sale_wire::DealService for SalesV2Service {
                     .to_string(),
                 amount_deal_count: row.amount_deal_count,
                 ..Default::default()
-            }
-        };
+            };
         RpcResponse::ok(sale_wire::GetPipelineMetricsResponse {
             pipeline_id: req.pipeline_id.to_owned(),
             total_deal_count: metrics.total_deal_count,

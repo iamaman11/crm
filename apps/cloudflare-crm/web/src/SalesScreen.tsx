@@ -402,6 +402,9 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       <p>Доля выигранных среди сделок, которые сейчас закрыты и имеют фактическую дату закрытия в выбранном периоде (UTC).
         Повторно открытые сделки не входят в когорту; результат не является историей переходов.</p>
       {metricsQuery.data.closedOutcomes?<>
+        <p>Период: {metricsQuery.data.analysisPeriod
+          ?inputDate(metricsQuery.data.analysisPeriod.startDate)+" — "+inputDate(metricsQuery.data.analysisPeriod.endDate)
+          :"все даты"}</p>
         <p>Выиграно: {metricsQuery.data.closedOutcomes.wonCount.toString()}
           {" · проиграно: "}{metricsQuery.data.closedOutcomes.lostCount.toString()}
           {" · знаменатель: "}{metricsQuery.data.closedOutcomes.denominator.toString()}</p>

@@ -1267,7 +1267,9 @@ pub(super) async fn pipeline_metrics(
                 None => count_one(&mut counts.unknown_close_count)?,
                 Some(outcome) => {
                     let day = gregorian_day_index(1970, 1, 1)
-                        + outcome.closed_at_unix_nanos().div_euclid(86_400_000_000_000);
+                        + outcome
+                            .closed_at_unix_nanos()
+                            .div_euclid(86_400_000_000_000);
                     if period.is_none_or(|period| period.includes(day)) {
                         match status {
                             DealStatus::Won => count_one(&mut counts.won_count)?,
