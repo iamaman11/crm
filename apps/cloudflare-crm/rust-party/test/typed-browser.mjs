@@ -678,7 +678,57 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await movedDealCard.getByRole("button",{name:"Завершить сделку",exact:true}).click();
    await page.getByRole("heading",{name:"Завершить сделку: Browser Deal "+runId,exact:true}).waitFor();
    await page.getByLabel("Причина закрытия",{exact:true}).fill("contract-signed");
-   await mutation(page.getByRole("button",{name:"Завершить сделку",exact:true}).last(),"CloseDeal");
+   // A different real write loses its response and the page is reloaded.
+   // Only opaque identifiers survive; lookup must not issue CloseDeal again.
+   const closeRoute="**/crm.sales.v2.DealService/CloseDeal";
+   let closeCalls=0, originalCloseRequestId;
+   await page.route(closeRoute,async route=>{
+     closeCalls++;
+     const committed=await route.fetch();
+     recordResponse(committed);
+     await assertMutation(committed,"CloseDeal");
+     originalCloseRequestId=committed.headers()["x-request-id"];
+     await route.abort("failed");
+   });
+   await page.getByRole("button",{name:"Завершить сделку",exact:true}).last().click();
+   await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   const mark=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.deal.pending.v1")));
+   assert.deepEqual(Object.keys(mark).sort(),["dealId","expectedVersion","key"]);
+   assert.equal(mark.dealId,dealId);
+   assert.equal(mark.expectedVersion,"3");
+   assert.match(mark.key,/^[a-f0-9-]{36}$/i);
+   const acceptReload=dialog=>void dialog.accept();
+   page.on("dialog",acceptReload);
+   try{await page.reload();}finally{page.off("dialog",acceptReload);}
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
+   await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeDisabled();
+   // A failed read cannot clear the marker or start another write.
+   const getDealRoute="**/crm.sales.v2.DealService/GetDeal";
+   const failLookup=route=>route.abort("failed");
+   await page.route(getDealRoute,failLookup);
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   await expect(page.getByRole("button",{name:"Проверить результат записи",exact:true})).toBeEnabled();
+   assert.deepEqual(await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.deal.pending.v1"))),mark);
+   assert.equal(closeCalls,1);
+   await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeDisabled();
+   await page.unroute(getDealRoute,failLookup);
+   const lookupResponse=page.waitForResponse(r=>r.url().endsWith("/GetDeal")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   const checked=await lookupResponse;
+   assert.equal(checked.status(),200);
+   const checkId=(await checked.allHeaders())["x-request-id"];
+   assert.match(checkId??"",/^[a-f0-9-]{36}$/i);
+   assert.ok(originalCloseRequestId);
+   await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
+     .toContainText(originalCloseRequestId);
+   assert.equal(closeCalls,1,"Reload recovery must not re-execute a write");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+checkId+"'"))[0].n,0);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+originalCloseRequestId+
+     "' AND action='sales_deals.close'"))[0].n,1);
+   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.deal.pending.v1")),null);
+   await page.unroute(closeRoute);
+   steps.push("S1 reload: opaque marker, read original receipt, no second CloseDeal");
    const terminal=(await sql("SELECT version,json_extract(state,'$.status') AS status,json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
    assert.deepEqual(terminal,{version:4,status:"won",stage:actualStage});
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,2);

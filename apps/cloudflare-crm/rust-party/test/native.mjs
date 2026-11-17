@@ -1655,6 +1655,19 @@ assert.equal((await salesV2("CreateDeal",admin,{
 assert.equal((await salesV2("GetDeal",tenantB,{dealId})).status,404);
 assert.equal((await salesV2("GetDeal",viewer,{dealId})).body.deal?.dealId,dealId);
 assert.equal((await salesV2("GetDeal",viewer,{dealId:"bad/invalid"})).status,400);
+// Recovery reads the original receipt without executing a write.
+const receiptRead=await salesV2("GetDeal",admin,{dealId,
+  receiptIdempotencyKey:saleCreate.precondition.idempotencyKey});
+assert.equal(receiptRead.status,200);
+assert.equal(receiptRead.body.confirmedMutation?.originalRequestId,salesCreated.headers.get("x-request-id"));
+assert.equal(receiptRead.body.confirmedMutation?.resourceVersion,1n);
+assert.equal(receiptRead.body.confirmedMutation?.replayed,false);
+assert.equal(receiptRead.body.confirmedMutation?.requestId,receiptRead.headers.get("x-request-id"));
+assert.equal((await salesV2("GetDeal",admin,{dealId,receiptIdempotencyKey:"r471-unknown-key"})).body.confirmedMutation,undefined);
+assert.equal((await salesV2("GetDeal",tenantB,{dealId,receiptIdempotencyKey:saleCreate.precondition.idempotencyKey})).status,404);
+assert.equal((await salesV2("GetDeal",null,{dealId,receiptIdempotencyKey:saleCreate.precondition.idempotencyKey})).status,401);
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?",
+  receiptRead.headers.get("x-request-id")))[0].n,0);
 const updateSale={dealId,
   name:{operation:{case:"set",value:"Updated Connect Deal"}},
   amount:{operation:{case:"set",value:{minorUnits:98765n,currencyCode:"PLN"}}},
@@ -1679,6 +1692,13 @@ assert.equal(saleUpdated.body.deal?.expectedCloseDate?.day,29);
 assert.ok(saleUpdated.body.deal?.updatedAt);
 assert.equal(saleUpdated.body.receipt?.resourceVersion,2n);
 assert.equal(saleUpdated.body.receipt?.replayed,false);
+// A later record version is not the original command's receipt version.
+const originalAfterUpdate=await salesV2("GetDeal",admin,{dealId,
+  receiptIdempotencyKey:saleCreate.precondition.idempotencyKey});
+assert.equal(originalAfterUpdate.status,200);
+assert.equal(originalAfterUpdate.body.deal?.version,2n);
+assert.equal(originalAfterUpdate.body.confirmedMutation?.resourceVersion,1n);
+assert.equal(originalAfterUpdate.body.confirmedMutation?.originalRequestId,salesCreated.headers.get("x-request-id"));
 const saleUpdateReplayed=await salesV2("UpdateDeal",admin,updateSale);
 assert.equal(saleUpdateReplayed.status,200);
 assert.equal(saleUpdateReplayed.body.receipt?.replayed,true);

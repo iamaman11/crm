@@ -160,10 +160,15 @@ message ListDealEventsResponse {
 
 message GetDealRequest {
   string deal_id = 1;
+  // Optional opaque key of the original command; never re-executes it.
+  optional string receipt_idempotency_key = 2;
 }
 
 message GetDealResponse {
   Deal deal = 1;
+  // Positive proof for this tenant, record and key only. Absence is not
+  // proof that a previously uncertain command was rejected or rolled back.
+  crm.core.v2.MutationReceipt confirmed_mutation = 2;
 }
 
 message ListDealsRequest {
