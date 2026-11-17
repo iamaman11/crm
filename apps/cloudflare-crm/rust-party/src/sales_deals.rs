@@ -844,7 +844,7 @@ pub(super) struct DealEventRow {
     pub(super) reason_code: Option<String>,
     pub(super) actor: String,
     pub(super) request_id: String,
-    pub(super) occurred_at_unix_nanos: i64,
+    pub(super) occurred_at_unix_nanos: String,
     pub(super) catalog_version: Option<i64>,
     pub(super) linked_task_id: Option<String>,
 }
@@ -860,11 +860,11 @@ pub(super) async fn list_events(
     size: usize,
 ) -> Result<(Vec<DealEventRow>, Option<String>)> {
     let mut rows=bind(db,
-        "SELECT e.deal_version,e.action,e.pipeline_id,e.previous_stage_id,e.stage_id,e.previous_status,e.status,e.reason_code,e.actor,e.request_id,e.occurred_at_unix_nanos,e.catalog_version,l.task_id AS linked_task_id FROM crm_sales_deal_events e LEFT JOIN crm_sales_link_delivery_records l ON l.tenant=e.tenant AND l.deal_id=e.deal_id AND l.deal_version=e.deal_version WHERE e.tenant=? AND e.deal_id=? AND e.deal_version<? ORDER BY e.deal_version DESC LIMIT ?",
+        "SELECT e.deal_version,e.action,e.pipeline_id,e.previous_stage_id,e.stage_id,e.previous_status,e.status,e.reason_code,e.actor,e.request_id,CAST(e.occurred_at_unix_nanos AS TEXT) AS occurred_at_unix_nanos,e.catalog_version,l.task_id AS linked_task_id FROM crm_sales_deal_events e LEFT JOIN crm_sales_link_delivery_records l ON l.tenant=e.tenant AND l.deal_id=e.deal_id AND l.deal_version=e.deal_version WHERE e.tenant=? AND e.deal_id=? AND e.deal_version<CAST(? AS INTEGER) ORDER BY e.deal_version DESC LIMIT ?",
         &[
             JsValue::from_str(tenant),
             JsValue::from_str(id),
-            JsValue::from_f64(before as f64),
+            JsValue::from_str(&before.to_string()),
             JsValue::from_f64((size+1) as f64),
         ],
     )?.all().await?.results::<DealEventRow>()?;
