@@ -41,3 +41,5 @@
 @media (pointer:coarse) {
   .dealDragHandle {display:none;}
 }
+
+.intentFields {border:0; padding:0; margin:0; min-width:0;}

@@ -1,5 +1,6 @@
 import { createClient, ConnectError, Code } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
+import { DomainErrorDetailSchema, MutationCommitOutcome } from "../gen/crm/core/v2/operation_pb";
 import { PartyService as PartyV3 } from "../gen/crm/parties/v3/party_pb";
 import { AccountService } from "../gen/crm/accounts/v2/account_pb";
 import { ContactPointService } from "../gen/crm/contact_points/v2/contact_point_pb";
@@ -58,22 +59,43 @@ export function createCloudflareCrmClient(baseUrl: string) {
     csv: createClient(PartyCsvService, transport),
     overview: createClient(Customer360Service, transport),
     csvDownloadUrl: new URL("/api/customer-data-operations/parties.csv", baseUrl).href,
-    describeError(error: unknown): string {
-      if (!(error instanceof ConnectError)) {
-        return error instanceof Error ? error.message : "Не удалось выполнить запрос.";
-      }
-      const explanations: Partial<Record<Code, string>> = {
-        [Code.Unauthenticated]: "Сессия завершена. Войдите через Cloudflare Access.",
-        [Code.PermissionDenied]: "Недостаточно прав для операции.",
-        [Code.NotFound]: "Запись не найдена.",
-        [Code.Aborted]: "Конфликт изменения. Обновите запись и проверьте введённые данные.",
-        [Code.InvalidArgument]: "Проверьте введённые данные.",
-        [Code.FailedPrecondition]: "Операция недоступна в текущем состоянии.",
-        [Code.Unavailable]: "Сервис временно недоступен. Повторите тот же запрос.",
-      };
-      const requestId = error.metadata.get("x-request-id");
-      return [explanations[error.code] ?? "Ошибка сервиса.", error.rawMessage,
-        requestId ? "Запрос: " + requestId : ""].filter(Boolean).join(" ");
-    },
+    describeError: (error: unknown): string => decodeCrmError(error).text,
+    decodeError: decodeCrmError,
   };
+}
+
+/** One generated error decoder. Only a positive rejection releases a new intent. */
+export type CrmFailure = {
+  outcome: "rejected" | "unconfirmed";
+  text: string;
+  requestId: string | undefined;
+  domainCode: string | undefined;
+};
+
+export function decodeCrmError(error: unknown): CrmFailure {
+  if (!(error instanceof ConnectError)) {
+    return {outcome:"unconfirmed",text:error instanceof Error?error.message:"Не удалось выполнить запрос.",
+      requestId:undefined,domainCode:undefined};
+  }
+  const detail = error.findDetails(DomainErrorDetailSchema)[0];
+  const requestId = error.metadata.get("x-request-id") ?? undefined;
+  // An edge-generated HTTP error without the Worker evidence is not proof
+  // that the operation was rejected before any write.
+  const workerRejected = !!requestId && error.metadata.get("x-crm-runtime")==="native-workers-rs" &&
+    [Code.InvalidArgument,Code.Unauthenticated,Code.PermissionDenied,Code.NotFound,
+      Code.Aborted,Code.FailedPrecondition,Code.AlreadyExists].includes(error.code);
+  const outcome = detail?.commitOutcome===MutationCommitOutcome.UNCONFIRMED?"unconfirmed":
+    detail?.commitOutcome===MutationCommitOutcome.REJECTED||workerRejected?"rejected":"unconfirmed";
+  const explanations: Partial<Record<Code, string>> = {
+    [Code.Unauthenticated]: "Сессия завершена. Войдите через Cloudflare Access.",
+    [Code.PermissionDenied]: "Недостаточно прав для операции.",
+    [Code.NotFound]: "Запись не найдена.",
+    [Code.Aborted]: "Конфликт изменения. Обновите запись и проверьте введённые данные.",
+    [Code.InvalidArgument]: "Проверьте введённые данные.",
+    [Code.FailedPrecondition]: "Операция недоступна в текущем состоянии.",
+    [Code.Unavailable]: "Сервис временно недоступен. Повторите тот же запрос.",
+  };
+  const text = [explanations[error.code] ?? "Ошибка сервиса.", error.rawMessage,
+    requestId ? "Запрос: " + requestId : ""].filter(Boolean).join(" ");
+  return {outcome,text,requestId,domainCode:detail?.domainCode};
 }

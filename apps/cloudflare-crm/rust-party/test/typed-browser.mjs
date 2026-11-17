@@ -611,7 +611,39 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Этап сделки: Browser Deal "+runId,exact:true}).waitFor();
    assert.equal(await page.getByLabel("Следующий этап",{exact:true}).inputValue(),
      ownStageIds[1],"Native DnD must preselect the dropped stage");
-   await mutation(page.getByRole("button",{name:"Сохранить этап",exact:true}),"AdvanceStage");
+   // A real Deal+Task atomic commit with a lost HTTP acknowledgement.
+   // Retry must preserve the exact binary payload, not merely its key.
+   const advanceRoute="**/crm.sales.v2.DealService/AdvanceStage";
+   let committedIntent;
+   let originalAdvanceRequestId;
+   await page.route(advanceRoute,async route=>{
+     const payload=route.request().postDataBuffer();
+     assert.ok(payload,"AdvanceStage must send a binary request");
+     if(committedIntent){
+       assert.deepEqual(payload,committedIntent,"retry must preserve the exact original intent");
+       await route.continue();return;
+     }
+     committedIntent=payload;
+     const committed=await route.fetch();
+     recordResponse(committed);
+     await assertMutation(committed,"AdvanceStage");
+     originalAdvanceRequestId=committed.headers()["x-request-id"];
+     await route.abort("failed");
+   });
+   await page.getByRole("button",{name:"Сохранить этап",exact:true}).click();
+   await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   await expect(page.getByLabel("Следующий этап",{exact:true})).toBeDisabled();
+   await expect(page.getByRole("button",{name:"Сохранить этап",exact:true})).toBeDisabled();
+   await page.keyboard.press("Escape");
+   await expect(page.getByRole("dialog")).toBeVisible();
+   const retryAdvance=page.waitForResponse(r=>r.url().endsWith("/AdvanceStage")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Повторить исходную операцию",exact:true}).click();
+   await assertMutation(await retryAdvance,"AdvanceStage",{replay:true});
+   await page.getByRole("heading",{name:/Сохранено ранее/}).waitFor();
+   assert.ok(originalAdvanceRequestId);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+originalAdvanceRequestId+"' AND action='sales_deals.advance'"))[0].n,1);
+   await page.unroute(advanceRoute);
+   steps.push("S1 lost Deal acknowledgement: locked editor, exact binary retry, original audit");
    await page.getByRole("group",{name:"Итоги этапа Квалификация"})
      .getByText("90071992547409.93 USD · сделок с суммой: 1",
        {exact:true}).waitFor();
