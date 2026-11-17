@@ -478,6 +478,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await forecast.getByText("90071992547409.93 USD · взвешено: 33731961209005.018785 USD · сделок с суммой: 1",{exact:true}).waitFor();
    const forecastRow=(await sql("SELECT json_extract(state,'$.probability_source') AS source,json_extract(state,'$.forecast_category') AS category FROM crm_sales_deal_records WHERE id='"+dealId+"'"))[0];
    assert.deepEqual(forecastRow,{source:"manual",category:"commit"});
+   await page.getByLabel("Начало периода",{exact:true}).fill("2000-01-01");
+   await page.getByLabel("Конец периода",{exact:true}).fill("2000-01-01");
+   await page.getByRole("button",{name:"Применить период",exact:true}).click();
+   await page.getByRole("region",{name:"Прогноз продаж",exact:true}).getByText(/2000-01-01 — 2000-01-01/).waitFor();
+   await forecast.getByText("Сделок: 0 · по этапу: 0 · вручную: 0",{exact:true}).waitFor();
+   await page.getByRole("region",{name:"Фактическая конверсия",exact:true}).getByText(/знаменатель: 0/).waitFor();
+   await page.getByRole("button",{name:"Без ограничения по сроку",exact:true}).click();
+   await forecast.getByText("Сделок: 1 · по этапу: 0 · вручную: 1",{exact:true}).waitFor();
    steps.push("R7.3 full-pipeline exact weighted multi-currency read model, React, D1");
    // R7.3 saved views through REAL React -> generated Connect -> Rust domain
    // -> D1 audit/receipt. Reload must not lose a named shared filter.
