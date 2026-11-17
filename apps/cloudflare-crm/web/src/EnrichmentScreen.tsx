@@ -7,8 +7,8 @@ import {useQuery,useReadAction,useMutation,MutationNotice,QueryNotice,Paging} fr
 export function EnrichmentScreen() {
   const [profileCursor,setProfileCursor]=useState("");
   const [mappingCursor,setMappingCursor]=useState("");
-  const profiles=useQuery(useCallback(()=>api.enrichment.listProviderProfiles({page:{pageSize:25,pageToken:profileCursor}}),[profileCursor]));
-  const mappings=useQuery(useCallback(()=>api.enrichment.listMappings({page:{pageSize:25,pageToken:mappingCursor}}),[mappingCursor]));
+  const profiles=useQuery(useCallback((signal:AbortSignal)=>api.enrichment.listProviderProfiles({page:{pageSize:25,pageToken:profileCursor}},{signal}),[profileCursor]));
+  const mappings=useQuery(useCallback((signal:AbortSignal)=>api.enrichment.listMappings({page:{pageSize:25,pageToken:mappingCursor}},{signal}),[mappingCursor]));
   const profileDetail=useReadAction<Awaited<ReturnType<typeof api.enrichment.getProviderProfile>>>();
   const mappingDetail=useReadAction<Awaited<ReturnType<typeof api.enrichment.getMapping>>>();
   const profileMutation=useMutation(),mappingMutation=useMutation();
@@ -18,7 +18,7 @@ export function EnrichmentScreen() {
     <PageHeader title="Обогащение данных" description="Неизменяемые версии настроек провайдеров и сопоставлений. Запросы к провайдерам и изменение данных участников пока недоступны." actions={<RecordActions><Button onClick={()=>{setPublishMode("profile");profileMutation.changed();}}>Новый профиль</Button><Button variant="secondary" onClick={()=>{setPublishMode("mapping");mappingMutation.changed();}}>Новое сопоставление</Button></RecordActions>}/>
     <Card title="Профили провайдеров"><QueryNotice query={profiles}/>
       {profiles.data?.profiles.map(p=><p key={p.profileVersionId}>
-        <Button variant="secondary" onClick={()=>{setDetailMode("profile");void profileDetail.run(()=>api.enrichment.getProviderProfile({profileVersionId:p.profileVersionId}));}}>{p.providerKey} · {p.adapterContractVersion}</Button>
+        <Button variant="secondary" onClick={()=>{setDetailMode("profile");void profileDetail.run(signal=>api.enrichment.getProviderProfile({profileVersionId:p.profileVersionId},{signal}));}}>{p.providerKey} · {p.adapterContractVersion}</Button>
       </p>)}
       <Paging next={profiles.data?.pageInfo?.nextPageToken??""} busy={profiles.busy} onFirst={()=>setProfileCursor("")} onNext={()=>setProfileCursor(profiles.data?.pageInfo?.nextPageToken??"")}/>
       </Card>
@@ -60,7 +60,7 @@ export function EnrichmentScreen() {
     <MutationNotice state={profileMutation}/>
     <Card title="Сопоставления"><QueryNotice query={mappings}/>
       {mappings.data?.mappings.map(m=><p key={m.mappingVersionId}><Button variant="secondary"
-        onClick={()=>{setDetailMode("mapping");void mappingDetail.run(()=>api.enrichment.getMapping({mappingVersionId:m.mappingVersionId}));}}>{m.mappingKey}</Button></p>)}
+        onClick={()=>{setDetailMode("mapping");void mappingDetail.run(signal=>api.enrichment.getMapping({mappingVersionId:m.mappingVersionId},{signal}));}}>{m.mappingKey}</Button></p>)}
       <Paging next={mappings.data?.pageInfo?.nextPageToken??""} busy={mappings.busy} onFirst={()=>setMappingCursor("")} onNext={()=>setMappingCursor(mappings.data?.pageInfo?.nextPageToken??"")}/>
       </Card>
     <RecordPanel open={detailMode==="mapping"} title="Сопоставление" onClose={()=>setDetailMode(null)}>

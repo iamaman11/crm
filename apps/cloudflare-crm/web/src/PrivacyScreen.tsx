@@ -37,7 +37,7 @@ export function PrivacyScreen() {
   const [createOpen,setCreateOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
-  const query=useQuery(useCallback(()=>api.privacy.listPrivacyCases({page:{pageSize:25,pageToken:cursor}}),[cursor]));
+  const query=useQuery(useCallback((signal:AbortSignal)=>api.privacy.listPrivacyCases({page:{pageSize:25,pageToken:cursor}},{signal}),[cursor]));
   return <>
     <PageHeader title="Запросы о данных" description="Создание, подача и отмена обращений. Проверка личности и исполнение запросов пока недоступны." actions={<Button onClick={()=>{setSelected(undefined);setCreateOpen(true);mutation.changed();}}>Новое обращение</Button>}/>
     <QueryNotice query={query}/>

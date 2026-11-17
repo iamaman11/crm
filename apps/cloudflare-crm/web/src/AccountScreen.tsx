@@ -29,10 +29,10 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
     registerBlocker(dirty||createOpen&&createDirty?()=>window.confirm(dirtyPrompt):null);
     return ()=>registerBlocker(null);
   },[dirty,createOpen,createDirty,registerBlocker]);
-  const query=useQuery(useCallback(()=>api.accounts.listAccounts({
+  const query=useQuery(useCallback((signal:AbortSignal)=>api.accounts.listAccounts({
     page:{pageSize:25,pageToken:cursor},search,
     ...(status!==null?{status}:{})
-  }),[cursor,status,search]));
+  },{signal}),[cursor,status,search]));
   const navigate=(next:Partial<AccountFilters>)=>{
     if(!navigateTo(accountsHref({...filters,...next})))return;
     setDirty(false);setExpanded("");setSavedNotice("");
@@ -140,7 +140,7 @@ export function AccountCreatePage({partyId,registerBlocker}:{
   partyId:string;registerBlocker:RegisterBlocker;
 }) {
   const [dirty,setDirty]=useState(false);
-  const query=useQuery(useCallback(()=>api.partyRecords.getParty({partyId}),[partyId]));
+  const query=useQuery(useCallback((signal:AbortSignal)=>api.partyRecords.getParty({partyId},{signal}),[partyId]));
   useLayoutEffect(()=>{
     registerBlocker(dirty?()=>window.confirm(dirtyPrompt):null);
     if(!dirty)return ()=>registerBlocker(null);

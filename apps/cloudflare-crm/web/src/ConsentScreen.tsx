@@ -32,13 +32,13 @@ export function ConsentScreen() {
   const [composer,setComposer]=useState<"grant"|"suppress"|null>(null);
   const mutation=useMutation();
   const evaluation=useReadAction<Awaited<ReturnType<typeof api.consents.evaluateConsent>>>();
-  const query=useQuery(useCallback(()=>api.consents.listConsentAuthorizations({page:{pageSize:25,pageToken:cursor},
-    ...(partyId?{partyId}:{})}),[cursor,partyId]));
+  const query=useQuery(useCallback((signal:AbortSignal)=>api.consents.listConsentAuthorizations({page:{pageSize:25,pageToken:cursor},
+    ...(partyId?{partyId}:{})},{signal}),[cursor,partyId]));
   return <>
     <PageHeader title="Коммуникации" description="Проверка разрешений, отзыв и запрет. Подписанный Access-владелец выдаёт личное согласие; сервисный администратор dev может проводить отдельный тестовый сценарий." actions={<RecordActions><Button onClick={()=>{setComposer("grant");mutation.changed();}}>Выдать согласие</Button><Button variant="secondary" onClick={()=>{setComposer("suppress");mutation.changed();}}>Запретить коммуникацию</Button></RecordActions>}/>
     <Card title="Проверить возможность контакта"><form onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
-      void evaluation.run(()=>api.consents.evaluateConsent(scope(data)));
+      void evaluation.run(signal=>api.consents.evaluateConsent(scope(data),{signal}));
     }}><FormGrid><ScopeFields/></FormGrid><Button type="submit" disabled={evaluation.busy}>Проверить разрешение</Button></form>
       {evaluation.error&&<FeedbackPanel tone="danger" title={evaluation.error}/>}
       {evaluation.data&&<FeedbackPanel tone={evaluation.data.allowed?"success":"warning"} title={evaluation.data.allowed?"Контакт разрешён":"Контакт не разрешён"}>

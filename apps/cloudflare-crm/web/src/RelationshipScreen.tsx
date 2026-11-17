@@ -16,8 +16,8 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
   const [editorOpen,setEditorOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
-  const query=useQuery(useCallback(()=>api.relationships.listPartyRelationships({page:{pageSize:25,pageToken:cursor},
-    ...(partyId?{partyId}:{})}),[cursor,partyId]));
+  const query=useQuery(useCallback((signal:AbortSignal)=>api.relationships.listPartyRelationships({page:{pageSize:25,pageToken:cursor},
+    ...(partyId?{partyId}:{})},{signal}),[cursor,partyId]));
   return <>
     <PageHeader title="Связи" description="Отношения между людьми и организациями." actions={<Button onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать связь</Button>}/>
     <TextField label="Фильтр по ID участника" value={partyId} onChange={e=>{setPartyId(e.target.value);setCursor("");}}/>
