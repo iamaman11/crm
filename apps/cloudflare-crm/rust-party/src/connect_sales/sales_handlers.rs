@@ -471,7 +471,8 @@ impl sale_wire::DealService for SalesV2Service {
                     .map_err(|_| ConnectError::invalid_argument("invalid probability basis points"))
             })
             .transpose()?;
-        let forecast_category = Self::forecast_category(input.forecast_category)?.unwrap_or_default();
+        let forecast_category =
+            Self::forecast_category(input.forecast_category)?.unwrap_or_default();
         let (amount_minor_units, currency) = match input.amount.as_option() {
             Some(money) => (Some(money.minor_units), Some(money.currency_code.clone())),
             None => (None, None),
