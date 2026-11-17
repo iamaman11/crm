@@ -1,6 +1,6 @@
 import {useCallback,useState} from "react";
 import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
-import type {Deal,SalesPipeline} from "@ultimate-crm/client/cloudflare";
+import type {Deal,SalesPipeline,SalesDealView} from "@ultimate-crm/client/cloudflare";
 import {DealStatus} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
@@ -35,6 +35,19 @@ async function allPipelines():Promise<SalesPipeline[]> {
   } while(cursor);
   return all;
 }
+async function allSalesViews():Promise<SalesDealView[]> {
+  const all:SalesDealView[]=[];
+  let cursor="";
+  const seen=new Set<string>();
+  do {
+    const page=await api.deals.listSalesViews({page:{pageSize:100,pageToken:cursor}});
+    all.push(...page.views);
+    cursor=page.pageInfo?.nextPageToken??"";
+    if(cursor&&seen.has(cursor))throw Error("Повторный курсор представлений");
+    if(cursor)seen.add(cursor);
+  } while(cursor);
+  return all;
+}
 export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   initialAccountId?:string;focusedDealId?:string;
 }) {
@@ -49,6 +62,10 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const [status,setStatus]=useState("");
   const [accountId,setAccountId]=useState(initialAccountId);
   const [pipelineId,setPipelineId]=useState("");
+  const [selectedViewId,setSelectedViewId]=useState("");
+  const [viewName,setViewName]=useState("");
+  const [viewDraftId,setViewDraftId]=useState(newId);
+  const [createViewOpen,setCreateViewOpen]=useState(false);
   const [selected,setSelected]=useState<Deal>();
   const [advance,setAdvance]=useState<Deal>();
   const [editorMode,setEditorMode]=useState<EditorMode>(null);
@@ -64,6 +81,49 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const [stageEdits,setStageEdits]=useState<StageDraft[]>([]);
   const mutation=useMutation();
   const pipelineMutation=useMutation();
+  const viewMutation=useMutation();
+  const savedViewsQuery=useQuery(useCallback(allSalesViews,[]));
+  const savedViews=savedViewsQuery.data??[];
+  const selectedView=savedViews.find(view=>view.viewId===selectedViewId);
+  const viewStatus=()=>status?enumValue(status,
+    [DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"):undefined;
+  const currentViewFilters=()=>({
+    ...(pipelineId?{pipelineId}:{}),
+    ...(viewStatus()!==undefined?{status:viewStatus()}:{}),
+    ...(accountId?{accountId}:{})
+  });
+  const applySavedView=(id:string)=>{
+    const view=savedViews.find(entry=>entry.viewId===id);
+    if(!view){setSelectedViewId("");return;}
+    setSelectedViewId(view.viewId);
+    setViewName(view.name);
+    setPipelineId(view.pipelineId??"");
+    setStatus(view.status===undefined?"":String(view.status));
+    setAccountId(view.accountId??"");
+    setStageCursors({});
+    setAllDealsCursor("");
+    viewMutation.changed();
+    setCreateViewOpen(false);
+  };
+  const saveView=(archive=false,asNew=false)=>{
+    const old=selectedView;
+    void viewMutation.run(()=>asNew?
+      api.deals.createSalesView({
+        viewId:viewDraftId,name:viewName,...currentViewFilters(),
+        precondition:{idempotencyKey:viewMutation.key}
+      }):old?api.deals.updateSalesView({
+        viewId:old.viewId,name:viewName,...currentViewFilters(),
+        archived:archive,
+        precondition:{idempotencyKey:viewMutation.key,expectedVersion:old.version}
+      }):Promise.reject(Error("Представление не выбрано")),
+      async()=>{
+        const createdId=viewDraftId;
+        await savedViewsQuery.reload();
+        if(asNew){setSelectedViewId(createdId);setViewDraftId(newId());setCreateViewOpen(false);}
+        if(archive){setSelectedViewId("");setViewName("");setCreateViewOpen(false);}
+      }
+    );
+  };
   const pipelinesQuery=useQuery(useCallback(allPipelines,[]));
   const pipelines=pipelinesQuery.data??[];
   const activePipeline=pipelines.find(p=>p.pipelineId===pipelineId);
@@ -165,18 +225,51 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       }}>Новая сделка</Button>
     </>}/>
     <QueryNotice query={pipelinesQuery}/>
+    <section aria-label="Сохранённые представления">
+      <h2>Сохранённые представления</h2>
+      <p>Именованные фильтры доступны в этом рабочем пространстве. Применение
+        использует существующие запросы сделок и аналитики, без копирования данных.</p>
+      <QueryNotice query={savedViewsQuery}/>
+      <SelectField label="Сохранённое представление" value={selectedViewId}
+        onChange={e=>applySavedView(e.target.value)}>
+        <option value="">Ручные фильтры</option>
+        {savedViews.map(view=><option value={view.viewId} key={view.viewId}>{view.name}</option>)}
+      </SelectField>
+      {" "}
+      <Button variant="secondary" onClick={()=>{
+        if(!selectedView)setViewName("");
+        viewMutation.changed();setCreateViewOpen(true);
+      }}>Сохранить как новое</Button>
+      {selectedView&&<>
+        {" "}
+        <Button variant="secondary" disabled={viewMutation.busy}
+          onClick={()=>saveView()}>Обновить представление</Button>
+        {" "}
+        <Button variant="secondary" disabled={viewMutation.busy}
+          onClick={()=>saveView(true)}>Архивировать представление</Button>
+      </>}
+      {(selectedView||createViewOpen)&&<TextField label="Название представления"
+        value={viewName} onChange={e=>{setViewName(e.target.value);viewMutation.changed();}}
+        required/>}
+      {createViewOpen&&<p>
+        <Button disabled={viewMutation.busy||!viewName.trim()}
+          onClick={()=>saveView(false,true)}>Сохранить новое представление</Button>{" "}
+        <Button variant="secondary" onClick={()=>setCreateViewOpen(false)}>Отмена</Button>
+      </p>}
+      <MutationNotice state={viewMutation}/>
+    </section>
     {!pipelinesQuery.busy&&pipelines.length===0&&
       <p>Сначала создайте воронку с этапами. Сделки нельзя создавать с произвольными кодами этапов.</p>}
     <SelectField label="Воронка продаж" value={pipelineId} onChange={e=>{
-      setPipelineId(e.target.value);setStageCursors({});
+      setPipelineId(e.target.value);setStageCursors({});viewMutation.changed();
     }}>
       <option value="">Все воронки — обзор</option>
       {pipelines.map(p=><option value={p.pipelineId} key={p.pipelineId}>
         {p.name}{p.archived?" (архив)":""}
       </option>)}
     </SelectField>
-    <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setStageCursors({});setAllDealsCursor("");}}/>
-    <SelectField label="Статус сделки" value={status} onChange={e=>{setStatus(e.target.value);setStageCursors({});setAllDealsCursor("");}}>
+    <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setStageCursors({});setAllDealsCursor("");viewMutation.changed();}}/>
+    <SelectField label="Статус сделки" value={status} onChange={e=>{setStatus(e.target.value);setStageCursors({});setAllDealsCursor("");viewMutation.changed();}}>
       <option value="">Все</option><option value={DealStatus.OPEN}>Открытые</option>
       <option value={DealStatus.WON}>Выигранные</option><option value={DealStatus.LOST}>Проигранные</option>
     </SelectField>
