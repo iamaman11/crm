@@ -1024,9 +1024,10 @@ pub(super) async fn pipeline_metrics(
         .await?
         .results::<PipelineMoneyRow>()?;
     let as_of_nanos = match rows.first() {
-        Some(row) => row.as_of_nanos.parse::<i64>().map_err(|_| {
-            worker::Error::RustError("SALES_METRICS_SNAPSHOT_TIME_INVALID".into())
-        })?,
+        Some(row) => row
+            .as_of_nanos
+            .parse::<i64>()
+            .map_err(|_| worker::Error::RustError("SALES_METRICS_SNAPSHOT_TIME_INVALID".into()))?,
         None => now_nanos(),
     };
     let as_of_text = as_of_nanos.to_string();
