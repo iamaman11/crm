@@ -108,28 +108,12 @@ struct PagedRow {
     state: String,
 }
 
-// Only this indexed money projection is needed for a full-stage summary.
-// Do not deserialize an entire original Deal for every one of 1000+ rows.
-#[derive(Deserialize)]
-struct StageMoneyRow {
-    id: String,
-    currency_code: String,
-    minor_units: String,
-}
-
-// A compact D1 projection of the original Deal state. No duplicate metrics
-// store or parallel Deal owner: summary is derived from the canonical records.
+// Read the canonical serialized Deal through its original owner, rather than
+// coercing individual JSON values in SQLite or duplicating persistence rules.
 #[derive(Deserialize)]
 struct PipelineMoneyRow {
     as_of_nanos: String,
-    stage_id: String,
-    status: String,
-    currency_code: Option<String>,
-    minor_units: Option<String>,
-    probability_basis_points: i64,
-    expected_close_year: Option<i32>,
-    expected_close_month: Option<i64>,
-    expected_close_day: Option<i64>,
+    state: String,
     stage_entered_at_nanos: Option<String>,
     has_overdue_linked_task: i64,
 }
@@ -895,11 +879,6 @@ pub(super) async fn list_events(
     Ok((rows, next))
 }
 
-#[derive(Deserialize)]
-struct CountRow {
-    total: i64,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct PipelineStatusMetric {
     pub stage_id: String,
@@ -993,27 +972,23 @@ pub(super) async fn pipeline_metrics(
                 + CAST(substr(strftime('%f','now'),4,3) AS INTEGER)*1000000 AS nanos
          )
          SELECT CAST(c.nanos AS TEXT) AS as_of_nanos,
-           json_extract(d.state,'$.stage.stage_id') AS stage_id,
-           json_extract(d.state,'$.status') AS status,
-           json_extract(d.state,'$.amount.currency') AS currency_code,
-           CAST(json_extract(d.state,'$.amount.minor_units') AS TEXT) AS minor_units,
-           CAST(json_extract(d.state,'$.probability_basis_points') AS INTEGER) AS probability_basis_points,
-           json_extract(d.state,'$.expected_close_date.year') AS expected_close_year,
-           json_extract(d.state,'$.expected_close_date.month') AS expected_close_month,
-           json_extract(d.state,'$.expected_close_date.day') AS expected_close_day,
+           d.state AS state,
            (SELECT CAST(e.occurred_at_unix_nanos AS TEXT)
               FROM crm_sales_deal_events e
              WHERE e.tenant=d.tenant AND e.deal_id=d.id
                AND e.action IN ('created','moved')
              ORDER BY e.deal_version DESC LIMIT 1) AS stage_entered_at_nanos,
-           EXISTS (SELECT 1
+           COALESCE((SELECT MAX(CASE
+                       WHEN json_type(t.state,'$.due_at_unix_nanos') IS NULL
+                         OR json_type(t.state,'$.due_at_unix_nanos')='null' THEN 0
+                       WHEN json_type(t.state,'$.due_at_unix_nanos')<>'integer' THEN 2
+                       WHEN json_extract(t.state,'$.due_at_unix_nanos') < c.nanos THEN 1
+                       ELSE 0 END)
                      FROM crm_sales_link_delivery_records l
                      JOIN crm_activity_task_records t
                        ON t.tenant=l.tenant AND t.id=l.task_id
                     WHERE l.tenant=d.tenant AND l.deal_id=d.id
-                      AND json_extract(t.state,'$.status')='open'
-                      AND CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER)
-                        < c.nanos) AS has_overdue_linked_task
+                      AND json_extract(t.state,'$.status')='open'),0) AS has_overdue_linked_task
          FROM snapshot_clock c CROSS JOIN crm_sales_deal_records d
         WHERE {condition}"#
     );
@@ -1043,48 +1018,31 @@ pub(super) async fn pipeline_metrics(
                 "SALES_METRICS_SNAPSHOT_TIME_INVALID".into(),
             ));
         }
-        let status = match row.status.as_str() {
-            "open" => DealStatus::Open,
-            "won" => DealStatus::Won,
-            "lost" => DealStatus::Lost,
-            _ => {
-                return Err(worker::Error::RustError(
-                    "SALES_METRICS_STATUS_INVALID".into(),
-                ));
-            }
+        let deal = decode(&row.state)?;
+        let stage_id = deal.stage().stage_id().as_str();
+        let status = deal.status();
+        let status_key = match status {
+            DealStatus::Open => "open",
+            DealStatus::Won => "won",
+            DealStatus::Lost => "lost",
         };
-        StageId::try_new(row.stage_id.clone())
-            .map_err(|e| worker::Error::RustError(e.code.to_owned()))?;
         total_count = total_count
             .checked_add(1)
             .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
         let status_group = status_groups
-            .entry((row.stage_id.clone(), row.status.clone()))
+            .entry((stage_id.to_owned(), status_key.to_owned()))
             .or_default();
         *status_group = status_group
             .checked_add(1)
             .ok_or_else(|| worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into()))?;
         if status == DealStatus::Open {
             let group = operational_groups
-                .entry((row.stage_id.clone(), row.status.clone()))
+                .entry((stage_id.to_owned(), status_key.to_owned()))
                 .or_default();
-            match (
-                row.expected_close_year,
-                row.expected_close_month,
-                row.expected_close_day,
-            ) {
-                (None, None, None) => count_one(&mut group.undated)?,
-                (Some(year), Some(month), Some(day)) => {
-                    let month = u8::try_from(month).map_err(|_| {
-                        worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
-                    })?;
-                    let day = u8::try_from(day).map_err(|_| {
-                        worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
-                    })?;
-                    CalendarDate::try_new(year, month, day).map_err(|_| {
-                        worker::Error::RustError("SALES_METRICS_DATE_INVALID".into())
-                    })?;
-                    let delta = gregorian_day_index(year, month, day) - today;
+            match deal.expected_close_date() {
+                None => count_one(&mut group.undated)?,
+                Some(date) => {
+                    let delta = gregorian_day_index(date.year(), date.month(), date.day()) - today;
                     if delta < 0 {
                         count_one(&mut group.overdue)?;
                     } else if delta <= 30 {
@@ -1092,11 +1050,6 @@ pub(super) async fn pipeline_metrics(
                     } else {
                         count_one(&mut group.due_later)?;
                     }
-                }
-                _ => {
-                    return Err(worker::Error::RustError(
-                        "SALES_METRICS_DATE_INVALID".into(),
-                    ));
                 }
             }
             // Pre-0013 Deals can have no immutable entry event. Never
@@ -1131,57 +1084,28 @@ pub(super) async fn pipeline_metrics(
                 }
             }
         }
-        let bps = u16::try_from(row.probability_basis_points)
-            .map_err(|_| worker::Error::RustError("SALES_METRICS_PROBABILITY_INVALID".into()))?;
-        if bps > 10_000 {
-            return Err(worker::Error::RustError(
-                "SALES_METRICS_PROBABILITY_INVALID".into(),
-            ));
+        if let Some(amount) = deal.amount() {
+            let units = amount.minor_units();
+            let weighted = units
+                .checked_mul(i128::from(deal.probability().get()))
+                .ok_or_else(|| worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into()))?;
+            let entry = money_groups
+                .entry((
+                    stage_id.to_owned(),
+                    status_key.to_owned(),
+                    amount.currency().to_string(),
+                ))
+                .or_default();
+            entry.0 = entry
+                .0
+                .checked_add(units)
+                .ok_or_else(|| worker::Error::RustError("SALES_METRICS_MONEY_OVERFLOW".into()))?;
+            entry.1 = entry
+                .1
+                .checked_add(weighted)
+                .ok_or_else(|| worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into()))?;
+            count_one(&mut entry.2)?;
         }
-        match (&row.currency_code, &row.minor_units) {
-            (None, None) => {}
-            (Some(code), Some(raw_units)) => {
-                let currency = CurrencyCode::try_new(code.clone())
-                    .map_err(|e| worker::Error::RustError(e.code.to_owned()))?;
-                let units = raw_units
-                    .parse::<i64>()
-                    .map_err(|_| worker::Error::RustError("SALES_METRICS_MONEY_INVALID".into()))?;
-                if units < 0 {
-                    return Err(worker::Error::RustError(
-                        "SALES_METRICS_MONEY_INVALID".into(),
-                    ));
-                }
-                let weighted = i128::from(units)
-                    .checked_mul(i128::from(bps))
-                    .ok_or_else(|| {
-                        worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into())
-                    })?;
-                let entry = money_groups
-                    .entry((
-                        row.stage_id.clone(),
-                        row.status.clone(),
-                        currency.to_string(),
-                    ))
-                    .or_default();
-                entry.0 = entry.0.checked_add(i128::from(units)).ok_or_else(|| {
-                    worker::Error::RustError("SALES_METRICS_MONEY_OVERFLOW".into())
-                })?;
-                entry.1 = entry.1.checked_add(weighted).ok_or_else(|| {
-                    worker::Error::RustError("SALES_METRICS_WEIGHT_OVERFLOW".into())
-                })?;
-                entry.2 = entry.2.checked_add(1).ok_or_else(|| {
-                    worker::Error::RustError("SALES_METRICS_COUNT_OVERFLOW".into())
-                })?;
-            }
-            _ => {
-                return Err(worker::Error::RustError(
-                    "SALES_METRICS_MONEY_INVALID".into(),
-                ));
-            }
-        }
-        // The grouping key is the persisted status; no implicit stage->Won
-        // conversion and no cross-currency totals.
-        let _ = status;
     }
     fn persisted_status(raw: &str) -> DealStatus {
         match raw {
@@ -1286,76 +1210,34 @@ pub(super) async fn list_stage_page(
         condition.push_str(" AND account_id=?");
         arguments.push(JsValue::from_str(account));
     }
-    let count_sql =
-        format!("SELECT COUNT(*) AS total FROM crm_sales_deal_records WHERE {condition}");
-    let counted = bind(db, &count_sql, &arguments)?
-        .first::<CountRow>(None)
+    // One indexed snapshot supplies counts, exact totals and the requested
+    // keyset page. The cursor limits returned cards, not the summary facts.
+    // There is no second read that can observe another committed Deal state.
+    let sql = format!("SELECT id,state FROM crm_sales_deal_records WHERE {condition} ORDER BY id");
+    let rows = bind(db, &sql, &arguments)?
+        .all()
         .await?
-        .ok_or_else(|| worker::Error::RustError("SALES_BOARD_COUNT_MISSING".into()))?;
-    let total = u64::try_from(counted.total)
+        .results::<PagedRow>()?;
+    let total = u64::try_from(rows.len())
         .map_err(|_| worker::Error::RustError("SALES_BOARD_COUNT_INVALID".into()))?;
-
-    // One bounded D1 keyset batch at a time, with the SAME tenant, pipeline,
-    // stage, status and account predicates as total_count. Pagination cursor
-    // is intentionally excluded so every column page reports the same totals.
-    // The existing stage index supplies the filter/id scan; no summary table
-    // or independently mutated aggregate state is introduced.
-    const SUMMARY_BATCH: usize = 256;
-    let totals_sql = format!(
-        "SELECT id, json_extract(state,'$.amount.currency') AS currency_code, \
-         CAST(json_extract(state,'$.amount.minor_units') AS TEXT) AS minor_units \
-         FROM crm_sales_deal_records WHERE {condition} \
-         AND json_type(state,'$.amount')='object' AND id>? ORDER BY id LIMIT ?"
-    );
-    let mut summary_after = String::new();
     let mut summary = BTreeMap::<String, (i128, u64)>::new();
-    loop {
-        let mut summary_args = arguments.clone();
-        summary_args.push(JsValue::from_str(&summary_after));
-        summary_args.push(JsValue::from_f64(SUMMARY_BATCH as f64));
-        let rows = bind(db, &totals_sql, &summary_args)?
-            .all()
-            .await?
-            .results::<StageMoneyRow>()?;
-        if rows.is_empty() {
-            break;
-        }
-        for row in &rows {
-            // Decode exact integer text, never SQLite SUM/REAL; reject invalid
-            // stored Money rather than silently returning misleading totals.
-            let units = row
-                .minor_units
-                .parse::<i128>()
-                .map_err(|_| worker::Error::RustError("SALES_BOARD_AMOUNT_INVALID".into()))?;
-            if units < 0 {
-                return Err(worker::Error::RustError(
-                    "SALES_BOARD_AMOUNT_INVALID".into(),
-                ));
-            }
-            let currency = CurrencyCode::try_new(row.currency_code.clone())
-                .map_err(|e| worker::Error::RustError(e.code.to_owned()))?;
-            let total = summary.entry(currency.to_string()).or_insert((0, 0));
-            total.0 = total
+    let mut page = Vec::with_capacity(limit + 1);
+    for row in &rows {
+        let deal = decode(&row.state)?;
+        if let Some(amount) = deal.amount() {
+            let entry = summary
+                .entry(amount.currency().to_string())
+                .or_insert((0, 0));
+            entry.0 = entry
                 .0
-                .checked_add(units)
+                .checked_add(amount.minor_units())
                 .ok_or_else(|| worker::Error::RustError("SALES_BOARD_AMOUNT_OVERFLOW".into()))?;
-            total.1 = total.1.checked_add(1).ok_or_else(|| {
+            entry.1 = entry.1.checked_add(1).ok_or_else(|| {
                 worker::Error::RustError("SALES_BOARD_AMOUNT_COUNT_OVERFLOW".into())
             })?;
         }
-        let next_after = rows
-            .last()
-            .ok_or_else(|| worker::Error::RustError("SALES_BOARD_SUMMARY_CURSOR_MISSING".into()))?
-            .id
-            .clone();
-        if next_after <= summary_after {
-            return Err(worker::Error::RustError(
-                "SALES_BOARD_SUMMARY_CURSOR_INVALID".into(),
-            ));
-        }
-        summary_after = next_after;
-        if rows.len() < SUMMARY_BATCH {
-            break;
+        if row.id.as_str() > after && page.len() <= limit {
+            page.push((row.id.clone(), deal));
         }
     }
     let currency_totals = summary
@@ -1368,27 +1250,14 @@ pub(super) async fn list_stage_page(
             },
         )
         .collect();
-    condition.push_str(" AND id>?");
-    arguments.push(JsValue::from_str(after));
-    arguments.push(JsValue::from_f64((limit + 1) as f64));
-    let list_sql = format!(
-        "SELECT id,state FROM crm_sales_deal_records WHERE {condition} ORDER BY id LIMIT ?"
-    );
-    let mut rows = bind(db, &list_sql, &arguments)?
-        .all()
-        .await?
-        .results::<PagedRow>()?;
-    let more = rows.len() > limit;
-    rows.truncate(limit);
+    let more = page.len() > limit;
+    page.truncate(limit);
     let next = if more {
-        rows.last().map(|item| item.id.clone())
+        page.last().map(|(id, _)| id.clone())
     } else {
         None
     };
-    let deals = rows
-        .iter()
-        .map(|item| decode(&item.state))
-        .collect::<Result<Vec<_>>>()?;
+    let deals = page.into_iter().map(|(_, deal)| deal).collect();
     Ok((deals, next, total, currency_totals))
 }
 
