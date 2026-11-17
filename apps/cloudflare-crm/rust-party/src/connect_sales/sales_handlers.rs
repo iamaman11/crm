@@ -553,9 +553,11 @@ impl sale_wire::DealService for SalesV2Service {
                     actor: row.actor,
                     request_id: row.request_id,
                     occurred_at: Some(ContactPointV2Service::timestamp(
-                        row.occurred_at_unix_nanos.parse::<i64>()
-                            .map_err(|_| ConnectError::internal("invalid persisted Sales event timestamp"))?,
-                    )).into(),
+                        row.occurred_at_unix_nanos.parse::<i64>().map_err(|_| {
+                            ConnectError::internal("invalid persisted Sales event timestamp")
+                        })?,
+                    ))
+                    .into(),
                     catalog_version: row.catalog_version.unwrap_or_default(),
                     linked_task_id: row.linked_task_id.unwrap_or_default(),
                     ..Default::default()
