@@ -1811,8 +1811,15 @@ for(const [index,nextId,pipe] of [
     dealId:nextId,name:"Sales page "+index,accountId,
     stage:{pipelineId:pipe,stageId:"lead",ordinal:1},
     probabilityBasisPoints:1000,
-    precondition:{idempotencyKey:"connect-sales-paging-"+index}});
+    precondition:{idempotencyKey:index===0?"r471-ci-ack-lost":"connect-sales-paging-"+index}});
   assert.equal(created.status,200,describeProtobuf(created.body));
+  if(index===0){
+    assert.equal(created.body.receipt.replayed,true,"D1 acknowledgement recovered from the committed receipt");
+    assert.equal(created.body.receipt.originalRequestId,created.headers.get("x-request-id"));
+    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND subject_id=?",
+      "tenant-a",nextId))[0].n,1);
+    console.log(JSON.stringify({event:"crm.native.s1-ack-reconciled",result:"PASS",receipt:true,single_audit:true}));
+  }
 }
 assert.equal((await salesV2("ListDeals",viewer,{page:{pageSize:101}})).status,400);
 assert.equal((await salesV2("ListDeals",viewer,{status:0})).status,400);

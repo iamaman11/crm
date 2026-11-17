@@ -450,6 +450,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Источник вероятности",{exact:true}).selectOption("1");
    await page.getByLabel("Категория прогноза",{exact:true}).selectOption("3");
    await page.getByLabel("Вероятность, %",{exact:true}).fill("37.45");
+   await page.getByLabel("Название сделки",{exact:true}).fill("   ");
+   const invalidCreate=page.waitForResponse(r=>r.url().endsWith("/CreateDeal")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Сохранить сделку",exact:true}).click();
+   assert.equal((await invalidCreate).status(),400);
+   await expect(page.getByRole("dialog").getByText(/deal\.name: deal name must be non-empty/)).toBeVisible();
+   await page.getByLabel("Название сделки",{exact:true}).fill("Browser Deal "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
    const dealId=await firstId("crm_sales_deal_records","name","Browser Deal "+runId);
    assert.ok(dealId);
