@@ -80,6 +80,25 @@ jobs:
           set -euo pipefail
           cargo fmt --all -- --check
           cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml -- --check
+      - name: Check locked Rust dependency security, licenses and sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive=cargo-deny-0.21.0-x86_64-unknown-linux-musl.tar.gz
+          curl --fail --silent --show-error --location --retry 3 "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.21.0/$archive" --output "$RUNNER_TEMP/$archive"
+          echo "a2170b854ff697e79e39c4c538981c9c1bdd803addbae6719a4cb66b4585a903  $RUNNER_TEMP/$archive" | sha256sum --check --status
+          mkdir -p "$RUNNER_TEMP/crm-cargo-deny"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/crm-cargo-deny" --strip-components=1
+          deny="$RUNNER_TEMP/crm-cargo-deny/cargo-deny"
+          "$deny" --version | grep -Fx 'cargo-deny 0.21.0'
+          # Native root workspace: actual supported host targets, including dev dependencies.
+          # Worker: deployed features and wasm target; do not scan an invented runtime.
+          root_status=0
+          worker_status=0
+          "$deny" --locked --config deny.toml --target x86_64-unknown-linux-gnu --target x86_64-pc-windows-msvc check --show-stats || root_status=$?
+          "$deny" --locked --config deny.toml --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native --exclude-dev check --show-stats || worker_status=$?
+          echo "cargo-deny root=$root_status worker=$worker_status"
+          test "$root_status" -eq 0 && test "$worker_status" -eq 0
       # Fail before the expensive WASM pipeline if the shared contract breaks.
       # The repo's existing frozen workspace provides Buf, Protobuf-ES, and TS.
       - name: Install pinned shared contract toolchain
