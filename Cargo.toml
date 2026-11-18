@@ -136,3 +136,4 @@ thiserror = "2"
 jiff = { version = "=0.2.42", default-features = false, features = ["std", "tzdb-bundle-always"] }
 iso4217-static = { version = "=0.3.1", default-features = false }
 rust_decimal = { version = "=1.43.0", default-features = false, features = ["std"] }
+email_address = { version = "=0.2.10", default-features = false, features = ["std"] }

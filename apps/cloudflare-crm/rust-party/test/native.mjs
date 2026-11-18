@@ -558,6 +558,14 @@ try{
  assert.equal((await contactV2("CreateContactPoint",admin,{
    ...contactInput,partyId:"missing-party",
    precondition:{idempotencyKey:"candidate-v2-contact-invalid-party"}})).status,400);
+ for(const [index,value] of [
+   "Ada..Tag@example.test","Ada<>@example.test","Ada@exa_mple.test",
+   "Ada@example.test.","Ada@[127.0.0.1]","Ада@example.test"
+ ].entries()){
+   const denied=await contactV2("CreateContactPoint",admin,{
+     ...contactInput,value,precondition:{idempotencyKey:"contact-email-invalid-"+index}});
+   assert.equal(denied.status,400,describeProtobuf(denied.body));
+ }
  const contactCreated=await contactV2("CreateContactPoint",admin,contactInput,{
     "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
     "cf-access-authenticated-user-email":"forged@example.test"});

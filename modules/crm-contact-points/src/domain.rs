@@ -569,50 +569,31 @@ fn normalize_value(kind: ContactPointKind, value: &str) -> Result<(String, Strin
 
 fn normalize_email(value: &str) -> Result<(String, String), SdkError> {
     let display = normalize_display(value, MAX_EMAIL_BYTES, "email")?;
+    // CRM stores a single mailbox, not a header; the transport does not
+    // currently negotiate SMTPUTF8 or quoted local-part semantics.
     if display.chars().any(char::is_whitespace) {
         return Err(value_invalid("email must not contain whitespace"));
     }
-    let mut parts = display.rsplitn(2, '@');
-    let domain = parts.next().unwrap_or_default();
-    let local = parts.next().unwrap_or_default();
-    if local.is_empty()
-        || domain.is_empty()
-        || local.contains('@')
-        || local.len() > 64
-        || local.starts_with('.')
-        || local.ends_with('.')
-        || local.contains("..")
-    {
-        return Err(value_invalid("email address is invalid"));
+    let (local, domain) = display
+        .rsplit_once('@')
+        .ok_or_else(|| value_invalid("email address is invalid"))?;
+    if !local.is_ascii() || local.contains('"') {
+        return Err(value_invalid("email local part must be unquoted ASCII"));
     }
-
-    let ascii_domain = idna::domain_to_ascii(domain)
+    let ascii_domain = idna::domain_to_ascii_strict(domain)
         .map_err(|_| value_invalid("email domain is invalid"))?
         .to_ascii_lowercase();
-    validate_ascii_domain(&ascii_domain)?;
     let normalized = format!("{local}@{ascii_domain}");
+    let options = email_address::Options::default()
+        .with_required_tld()
+        .without_domain_literal()
+        .without_display_text();
+    email_address::EmailAddress::parse_with_options(&normalized, options)
+        .map_err(|_| value_invalid("email address is invalid"))?;
     if normalized.len() > MAX_EMAIL_BYTES {
         return Err(value_invalid("normalized email address is too long"));
     }
     Ok((normalized, display))
-}
-
-fn validate_ascii_domain(domain: &str) -> Result<(), SdkError> {
-    if domain.is_empty() || domain.len() > 253 || !domain.contains('.') || domain.ends_with('.') {
-        return Err(value_invalid("email domain is invalid"));
-    }
-    if domain.split('.').any(|label| {
-        label.is_empty()
-            || label.len() > 63
-            || label.starts_with('-')
-            || label.ends_with('-')
-            || !label
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-    }) {
-        return Err(value_invalid("email domain is invalid"));
-    }
-    Ok(())
 }
 
 fn normalize_phone(value: &str) -> Result<(String, String), SdkError> {
@@ -805,6 +786,40 @@ mod tests {
 
         let postal = create(ContactPointKind::Postal, "  Vilnius   LT  ");
         assert_eq!(postal.normalized_value(), "Vilnius LT");
+    }
+
+    #[test]
+    fn email_parser_preserves_local_case_and_idna_display_without_claiming_verification() {
+        for (raw, expected) in [
+            ("Ada+Tag@EXAMPLE.Test", "Ada+Tag@example.test"),
+            ("ada+tag@example.test", "ada+tag@example.test"),
+            ("Ada@BÜCHER.Example", "Ada@xn--bcher-kva.example"),
+        ] {
+            let point = create(ContactPointKind::Email, raw);
+            assert_eq!(point.normalized_value(), expected);
+            assert_eq!(point.display_value(), raw);
+            assert!(!point.verification().is_verified());
+        }
+        for raw in [
+            "Ada..Tag@example.test",
+            "Ada<>@example.test",
+            "Ada@@example.test",
+            "Ada@exa_mple.test",
+            "Ada@-example.test",
+            "Ada@example.test.",
+            "Ada@[127.0.0.1]",
+            "Ada <ada@example.test>",
+            "\"Ada\"@example.test",
+            "é@example.test",
+            "Ada@localhost",
+        ] {
+            assert_eq!(
+                normalize_email(raw).unwrap_err().code,
+                "CONTACT_POINTS_VALUE_INVALID",
+                "{raw}"
+            );
+        }
+        assert!(normalize_email(&format!("{}@example.test", "a".repeat(65))).is_err());
     }
 
     #[test]

@@ -543,6 +543,7 @@ version = "0.1.0"
 dependencies = [
  "crm-core-contracts",
  "crm-module-sdk",
+ "email_address",
  "idna",
  "serde",
  "serde_json",
@@ -2148,6 +2149,12 @@ checksum = "9e5e8f6c15a24b9a3ee5efec809ccd006d3b30e8b3bb63c39af737c7f87daa1d"
 dependencies = [
  "serde",
 ]
+
+[[package]]
+name = "email_address"
+version = "0.2.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ab6bbd053d3cdc62ba3de82aae11530a97bbd5b3a572fbdbcd0f0e545e3ff21"
 
 [[package]]
 name = "equivalent"

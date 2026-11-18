@@ -38,6 +38,7 @@
     "tracking_issue": "#194",
     "exception_rule": "workspace-dependency-no-growth",
     "dependency_families": [
+      "email_address",
       "iso4217-static",
       "jiff",
       "prost",
@@ -147,6 +148,21 @@
       "rust_decimal": {
         "workspace": false,
         "version": "=1.43.0",
+        "features": [
+          "std"
+        ],
+        "default_features": false,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "email_address": {
+        "workspace": false,
+        "version": "=0.2.10",
         "features": [
           "std"
         ],
@@ -279,7 +295,8 @@
       "thiserror": [],
       "jiff": [],
       "iso4217-static": [],
-      "rust_decimal": []
+      "rust_decimal": [],
+      "email_address": []
     }
   }
 }
