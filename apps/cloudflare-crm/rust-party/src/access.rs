@@ -180,7 +180,27 @@ fn invalid_claim_reason(claims: &Value) -> &'static str {
         return "jwt_iat_future";
     }
     if identity_key(claims).is_none() {
-        return "jwt_identity_invalid";
+        // These are static categories only: no token/claim values are logged.
+        return match claims.get("sub") {
+            None => "jwt_identity_sub_absent",
+            Some(Value::String(sub)) if sub.is_empty() => match claims.get("common_name") {
+                None => "jwt_service_name_absent",
+                Some(Value::String(name)) if name.is_empty() => "jwt_service_name_empty",
+                Some(Value::String(name)) if !(8..=120).contains(&name.len()) => {
+                    "jwt_service_name_length"
+                }
+                Some(Value::String(name)) if !name.ends_with(".access") => {
+                    "jwt_service_name_suffix"
+                }
+                Some(Value::String(_)) => "jwt_service_name_charset",
+                _ => "jwt_service_name_type",
+            },
+            Some(Value::String(_)) => match claims.get("email") {
+                Some(Value::String(_)) => "jwt_human_email_invalid",
+                _ => "jwt_human_email_absent",
+            },
+            _ => "jwt_identity_sub_type",
+        };
     }
     "jwt_claims_invalid_other"
 }
@@ -189,8 +209,8 @@ async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
     // Only the release version probe emits a safe, static rejection category.
     // Never log or expose Access assertions, service credentials, or claims.
     let reject = |reason: &'static str| -> Result<Option<String>> {
-        if matches!(req.path().as_str(), "/api/version" | "/api/session")
-            || req.path() == "/crm.parties.v3.PartyService/CreateParty"
+        if req.path().starts_with("/crm.")
+            || matches!(req.path().as_str(), "/api/version" | "/api/session")
         {
             worker::console_log!(
                 "{}",
@@ -323,8 +343,8 @@ pub async fn actor(req: &Request, env: &Env) -> Result<Option<Actor>> {
     // existing CRM and bypass the explicit provisioning decision. Only an
     // already active crm_users row may authorize a service identity.
     if identity.starts_with("service:") {
-        if matches!(req.path().as_str(), "/api/version" | "/api/session")
-            || req.path() == "/crm.parties.v3.PartyService/CreateParty"
+        if req.path().starts_with("/crm.")
+            || matches!(req.path().as_str(), "/api/version" | "/api/session")
         {
             worker::console_log!(
                 "{}",
