@@ -4,7 +4,7 @@
 //! local time explicitly before creating a UTC instant or external effect.
 
 use crm_core_contracts::CalendarDate;
-use crm_module_sdk::{ErrorCategory, SdkError};
+use crm_module_sdk::{ErrorCategory, FieldName, FieldViolation, SdkError};
 
 /// A deliberately bounded subset of recurring task dates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,12 +35,14 @@ impl TaskRecurrence {
         if !(1..=Self::MAX_INTERVAL).contains(&interval) {
             return Err(invalid(
                 "ACTIVITIES_RECURRENCE_INTERVAL_INVALID",
+                "task.recurrence.interval",
                 "recurrence interval must be between 1 and 120",
             ));
         }
         if !(1..=Self::MAX_OCCURRENCES).contains(&count) {
             return Err(invalid(
                 "ACTIVITIES_RECURRENCE_COUNT_INVALID",
+                "task.recurrence.count",
                 "recurrence count must be between 1 and 256",
             ));
         }
@@ -88,13 +90,25 @@ impl TaskRecurrence {
     }
 }
 
-fn invalid(code: &'static str, message: &'static str) -> SdkError {
-    SdkError::new(code, ErrorCategory::InvalidArgument, false, message)
+fn invalid(code: &'static str, field: &'static str, message: &'static str) -> SdkError {
+    let mut error = SdkError::new(
+        code,
+        ErrorCategory::InvalidArgument,
+        false,
+        "The task recurrence contains invalid data.",
+    );
+    error.field_violations.push(FieldViolation {
+        field: FieldName::try_new(field).expect("static recurrence field path is valid"),
+        code: code.to_owned(),
+        safe_message: message.to_owned(),
+    });
+    error
 }
 
 fn range_error() -> SdkError {
     invalid(
         "ACTIVITIES_RECURRENCE_DATE_RANGE",
+        "task.recurrence",
         "recurrence exceeds supported civil-date range",
     )
 }
