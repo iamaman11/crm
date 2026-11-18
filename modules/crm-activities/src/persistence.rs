@@ -44,7 +44,9 @@ const TASK_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
 pub fn decode_task_state(bytes: &[u8]) -> Result<Task, SdkError> {
     validate_size(bytes)?;
     let state: TaskStateV1 = crm_module_sdk::decode_json(bytes, TASK_JSON_DIAGNOSTIC_FIELDS)
-        .map_err(|diagnostic| persisted_error(format!("task state JSON is invalid: {diagnostic}")))?;
+        .map_err(|diagnostic| {
+            persisted_error(format!("task state JSON is invalid: {diagnostic}"))
+        })?;
     let snapshot = state.try_into()?;
     Task::rehydrate(snapshot)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))

@@ -33,7 +33,9 @@ const PARTY_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
 pub fn decode_party_state(bytes: &[u8]) -> Result<Party, SdkError> {
     validate_size(bytes)?;
     let state: PartyStateV1 = crm_module_sdk::decode_json(bytes, PARTY_JSON_DIAGNOSTIC_FIELDS)
-        .map_err(|diagnostic| persisted_error(format!("Party state JSON is invalid: {diagnostic}")))?;
+        .map_err(|diagnostic| {
+            persisted_error(format!("Party state JSON is invalid: {diagnostic}"))
+        })?;
     Party::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }
