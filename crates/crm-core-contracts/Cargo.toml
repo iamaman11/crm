@@ -7,3 +7,5 @@ publish = false
 [dependencies]
 thiserror = { workspace = true }
 jiff = { workspace = true }
+iso4217-static = { workspace = true }
+rust_decimal = { workspace = true }

@@ -38,8 +38,10 @@
     "tracking_issue": "#194",
     "exception_rule": "workspace-dependency-no-growth",
     "dependency_families": [
+      "iso4217-static",
       "jiff",
       "prost",
+      "rust_decimal",
       "serde",
       "serde_json",
       "sha2",
@@ -119,6 +121,34 @@
         "features": [
           "std",
           "tzdb-bundle-always"
+        ],
+        "default_features": false,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "iso4217-static": {
+        "workspace": false,
+        "version": "=0.3.1",
+        "features": [],
+        "default_features": false,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "rust_decimal": {
+        "workspace": false,
+        "version": "=1.43.0",
+        "features": [
+          "std"
         ],
         "default_features": false,
         "path": null,
@@ -247,7 +277,9 @@
         "services/crm-api/Cargo.toml"
       ],
       "thiserror": [],
-      "jiff": []
+      "jiff": [],
+      "iso4217-static": [],
+      "rust_decimal": []
     }
   }
 }

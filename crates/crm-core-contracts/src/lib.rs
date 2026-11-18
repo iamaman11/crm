@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+pub use rust_decimal::{Decimal, RoundingStrategy};
+
 /// Architecture marker for `crm-core-contracts`.
 pub const CRATE_NAME: &str = "crm-core-contracts";
 
@@ -25,24 +27,37 @@ impl ContractError {
     }
 }
 
-/// ISO 4217 alphabetic currency code.
+/// Current ISO 4217 currency with an assigned decimal minor unit.
+/// Source: iso4217-static's embedded SIX List One. Reject non-monetary codes.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct CurrencyCode(String);
+pub struct CurrencyCode {
+    code: String,
+    exponent: u8,
+}
 
 impl CurrencyCode {
     pub fn try_new(value: impl Into<String>) -> Result<Self, ContractError> {
-        let value = value.into();
-        if value.len() != 3 || !value.bytes().all(|byte| byte.is_ascii_uppercase()) {
-            return Err(ContractError::new(
+        let code = value.into();
+        let invalid = || {
+            ContractError::new(
                 "CONTRACT_CURRENCY_INVALID",
-                "currency must be a three-letter uppercase ISO 4217 code",
-            ));
+                "currency must be a current ISO 4217 code with an assigned minor unit",
+            )
+        };
+        if code.len() != 3 || !code.bytes().all(|byte| byte.is_ascii_uppercase()) {
+            return Err(invalid());
         }
-        Ok(Self(value))
+        let currency = iso4217_static::Currency::try_from(code.as_str()).map_err(|_| invalid())?;
+        let exponent = currency.minor_unit().ok_or_else(invalid)?;
+        Ok(Self { code, exponent })
     }
 
     pub fn as_str(&self) -> &str {
-        &self.0
+        &self.code
+    }
+
+    pub const fn exponent(&self) -> u8 {
+        self.exponent
     }
 }
 
@@ -75,6 +90,50 @@ impl Money {
 
     pub const fn currency(&self) -> &CurrencyCode {
         &self.currency
+    }
+
+    /// Optional decimal view for pricing; never narrow canonical Money implicitly.
+    pub fn try_decimal(&self) -> Result<Decimal, ContractError> {
+        Decimal::try_from_i128_with_scale(self.minor_units, u32::from(self.currency.exponent()))
+            .map_err(|_| {
+                ContractError::new("CONTRACT_DECIMAL_RANGE", "amount exceeds decimal range")
+            })
+    }
+
+    /// Convert decimal major units to exact minor units, rejecting fractional minor units.
+    pub fn from_decimal_exact(
+        value: Decimal,
+        currency: CurrencyCode,
+    ) -> Result<Self, ContractError> {
+        let exponent = u32::from(currency.exponent());
+        let scale = value.scale();
+        let mantissa = value.mantissa();
+        let range =
+            || ContractError::new("CONTRACT_MONEY_RANGE", "amount exceeds minor-unit range");
+        let minor_units = if scale <= exponent {
+            let factor = 10_i128.checked_pow(exponent - scale).ok_or_else(range)?;
+            mantissa.checked_mul(factor).ok_or_else(range)?
+        } else {
+            let factor = 10_i128.checked_pow(scale - exponent).ok_or_else(range)?;
+            if mantissa % factor != 0 {
+                return Err(ContractError::new(
+                    "CONTRACT_MONEY_PRECISION",
+                    "amount has fractional minor units",
+                ));
+            }
+            mantissa / factor
+        };
+        Ok(Self::new(minor_units, currency))
+    }
+
+    /// The original commercial owner chooses the rounding policy explicitly.
+    pub fn from_decimal_rounded(
+        value: Decimal,
+        currency: CurrencyCode,
+        strategy: RoundingStrategy,
+    ) -> Result<Self, ContractError> {
+        let rounded = value.round_dp_with_strategy(u32::from(currency.exponent()), strategy);
+        Self::from_decimal_exact(rounded, currency)
     }
 
     pub fn non_negative(self) -> Result<Self, ContractError> {
@@ -388,6 +447,86 @@ mod tests {
                 .non_negative()
                 .is_err()
         );
+    }
+
+    #[test]
+    fn currency_data_rejects_non_current_and_non_monetary_codes() {
+        for (code, exponent) in [
+            ("JPY", 0),
+            ("EUR", 2),
+            ("PLN", 2),
+            ("KWD", 3),
+            ("CLF", 4),
+            ("XCG", 2),
+        ] {
+            assert_eq!(CurrencyCode::try_new(code).unwrap().exponent(), exponent);
+        }
+        for code in [
+            "ZZZ", "XXX", "XAU", "BGN", "HRK", "CUC", "SLL", "ZWL", "usd",
+        ] {
+            assert!(CurrencyCode::try_new(code).is_err(), "{code}");
+        }
+    }
+
+    #[test]
+    fn exact_decimal_pricing_never_narrows_canonical_money() {
+        let eur = CurrencyCode::try_new("EUR").unwrap();
+        let quantity = Decimal::from_str_exact("2.5").unwrap();
+        let price = Decimal::from_str_exact("19.99").unwrap();
+        let subtotal = quantity.checked_mul(price).unwrap();
+        assert_eq!(subtotal, Decimal::from_str_exact("49.975").unwrap());
+        assert!(Money::from_decimal_exact(subtotal, eur.clone()).is_err());
+        let rounded = Money::from_decimal_rounded(
+            subtotal,
+            eur.clone(),
+            RoundingStrategy::MidpointNearestEven,
+        )
+        .unwrap();
+        assert_eq!(rounded.minor_units(), 4_998);
+        assert_eq!(
+            rounded.try_decimal().unwrap(),
+            Decimal::from_str_exact("49.98").unwrap()
+        );
+        let tax = rounded
+            .try_decimal()
+            .unwrap()
+            .checked_mul(Decimal::from_str_exact("0.23").unwrap())
+            .unwrap();
+        let tax_money =
+            Money::from_decimal_rounded(tax, eur.clone(), RoundingStrategy::MidpointAwayFromZero)
+                .unwrap();
+        assert_eq!(tax_money.minor_units(), 1_150);
+        let half_cent = Decimal::from_str_exact("0.005").unwrap();
+        assert_eq!(
+            Money::from_decimal_rounded(
+                half_cent,
+                eur.clone(),
+                RoundingStrategy::MidpointNearestEven
+            )
+            .unwrap()
+            .minor_units(),
+            0
+        );
+        assert_eq!(
+            Money::from_decimal_rounded(
+                half_cent,
+                eur.clone(),
+                RoundingStrategy::MidpointAwayFromZero
+            )
+            .unwrap()
+            .minor_units(),
+            1
+        );
+        assert_eq!(
+            Money::from_decimal_exact(Decimal::from_str_exact("-1.2500").unwrap(), eur.clone())
+                .unwrap()
+                .minor_units(),
+            -125
+        );
+        assert!(Decimal::MAX.checked_mul(Decimal::from(2)).is_none());
+        let huge = Money::new(i128::MAX, eur);
+        assert_eq!(huge.minor_units(), i128::MAX);
+        assert!(huge.try_decimal().is_err());
     }
 
     #[test]
