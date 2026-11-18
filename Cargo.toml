@@ -139,3 +139,4 @@ rust_decimal = { version = "=1.43.0", default-features = false, features = ["std
 email_address = { version = "=0.2.10", default-features = false, features = ["std"] }
 phonenumber = { version = "=0.3.10", default-features = false }
 unicode-normalization = { version = "=0.1.25", default-features = false, features = ["std"] }
+serde_path_to_error = "=0.1.20"

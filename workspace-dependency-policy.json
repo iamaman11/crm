@@ -46,6 +46,7 @@
       "rust_decimal",
       "serde",
       "serde_json",
+      "serde_path_to_error",
       "sha2",
       "thiserror",
       "unicode-normalization"
@@ -204,6 +205,19 @@
         "branch": null,
         "rev": null,
         "tag": null
+      },
+      "serde_path_to_error": {
+        "workspace": false,
+        "version": "=0.1.20",
+        "features": [],
+        "default_features": true,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
       }
     },
     "accepted_direct_consumers": {
@@ -328,7 +342,8 @@
       "rust_decimal": [],
       "email_address": [],
       "phonenumber": [],
-      "unicode-normalization": []
+      "unicode-normalization": [],
+      "serde_path_to_error": []
     }
   }
 }

@@ -9,6 +9,7 @@
 
 pub mod event_delivery;
 mod identifier_try_from;
+mod json;
 pub mod ports;
 pub mod testing;
 pub mod types;
@@ -16,6 +17,7 @@ pub mod types;
 use std::sync::Arc;
 
 pub use event_delivery::*;
+pub use json::{JsonDecodeDiagnostic, JsonDecodeKind, decode_json};
 pub use ports::*;
 pub use types::*;
 

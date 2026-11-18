@@ -25,10 +25,45 @@ pub fn encode_deal_state(deal: &Deal) -> Result<Vec<u8>, SdkError> {
     Ok(bytes)
 }
 
+// Static diagnostic labels only; Serde remains the sole schema validator.
+const DEAL_DIAGNOSTIC_FIELDS: &[&str] = &[
+    "deal_id",
+    "name",
+    "owner",
+    "kind",
+    "actor_id",
+    "team_id",
+    "account",
+    "primary_contact",
+    "resource_type",
+    "resource_id",
+    "stage",
+    "pipeline_id",
+    "stage_id",
+    "ordinal",
+    "status",
+    "amount",
+    "minor_units",
+    "currency",
+    "expected_close_date",
+    "year",
+    "month",
+    "day",
+    "probability_basis_points",
+    "probability_source",
+    "forecast_category",
+    "close_outcome",
+    "reason_code",
+    "closed_at_unix_nanos",
+    "created_at_unix_nanos",
+    "updated_at_unix_nanos",
+    "version",
+];
+
 pub fn decode_deal_state(bytes: &[u8]) -> Result<Deal, SdkError> {
     validate_size(bytes)?;
-    let state: DealStateV1 = serde_json::from_slice(bytes)
-        .map_err(|error| persisted_error(format!("deal state JSON is invalid: {error}")))?;
+    let state: DealStateV1 = crm_module_sdk::decode_json(bytes, DEAL_DIAGNOSTIC_FIELDS)
+        .map_err(|error| persisted_error(error.to_string()))?;
     let snapshot = state.try_into()?;
     Deal::rehydrate(snapshot)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
@@ -400,6 +435,32 @@ mod tests {
             9_999_999_999_999_999_999_i128
         );
         assert_ne!(deal_state_descriptor_hash(), [0; 32]);
+    }
+
+    #[test]
+    fn malformed_nested_money_has_safe_owner_diagnostic() {
+        let mut json: serde_json::Value =
+            serde_json::from_slice(&encode_deal_state(&deal()).unwrap()).unwrap();
+        json["amount"]["minor_units"] = serde_json::json!(["private-input"]);
+        let error = decode_deal_state(&serde_json::to_vec(&json).unwrap()).unwrap_err();
+        assert_eq!(error.code, "SALES_DEAL_PERSISTED_STATE_INVALID");
+        assert_eq!(error.category, ErrorCategory::Internal);
+        assert!(!error.retryable);
+        assert!(
+            error
+                .internal_reference
+                .as_deref()
+                .unwrap()
+                .contains("$.amount.minor_units")
+        );
+        assert!(!format!("{error:?}").contains("private-input"));
+        json["amount"]["private-extra-field"] = serde_json::json!("private-value");
+        let error = decode_deal_state(&serde_json::to_vec(&json).unwrap()).unwrap_err();
+        assert!(!format!("{error:?}").contains("private-extra-field"));
+        assert!(!format!("{error:?}").contains("private-value"));
+        let mut trailing = encode_deal_state(&deal()).unwrap();
+        trailing.extend_from_slice(b" null");
+        assert!(decode_deal_state(&trailing).is_err());
     }
 
     #[test]
