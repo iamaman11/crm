@@ -158,13 +158,25 @@ fn invalid_claim_reason(claims: &Value) -> &'static str {
     if !aud_ok {
         return "jwt_audience_invalid";
     }
-    if !claims.get("exp").and_then(Value::as_i64).is_some_and(|exp| exp > now) {
+    if !claims
+        .get("exp")
+        .and_then(Value::as_i64)
+        .is_some_and(|exp| exp > now)
+    {
         return "jwt_exp_invalid";
     }
-    if !claims.get("nbf").and_then(Value::as_i64).is_none_or(|nbf| nbf <= now) {
+    if !claims
+        .get("nbf")
+        .and_then(Value::as_i64)
+        .is_none_or(|nbf| nbf <= now)
+    {
         return "jwt_nbf_future";
     }
-    if !claims.get("iat").and_then(Value::as_i64).is_none_or(|iat| iat <= now + 60) {
+    if !claims
+        .get("iat")
+        .and_then(Value::as_i64)
+        .is_none_or(|iat| iat <= now + 60)
+    {
         return "jwt_iat_future";
     }
     if identity_key(claims).is_none() {
