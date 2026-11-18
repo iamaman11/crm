@@ -148,7 +148,8 @@ async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
     // Only the release version probe emits a safe, static rejection category.
     // Never log or expose Access assertions, service credentials, or claims.
     let reject = |reason: &'static str| -> Result<Option<String>> {
-        if matches!(req.path().as_str(), "/api/version" | "/api/session") {
+        if matches!(req.path().as_str(), "/api/version" | "/api/session")
+            || req.path() == "/crm.parties.v3.PartyService/CreateParty" {
             worker::console_log!(
                 "{}",
                 serde_json::json!({"event": "crm.auth.reject", "reason": reason})
@@ -277,7 +278,8 @@ pub async fn actor(req: &Request, env: &Env) -> Result<Option<Actor>> {
     // existing CRM and bypass the explicit provisioning decision. Only an
     // already active crm_users row may authorize a service identity.
     if identity.starts_with("service:") {
-        if matches!(req.path().as_str(), "/api/version" | "/api/session") {
+        if matches!(req.path().as_str(), "/api/version" | "/api/session")
+            || req.path() == "/crm.parties.v3.PartyService/CreateParty" {
             worker::console_log!(
                 "{}",
                 serde_json::json!({"event": "crm.auth.reject", "reason": "service_not_enrolled"})
