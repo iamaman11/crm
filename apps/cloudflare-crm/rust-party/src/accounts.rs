@@ -154,12 +154,12 @@ pub(super) async fn create_typed(
     };
     let snapshot = state(&account)?;
     let stored=bind(db,
-        "INSERT INTO crm_account_records(tenant,id,primary_party,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO crm_account_records(tenant,id,primary_party,state,version,idem_key,idem_digest,request_id,actor,search_name) VALUES(?,?,?,?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant),JsValue::from_str(account.account_id().as_str()),
           JsValue::from_str(&input.party_id),JsValue::from_str(&snapshot),
           JsValue::from_f64(account.version() as f64),JsValue::from_str(key),
           JsValue::from_str(&digest),JsValue::from_str(trace),
-           JsValue::from_str(&actor.identity)])?.run().await;
+           JsValue::from_str(&actor.identity),JsValue::from_str(&crm_core_contracts::nfc_text_key(account.name()))])?.run().await;
     if stored.is_err() {
         return Ok(Err(fail("CUSTOMER_ACCOUNTS_CREATE_CONFLICT", 409)));
     }
@@ -219,10 +219,10 @@ pub(super) async fn update_typed(
     }
     let snapshot = state(&account)?;
     let changed=bind(db,
-        "UPDATE crm_account_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?",
+        "UPDATE crm_account_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,search_name=? WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&snapshot),JsValue::from_f64(account.version() as f64),
           JsValue::from_str(key),JsValue::from_str(&digest),JsValue::from_str(trace),
-          JsValue::from_str(&actor.identity),JsValue::from_str(tenant),JsValue::from_str(id),
+          JsValue::from_str(&actor.identity),JsValue::from_str(&crm_core_contracts::nfc_text_key(account.name())),JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
     let Ok(result) = changed else {
         return Ok(Err(fail("CUSTOMER_ACCOUNTS_UPDATE_CONFLICT", 409)));
@@ -256,8 +256,11 @@ pub(super) async fn list_page_typed(
         params.push(JsValue::from_str(value));
     }
     if !search.is_empty() {
-        query.push_str(" AND (instr(json_extract(state,'$.name'),?)>0 OR instr(id,?)>0)");
-        params.extend([JsValue::from_str(search), JsValue::from_str(search)]);
+        query.push_str(" AND (instr(search_name,?)>0 OR instr(id,?)>0)");
+        params.extend([
+            JsValue::from_str(&crm_core_contracts::nfc_text_key(search)),
+            JsValue::from_str(search),
+        ]);
     }
     query.push_str(" ORDER BY id LIMIT ?");
     params.push(JsValue::from_f64((size + 1) as f64));

@@ -5,7 +5,7 @@ import {createHash} from "node:crypto";
 import {join,relative} from "node:path";
 import {spawnSync} from "node:child_process";
 import {DatabaseSync} from "node:sqlite";
-import {verifyAnonymousDenial} from "./release-readback.mjs";
+import {verifyAnonymousDenial,verifyNfcMigrationNames} from "./release-readback.mjs";
 const required=n=>{if(!process.env[n])throw Error("Missing "+n);return process.env[n];};
 const sha=required("GITHUB_SHA");
 if(!/^[0-9a-f]{40}$/.test(sha)||process.env.GITHUB_REF!=="refs/heads/dev"||process.env.GITHUB_EVENT_NAME!=="push")throw Error("Untrusted deployment");
@@ -175,8 +175,8 @@ async function deploy(){
   });
   if(checked.status!==0||!existsSync("apps/cloudflare-crm/dist/index.html"))
     throw Error("Compiled CRM release artifact integrity failed");
-  const query=async(sql)=>{
-    const result=await cf("/d1/database/"+database+"/query","POST",{sql});
+  const query=async(sql,params=[])=>{
+    const result=await cf("/d1/database/"+database+"/query","POST",{sql,...(params.length?{params}:{})});
     assert.equal(result?.[0]?.success,true);return result[0].results;
   };
   // Canonical files plus the existing D1 ledger: no third schema registry.
@@ -188,6 +188,9 @@ async function deploy(){
     "D1 migration ledger must match the committed schema history");
   const pendingMigrations=localMigrations.length>appliedMigrations.length;
   const resetPending=!appliedMigrations.includes("0002_hard_cutover.sql");
+  const nfcPending=!resetPending&&localMigrations.includes("0016_nfc_search_name.sql")&&
+    !appliedMigrations.includes("0016_nfc_search_name.sql");
+  if(nfcPending)await verifyNfcMigrationNames(query);
   if(resetPending)assert.equal(before.sha,"90a352be2a70b74a64e5a774c9a76b7f02c86a5f",
     "One-time reset requires the audited frozen predecessor");
   console.log(JSON.stringify({event:"crm.migration-readback",result:"PASS",
@@ -201,6 +204,10 @@ async function deploy(){
     // Stop traffic only when the D1 schema will actually change.
     await cf(worker+"/subdomain","POST",{enabled:false,previews_enabled:false});
     await confirmClosed();
+    if(nfcPending){
+      await verifyNfcMigrationNames(query);
+      console.log(JSON.stringify({event:"crm.nfc-migration-precondition",result:"PASS"}));
+    }
     cmd("wrangler","d1","migrations","apply","crm-dev","--remote");
   }
   assert.deepEqual((await query("SELECT name FROM d1_migrations ORDER BY name"))

@@ -130,9 +130,9 @@ try{
    display_name:"Original Rust Party",created_at_unix_nanos:10,
    updated_at_unix_nanos:10,version:1});
  run(["d1","execute","crm-rust-party-local","--local","--persist-to",data,
-   "--command","INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) "+
+   "--command","INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) "+
      "VALUES('tenant-a','binary-rpc-proof-01','"+state.replaceAll("'","''")+
-     "',1,'fixture-key-01','fixture-digest-01',NULL,'native-a@example.test');"]);
+     "',1,'fixture-key-01','fixture-digest-01',NULL,'native-a@example.test','Original Rust Party');"]);
  // Wrangler's applied-migration ledger must prevent a second reset.
  run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
  // Use the pinned Wrangler config translator: no second routing or asset
@@ -3079,9 +3079,9 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const boundaryRows=Array.from({length:101},(_,i)=>{
    const state=JSON.stringify({party_id:"csv-boundary-"+i,kind:"person",display_name:"Boundary "+i,
      created_at_unix_nanos:10,updated_at_unix_nanos:10,version:1});
-   return "('tenant-b','csv-boundary-"+i+"','"+state+"',1,'csv-boundary-key-"+i+"','fixture','fixture','native-b@example.test')";
+   return "('tenant-b','csv-boundary-"+i+"','"+state+"',1,'csv-boundary-key-"+i+"','fixture','fixture','native-b@example.test','Boundary "+i+"')";
  }).join(",");
- await sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES "+boundaryRows);
+ await sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) VALUES "+boundaryRows);
  assert.equal((await csv("PreviewPartyExport",tenantB,{kind:2})).body.code,"failed_precondition");
  assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv?kind=organization",{
    headers:{"cf-access-jwt-assertion":tenantB}})).status,409);
@@ -3114,6 +3114,47 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await accountV2("CreateAccount",admin,{accountId:target,name,primaryPartyId:id,
      precondition:{idempotencyKey:"search-account-"+index}})).status,200);
  }
+ const nfcPartyId="zzz-nfc-party",nfcAccountId="zzz-nfc-account";
+ const originalNfcName="Cafe\u0301 И\u0306ошкар-Ола";
+ const canonicalNfcName="Café Йошкар-Ола";
+ const nfcParty=await v3("CreateParty",admin,{partyId:nfcPartyId,kind:2,displayName:originalNfcName,
+   precondition:{idempotencyKey:"nfc-party-create"}});
+ assert.equal(nfcParty.status,200,describeProtobuf(nfcParty.body));
+ const nfcAccount=await accountV2("CreateAccount",admin,{accountId:nfcAccountId,name:canonicalNfcName,
+   primaryPartyId:nfcPartyId,precondition:{idempotencyKey:"nfc-account-create"}});
+ assert.equal(nfcAccount.status,200,describeProtobuf(nfcAccount.body));
+ for(const needle of [originalNfcName,canonicalNfcName]){
+   const parties=await collectPages(v3,"ListParties","parties",{search:needle});
+   assert.equal(parties.find(row=>row.partyId===nfcPartyId)?.displayName,originalNfcName);
+   const accounts=await collectPages(accountV2,"ListAccounts","accounts",{search:needle});
+   assert.equal(accounts.find(row=>row.accountId===nfcAccountId)?.name,canonicalNfcName);
+ }
+ assert.deepEqual(await sql("SELECT search_name FROM crm_party_records WHERE id='zzz-nfc-party'"),
+   [{search_name:canonicalNfcName}]);
+ assert.deepEqual(await sql("SELECT search_name FROM crm_account_records WHERE id='zzz-nfc-account'"),
+   [{search_name:canonicalNfcName}]);
+ const nfcUpdateName="Renamed Cafe\u0301";
+ const nfcUpdateCanonical="Renamed Café";
+ const updatedNfcParty=await v3("UpdateParty",admin,{partyId:nfcPartyId,displayName:nfcUpdateName,
+   precondition:{idempotencyKey:"nfc-party-update",expectedVersion:1n}});
+ assert.equal(updatedNfcParty.status,200,describeProtobuf(updatedNfcParty.body));
+ const updatedNfcAccount=await accountV2("UpdateAccount",admin,{accountId:nfcAccountId,name:nfcUpdateName,status:1,
+   precondition:{idempotencyKey:"nfc-account-update",expectedVersion:1n}});
+ assert.equal(updatedNfcAccount.status,200,describeProtobuf(updatedNfcAccount.body));
+ assert.equal((await collectPages(v3,"ListParties","parties",{search:canonicalNfcName})).length,0);
+ assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{search:canonicalNfcName})).length,0);
+ assert.equal((await collectPages(v3,"ListParties","parties",{search:nfcUpdateCanonical}))[0]?.displayName,nfcUpdateName);
+ assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{search:nfcUpdateCanonical}))[0]?.name,nfcUpdateName);
+ const nfcCsvBytes=new TextEncoder().encode("party_id,kind,display_name,resource_version\r\nnfc-import,person,Imported Cafe\u0301,1\r\n");
+ const nfcPreview=await csv("PreviewPartyImport",admin,{csv:nfcCsvBytes});
+ assert.equal(nfcPreview.status,200,describeProtobuf(nfcPreview.body));
+ const nfcApplied=await csv("ApplyPartyImport",admin,{csv:nfcCsvBytes,
+   expectedSha256Hex:nfcPreview.body.csvSha256Hex,precondition:{idempotencyKey:"nfc-import-operation"}});
+ assert.equal(nfcApplied.status,200,describeProtobuf(nfcApplied.body));
+ const importedNfc=await collectPages(v3,"ListParties","parties",{search:"Imported Café"});
+ assert.equal(importedNfc.length,1);
+ assert.equal(importedNfc[0].partyId,nfcPreview.body.targetPartyIds[0]);
+ assert.equal(importedNfc[0].displayName,"Imported Cafe\u0301");
  const searchSnapshot=async()=>({party:(await partySnapshot()),
    accounts:(await sql("SELECT id,state,version FROM crm_account_records ORDER BY tenant,id")),
    accountReceipts:(await sql("SELECT COUNT(*) AS n FROM crm_account_receipts"))});

@@ -46,3 +46,29 @@ export async function verifyAnonymousDenial(endpoint,{
     return;
   }
 }
+
+// One-time migration precondition, not a second production normalization path.
+// Check only; SQL copies already-canonical strings byte-for-byte. Never log names.
+export async function verifyNfcMigrationNames(query){
+  const pageSize=200;
+  for(const [table,field] of [["crm_party_records","display_name"],["crm_account_records","name"]]){
+    let after=null;
+    for(;;){
+      const sql="SELECT tenant,id,json_extract(state,'$."+field+"') AS name FROM "+table+
+        (after?" WHERE (tenant,id)>(?,?)":"")+" ORDER BY tenant,id LIMIT "+pageSize;
+      const rows=await query(sql,after??[]);
+      if(!Array.isArray(rows)||rows.length>pageSize)
+        throw Error("CRM_NFC_MIGRATION_READBACK_INVALID "+table);
+      for(const row of rows){
+        if(typeof row.tenant!=="string"||typeof row.id!=="string"||
+           typeof row.name!=="string"||!row.name||row.name!==row.name.normalize("NFC"))
+          throw Error("CRM_NFC_MIGRATION_NONCANONICAL_EXISTING_NAME "+table);
+      }
+      if(rows.length<pageSize)break;
+      const last=rows.at(-1),next=[last.tenant,last.id];
+      if(after&&next[0]===after[0]&&next[1]===after[1])
+        throw Error("CRM_NFC_MIGRATION_CURSOR_STALLED "+table);
+      after=next;
+    }
+  }
+}

@@ -13,7 +13,8 @@ async function subprocessEntry(){
  const {writeFileSync,readFileSync,readdirSync}=await import("node:fs");
  const {mode,variant,sha,database,audit,requestId,rpcPath}=JSON.parse(process.env.CRM_RELEASE_TEST_FIXTURE);
  const posts=[];
- let enabled=mode==="deploy",migrated=variant!=="migration-fails",published=false,edgeAttempts=0,role="viewer";
+ const nfcLegacy=variant==="nfc-migration"||variant==="nfc-noncanonical";
+ let enabled=mode==="deploy",migrated=variant!=="migration-fails"&&!nfcLegacy,published=false,edgeAttempts=0,role="viewer";
  let auditAttempts=0,telemetryAttempts=0,anonymousAttempts=0;
  const commands=[];
  let db;
@@ -21,8 +22,15 @@ async function subprocessEntry(){
    const {DatabaseSync}=await import("node:sqlite");
    db=new DatabaseSync(":memory:");
    // The ordinary release starts with the full current SQL schema.
-   if(migrated)for(const name of readdirSync("apps/cloudflare-crm/migrations").filter(n=>n.endsWith(".sql")).sort())
+   if(migrated||nfcLegacy)for(const name of readdirSync("apps/cloudflare-crm/migrations").filter(n=>n.endsWith(".sql")).sort()){
+     if(nfcLegacy&&name==="0016_nfc_search_name.sql")continue;
      db.exec(readFileSync("apps/cloudflare-crm/migrations/"+name,"utf8"));
+   }
+   if(nfcLegacy){
+     db.exec("INSERT INTO crm_tenants VALUES('tenant-a','A')");
+     db.prepare("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?)")
+       .run("tenant-a","p",JSON.stringify({display_name:variant==="nfc-noncanonical"?"Cafe\u0301":"Café"}),1,"key","digest","request","actor");
+   }
    const child=(await import("node:child_process")).default;
    child.spawnSync=(command,args)=>{
      commands.push([command,...args]);
@@ -32,8 +40,10 @@ async function subprocessEntry(){
        assert.equal(enabled,false,"Schema changes require closed public entry");
        assert.deepEqual(args,["wrangler","d1","migrations","apply","crm-dev","--remote"]);
        if(variant==="migration-fails")return{status:1};
-       for(const name of readdirSync("apps/cloudflare-crm/migrations").sort())
+       for(const name of readdirSync("apps/cloudflare-crm/migrations").sort()){
+         if(nfcLegacy&&name!=="0016_nfc_search_name.sql")continue;
          db.exec(readFileSync("apps/cloudflare-crm/migrations/"+name,"utf8"));
+       }
        migrated=true;
      }else{
        assert.deepEqual(args,["wrangler","deploy","--var","GIT_SHA:"+sha]);
@@ -126,12 +136,12 @@ async function subprocessEntry(){
        return wrap([{success:true,results:[{role}]}]);
      }
      if(mode==="deploy"){
-       const {sql}=JSON.parse(options.body);
+       const {sql,params=[]}=JSON.parse(options.body);
        const names=readdirSync("apps/cloudflare-crm/migrations").filter(n=>n.endsWith(".sql")).sort();
        const ledger=variant==="migration-fails"?names.slice(0,1):
-         variant==="migration-history-drift"?["unrecognized.sql"]:names;
+         variant==="migration-history-drift"?["unrecognized.sql"]:nfcLegacy&&!migrated?names.slice(0,-1):names;
        const results=sql.includes("FROM d1_migrations")?ledger.map(name=>({name})):
-         !migrated?[]:db.prepare(sql).all();
+         !migrated&&!nfcLegacy?[]:db.prepare(sql).all(...params);
        return wrap([{success:true,results}]);
      }
      return wrap([{success:true,results:variant==="missing-audit"?[]:audit}]);
@@ -152,7 +162,7 @@ function run(mode,variant="valid"){
  for(const name of ["deploy.mjs","release-readback.mjs"])
    copyFileSync(new URL("../scripts/"+name,import.meta.url),join(dir,name));
  const save=(path,value)=>writeFileSync(path,JSON.stringify(value));
- if(variant!=="no-checkpoint")save(join(out,"checkpoint.json"),{git_sha:sha,previous_sha:previous,d1_database:database});
+ if(variant!=="no-checkpoint"&&mode!=="deploy")save(join(out,"checkpoint.json"),{git_sha:sha,previous_sha:previous,d1_database:database});
  save(join(out,"deployed.json"),{git_sha:sha,worker_version:"version-new",started_at:1});
  if(mode==="verify-data")save(join(out,"e2e-tenants.json"),{tenant_a:"fixture-a",actor_a:"service:synthetic.access"});
  if(variant==="restore-role"||variant==="wrong-role-tenant")save(join(out,"e2e-tenants.json"),{
@@ -183,7 +193,7 @@ function run(mode,variant="valid"){
        CRM_RELEASE_TEST_FIXTURE:JSON.stringify({mode,variant,sha,database,audit,requestId,rpcPath})}});
    return {status:result.status,error:result.stderr,posts:JSON.parse(readFileSync(join(dir,"posts.json"),"utf8")),
      state:JSON.parse(readFileSync(join(dir,"state.json"),"utf8")),deployed:existsSync(join(out,"deployed.json")),
-     stopped:existsSync(join(out,"failed-release.json")),accepted:existsSync(join(out,"accepted.json"))};
+     stopped:existsSync(join(out,"failed-release.json")),accepted:existsSync(join(out,"accepted.json")),checkpoint:existsSync(join(out,"checkpoint.json"))};
  }finally{rmSync(dir,{recursive:true,force:true});}
 }
 test("failed candidate stops public entry and never redeploys its predecessor",()=>{
@@ -232,7 +242,7 @@ test("unchanged D1 ledger keeps public entry online and signed version checks Ac
  assert.equal(result.status,0,result.error);assert.equal(result.deployed,true);
  assert.equal(result.state.edgeAttempts,3);assert.equal(result.state.enabled,true);
  assert.equal(result.state.migrated,true);assert.equal(result.state.published,true);
- assert.equal(result.state.commands.filter(c=>c[2]==="migrations").length,0);
+ assert.equal(result.state.commands.filter(c=>c[2]==="d1"&&c[3]==="migrations").length,0);
  assert.equal(result.posts.filter(path=>path.endsWith("/subdomain")).length,1,
    "Code-only release must not stop public entry before deployment");
 });
@@ -279,4 +289,69 @@ test("failure cleanup refuses to change a role in an unrelated tenant",()=>{
  const result=run("fail-closed","wrong-role-tenant");
  assert.notEqual(result.status,0);assert.equal(result.stopped,true);
  assert.equal(result.posts.filter(path=>path.endsWith("/query")).length,0);
+});
+
+test("NFC schema migration copies canonical names without changing receipts or audit",async()=>{
+ const {DatabaseSync}=await import("node:sqlite");
+ const {readdirSync}=await import("node:fs");
+ const {verifyNfcMigrationNames}=await import("../scripts/release-readback.mjs");
+ const db=new DatabaseSync(":memory:");
+ try{
+   const dir=new URL("../migrations/",import.meta.url);
+   const migration="0016_nfc_search_name.sql";
+   for(const name of readdirSync(dir).filter(n=>n.endsWith(".sql")&&n<migration).sort())
+     db.exec(readFileSync(new URL(name,dir),"utf8"));
+   db.exec("INSERT INTO crm_tenants VALUES('tenant-a','A')");
+   const party=JSON.stringify({display_name:"Café Йошкар-Ола"});
+   const account=JSON.stringify({name:"Café Йошкар-Ола"});
+   db.prepare("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?)")
+     .run("tenant-a","p",party,1,"p-create","digest","request","actor");
+   db.prepare("INSERT INTO crm_account_records(tenant,id,primary_party,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?)")
+     .run("tenant-a","a","p",account,1,"a-create","digest","request","actor");
+   const read=async(sql,params)=>db.prepare(sql).all(...params);
+   await verifyNfcMigrationNames(read);
+   const counts=()=>["crm_party_receipts","crm_account_receipts","crm_audit"].map(t=>db.prepare("SELECT COUNT(*) AS n FROM "+t).get().n);
+   const before=counts();
+   db.exec(readFileSync(new URL(migration,dir),"utf8"));
+   assert.deepEqual(counts(),before);
+   assert.equal(db.prepare("SELECT search_name FROM crm_party_records WHERE id='p'").get().search_name,"Café Йошкар-Ола");
+   assert.equal(db.prepare("SELECT search_name FROM crm_account_records WHERE id='a'").get().search_name,"Café Йошкар-Ола");
+   assert.throws(()=>db.prepare("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?)")
+     .run("tenant-a","missing-key",party,1,"bad-create","digest","request","actor"),/NFC_SEARCH_NAME_REQUIRED/);
+   assert.deepEqual(counts(),before);
+   assert.equal(db.prepare("SELECT state FROM crm_party_records WHERE id='p'").get().state,party);
+   assert.equal(db.prepare("SELECT state FROM crm_account_records WHERE id='a'").get().state,account);
+ }finally{db.close();}
+});
+test("NFC migration preflight fails closed and does not expose names",async()=>{
+ const {verifyNfcMigrationNames}=await import("../scripts/release-readback.mjs");
+ await assert.rejects(verifyNfcMigrationNames(async()=>[{tenant:"tenant-a",id:"p",name:"private-Cafe\u0301"}]),
+  error=>error.message==="CRM_NFC_MIGRATION_NONCANONICAL_EXISTING_NAME crm_party_records");
+ let calls=0;
+ await verifyNfcMigrationNames(async(sql,params)=>{
+   calls++;
+   if(calls===1){assert.deepEqual(params,[]);return Array.from({length:200},(_,i)=>({tenant:"t",id:String(i).padStart(3,"0"),name:"Café"}));}
+   if(calls===2)assert.deepEqual(params,["t","199"]);
+   return [];
+ });
+ assert.equal(calls,3);
+});
+
+test("pending NFC migration runs under the same protected release path",()=>{
+ const result=run("deploy","nfc-migration");
+ assert.equal(result.status,0,result.error);
+ assert.equal(result.deployed,true);
+ assert.equal(result.state.migrated,true);
+ assert.equal(result.state.enabled,true);
+ assert.equal(result.state.commands.filter(c=>c[2]==="d1"&&c[3]==="migrations").length,1);
+});
+test("noncanonical existing names block release before checkpoint and traffic closure",()=>{
+ const result=run("deploy","nfc-noncanonical");
+ assert.notEqual(result.status,0);
+ assert.match(result.error,/CRM_NFC_MIGRATION_NONCANONICAL_EXISTING_NAME/);
+ assert.equal(result.checkpoint,false);
+ assert.equal(result.state.enabled,true);
+ assert.equal(result.state.published,false);
+ assert.equal(result.state.commands.filter(c=>c[2]==="d1"&&c[3]==="migrations").length,0);
+ assert.equal(result.posts.filter(p=>p.endsWith("/subdomain")).length,0);
 });
