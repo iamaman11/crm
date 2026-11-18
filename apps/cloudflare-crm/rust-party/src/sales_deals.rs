@@ -1427,7 +1427,8 @@ pub(super) async fn list_stage_page(
     db: &D1Database,
     tenant: &str,
     query: StageListQuery<'_>,
-) -> std::result::Result<(Vec<Deal>, Option<String>, u64, Vec<StageCurrencyTotal>), ReadFailureReason> {
+) -> std::result::Result<(Vec<Deal>, Option<String>, u64, Vec<StageCurrencyTotal>), ReadFailureReason>
+{
     let StageListQuery {
         pipeline_id,
         stage_id,
@@ -1464,8 +1465,7 @@ pub(super) async fn list_stage_page(
         .all()
         .await?
         .results::<PagedRow>()?;
-    let total = u64::try_from(rows.len())
-        .map_err(|_| ReadFailureReason::SalesBoardCountInvalid)?;
+    let total = u64::try_from(rows.len()).map_err(|_| ReadFailureReason::SalesBoardCountInvalid)?;
     let mut summary = BTreeMap::<String, (i128, u64)>::new();
     let mut page = Vec::with_capacity(limit + 1);
     for row in &rows {
