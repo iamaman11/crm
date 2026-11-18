@@ -445,6 +445,67 @@ pub struct Page<T> {
 mod tests {
     use super::*;
 
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(proptest::test_runner::Config {
+            cases: 256,
+            rng_seed: proptest::test_runner::RngSeed::Fixed(471_2026),
+            ..proptest::test_runner::Config::default()
+        })]
+
+        #[test]
+        fn property_money_round_trip_and_explicit_fraction_rejection(
+            units in any::<i64>(), index in 0usize..5, fraction in 1i64..10,
+        ) {
+            let code = ["JPY", "USD", "KWD", "CLF", "PLN"][index];
+            let currency = CurrencyCode::try_new(code).unwrap();
+            let original = Money::new(i128::from(units), currency.clone());
+            let restored = Money::from_decimal_exact(original.try_decimal().unwrap(), currency.clone()).unwrap();
+            prop_assert_eq!(restored, original);
+            let fractional = Decimal::from_i128_with_scale(i128::from(units) * 10 + i128::from(fraction),
+                u32::from(currency.exponent()) + 1);
+            prop_assert!(Money::from_decimal_exact(fractional, currency.clone()).is_err());
+            prop_assert!(Money::from_decimal_rounded(fractional, currency, RoundingStrategy::MidpointNearestEven).is_ok());
+        }
+
+        #[test]
+        fn property_utc_proto_roundtrip_and_elapsed_overflow(a in any::<i64>(), b in any::<i64>()) {
+            let instant = UtcInstant::from_unix_nanos(a);
+            let (s, ns) = instant.proto_parts();
+            prop_assert!((0..1_000_000_000).contains(&ns));
+            prop_assert_eq!(UtcInstant::from_proto_parts(s, ns).unwrap(), instant);
+            let target = UtcInstant::from_unix_nanos(b);
+            prop_assert_eq!(instant.checked_add_elapsed(instant.duration_until(target)).unwrap(), target);
+            let delta = jiff::SignedDuration::from_nanos(b);
+            prop_assert_eq!(instant.checked_add_elapsed(delta).ok().map(UtcInstant::unix_nanos), a.checked_add(b));
+        }
+
+        #[test]
+        fn property_calendar_distance_and_month_clamp(
+            y in 2i32..9998, m in 1u8..=12, d in 1u8..=31,
+            other_y in 1i32..=9999, other_m in 1u8..=12, offset in -12i16..=12,
+        ) {
+            let start = CalendarDate::try_new(y, m, 1).unwrap();
+            let date = CalendarDate::try_new(y, m, d.min(start.last_of_month().day())).unwrap();
+            let other = CalendarDate::try_new(other_y, other_m, 1).unwrap();
+            prop_assert_eq!(date.days_until(other), -other.days_until(date));
+            prop_assert_eq!(date.days_until(other), date.days_until(start) + start.days_until(other));
+            let shifted = date.checked_add_months_clamped(offset).unwrap();
+            let shifted_first = start.checked_add_months_clamped(offset).unwrap();
+            prop_assert_eq!(shifted.year(), shifted_first.year());
+            prop_assert_eq!(shifted.month(), shifted_first.month());
+            prop_assert_eq!(shifted.day(), date.day().min(shifted_first.last_of_month().day()));
+        }
+
+        #[test]
+        fn property_nfc_is_idempotent(text in proptest::collection::vec(any::<char>(), 0..128)) {
+            let raw: String = text.into_iter().collect();
+            let key = nfc_text_key(&raw);
+            prop_assert_eq!(nfc_text_key(&key), key);
+        }
+    }
+
     #[test]
     fn contract_error_preserves_code_message_and_standard_error() {
         let error = ContractError::new("CONTRACT_TEST", "safe detail");

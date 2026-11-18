@@ -42,6 +42,7 @@
       "iso4217-static",
       "jiff",
       "phonenumber",
+      "proptest",
       "prost",
       "rust_decimal",
       "serde",
@@ -218,6 +219,21 @@
         "branch": null,
         "rev": null,
         "tag": null
+      },
+      "proptest": {
+        "workspace": false,
+        "version": "=1.12.0",
+        "features": [
+          "std"
+        ],
+        "default_features": false,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
       }
     },
     "accepted_direct_consumers": {
@@ -343,7 +359,8 @@
       "email_address": [],
       "phonenumber": [],
       "unicode-normalization": [],
-      "serde_path_to_error": []
+      "serde_path_to_error": [],
+      "proptest": []
     }
   }
 }

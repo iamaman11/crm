@@ -14,3 +14,6 @@ sha2 = { workspace = true }
 url = "2"
 email_address = { workspace = true }
 phonenumber = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

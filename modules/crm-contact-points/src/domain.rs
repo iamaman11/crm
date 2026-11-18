@@ -815,6 +815,39 @@ mod tests {
         .unwrap()
     }
 
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(proptest::test_runner::Config {
+            cases: 256,
+            rng_seed: proptest::test_runner::RngSeed::Fixed(471_2026),
+            ..proptest::test_runner::Config::default()
+        })]
+
+        #[test]
+        fn property_email_display_case_and_redaction(
+            local in "[A-Za-z0-9]{1,30}", label in "[A-Za-z]{1,20}",
+            moment in 10i64..=i64::MAX, wrong_version in 2i64..=i64::MAX,
+        ) {
+            let raw = format!("{local}@{label}.Example");
+            let expected = format!("{local}@{}.example", label.to_ascii_lowercase());
+            let mut point = create(ContactPointKind::Email, &raw);
+            prop_assert_eq!(point.display_value(), raw.as_str());
+            prop_assert_eq!(point.normalized_value(), expected.as_str());
+            let before = point.clone();
+            prop_assert!(point.redact(wrong_version, moment).is_err());
+            prop_assert_eq!(&point, &before);
+            point.redact(1, moment).unwrap();
+            let erased = point.clone();
+            prop_assert!(point.redact(1, moment).is_err());
+            prop_assert_eq!(&point, &erased);
+            let bytes = crate::encode_contact_point_state(&point).unwrap();
+            prop_assert_eq!(crate::decode_contact_point_state(&bytes).unwrap(), erased);
+            prop_assert!(point.display_value().is_empty());
+            prop_assert!(point.normalized_value().is_empty());
+        }
+    }
+
     #[test]
     fn normalizes_all_channel_values_deterministically() {
         let email = create(ContactPointKind::Email, "Ada@BÜCHER.Example");
