@@ -144,6 +144,35 @@ fn valid_claims(claims: &Value) -> bool {
         && identity_key(claims).is_some()
 }
 
+// Report only a fixed rejection category; never emit JWT claims or credentials.
+fn invalid_claim_reason(claims: &Value) -> &'static str {
+    let now = (Date::now().as_millis() / 1000) as i64;
+    if claims.get("iss").and_then(Value::as_str) != Some(ISSUER) {
+        return "jwt_issuer_invalid";
+    }
+    let aud_ok = match claims.get("aud") {
+        Some(Value::String(s)) => s == AUDIENCE,
+        Some(Value::Array(items)) => items.iter().any(|x| x.as_str() == Some(AUDIENCE)),
+        _ => false,
+    };
+    if !aud_ok {
+        return "jwt_audience_invalid";
+    }
+    if !claims.get("exp").and_then(Value::as_i64).is_some_and(|exp| exp > now) {
+        return "jwt_exp_invalid";
+    }
+    if !claims.get("nbf").and_then(Value::as_i64).is_none_or(|nbf| nbf <= now) {
+        return "jwt_nbf_future";
+    }
+    if !claims.get("iat").and_then(Value::as_i64).is_none_or(|iat| iat <= now + 60) {
+        return "jwt_iat_future";
+    }
+    if identity_key(claims).is_none() {
+        return "jwt_identity_invalid";
+    }
+    "jwt_claims_invalid_other"
+}
+
 async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
     // Only the release version probe emits a safe, static rejection category.
     // Never log or expose Access assertions, service credentials, or claims.
@@ -177,8 +206,11 @@ async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
     let Ok(claims) = serde_json::from_slice::<Value>(&payload) else {
         return reject("jwt_payload_json_invalid");
     };
-    if header.get("alg").and_then(Value::as_str) != Some("RS256") || !valid_claims(&claims) {
-        return reject("jwt_claims_invalid");
+    if header.get("alg").and_then(Value::as_str) != Some("RS256") {
+        return reject("jwt_alg_invalid");
+    }
+    if !valid_claims(&claims) {
+        return reject(invalid_claim_reason(&claims));
     }
     let Some(kid) = header
         .get("kid")
