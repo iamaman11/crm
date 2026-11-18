@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {minorUnits,decimalUnits,basisPoints} from "../web/src/money.ts";
+import {inputDate,parseDate} from "../web/src/calendarInput.ts";
 import {panelFailureCode} from "../rust-party/test/ui-diagnostics.mjs";
 
 test("money preserves int64 above JavaScript safe integer",()=>{
@@ -83,4 +84,16 @@ test("UI panel diagnostics distinguish native desync, guard rejection and timeou
   assert.equal(panelFailureCode({panels:[panel("open",true)],expected:"closed"}),"CRM_UI_PANEL_TRANSITION_REJECTED");
   assert.equal(panelFailureCode({panels:[panel("closed",false)],expected:"closed"}),"CRM_UI_PANEL_TIMEOUT");
   assert.equal(panelFailureCode({panels:[panel("closed",true)],expected:"closed"}),"CRM_UI_PANEL_NATIVE_DESYNC");
+});
+
+test("calendar input preserves date-only wire values and delegates civil validity",()=>{
+  assert.equal(parseDate(""),undefined);
+  assert.equal(inputDate(undefined),"");
+  for(const raw of ["0001-01-01","2024-02-29","9999-12-31"])
+    assert.equal(inputDate(parseDate(raw)),raw);
+  // Negative domain fixtures must reach the Rust validator, not another calendar.
+  for(const raw of ["0000-01-01","2100-02-29","2024-04-31","2024-13-00"])
+    assert.equal(inputDate(parseDate(raw)),raw);
+  for(const raw of ["2024-2-09","2024-02-9","2024-02-29T00:00:00Z","2024/02/29"," 2024-02-29","10000-01-01"])
+    assert.throws(()=>parseDate(raw),/Неверная дата/);
 });
