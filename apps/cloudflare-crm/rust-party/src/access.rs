@@ -145,44 +145,55 @@ fn valid_claims(claims: &Value) -> bool {
 }
 
 async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
+    // Only the release version probe emits a safe, static rejection category.
+    // Never log or expose Access assertions, service credentials, or claims.
+    let reject = |reason: &'static str| -> Result<Option<String>> {
+        if req.path() == "/api/version" {
+            worker::console_log!(
+                "{}",
+                serde_json::json!({"event": "crm.auth.reject", "reason": reason})
+            );
+        }
+        Ok(None)
+    };
     let token = match req.headers().get("cf-access-jwt-assertion")? {
         Some(t) if t.len() <= 16_384 => t,
-        _ => return Ok(None),
+        _ => return reject("jwt_header_absent_or_oversize"),
     };
     let parts: Vec<_> = token.split('.').collect();
     if parts.len() != 3 {
-        return Ok(None);
+        return reject("jwt_segments_invalid");
     }
     let (Some(header), Some(payload), Some(signature)) =
         (decoded(parts[0]), decoded(parts[1]), decoded(parts[2]))
     else {
-        return Ok(None);
+        return reject("jwt_base64_invalid");
     };
     let Ok(header) = serde_json::from_slice::<Value>(&header) else {
-        return Ok(None);
+        return reject("jwt_header_json_invalid");
     };
     let Ok(claims) = serde_json::from_slice::<Value>(&payload) else {
-        return Ok(None);
+        return reject("jwt_payload_json_invalid");
     };
     if header.get("alg").and_then(Value::as_str) != Some("RS256") || !valid_claims(&claims) {
-        return Ok(None);
+        return reject("jwt_claims_invalid");
     }
     let Some(kid) = header
         .get("kid")
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty() && s.len() <= 256)
     else {
-        return Ok(None);
+        return reject("jwt_key_id_invalid");
     };
     #[cfg(feature = "native-ci")]
     let jwks: Value = {
         // Fail-closed: test public keys are accepted by a CI-only binary on loopback.
         let host = req.url()?.host_str().unwrap_or_default().to_owned();
         if host != "localhost" && host != "127.0.0.1" {
-            return Ok(None);
+            return reject("ci_host_invalid");
         }
         if env.var("CRM_CI_LOCAL_ONLY")?.to_string() != "yes" {
-            return Ok(None);
+            return reject("ci_fixture_missing");
         }
         serde_json::from_str(&env.var("CRM_NATIVE_CI_JWKS")?.to_string())
             .map_err(|_| invalid("invalid local JWKS fixture"))?
@@ -192,7 +203,7 @@ async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
         let url = format!("{ISSUER}/cdn-cgi/access/certs");
         let mut response = Fetch::Url(url.parse()?).send().await?;
         if response.status_code() != 200 {
-            return Ok(None);
+            return reject("jwks_http_not_200");
         }
         response.json().await?
     };
@@ -211,10 +222,10 @@ async fn verify(req: &Request, env: &Env) -> Result<Option<String>> {
         })
     });
     let Some(key) = key else {
-        return Ok(None);
+        return reject("jwks_key_not_found");
     };
     if !verify_signature(key, &format!("{}.{}", parts[0], parts[1]), &signature).await? {
-        return Ok(None);
+        return reject("jwt_signature_invalid");
     }
     Ok(identity_key(&claims))
 }
@@ -266,6 +277,12 @@ pub async fn actor(req: &Request, env: &Env) -> Result<Option<Actor>> {
     // existing CRM and bypass the explicit provisioning decision. Only an
     // already active crm_users row may authorize a service identity.
     if identity.starts_with("service:") {
+        if req.path() == "/api/version" {
+            worker::console_log!(
+                "{}",
+                serde_json::json!({"event": "crm.auth.reject", "reason": "service_not_enrolled"})
+            );
+        }
         return Ok(None);
     }
     // Preserve the existing CRM onboarding contract for human identities:
