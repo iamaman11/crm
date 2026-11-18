@@ -250,9 +250,7 @@ impl CalendarDate {
     /// This is date-only arithmetic: no time zone or UTC duration is implied.
     pub fn checked_add_days(self, days: i32) -> Result<Self, ContractError> {
         let invalid = || ContractError::new("CONTRACT_DATE_RANGE", "date arithmetic exceeds range");
-        let span = jiff::Span::new()
-            .try_days(days)
-            .map_err(|_| invalid())?;
+        let span = jiff::Span::new().try_days(days).map_err(|_| invalid())?;
         let date = self.0.checked_add(span).map_err(|_| invalid())?;
         if !(1..=9999).contains(&i32::from(date.year())) {
             return Err(invalid());
