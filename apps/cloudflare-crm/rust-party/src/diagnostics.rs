@@ -136,7 +136,10 @@ pub(super) fn read_failure(request_id: &str, phase: &'static str, reason: ReadFa
 // Outer adapter errors are raised before the D1 write is submitted.
 // Receipt lookup failure is handled explicitly by the adapter as uncertain.
 // A retry of an already uncertain UI intent still retains that intent.
-pub(super) fn mutation_preparation_failure(operation: &'static str, request_id: &str) -> ConnectError {
+pub(super) fn mutation_preparation_failure(
+    operation: &'static str,
+    request_id: &str,
+) -> ConnectError {
     let code = "SALES_WRITE_PREPARATION_FAILED";
     mutation_error(
         operation,

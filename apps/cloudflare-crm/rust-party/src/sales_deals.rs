@@ -1114,7 +1114,11 @@ fn count_one(value: &mut u64) -> std::result::Result<(), ReadFailureReason> {
         .ok_or(ReadFailureReason::SalesMetricsCountOverflow)?;
     Ok(())
 }
-fn add_money(entry: &mut (i128, i128, u64), units: i128, weighted: i128) -> std::result::Result<(), ReadFailureReason> {
+fn add_money(
+    entry: &mut (i128, i128, u64),
+    units: i128,
+    weighted: i128,
+) -> std::result::Result<(), ReadFailureReason> {
     entry.0 = entry
         .0
         .checked_add(units)
