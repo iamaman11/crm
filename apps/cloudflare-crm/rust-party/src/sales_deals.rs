@@ -381,8 +381,10 @@ pub(super) async fn create_typed(
         ));
     }
     let digest = hash("create", &input.id, &input)?;
-    if let Some(p) = prior(db, tenant, k).await? {
-        return Ok(replay(p, &digest));
+    match prior(db, tenant, k).await {
+        Ok(Some(p)) => return Ok(replay(p, &digest)),
+        Ok(None) => (),
+        Err(_) => return Ok(Err(unconfirmed(ReceiptUncertainty::ReadFailed))),
     }
     let id = match RecordId::try_new(&input.id) {
         Ok(x) => x,
@@ -521,8 +523,10 @@ pub(super) async fn update_typed(
         ));
     }
     let digest = hash("update", id, &input)?;
-    if let Some(p) = prior(db, tenant, key).await? {
-        return Ok(replay(p, &digest));
+    match prior(db, tenant, key).await {
+        Ok(Some(p)) => return Ok(replay(p, &digest)),
+        Ok(None) => (),
+        Err(_) => return Ok(Err(unconfirmed(ReceiptUncertainty::ReadFailed))),
     }
     let Some(mut deal) = load(db, tenant, id).await? else {
         return Ok(rejected("NOT_FOUND", ErrorCategory::NotFound));
@@ -737,8 +741,12 @@ async fn stage_mutation(
         StageMutation::Move(value) => hash("advance", id, value)?,
         StageMutation::Close(value) => hash("close", id, value)?,
     };
-    if let Some(p) = prior(db, tenant, key).await? {
-        return Ok(replay(p, &digest).map(|saved| AdvanceSaved { saved, link: None }));
+    match prior(db, tenant, key).await {
+        Ok(Some(p)) => {
+            return Ok(replay(p, &digest).map(|saved| AdvanceSaved { saved, link: None }));
+        }
+        Ok(None) => (),
+        Err(_) => return Ok(Err(unconfirmed(ReceiptUncertainty::ReadFailed))),
     }
     let Some(mut deal) = load(db, tenant, id).await? else {
         return Ok(rejected("NOT_FOUND", ErrorCategory::NotFound));
@@ -953,8 +961,10 @@ pub(super) async fn reopen_typed(
         ));
     }
     let digest = hash("reopen", id, &input)?;
-    if let Some(p) = prior(db, tenant, key).await? {
-        return Ok(replay(p, &digest));
+    match prior(db, tenant, key).await {
+        Ok(Some(p)) => return Ok(replay(p, &digest)),
+        Ok(None) => (),
+        Err(_) => return Ok(Err(unconfirmed(ReceiptUncertainty::ReadFailed))),
     }
     let Some(mut deal) = load(db, tenant, id).await? else {
         return Ok(rejected("NOT_FOUND", ErrorCategory::NotFound));
@@ -1270,7 +1280,9 @@ pub(super) async fn pipeline_metrics(
             // Pre-0013 Deals can have no immutable entry event. Never
             // synthesize a historical timestamp from updated_at.
             if let Some(start) = &row.stage_entered_at_nanos {
-                let started = start.parse::<i64>().map_err(|_| ReadFailureReason::SalesMetricsStageTimeInvalid)?;
+                let started = start
+                    .parse::<i64>()
+                    .map_err(|_| ReadFailureReason::SalesMetricsStageTimeInvalid)?;
                 if started <= 0 {
                     return Err(ReadFailureReason::SalesMetricsStageTimeInvalid);
                 }
@@ -1462,7 +1474,10 @@ pub(super) async fn list_stage_page(
                 .0
                 .checked_add(amount.minor_units())
                 .ok_or(ReadFailureReason::SalesBoardAmountOverflow)?;
-            entry.1 = entry.1.checked_add(1).ok_or(ReadFailureReason::SalesBoardAmountCountOverflow)?;
+            entry.1 = entry
+                .1
+                .checked_add(1)
+                .ok_or(ReadFailureReason::SalesBoardAmountCountOverflow)?;
         }
         if row.id.as_str() > after && page.len() <= limit {
             page.push((row.id.clone(), deal));

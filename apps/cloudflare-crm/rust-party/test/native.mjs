@@ -3362,6 +3362,27 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  // The exact production receipt query (not a mocked storage error) must
  // distinguish a proven absent key from an inaccessible receipt table.
  // Use only the existing signed native-ci read-only probe and local D1 fixture.
+ // Preparation failure occurs before a command can reach D1 writes;
+ // unlike a failed lookup of the original receipt, it is a typed rejection.
+ const preparationInput={...saleCreate,dealId:"r471-prepare-"+randomUUID(),
+   precondition:{idempotencyKey:"r471-preparation-failure"}};
+ await sql("ALTER TABLE crm_sales_pipeline_records RENAME TO fixture_unavailable_deal_catalog");
+ try {
+   const preparationFailed=await salesV2("CreateDeal",admin,preparationInput);
+   assert.equal(preparationFailed.status,503,describeProtobuf(preparationFailed.body));
+   const detail=decodeDomainErrorDetail(preparationFailed.body.details.find(d=>d.type==="crm.core.v2.DomainErrorDetail"));
+   assert.equal(detail.domainCode,"SALES_WRITE_PREPARATION_FAILED");
+   assert.equal(detail.commitOutcome,1);
+   assert.equal(detail.requestId,preparationFailed.headers.get("x-request-id"));
+ } finally {
+   await sql("ALTER TABLE fixture_unavailable_deal_catalog RENAME TO crm_sales_pipeline_records");
+ }
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_records WHERE tenant=? AND id=?",
+   "tenant-a",preparationInput.dealId))[0].n,0);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_deal_receipts WHERE tenant=? AND key=?",
+   "tenant-a",preparationInput.precondition.idempotencyKey))[0].n,0);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND subject_id=?",
+   "tenant-a",preparationInput.dealId))[0].n,0);
  const receiptProbe=await call("/api/_ci/original-domain-check",admin);
  assert.equal(receiptProbe.status,200);
  assert.equal(receiptProbe.body.receipt_read_classification,"PROVEN_NO_CHANGE");
@@ -3369,6 +3390,11 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  try {
    const unavailable=await call("/api/_ci/original-domain-check",admin);
    assert.equal(unavailable.status,200);
+   const unknownReplay=await salesV2("CreateDeal",admin,saleCreate);
+   assert.equal(unknownReplay.status,503);
+   const unknownDetail=decodeDomainErrorDetail(unknownReplay.body.details.find(d=>d.type==="crm.core.v2.DomainErrorDetail"));
+   assert.equal(unknownDetail.domainCode,"SALES_COMMIT_UNCONFIRMED");
+   assert.equal(unknownDetail.commitOutcome,2);
    assert.equal(unavailable.body.receipt_read_classification,"RECEIPT_READ_FAILED",
      "An inaccessible receipt source must not become a proven CAS conflict");
  } finally {

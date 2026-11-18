@@ -530,17 +530,20 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    };
    await page.route(metricsRoute,blockOldMetrics);
    const statusFilter=page.getByLabel("Статус сделки",{exact:true});
-   await statusFilter.selectOption("2");
-   await oldMetricsStarted;
-   await expect(page.getByRole("region",{name:"Аналитика воронки"})
-     .getByText(/^Всего сделок: 1 · срез по UTC:/)).toHaveCount(0);
-   const superseded=page.waitForEvent("requestfailed",{predicate:req=>req===oldMetricsRequest,timeout:15000});
-   await statusFilter.selectOption("1");
-   assert.ok((await superseded).failure(),"obsolete request must be cancelled");
-   await page.getByRole("region",{name:"Аналитика воронки"})
-     .getByText(/^Всего сделок: 1 · срез по UTC:/).waitFor();
-   releaseOldMetrics();
-   await page.unroute(metricsRoute,blockOldMetrics);
+   try {
+     await statusFilter.selectOption("2");
+     await oldMetricsStarted;
+     await expect(page.getByRole("region",{name:"Аналитика воронки"})
+       .getByText(/^Всего сделок: 1 · срез по UTC:/)).toHaveCount(0);
+     const superseded=page.waitForEvent("requestfailed",{predicate:req=>req===oldMetricsRequest,timeout:15000});
+     await statusFilter.selectOption("1");
+     assert.ok((await superseded).failure(),"obsolete request must be cancelled");
+     await page.getByRole("region",{name:"Аналитика воронки"})
+       .getByText(/^Всего сделок: 1 · срез по UTC:/).waitFor();
+   } finally {
+     releaseOldMetrics();
+     await page.unroute(metricsRoute,blockOldMetrics);
+   }
    steps.push("S1 read: old key hidden, obsolete request cancelled, latest key rendered");
    // Save the changed selected filters under the same stable view ID.
    await statusFilter.selectOption("2");

@@ -16,8 +16,6 @@ pub(super) enum ReceiptUncertainty {
     NotFound,
     #[serde(rename = "RECEIPT_DECODE_FAILED")]
     DecodeFailed,
-    #[serde(rename = "D1_ADAPTER_FAILED")]
-    AdapterFailed,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -127,11 +125,7 @@ pub(super) fn request(
     });
 }
 
-pub(super) fn read_failure(
-    request_id: &str,
-    phase: &'static str,
-    reason: ReadFailureReason,
-) {
+pub(super) fn read_failure(request_id: &str, phase: &'static str, reason: ReadFailureReason) {
     emit(Event::ReadFailure {
         request_id,
         phase,
@@ -139,17 +133,20 @@ pub(super) fn read_failure(
     });
 }
 
-pub(super) fn mutation_adapter_failure(
-    operation: &'static str,
-    request_id: &str,
-) -> ConnectError {
+// Outer adapter errors are raised before the D1 write is submitted.
+// Receipt lookup failure is handled explicitly by the adapter as uncertain.
+// A retry of an already uncertain UI intent still retains that intent.
+pub(super) fn mutation_preparation_failure(operation: &'static str, request_id: &str) -> ConnectError {
+    let code = "SALES_WRITE_PREPARATION_FAILED";
     mutation_error(
         operation,
         request_id,
-        MutationFailure::CommitUnconfirmed {
-            code: "SALES_COMMIT_UNCONFIRMED",
-            reason: ReceiptUncertainty::AdapterFailed,
-        },
+        MutationFailure::Rejected(Box::new(SdkError::new(
+            code,
+            ErrorCategory::Unavailable,
+            true,
+            "The current write was not submitted.",
+        ))),
     )
 }
 

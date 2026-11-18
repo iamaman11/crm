@@ -22,7 +22,7 @@ function useRead<T>() {
     const controller=new AbortController();
     active.current=controller;
     const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(READ_TIMEOUT_MS)]);
-    setState(previous=>({load,data:previous?.load===load?previous.data:undefined,busy:true,error:""}));
+    setState(previous=>({load,data:previous&&previous.load===load?previous.data:undefined,busy:true,error:""}));
     try {
       const data=await load(signal);
       signal.throwIfAborted();
@@ -30,7 +30,7 @@ function useRead<T>() {
       return data;
     }catch(error){
       if(active.current===controller)
-        setState(previous=>({load,data:previous?.load===load?previous.data:undefined,busy:false,
+        setState(previous=>({load,data:previous&&previous.load===load?previous.data:undefined,busy:false,
           error:signal.aborted&&!controller.signal.aborted?"Время ожидания чтения истекло.":api.describeError(error)}));
       throw error;
     }finally{
