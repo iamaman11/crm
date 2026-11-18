@@ -645,6 +645,40 @@ mod tests {
     }
 
     #[test]
+    fn checked_civil_day_arithmetic_handles_bounds_without_panics() {
+        let feb = CalendarDate::try_new(2024, 2, 28).unwrap();
+        assert_eq!(
+            feb.checked_add_days(1).unwrap(),
+            CalendarDate::try_new(2024, 2, 29).unwrap()
+        );
+        assert_eq!(
+            feb.checked_add_days(2).unwrap(),
+            CalendarDate::try_new(2024, 3, 1).unwrap()
+        );
+        assert_eq!(feb.checked_add_days(0).unwrap(), feb);
+        assert_eq!(
+            feb.checked_add_days(-1).unwrap(),
+            CalendarDate::try_new(2024, 2, 27).unwrap()
+        );
+        // The public method accepts all i32 values; extreme offsets must
+        // return an error, never panic inside Jiff's infallible Span setters.
+        assert!(feb.checked_add_days(i32::MIN).is_err());
+        assert!(feb.checked_add_days(i32::MAX).is_err());
+        assert!(
+            CalendarDate::try_new(1, 1, 1)
+                .unwrap()
+                .checked_add_days(-1)
+                .is_err()
+        );
+        assert!(
+            CalendarDate::try_new(9999, 12, 31)
+                .unwrap()
+                .checked_add_days(1)
+                .is_err()
+        );
+    }
+
+    #[test]
     fn civil_calendar_month_end_and_utc_date_use_jiff() {
         let jan = CalendarDate::try_new(2024, 1, 31).unwrap();
         let feb = CalendarDate::try_new(2024, 2, 29).unwrap();
