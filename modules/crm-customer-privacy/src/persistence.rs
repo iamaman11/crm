@@ -51,41 +51,32 @@ pub fn encode_privacy_case_state(case: &PrivacyCase) -> Result<Vec<u8>, SdkError
     )
 }
 
-// Internal diagnostics may include only static approved structural labels.
-// Serde types below remain the sole authoritative persisted-state schema.
-const PRIVACY_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
-    "case_id",
-    "tenant_id",
-    "kind",
-    "status",
-    "version",
-    "policy_version",
-    "created_at_unix_nanos",
-    "last_transition_at_unix_nanos",
-    "previous_case_id",
-    "subject_binding",
-    "pending_rescope",
-    "scope_snapshot_id",
-    "action_plan_id",
-    "approval",
-    "restriction_id",
-    "canonical_party_id",
-    "scope",
-    "placed_by",
-    "effective_from_unix_nanos",
-    "expires_at_unix_nanos",
-    "released_by",
-    "released_at_unix_nanos",
-    "hold_id",
-    "authority_reference",
-    "reason_code",
-    "canonicalization_profile",
-];
+// Privacy alone uses an explicitly profiled canonical JSON representation.
+// The existing owner codec validates and removes canonicalization_profile
+// before Serde can deserialize the domain state. Passing these bytes directly
+// to crm_module_sdk::decode_json bypasses that mandatory profile check.
+// Expose only closed error kinds: parser messages may contain untrusted PII.
+fn decode_profiled_state<T: serde::de::DeserializeOwned>(
+    bytes: &[u8],
+    label: &str,
+) -> Result<T, SdkError> {
+    use crate::canonicalization::ProfiledStateError;
+    serde_json::from_slice(bytes).map_err(|error| {
+        let reason = match error {
+            ProfiledStateError::Json(_) => "INVALID_JSON",
+            ProfiledStateError::Canonical(_) => "INVALID_CANONICAL_JSON",
+            ProfiledStateError::RootNotObject => "ROOT_NOT_OBJECT",
+            ProfiledStateError::ReservedProfileField => "RESERVED_PROFILE_FIELD",
+            ProfiledStateError::ProfileMissing => "PROFILE_MISSING",
+            ProfiledStateError::ProfileMismatch => "PROFILE_MISMATCH",
+        };
+        persisted_error(format!("{label} persisted JSON is invalid: {reason}"))
+    })
+}
 
 pub fn decode_privacy_case_state(bytes: &[u8]) -> Result<PrivacyCase, SdkError> {
     validate_size(bytes, PRIVACY_CASE_STATE_MAXIMUM_BYTES, "privacy case")?;
-    let state: PrivacyCaseStateV1 = crm_module_sdk::decode_json(bytes, PRIVACY_JSON_DIAGNOSTIC_FIELDS)
-        .map_err(|diagnostic| persisted_error(format!("privacy-case JSON is invalid: {diagnostic}")))?;
+    let state: PrivacyCaseStateV1 = decode_profiled_state(bytes, "privacy case")?;
     let case = state.into_domain()?;
     if encode_privacy_case_state(&case)? != bytes {
         return Err(persisted_error(
@@ -114,9 +105,7 @@ pub fn decode_processing_restriction_state(
         "processing restriction",
     )?;
     let state: ProcessingRestrictionStateV1 =
-        crm_module_sdk::decode_json(bytes, PRIVACY_JSON_DIAGNOSTIC_FIELDS).map_err(|diagnostic| {
-            persisted_error(format!("processing-restriction JSON is invalid: {diagnostic}"))
-        })?;
+        decode_profiled_state(bytes, "processing restriction")?;
     let restriction = state.into_domain()?;
     if encode_processing_restriction_state(&restriction)? != bytes {
         return Err(persisted_error(
@@ -136,8 +125,7 @@ pub fn encode_legal_hold_state(hold: &CustomerDataLegalHold) -> Result<Vec<u8>, 
 
 pub fn decode_legal_hold_state(bytes: &[u8]) -> Result<CustomerDataLegalHold, SdkError> {
     validate_size(bytes, LEGAL_HOLD_STATE_MAXIMUM_BYTES, "customer-data legal hold")?;
-    let state: LegalHoldStateV1 = crm_module_sdk::decode_json(bytes, PRIVACY_JSON_DIAGNOSTIC_FIELDS)
-        .map_err(|diagnostic| persisted_error(format!("legal-hold JSON is invalid: {diagnostic}")))?;
+    let state: LegalHoldStateV1 = decode_profiled_state(bytes, "legal hold")?;
     let hold = state.into_domain()?;
     if encode_legal_hold_state(&hold)? != bytes {
         return Err(persisted_error(
