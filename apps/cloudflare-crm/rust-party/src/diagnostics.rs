@@ -91,7 +91,8 @@ enum Event<'a> {
         #[serde(skip_serializing_if = "Option::is_none")]
         version: Option<i64>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        d1_deal_changes: Option<usize>,
+        // Raw D1Result.meta().changes for the primary write statement, not a Deal count.
+        d1_statement_changes: Option<usize>,
         #[serde(skip_serializing_if = "Option::is_none")]
         domain_code: Option<&'a str>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -159,7 +160,7 @@ pub(super) fn receipt(
     original_request_id: Option<&str>,
     version: i64,
     replayed: bool,
-    d1_deal_changes: Option<usize>,
+    d1_statement_changes: Option<usize>,
 ) -> core_v2::MutationReceipt {
     emit(Event::Mutation {
         operation,
@@ -172,7 +173,7 @@ pub(super) fn receipt(
         },
         original_request_id,
         version: Some(version),
-        d1_deal_changes,
+        d1_statement_changes,
         domain_code: None,
         connect_code: None,
         reason: None,
@@ -242,7 +243,7 @@ pub(super) fn mutation_error(
         outcome,
         original_request_id: None,
         version: None,
-        d1_deal_changes: None,
+        d1_statement_changes: None,
         domain_code: Some(&code),
         connect_code: Some(error.code.as_str()),
         reason,

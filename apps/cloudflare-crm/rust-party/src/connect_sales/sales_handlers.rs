@@ -516,7 +516,7 @@ impl sale_wire::DealService for SalesV2Service {
                 saved.original_request_id.as_deref(),
                 saved.deal.version(),
                 saved.replayed,
-                saved.d1_deal_changes,
+                saved.d1_statement_changes,
             ))
             .into(),
             ..Default::default()
@@ -626,7 +626,7 @@ impl sale_wire::DealService for SalesV2Service {
                 saved.original_request_id.as_deref(),
                 saved.deal.version(),
                 saved.replayed,
-                saved.d1_deal_changes,
+                saved.d1_statement_changes,
             ))
             .into(),
             ..Default::default()
@@ -680,7 +680,7 @@ impl sale_wire::DealService for SalesV2Service {
                 advanced.saved.original_request_id.as_deref(),
                 advanced.saved.deal.version(),
                 advanced.saved.replayed,
-                advanced.saved.d1_deal_changes,
+                advanced.saved.d1_statement_changes,
             ))
             .into(),
             ..Default::default()
@@ -730,7 +730,7 @@ impl sale_wire::DealService for SalesV2Service {
                 saved.saved.original_request_id.as_deref(),
                 saved.saved.deal.version(),
                 saved.saved.replayed,
-                saved.saved.d1_deal_changes,
+                saved.saved.d1_statement_changes,
             ))
             .into(),
             ..Default::default()
@@ -773,7 +773,7 @@ impl sale_wire::DealService for SalesV2Service {
                 saved.original_request_id.as_deref(),
                 saved.deal.version(),
                 saved.replayed,
-                saved.d1_deal_changes,
+                saved.d1_statement_changes,
             ))
             .into(),
             ..Default::default()

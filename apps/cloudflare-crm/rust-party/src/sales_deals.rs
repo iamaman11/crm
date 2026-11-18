@@ -249,7 +249,7 @@ pub(super) struct SalesSaved {
     pub(super) deal: Deal,
     pub(super) replayed: bool,
     pub(super) original_request_id: Option<String>,
-    pub(super) d1_deal_changes: Option<usize>,
+    pub(super) d1_statement_changes: Option<usize>,
 }
 
 fn rejected<T>(
@@ -280,7 +280,7 @@ fn replay(receipt: Receipt, digest: &str) -> std::result::Result<SalesSaved, Mut
         deal,
         replayed: true,
         original_request_id: receipt.original_request_id,
-        d1_deal_changes: None,
+        d1_statement_changes: None,
     })
 }
 
@@ -289,12 +289,13 @@ fn acknowledged(deal: Deal, trace: &str, changes: usize) -> SalesSaved {
         deal,
         replayed: false,
         original_request_id: Some(trace.to_owned()),
-        d1_deal_changes: Some(changes),
+        d1_statement_changes: Some(changes),
     }
 }
 
 // A successful transport is not sufficient; missing change metadata is not
-// proof of a version conflict.
+// proof of a version conflict. This is raw D1 statement metadata, not
+// a count of Deal records; trigger-related changes may be included.
 fn changes(result: &worker::d1::D1Result) -> Option<usize> {
     if !result.success() {
         return None;
