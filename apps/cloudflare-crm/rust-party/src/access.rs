@@ -101,7 +101,14 @@ fn decoded(segment: &str) -> Option<Vec<u8>> {
 // common_name (their Client ID). Human JWTs carry a nonempty sub and email.
 // Keep these separate so a service JWT cannot impersonate an email principal.
 fn identity_key(claims: &Value) -> Option<String> {
-    let sub = claims.get("sub").and_then(Value::as_str)?;
+    // Access sometimes omits sub on signed non-identity service assertions.
+    // Absent and empty sub both require a valid signed common_name; a malformed
+    // non-string sub still fails closed. Human identities always need sub+email.
+    let sub = match claims.get("sub") {
+        Some(Value::String(sub)) => sub.as_str(),
+        None => "",
+        _ => return None,
+    };
     if sub.is_empty() {
         let name = claims.get("common_name").and_then(Value::as_str)?;
         if (8..=120).contains(&name.len())
@@ -370,4 +377,32 @@ pub async fn actor(req: &Request, env: &Env) -> Result<Option<Actor>> {
     ])
     .await?;
     enrolled(&db, &identity).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::identity_key;
+    use serde_json::json;
+
+    #[test]
+    fn service_assertion_without_sub_requires_signed_client_identity() {
+        let client = "e367826f93b8d71185e03fe518aff3b4.access";
+        let expected = Some(format!("service:{client}"));
+        assert_eq!(identity_key(&json!({"sub": "", "common_name": client})), expected);
+        assert_eq!(
+            identity_key(&json!({"common_name": client})),
+            Some(format!("service:{client}"))
+        );
+        assert_eq!(identity_key(&json!({"sub": 9, "common_name": client})), None);
+        assert_eq!(identity_key(&json!({"common_name": "invalid"})), None);
+        assert_eq!(identity_key(&json!({"email": "owner@example.test"})), None);
+        assert_eq!(
+            identity_key(&json!({"sub": "human", "common_name": client})),
+            None
+        );
+        assert_eq!(
+            identity_key(&json!({"sub": "human", "email": "Owner@Example.test"})),
+            Some("owner@example.test".to_owned())
+        );
+    }
 }
