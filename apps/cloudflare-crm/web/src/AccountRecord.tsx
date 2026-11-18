@@ -17,7 +17,7 @@ export function accountStatusLabel(status:AccountStatus):string {
 }
 /** Both inline and full-page views use precisely the same read-only Customer360 projection. */
 export function AccountDetails({accountId}:{accountId:string}) {
-  const query=useQuery(useCallback(()=>api.overview.getAccountOverview({accountId}),[accountId]));
+  const query=useQuery(useCallback((signal:AbortSignal)=>api.overview.getAccountOverview({accountId},{signal}),[accountId]));
   const card:AccountOverview|undefined=query.error?undefined:query.data?.overview;
   return <div><QueryNotice query={query}/>{!query.error&&card&&<>
     <h3>{card.account?.name}</h3>
@@ -42,7 +42,7 @@ export function AccountDetails({accountId}:{accountId:string}) {
 export function AccountEditor({accountId,onSaved,onCancel,onDirtyChange}:{
   accountId:string;onSaved:()=>Promise<unknown>;onCancel:()=>void;onDirtyChange:(dirty:boolean)=>void;
 }) {
-  const query=useQuery(useCallback(()=>api.accounts.getAccount({accountId}),[accountId]));
+  const query=useQuery(useCallback((signal:AbortSignal)=>api.accounts.getAccount({accountId},{signal}),[accountId]));
   const mutation=useMutation();
   const account:Account|undefined=query.data?.account;
   return <div><QueryNotice query={query}/>

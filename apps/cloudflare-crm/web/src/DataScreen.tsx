@@ -20,7 +20,7 @@ export function DataScreen() {
       <SelectField label="Тип экспорта" value={kind} onChange={e=>setKind(e.target.value===""?"":String(enumValue(e.target.value,[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип экспорта")))}>
         <option value="">Все</option><option value={PartyKind.PERSON}>Люди</option><option value={PartyKind.ORGANIZATION}>Организации</option>
       </SelectField>
-      <p><Button disabled={exported.busy} onClick={()=>void exported.run(()=>api.csv.previewPartyExport(kind?{kind:enumValue(kind,[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип экспорта")}:{}))}>Проверить экспорт</Button></p>
+      <p><Button disabled={exported.busy} onClick={()=>void exported.run(signal=>api.csv.previewPartyExport(kind?{kind:enumValue(kind,[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип экспорта")}:{},{signal}))}>Проверить экспорт</Button></p>
       {exported.error&&<FeedbackPanel tone="danger" title={exported.error}/>}
       {exported.data&&<p>Записей: {exported.data.count}. Предел: {exported.data.maximumTenantParties} участников в организации.</p>}
       <a href={api.csvDownloadUrl+(kind?"?kind="+(kind===String(PartyKind.PERSON)?"person":"organization"):"")}>Скачать CSV</a>

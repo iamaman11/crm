@@ -8,12 +8,12 @@ export function ReviewScreen() {
   const [cursor,setCursor]=useState("");
   const quality=useReadAction<Awaited<ReturnType<typeof api.dataQuality.evaluatePartyName>>>();
   const comparison=useReadAction<Awaited<ReturnType<typeof api.identityResolution.compareParties>>>();
-  const candidates=useQuery(useCallback(()=>api.identityResolution.findSharedEmailCandidates({page:{pageSize:25,pageToken:cursor}}),[cursor]));
+  const candidates=useQuery(useCallback((signal:AbortSignal)=>api.identityResolution.findSharedEmailCandidates({page:{pageSize:25,pageToken:cursor}},{signal}),[cursor]));
   return <>
     <PageHeader title="Качество и совпадения" description="Проверки помогают заметить проблему. Совпадение email не подтверждает личность и не объединяет записи."/>
     <Card title="Проверить имя"><form onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
-      void quality.run(()=>api.dataQuality.evaluatePartyName({partyId:field(data,"partyId")}));
+      void quality.run(signal=>api.dataQuality.evaluatePartyName({partyId:field(data,"partyId")},{signal}));
     }}><FormGrid><PartyPicker/></FormGrid><Button type="submit" disabled={quality.busy}>Проверить качество</Button></form>
       {quality.error&&<FeedbackPanel tone="danger" title={quality.error}/>}
       {quality.data&&<><h3>{quality.data.party?.displayName}</h3><p>Не пройдено: {quality.data.failedCount}</p>
@@ -21,7 +21,7 @@ export function ReviewScreen() {
     </Card>
     <Card title="Сравнить участников"><form onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
-      void comparison.run(()=>api.identityResolution.compareParties({firstPartyId:field(data,"first"),secondPartyId:field(data,"second")}));
+      void comparison.run(signal=>api.identityResolution.compareParties({firstPartyId:field(data,"first"),secondPartyId:field(data,"second")},{signal}));
     }}><FormGrid><PartyPicker name="first" label="Первый участник"/><PartyPicker name="second" label="Второй участник"/></FormGrid>
       <Button type="submit" disabled={comparison.busy}>Сравнить</Button></form>
       {comparison.error&&<FeedbackPanel tone="danger" title={comparison.error}/>}

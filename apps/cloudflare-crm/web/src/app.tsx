@@ -1,6 +1,7 @@
-import {useMemo,useSyncExternalStore} from "react";
+import {Component,useMemo,useSyncExternalStore} from "react";
+import type {ReactNode} from "react";
 import {createRoot} from "react-dom/client";
-import {AppShell,PageHeader,ThemePicker} from "@ultimate-crm/ui";
+import {AppShell,Button,FeedbackPanel,PageHeader,ThemePicker} from "@ultimate-crm/ui";
 import {PartyScreen} from "./PartyScreen";
 import {AccountScreen,AccountPage,AccountCreatePage,accountFilterStatuses} from "./AccountScreen";
 import {ContactScreen} from "./ContactScreen";
@@ -54,6 +55,18 @@ function App() {
     </div>
   </AppShell>;
 }
+// A render exception is not evidence of a rollback. Keep the pending
+// marker and let the original recovery path verify it after reload.
+class AppErrorBoundary extends Component<{children:ReactNode},{failed:boolean}> {
+  state={failed:false};
+  static getDerivedStateFromError(){return {failed:true};}
+  render(){
+    return this.state.failed?<FeedbackPanel tone="danger" title="Не удалось отобразить CRM."
+      action={<Button onClick={()=>window.location.reload()}>Перезагрузить приложение</Button>}>
+      Результат незавершённой записи необходимо проверить после перезагрузки.
+    </FeedbackPanel>:this.props.children;
+  }
+}
 const root=document.getElementById("root");
 if(!root)throw Error("CRM root missing");
-createRoot(root).render(<App/>);
+createRoot(root).render(<AppErrorBoundary><App/></AppErrorBoundary>);

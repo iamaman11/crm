@@ -515,8 +515,38 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByLabel("Статус сделки",{exact:true})).toHaveValue("1");
    await page.getByRole("region",{name:"Аналитика воронки"})
      .getByText(/^Всего сделок: 1 · срез по UTC:/).waitFor();
+   // Hold an obsolete read to prove no previous-key data is displayed.
+   const metricsRoute="**/crm.sales.v2.DealService/GetPipelineMetrics";
+   let startedOldMetrics,releaseOldMetrics;
+   const oldMetricsStarted=new Promise(resolve=>{startedOldMetrics=resolve;});
+   const oldMetricsGate=new Promise(resolve=>{releaseOldMetrics=resolve;});
+   let oldMetricsRequest;
+   const blockOldMetrics=async route=>{
+     if(!oldMetricsRequest){
+       oldMetricsRequest=route.request();startedOldMetrics();await oldMetricsGate;
+     }
+     try{await route.continue();}
+     catch(error){if(!/Route is already handled!/.test(String(error)))throw error;}
+   };
+   await page.route(metricsRoute,blockOldMetrics);
+   const statusFilter=page.getByLabel("Статус сделки",{exact:true});
+   try {
+     await statusFilter.selectOption("2");
+     await oldMetricsStarted;
+     await expect(page.getByRole("region",{name:"Аналитика воронки"})
+       .getByText(/^Всего сделок: 1 · срез по UTC:/)).toHaveCount(0);
+     const superseded=page.waitForEvent("requestfailed",{predicate:req=>req===oldMetricsRequest,timeout:15000});
+     await statusFilter.selectOption("1");
+     assert.ok((await superseded).failure(),"obsolete request must be cancelled");
+     await page.getByRole("region",{name:"Аналитика воронки"})
+       .getByText(/^Всего сделок: 1 · срез по UTC:/).waitFor();
+   } finally {
+     releaseOldMetrics();
+     await page.unroute(metricsRoute,blockOldMetrics);
+   }
+   steps.push("S1 read: old key hidden, obsolete request cancelled, latest key rendered");
    // Save the changed selected filters under the same stable view ID.
-   await page.getByLabel("Статус сделки",{exact:true}).selectOption("2");
+   await statusFilter.selectOption("2");
    await page.getByLabel("Название представления",{exact:true})
      .fill("Browser Won View "+runId);
    await mutation(page.getByRole("button",{name:"Обновить представление",exact:true}),

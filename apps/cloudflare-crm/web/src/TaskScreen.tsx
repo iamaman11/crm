@@ -21,16 +21,16 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
   const [selected,setSelected]=useState<Task>();
   const [editorMode,setEditorMode]=useState<"create"|"edit"|null>(null);
   const mutation=useMutation();
-  const query=useQuery(useCallback(async()=>{
+  const query=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(focusedTaskId)return undefined; // Direct-link view never loads a full task list.
     return api.tasks.listTasks({page:{pageSize:25,pageToken:cursor},
       ...(accountId?{accountId}:{}),
       ...(status?{status:enumValue(status,[TaskStatus.OPEN,TaskStatus.COMPLETED],"Статус задачи")}:{}),
-      ...(priority?{priority:enumValue(priority,[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи")}:{})});
+      ...(priority?{priority:enumValue(priority,[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи")}:{})},{signal});
   },[cursor,status,priority,accountId,focusedTaskId]));
-  const focused=useQuery(useCallback(async()=>{
+  const focused=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!focusedTaskId)return undefined;
-    const task=(await api.tasks.getTask({taskId:focusedTaskId})).task;
+    const task=(await api.tasks.getTask({taskId:focusedTaskId},{signal})).task;
     if(!task)throw Error("Задача не найдена");
     if(initialAccountId&&task.accountId!==initialAccountId)
       throw Error("Задача не принадлежит выбранному клиенту");

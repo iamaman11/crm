@@ -16,9 +16,9 @@ export function PartyScreen({initialPartyId=""}:{initialPartyId?:string}) {
   const [editorOpen,setEditorOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
   const mutation=useMutation();
-  const query=useQuery(useCallback(()=>api.partyRecords.listParties({
+  const query=useQuery(useCallback((signal:AbortSignal)=>api.partyRecords.listParties({
     page:{pageSize:25,pageToken:cursor},search,...(kind?{kind:enumValue(kind,[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип участника")}:{})
-  }),[cursor,kind,search]));
+  },{signal}),[cursor,kind,search]));
   useEffect(()=>{
     if(!initialPartyId||query.busy||!query.data)return;
     const scroll=savedPartyListScroll();

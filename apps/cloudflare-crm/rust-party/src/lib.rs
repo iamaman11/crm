@@ -863,8 +863,12 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 "access",
             ),
             Ok(None) => (error("AUTH_REQUIRED", 401), "access"),
-            Err(cause) => {
-                diagnostics::read_failure(&request_id, "access", &cause);
+            Err(_) => {
+                diagnostics::read_failure(
+                    &request_id,
+                    "access",
+                    diagnostics::ReadFailureReason::AccessProviderFailed,
+                );
                 let reply = if path.starts_with("/crm.") {
                     rpc_error(connectrpc::ConnectError::unavailable(
                         "ACCESS_INTERNAL_ERROR",
