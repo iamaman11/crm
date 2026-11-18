@@ -383,12 +383,19 @@ jobs:
             import {execFileSync} from "node:child_process";
             import {readFileSync,writeFileSync,readdirSync,statSync} from "node:fs";
             import {createHash} from "node:crypto";
+            import {gzipSync} from "node:zlib";
             import {join} from "node:path";
             const run=(command,args)=>execFileSync(command,args,{encoding:"utf8",maxBuffer:8*1024*1024}).trim();
             const size=path=>statSync(path).size;
             const treeBytes=path=>readdirSync(path,{withFileTypes:true}).reduce((total,entry)=>{
               const child=join(path,entry.name);
               return total+(entry.isDirectory()?treeBytes(child):size(child));
+            },0);
+            const gzip9=path=>gzipSync(readFileSync(path),{level:9}).byteLength;
+            const textAssetGzip9=dir=>readdirSync(dir,{withFileTypes:true}).reduce((total,entry)=>{
+              const child=join(dir,entry.name);
+              return total+(entry.isDirectory()?textAssetGzip9(child):
+                /\.(?:html|css|js|json|svg)$/.test(entry.name)?gzip9(child):0);
             },0);
             const hash=path=>createHash("sha256").update(readFileSync(path)).digest("hex");
             const wasmGraph=(features,edges)=>run("cargo",["tree","--locked","--manifest-path",
@@ -404,6 +411,10 @@ jobs:
               foundation_baseline:{
                 bytes:{production_wasm:size(".release/native-build/index_bg.wasm"),
                   production_worker:treeBytes(".release/native-build"),react_dist:treeBytes("dist")},
+                gzip9_bytes:{production_wasm:gzip9(".release/native-build/index_bg.wasm"),
+                  production_worker_entry_js:gzip9(".release/native-build/index.js"),
+                  react_text_assets_sum:textAssetGzip9("dist")},
+                gzip9_method:"Node zlib level 9 per file; React sum html/css/js/json/svg; not CDN transfer, CPU, or memory",
                 lock_sha256:{root_cargo:hash("../../Cargo.lock"),worker_cargo:hash("rust-party/Cargo.lock"),
                   pnpm:hash("../../pnpm-lock.yaml")},
                 native_owners:JSON.parse(readFileSync("/tmp/crm-native-owner-dependency-trees.json","utf8")),
