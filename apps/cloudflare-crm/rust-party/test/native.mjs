@@ -566,6 +566,14 @@ try{
      ...contactInput,value,precondition:{idempotencyKey:"contact-email-invalid-"+index}});
    assert.equal(denied.status,400,describeProtobuf(denied.body));
  }
+ for(const [index,value] of [
+   "2025550102","+999123456789","+11111111111",
+   "+1 202 555 0102 ext 42","+1 202 555 0102 junk"
+ ].entries()){
+   const denied=await contactV2("CreateContactPoint",admin,{
+     ...contactInput,kind:2,value,precondition:{idempotencyKey:"contact-phone-invalid-"+index}});
+   assert.equal(denied.status,400,describeProtobuf(denied.body));
+ }
  const contactCreated=await contactV2("CreateContactPoint",admin,contactInput,{
     "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
     "cf-access-authenticated-user-email":"forged@example.test"});
@@ -678,10 +686,17 @@ try{
    [contactLastId,id]
  ].entries()){
    const made=await contactV2("CreateContactPoint",admin,{
-     contactPointId:pointToCreate[0],partyId:pointToCreate[1],kind:1,
-     value:"page-"+index+"@example.org",preferred:false,
+     contactPointId:pointToCreate[0],partyId:pointToCreate[1],kind:index===0?2:1,
+     value:index===0?"+1 202 555 0102":"page-"+index+"@example.org",preferred:false,
      precondition:{idempotencyKey:"page-contact-create-"+index}});
    assert.equal(made.status,200,describeProtobuf(made.body));
+   if(index===0){
+     assert.equal(made.body.contactPoint?.normalizedValue,"+12025550102");
+     assert.equal(made.body.contactPoint?.verified,false);
+     const read=await contactV2("GetContactPoint",viewer,{contactPointId:pointToCreate[0]});
+     assert.equal(read.status,200,describeProtobuf(read.body));
+     assert.equal(read.body.contactPoint?.normalizedValue,"+12025550102");
+   }
  }
  const filteredContacts=await collectPages(contactV2,"ListContactPoints",
    "contactPoints",{partyId:id});

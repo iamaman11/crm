@@ -234,8 +234,21 @@ impl ContactPoint {
         )?;
         validate_preference(snapshot.status, snapshot.preferred)?;
 
-        let (normalized_value, display_value) =
-            normalize_value(snapshot.kind, &snapshot.display_value)?;
+        // An erased endpoint is represented by an empty pair only in this
+        // irreversible owner state. Ordinary input never uses this path.
+        let (normalized_value, display_value) = if snapshot.display_value.is_empty()
+            && snapshot.normalized_value.is_empty()
+            && snapshot.status == ContactPointStatus::Inactive
+            && !snapshot.preferred
+            && snapshot.valid_from_unix_nanos.is_none()
+            && snapshot.valid_until_unix_nanos.is_none()
+            && !snapshot.verification.is_verified()
+            && snapshot.version > 1
+        {
+            (String::new(), String::new())
+        } else {
+            normalize_value(snapshot.kind, &snapshot.display_value)?
+        };
         if display_value != snapshot.display_value {
             return Err(invalid(
                 "CONTACT_POINTS_PERSISTED_DISPLAY_VALUE_INVALID",
@@ -282,6 +295,12 @@ impl ContactPoint {
             command.valid_until_unix_nanos,
         )?;
         validate_preference(command.status, command.preferred)?;
+        if self.is_redacted() {
+            return Err(conflict(
+                "CONTACT_POINTS_REDACTED",
+                "An erased Contact Point cannot be edited.",
+            ));
+        }
         let (normalized_value, display_value) = normalize_value(self.kind, &command.value)?;
         let value_changed = normalized_value != self.normalized_value;
         let next_verification = if value_changed {
@@ -316,6 +335,32 @@ impl ContactPoint {
         self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
         self.version = next_version;
         Ok(())
+    }
+
+    /// Privacy owner action: remove the endpoint and its evidence, never invent
+    /// a replacement address or telephone number. CAS/time checks precede mutation.
+    pub fn redact(
+        &mut self,
+        expected_version: i64,
+        occurred_at_unix_nanos: i64,
+    ) -> Result<(), SdkError> {
+        self.require_version(expected_version)?;
+        self.require_monotonic_time(occurred_at_unix_nanos)?;
+        let next_version = self.next_version()?;
+        self.normalized_value.clear();
+        self.display_value.clear();
+        self.status = ContactPointStatus::Inactive;
+        self.preferred = false;
+        self.valid_from_unix_nanos = None;
+        self.valid_until_unix_nanos = None;
+        self.verification = VerificationState::Unverified;
+        self.updated_at_unix_nanos = occurred_at_unix_nanos;
+        self.version = next_version;
+        Ok(())
+    }
+
+    pub fn is_redacted(&self) -> bool {
+        self.normalized_value.is_empty()
     }
 
     pub fn verify(&mut self, command: VerifyContactPoint) -> Result<(), SdkError> {
@@ -598,28 +643,28 @@ fn normalize_email(value: &str) -> Result<(String, String), SdkError> {
 
 fn normalize_phone(value: &str) -> Result<(String, String), SdkError> {
     let display = normalize_display(value, MAX_PHONE_DISPLAY_BYTES, "phone")?;
-    let mut normalized = String::with_capacity(display.len());
-    for (index, character) in display.chars().enumerate() {
-        match character {
-            '+' if index == 0 => normalized.push(character),
-            '0'..='9' => normalized.push(character),
-            ' ' | '-' | '(' | ')' | '.' => {}
-            _ => {
-                return Err(value_invalid(
-                    "phone must be an E.164 number with safe separators",
-                ));
-            }
-        }
-    }
-    if !normalized.starts_with('+') {
+    // No implicit user region, vanity numbers, extensions or trailing text.
+    let Some(international) = display.strip_prefix('+') else {
         return Err(value_invalid(
             "phone must start with '+' and include a country code",
         ));
+    };
+    if !international
+        .bytes()
+        .all(|byte| matches!(byte, b'0'..=b'9' | b' ' | b'-' | b'(' | b')' | b'.'))
+    {
+        return Err(value_invalid(
+            "phone must not contain extensions or non-numeric content",
+        ));
     }
-    let digit_count = normalized.len().saturating_sub(1);
-    if !(8..=15).contains(&digit_count) || normalized.as_bytes().get(1) == Some(&b'0') {
-        return Err(value_invalid("phone must contain 8 to 15 E.164 digits"));
+    let parsed = phonenumber::parse(None, &display)
+        .map_err(|_| value_invalid("phone is invalid for its country calling code"))?;
+    if parsed.extension().is_some() || !parsed.is_valid() {
+        return Err(value_invalid(
+            "phone is invalid for its country calling code",
+        ));
     }
+    let normalized = parsed.format().mode(phonenumber::Mode::E164).to_string();
     Ok((normalized, display))
 }
 
@@ -786,6 +831,103 @@ mod tests {
 
         let postal = create(ContactPointKind::Postal, "  Vilnius   LT  ");
         assert_eq!(postal.normalized_value(), "Vilnius LT");
+    }
+
+    #[test]
+    fn phone_parser_requires_real_numbering_plan_and_explicit_country_code() {
+        for (raw, expected) in [
+            ("+370 (612) 34-567", "+37061234567"),
+            ("+1 202-555-0102", "+12025550102"),
+            ("+44 20 7946 0018", "+442079460018"),
+        ] {
+            let point = create(ContactPointKind::Phone, raw);
+            assert_eq!(point.normalized_value(), expected);
+            assert_eq!(point.display_value(), raw);
+            assert!(!point.verification().is_verified());
+        }
+        for raw in [
+            "2025550102",
+            "00442079460018",
+            "+999123456789",
+            "+11111111111",
+            "+1 202 555 0102 ext 42",
+            "+1 202 555 0102#42",
+            "+1 202 555 0102 junk",
+            "+1+2025550102",
+            "+",
+            "+12345678901234567890",
+        ] {
+            assert_eq!(
+                normalize_phone(raw).unwrap_err().code,
+                "CONTACT_POINTS_VALUE_INVALID",
+                "{raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn privacy_redaction_erases_all_endpoint_kinds_and_cannot_be_reactivated() {
+        for (kind, raw) in [
+            (ContactPointKind::Email, "Ada@example.test"),
+            (ContactPointKind::Phone, "+37061234567"),
+            (ContactPointKind::Postal, "Private postal address"),
+            (ContactPointKind::Web, "https://example.test/private"),
+            (ContactPointKind::Messaging, "chat:private"),
+        ] {
+            let mut point = create(kind, raw);
+            point
+                .verify(VerifyContactPoint {
+                    expected_version: 1,
+                    evidence_ref: "private-verification-evidence".to_owned(),
+                    occurred_at_unix_nanos: 20,
+                })
+                .unwrap();
+            let before = point.clone();
+            assert!(point.redact(1, 30).is_err());
+            assert!(point.redact(2, 19).is_err());
+            assert_eq!(point, before);
+            point.redact(2, 30).unwrap();
+            assert!(point.is_redacted());
+            assert_eq!(point.status(), ContactPointStatus::Inactive);
+            assert_eq!(point.display_value(), "");
+            assert_eq!(point.normalized_value(), "");
+            assert!(!point.preferred());
+            assert!(!point.verification().is_verified());
+            assert_eq!(point.valid_from_unix_nanos(), None);
+            assert_eq!(point.valid_until_unix_nanos(), None);
+            let encoded = crate::encode_contact_point_state(&point).unwrap();
+            let encoded_text = std::str::from_utf8(&encoded).unwrap();
+            assert!(!encoded_text.contains(raw));
+            assert!(!encoded_text.contains("private-verification-evidence"));
+            assert_eq!(crate::decode_contact_point_state(&encoded).unwrap(), point);
+            let mut corrupt = point.snapshot();
+            corrupt.status = ContactPointStatus::Active;
+            assert!(ContactPoint::rehydrate(corrupt).is_err());
+            assert!(
+                point
+                    .apply_update(UpdateContactPoint {
+                        expected_version: 3,
+                        value: raw.to_owned(),
+                        status: ContactPointStatus::Active,
+                        preferred: false,
+                        valid_from_unix_nanos: None,
+                        valid_until_unix_nanos: None,
+                        occurred_at_unix_nanos: 40,
+                    })
+                    .is_err()
+            );
+            assert!(
+                point
+                    .verify(VerifyContactPoint {
+                        expected_version: 3,
+                        evidence_ref: "new".to_owned(),
+                        occurred_at_unix_nanos: 40,
+                    })
+                    .is_err()
+            );
+            assert_eq!(point.version(), 3);
+            assert!(normalize_value(kind, "").is_err());
+        }
     }
 
     #[test]
