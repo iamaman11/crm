@@ -203,6 +203,37 @@ mod tests {
     }
 
     #[test]
+    fn invalid_input_reports_original_field_without_leaking_values() {
+        let interval = TaskRecurrence::try_new(TaskRecurrenceFrequency::Daily, 0, 1)
+            .unwrap_err();
+        assert_eq!(interval.category, ErrorCategory::InvalidArgument);
+        assert_eq!(interval.field_violations.len(), 1);
+        assert_eq!(
+            interval.field_violations[0].field.as_str(),
+            "task.recurrence.interval"
+        );
+        assert_eq!(
+            interval.field_violations[0].code,
+            "ACTIVITIES_RECURRENCE_INTERVAL_INVALID"
+        );
+        let count = TaskRecurrence::try_new(TaskRecurrenceFrequency::Daily, 1, 0)
+            .unwrap_err();
+        assert_eq!(count.field_violations.len(), 1);
+        assert_eq!(
+            count.field_violations[0].field.as_str(),
+            "task.recurrence.count"
+        );
+        let range = rule(TaskRecurrenceFrequency::Daily, 1, 2)
+            .dates(date(9999, 12, 31))
+            .unwrap_err();
+        assert_eq!(range.field_violations.len(), 1);
+        assert_eq!(
+            range.field_violations[0].field.as_str(),
+            "task.recurrence"
+        );
+    }
+
+    #[test]
     fn out_of_calendar_range_is_rejected_not_truncated() {
         assert_eq!(
             rule(TaskRecurrenceFrequency::Daily, 1, 2)
