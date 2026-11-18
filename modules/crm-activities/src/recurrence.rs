@@ -89,7 +89,7 @@ impl TaskRecurrence {
 }
 
 fn invalid(code: &'static str, message: &'static str) -> SdkError {
-    SdkError::new(code, ErrorCategory::Validation, false, message)
+    SdkError::new(code, ErrorCategory::InvalidArgument, false, message)
 }
 
 fn range_error() -> SdkError {
