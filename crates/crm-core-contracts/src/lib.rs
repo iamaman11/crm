@@ -108,25 +108,21 @@ impl BasisPoints {
     }
 }
 
-/// Time-zone-independent Gregorian calendar date.
+/// A Gregorian date in CRM's 1..=9999 civil calendar, without a time zone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct CalendarDate {
-    year: i32,
-    month: u8,
-    day: u8,
-}
+pub struct CalendarDate(jiff::civil::Date);
 
 impl CalendarDate {
-    pub const fn year(self) -> i32 {
-        self.year
+    pub fn year(self) -> i32 {
+        i32::from(self.0.year())
     }
 
-    pub const fn month(self) -> u8 {
-        self.month
+    pub fn month(self) -> u8 {
+        self.0.month() as u8
     }
 
-    pub const fn day(self) -> u8 {
-        self.day
+    pub fn day(self) -> u8 {
+        self.0.day() as u8
     }
 
     pub fn try_new(year: i32, month: u8, day: u8) -> Result<Self, ContractError> {
@@ -142,28 +138,50 @@ impl CalendarDate {
                 "month must be between 1 and 12",
             ));
         }
-        let maximum_day = days_in_month(year, month);
+        let invalid = || ContractError::new("CONTRACT_DATE_DAY_INVALID", "invalid calendar day");
+        let first = jiff::civil::Date::new(year as i16, month as i8, 1).map_err(|_| invalid())?;
+        let maximum_day = first.days_in_month() as u8;
         if day == 0 || day > maximum_day {
             return Err(ContractError::new(
                 "CONTRACT_DATE_DAY_INVALID",
                 format!("day must be between 1 and {maximum_day}"),
             ));
         }
-        Ok(Self { year, month, day })
+        jiff::civil::Date::new(year as i16, month as i8, day as i8)
+            .map(Self)
+            .map_err(|_| invalid())
     }
-}
 
-const fn is_leap_year(year: i32) -> bool {
-    year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
-}
+    pub fn days_until(self, other: Self) -> i64 {
+        self.0.duration_until(other.0).as_secs() / 86_400
+    }
 
-const fn days_in_month(year: i32, month: u8) -> u8 {
-    match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 if is_leap_year(year) => 29,
-        2 => 28,
-        _ => 0,
+    pub fn from_utc_unix_nanos(nanos: i64) -> Result<Self, ContractError> {
+        let instant = jiff::Timestamp::from_nanosecond(i128::from(nanos)).map_err(|_| {
+            ContractError::new("CONTRACT_INSTANT_RANGE", "invalid Unix nanoseconds")
+        })?;
+        // The signed i64 storage interval is entirely inside years 1..=9999.
+        Ok(Self(instant.to_zoned(jiff::tz::TimeZone::UTC).date()))
+    }
+
+    pub fn last_of_month(self) -> Self {
+        Self(self.0.last_of_month())
+    }
+
+    pub fn weekday(self) -> jiff::civil::Weekday {
+        self.0.weekday()
+    }
+
+    pub fn checked_add_months_clamped(self, months: i16) -> Result<Self, ContractError> {
+        let invalid = || ContractError::new("CONTRACT_DATE_RANGE", "date arithmetic exceeds range");
+        let date = self
+            .0
+            .checked_add(jiff::Span::new().months(months))
+            .map_err(|_| invalid())?;
+        if date.year() < 1 {
+            return Err(invalid());
+        }
+        Ok(Self(date))
     }
 }
 
@@ -278,6 +296,36 @@ mod tests {
         assert!(CalendarDate::try_new(2024, 2, 29).is_ok());
         assert!(CalendarDate::try_new(2100, 2, 29).is_err());
         assert!(CalendarDate::try_new(2000, 2, 29).is_ok());
+    }
+
+    #[test]
+    fn civil_calendar_month_end_and_utc_date_use_jiff() {
+        let jan = CalendarDate::try_new(2024, 1, 31).unwrap();
+        let feb = CalendarDate::try_new(2024, 2, 29).unwrap();
+        assert_eq!(jan.checked_add_months_clamped(1).unwrap(), feb);
+        assert_eq!(feb.last_of_month(), feb);
+        assert_eq!(jan.days_until(feb), 29);
+        assert_eq!(feb.days_until(jan), -29);
+        assert_eq!(
+            CalendarDate::from_utc_unix_nanos(-1).unwrap(),
+            CalendarDate::try_new(1969, 12, 31).unwrap()
+        );
+        assert_eq!(
+            CalendarDate::from_utc_unix_nanos(0).unwrap(),
+            CalendarDate::try_new(1970, 1, 1).unwrap()
+        );
+        assert!(
+            CalendarDate::try_new(1, 1, 1)
+                .unwrap()
+                .checked_add_months_clamped(-1)
+                .is_err()
+        );
+        assert!(
+            CalendarDate::try_new(9999, 12, 31)
+                .unwrap()
+                .checked_add_months_clamped(1)
+                .is_err()
+        );
     }
 
     #[test]

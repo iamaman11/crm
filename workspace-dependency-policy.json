@@ -38,6 +38,7 @@
     "tracking_issue": "#194",
     "exception_rule": "workspace-dependency-no-growth",
     "dependency_families": [
+      "jiff",
       "prost",
       "serde",
       "serde_json",
@@ -104,6 +105,22 @@
         "version": "2",
         "features": [],
         "default_features": true,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "jiff": {
+        "workspace": false,
+        "version": "=0.2.42",
+        "features": [
+          "std",
+          "tzdb-bundle-always"
+        ],
+        "default_features": false,
         "path": null,
         "git": null,
         "registry": null,
@@ -229,7 +246,8 @@
         "crates/crm-search-runtime/Cargo.toml",
         "services/crm-api/Cargo.toml"
       ],
-      "thiserror": []
+      "thiserror": [],
+      "jiff": []
     }
   }
 }
