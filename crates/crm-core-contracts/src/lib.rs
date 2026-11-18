@@ -246,6 +246,20 @@ impl CalendarDate {
         self.0.weekday()
     }
 
+    /// Apply an exact civil day offset through the canonical Jiff calendar.
+    /// This is date-only arithmetic: no time zone or UTC duration is implied.
+    pub fn checked_add_days(self, days: i32) -> Result<Self, ContractError> {
+        let invalid = || ContractError::new("CONTRACT_DATE_RANGE", "date arithmetic exceeds range");
+        let date = self
+            .0
+            .checked_add(jiff::Span::new().days(days))
+            .map_err(|_| invalid())?;
+        if !(1..=9999).contains(&i32::from(date.year())) {
+            return Err(invalid());
+        }
+        Ok(Self(date))
+    }
+
     pub fn checked_add_months_clamped(self, months: i16) -> Result<Self, ContractError> {
         let invalid = || ContractError::new("CONTRACT_DATE_RANGE", "date arithmetic exceeds range");
         let date = self
