@@ -248,6 +248,8 @@ message ListPipelinesRequest {
 message ListPipelinesResponse {
   repeated SalesPipeline pipelines = 1;
   crm.core.v2.PageInfo page_info = 2;
+  // Complete currency reference data on the first page only.
+  repeated crm.core.v2.CurrencyDefinition currencies = 3;
 }
 
 message ListStageDealsRequest {

@@ -75,3 +75,15 @@ test("read-only commit evidence never claims another write or replay",()=>{
  assert.equal(result?.field.find(x=>x.name==="confirmed_mutation")?.typeName,
   ".crm.core.v2.MutationCommitEvidence");
 });
+
+test("currency reference precision has explicit zero presence",()=>{
+ const code=field("CurrencyDefinition","currency_code");
+ assert.equal(code.type,9);
+ const exponent=field("CurrencyDefinition","minor_unit_exponent");
+ assert.equal(exponent.type,13);
+ assert.equal(exponent.proto3Optional,true);
+ const sales=set.file.find(x=>x.package==="crm.sales.v2");
+ const currencies=sales?.messageType.find(x=>x.name==="ListPipelinesResponse")?.field.find(x=>x.name==="currencies");
+ assert.equal(currencies?.typeName,".crm.core.v2.CurrencyDefinition");
+ assert.equal(currencies?.label,3);
+});

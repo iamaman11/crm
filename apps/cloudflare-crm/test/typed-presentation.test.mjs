@@ -1,24 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {minorUnits,decimalUnits,basisPoints} from "../web/src/money.ts";
+import {currencyCatalog,minorUnits,decimalUnits,basisPoints,weightedMoneyText} from "../web/src/money.ts";
 import {inputDate,parseDate} from "../web/src/calendarInput.ts";
 import {panelFailureCode} from "../rust-party/test/ui-diagnostics.mjs";
 
+const currencies=currencyCatalog([
+  {currencyCode:"USD",minorUnitExponent:2},
+  {currencyCode:"JPY",minorUnitExponent:0},
+  {currencyCode:"KWD",minorUnitExponent:3},
+  {currencyCode:"CLF",minorUnitExponent:4},
+]);
 test("money preserves int64 above JavaScript safe integer",()=>{
   const units=9007199254740993n;
-  assert.equal(minorUnits("90071992547409.93","USD"),units);
-  assert.equal(decimalUnits(units,"USD"),"90071992547409.93");
-  assert.equal(minorUnits("92233720368547758.07","USD"),9223372036854775807n);
-  assert.throws(()=>minorUnits("92233720368547758.08","USD"),/диапазон/);
+  assert.equal(minorUnits("90071992547409.93","USD",currencies),units);
+  assert.equal(decimalUnits(units,"USD",currencies),"90071992547409.93");
+  assert.equal(minorUnits("92233720368547758.07","USD",currencies),9223372036854775807n);
+  assert.throws(()=>minorUnits("92233720368547758.08","USD",currencies),/диапазон/);
 });
 test("currency exponent controls decimal input without rounding",()=>{
-  assert.equal(minorUnits("123","JPY"),123n);
-  assert.equal(decimalUnits(123n,"JPY"),"123");
-  assert.equal(minorUnits("123.456","KWD"),123456n);
-  assert.equal(decimalUnits(123456n,"KWD"),"123.456");
-  assert.throws(()=>minorUnits("1.1","JPY"),/знаков/);
-  assert.throws(()=>minorUnits("1.001","USD"),/знаков/);
-  for(const text of ["1e3","NaN","Infinity","-1","1.2.3"])assert.throws(()=>minorUnits(text,"USD"));
+  assert.equal(minorUnits("123","JPY",currencies),123n);
+  assert.equal(decimalUnits(123n,"JPY",currencies),"123");
+  assert.equal(minorUnits("123.456","KWD",currencies),123456n);
+  assert.equal(decimalUnits(123456n,"KWD",currencies),"123.456");
+  assert.throws(()=>minorUnits("1.1","JPY",currencies),/знаков/);
+  assert.throws(()=>minorUnits("1.001","USD",currencies),/знаков/);
+  for(const text of ["1e3","NaN","Infinity","-1","1.2.3"])assert.throws(()=>minorUnits(text,"USD",currencies));
 });
 test("percent input preserves basis points and rejects overflow",()=>{
   assert.equal(basisPoints("37,45"),3745);
@@ -96,4 +102,15 @@ test("calendar input preserves date-only wire values and delegates civil validit
     assert.equal(inputDate(parseDate(raw)),raw);
   for(const raw of ["2024-2-09","2024-02-9","2024-02-29T00:00:00Z","2024/02/29"," 2024-02-29","10000-01-01"])
     assert.throws(()=>parseDate(raw),/Неверная дата/);
+});
+
+test("currency precision is an explicit server projection, never an Intl fallback",()=>{
+  assert.equal(minorUnits("1.2345","CLF",currencies),12345n);
+  assert.equal(decimalUnits(12345n,"CLF",currencies),"1.2345");
+  assert.equal(weightedMoneyText("90071992547409930000","USD",currencies),"90071992547409.930000 USD");
+  assert.throws(()=>minorUnits("1.00","ZZZ",currencies),/Неизвестная точность/);
+  assert.throws(()=>decimalUnits(1n,"EUR",currencies),/Неизвестная точность/);
+  assert.throws(()=>currencyCatalog([]),/не получен/);
+  assert.throws(()=>currencyCatalog([{currencyCode:"JPY"}]),/Некорректный/);
+  assert.throws(()=>currencyCatalog([{currencyCode:"JPY",minorUnitExponent:0},{currencyCode:"JPY",minorUnitExponent:2}]),/Некорректный/);
 });

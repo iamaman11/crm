@@ -59,6 +59,17 @@ impl CurrencyCode {
     pub const fn exponent(&self) -> u8 {
         self.exponent
     }
+
+    /// Enumerate assigned ISO 4217 numeric codes from the same pinned dataset.
+    /// No duplicated alphabetic table or browser currency authority.
+    pub fn catalog() -> Vec<Self> {
+        let mut currencies: Vec<_> = (1..=999)
+            .filter_map(|numeric| iso4217_static::Currency::from_u16(numeric).ok())
+            .filter_map(|currency| Self::try_new(currency.as_str()).ok())
+            .collect();
+        currencies.sort_unstable();
+        currencies
+    }
 }
 
 impl fmt::Display for CurrencyCode {
@@ -465,6 +476,20 @@ mod tests {
             "ZZZ", "XXX", "XAU", "BGN", "HRK", "CUC", "SLL", "ZWL", "usd",
         ] {
             assert!(CurrencyCode::try_new(code).is_err(), "{code}");
+        }
+    }
+
+    #[test]
+    fn catalog_contains_exactly_the_pinned_six_monetary_codes() {
+        let catalog = CurrencyCode::catalog();
+        // SIX List One 2026-09-17: 178 codes, 165 assigned minor units.
+        assert_eq!(catalog.len(), 165);
+        assert!(catalog.windows(2).all(|pair| pair[0] < pair[1]));
+        for entry in &catalog {
+            assert_eq!(CurrencyCode::try_new(entry.as_str()).unwrap(), *entry);
+        }
+        for code in ["USD", "EUR", "PLN", "JPY", "KWD", "CLF", "XCG"] {
+            assert!(catalog.contains(&CurrencyCode::try_new(code).unwrap()));
         }
     }
 

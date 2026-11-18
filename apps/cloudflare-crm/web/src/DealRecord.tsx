@@ -6,6 +6,7 @@ import {ContactPointStatus,DealStatus,ForecastCategory,ProbabilitySource} from "
 import {api,dateText} from "./api";
 import {useQuery,QueryNotice} from "./hooks";
 import {moneyText,percent} from "./money";
+import type {CurrencyCatalog} from "./money";
 import {inputDate} from "./calendarInput";
 import {accountHref,scopeHref,taskHref} from "./routes";
 
@@ -108,7 +109,7 @@ export function DealHistory({dealId,accountId}:{dealId:string;accountId:string})
 }
 
 // One canonical GetDeal/ContactPoint read projection for inline/full page.
-export function DealDetails({dealId,onEdit,onClose,onReopen}:{dealId:string;
+export function DealDetails({dealId,currencies,onEdit,onClose,onReopen}:{dealId:string;currencies:CurrencyCatalog;
  onEdit?:()=>void;onClose?:()=>void;onReopen?:()=>void}) {
   const details=useQuery(useCallback(async(signal:AbortSignal)=>{
     const deal=(await api.deals.getDeal({dealId},{signal})).deal;
@@ -129,7 +130,7 @@ export function DealDetails({dealId,onEdit,onClose,onReopen}:{dealId:string;
         <a href={scopeHref("contacts",details.data.contact.partyId)}>
           {details.data.contact.displayValue}</a>:"Не выбран"}</p>
       <p>Воронка: {deal.stage?.pipelineId??"—"} · этап: {deal.stage?.stageId??"—"}</p>
-      <p>Сумма: {moneyText(deal.amount)} · вероятность: {percent(deal.probabilityBasisPoints)}%</p>
+      <p>Сумма: {moneyText(deal.amount,currencies)} · вероятность: {percent(deal.probabilityBasisPoints)}%</p>
       {deal.status===DealStatus.OPEN&&<p>{probabilitySourceText(deal.probabilitySource)} · {forecastCategoryText(deal.forecastCategory)}</p>}
       <p>Ожидаемое закрытие: {inputDate(deal.expectedCloseDate) || "Не назначено"}</p>
       <p>Статус: {deal.status===DealStatus.OPEN?"Открыта":

@@ -244,6 +244,18 @@ impl sale_wire::DealService for SalesV2Service {
         .map_err(|_| ConnectError::internal("Pipeline D1 list failed"))?;
         RpcResponse::ok(sale_wire::ListPipelinesResponse {
             pipelines: pipelines.iter().map(Self::pipeline).collect(),
+            currencies: if cursor.is_empty() {
+                crm_core_contracts::CurrencyCode::catalog()
+                    .into_iter()
+                    .map(|currency| core_v2::CurrencyDefinition {
+                        currency_code: currency.as_str().to_owned(),
+                        minor_unit_exponent: Some(u32::from(currency.exponent())),
+                        ..Default::default()
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
             page_info: Some(core_v2::PageInfo {
                 next_page_token: next.unwrap_or_default(),
                 ..Default::default()

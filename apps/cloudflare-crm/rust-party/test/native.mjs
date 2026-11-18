@@ -1465,6 +1465,17 @@ const pipelineList=await salesV2("ListPipelines",viewer,{page:{pageSize:1}});
 assert.equal(pipelineList.status,200,describeProtobuf(pipelineList.body));
 assert.equal(pipelineList.body.pipelines.length,1);
 assert.ok(pipelineList.body.pageInfo?.nextPageToken);
+const currencyRows=pipelineList.body.currencies;
+assert.equal(currencyRows.length,165);
+const currencyByCode=new Map(currencyRows.map(row=>[row.currencyCode,row.minorUnitExponent]));
+assert.equal(currencyByCode.size,currencyRows.length);
+for(const [code,exponent] of [["JPY",0],["USD",2],["EUR",2],["KWD",3],["CLF",4]])
+  assert.equal(currencyByCode.get(code),exponent);
+for(const code of ["ZZZ","XXX","XAU","BGN"])assert.equal(currencyByCode.has(code),false);
+const pipelineNext=await salesV2("ListPipelines",viewer,{page:{pageSize:1,pageToken:pipelineList.body.pageInfo.nextPageToken}});
+assert.equal(pipelineNext.status,200,describeProtobuf(pipelineNext.body));
+assert.equal(pipelineNext.body.pipelines.length,1);
+assert.equal(pipelineNext.body.currencies.length,0);
 const pipelineUpdated=await salesV2("UpdatePipeline",admin,{
   pipelineId:"pipeline.enterprise",name:"Enterprise managed",
   stages:pipelineSeed.stages,archived:false,
@@ -1587,6 +1598,13 @@ const denialAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE te
   "AND subject_id='"+dealId+"'"))[0].n;
 assert.equal((await salesV2("CreateDeal",null,saleCreate)).status,401);
 assert.equal((await salesV2("CreateDeal",viewer,saleCreate)).status,403);
+for(const currencyCode of ["ZZZ","XXX","XAU","BGN"]){
+  const rejected=await salesV2("CreateDeal",admin,{
+    ...saleCreate,amount:{minorUnits:1n,currencyCode},
+    precondition:{idempotencyKey:"connect-sales-unsupported-currency-"+currencyCode}
+  });
+  assert.equal(rejected.status,400,describeProtobuf(rejected.body));
+}
 assert.equal((await salesV2("CreateDeal",admin,{
   ...saleCreate,stage:undefined,
   precondition:{idempotencyKey:"connect-sales-no-stage"}})).status,400);
