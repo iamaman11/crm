@@ -197,7 +197,10 @@ mod tests {
             );
         }
         let single = rule(TaskRecurrenceFrequency::Monthly, 120, 1);
-        assert_eq!(single.dates(date(9999, 12, 31)).unwrap(), vec![date(9999, 12, 31)]);
+        assert_eq!(
+            single.dates(date(9999, 12, 31)).unwrap(),
+            vec![date(9999, 12, 31)]
+        );
         let maximum = rule(TaskRecurrenceFrequency::Daily, 1, 256);
         assert_eq!(maximum.dates(date(2026, 1, 1)).unwrap().len(), 256);
     }
