@@ -388,12 +388,18 @@ mod tests {
     fn service_assertion_without_sub_requires_signed_client_identity() {
         let client = "e367826f93b8d71185e03fe518aff3b4.access";
         let expected = Some(format!("service:{client}"));
-        assert_eq!(identity_key(&json!({"sub": "", "common_name": client})), expected);
+        assert_eq!(
+            identity_key(&json!({"sub": "", "common_name": client})),
+            expected
+        );
         assert_eq!(
             identity_key(&json!({"common_name": client})),
             Some(format!("service:{client}"))
         );
-        assert_eq!(identity_key(&json!({"sub": 9, "common_name": client})), None);
+        assert_eq!(
+            identity_key(&json!({"sub": 9, "common_name": client})),
+            None
+        );
         assert_eq!(identity_key(&json!({"common_name": "invalid"})), None);
         assert_eq!(identity_key(&json!({"email": "owner@example.test"})), None);
         assert_eq!(
