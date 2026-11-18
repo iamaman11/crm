@@ -300,6 +300,9 @@ dependencies = [
 [[package]]
 name = "crm-core-contracts"
 version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "crm-customer-360-query-adapter"
@@ -383,6 +386,7 @@ name = "crm-module-sdk"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "thiserror",
 ]
 
 [[package]]

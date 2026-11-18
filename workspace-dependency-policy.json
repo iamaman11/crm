@@ -41,7 +41,8 @@
       "prost",
       "serde",
       "serde_json",
-      "sha2"
+      "sha2",
+      "thiserror"
     ],
     "accepted_specs": {
       "prost": {
@@ -88,6 +89,19 @@
       "sha2": {
         "workspace": false,
         "version": "0.10",
+        "features": [],
+        "default_features": true,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "thiserror": {
+        "workspace": false,
+        "version": "2",
         "features": [],
         "default_features": true,
         "path": null,
@@ -214,7 +228,8 @@
         "crates/crm-query-runtime/Cargo.toml",
         "crates/crm-search-runtime/Cargo.toml",
         "services/crm-api/Cargo.toml"
-      ]
+      ],
+      "thiserror": []
     }
   }
 }

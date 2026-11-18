@@ -1,6 +1,5 @@
 #![forbid(unsafe_code)]
 
-use std::error::Error;
 use std::fmt;
 
 /// Architecture marker for `crm-core-contracts`.
@@ -10,7 +9,8 @@ pub const MAX_CURSOR_BYTES: usize = 1024;
 pub const MAX_PAGE_SIZE: u16 = 200;
 pub const DEFAULT_PAGE_SIZE: u16 = 50;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{code}: {message}")]
 pub struct ContractError {
     pub code: &'static str,
     pub message: String,
@@ -24,14 +24,6 @@ impl ContractError {
         }
     }
 }
-
-impl fmt::Display for ContractError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
-    }
-}
-
-impl Error for ContractError {}
 
 /// ISO 4217 alphabetic currency code.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -257,6 +249,14 @@ pub struct Page<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contract_error_preserves_code_message_and_standard_error() {
+        let error = ContractError::new("CONTRACT_TEST", "safe detail");
+        assert_eq!(error.code, "CONTRACT_TEST");
+        assert_eq!(error.to_string(), "CONTRACT_TEST: safe detail");
+        assert!(std::error::Error::source(&error).is_none());
+    }
 
     #[test]
     fn money_is_exact_and_currency_is_strict() {
