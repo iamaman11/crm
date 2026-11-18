@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {verifyAnonymousDenial} from "./release-readback.mjs";
+import {verifyAnonymousDenial,verifyTracePrivacySettings} from "./release-readback.mjs";
 
 const endpoint="https://example.test/api/version";
 const reset=()=>Object.assign(new TypeError("fetch failed"),{
@@ -74,4 +74,18 @@ test("unexpected error fails without replay",async()=>{
   const x=await run([new TypeError("invalid URL"),403]);
   await assert.rejects(x.result,/invalid URL/);
   assert.equal(x.calls.length,1);
+});
+
+test("Cloudflare tracing requires enabled logs, traces and query redaction",()=>{
+  const safe={enabled:true,redact_query_string:true,
+    logs:{enabled:true,head_sampling_rate:1},traces:{enabled:true,head_sampling_rate:1}};
+  assert.deepEqual(verifyTracePrivacySettings(safe),{
+    traces_enabled:true,query_string_redacted:true,logs_enabled:true,trace_sampling_rate:1});
+  for(const unsafe of [
+    null,{}, {...safe,enabled:false}, {...safe,redact_query_string:false},
+    {...safe,redact_query_string:undefined}, {...safe,logs:{enabled:false}},
+    {...safe,traces:{enabled:false,head_sampling_rate:1}},
+    {...safe,traces:{enabled:true,head_sampling_rate:0}},
+    {...safe,traces:{enabled:true}}
+  ])assert.throws(()=>verifyTracePrivacySettings(unsafe),/CRM_TRACE_PRIVACY_SETTINGS_UNSAFE/);
 });

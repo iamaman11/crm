@@ -88,6 +88,11 @@ async function subprocessEntry(){
    if(path.endsWith("/versions/version-old"))return wrap({resources:{bindings:[
      {name:"GIT_SHA",text:"90a352be2a70b74a64e5a774c9a76b7f02c86a5f"},{name:"DB",id:database}]}});
    if(path.endsWith("/time_travel/bookmark"))return wrap({bookmark:"synthetic-bookmark"});
+   if(path.endsWith("/settings"))return wrap({observability:{
+     enabled:true,redact_query_string:variant!=="trace-redaction-disabled",
+     logs:{enabled:variant!=="trace-logs-disabled",head_sampling_rate:1},
+     traces:{enabled:variant!=="trace-disabled",head_sampling_rate:1}
+   }});
    if(path.endsWith("/versions/version-new"))return wrap({resources:{bindings:[
      {name:"GIT_SHA",text:variant==="unrelated"?"c".repeat(40):sha},
      {name:"DB",id:variant==="wrong-database"?"other":database}]}});
@@ -163,7 +168,8 @@ function run(mode,variant="valid"){
    copyFileSync(new URL("../scripts/"+name,import.meta.url),join(dir,name));
  const save=(path,value)=>writeFileSync(path,JSON.stringify(value));
  if(variant!=="no-checkpoint"&&mode!=="deploy")save(join(out,"checkpoint.json"),{git_sha:sha,previous_sha:previous,d1_database:database});
- save(join(out,"deployed.json"),{git_sha:sha,worker_version:"version-new",started_at:1});
+ save(join(out,"deployed.json"),{git_sha:sha,worker_version:"version-new",started_at:1,
+   trace_settings:{traces_enabled:true,query_string_redacted:true,logs_enabled:true,trace_sampling_rate:1}});
  if(mode==="verify-data")save(join(out,"e2e-tenants.json"),{tenant_a:"fixture-a",actor_a:"service:synthetic.access"});
  if(variant==="restore-role"||variant==="wrong-role-tenant")save(join(out,"e2e-tenants.json"),{
    source_sha:sha,database,run_id:"123",attempt:"1",actor_a:"service:synthetic.access",
@@ -233,9 +239,21 @@ for(const variant of ["persistent-html-telemetry","html-success-telemetry","pers
    assert.ok(!result.error.includes("<!DOCTYPE"),
      "never print an HTML error body or upstream credentials");
  });
-for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-error-code","wrong-actor"])test("release rejects "+variant,()=>{
+for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-error-code","wrong-actor",
+  "trace-redaction-disabled","trace-logs-disabled","trace-disabled"])test("release rejects "+variant,()=>{
  const result=run("verify-data",variant);
  assert.notEqual(result.status,0);assert.equal(result.accepted,false);
+});
+test("deploy never reopens public entry with unsafe Cloudflare tracing settings",()=>{
+  for(const variant of ["trace-redaction-disabled","trace-logs-disabled","trace-disabled"]){
+    const result=run("deploy",variant);
+    assert.notEqual(result.status,0);
+    assert.equal(result.deployed,false);
+    assert.equal(result.state.published,true);
+    assert.equal(result.posts.filter(path=>path.endsWith("/subdomain")).length,0,
+      "No public-entry changes after unsafe trace settings readback");
+    assert.match(result.error,/CRM_TRACE_PRIVACY_SETTINGS_UNSAFE/);
+  }
 });
 test("unchanged D1 ledger keeps public entry online and signed version checks Access",()=>{
  const result=run("deploy");

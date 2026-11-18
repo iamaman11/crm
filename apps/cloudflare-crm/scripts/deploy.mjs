@@ -5,7 +5,7 @@ import {createHash} from "node:crypto";
 import {join,relative} from "node:path";
 import {spawnSync} from "node:child_process";
 import {DatabaseSync} from "node:sqlite";
-import {verifyAnonymousDenial,verifyNfcMigrationNames} from "./release-readback.mjs";
+import {verifyAnonymousDenial,verifyNfcMigrationNames,verifyTracePrivacySettings} from "./release-readback.mjs";
 const required=n=>{if(!process.env[n])throw Error("Missing "+n);return process.env[n];};
 const sha=required("GITHUB_SHA");
 if(!/^[0-9a-f]{40}$/.test(sha)||process.env.GITHUB_REF!=="refs/heads/dev"||process.env.GITHUB_EVENT_NAME!=="push")throw Error("Untrusted deployment");
@@ -163,6 +163,8 @@ async function deploy(){
   const config=JSON.parse(readFileSync("apps/cloudflare-crm/wrangler.jsonc","utf8"));
   if(config.main!=="./rust-party/build/index.js"||config.workers_dev!==false||config.preview_urls!==false||config.routes?.length)
     throw Error("Refusing release: public Worker is not native workers-rs");
+  // Prevent a privacy regression BEFORE changing any live deployment or D1.
+  verifyTracePrivacySettings(config.observability);
   const rust=builtRust(), oldVersion=await version(), before=await bindings(oldVersion);
   if(before.db!==database||!/^[a-f0-9]{40}$/.test(before.sha||""))throw Error("Previous CRM binding/SHA mismatch");
   const bookmark=(await cf("/d1/database/"+database+"/time_travel/bookmark")).bookmark;
@@ -232,12 +234,16 @@ async function deploy(){
   cmd("wrangler","deploy","--var","GIT_SHA:"+sha);
   const newVersion=await waitForDeployment(null,sha,"deploy");
   if(newVersion===oldVersion)throw Error("Worker version did not advance");
+  // Read the settings returned by Cloudflare, not an assumed Wrangler default.
+  // Do not reopen public entry if trace privacy differs from committed config.
+  const traceSettings=verifyTracePrivacySettings((await cf(worker+"/settings")).observability);
   await cf(worker+"/subdomain","POST",{enabled:true,previews_enabled:false});
   await waitForPublicSha(sha,"deploy");
   // Signed exact-SHA /api/version above already establishes Access plus Worker
   // availability. Require the same endpoint to reject anonymous requests.
   await verifyAnonymousDenial(url+"/api/version");
-  record("deployed.json",{git_sha:sha,worker_version:newVersion,d1_database:database,rust,started_at:startedAt,result:"E2E_PENDING"});
+  record("deployed.json",{git_sha:sha,worker_version:newVersion,d1_database:database,rust,
+    trace_settings:traceSettings,started_at:startedAt,result:"E2E_PENDING"});
   console.log(JSON.stringify({event:"crm.deploy",sha,result:"E2E_PENDING",version:newVersion}));
 }
 async function confirmClosed(){
@@ -361,6 +367,8 @@ async function verifyData(){
   const liveVersion=await version(),liveBindings=await bindings(liveVersion);
   assert.equal(liveVersion,deployed.worker_version);
   assert.deepEqual(liveBindings,{sha,db:database});
+  const traceSettings=verifyTracePrivacySettings((await cf(worker+"/settings")).observability);
+  assert.deepEqual(deployed.trace_settings,traceSettings);
   const evidence=JSON.parse(readFileSync("apps/cloudflare-crm/e2e-evidence/typed-browser.json","utf8"));
   assert.equal(evidence.result,"PASS");assert.equal(evidence.source_sha,sha);
   assert.deepEqual(evidence.features,["native"]);
@@ -434,7 +442,8 @@ async function verifyData(){
   await waitForPublicSha(sha,"final");
   record("accepted.json",{result:"PASS",git_sha:sha,worker_version:liveVersion,
     d1_database:database,features:["native"],traffic_percentage:100,
-    mutations:mutationIds.size,logs_correlated:requests.size,steps:evidence.steps,
+    mutations:mutationIds.size,logs_correlated:requests.size,
+    trace_settings:traceSettings,steps:evidence.steps,
     request_ids:[...requests.keys()]});
 }
 async function failClosed(){

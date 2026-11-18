@@ -10,6 +10,14 @@ import type {CurrencyCatalog} from "./money";
 import {inputDate} from "./calendarInput";
 import {accountHref,scopeHref,taskHref} from "./routes";
 
+export function dealStatusText(status:DealStatus):string {
+  switch(status){
+    case DealStatus.OPEN:return "Открыта";
+    case DealStatus.WON:return "Выиграна";
+    case DealStatus.LOST:return "Проиграна";
+    default:return "Неизвестный статус";
+  }
+}
 export function forecastCategoryText(category:ForecastCategory):string {
   switch(category){
     case ForecastCategory.PIPELINE:return "Воронка";
@@ -133,8 +141,7 @@ export function DealDetails({dealId,currencies,onEdit,onClose,onReopen}:{dealId:
       <p>Сумма: {moneyText(deal.amount,currencies)} · вероятность: {percent(deal.probabilityBasisPoints)}%</p>
       {deal.status===DealStatus.OPEN&&<p>{probabilitySourceText(deal.probabilitySource)} · {forecastCategoryText(deal.forecastCategory)}</p>}
       <p>Ожидаемое закрытие: {inputDate(deal.expectedCloseDate) || "Не назначено"}</p>
-      <p>Статус: {deal.status===DealStatus.OPEN?"Открыта":
-        deal.status===DealStatus.WON?"Выиграна":"Проиграна"}</p>
+      <p>Статус: {dealStatusText(deal.status)}</p>
       {deal.closeReasonCode&&<p>Причина закрытия: {deal.closeReasonCode}</p>}
       <p>Создана: {dateText(deal.createdAt)} · обновлена: {dateText(deal.updatedAt)}</p>
       {deal.closedAt&&<p>Закрыта: {dateText(deal.closedAt)}</p>}

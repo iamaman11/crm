@@ -23,6 +23,9 @@
     "binding": "CF_VERSION_METADATA"
   },
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": {"enabled": true, "head_sampling_rate": 1},
+    "traces": {"enabled": true, "head_sampling_rate": 1}
   }
 }
