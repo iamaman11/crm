@@ -9,3 +9,4 @@ thiserror = { workspace = true }
 jiff = { workspace = true }
 iso4217-static = { workspace = true }
 rust_decimal = { workspace = true }
+unicode-normalization = { workspace = true }

@@ -650,6 +650,7 @@ dependencies = [
  "jiff",
  "rust_decimal",
  "thiserror",
+ "unicode-normalization",
 ]
 
 [[package]]

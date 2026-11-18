@@ -670,7 +670,11 @@ fn normalize_phone(value: &str) -> Result<(String, String), SdkError> {
 
 fn normalize_postal(value: &str) -> Result<(String, String), SdkError> {
     let display = normalize_display(value, MAX_POSTAL_BYTES, "postal address")?;
-    Ok((display.clone(), display))
+    let normalized = crm_core_contracts::nfc_text_key(&display);
+    if normalized.len() > MAX_POSTAL_BYTES {
+        return Err(value_invalid("normalized postal address is too long"));
+    }
+    Ok((normalized, display))
 }
 
 fn normalize_web(value: &str) -> Result<(String, String), SdkError> {
@@ -831,6 +835,33 @@ mod tests {
 
         let postal = create(ContactPointKind::Postal, "  Vilnius   LT  ");
         assert_eq!(postal.normalized_value(), "Vilnius LT");
+    }
+
+    #[test]
+    fn postal_nfc_preserves_display_and_canonical_equality_does_not_merge_contacts() {
+        let decomposed = "Cafe\u{301}, И\u{306}ошкар-Ола";
+        let composed = "Café, Йошкар-Ола";
+        let first = create(ContactPointKind::Postal, decomposed);
+        let second = create(ContactPointKind::Postal, composed);
+        assert_eq!(first.normalized_value(), composed);
+        assert_eq!(second.normalized_value(), composed);
+        assert_eq!(first.display_value(), decomposed);
+        assert_eq!(second.display_value(), composed);
+        assert_ne!(first.snapshot(), second.snapshot());
+        assert!(!first.verification().is_verified());
+        assert!(!second.verification().is_verified());
+        assert_eq!(
+            crate::decode_contact_point_state(&crate::encode_contact_point_state(&first).unwrap())
+                .unwrap(),
+            first
+        );
+        // U+0344 decomposes into two non-composing marks: enforce output size too.
+        assert!(normalize_postal(&"\u{0344}".repeat(MAX_POSTAL_BYTES / 2)).is_err());
+        // No NFKC/compatibility fold; full-width symbols remain distinct.
+        assert_ne!(
+            crm_core_contracts::nfc_text_key("Ａ"),
+            crm_core_contracts::nfc_text_key("A")
+        );
     }
 
     #[test]

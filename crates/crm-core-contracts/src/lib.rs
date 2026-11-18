@@ -11,6 +11,14 @@ pub const MAX_CURSOR_BYTES: usize = 1024;
 pub const MAX_PAGE_SIZE: u16 = 200;
 pub const DEFAULT_PAGE_SIZE: u16 = 50;
 
+/// NFC for human-language comparison keys only, never for entity identity,
+/// credentials, local parts of email addresses or opaque provider identifiers.
+/// The owner must retain the original display text and enforce its own bounds.
+pub fn nfc_text_key(value: &str) -> String {
+    use unicode_normalization::UnicodeNormalization as _;
+    value.nfc().collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{code}: {message}")]
 pub struct ContractError {

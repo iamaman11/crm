@@ -138,3 +138,4 @@ iso4217-static = { version = "=0.3.1", default-features = false }
 rust_decimal = { version = "=1.43.0", default-features = false, features = ["std"] }
 email_address = { version = "=0.2.10", default-features = false, features = ["std"] }
 phonenumber = { version = "=0.3.10", default-features = false }
+unicode-normalization = { version = "=0.1.25", default-features = false, features = ["std"] }

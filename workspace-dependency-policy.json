@@ -47,7 +47,8 @@
       "serde",
       "serde_json",
       "sha2",
-      "thiserror"
+      "thiserror",
+      "unicode-normalization"
     ],
     "accepted_specs": {
       "prost": {
@@ -188,6 +189,21 @@
         "branch": null,
         "rev": null,
         "tag": null
+      },
+      "unicode-normalization": {
+        "workspace": false,
+        "version": "=0.1.25",
+        "features": [
+          "std"
+        ],
+        "default_features": false,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
       }
     },
     "accepted_direct_consumers": {
@@ -311,7 +327,8 @@
       "iso4217-static": [],
       "rust_decimal": [],
       "email_address": [],
-      "phonenumber": []
+      "phonenumber": [],
+      "unicode-normalization": []
     }
   }
 }
