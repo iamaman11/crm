@@ -1130,14 +1130,6 @@ fn add_money(
         .ok_or(ReadFailureReason::SalesMetricsWeightOverflow)?;
     count_one(&mut entry.2)
 }
-// Proleptic Gregorian UTC day index; CalendarDate validates input first.
-fn gregorian_day_index(year: i32, month: u8, day: u8) -> i64 {
-    let y = i64::from(year) - 1;
-    const BEFORE_MONTH: [i64; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
-    365 * y + y / 4 - y / 100 + y / 400 + BEFORE_MONTH[usize::from(month - 1)] + i64::from(day) - 1
-        + i64::from(leap && month > 2)
-}
 pub(super) struct ForecastCategoryMetric {
     pub category: ForecastCategory,
     pub deal_count: u64,
@@ -1228,8 +1220,9 @@ pub(super) async fn pipeline_metrics(
         None => now_nanos(),
     };
     let as_of_text = as_of_nanos.to_string();
-    let as_of_unix_seconds = as_of_nanos.div_euclid(1_000_000_000);
-    let today = gregorian_day_index(1970, 1, 1) + as_of_unix_seconds.div_euclid(86_400);
+    let as_of = crm_core_contracts::UtcInstant::from_unix_nanos(as_of_nanos);
+    let as_of_unix_seconds = as_of.proto_parts().0;
+    let today = as_of.utc_date();
     let mut total_count = 0u64;
     let mut status_groups = BTreeMap::<(String, String), u64>::new();
     let mut money_groups = BTreeMap::<(String, String, String), (i128, i128, u64)>::new();
@@ -1272,7 +1265,7 @@ pub(super) async fn pipeline_metrics(
             match deal.expected_close_date() {
                 None => count_one(&mut group.undated)?,
                 Some(date) => {
-                    let delta = gregorian_day_index(date.year(), date.month(), date.day()) - today;
+                    let delta = today.days_until(date);
                     if delta < 0 {
                         count_one(&mut group.overdue)?;
                     } else if delta <= 30 {

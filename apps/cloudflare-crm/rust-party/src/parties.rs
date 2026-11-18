@@ -145,11 +145,11 @@ pub(super) async fn import_batch(
         )
         .map_err(|e| worker::Error::RustError(e.to_string()))?;
         statements.push(bind(db,
-            "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?)",
+            "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) VALUES(?,?,?,?,?,?,?,?,?)",
             &[JsValue::from_str(tenant),JsValue::from_str(id),
               JsValue::from_str(&state),JsValue::from_f64(1.0),
               JsValue::from_str(key),JsValue::from_str(&hash),
-              JsValue::from_str(trace),JsValue::from_str(&actor.identity)])?);
+              JsValue::from_str(trace),JsValue::from_str(&actor.identity),JsValue::from_str(&crm_core_contracts::nfc_text_key(party.display_name()))])?);
     }
     if receipts > 0 && receipts != rows.len() {
         return Ok(Err(failed("IMPORT_PARTIAL_REPLAY_CONFLICT", 409)));
@@ -255,11 +255,11 @@ pub(super) async fn create_typed(
     .map_err(|e| worker::Error::RustError(e.to_string()))?;
     // Existing D1 triggers write the audit and idempotency receipt atomically.
     let result = bind(db,
-        "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?)",
+        "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) VALUES(?,?,?,?,?,?,?,?,?)",
         &[JsValue::from_str(tenant), JsValue::from_str(party.party_id().as_str()),
           JsValue::from_str(&state), JsValue::from_f64(1.0),
           JsValue::from_str(key), JsValue::from_str(&hash),
-          JsValue::from_str(request_id), JsValue::from_str(&actor.identity)])?.run().await;
+          JsValue::from_str(request_id), JsValue::from_str(&actor.identity), JsValue::from_str(&crm_core_contracts::nfc_text_key(party.display_name()))])?.run().await;
     if result.is_err() {
         return Ok(Err(failed("PARTIES_PARTY_CREATE_CONFLICT", 409)));
     }
@@ -316,10 +316,10 @@ pub(super) async fn update_typed(
     )
     .map_err(|e| worker::Error::RustError(e.to_string()))?;
     let result = bind(db,
-        "UPDATE crm_party_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?",
+        "UPDATE crm_party_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,search_name=? WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&state), JsValue::from_f64(party.version() as f64),
           JsValue::from_str(key), JsValue::from_str(&hash),
-          JsValue::from_str(request_id), JsValue::from_str(&actor.identity), JsValue::from_str(tenant),
+          JsValue::from_str(request_id), JsValue::from_str(&actor.identity), JsValue::from_str(&crm_core_contracts::nfc_text_key(party.display_name())), JsValue::from_str(tenant),
           JsValue::from_str(id), JsValue::from_f64(expected_version as f64)])?.run().await;
     let Ok(changed) = result else {
         return Ok(Err(failed("PARTIES_PARTY_UPDATE_CONFLICT", 409)));
@@ -353,8 +353,11 @@ pub(super) async fn list_page_typed(
         params.push(JsValue::from_str(value));
     }
     if !search.is_empty() {
-        query.push_str(" AND (instr(json_extract(state,'$.display_name'),?)>0 OR instr(id,?)>0)");
-        params.extend([JsValue::from_str(search), JsValue::from_str(search)]);
+        query.push_str(" AND (instr(search_name,?)>0 OR instr(id,?)>0)");
+        params.extend([
+            JsValue::from_str(&crm_core_contracts::nfc_text_key(search)),
+            JsValue::from_str(search),
+        ]);
     }
     query.push_str(" ORDER BY id LIMIT ?");
     params.push(JsValue::from_f64((page_size + 1) as f64));

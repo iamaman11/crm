@@ -737,6 +737,12 @@ impl Deal {
                 ),
             ));
         }
+        if self.version == i64::MAX {
+            return Err(conflict(
+                "SALES_DEAL_VERSION_EXHAUSTED",
+                "deal version cannot be incremented",
+            ));
+        }
         Ok(())
     }
 
@@ -909,6 +915,63 @@ mod tests {
             occurred_at_unix_nanos: 10,
         })
         .unwrap()
+    }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(proptest::test_runner::Config {
+            cases: 256,
+            rng_seed: proptest::test_runner::RngSeed::Fixed(471_2026),
+            ..proptest::test_runner::Config::default()
+        })]
+
+        #[test]
+        fn property_failed_later_patch_and_stale_replay_are_atomic(
+            label in "[A-Za-z0-9]{1,32}", units in 1i64..=i64::MAX,
+            stale in 2i64..=i64::MAX, moment in 10i64..=i64::MAX,
+        ) {
+            let mut deal = open_deal();
+            let before = deal.clone();
+            let command = UpdateDeal {
+                expected_version: 1,
+                name: Patch::Set(label),
+                owner: Patch::Keep,
+                account: Patch::Clear,
+                primary_contact: Patch::Keep,
+                amount: Patch::Set(Money::new(-i128::from(units), CurrencyCode::try_new("USD").unwrap())),
+                expected_close_date: Patch::Keep,
+                probability: Patch::Keep,
+                forecast_category: None,
+                occurred_at_unix_nanos: moment,
+            };
+            prop_assert!(deal.apply_update(command.clone()).is_err());
+            prop_assert_eq!(&deal, &before);
+            let valid = UpdateDeal {
+                amount: Patch::Set(Money::new(i128::from(units), CurrencyCode::try_new("USD").unwrap())),
+                ..command
+            };
+            let stale_result = deal.apply_update(UpdateDeal { expected_version: stale, ..valid.clone() });
+            prop_assert!(stale_result.is_err());
+            prop_assert_eq!(&deal, &before);
+            let mut exhausted_snapshot = before.snapshot();
+            exhausted_snapshot.version = i64::MAX;
+            let mut exhausted = Deal::rehydrate(exhausted_snapshot).unwrap();
+            let exhausted_before = exhausted.clone();
+            let error = exhausted.apply_update(UpdateDeal {
+                expected_version: i64::MAX,
+                ..valid.clone()
+            }).unwrap_err();
+            prop_assert_eq!(error.code, "SALES_DEAL_VERSION_EXHAUSTED");
+            prop_assert_eq!(exhausted, exhausted_before);
+            deal.apply_update(valid.clone()).unwrap();
+            prop_assert_eq!(deal.version(), 2);
+            let committed = deal.clone();
+            prop_assert!(deal.apply_update(valid).is_err());
+            prop_assert_eq!(&deal, &committed);
+            let bytes = crate::encode_deal_state(&deal).unwrap();
+            prop_assert_eq!(crate::decode_deal_state(&bytes).unwrap(), committed);
+        }
     }
 
     #[test]

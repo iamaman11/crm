@@ -6,9 +6,11 @@ import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useReadAction,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
 import {AccountPicker} from "./Pickers";
-import {DealContactPicker,DealDetails,inputDate,parseDate,forecastCategoryText,probabilitySourceText} from "./DealRecord";
+import {DealContactPicker,DealDetails,forecastCategoryText,probabilitySourceText} from "./DealRecord";
+import {inputDate,parseDate} from "./calendarInput";
 import {dealHref} from "./routes";
-import {minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText} from "./money";
+import {currencyCatalog,minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText} from "./money";
+import type {CurrencyCatalog} from "./money";
 import styles from "./App.module.css";
 
 type EditorMode="create"|"edit"|"advance"|"close"|"reopen"|null;
@@ -22,18 +24,21 @@ function stageDrafts(pipeline?:SalesPipeline):StageDraft[] {
     {stageId:newId(),name:"Квалификация",probability:"40",archived:false}
   ];
 }
-async function allPipelines(signal:AbortSignal):Promise<SalesPipeline[]> {
+async function allPipelines(signal:AbortSignal):Promise<{pipelines:SalesPipeline[];currencies:CurrencyCatalog}> {
   const all:SalesPipeline[]=[];
+  let currencies:CurrencyCatalog|undefined;
   let cursor="";
   const seen=new Set<string>();
   do {
     const page=await api.deals.listPipelines({page:{pageSize:100,pageToken:cursor},includeArchived:true},{signal});
+    if(!cursor)currencies=currencyCatalog(page.currencies);
     all.push(...page.pipelines);
     cursor=page.pageInfo?.nextPageToken??"";
     if(cursor&&seen.has(cursor))throw Error("Повторный курсор воронок");
     if(cursor)seen.add(cursor);
   } while(cursor);
-  return all;
+  if(!currencies)throw Error("Справочник валют не получен");
+  return {pipelines:all,currencies};
 }
 async function allSalesViews(signal:AbortSignal):Promise<SalesDealView[]> {
   const all:SalesDealView[]=[];
@@ -134,7 +139,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
     );
   };
   const pipelinesQuery=useQuery(useCallback(allPipelines,[]));
-  const pipelines=pipelinesQuery.data??[];
+  const pipelines=pipelinesQuery.data?.pipelines??[];
   const activePipeline=pipelines.find(p=>p.pipelineId===pipelineId);
   const query=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!activePipeline)return [];
@@ -221,11 +226,19 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const advancePipeline=pipelines.find(p=>p.pipelineId===advance?.stage?.pipelineId);
   const nextStages=!advancePipeline?.archived?advancePipeline?.stages.filter(s=>!s.archived&&s.ordinal>(advance?.stage?.ordinal??0))??[]:[];
   const readyStage=!activePipeline?.archived?activePipeline?.stages.find(s=>!s.archived):undefined;
+  // Do not interpret monetary values until the authoritative catalog arrives.
+  if(!pipelinesQuery.data)return <>
+    <PageHeader title="Сделки"/><QueryNotice query={pipelinesQuery}/>
+    <Button variant="secondary" disabled={pipelinesQuery.busy}
+      onClick={()=>void pipelinesQuery.reload().catch(()=>{})}>Повторить загрузку</Button>
+    <MutationNotice state={mutation}/>
+  </>;
+  const currencyDefinitions=pipelinesQuery.data.currencies;
   return <>
     <QueryNotice query={editorRead}/>
     {focusedDealId?<section>
       <PageHeader title="Карточка сделки" actions={<a href="#sales">К списку сделок</a>}/>
-      <DealDetails key={focusedDealId+":"+detailRevision} dealId={focusedDealId}
+      <DealDetails currencies={currencyDefinitions} key={focusedDealId+":"+detailRevision} dealId={focusedDealId}
         onEdit={()=>void open(focusedDealId,"edit")}
         onClose={()=>void open(focusedDealId,"close")}
         onReopen={()=>void open(focusedDealId,"reopen")}/>
@@ -338,8 +351,8 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
                 </div>}
                 {currencies.length===0?<p>Суммы не указаны</p>:currencies.map(total=>
                   <p key={total.currencyCode}>
-                    {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode)} {total.currencyCode}
-                    {" · взвешено: "}{weightedMoneyText(total.weightedMinorUnitsTimesBasisPoints,total.currencyCode)}
+                    {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode,currencyDefinitions)} {total.currencyCode}
+                    {" · взвешено: "}{weightedMoneyText(total.weightedMinorUnitsTimesBasisPoints,total.currencyCode,currencyDefinitions)}
                     {" · сделок с суммой: "}{total.amountDealCount.toString()}
                   </p>)}
               </div>;
@@ -360,8 +373,8 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           <h3>{forecastCategoryText(category)}</h3>
           <p>Сделок: {(group?.dealCount??0n).toString()} · по этапу: {(group?.stageDefaultCount??0n).toString()} · вручную: {(group?.manualCount??0n).toString()}</p>
           {totals.length===0?<p>Суммы не указаны</p>:totals.map(total=><p key={total.currencyCode}>
-            {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode)} {total.currencyCode}
-            {" · взвешено: "}{weightedMoneyText(total.weightedMinorUnitsTimesBasisPoints,total.currencyCode)}
+            {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode,currencyDefinitions)} {total.currencyCode}
+            {" · взвешено: "}{weightedMoneyText(total.weightedMinorUnitsTimesBasisPoints,total.currencyCode,currencyDefinitions)}
             {" · сделок с суммой: "}{total.amountDealCount.toString()}
           </p>)}
         </div>;
@@ -381,14 +394,14 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           <a href={dealHref(deal.dealId)}>Полная страница</a>
           <p>Воронка: {pipeline?.name??deal.stage?.pipelineId??"неизвестна"} · Этап: {stage?.name??deal.stage?.stageId??"неизвестен"}</p>
           {pipeline&&<Button variant="secondary" onClick={()=>{setPipelineId(pipeline.pipelineId);setStageCursors({});}}>Открыть воронку</Button>}
-          <p>{moneyText(deal.amount)} · {percent(deal.probabilityBasisPoints)}%</p>
+          <p>{moneyText(deal.amount,currencyDefinitions)} · {percent(deal.probabilityBasisPoints)}%</p>
           {deal.status===DealStatus.OPEN&&<p>{probabilitySourceText(deal.probabilitySource)} · {forecastCategoryText(deal.forecastCategory)}</p>}
           <p>{deal.status===DealStatus.OPEN?"Открыта":deal.status===DealStatus.WON?"Выиграна":"Проиграна"} · версия {deal.version.toString()}</p>
           {deal.status===DealStatus.OPEN?<>
             <Button variant="secondary" onClick={()=>void open(deal.dealId,"edit")}>Редактировать</Button>{" "}
             <Button variant="secondary" onClick={()=>void open(deal.dealId,"close")}>Завершить</Button>
           </>:<Button variant="secondary" onClick={()=>void open(deal.dealId,"reopen")}>Открыть повторно</Button>}
-          {expandedDeal===deal.dealId&&<DealDetails key={deal.dealId+":"+detailRevision}
+          {expandedDeal===deal.dealId&&<DealDetails currencies={currencyDefinitions} key={deal.dealId+":"+detailRevision}
             dealId={deal.dealId} onEdit={()=>void open(deal.dealId,"edit")}
             onClose={()=>void open(deal.dealId,"close")}
              onReopen={()=>void open(deal.dealId,"reopen")}/>}
@@ -435,7 +448,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           </div>}
           {boardPage&&<div role="group" aria-label={"Итоги этапа "+stage.name}>
             {boardPage.currencyTotals.map(total=><p key={total.currencyCode}>
-              {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode)} {total.currencyCode}
+              {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode,currencyDefinitions)} {total.currencyCode}
               {" · сделок с суммой: "}{total.amountDealCount.toString()}
             </p>)}
             {boardPage.currencyTotals.length===0&&<p>Суммы не указаны</p>}
@@ -458,7 +471,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
                 onDragEnd={()=>setDraggingDeal(null)}>
                 Перетащить
               </span>}
-            <p>{moneyText(d.amount)} · {percent(d.probabilityBasisPoints)}%</p>
+            <p>{moneyText(d.amount,currencyDefinitions)} · {percent(d.probabilityBasisPoints)}%</p>
             {d.status===DealStatus.OPEN&&<p>{probabilitySourceText(d.probabilitySource)} · {forecastCategoryText(d.forecastCategory)}</p>}
             <p>Клиент: {d.accountId}</p>
             <p>{d.status===DealStatus.WON?"Выиграна":d.status===DealStatus.LOST?"Проиграна":
@@ -468,7 +481,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
               <Button variant="secondary" onClick={()=>void open(d.dealId,"advance")}>Изменить этап</Button>{" "}
               <Button variant="secondary" onClick={()=>void open(d.dealId,"close")}>Завершить сделку</Button>
             </>:<Button variant="secondary" onClick={()=>void open(d.dealId,"reopen")}>Открыть повторно</Button>}
-            {expandedDeal===d.dealId&&<DealDetails key={d.dealId+":"+detailRevision}
+            {expandedDeal===d.dealId&&<DealDetails currencies={currencyDefinitions} key={d.dealId+":"+detailRevision}
               dealId={d.dealId} onEdit={()=>void open(d.dealId,"edit")}
               onClose={()=>void open(d.dealId,"close")}
                onReopen={()=>void open(d.dealId,"reopen")}/>}
@@ -614,7 +627,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           const currencyCode=field(data,"currency"),amountText=field(data,"amount");
           const mode=selected?field(data,"amountMode"):"set";
           const amount=mode==="set"&&amountText?{
-            minorUnits:minorUnits(amountText,currencyCode),currencyCode
+            minorUnits:minorUnits(amountText,currencyCode,currencyDefinitions),currencyCode
           }:undefined;
           const sourceValue=field(data,"probabilitySource");
           const source=selected&&sourceValue==="keep"?undefined:enumValue(sourceValue,
@@ -684,9 +697,9 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           <option value="clear">Убрать</option>
         </SelectField>}
         <TextField label="Сумма" name="amount" inputMode="decimal"
-          defaultValue={selected?.amount?decimalUnits(selected.amount.minorUnits,selected.amount.currencyCode):""}/>
+          defaultValue={selected?.amount?decimalUnits(selected.amount.minorUnits,selected.amount.currencyCode,currencyDefinitions):""}/>
         <SelectField label="Валюта" name="currency" defaultValue={selected?.amount?.currencyCode??"USD"}>
-          {["USD","EUR","PLN","JPY","KWD"].map(c=><option key={c} value={c}>{c}</option>)}
+          {Array.from(currencyDefinitions.keys()).map(c=><option key={c} value={c}>{c}</option>)}
         </SelectField>
         <SelectField label="Источник вероятности" name="probabilitySource"
           value={probabilityChoice} onChange={e=>setProbabilityChoice(e.target.value)}>

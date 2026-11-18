@@ -130,9 +130,9 @@ try{
    display_name:"Original Rust Party",created_at_unix_nanos:10,
    updated_at_unix_nanos:10,version:1});
  run(["d1","execute","crm-rust-party-local","--local","--persist-to",data,
-   "--command","INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) "+
+   "--command","INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) "+
      "VALUES('tenant-a','binary-rpc-proof-01','"+state.replaceAll("'","''")+
-     "',1,'fixture-key-01','fixture-digest-01',NULL,'native-a@example.test');"]);
+     "',1,'fixture-key-01','fixture-digest-01',NULL,'native-a@example.test','Original Rust Party');"]);
  // Wrangler's applied-migration ledger must prevent a second reset.
  run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
  // Use the pinned Wrangler config translator: no second routing or asset
@@ -558,6 +558,22 @@ try{
  assert.equal((await contactV2("CreateContactPoint",admin,{
    ...contactInput,partyId:"missing-party",
    precondition:{idempotencyKey:"candidate-v2-contact-invalid-party"}})).status,400);
+ for(const [index,value] of [
+   "Ada..Tag@example.test","Ada<>@example.test","Ada@exa_mple.test",
+   "Ada@example.test.","Ada@[127.0.0.1]","Ада@example.test"
+ ].entries()){
+   const denied=await contactV2("CreateContactPoint",admin,{
+     ...contactInput,value,precondition:{idempotencyKey:"contact-email-invalid-"+index}});
+   assert.equal(denied.status,400,describeProtobuf(denied.body));
+ }
+ for(const [index,value] of [
+   "2025550102","+999123456789","+11111111111",
+   "+1 202 555 0102 ext 42","+1 202 555 0102 junk"
+ ].entries()){
+   const denied=await contactV2("CreateContactPoint",admin,{
+     ...contactInput,kind:2,value,precondition:{idempotencyKey:"contact-phone-invalid-"+index}});
+   assert.equal(denied.status,400,describeProtobuf(denied.body));
+ }
  const contactCreated=await contactV2("CreateContactPoint",admin,contactInput,{
     "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
     "cf-access-authenticated-user-email":"forged@example.test"});
@@ -670,10 +686,17 @@ try{
    [contactLastId,id]
  ].entries()){
    const made=await contactV2("CreateContactPoint",admin,{
-     contactPointId:pointToCreate[0],partyId:pointToCreate[1],kind:1,
-     value:"page-"+index+"@example.org",preferred:false,
+     contactPointId:pointToCreate[0],partyId:pointToCreate[1],kind:index===0?2:1,
+     value:index===0?"+1 202 555 0102":"page-"+index+"@example.org",preferred:false,
      precondition:{idempotencyKey:"page-contact-create-"+index}});
    assert.equal(made.status,200,describeProtobuf(made.body));
+   if(index===0){
+     assert.equal(made.body.contactPoint?.normalizedValue,"+12025550102");
+     assert.equal(made.body.contactPoint?.verified,false);
+     const read=await contactV2("GetContactPoint",viewer,{contactPointId:pointToCreate[0]});
+     assert.equal(read.status,200,describeProtobuf(read.body));
+     assert.equal(read.body.contactPoint?.normalizedValue,"+12025550102");
+   }
  }
  const filteredContacts=await collectPages(contactV2,"ListContactPoints",
    "contactPoints",{partyId:id});
@@ -1465,6 +1488,17 @@ const pipelineList=await salesV2("ListPipelines",viewer,{page:{pageSize:1}});
 assert.equal(pipelineList.status,200,describeProtobuf(pipelineList.body));
 assert.equal(pipelineList.body.pipelines.length,1);
 assert.ok(pipelineList.body.pageInfo?.nextPageToken);
+const currencyRows=pipelineList.body.currencies;
+assert.equal(currencyRows.length,165);
+const currencyByCode=new Map(currencyRows.map(row=>[row.currencyCode,row.minorUnitExponent]));
+assert.equal(currencyByCode.size,currencyRows.length);
+for(const [code,exponent] of [["JPY",0],["USD",2],["EUR",2],["KWD",3],["CLF",4]])
+  assert.equal(currencyByCode.get(code),exponent);
+for(const code of ["ZZZ","XXX","XAU","BGN"])assert.equal(currencyByCode.has(code),false);
+const pipelineNext=await salesV2("ListPipelines",viewer,{page:{pageSize:1,pageToken:pipelineList.body.pageInfo.nextPageToken}});
+assert.equal(pipelineNext.status,200,describeProtobuf(pipelineNext.body));
+assert.equal(pipelineNext.body.pipelines.length,1);
+assert.equal(pipelineNext.body.currencies.length,0);
 const pipelineUpdated=await salesV2("UpdatePipeline",admin,{
   pipelineId:"pipeline.enterprise",name:"Enterprise managed",
   stages:pipelineSeed.stages,archived:false,
@@ -1587,6 +1621,13 @@ const denialAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE te
   "AND subject_id='"+dealId+"'"))[0].n;
 assert.equal((await salesV2("CreateDeal",null,saleCreate)).status,401);
 assert.equal((await salesV2("CreateDeal",viewer,saleCreate)).status,403);
+for(const currencyCode of ["ZZZ","XXX","XAU","BGN"]){
+  const rejected=await salesV2("CreateDeal",admin,{
+    ...saleCreate,amount:{minorUnits:1n,currencyCode},
+    precondition:{idempotencyKey:"connect-sales-unsupported-currency-"+currencyCode}
+  });
+  assert.equal(rejected.status,400,describeProtobuf(rejected.body));
+}
 assert.equal((await salesV2("CreateDeal",admin,{
   ...saleCreate,stage:undefined,
   precondition:{idempotencyKey:"connect-sales-no-stage"}})).status,400);
@@ -3038,9 +3079,9 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const boundaryRows=Array.from({length:101},(_,i)=>{
    const state=JSON.stringify({party_id:"csv-boundary-"+i,kind:"person",display_name:"Boundary "+i,
      created_at_unix_nanos:10,updated_at_unix_nanos:10,version:1});
-   return "('tenant-b','csv-boundary-"+i+"','"+state+"',1,'csv-boundary-key-"+i+"','fixture','fixture','native-b@example.test')";
+   return "('tenant-b','csv-boundary-"+i+"','"+state+"',1,'csv-boundary-key-"+i+"','fixture','fixture','native-b@example.test','Boundary "+i+"')";
  }).join(",");
- await sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor) VALUES "+boundaryRows);
+ await sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) VALUES "+boundaryRows);
  assert.equal((await csv("PreviewPartyExport",tenantB,{kind:2})).body.code,"failed_precondition");
  assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv?kind=organization",{
    headers:{"cf-access-jwt-assertion":tenantB}})).status,409);
@@ -3073,6 +3114,47 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await accountV2("CreateAccount",admin,{accountId:target,name,primaryPartyId:id,
      precondition:{idempotencyKey:"search-account-"+index}})).status,200);
  }
+ const nfcPartyId="zzz-nfc-party",nfcAccountId="zzz-nfc-account";
+ const originalNfcName="Cafe\u0301 И\u0306ошкар-Ола";
+ const canonicalNfcName="Café Йошкар-Ола";
+ const nfcParty=await v3("CreateParty",admin,{partyId:nfcPartyId,kind:2,displayName:originalNfcName,
+   precondition:{idempotencyKey:"nfc-party-create"}});
+ assert.equal(nfcParty.status,200,describeProtobuf(nfcParty.body));
+ const nfcAccount=await accountV2("CreateAccount",admin,{accountId:nfcAccountId,name:canonicalNfcName,
+   primaryPartyId:nfcPartyId,precondition:{idempotencyKey:"nfc-account-create"}});
+ assert.equal(nfcAccount.status,200,describeProtobuf(nfcAccount.body));
+ for(const needle of [originalNfcName,canonicalNfcName]){
+   const parties=await collectPages(v3,"ListParties","parties",{search:needle});
+   assert.equal(parties.find(row=>row.partyId===nfcPartyId)?.displayName,originalNfcName);
+   const accounts=await collectPages(accountV2,"ListAccounts","accounts",{search:needle});
+   assert.equal(accounts.find(row=>row.accountId===nfcAccountId)?.name,canonicalNfcName);
+ }
+ assert.deepEqual(await sql("SELECT search_name FROM crm_party_records WHERE id='zzz-nfc-party'"),
+   [{search_name:canonicalNfcName}]);
+ assert.deepEqual(await sql("SELECT search_name FROM crm_account_records WHERE id='zzz-nfc-account'"),
+   [{search_name:canonicalNfcName}]);
+ const nfcUpdateName="Renamed Cafe\u0301";
+ const nfcUpdateCanonical="Renamed Café";
+ const updatedNfcParty=await v3("UpdateParty",admin,{partyId:nfcPartyId,displayName:nfcUpdateName,
+   precondition:{idempotencyKey:"nfc-party-update",expectedVersion:1n}});
+ assert.equal(updatedNfcParty.status,200,describeProtobuf(updatedNfcParty.body));
+ const updatedNfcAccount=await accountV2("UpdateAccount",admin,{accountId:nfcAccountId,name:nfcUpdateName,status:1,
+   precondition:{idempotencyKey:"nfc-account-update",expectedVersion:1n}});
+ assert.equal(updatedNfcAccount.status,200,describeProtobuf(updatedNfcAccount.body));
+ assert.equal((await collectPages(v3,"ListParties","parties",{search:canonicalNfcName})).length,0);
+ assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{search:canonicalNfcName})).length,0);
+ assert.equal((await collectPages(v3,"ListParties","parties",{search:nfcUpdateCanonical}))[0]?.displayName,nfcUpdateName);
+ assert.equal((await collectPages(accountV2,"ListAccounts","accounts",{search:nfcUpdateCanonical}))[0]?.name,nfcUpdateName);
+ const nfcCsvBytes=new TextEncoder().encode("party_id,kind,display_name,resource_version\r\nnfc-import,person,Imported Cafe\u0301,1\r\n");
+ const nfcPreview=await csv("PreviewPartyImport",admin,{csv:nfcCsvBytes});
+ assert.equal(nfcPreview.status,200,describeProtobuf(nfcPreview.body));
+ const nfcApplied=await csv("ApplyPartyImport",admin,{csv:nfcCsvBytes,
+   expectedSha256Hex:nfcPreview.body.csvSha256Hex,precondition:{idempotencyKey:"nfc-import-operation"}});
+ assert.equal(nfcApplied.status,200,describeProtobuf(nfcApplied.body));
+ const importedNfc=await collectPages(v3,"ListParties","parties",{search:"Imported Café"});
+ assert.equal(importedNfc.length,1);
+ assert.equal(importedNfc[0].partyId,nfcPreview.body.targetPartyIds[0]);
+ assert.equal(importedNfc[0].displayName,"Imported Cafe\u0301");
  const searchSnapshot=async()=>({party:(await partySnapshot()),
    accounts:(await sql("SELECT id,state,version FROM crm_account_records ORDER BY tenant,id")),
    accountReceipts:(await sql("SELECT COUNT(*) AS n FROM crm_account_receipts"))});

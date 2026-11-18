@@ -5,3 +5,11 @@ edition = "2024"
 publish = false
 
 [dependencies]
+thiserror = { workspace = true }
+jiff = { workspace = true }
+iso4217-static = { workspace = true }
+rust_decimal = { workspace = true }
+unicode-normalization = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

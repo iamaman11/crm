@@ -38,10 +38,19 @@
     "tracking_issue": "#194",
     "exception_rule": "workspace-dependency-no-growth",
     "dependency_families": [
+      "email_address",
+      "iso4217-static",
+      "jiff",
+      "phonenumber",
+      "proptest",
       "prost",
+      "rust_decimal",
       "serde",
       "serde_json",
-      "sha2"
+      "serde_path_to_error",
+      "sha2",
+      "thiserror",
+      "unicode-normalization"
     ],
     "accepted_specs": {
       "prost": {
@@ -90,6 +99,134 @@
         "version": "0.10",
         "features": [],
         "default_features": true,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "thiserror": {
+        "workspace": false,
+        "version": "2",
+        "features": [],
+        "default_features": true,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "jiff": {
+        "workspace": false,
+        "version": "=0.2.42",
+        "features": [
+          "std",
+          "tzdb-bundle-always"
+        ],
+        "default_features": false,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "iso4217-static": {
+        "workspace": false,
+        "version": "=0.3.1",
+        "features": [],
+        "default_features": false,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "rust_decimal": {
+        "workspace": false,
+        "version": "=1.43.0",
+        "features": [
+          "std"
+        ],
+        "default_features": false,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "email_address": {
+        "workspace": false,
+        "version": "=0.2.10",
+        "features": [
+          "std"
+        ],
+        "default_features": false,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "phonenumber": {
+        "workspace": false,
+        "version": "=0.3.10",
+        "features": [],
+        "default_features": false,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "unicode-normalization": {
+        "workspace": false,
+        "version": "=0.1.25",
+        "features": [
+          "std"
+        ],
+        "default_features": false,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "serde_path_to_error": {
+        "workspace": false,
+        "version": "=0.1.20",
+        "features": [],
+        "default_features": true,
+        "path": null,
+        "git": null,
+        "registry": null,
+        "package": null,
+        "branch": null,
+        "rev": null,
+        "tag": null
+      },
+      "proptest": {
+        "workspace": false,
+        "version": "=1.12.0",
+        "features": [
+          "std"
+        ],
+        "default_features": false,
         "path": null,
         "git": null,
         "registry": null,
@@ -214,7 +351,16 @@
         "crates/crm-query-runtime/Cargo.toml",
         "crates/crm-search-runtime/Cargo.toml",
         "services/crm-api/Cargo.toml"
-      ]
+      ],
+      "thiserror": [],
+      "jiff": [],
+      "iso4217-static": [],
+      "rust_decimal": [],
+      "email_address": [],
+      "phonenumber": [],
+      "unicode-normalization": [],
+      "serde_path_to_error": [],
+      "proptest": []
     }
   }
 }

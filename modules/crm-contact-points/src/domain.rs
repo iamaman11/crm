@@ -234,8 +234,21 @@ impl ContactPoint {
         )?;
         validate_preference(snapshot.status, snapshot.preferred)?;
 
-        let (normalized_value, display_value) =
-            normalize_value(snapshot.kind, &snapshot.display_value)?;
+        // An erased endpoint is represented by an empty pair only in this
+        // irreversible owner state. Ordinary input never uses this path.
+        let (normalized_value, display_value) = if snapshot.display_value.is_empty()
+            && snapshot.normalized_value.is_empty()
+            && snapshot.status == ContactPointStatus::Inactive
+            && !snapshot.preferred
+            && snapshot.valid_from_unix_nanos.is_none()
+            && snapshot.valid_until_unix_nanos.is_none()
+            && !snapshot.verification.is_verified()
+            && snapshot.version > 1
+        {
+            (String::new(), String::new())
+        } else {
+            normalize_value(snapshot.kind, &snapshot.display_value)?
+        };
         if display_value != snapshot.display_value {
             return Err(invalid(
                 "CONTACT_POINTS_PERSISTED_DISPLAY_VALUE_INVALID",
@@ -282,6 +295,12 @@ impl ContactPoint {
             command.valid_until_unix_nanos,
         )?;
         validate_preference(command.status, command.preferred)?;
+        if self.is_redacted() {
+            return Err(conflict(
+                "CONTACT_POINTS_REDACTED",
+                "An erased Contact Point cannot be edited.",
+            ));
+        }
         let (normalized_value, display_value) = normalize_value(self.kind, &command.value)?;
         let value_changed = normalized_value != self.normalized_value;
         let next_verification = if value_changed {
@@ -316,6 +335,32 @@ impl ContactPoint {
         self.updated_at_unix_nanos = command.occurred_at_unix_nanos;
         self.version = next_version;
         Ok(())
+    }
+
+    /// Privacy owner action: remove the endpoint and its evidence, never invent
+    /// a replacement address or telephone number. CAS/time checks precede mutation.
+    pub fn redact(
+        &mut self,
+        expected_version: i64,
+        occurred_at_unix_nanos: i64,
+    ) -> Result<(), SdkError> {
+        self.require_version(expected_version)?;
+        self.require_monotonic_time(occurred_at_unix_nanos)?;
+        let next_version = self.next_version()?;
+        self.normalized_value.clear();
+        self.display_value.clear();
+        self.status = ContactPointStatus::Inactive;
+        self.preferred = false;
+        self.valid_from_unix_nanos = None;
+        self.valid_until_unix_nanos = None;
+        self.verification = VerificationState::Unverified;
+        self.updated_at_unix_nanos = occurred_at_unix_nanos;
+        self.version = next_version;
+        Ok(())
+    }
+
+    pub fn is_redacted(&self) -> bool {
+        self.normalized_value.is_empty()
     }
 
     pub fn verify(&mut self, command: VerifyContactPoint) -> Result<(), SdkError> {
@@ -569,82 +614,67 @@ fn normalize_value(kind: ContactPointKind, value: &str) -> Result<(String, Strin
 
 fn normalize_email(value: &str) -> Result<(String, String), SdkError> {
     let display = normalize_display(value, MAX_EMAIL_BYTES, "email")?;
+    // CRM stores a single mailbox, not a header; the transport does not
+    // currently negotiate SMTPUTF8 or quoted local-part semantics.
     if display.chars().any(char::is_whitespace) {
         return Err(value_invalid("email must not contain whitespace"));
     }
-    let mut parts = display.rsplitn(2, '@');
-    let domain = parts.next().unwrap_or_default();
-    let local = parts.next().unwrap_or_default();
-    if local.is_empty()
-        || domain.is_empty()
-        || local.contains('@')
-        || local.len() > 64
-        || local.starts_with('.')
-        || local.ends_with('.')
-        || local.contains("..")
-    {
-        return Err(value_invalid("email address is invalid"));
+    let (local, domain) = display
+        .rsplit_once('@')
+        .ok_or_else(|| value_invalid("email address is invalid"))?;
+    if !local.is_ascii() || local.contains('"') {
+        return Err(value_invalid("email local part must be unquoted ASCII"));
     }
-
-    let ascii_domain = idna::domain_to_ascii(domain)
+    let ascii_domain = idna::domain_to_ascii_strict(domain)
         .map_err(|_| value_invalid("email domain is invalid"))?
         .to_ascii_lowercase();
-    validate_ascii_domain(&ascii_domain)?;
     let normalized = format!("{local}@{ascii_domain}");
+    let options = email_address::Options::default()
+        .with_required_tld()
+        .without_domain_literal()
+        .without_display_text();
+    email_address::EmailAddress::parse_with_options(&normalized, options)
+        .map_err(|_| value_invalid("email address is invalid"))?;
     if normalized.len() > MAX_EMAIL_BYTES {
         return Err(value_invalid("normalized email address is too long"));
     }
     Ok((normalized, display))
 }
 
-fn validate_ascii_domain(domain: &str) -> Result<(), SdkError> {
-    if domain.is_empty() || domain.len() > 253 || !domain.contains('.') || domain.ends_with('.') {
-        return Err(value_invalid("email domain is invalid"));
-    }
-    if domain.split('.').any(|label| {
-        label.is_empty()
-            || label.len() > 63
-            || label.starts_with('-')
-            || label.ends_with('-')
-            || !label
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-    }) {
-        return Err(value_invalid("email domain is invalid"));
-    }
-    Ok(())
-}
-
 fn normalize_phone(value: &str) -> Result<(String, String), SdkError> {
     let display = normalize_display(value, MAX_PHONE_DISPLAY_BYTES, "phone")?;
-    let mut normalized = String::with_capacity(display.len());
-    for (index, character) in display.chars().enumerate() {
-        match character {
-            '+' if index == 0 => normalized.push(character),
-            '0'..='9' => normalized.push(character),
-            ' ' | '-' | '(' | ')' | '.' => {}
-            _ => {
-                return Err(value_invalid(
-                    "phone must be an E.164 number with safe separators",
-                ));
-            }
-        }
-    }
-    if !normalized.starts_with('+') {
+    // No implicit user region, vanity numbers, extensions or trailing text.
+    let Some(international) = display.strip_prefix('+') else {
         return Err(value_invalid(
             "phone must start with '+' and include a country code",
         ));
+    };
+    if !international
+        .bytes()
+        .all(|byte| matches!(byte, b'0'..=b'9' | b' ' | b'-' | b'(' | b')' | b'.'))
+    {
+        return Err(value_invalid(
+            "phone must not contain extensions or non-numeric content",
+        ));
     }
-    let digit_count = normalized.len().saturating_sub(1);
-    if !(8..=15).contains(&digit_count) || normalized.as_bytes().get(1) == Some(&b'0') {
-        return Err(value_invalid("phone must contain 8 to 15 E.164 digits"));
+    let parsed = phonenumber::parse(None, &display)
+        .map_err(|_| value_invalid("phone is invalid for its country calling code"))?;
+    if parsed.extension().is_some() || !parsed.is_valid() {
+        return Err(value_invalid(
+            "phone is invalid for its country calling code",
+        ));
     }
+    let normalized = parsed.format().mode(phonenumber::Mode::E164).to_string();
     Ok((normalized, display))
 }
 
 fn normalize_postal(value: &str) -> Result<(String, String), SdkError> {
     let display = normalize_display(value, MAX_POSTAL_BYTES, "postal address")?;
-    Ok((display.clone(), display))
+    let normalized = crm_core_contracts::nfc_text_key(&display);
+    if normalized.len() > MAX_POSTAL_BYTES {
+        return Err(value_invalid("normalized postal address is too long"));
+    }
+    Ok((normalized, display))
 }
 
 fn normalize_web(value: &str) -> Result<(String, String), SdkError> {
@@ -785,6 +815,39 @@ mod tests {
         .unwrap()
     }
 
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(proptest::test_runner::Config {
+            cases: 256,
+            rng_seed: proptest::test_runner::RngSeed::Fixed(471_2026),
+            ..proptest::test_runner::Config::default()
+        })]
+
+        #[test]
+        fn property_email_display_case_and_redaction(
+            local in "[A-Za-z0-9]{1,30}", label in "[A-Za-z]{1,20}",
+            moment in 10i64..=i64::MAX, wrong_version in 2i64..=i64::MAX,
+        ) {
+            let raw = format!("{local}@{label}.Example");
+            let expected = format!("{local}@{}.example", label.to_ascii_lowercase());
+            let mut point = create(ContactPointKind::Email, &raw);
+            prop_assert_eq!(point.display_value(), raw.as_str());
+            prop_assert_eq!(point.normalized_value(), expected.as_str());
+            let before = point.clone();
+            prop_assert!(point.redact(wrong_version, moment).is_err());
+            prop_assert_eq!(&point, &before);
+            point.redact(1, moment).unwrap();
+            let erased = point.clone();
+            prop_assert!(point.redact(1, moment).is_err());
+            prop_assert_eq!(&point, &erased);
+            let bytes = crate::encode_contact_point_state(&point).unwrap();
+            prop_assert_eq!(crate::decode_contact_point_state(&bytes).unwrap(), erased);
+            prop_assert!(point.display_value().is_empty());
+            prop_assert!(point.normalized_value().is_empty());
+        }
+    }
+
     #[test]
     fn normalizes_all_channel_values_deterministically() {
         let email = create(ContactPointKind::Email, "Ada@BÜCHER.Example");
@@ -805,6 +868,164 @@ mod tests {
 
         let postal = create(ContactPointKind::Postal, "  Vilnius   LT  ");
         assert_eq!(postal.normalized_value(), "Vilnius LT");
+    }
+
+    #[test]
+    fn postal_nfc_preserves_display_and_canonical_equality_does_not_merge_contacts() {
+        let decomposed = "Cafe\u{301}, И\u{306}ошкар-Ола";
+        let composed = "Café, Йошкар-Ола";
+        let first = create(ContactPointKind::Postal, decomposed);
+        let second = create(ContactPointKind::Postal, composed);
+        assert_eq!(first.normalized_value(), composed);
+        assert_eq!(second.normalized_value(), composed);
+        assert_eq!(first.display_value(), decomposed);
+        assert_eq!(second.display_value(), composed);
+        assert_ne!(first.snapshot(), second.snapshot());
+        assert!(!first.verification().is_verified());
+        assert!(!second.verification().is_verified());
+        assert_eq!(
+            crate::decode_contact_point_state(&crate::encode_contact_point_state(&first).unwrap())
+                .unwrap(),
+            first
+        );
+        // U+0344 decomposes into two non-composing marks: enforce output size too.
+        assert!(normalize_postal(&"\u{0344}".repeat(MAX_POSTAL_BYTES / 2)).is_err());
+        // No NFKC/compatibility fold; full-width symbols remain distinct.
+        assert_ne!(
+            crm_core_contracts::nfc_text_key("Ａ"),
+            crm_core_contracts::nfc_text_key("A")
+        );
+    }
+
+    #[test]
+    fn phone_parser_requires_real_numbering_plan_and_explicit_country_code() {
+        for (raw, expected) in [
+            ("+370 (612) 34-567", "+37061234567"),
+            ("+1 202-555-0102", "+12025550102"),
+            ("+44 20 7946 0018", "+442079460018"),
+        ] {
+            let point = create(ContactPointKind::Phone, raw);
+            assert_eq!(point.normalized_value(), expected);
+            assert_eq!(point.display_value(), raw);
+            assert!(!point.verification().is_verified());
+        }
+        for raw in [
+            "2025550102",
+            "00442079460018",
+            "+999123456789",
+            "+11111111111",
+            "+1 202 555 0102 ext 42",
+            "+1 202 555 0102#42",
+            "+1 202 555 0102 junk",
+            "+1+2025550102",
+            "+",
+            "+12345678901234567890",
+        ] {
+            assert_eq!(
+                normalize_phone(raw).unwrap_err().code,
+                "CONTACT_POINTS_VALUE_INVALID",
+                "{raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn privacy_redaction_erases_all_endpoint_kinds_and_cannot_be_reactivated() {
+        for (kind, raw) in [
+            (ContactPointKind::Email, "Ada@example.test"),
+            (ContactPointKind::Phone, "+37061234567"),
+            (ContactPointKind::Postal, "Private postal address"),
+            (ContactPointKind::Web, "https://example.test/private"),
+            (ContactPointKind::Messaging, "chat:private"),
+        ] {
+            let mut point = create(kind, raw);
+            point
+                .verify(VerifyContactPoint {
+                    expected_version: 1,
+                    evidence_ref: "private-verification-evidence".to_owned(),
+                    occurred_at_unix_nanos: 20,
+                })
+                .unwrap();
+            let before = point.clone();
+            assert!(point.redact(1, 30).is_err());
+            assert!(point.redact(2, 19).is_err());
+            assert_eq!(point, before);
+            point.redact(2, 30).unwrap();
+            assert!(point.is_redacted());
+            assert_eq!(point.status(), ContactPointStatus::Inactive);
+            assert_eq!(point.display_value(), "");
+            assert_eq!(point.normalized_value(), "");
+            assert!(!point.preferred());
+            assert!(!point.verification().is_verified());
+            assert_eq!(point.valid_from_unix_nanos(), None);
+            assert_eq!(point.valid_until_unix_nanos(), None);
+            let encoded = crate::encode_contact_point_state(&point).unwrap();
+            let encoded_text = std::str::from_utf8(&encoded).unwrap();
+            assert!(!encoded_text.contains(raw));
+            assert!(!encoded_text.contains("private-verification-evidence"));
+            assert_eq!(crate::decode_contact_point_state(&encoded).unwrap(), point);
+            let mut corrupt = point.snapshot();
+            corrupt.status = ContactPointStatus::Active;
+            assert!(ContactPoint::rehydrate(corrupt).is_err());
+            assert!(
+                point
+                    .apply_update(UpdateContactPoint {
+                        expected_version: 3,
+                        value: raw.to_owned(),
+                        status: ContactPointStatus::Active,
+                        preferred: false,
+                        valid_from_unix_nanos: None,
+                        valid_until_unix_nanos: None,
+                        occurred_at_unix_nanos: 40,
+                    })
+                    .is_err()
+            );
+            assert!(
+                point
+                    .verify(VerifyContactPoint {
+                        expected_version: 3,
+                        evidence_ref: "new".to_owned(),
+                        occurred_at_unix_nanos: 40,
+                    })
+                    .is_err()
+            );
+            assert_eq!(point.version(), 3);
+            assert!(normalize_value(kind, "").is_err());
+        }
+    }
+
+    #[test]
+    fn email_parser_preserves_local_case_and_idna_display_without_claiming_verification() {
+        for (raw, expected) in [
+            ("Ada+Tag@EXAMPLE.Test", "Ada+Tag@example.test"),
+            ("ada+tag@example.test", "ada+tag@example.test"),
+            ("Ada@BÜCHER.Example", "Ada@xn--bcher-kva.example"),
+        ] {
+            let point = create(ContactPointKind::Email, raw);
+            assert_eq!(point.normalized_value(), expected);
+            assert_eq!(point.display_value(), raw);
+            assert!(!point.verification().is_verified());
+        }
+        for raw in [
+            "Ada..Tag@example.test",
+            "Ada<>@example.test",
+            "Ada@@example.test",
+            "Ada@exa_mple.test",
+            "Ada@-example.test",
+            "Ada@example.test.",
+            "Ada@[127.0.0.1]",
+            "Ada <ada@example.test>",
+            "\"Ada\"@example.test",
+            "é@example.test",
+            "Ada@localhost",
+        ] {
+            assert_eq!(
+                normalize_email(raw).unwrap_err().code,
+                "CONTACT_POINTS_VALUE_INVALID",
+                "{raw}"
+            );
+        }
+        assert!(normalize_email(&format!("{}@example.test", "a".repeat(65))).is_err());
     }
 
     #[test]

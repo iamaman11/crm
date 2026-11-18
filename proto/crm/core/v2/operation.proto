@@ -12,6 +12,12 @@ message ExactMoney {
   string currency_code = 2;
 }
 
+// Authoritative Rust currency reference data; zero is a valid exponent.
+message CurrencyDefinition {
+  string currency_code = 1;
+  optional uint32 minor_unit_exponent = 2;
+}
+
 // Date-only values never carry an invented timezone or midnight instant.
 message CalendarDate {
   int32 year = 1;

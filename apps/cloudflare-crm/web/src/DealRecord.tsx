@@ -6,6 +6,8 @@ import {ContactPointStatus,DealStatus,ForecastCategory,ProbabilitySource} from "
 import {api,dateText} from "./api";
 import {useQuery,QueryNotice} from "./hooks";
 import {moneyText,percent} from "./money";
+import type {CurrencyCatalog} from "./money";
+import {inputDate} from "./calendarInput";
 import {accountHref,scopeHref,taskHref} from "./routes";
 
 export function forecastCategoryText(category:ForecastCategory):string {
@@ -24,23 +26,6 @@ export function probabilitySourceText(source:ProbabilitySource):string {
     default:return "Неизвестный источник";
   }
 }
-export type Calendar={year:number;month:number;day:number};
-export function inputDate(date:Calendar|undefined):string {
-  return date?String(date.year).padStart(4,"0")+"-"+String(date.month).padStart(2,"0")+
-    "-"+String(date.day).padStart(2,"0"):"";
-}
-export function parseDate(value:string):Calendar|undefined {
-  if(!value)return undefined;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(value))throw Error("Неверная дата закрытия");
-  const [year,month,day]=value.split("-").map(Number);
-  if(year===undefined||month===undefined||day===undefined||year<1||year>9999)
-    throw Error("Неверная дата закрытия");
-  const leap=year%4===0&&(year%100!==0||year%400===0);
-  const maximum=[31,leap?29:28,31,30,31,30,31,31,30,31,30,31][month-1];
-  if(maximum===undefined||day<1||day>maximum)throw Error("Неверная дата закрытия");
-  return {year,month,day};
-}
-
 // Presentation-only picker. Original Account/ContactPoint owners provide
 // choices; original crm-sales Rust validates tenant, Party, Account and status.
 export function DealContactPicker({accountId,initialContactId=""}:{
@@ -124,7 +109,7 @@ export function DealHistory({dealId,accountId}:{dealId:string;accountId:string})
 }
 
 // One canonical GetDeal/ContactPoint read projection for inline/full page.
-export function DealDetails({dealId,onEdit,onClose,onReopen}:{dealId:string;
+export function DealDetails({dealId,currencies,onEdit,onClose,onReopen}:{dealId:string;currencies:CurrencyCatalog;
  onEdit?:()=>void;onClose?:()=>void;onReopen?:()=>void}) {
   const details=useQuery(useCallback(async(signal:AbortSignal)=>{
     const deal=(await api.deals.getDeal({dealId},{signal})).deal;
@@ -145,7 +130,7 @@ export function DealDetails({dealId,onEdit,onClose,onReopen}:{dealId:string;
         <a href={scopeHref("contacts",details.data.contact.partyId)}>
           {details.data.contact.displayValue}</a>:"Не выбран"}</p>
       <p>Воронка: {deal.stage?.pipelineId??"—"} · этап: {deal.stage?.stageId??"—"}</p>
-      <p>Сумма: {moneyText(deal.amount)} · вероятность: {percent(deal.probabilityBasisPoints)}%</p>
+      <p>Сумма: {moneyText(deal.amount,currencies)} · вероятность: {percent(deal.probabilityBasisPoints)}%</p>
       {deal.status===DealStatus.OPEN&&<p>{probabilitySourceText(deal.probabilitySource)} · {forecastCategoryText(deal.forecastCategory)}</p>}
       <p>Ожидаемое закрытие: {inputDate(deal.expectedCloseDate) || "Не назначено"}</p>
       <p>Статус: {deal.status===DealStatus.OPEN?"Открыта":

@@ -10,3 +10,6 @@ crm-module-sdk = { path = "../../crates/crm-module-sdk" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

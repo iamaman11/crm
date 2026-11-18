@@ -263,18 +263,15 @@ impl ContactPointV2Service {
         Ok(value.as_str().to_owned())
     }
     fn nanos(ts: &Timestamp) -> std::result::Result<i64, ConnectError> {
-        if !(0..1_000_000_000).contains(&ts.nanos) {
-            return Err(ConnectError::invalid_argument("invalid timestamp nanos"));
-        }
-        ts.seconds
-            .checked_mul(1_000_000_000)
-            .and_then(|s| s.checked_add(i64::from(ts.nanos)))
-            .ok_or_else(|| ConnectError::invalid_argument("timestamp outside domain range"))
+        crm_core_contracts::UtcInstant::from_proto_parts(ts.seconds, ts.nanos)
+            .map(crm_core_contracts::UtcInstant::unix_nanos)
+            .map_err(|error| ConnectError::invalid_argument(error.message))
     }
     fn timestamp(nanos: i64) -> Timestamp {
+        let (seconds, nanos) = crm_core_contracts::UtcInstant::from_unix_nanos(nanos).proto_parts();
         Timestamp {
-            seconds: nanos.div_euclid(1_000_000_000),
-            nanos: nanos.rem_euclid(1_000_000_000) as i32,
+            seconds,
+            nanos,
             ..Default::default()
         }
     }
