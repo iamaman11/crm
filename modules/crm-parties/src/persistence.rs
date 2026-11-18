@@ -129,8 +129,8 @@ mod tests {
 
     #[test]
     fn malformed_json_does_not_expose_untrusted_values_or_keys() {
-        let error = decode_party_state(br#"{"party_id":"secret-471-value","private-471-key":"secret-471-payload"}"#)
-            .unwrap_err();
+        let invalid = br#"{"party_id":"secret-471-value","private-471-key":"secret-471-payload"}"#;
+        let error = decode_party_state(invalid).unwrap_err();
         assert_eq!(error.code, "PARTIES_PARTY_PERSISTED_STATE_INVALID");
         let output = format!("{error:?}");
         assert!(!output.contains("secret-471-value"));
