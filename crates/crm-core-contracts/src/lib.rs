@@ -157,11 +157,7 @@ impl CalendarDate {
     }
 
     pub fn from_utc_unix_nanos(nanos: i64) -> Result<Self, ContractError> {
-        let instant = jiff::Timestamp::from_nanosecond(i128::from(nanos)).map_err(|_| {
-            ContractError::new("CONTRACT_INSTANT_RANGE", "invalid Unix nanoseconds")
-        })?;
-        // The signed i64 storage interval is entirely inside years 1..=9999.
-        Ok(Self(instant.to_zoned(jiff::tz::TimeZone::UTC).date()))
+        Ok(UtcInstant::from_unix_nanos(nanos).utc_date())
     }
 
     pub fn last_of_month(self) -> Self {
@@ -182,6 +178,109 @@ impl CalendarDate {
             return Err(invalid());
         }
         Ok(Self(date))
+    }
+}
+
+/// Explicit choice for a skipped or repeated civil time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalTimeResolution {
+    Reject,
+    Earlier,
+    Later,
+}
+
+/// Exact UTC instant constrained to the existing signed Unix-nanosecond boundary.
+/// Every i64 nanosecond value fits Jiff's much wider supported instant range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct UtcInstant(i64);
+
+impl UtcInstant {
+    pub const fn from_unix_nanos(nanos: i64) -> Self {
+        Self(nanos)
+    }
+
+    pub const fn unix_nanos(self) -> i64 {
+        self.0
+    }
+
+    pub fn from_proto_parts(seconds: i64, nanos: i32) -> Result<Self, ContractError> {
+        if !(0..1_000_000_000).contains(&nanos) {
+            return Err(ContractError::new(
+                "CONTRACT_INSTANT_NANOS_INVALID",
+                "invalid timestamp nanos",
+            ));
+        }
+        // Widen first: i64::MIN is a valid result even though its whole
+        // seconds component multiplied by 1e9 does not fit an i64.
+        let total = i128::from(seconds) * 1_000_000_000 + i128::from(nanos);
+        i64::try_from(total)
+            .map(Self)
+            .map_err(|_| Self::range_error())
+    }
+
+    pub fn proto_parts(self) -> (i64, i32) {
+        (
+            self.0.div_euclid(1_000_000_000),
+            self.0.rem_euclid(1_000_000_000) as i32,
+        )
+    }
+
+    fn range_error() -> ContractError {
+        ContractError::new("CONTRACT_INSTANT_RANGE", "timestamp outside domain range")
+    }
+
+    fn timestamp(self) -> jiff::Timestamp {
+        jiff::Timestamp::from_nanosecond(i128::from(self.0))
+            .expect("all signed i64 Unix nanoseconds fit Jiff")
+    }
+
+    fn from_timestamp(timestamp: jiff::Timestamp) -> Result<Self, ContractError> {
+        i64::try_from(timestamp.as_nanosecond())
+            .map(Self)
+            .map_err(|_| Self::range_error())
+    }
+
+    pub fn utc_date(self) -> CalendarDate {
+        CalendarDate(self.timestamp().to_zoned(jiff::tz::TimeZone::UTC).date())
+    }
+
+    pub fn duration_until(self, other: Self) -> jiff::SignedDuration {
+        self.timestamp().duration_until(other.timestamp())
+    }
+
+    pub fn checked_add_elapsed(
+        self,
+        duration: jiff::SignedDuration,
+    ) -> Result<Self, ContractError> {
+        let timestamp = self
+            .timestamp()
+            .checked_add(duration)
+            .map_err(|_| Self::range_error())?;
+        Self::from_timestamp(timestamp)
+    }
+
+    /// Use only the lockfile-pinned bundled IANA database, never host settings.
+    pub fn resolve_local(
+        local: jiff::civil::DateTime,
+        zone_name: &str,
+        resolution: LocalTimeResolution,
+    ) -> Result<Self, ContractError> {
+        let zone = jiff::tz::TimeZoneDatabase::bundled()
+            .get(zone_name)
+            .map_err(|_| ContractError::new("CONTRACT_TIME_ZONE_INVALID", "unknown time zone"))?;
+        let ambiguous = zone.to_ambiguous_timestamp(local);
+        let timestamp = match resolution {
+            LocalTimeResolution::Reject => ambiguous.unambiguous(),
+            LocalTimeResolution::Earlier => ambiguous.earlier(),
+            LocalTimeResolution::Later => ambiguous.later(),
+        }
+        .map_err(|_| {
+            ContractError::new(
+                "CONTRACT_LOCAL_TIME_AMBIGUOUS",
+                "local time requires explicit resolution",
+            )
+        })?;
+        Self::from_timestamp(timestamp)
     }
 }
 
@@ -325,6 +424,57 @@ mod tests {
                 .unwrap()
                 .checked_add_months_clamped(1)
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn utc_round_trip_is_lossless_at_storage_and_wire_boundaries() {
+        for nanos in [i64::MIN, -1, 0, 1, i64::MAX] {
+            let instant = UtcInstant::from_unix_nanos(nanos);
+            let (seconds, part) = instant.proto_parts();
+            assert_eq!(
+                UtcInstant::from_proto_parts(seconds, part).unwrap(),
+                instant
+            );
+        }
+        assert_eq!(
+            UtcInstant::from_unix_nanos(-1).proto_parts(),
+            (-1, 999_999_999)
+        );
+        assert!(UtcInstant::from_proto_parts(0, -1).is_err());
+        assert!(UtcInstant::from_proto_parts(0, 1_000_000_000).is_err());
+        assert!(UtcInstant::from_proto_parts(i64::MAX, 0).is_err());
+        assert!(
+            UtcInstant::from_unix_nanos(i64::MAX)
+                .checked_add_elapsed(jiff::SignedDuration::from_nanos(1))
+                .is_err()
+        );
+        assert_eq!(
+            UtcInstant::from_unix_nanos(0)
+                .checked_add_elapsed(jiff::SignedDuration::from_secs(1))
+                .unwrap()
+                .unix_nanos(),
+            1_000_000_000
+        );
+    }
+
+    #[test]
+    fn bundled_zone_requires_explicit_dst_resolution() {
+        for value in ["2024-03-10T02:30:00", "2024-11-03T01:30:00"] {
+            let local: jiff::civil::DateTime = value.parse().unwrap();
+            let zone = "America/New_York";
+            assert!(UtcInstant::resolve_local(local, zone, LocalTimeResolution::Reject).is_err());
+            let earlier =
+                UtcInstant::resolve_local(local, zone, LocalTimeResolution::Earlier).unwrap();
+            let later = UtcInstant::resolve_local(local, zone, LocalTimeResolution::Later).unwrap();
+            assert_eq!(earlier.duration_until(later).as_secs(), 3600);
+        }
+        let local: jiff::civil::DateTime = "2024-01-01T12:00:00".parse().unwrap();
+        let warsaw =
+            UtcInstant::resolve_local(local, "Europe/Warsaw", LocalTimeResolution::Reject).unwrap();
+        assert_eq!(warsaw.proto_parts(), (1_704_106_800, 0));
+        assert!(
+            UtcInstant::resolve_local(local, "Invalid/Zone", LocalTimeResolution::Reject).is_err()
         );
     }
 

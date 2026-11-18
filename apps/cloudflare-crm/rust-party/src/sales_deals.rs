@@ -1220,9 +1220,9 @@ pub(super) async fn pipeline_metrics(
         None => now_nanos(),
     };
     let as_of_text = as_of_nanos.to_string();
-    let as_of_unix_seconds = as_of_nanos.div_euclid(1_000_000_000);
-    let today = CalendarDate::from_utc_unix_nanos(as_of_nanos)
-        .map_err(|_| ReadFailureReason::SalesMetricsSnapshotTimeInvalid)?;
+    let as_of = crm_core_contracts::UtcInstant::from_unix_nanos(as_of_nanos);
+    let as_of_unix_seconds = as_of.proto_parts().0;
+    let today = as_of.utc_date();
     let mut total_count = 0u64;
     let mut status_groups = BTreeMap::<(String, String), u64>::new();
     let mut money_groups = BTreeMap::<(String, String, String), (i128, i128, u64)>::new();
