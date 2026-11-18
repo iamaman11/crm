@@ -94,11 +94,16 @@ jobs:
           # Native root workspace: actual supported host targets, including dev dependencies.
           # Worker: deployed features and wasm target; do not scan an invented runtime.
           root_status=0
-          worker_status=0
+          worker_wasm_status=0
+          worker_native_status=0
           "$deny" --locked --config deny.toml --target x86_64-unknown-linux-gnu --target x86_64-pc-windows-msvc check --show-stats || root_status=$?
-          "$deny" --locked --config deny.toml --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native --exclude-dev check --show-stats || worker_status=$?
-          echo "cargo-deny root=$root_status worker=$worker_status"
-          test "$root_status" -eq 0 && test "$worker_status" -eq 0
+          # Check both actual Worker graphs independently; the production WASM
+          # and native development target can resolve different dependencies.
+          # Retain all exit codes and FAIL the gate if any supported graph fails.
+          "$deny" --locked --config deny.toml --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native --exclude-dev check --show-stats || worker_wasm_status=$?
+          "$deny" --locked --config deny.toml --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target x86_64-unknown-linux-gnu --features native --exclude-dev check --show-stats || worker_native_status=$?
+          echo "cargo-deny root=$root_status worker_wasm=$worker_wasm_status worker_native=$worker_native_status"
+          test "$root_status" -eq 0 && test "$worker_wasm_status" -eq 0 && test "$worker_native_status" -eq 0
       # Fail before the expensive WASM pipeline if the shared contract breaks.
       # The repo's existing frozen workspace provides Buf, Protobuf-ES, and TS.
       - name: Install pinned shared contract toolchain
