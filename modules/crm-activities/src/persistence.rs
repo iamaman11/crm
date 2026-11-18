@@ -20,10 +20,31 @@ pub fn encode_task_state(task: &Task) -> Result<Vec<u8>, SdkError> {
     Ok(bytes)
 }
 
+// Only these static schema labels may appear in internal decode diagnostics.
+const TASK_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
+    "task_id",
+    "subject",
+    "description",
+    "owner",
+    "actor_id",
+    "team_id",
+    "related_resources",
+    "resource_type",
+    "resource_id",
+    "priority",
+    "status",
+    "due_at_unix_nanos",
+    "reminder_at_unix_nanos",
+    "completed_at_unix_nanos",
+    "created_at_unix_nanos",
+    "updated_at_unix_nanos",
+    "version",
+];
+
 pub fn decode_task_state(bytes: &[u8]) -> Result<Task, SdkError> {
     validate_size(bytes)?;
-    let state: TaskStateV1 = serde_json::from_slice(bytes)
-        .map_err(|error| persisted_error(format!("task state JSON is invalid: {error}")))?;
+    let state: TaskStateV1 = crm_module_sdk::decode_json(bytes, TASK_JSON_DIAGNOSTIC_FIELDS)
+        .map_err(|diagnostic| persisted_error(format!("task state JSON is invalid: {diagnostic}")))?;
     let snapshot = state.try_into()?;
     Task::rehydrate(snapshot)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
@@ -242,6 +263,17 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
 mod tests {
     use super::*;
     use crate::domain::{CompleteTask, CreateTask, TaskMutation};
+
+    #[test]
+    fn malformed_json_does_not_expose_untrusted_values_or_keys() {
+        let error = decode_task_state(br#"{"task_id":"secret-471-value","private-471-key":"secret-471-payload"}"#)
+            .unwrap_err();
+        assert_eq!(error.code, "ACTIVITIES_TASK_PERSISTED_STATE_INVALID");
+        let output = format!("{error:?}");
+        assert!(!output.contains("secret-471-value"));
+        assert!(!output.contains("private-471-key"));
+        assert!(!output.contains("secret-471-payload"));
+    }
 
     fn task() -> Task {
         Task::create(CreateTask {

@@ -51,10 +51,41 @@ pub fn encode_privacy_case_state(case: &PrivacyCase) -> Result<Vec<u8>, SdkError
     )
 }
 
+// Internal diagnostics may include only static approved structural labels.
+// Serde types below remain the sole authoritative persisted-state schema.
+const PRIVACY_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
+    "case_id",
+    "tenant_id",
+    "kind",
+    "status",
+    "version",
+    "policy_version",
+    "created_at_unix_nanos",
+    "last_transition_at_unix_nanos",
+    "previous_case_id",
+    "subject_binding",
+    "pending_rescope",
+    "scope_snapshot_id",
+    "action_plan_id",
+    "approval",
+    "restriction_id",
+    "canonical_party_id",
+    "scope",
+    "placed_by",
+    "effective_from_unix_nanos",
+    "expires_at_unix_nanos",
+    "released_by",
+    "released_at_unix_nanos",
+    "hold_id",
+    "authority_reference",
+    "reason_code",
+    "canonicalization_profile",
+];
+
 pub fn decode_privacy_case_state(bytes: &[u8]) -> Result<PrivacyCase, SdkError> {
     validate_size(bytes, PRIVACY_CASE_STATE_MAXIMUM_BYTES, "privacy case")?;
-    let state: PrivacyCaseStateV1 = serde_json::from_slice(bytes)
-        .map_err(|error| persisted_error(format!("privacy-case JSON is invalid: {error}")))?;
+    let state: PrivacyCaseStateV1 = crm_module_sdk::decode_json(bytes, PRIVACY_JSON_DIAGNOSTIC_FIELDS)
+        .map_err(|diagnostic| persisted_error(format!("privacy-case JSON is invalid: {diagnostic}")))?;
     let case = state.into_domain()?;
     if encode_privacy_case_state(&case)? != bytes {
         return Err(persisted_error(
@@ -82,9 +113,10 @@ pub fn decode_processing_restriction_state(
         PROCESSING_RESTRICTION_STATE_MAXIMUM_BYTES,
         "processing restriction",
     )?;
-    let state: ProcessingRestrictionStateV1 = serde_json::from_slice(bytes).map_err(|error| {
-        persisted_error(format!("processing-restriction JSON is invalid: {error}"))
-    })?;
+    let state: ProcessingRestrictionStateV1 =
+        crm_module_sdk::decode_json(bytes, PRIVACY_JSON_DIAGNOSTIC_FIELDS).map_err(|diagnostic| {
+            persisted_error(format!("processing-restriction JSON is invalid: {diagnostic}"))
+        })?;
     let restriction = state.into_domain()?;
     if encode_processing_restriction_state(&restriction)? != bytes {
         return Err(persisted_error(
@@ -104,8 +136,8 @@ pub fn encode_legal_hold_state(hold: &CustomerDataLegalHold) -> Result<Vec<u8>, 
 
 pub fn decode_legal_hold_state(bytes: &[u8]) -> Result<CustomerDataLegalHold, SdkError> {
     validate_size(bytes, LEGAL_HOLD_STATE_MAXIMUM_BYTES, "customer-data legal hold")?;
-    let state: LegalHoldStateV1 = serde_json::from_slice(bytes)
-        .map_err(|error| persisted_error(format!("legal-hold JSON is invalid: {error}")))?;
+    let state: LegalHoldStateV1 = crm_module_sdk::decode_json(bytes, PRIVACY_JSON_DIAGNOSTIC_FIELDS)
+        .map_err(|diagnostic| persisted_error(format!("legal-hold JSON is invalid: {diagnostic}")))?;
     let hold = state.into_domain()?;
     if encode_legal_hold_state(&hold)? != bytes {
         return Err(persisted_error(
@@ -1165,6 +1197,22 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sensitive_invalid_json_is_never_reflected_in_diagnostics() {
+        let invalid = br#"{"case_id":"secret-471-value","private-471-key":"secret-471-payload"}"#;
+        for error in [
+            decode_privacy_case_state(invalid).unwrap_err(),
+            decode_processing_restriction_state(invalid).unwrap_err(),
+            decode_legal_hold_state(invalid).unwrap_err(),
+        ] {
+            assert_eq!(error.code, "CUSTOMER_PRIVACY_PERSISTED_STATE_INVALID");
+            let output = format!("{error:?}");
+            assert!(!output.contains("secret-471-value"));
+            assert!(!output.contains("private-471-key"));
+            assert!(!output.contains("secret-471-payload"));
+        }
+    }
 
     fn record_id(value: &str) -> RecordId {
         RecordId::try_new(value).unwrap()
