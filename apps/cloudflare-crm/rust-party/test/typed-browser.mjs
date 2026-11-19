@@ -507,7 +507,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"UpdateContactPoint");
    assert.equal((await sql("SELECT version FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].version,2);
    // Use the owner-tested fictional NANP 555-0102 fixture, not the UK drama range.
-   const privatePhone="+12025550102";
+   const privatePhone="+447700900123";
    await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
    await selectPagedPicker(page,"Участник",partyId);
    await page.getByLabel("Тип контакта",{exact:true}).selectOption("2");

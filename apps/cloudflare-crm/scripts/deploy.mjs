@@ -502,7 +502,7 @@ async function verifyData(){
   const probeValuesByRequest=new Map(),probeKinds=[];
   for(const probe of evidence.synthetic_private_probes??[]){
     assert.ok(syntheticFormats[probe.kind]?.test(probe.value),
-      "Only approved synthetic privacy probes may be released");
+      "Only approved synthetic privacy probes may be released: "+probe.kind);
     assert.ok(mutationIds.has(probe.request_id),
       "Synthetic privacy probe must refer to a committed browser request");
     assert.ok(!probeKinds.includes(probe.kind),"Duplicate privacy probe kind");
