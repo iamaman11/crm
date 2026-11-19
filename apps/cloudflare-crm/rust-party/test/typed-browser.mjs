@@ -36,9 +36,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      }));
    }else capture(response.headers());
  };
-   // Match the RPC pathname, not the serialized URL: privacy probes deliberately add query parameters.
-  const responsePathEndsWith=(response,suffix)=>new URL(response.url()).pathname.endsWith(suffix);
-const watch=context=>{
+ // Match the RPC pathname, not the serialized URL: privacy probes deliberately add query parameters.
+ const responsePathEndsWith=(response,suffix)=>new URL(response.url()).pathname.endsWith(suffix);
+ const watch=context=>{
    context.on("page",p=>p.on("pageerror",error=>pageErrors.push(error.message)));
    context.on("response",recordResponse);
  };
