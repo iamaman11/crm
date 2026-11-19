@@ -44,7 +44,7 @@ export function AccountEditor({accountId,onSaved,onCancel,onDirtyChange}:{
 }) {
   const query=useQuery(useCallback((signal:AbortSignal)=>api.accounts.getAccount({accountId},{signal}),[accountId]));
   const mutation=useMutation({
-    storageKey:"crm.account.update."+accountId+".pending.v1",
+    storageKey:"crm.account.update.pending.v1",
     lookup:async({resourceId,key},signal)=>(await api.accounts.getAccount({
       accountId:resourceId,receiptIdempotencyKey:key
     },{signal})).confirmedMutation,
