@@ -85,13 +85,28 @@ impl party_v3::PartyService for PartyV3Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, party_v3::GetPartyRequest>,
     ) -> ServiceResult<party_v3::GetPartyResponse> {
-        let id = Self::valid_id(req.party_id)?;
-        let party = parties::stored(&self.d1()?, &self.actor.tenant, id.as_str())
+        let input = req.to_owned_message();
+        let id = Self::valid_id(&input.party_id)?;
+        let db = self.d1()?;
+        let item = parties::stored(&db, &self.actor.tenant, id.as_str())
             .await
-            .map_err(|_| ConnectError::internal("Party D1 get failed"))?
+            .map_err(|_| ConnectError::internal("PARTY original D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("PARTIES_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let stored = crud_receipt(&db, &self.actor.tenant, key, CrudReceiptOwner::Party)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("PARTY_RECEIPT_READ_FAILED"))?;
+                crud_commit_evidence(stored, id.as_str(), &self.request_id, |state| {
+                    crm_parties::decode_party_state(state.as_bytes()).map(|row| (row.party_id().as_str().to_owned(), row.version())).map_err(|e| worker::Error::RustError(e.code))
+                })
+                .map_err(|_| ConnectError::unavailable("PARTY_RECEIPT_DECODE_FAILED"))?
+            }
+        };
         RpcResponse::ok(party_v3::GetPartyResponse {
-            party: Some(Self::convert(&party)?).into(),
+            party: Some(Self::convert(&item)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }
