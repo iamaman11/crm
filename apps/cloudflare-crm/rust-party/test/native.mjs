@@ -3346,9 +3346,11 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      ...(probability===undefined?{}:{probabilityBasisPoints:probability}),
      precondition:pre("create-"+id)
    });
-   const firstInput=create(ids[0],3,10001n,"EUR");
+   const firstInput={...create(ids[0],3,10001n,"EUR"),expectedCloseDate:{year:2027,month:2,day:28}};
    const first=await salesV2("CreateDeal",admin,firstInput);
-   const second=await salesV2("CreateDeal",admin,create(ids[1],2,2500n,"USD",0));
+   const second=await salesV2("CreateDeal",admin,{
+     ...create(ids[1],2,2500n,"USD",0),expectedCloseDate:{year:2027,month:3,day:1}
+   });
    const third=await salesV2("CreateDeal",admin,create(ids[2],4,985n,"EUR",5000));
    for(const result of [first,second,third])assert.equal(result.status,200,describeProtobuf(result.body));
    assert.equal(first.body.deal.probabilityBasisPoints,1000);
@@ -3401,21 +3403,58 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      [[3,2n,2n,0n],[4,1n,0n,1n]]);
    assert.deepEqual(summary.body.forecastCurrencies.map(x=>[x.category,x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints,x.amountDealCount]),
      [[3,"EUR","10001","45004500",1n],[3,"USD","2500","11250000",1n],[4,"EUR","985","4925000",1n]]);
+   const windowMetric=async(analysisPeriod)=>salesV2("GetPipelineMetrics",viewer,{
+     pipelineId,accountId,analysisPeriod
+   });
+   const day={year:2027,month:2,day:28};
+   const window=await windowMetric({startDate:day,endDate:day});
+   assert.equal(window.status,200,describeProtobuf(window.body));
+   assert.equal(window.body.totalDealCount,3n,"window must not filter board inventory");
+   assert.deepEqual(window.body.forecastCurrencies.map(x=>[x.category,x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints]),
+     [[3,"EUR","10001","45004500"]]);
+   assert.deepEqual(window.body.undatedForecastCurrencies.map(x=>[x.category,x.currencyCode,x.totalMinorUnits]),
+     [[4,"EUR","985"]]);
+   assert.equal(window.body.closedOutcomes.denominator,0n);
+   assert.equal(window.body.closedOutcomes.winRateBasisPoints,undefined);
+   assert.equal((await windowMetric({startDate:{year:2027,month:3,day:1},endDate:day})).status,400);
+   assert.equal((await windowMetric({startDate:{year:2027,month:2,day:29},endDate:day})).status,400);
+   assert.equal((await windowMetric({startDate:day})).status,400);
    const closed=await salesV2("CloseDeal",admin,{
      dealId:ids[0],outcome:2,reasonCode:"forecast-accepted",precondition:pre("close",moved.body.deal.version)
    });
    assert.equal(closed.status,200,describeProtobuf(closed.body));
    assert.equal((await metric(2)).body.forecastCategories.length,0);
    const openSummary=await metric();
+   assert.equal(openSummary.body.closedOutcomes.wonCount,1n);
+   assert.equal(openSummary.body.closedOutcomes.lostCount,0n);
+   assert.equal(openSummary.body.closedOutcomes.denominator,1n);
+   assert.equal(openSummary.body.closedOutcomes.winRateBasisPoints,10000);
+   assert.equal((await metric(2)).body.closedOutcomes,undefined);
+   const closeDay=new Date(Number(closed.body.deal.closedAt.seconds)*1000);
+   const utcDay={year:closeDay.getUTCFullYear(),month:closeDay.getUTCMonth()+1,day:closeDay.getUTCDate()};
+   assert.equal((await windowMetric({startDate:utcDay,endDate:utcDay})).body.closedOutcomes.wonCount,1n);
+   assert.equal((await windowMetric({startDate:{year:2000,month:1,day:1},endDate:{year:2000,month:1,day:1}})).body.closedOutcomes.denominator,0n);
    assert.equal(openSummary.body.totalDealCount,3n);
    assert.equal(openSummary.body.forecastCategories.find(x=>x.category===3).dealCount,1n);
    assert.equal(openSummary.body.forecastCurrencies.some(x=>x.category===3&&x.currencyCode==="EUR"),false);
+   const lost=await salesV2("CloseDeal",admin,{
+     dealId:ids[2],outcome:3,reasonCode:"forecast-lost",precondition:pre("close-lost",third.body.deal.version)
+   });
+   assert.equal(lost.status,200,describeProtobuf(lost.body));
+   const bothClosed=(await metric()).body.closedOutcomes;
+   assert.deepEqual([bothClosed.wonCount,bothClosed.lostCount,bothClosed.denominator,bothClosed.winRateBasisPoints],
+     [1n,1n,2n,5000]);
+   const lostReopened=await salesV2("ReopenDeal",admin,{
+     dealId:ids[2],reasonCode:"forecast-lost-reopened",precondition:pre("reopen-lost",lost.body.deal.version)
+   });
+   assert.equal(lostReopened.status,200,describeProtobuf(lostReopened.body));
    const reopened=await salesV2("ReopenDeal",admin,{
      dealId:ids[0],reasonCode:"forecast-reopened",precondition:pre("reopen",closed.body.deal.version)
    });
    assert.equal(reopened.status,200,describeProtobuf(reopened.body));
    assert.equal(reopened.body.deal.forecastCategory,3);
    assert.equal(reopened.body.deal.probabilityBasisPoints,4500);
+   assert.equal((await metric()).body.closedOutcomes.denominator,0n);
    const persisted=await sql("SELECT json_extract(state,'$.probability_source') AS source,json_extract(state,'$.forecast_category') AS category FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id=?",ids[0]);
    assert.deepEqual(persisted,[{source:"stage_default",category:"commit"}]);
    assert.deepEqual((await metric()).body.forecastCurrencies,summary.body.forecastCurrencies);
