@@ -109,13 +109,28 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, rel_wire::GetPartyRelationshipRequest>,
     ) -> ServiceResult<rel_wire::GetPartyRelationshipResponse> {
-        let id = Self::valid_id(req.relationship_id)?;
-        let relationship = party_relationships::load(&self.d1()?, &self.tenant, &id)
+        let input = req.to_owned_message();
+        let id = Self::valid_id(&input.relationship_id)?;
+        let db = self.d1()?;
+        let item = party_relationships::load(&db, &self.tenant, &id)
             .await
-            .map_err(|_| ConnectError::internal("Relationship D1 read failed"))?
+            .map_err(|_| ConnectError::internal("RELATIONSHIP original D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("PARTY_RELATIONSHIPS_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let stored = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::Relationship)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("RELATIONSHIP_RECEIPT_READ_FAILED"))?;
+                crud_commit_evidence(stored, &id, &self.request_id, |state| {
+                    party_relationships::decoded(state).map(|row| (row.party_relationship_id().as_str().to_owned(), row.version()))
+                })
+                .map_err(|_| ConnectError::unavailable("RELATIONSHIP_RECEIPT_DECODE_FAILED"))?
+            }
+        };
         RpcResponse::ok(rel_wire::GetPartyRelationshipResponse {
-            relationship: Some(Self::convert(&relationship)?).into(),
+            relationship: Some(Self::convert(&item)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }
