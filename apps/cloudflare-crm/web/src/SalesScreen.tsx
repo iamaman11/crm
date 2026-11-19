@@ -67,6 +67,13 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const [status,setStatus]=useState("");
   const [accountId,setAccountId]=useState(initialAccountId);
   const [pipelineId,setPipelineId]=useState("");
+  const [analysisStart,setAnalysisStart]=useState("");
+  const [analysisEnd,setAnalysisEnd]=useState("");
+  const [analysisPeriod,setAnalysisPeriod]=useState<{
+    startDate:NonNullable<ReturnType<typeof parseDate>>;
+    endDate:NonNullable<ReturnType<typeof parseDate>>;
+  }>();
+  const [analysisError,setAnalysisError]=useState("");
   const [selectedViewId,setSelectedViewId]=useState("");
   const [viewName,setViewName]=useState("");
   const [viewDraftId,setViewDraftId]=useState(newId);
@@ -160,9 +167,10 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
     return api.deals.getPipelineMetrics({
       pipelineId:activePipeline.pipelineId,
       ...(accountId?{accountId}:{}),
-      ...(selectedStatus!==undefined?{status:selectedStatus}:{})
+      ...(selectedStatus!==undefined?{status:selectedStatus}:{}),
+      ...(analysisPeriod?{analysisPeriod}:{})
     },{signal});
-  },[activePipeline,accountId,status]));
+  },[activePipeline,accountId,status,analysisPeriod]));
   // The canonical ListDeals RPC already supports a tenant-wide cursor and
   // optional Account/status filters. It is the default all-pipelines overview;
   // the independent ListStageDeals query is only for a selected Kanban board.
@@ -361,24 +369,86 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
         })}
       </>}
     </section>}
-    {activePipeline&&metricsQuery.data&&<section aria-label="Прогноз продаж">
+    {activePipeline&&<section aria-label="Период аналитики">
+      <h2>Период аналитики</h2>
+      <form onSubmit={event=>{
+        event.preventDefault();
+        try {
+          const startDate=parseDate(analysisStart),endDate=parseDate(analysisEnd);
+          if(!startDate||!endDate||analysisStart>analysisEnd)
+            throw Error("Укажите начало и конец периода в правильном порядке");
+          setAnalysisPeriod({startDate,endDate});setAnalysisError("");
+        } catch(error) {
+          setAnalysisError(error instanceof Error?error.message:"Неверный период");
+        }
+      }}>
+        <TextField label="Начало периода" type="date" value={analysisStart}
+          onChange={event=>setAnalysisStart(event.target.value)} required/>
+        <TextField label="Конец периода" type="date" value={analysisEnd}
+          onChange={event=>setAnalysisEnd(event.target.value)} required/>
+        <Button type="submit">Применить период</Button>{" "}
+        <Button type="button" variant="secondary" onClick={()=>{
+          setAnalysisPeriod(undefined);setAnalysisStart("");setAnalysisEnd("");setAnalysisError("");
+        }}>Без ограничения по сроку</Button>
+      </form>
+      {analysisError&&<p role="alert">{analysisError}</p>}
+      <p>Период ограничивает только прогноз и конверсию, не список и Kanban.
+        Фильтры клиента, воронки и статуса остаются общими.</p>
+    </section>}
+    {activePipeline&&metricsQuery.data&&!metricsQuery.busy&&!metricsQuery.error&&<section aria-label="Прогноз продаж">
       <h2>Прогноз продаж · {activePipeline.name}</h2>
-      <p>Только открытые сделки выбранного фильтра, без ограничения по сроку.
+      <p>Только открытые сделки выбранного фильтра, {metricsQuery.data.analysisPeriod
+        ?inputDate(metricsQuery.data.analysisPeriod.startDate)+" — "+inputDate(metricsQuery.data.analysisPeriod.endDate)+" (включительно)"
+        :"без ограничения по сроку"}.
         Категории не пересекаются; исключённые показаны отдельно.
         Взвешивание — арифметическая оценка, а не статистический прогноз.</p>
-      {[ForecastCategory.PIPELINE,ForecastCategory.BEST_CASE,ForecastCategory.COMMIT,ForecastCategory.OMITTED].map(category=>{
-        const group=metricsQuery.data?.forecastCategories.find(m=>m.category===category);
-        const totals=metricsQuery.data?.forecastCurrencies.filter(m=>m.category===category)??[];
-        return <div key={category} role="group" aria-label={forecastCategoryText(category)}>
-          <h3>{forecastCategoryText(category)}</h3>
-          <p>Сделок: {(group?.dealCount??0n).toString()} · по этапу: {(group?.stageDefaultCount??0n).toString()} · вручную: {(group?.manualCount??0n).toString()}</p>
-          {totals.length===0?<p>Суммы не указаны</p>:totals.map(total=><p key={total.currencyCode}>
-            {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode,currencyDefinitions)} {total.currencyCode}
-            {" · взвешено: "}{weightedMoneyText(total.weightedMinorUnitsTimesBasisPoints,total.currencyCode,currencyDefinitions)}
-            {" · сделок с суммой: "}{total.amountDealCount.toString()}
-          </p>)}
-        </div>;
-      })}
+      {[
+        {key:"forecast",title:"По категориям",
+          groups:metricsQuery.data.forecastCategories,currencies:metricsQuery.data.forecastCurrencies},
+        {key:"undated",title:metricsQuery.data.analysisPeriod
+          ?"Без даты закрытия (вне периода)":"Без даты закрытия (часть общего прогноза)",
+          groups:metricsQuery.data.undatedForecastCategories,
+          currencies:metricsQuery.data.undatedForecastCurrencies}
+      ].map(bucket=><div key={bucket.key} role="region" aria-label={bucket.title}>
+        {bucket.key==="undated"&&<h3>{bucket.title}</h3>}
+        {[ForecastCategory.PIPELINE,ForecastCategory.BEST_CASE,ForecastCategory.COMMIT,ForecastCategory.OMITTED]
+          .map(category=>{
+            const group=bucket.groups.find(m=>m.category===category);
+            const totals=bucket.currencies.filter(m=>m.category===category);
+            return <div key={category} role="group"
+              aria-label={bucket.key==="forecast"?forecastCategoryText(category):
+                bucket.title+" · "+forecastCategoryText(category)}>
+              <h3>{forecastCategoryText(category)}</h3>
+              <p>Сделок: {(group?.dealCount??0n).toString()}
+                {" · по этапу: "}{(group?.stageDefaultCount??0n).toString()}
+                {" · вручную: "}{(group?.manualCount??0n).toString()}</p>
+              {totals.length===0?<p>Суммы не указаны</p>:totals.map(total=><p key={total.currencyCode}>
+                {decimalUnits(BigInt(total.totalMinorUnits),total.currencyCode,currencyDefinitions)} {total.currencyCode}
+                {" · взвешено: "}{weightedMoneyText(total.weightedMinorUnitsTimesBasisPoints,total.currencyCode,currencyDefinitions)}
+                {" · сделок с суммой: "}{total.amountDealCount.toString()}
+              </p>)}
+            </div>;
+          })}
+      </div>)}
+    </section>}
+    {activePipeline&&metricsQuery.data&&!metricsQuery.busy&&!metricsQuery.error&&<section aria-label="Фактическая конверсия">
+      <h2>Фактическая конверсия · {activePipeline.name}</h2>
+      <p>Доля выигранных среди сделок, которые сейчас закрыты и имеют фактическую дату
+        закрытия в выбранном периоде (UTC). Повторно открытые сделки исключены.</p>
+      {metricsQuery.data.closedOutcomes?<>
+        <p>Период: {metricsQuery.data.analysisPeriod
+          ?inputDate(metricsQuery.data.analysisPeriod.startDate)+" — "+
+            inputDate(metricsQuery.data.analysisPeriod.endDate)
+          :"все даты"}</p>
+        <p>Выиграно: {metricsQuery.data.closedOutcomes.wonCount.toString()}
+          {" · проиграно: "}{metricsQuery.data.closedOutcomes.lostCount.toString()}
+          {" · знаменатель: "}{metricsQuery.data.closedOutcomes.denominator.toString()}</p>
+        <p>Конверсия: {metricsQuery.data.closedOutcomes.winRateBasisPoints===undefined
+          ?"Нет закрытых сделок с подтверждённой датой"
+          :percent(metricsQuery.data.closedOutcomes.winRateBasisPoints)+"%"}</p>
+        <p>Закрытые без подтверждённой даты (вне знаменателя):
+          {" "}{metricsQuery.data.closedOutcomes.unknownCloseCount.toString()}</p>
+      </>:<p>Для расчёта конверсии выберите все статусы сделок.</p>}
     </section>}
     {(!pipelineId||accountId)&&<section aria-label={accountId?"Сделки клиента во всех воронках":"Сделки во всех воронках"}>
       <h2>{accountId?"Все сделки клиента во всех воронках":"Все сделки во всех воронках"}</h2>
