@@ -477,11 +477,16 @@ async function verifyData(){
   const syntheticFormats={
     "party-name":/^Browser Party [0-9]{10,}$/,
     "contact-email":/^browser-[0-9]{10,}@example\.org$/,
+    "contact-phone":/^\+447700900[0-9]{3}$/,
     "task-subject":/^Browser Task [0-9]{10,}$/,
     "cookie":/^crm-s3-cookie-[0-9]{10,}$/,
     "header":/^crm-s3-header-[0-9]{10,}$/,
+    "authorization":/^Bearer crm-s3-authorization-[0-9]{10,}$/,
+    "jwt":/^eyJhbGciOiJub25lIn0\.eyJzdWIiOiJjcm0tc3ludGhldGljIn0\.signature-[0-9]{10,}$/,
+    "query-string":/^crm-s3-query-[0-9]{10,}$/,
     "enrichment-provider-key":/^browser_registry_[0-9]{10,}$/,
     "enrichment-license":/^Browser test license$/,
+    "enrichment-credential-handle":/^browser-credential-handle-[0-9]{10,}$/,
     "enrichment-mapping-key":/^browser_mapping_[0-9]{10,}$/,
     "csv-party-name":/^Browser Import [0-9]{10,}$/,
     "csv-payload":/^party_id,kind,display_name,resource_version\r\nbrowser-import,person,Browser Import [0-9]{10,},1\r\n$/
@@ -499,7 +504,7 @@ async function verifyData(){
     probeValuesByRequest.set(probe.request_id,values);
   }
   assert.deepEqual(probeKinds.sort(),Object.keys(syntheticFormats).sort(),
-    "Party, Contact, Task, cookie and header probes are mandatory");
+    "Party, email/phone, Task, cookies, Authorization/JWT, query, Enrichment and CSV probes are mandatory");
   // Observe every exact browser request, including rejected requests and read-only RPCs.
   // Audit rows are required only for committed mutations, never invented for reads.
   let pending=[...requests.values()];
