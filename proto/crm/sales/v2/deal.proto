@@ -331,10 +331,16 @@ message ListSalesViewsResponse {
 // Read-only full-pipeline statistics. No currency mixing, page-size leakage,
 // float money or predictive accuracy claims. Weighted numerator is exact:
 // sum(minor_units * individual_probability_basis_points).
+// Inclusive UTC calendar dates; scopes analytics, not the board inventory.
+message SalesAnalysisPeriod {
+  crm.core.v2.CalendarDate start_date = 1;
+  crm.core.v2.CalendarDate end_date = 2;
+}
 message GetPipelineMetricsRequest {
   string pipeline_id = 1;
   optional DealStatus status = 2;
   optional string account_id = 3;
+  SalesAnalysisPeriod analysis_period = 4;
 }
 message PipelineStatusMetric {
   string stage_id = 1;
@@ -383,6 +389,16 @@ message ForecastCurrencyMetric {
   string weighted_minor_units_times_basis_points = 4;
   uint64 amount_deal_count = 5;
 }
+// Currently closed deals with a recorded final close outcome in the period.
+// Reopened deals and unknown close dates are excluded from the denominator.
+message SalesClosedOutcomeMetric {
+  uint64 won_count = 1;
+  uint64 lost_count = 2;
+  uint64 unknown_close_count = 3;
+  uint64 denominator = 4;
+  // Truncated to basis points; absent if the denominator is zero.
+  optional uint32 win_rate_basis_points = 5;
+}
 message GetPipelineMetricsResponse {
   string pipeline_id = 1;
   uint64 total_deal_count = 2;
@@ -392,6 +408,13 @@ message GetPipelineMetricsResponse {
   int64 as_of_unix_seconds = 6;
   repeated ForecastCategoryMetric forecast_categories = 7;
   repeated ForecastCurrencyMetric forecast_currencies = 8;
+  // Undated deals are a subset of the all-time forecast; they are outside
+  // every explicit dated period, and must never be assigned an invented date.
+  repeated ForecastCategoryMetric undated_forecast_categories = 9;
+  repeated ForecastCurrencyMetric undated_forecast_currencies = 10;
+  // Absent when a single status is selected (biased denominator).
+  SalesClosedOutcomeMetric closed_outcomes = 11;
+  SalesAnalysisPeriod analysis_period = 12;
 }
 
 service DealService {
