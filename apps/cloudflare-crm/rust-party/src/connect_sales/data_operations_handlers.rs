@@ -63,7 +63,7 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
         let db = self.d1()?;
         if input.csv.is_empty() {
             let key = key.ok_or_else(|| {
-                ConnectError::invalid_argument("CSV_OR_RECEIPT_KEY_REQUIRED")
+                ConnectError::invalid_argument("IMPORT_FILE_SIZE_INVALID")
             })?;
             let receipt = owner::import_receipt(&db, &self.actor.tenant, key)
                 .await
