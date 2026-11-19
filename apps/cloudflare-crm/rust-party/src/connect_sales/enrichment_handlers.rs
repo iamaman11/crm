@@ -1,7 +1,10 @@
 //! Generated Connect traits mapped to the original immutable definition owner.
 use super::super::customer_enrichment as owner;
 use super::*;
-use crm_customer_enrichment::{MappingVersion, ProviderProfileVersion, RawPayloadPolicy};
+use crm_customer_enrichment::{
+    decode_mapping_version_state, decode_provider_profile_version_state, MappingVersion,
+    ProviderProfileVersion, RawPayloadPolicy,
+};
 
 pub(super) struct EnrichmentV2Service {
     pub(super) env: Arc<Env>,
@@ -191,13 +194,50 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, enrichment_wire::GetProviderProfileRequest>,
     ) -> ServiceResult<enrichment_wire::GetProviderProfileResponse> {
-        Self::id(req.profile_version_id)?;
-        let value = owner::profile(&self.d1()?, &self.actor.tenant, req.profile_version_id)
+        let input = req.to_owned_message();
+        let db = self.d1()?;
+        let key = receipt_key(input.receipt_idempotency_key.as_deref())?;
+        let (value, confirmed_mutation) = if let Some(key) = key {
+            let row = crud_receipt(
+                &db,
+                &self.actor.tenant,
+                key,
+                CrudReceiptOwner::EnrichmentProfile,
+            )
             .await
-            .map_err(|_| ConnectError::internal("profile D1 read failed"))?
-            .ok_or_else(|| ConnectError::not_found("ENRICHMENT_PROVIDER_PROFILE_NOT_FOUND"))?;
+            .map_err(|_| ConnectError::unavailable("ENRICHMENT_RECEIPT_READ_FAILED"))?;
+            let Some(receipt) = row.as_ref() else {
+                return Err(ConnectError::not_found("ENRICHMENT_PROVIDER_PROFILE_NOT_FOUND"));
+            };
+            let value = decode_provider_profile_version_state(receipt.state.as_bytes())
+                .map_err(|_| ConnectError::unavailable("ENRICHMENT_RECEIPT_DECODE_FAILED"))?;
+            let id = value.version_id().as_str();
+            if !input.profile_version_id.is_empty() && input.profile_version_id != id {
+                return Err(ConnectError::not_found("ENRICHMENT_PROVIDER_PROFILE_NOT_FOUND"));
+            }
+            let evidence = crud_commit_evidence(
+                row,
+                id,
+                &self.request_id,
+                |state| {
+                    decode_provider_profile_version_state(state.as_bytes())
+                        .map(|saved| (saved.version_id().as_str().to_owned(), 1))
+                        .map_err(|error| worker::Error::RustError(error.code))
+                },
+            )
+            .map_err(|_| ConnectError::unavailable("ENRICHMENT_RECEIPT_DECODE_FAILED"))?;
+            (value, evidence)
+        } else {
+            Self::id(&input.profile_version_id)?;
+            let value = owner::profile(&db, &self.actor.tenant, &input.profile_version_id)
+                .await
+                .map_err(|_| ConnectError::internal("profile D1 read failed"))?
+                .ok_or_else(|| ConnectError::not_found("ENRICHMENT_PROVIDER_PROFILE_NOT_FOUND"))?;
+            (value, None)
+        };
         RpcResponse::ok(enrichment_wire::GetProviderProfileResponse {
             profile: Some(Self::profile(&value)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }
@@ -207,13 +247,50 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, enrichment_wire::GetMappingRequest>,
     ) -> ServiceResult<enrichment_wire::GetMappingResponse> {
-        Self::id(req.mapping_version_id)?;
-        let value = owner::mapping(&self.d1()?, &self.actor.tenant, req.mapping_version_id)
+        let input = req.to_owned_message();
+        let db = self.d1()?;
+        let key = receipt_key(input.receipt_idempotency_key.as_deref())?;
+        let (value, confirmed_mutation) = if let Some(key) = key {
+            let row = crud_receipt(
+                &db,
+                &self.actor.tenant,
+                key,
+                CrudReceiptOwner::EnrichmentMapping,
+            )
             .await
-            .map_err(|_| ConnectError::internal("mapping D1 read failed"))?
-            .ok_or_else(|| ConnectError::not_found("ENRICHMENT_MAPPING_NOT_FOUND"))?;
+            .map_err(|_| ConnectError::unavailable("ENRICHMENT_RECEIPT_READ_FAILED"))?;
+            let Some(receipt) = row.as_ref() else {
+                return Err(ConnectError::not_found("ENRICHMENT_MAPPING_NOT_FOUND"));
+            };
+            let value = decode_mapping_version_state(receipt.state.as_bytes())
+                .map_err(|_| ConnectError::unavailable("ENRICHMENT_RECEIPT_DECODE_FAILED"))?;
+            let id = value.version_id().as_str();
+            if !input.mapping_version_id.is_empty() && input.mapping_version_id != id {
+                return Err(ConnectError::not_found("ENRICHMENT_MAPPING_NOT_FOUND"));
+            }
+            let evidence = crud_commit_evidence(
+                row,
+                id,
+                &self.request_id,
+                |state| {
+                    decode_mapping_version_state(state.as_bytes())
+                        .map(|saved| (saved.version_id().as_str().to_owned(), 1))
+                        .map_err(|error| worker::Error::RustError(error.code))
+                },
+            )
+            .map_err(|_| ConnectError::unavailable("ENRICHMENT_RECEIPT_DECODE_FAILED"))?;
+            (value, evidence)
+        } else {
+            Self::id(&input.mapping_version_id)?;
+            let value = owner::mapping(&db, &self.actor.tenant, &input.mapping_version_id)
+                .await
+                .map_err(|_| ConnectError::internal("mapping D1 read failed"))?
+                .ok_or_else(|| ConnectError::not_found("ENRICHMENT_MAPPING_NOT_FOUND"))?;
+            (value, None)
+        };
         RpcResponse::ok(enrichment_wire::GetMappingResponse {
             mapping: Some(Self::mapping(&value)).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }

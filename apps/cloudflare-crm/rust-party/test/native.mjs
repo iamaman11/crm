@@ -2794,6 +2794,17 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await enrichment("PublishProviderProfile",knownService,profileInput)).body.receipt.replayed,true);
  assert.equal((await enrichment("PublishProviderProfile",admin,{...profileInput,retentionDays:31})).body.code,"aborted");
  assert.equal((await enrichment("GetProviderProfile",viewer,{profileVersionId:profileId})).body.profile.profileVersionId,profileId);
+ const profileAuditBeforeRead=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE subject_id='"+profileId+"'"))[0].n;
+ const profileProof=await enrichment("GetProviderProfile",viewer,{
+   profileVersionId:"",receiptIdempotencyKey:profileInput.precondition.idempotencyKey});
+ assert.equal(profileProof.status,200,describeProtobuf(profileProof.body));
+ assert.equal(profileProof.body.profile.profileVersionId,profileId);
+ assert.equal(profileProof.body.confirmedMutation?.originalRequestId,profileResult.headers.get("x-request-id"));
+ assert.equal(profileProof.body.confirmedMutation?.resourceVersion,1n);
+ assert.equal((await enrichment("GetProviderProfile",tenantB,{
+   profileVersionId:"",receiptIdempotencyKey:profileInput.precondition.idempotencyKey})).status,404);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE subject_id='"+profileId+"'"))[0].n,
+   profileAuditBeforeRead,"Profile receipt lookup is read-only");
  assert.equal((await enrichment("GetProviderProfile",tenantB,{profileVersionId:profileId})).body.code,"not_found");
  const mappingInput={
    mappingKey:"party_display_name",providerProfileVersionId:profileId,
@@ -2812,6 +2823,17 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await enrichment("PublishMapping",admin,{...mappingInput,
    precondition:{idempotencyKey:"enrichment-profile-main"}})).body.code,"aborted");
  assert.equal((await enrichment("GetMapping",viewer,{mappingVersionId:mappingId})).body.mapping.mappingVersionId,mappingId);
+ const mappingAuditBeforeRead=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE subject_id='"+mappingId+"'"))[0].n;
+ const mappingProof=await enrichment("GetMapping",viewer,{
+   mappingVersionId:"",receiptIdempotencyKey:mappingInput.precondition.idempotencyKey});
+ assert.equal(mappingProof.status,200,describeProtobuf(mappingProof.body));
+ assert.equal(mappingProof.body.mapping.mappingVersionId,mappingId);
+ assert.equal(mappingProof.body.confirmedMutation?.originalRequestId,mappingResult.headers.get("x-request-id"));
+ assert.equal(mappingProof.body.confirmedMutation?.resourceVersion,1n);
+ assert.equal((await enrichment("GetMapping",tenantB,{
+   mappingVersionId:"",receiptIdempotencyKey:mappingInput.precondition.idempotencyKey})).status,404);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE subject_id='"+mappingId+"'"))[0].n,
+   mappingAuditBeforeRead,"Mapping receipt lookup is read-only");
  assert.equal((await enrichment("GetMapping",tenantB,{mappingVersionId:mappingId})).body.code,"not_found");
  assert.deepEqual((await sql("SELECT action,subject_id,request_id,actor FROM crm_audit WHERE "+
    "tenant_id='tenant-a' AND subject_id IN ('"+profileId+"','"+mappingId+"') ORDER BY rowid")),[

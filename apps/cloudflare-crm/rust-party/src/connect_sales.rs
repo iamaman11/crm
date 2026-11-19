@@ -112,6 +112,8 @@ enum CrudReceiptOwner {
     Task,
     Privacy,
     Consent,
+    EnrichmentProfile,
+    EnrichmentMapping,
 }
 impl CrudReceiptOwner {
     fn sql(self) -> &'static str {
@@ -143,6 +145,18 @@ impl CrudReceiptOwner {
             Self::Consent => concat!(
                 "SELECT state,original_request_id FROM crm_consent_receipts",
                 " WHERE tenant=? AND key=?"
+            ),
+            Self::EnrichmentProfile => concat!(
+                "SELECT r.state,p.request_id AS original_request_id FROM crm_enrichment_receipts r ",
+                "JOIN crm_enrichment_profiles p ON p.tenant=r.tenant AND p.idem_key=r.key ",
+                "AND p.idem_digest=r.digest AND p.state=r.state ",
+                "WHERE r.tenant=? AND r.key=? AND r.kind='profile'"
+            ),
+            Self::EnrichmentMapping => concat!(
+                "SELECT r.state,m.request_id AS original_request_id FROM crm_enrichment_receipts r ",
+                "JOIN crm_enrichment_mappings m ON m.tenant=r.tenant AND m.idem_key=r.key ",
+                "AND m.idem_digest=r.digest AND m.state=r.state ",
+                "WHERE r.tenant=? AND r.key=? AND r.kind='mapping'"
             ),
         }
     }
