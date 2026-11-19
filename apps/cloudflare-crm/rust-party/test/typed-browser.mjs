@@ -1143,27 +1143,114 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.unroute("**/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase",losePrivacyAck);
    steps.push("S5b Privacy lost acknowledgement: reload + immutable GetPrivacyCase provenance without duplicate create");
    await navigate("enrichment","Обогащение данных");
+   const providerKey="browser_registry_"+runId;
+   const profileBefore=new Set((await sql("SELECT id FROM crm_enrichment_profiles WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
+   let s5bProfileCalls=0,s5bProfileRequestId;
+   const loseProfileAck=async route=>{
+     s5bProfileCalls++;
+     const committed=await route.fetch();
+     recordResponse(committed);
+     await assertMutation(committed,"PublishProviderProfile");
+     s5bProfileRequestId=committed.headers()["x-request-id"];
+     await route.abort("failed");
+   };
+   const s5bProfilePath="**/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishProviderProfile";
+   await page.route(s5bProfilePath,loseProfileAck);
    await page.getByRole("button",{name:"Новый профиль",exact:true}).click();
-   await page.getByLabel("Ключ провайдера",{exact:true}).fill("browser_registry_"+runId);
+   await page.getByLabel("Ключ провайдера",{exact:true}).fill(providerKey);
    await page.getByLabel("Лицензия",{exact:true}).fill("Browser test license");
    await page.getByLabel("Начало действия",{exact:true}).fill("2026-11-12T12:00");
    assert.equal(await page.getByLabel("Начало действия",{exact:true}).inputValue(),"2026-11-12T12:00");
-   await mutation(page.getByRole("button",{name:"Опубликовать профиль",exact:true}),"PublishProviderProfile");
-   const profileId=await firstId("crm_enrichment_profiles","provider_key","browser_registry_"+runId);
-   await page.getByRole("button",{name:"browser_registry_"+runId+" · 1.0.0",exact:true}).click();
+   const profileDialog=page.getByRole("dialog");
+   await profileDialog.getByRole("button",{name:"Опубликовать профиль",exact:true}).click();
+   await profileDialog.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   await expect(profileDialog.getByRole("button",{name:"Опубликовать профиль",exact:true})).toBeDisabled();
+   const s5bProfileMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.enrichment.profile.pending.v1")));
+   assert.deepEqual(Object.keys(s5bProfileMarker).sort(),["expectedVersion","key","resourceId"]);
+   assert.equal(s5bProfileMarker.expectedVersion,"0");
+   assert.equal(s5bProfileMarker.resourceId,providerKey);
+   const s5bProfileCreated=(await sql("SELECT id FROM crm_enrichment_profiles WHERE tenant='"+tenantSql+"'"))
+     .filter(x=>!profileBefore.has(x.id));
+   assert.equal(s5bProfileCreated.length,1);
+   const acceptProfileReload=dialog=>void dialog.accept();
+   page.on("dialog",acceptProfileReload);
+   try{await page.reload();}finally{page.off("dialog",acceptProfileReload);}
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   await expect(page.getByRole("button",{name:"Новый профиль",exact:true})).toBeDisabled();
+   const s5bProfileRead=page.waitForResponse(r=>r.url().endsWith("/GetProviderProfile")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   const s5bProfileChecked=await s5bProfileRead;
+   assert.equal(s5bProfileChecked.status(),200);
+   const s5bProfileReadId=(await s5bProfileChecked.allHeaders())["x-request-id"];
+   await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
+     .toContainText(s5bProfileRequestId);
+   assert.equal(s5bProfileCalls,1,"Enrichment profile recovery must not publish twice");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bProfileRequestId+
+     "' AND action='customer_enrichment.profile_publish'"))[0].n,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bProfileReadId+"'"))[0].n,0);
+   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.enrichment.profile.pending.v1")),null);
+   ownerRecovery.push({owner:"enrichment-profile",kind:"lookup",original_request_id:s5bProfileRequestId,
+     subsequent_request_id:s5bProfileReadId});
+   await page.unroute(s5bProfilePath,loseProfileAck);
+   const profileId=await firstId("crm_enrichment_profiles","provider_key",providerKey);
+   await page.getByRole("button",{name:providerKey+" · 1.0.0",exact:true}).click();
    await page.getByText("ID: "+profileId,{exact:true}).waitFor();
    await page.getByRole("button",{name:"Закрыть панель",exact:true}).click();
    await page.getByRole("dialog").waitFor({state:"hidden"});
+
+   const mappingKey="browser_mapping_"+runId;
+   const mappingBefore=new Set((await sql("SELECT id FROM crm_enrichment_mappings WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
+   let s5bMappingCalls=0,s5bMappingRequestId;
+   const loseMappingAck=async route=>{
+     s5bMappingCalls++;
+     const committed=await route.fetch();
+     recordResponse(committed);
+     await assertMutation(committed,"PublishMapping");
+     s5bMappingRequestId=committed.headers()["x-request-id"];
+     await route.abort("failed");
+   };
+   const s5bMappingPath="**/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishMapping";
+   await page.route(s5bMappingPath,loseMappingAck);
    await page.getByRole("button",{name:"Новое сопоставление",exact:true}).click();
    await page.getByLabel("Версия профиля",{exact:true}).selectOption(profileId);
-   await page.getByLabel("Ключ сопоставления",{exact:true}).fill("browser_mapping_"+runId);
-   await mutation(page.getByRole("button",{name:"Опубликовать сопоставление",exact:true}),"PublishMapping");
-   const mappingId=await firstId("crm_enrichment_mappings","mapping_key","browser_mapping_"+runId);
-   await page.getByRole("button",{name:"browser_mapping_"+runId,exact:true}).click();
+   await page.getByLabel("Ключ сопоставления",{exact:true}).fill(mappingKey);
+   const mappingDialog=page.getByRole("dialog");
+   await mappingDialog.getByRole("button",{name:"Опубликовать сопоставление",exact:true}).click();
+   await mappingDialog.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   await expect(mappingDialog.getByRole("button",{name:"Опубликовать сопоставление",exact:true})).toBeDisabled();
+   const s5bMappingMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.enrichment.mapping.pending.v1")));
+   assert.deepEqual(Object.keys(s5bMappingMarker).sort(),["expectedVersion","key","resourceId"]);
+   assert.equal(s5bMappingMarker.expectedVersion,"0");
+   assert.equal(s5bMappingMarker.resourceId,mappingKey);
+   const s5bMappingCreated=(await sql("SELECT id FROM crm_enrichment_mappings WHERE tenant='"+tenantSql+"'"))
+     .filter(x=>!mappingBefore.has(x.id));
+   assert.equal(s5bMappingCreated.length,1);
+   const acceptMappingReload=dialog=>void dialog.accept();
+   page.on("dialog",acceptMappingReload);
+   try{await page.reload();}finally{page.off("dialog",acceptMappingReload);}
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   await expect(page.getByRole("button",{name:"Новое сопоставление",exact:true})).toBeDisabled();
+   const s5bMappingRead=page.waitForResponse(r=>r.url().endsWith("/GetMapping")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   const s5bMappingChecked=await s5bMappingRead;
+   assert.equal(s5bMappingChecked.status(),200);
+   const s5bMappingReadId=(await s5bMappingChecked.allHeaders())["x-request-id"];
+   await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
+     .toContainText(s5bMappingRequestId);
+   assert.equal(s5bMappingCalls,1,"Enrichment mapping recovery must not publish twice");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bMappingRequestId+
+     "' AND action='customer_enrichment.mapping_publish'"))[0].n,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bMappingReadId+"'"))[0].n,0);
+   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.enrichment.mapping.pending.v1")),null);
+   ownerRecovery.push({owner:"enrichment-mapping",kind:"lookup",original_request_id:s5bMappingRequestId,
+     subsequent_request_id:s5bMappingReadId});
+   await page.unroute(s5bMappingPath,loseMappingAck);
+   const mappingId=await firstId("crm_enrichment_mappings","mapping_key",mappingKey);
+   await page.getByRole("button",{name:mappingKey,exact:true}).click();
    await page.getByText("ID: "+mappingId+"; поле: organization.legal_name; профиль: "+profileId,{exact:true}).waitFor();
-   steps.push("Privacy draft/submit/cancel and immutable Enrichment profile/mapping readback");
+
    await navigate("data","Импорт и экспорт");
-   const csv="party_id,kind,display_name,resource_version\r\nbrowser-import,person,Browser Import "+runId+",1\r\n";
+   const csv="party_id,kind,display_name,resource_version\\r\\nbrowser-import,person,Browser Import "+runId+",1\\r\\n";
    const obsoleteCsv=csv.replace("Browser Import ","Browser Obsolete ");
    await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
      name:"obsolete.csv",mimeType:"text/csv",buffer:Buffer.from(obsoleteCsv)});
@@ -1171,11 +1258,63 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      name:"browser.csv",mimeType:"text/csv",buffer:Buffer.from(csv)});
    await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
    await page.getByRole("button",{name:"Подтвердить импорт",exact:true}).waitFor();
-   await mutation(page.getByRole("button",{name:"Подтвердить импорт",exact:true}),"ApplyPartyImport");
-   assert.ok(await firstId("crm_party_records","display_name","Browser Import "+runId));
+   const csvBefore=new Set((await sql("SELECT id FROM crm_party_records WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
+   let s5bCsvCalls=0,s5bCsvRequestId;
+   const loseCsvAck=async route=>{
+     s5bCsvCalls++;
+     const committed=await route.fetch();
+     recordResponse(committed);
+     await assertMutation(committed,"ApplyPartyImport");
+     s5bCsvRequestId=committed.headers()["x-request-id"];
+     await route.abort("failed");
+   };
+   const s5bCsvPath="**/crm.customer_data_operations.v2.PartyCsvService/ApplyPartyImport";
+   await page.route(s5bCsvPath,loseCsvAck);
+   await page.getByRole("button",{name:"Подтвердить импорт",exact:true}).click();
+   await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   await expect(page.getByRole("button",{name:"Подтвердить импорт",exact:true})).toBeDisabled();
+   const s5bCsvMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.data.csv-import.pending.v1")));
+   assert.deepEqual(Object.keys(s5bCsvMarker).sort(),["expectedVersion","key","resourceId"]);
+   assert.equal(s5bCsvMarker.expectedVersion,"0");
+   const s5bCsvReceipt=(await sql("SELECT source_sha256,row_count,request_id FROM crm_party_import_receipts WHERE tenant='"+
+     tenantSql+"' AND key='"+s5bCsvMarker.key+"'"));
+   assert.equal(s5bCsvReceipt.length,1);
+   assert.equal(s5bCsvMarker.resourceId,s5bCsvReceipt[0].source_sha256);
+   assert.equal(s5bCsvReceipt[0].row_count,1);
+   assert.equal(s5bCsvReceipt[0].request_id,s5bCsvRequestId);
+   const csvCreated=(await sql("SELECT id FROM crm_party_records WHERE tenant='"+tenantSql+"'"))
+     .filter(x=>!csvBefore.has(x.id));
+   assert.equal(csvCreated.length,1);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+
      "' AND json_extract(state,'$.display_name')='Browser Obsolete "+runId+"'"))[0].n,0,
      "A replaced CSV file must never commit its superseded records");
+   const storedSession=await page.evaluate(()=>JSON.stringify(
+     Object.keys(sessionStorage).sort().map(key=>[key,sessionStorage.getItem(key)])));
+   assert.ok(!storedSession.includes("Browser Import "+runId));
+   assert.ok(!storedSession.includes("party_id,kind,display_name"));
+   const acceptCsvReload=dialog=>void dialog.accept();
+   page.on("dialog",acceptCsvReload);
+   try{await page.reload();}finally{page.off("dialog",acceptCsvReload);}
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   assert.equal(await page.getByRole("button",{name:"Подтвердить импорт",exact:true}).count(),0,
+     "CSV payload is not restored after reload; only receipt lookup is available");
+   const s5bCsvRead=page.waitForResponse(r=>r.url().endsWith("/PreviewPartyImport")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   const s5bCsvChecked=await s5bCsvRead;
+   assert.equal(s5bCsvChecked.status(),200);
+   const s5bCsvReadId=(await s5bCsvChecked.allHeaders())["x-request-id"];
+   await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
+     .toContainText(s5bCsvRequestId);
+   assert.equal(s5bCsvCalls,1,"CSV recovery must not apply the import twice");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bCsvRequestId+
+     "' AND action='parties.create'"))[0].n,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bCsvReadId+"'"))[0].n,0);
+   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.data.csv-import.pending.v1")),null);
+   ownerRecovery.push({owner:"party-csv-import",kind:"lookup",original_request_id:s5bCsvRequestId,
+     subsequent_request_id:s5bCsvReadId});
+   await page.unroute(s5bCsvPath,loseCsvAck);
+   assert.ok(await firstId("crm_party_records","display_name","Browser Import "+runId));
+
    const exportReply=page.waitForResponse(r=>r.url().endsWith("/PreviewPartyExport"));
    await page.getByRole("button",{name:"Проверить экспорт",exact:true}).click();
    assert.equal((await exportReply).status(),200);
@@ -1186,8 +1325,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const exported=await readFile(await download.path(),"utf8");
    assert.ok(exported.includes("Browser Import "+runId));
    assert.ok(exported.includes("Browser Updated "+runId));
-   steps.push("CSV rapid file replacement, generated preview and confirmed import");
-
+   steps.push("S5b Enrichment profile/mapping and CSV import: lost acknowledgments, reload, read-only receipt lookup, no duplicate writes or payload storage");
    // Two actual browser forms hold the same version. Only one may commit.
    await navigate("parties","Люди и организации");
    const stalePage=await context.newPage();
