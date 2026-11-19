@@ -436,23 +436,40 @@ async function verifyData(){
   // S5a adds one independent original Party owner, not a fabricated Deal
   // write. It must prove a committed request and a distinct read-only GetParty.
   const ownerProofs=evidence.owner_recovery??[];
-  assert.equal(ownerProofs.length,1,"S5a Party reload-recovery proof required");
+  const ownerContracts={
+    party:{write:"/CreateParty",read:"/GetParty",audit:"parties.create"},
+    consent:{write:"/SuppressCommunication",read:"/GetConsentAuthorization",audit:"consents.operator_suppress"},
+    privacy:{write:"/CreatePrivacyCase",read:"/GetPrivacyCase",audit:"customer_privacy.create"},
+    "enrichment-profile":{write:"/PublishProviderProfile",read:"/GetProviderProfile",audit:"customer_enrichment.profile_publish"},
+    "enrichment-mapping":{write:"/PublishMapping",read:"/GetMapping",audit:"customer_enrichment.mapping_publish"},
+    "party-csv-import":{write:"/ApplyPartyImport",read:"/PreviewPartyImport",audit:"parties.create"}
+  };
+  assert.deepEqual(ownerProofs.map(proof=>proof.owner).sort(),Object.keys(ownerContracts).sort(),
+    "Every active S5 owner must provide one lost-ack/reload receipt proof");
   for(const proof of ownerProofs){
-    assert.equal(proof.owner,"party");assert.equal(proof.kind,"lookup");
+    const contract=ownerContracts[proof.owner];
+    assert.equal(proof.kind,"lookup");
     const original=requests.get(proof.original_request_id);
     const read=requests.get(proof.subsequent_request_id);
-    assert.ok(original&&read,"S5a signed owner requests missing");
-    assert.ok(original.path.endsWith("/CreateParty")&&read.path.endsWith("/GetParty"));
+    assert.ok(original&&read,"Signed owner recovery requests missing: "+proof.owner);
+    assert.ok(original.path.endsWith(contract.write)&&read.path.endsWith(contract.read),
+      "Owner recovery must use its existing write and read RPC: "+proof.owner);
     assert.equal(original.status,200);assert.equal(read.status,200);
-    assert.ok(mutationIds.has(proof.original_request_id));
-    assert.ok(!mutationIds.has(proof.subsequent_request_id));
+    assert.ok(mutationIds.has(proof.original_request_id),"Owner recovery has no original commit: "+proof.owner);
+    assert.ok(!mutationIds.has(proof.subsequent_request_id),"Read-only recovery must not be a mutation: "+proof.owner);
     assert.notEqual(proof.original_request_id,proof.subsequent_request_id);
+    const committed=await cfReadback("/d1/database/"+database+"/query",{
+      sql:"SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND request_id=? AND action=?",
+      params:[evidence.tenant,proof.original_request_id,contract.audit]});
+    assert.equal(committed?.[0]?.success,true);
+    assert.equal(Number(committed[0].results?.[0]?.n),1,
+      "Original owner write must have exactly one matching audit row: "+proof.owner);
     const checked=await cfReadback("/d1/database/"+database+"/query",{
       sql:"SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND request_id=?",
       params:[evidence.tenant,proof.subsequent_request_id]});
     assert.equal(checked?.[0]?.success,true);
     assert.equal(Number(checked[0].results?.[0]?.n),0,
-      "S5a GetParty must never commit a second audit row");
+      "Read-only owner recovery must never append audit: "+proof.owner);
   }
   // Synthetic-only business values actually sent by the browser must not
   // appear in the native Cloudflare events of their committed requests.
@@ -462,7 +479,12 @@ async function verifyData(){
     "contact-email":/^browser-[0-9]{10,}@example\.org$/,
     "task-subject":/^Browser Task [0-9]{10,}$/,
     "cookie":/^crm-s3-cookie-[0-9]{10,}$/,
-    "header":/^crm-s3-header-[0-9]{10,}$/
+    "header":/^crm-s3-header-[0-9]{10,}$/,
+    "enrichment-provider-key":/^browser_registry_[0-9]{10,}$/,
+    "enrichment-license":/^Browser test license$/,
+    "enrichment-mapping-key":/^browser_mapping_[0-9]{10,}$/,
+    "csv-party-name":/^Browser Import [0-9]{10,}$/,
+    "csv-payload":/^party_id,kind,display_name,resource_version\r\nbrowser-import,person,Browser Import [0-9]{10,},1\r\n$/
   };
   const probeValuesByRequest=new Map(),probeKinds=[];
   for(const probe of evidence.synthetic_private_probes??[]){
@@ -537,9 +559,16 @@ async function verifyData(){
       {entry:requests.get(item.original_request_id),needsD1:true},
       {entry:requests.get(item.subsequent_request_id),needsD1:true}
     ]),
-    ...[ [...requests.values()].find(e=>!mutationIds.has(e.request_id)&&e.status===200),
-          [...requests.values()].find(e=>e.status>=400) ]
-      .filter(Boolean).map(entry=>({entry,needsD1:false}))
+    ...[
+      [...requests.values()].find(e=>!mutationIds.has(e.request_id)&&e.status===200),
+      [...requests.values()].find(e=>e.status===400),
+      [...requests.values()].find(e=>e.status===403),
+      [...requests.values()].find(e=>e.status===409)
+    ].map((entry,index)=>{
+      assert.ok(entry,["read-only","validation rejection","authorization denial","CAS conflict"][index]+
+        " request must be observed in signed browser evidence");
+      return {entry,needsD1:false};
+    })
   ];
   // A recovery scenario is proved only by distinct Cloudflare traces for
   // its original and follow-up requests. Do not pass on the same trace twice.
