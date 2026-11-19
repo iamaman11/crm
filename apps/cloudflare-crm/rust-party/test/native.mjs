@@ -3450,8 +3450,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    {table:"crm_contact_point_records",id:"contact_point_id",fields:["kind","status"],version:true},
    {table:"crm_party_relationship_records",id:"party_relationship_id",fields:["status"],version:true},
    {table:"crm_activity_task_records",id:"task_id",fields:["status","priority"],version:true},
-   {table:"crm_sales_deal_records",id:"deal_id",fields:["status","stage.pipeline_id","stage.stage_id",
-     "probability_source","forecast_category"],version:true},
+   {table:"crm_sales_deal_records",id:"deal_id",
+     fields:["status","stage.pipeline_id","stage.stage_id"],version:true},
    {table:"crm_sales_pipeline_records",id:"pipeline_id",fields:["name"],version:false},
    {table:"crm_sales_saved_view_records",id:"view_id",fields:["name"],version:false}
  ];

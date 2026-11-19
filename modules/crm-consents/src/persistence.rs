@@ -55,11 +55,13 @@ const CONSENT_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
 pub fn decode_consent_authorization_state(bytes: &[u8]) -> Result<ConsentAuthorization, SdkError> {
     validate_size(bytes)?;
     let state: ConsentAuthorizationStateV1 =
-        crm_module_sdk::decode_json(bytes, CONSENT_JSON_DIAGNOSTIC_FIELDS).map_err(|diagnostic| {
-            persisted_error(format!(
-                "Consent Authorization state JSON is invalid: {diagnostic}"
-            ))
-        })?;
+        crm_module_sdk::decode_json(bytes, CONSENT_JSON_DIAGNOSTIC_FIELDS).map_err(
+            |diagnostic| {
+                persisted_error(format!(
+                    "Consent Authorization state JSON is invalid: {diagnostic}"
+                ))
+            },
+        )?;
     ConsentAuthorization::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }

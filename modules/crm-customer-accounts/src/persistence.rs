@@ -38,8 +38,8 @@ const ACCOUNT_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
 
 pub fn decode_account_state(bytes: &[u8]) -> Result<Account, SdkError> {
     validate_size(bytes)?;
-    let state: AccountStateV1 =
-        crm_module_sdk::decode_json(bytes, ACCOUNT_JSON_DIAGNOSTIC_FIELDS).map_err(|diagnostic| {
+    let state: AccountStateV1 = crm_module_sdk::decode_json(bytes, ACCOUNT_JSON_DIAGNOSTIC_FIELDS)
+        .map_err(|diagnostic| {
             persisted_error(format!("Account state JSON is invalid: {diagnostic}"))
         })?;
     Account::rehydrate(state.try_into()?)

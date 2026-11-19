@@ -54,11 +54,13 @@ const RELATIONSHIP_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
 pub fn decode_party_relationship_state(bytes: &[u8]) -> Result<PartyRelationship, SdkError> {
     validate_size(bytes)?;
     let state: PartyRelationshipStateV1 =
-        crm_module_sdk::decode_json(bytes, RELATIONSHIP_JSON_DIAGNOSTIC_FIELDS).map_err(|diagnostic| {
-            persisted_error(format!(
-                "Party Relationship state JSON is invalid: {diagnostic}"
-            ))
-        })?;
+        crm_module_sdk::decode_json(bytes, RELATIONSHIP_JSON_DIAGNOSTIC_FIELDS).map_err(
+            |diagnostic| {
+                persisted_error(format!(
+                    "Party Relationship state JSON is invalid: {diagnostic}"
+                ))
+            },
+        )?;
     PartyRelationship::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }

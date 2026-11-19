@@ -61,11 +61,13 @@ pub fn decode_duplicate_candidate_case_state(
 ) -> Result<DuplicateCandidateCase, SdkError> {
     validate_size(bytes)?;
     let state: DuplicateCandidateCaseStateV1 =
-        crm_module_sdk::decode_json(bytes, IDENTITY_JSON_DIAGNOSTIC_FIELDS).map_err(|diagnostic| {
-            persisted_error(format!(
-                "Identity Resolution candidate state JSON is invalid: {diagnostic}"
-            ))
-        })?;
+        crm_module_sdk::decode_json(bytes, IDENTITY_JSON_DIAGNOSTIC_FIELDS).map_err(
+            |diagnostic| {
+                persisted_error(format!(
+                    "Identity Resolution candidate state JSON is invalid: {diagnostic}"
+                ))
+            },
+        )?;
     DuplicateCandidateCase::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }
