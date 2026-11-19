@@ -1139,18 +1139,24 @@ mod tests {
         let canonical = encode_review_decision_state(&values.review).unwrap();
         let mut json: Value = serde_json::from_slice(&canonical).unwrap();
         json["untrusted-471-key"] = Value::String("secret-471-value".to_owned());
-        let untrusted = decode_review_decision_state(&serde_json::to_vec(&json).unwrap())
-            .unwrap_err();
-        assert_eq!(untrusted.code, "CUSTOMER_ENRICHMENT_PERSISTED_STATE_INVALID");
+        let untrusted =
+            decode_review_decision_state(&serde_json::to_vec(&json).unwrap()).unwrap_err();
+        assert_eq!(
+            untrusted.code,
+            "CUSTOMER_ENRICHMENT_PERSISTED_STATE_INVALID"
+        );
         let output = format!("{untrusted:?}");
         assert!(!output.contains("untrusted-471-key"));
         assert!(!output.contains("secret-471-value"));
 
         let mut json: Value = serde_json::from_slice(&canonical).unwrap();
         json["kind"] = Value::String("secret-471-enum".to_owned());
-        let untrusted = decode_review_decision_state(&serde_json::to_vec(&json).unwrap())
-            .unwrap_err();
-        assert_eq!(untrusted.code, "CUSTOMER_ENRICHMENT_PERSISTED_STATE_INVALID");
+        let untrusted =
+            decode_review_decision_state(&serde_json::to_vec(&json).unwrap()).unwrap_err();
+        assert_eq!(
+            untrusted.code,
+            "CUSTOMER_ENRICHMENT_PERSISTED_STATE_INVALID"
+        );
         assert!(!format!("{untrusted:?}").contains("secret-471-enum"));
     }
 

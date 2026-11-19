@@ -46,9 +46,10 @@ pub fn decode_import_job_state(bytes: &[u8]) -> Result<ImportJob, SdkError> {
     validate_size(bytes, IMPORT_JOB_STATE_MAXIMUM_BYTES, "import-job")?;
     // The schema and mandatory canonical-byte check remain owned here. The
     // shared decoder only sanitizes diagnostics (no user keys or payloads).
-    let state: ImportJobStateV1 = crm_module_sdk::decode_json(bytes, &[]).map_err(|diagnostic| {
-        persisted_error(format!("import-job state JSON is invalid: {diagnostic}"))
-    })?;
+    let state: ImportJobStateV1 =
+        crm_module_sdk::decode_json(bytes, &[]).map_err(|diagnostic| {
+            persisted_error(format!("import-job state JSON is invalid: {diagnostic}"))
+        })?;
     require_canonical_json(bytes, &state, "import-job")?;
     ImportJob::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
@@ -64,9 +65,10 @@ pub fn encode_import_row_state(row: &ImportRow) -> Result<Vec<u8>, SdkError> {
 
 pub fn decode_import_row_state(bytes: &[u8]) -> Result<ImportRow, SdkError> {
     validate_size(bytes, IMPORT_ROW_STATE_MAXIMUM_BYTES, "import-row")?;
-    let state: ImportRowStateV1 = crm_module_sdk::decode_json(bytes, &[]).map_err(|diagnostic| {
-        persisted_error(format!("import-row state JSON is invalid: {diagnostic}"))
-    })?;
+    let state: ImportRowStateV1 =
+        crm_module_sdk::decode_json(bytes, &[]).map_err(|diagnostic| {
+            persisted_error(format!("import-row state JSON is invalid: {diagnostic}"))
+        })?;
     require_canonical_json(bytes, &state, "import-row")?;
     ImportRow::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
