@@ -77,13 +77,28 @@ impl account_wire::AccountService for AccountV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, account_wire::GetAccountRequest>,
     ) -> ServiceResult<account_wire::GetAccountResponse> {
-        let id = Self::valid_id(req.account_id)?;
-        let account = accounts::load(&self.d1()?, &self.actor.tenant, &id)
+        let input = req.to_owned_message();
+        let id = Self::valid_id(&input.account_id)?;
+        let db = self.d1()?;
+        let item = accounts::load(&db, &self.actor.tenant, &id)
             .await
-            .map_err(|_| ConnectError::internal("Account D1 read failed"))?
+            .map_err(|_| ConnectError::internal("ACCOUNT original D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("CUSTOMER_ACCOUNTS_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let stored = crud_receipt(&db, &self.actor.tenant, key, CrudReceiptOwner::Account)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("ACCOUNT_RECEIPT_READ_FAILED"))?;
+                crud_commit_evidence(stored, &id, &self.request_id, |state| {
+                    crm_customer_accounts::decode_account_state(state.as_bytes()).map(|row| (row.account_id().as_str().to_owned(), row.version())).map_err(|e| worker::Error::RustError(e.code))
+                })
+                .map_err(|_| ConnectError::unavailable("ACCOUNT_RECEIPT_DECODE_FAILED"))?
+            }
+        };
         RpcResponse::ok(account_wire::GetAccountResponse {
-            account: Some(Self::convert(&account)?).into(),
+            account: Some(Self::convert(&item)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }
