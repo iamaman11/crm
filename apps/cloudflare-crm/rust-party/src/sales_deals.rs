@@ -1130,6 +1130,46 @@ fn add_money(
         .ok_or(ReadFailureReason::SalesMetricsWeightOverflow)?;
     count_one(&mut entry.2)
 }
+#[derive(Clone, Copy)]
+pub(super) struct AnalysisPeriod {
+    start: CalendarDate,
+    end: CalendarDate,
+}
+
+impl AnalysisPeriod {
+    pub(super) fn new(start: DateInput, end: DateInput) -> std::result::Result<Self, &'static str> {
+        let start = typed_date(start)?;
+        let end = typed_date(end)?;
+        if start > end {
+            return Err("SALES_ANALYSIS_PERIOD_REVERSED");
+        }
+        Ok(Self { start, end })
+    }
+
+    fn includes(self, date: CalendarDate) -> bool {
+        self.start <= date && date <= self.end
+    }
+}
+
+#[derive(Default)]
+pub(super) struct ClosedOutcomeMetric {
+    pub won_count: u64,
+    pub lost_count: u64,
+    pub unknown_close_count: u64,
+}
+
+impl ClosedOutcomeMetric {
+    pub(super) fn denominator(&self) -> u64 {
+        self.won_count + self.lost_count
+    }
+
+    pub(super) fn win_rate_basis_points(&self) -> Option<u32> {
+        let denominator = self.denominator();
+        (denominator > 0)
+            .then(|| (u128::from(self.won_count) * 10_000 / u128::from(denominator)) as u32)
+    }
+}
+
 pub(super) struct ForecastCategoryMetric {
     pub category: ForecastCategory,
     pub deal_count: u64,
@@ -1143,6 +1183,66 @@ pub(super) struct ForecastCurrencyMetric {
     pub weighted_minor_units_times_basis_points: i128,
     pub amount_deal_count: u64,
 }
+#[derive(Default)]
+struct ForecastTotals {
+    categories: BTreeMap<ForecastCategory, (u64, u64, u64)>,
+    money: BTreeMap<(ForecastCategory, String), (i128, i128, u64)>,
+}
+
+impl ForecastTotals {
+    fn add(&mut self, deal: &Deal) -> std::result::Result<(), ReadFailureReason> {
+        let counts = self.categories.entry(deal.forecast_category()).or_default();
+        count_one(&mut counts.0)?;
+        match deal.probability_source() {
+            ProbabilitySource::StageDefault => count_one(&mut counts.1)?,
+            ProbabilitySource::Manual => count_one(&mut counts.2)?,
+        }
+        if let Some(amount) = deal.amount() {
+            let units = amount.minor_units();
+            let weighted = units
+                .checked_mul(i128::from(deal.probability().get()))
+                .ok_or(ReadFailureReason::SalesMetricsWeightOverflow)?;
+            let entry = self
+                .money
+                .entry((deal.forecast_category(), amount.currency().to_string()))
+                .or_default();
+            add_money(entry, units, weighted)?;
+        }
+        Ok(())
+    }
+
+    fn finish(self) -> (Vec<ForecastCategoryMetric>, Vec<ForecastCurrencyMetric>) {
+        let categories = self
+            .categories
+            .into_iter()
+            .map(
+                |(category, (deal_count, stage_default_count, manual_count))| {
+                    ForecastCategoryMetric {
+                        category,
+                        deal_count,
+                        stage_default_count,
+                        manual_count,
+                    }
+                },
+            )
+            .collect();
+        let currencies = self
+            .money
+            .into_iter()
+            .map(
+                |((category, currency_code), (total, weighted, count))| ForecastCurrencyMetric {
+                    category,
+                    currency_code,
+                    total_minor_units: total,
+                    weighted_minor_units_times_basis_points: weighted,
+                    amount_deal_count: count,
+                },
+            )
+            .collect();
+        (categories, currencies)
+    }
+}
+
 pub(super) struct PipelineMetrics {
     pub total_deal_count: u64,
     pub statuses: Vec<PipelineStatusMetric>,
@@ -1150,6 +1250,9 @@ pub(super) struct PipelineMetrics {
     pub operational: Vec<PipelineOperationalMetric>,
     pub forecast_categories: Vec<ForecastCategoryMetric>,
     pub forecast_currencies: Vec<ForecastCurrencyMetric>,
+    pub undated_forecast_categories: Vec<ForecastCategoryMetric>,
+    pub undated_forecast_currencies: Vec<ForecastCurrencyMetric>,
+    pub closed_outcomes: Option<ClosedOutcomeMetric>,
     pub as_of_unix_seconds: i64,
 }
 
@@ -1162,6 +1265,7 @@ pub(super) async fn pipeline_metrics(
     pipeline_id: &str,
     status: Option<DealStatus>,
     account: Option<&str>,
+    period: Option<AnalysisPeriod>,
 ) -> std::result::Result<PipelineMetrics, ReadFailureReason> {
     let mut condition =
         String::from("d.tenant=? AND json_extract(d.state,'$.stage.pipeline_id')=?");
@@ -1227,8 +1331,9 @@ pub(super) async fn pipeline_metrics(
     let mut status_groups = BTreeMap::<(String, String), u64>::new();
     let mut money_groups = BTreeMap::<(String, String, String), (i128, i128, u64)>::new();
     let mut operational_groups = BTreeMap::<(String, String), OperationalCounts>::new();
-    let mut forecast_categories = BTreeMap::<ForecastCategory, (u64, u64, u64)>::new();
-    let mut forecast_money = BTreeMap::<(ForecastCategory, String), (i128, i128, u64)>::new();
+    let mut forecast = ForecastTotals::default();
+    let mut undated_forecast = ForecastTotals::default();
+    let mut closed_outcomes = status.is_none().then(ClosedOutcomeMetric::default);
     for row in &rows {
         if row.as_of_nanos != as_of_text {
             return Err(ReadFailureReason::SalesMetricsSnapshotTimeInvalid);
@@ -1251,13 +1356,18 @@ pub(super) async fn pipeline_metrics(
             .checked_add(1)
             .ok_or(ReadFailureReason::SalesMetricsCountOverflow)?;
         if status == DealStatus::Open {
-            let counts = forecast_categories
-                .entry(deal.forecast_category())
-                .or_default();
-            count_one(&mut counts.0)?;
-            match deal.probability_source() {
-                ProbabilitySource::StageDefault => count_one(&mut counts.1)?,
-                ProbabilitySource::Manual => count_one(&mut counts.2)?,
+            match deal.expected_close_date() {
+                None => {
+                    undated_forecast.add(&deal)?;
+                    if period.is_none() {
+                        forecast.add(&deal)?;
+                    }
+                }
+                Some(date) => {
+                    if period.is_none_or(|period| period.includes(date)) {
+                        forecast.add(&deal)?;
+                    }
+                }
             }
             let group = operational_groups
                 .entry((stage_id.to_owned(), status_key.to_owned()))
@@ -1300,6 +1410,25 @@ pub(super) async fn pipeline_metrics(
                     return Err(ReadFailureReason::SalesMetricsTaskFlagInvalid);
                 }
             }
+        } else if let Some(counts) = &mut closed_outcomes {
+            match deal.close_outcome() {
+                None => count_one(&mut counts.unknown_close_count)?,
+                Some(outcome) => {
+                    // Domain close timestamp is an instant, never a locally
+                    // interpreted date or another Gregorian implementation.
+                    let date = crm_core_contracts::UtcInstant::from_unix_nanos(
+                        outcome.closed_at_unix_nanos(),
+                    )
+                    .utc_date();
+                    if period.is_none_or(|period| period.includes(date)) {
+                        match status {
+                            DealStatus::Won => count_one(&mut counts.won_count)?,
+                            DealStatus::Lost => count_one(&mut counts.lost_count)?,
+                            DealStatus::Open => unreachable!("closed outcome branch"),
+                        }
+                    }
+                }
+            }
         }
         if let Some(amount) = deal.amount() {
             let units = amount.minor_units();
@@ -1314,12 +1443,6 @@ pub(super) async fn pipeline_metrics(
                 ))
                 .or_default();
             add_money(entry, units, weighted)?;
-            if status == DealStatus::Open {
-                let entry = forecast_money
-                    .entry((deal.forecast_category(), amount.currency().to_string()))
-                    .or_default();
-                add_money(entry, units, weighted)?;
-            }
         }
     }
     fn persisted_status(raw: &str) -> DealStatus {
@@ -1330,6 +1453,8 @@ pub(super) async fn pipeline_metrics(
             _ => unreachable!("Validated during the original D1 row scan"),
         }
     }
+    let (forecast_categories, forecast_currencies) = forecast.finish();
+    let (undated_forecast_categories, undated_forecast_currencies) = undated_forecast.finish();
     Ok(PipelineMetrics {
         total_deal_count: total_count,
         statuses: status_groups
@@ -1370,31 +1495,11 @@ pub(super) async fn pipeline_metrics(
                 overdue_linked_task_count: c.overdue_tasks,
             })
             .collect(),
-        forecast_categories: forecast_categories
-            .into_iter()
-            .map(
-                |(category, (deal_count, stage_default_count, manual_count))| {
-                    ForecastCategoryMetric {
-                        category,
-                        deal_count,
-                        stage_default_count,
-                        manual_count,
-                    }
-                },
-            )
-            .collect(),
-        forecast_currencies: forecast_money
-            .into_iter()
-            .map(
-                |((category, currency_code), (total, weighted, count))| ForecastCurrencyMetric {
-                    category,
-                    currency_code,
-                    total_minor_units: total,
-                    weighted_minor_units_times_basis_points: weighted,
-                    amount_deal_count: count,
-                },
-            )
-            .collect(),
+        forecast_categories,
+        forecast_currencies,
+        undated_forecast_categories,
+        undated_forecast_currencies,
+        closed_outcomes,
         as_of_unix_seconds,
     })
 }
