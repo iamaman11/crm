@@ -33,11 +33,32 @@ pub fn encode_party_relationship_state(
     Ok(bytes)
 }
 
+// Diagnostics only: these trusted literal labels do not define another state schema.
+const RELATIONSHIP_JSON_DIAGNOSTIC_FIELDS: &[&str] = &[
+    "party_relationship_id",
+    "from_party_id",
+    "to_party_id",
+    "relationship_type",
+    "code",
+    "directionality",
+    "from_role",
+    "to_role",
+    "status",
+    "valid_from_unix_nanos",
+    "valid_until_unix_nanos",
+    "created_at_unix_nanos",
+    "updated_at_unix_nanos",
+    "version",
+];
+
 pub fn decode_party_relationship_state(bytes: &[u8]) -> Result<PartyRelationship, SdkError> {
     validate_size(bytes)?;
-    let state: PartyRelationshipStateV1 = serde_json::from_slice(bytes).map_err(|error| {
-        persisted_error(format!("Party Relationship state JSON is invalid: {error}"))
-    })?;
+    let state: PartyRelationshipStateV1 =
+        crm_module_sdk::decode_json(bytes, RELATIONSHIP_JSON_DIAGNOSTIC_FIELDS).map_err(|diagnostic| {
+            persisted_error(format!(
+                "Party Relationship state JSON is invalid: {diagnostic}"
+            ))
+        })?;
     PartyRelationship::rehydrate(state.try_into()?)
         .map_err(|error| persisted_error(format!("{}: {}", error.code, error.safe_message)))
 }
@@ -213,6 +234,17 @@ fn persisted_error(message: impl Into<String>) -> SdkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn persisted_json_diagnostics_never_echo_private_keys_or_values() {
+        let invalid = br#"{"private-471-key":"secret-471-payload","version":"secret-471-value"}"#;
+        let error = decode_party_relationship_state(invalid).unwrap_err();
+        assert_eq!(error.code, "PARTY_RELATIONSHIPS_PERSISTED_STATE_INVALID");
+        let diagnostic = format!("{error:?}");
+        for sensitive in ["private-471-key", "secret-471-payload", "secret-471-value"] {
+            assert!(!diagnostic.contains(sensitive));
+        }
+    }
+
     use crate::domain::{CreatePartyRelationship, RelationshipType};
 
     fn directional_relationship() -> PartyRelationship {

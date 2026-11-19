@@ -3441,6 +3441,48 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    console.log(JSON.stringify({event:"crm.native-r73-forecast",result:"PASS",stage_default:true,
      manual_zero:true,move:true,reset:true,category:true,currency:true,close_reopen:true,cas:true,tenant:true}));
  }
+ // #471 S2: prove SQL JSON paths and native persisted Rust state agree
+ // for all active owner records created through generated binary Connect.
+ // These are *SQL usage contracts*, not a new JSON business-schema registry.
+ const nativeSqlStateContracts=[
+   {table:"crm_party_records",id:"party_id",fields:["kind","display_name"],version:true},
+   {table:"crm_account_records",id:"account_id",fields:["name","status"],version:true},
+   {table:"crm_contact_point_records",id:"contact_point_id",fields:["kind","status"],version:true},
+   {table:"crm_party_relationship_records",id:"party_relationship_id",fields:["status"],version:true},
+   {table:"crm_activity_task_records",id:"task_id",fields:["status","priority"],version:true},
+   {table:"crm_sales_deal_records",id:"deal_id",fields:["status","stage.pipeline_id","stage.stage_id",
+     "probability_source","forecast_category"],version:true},
+   {table:"crm_sales_pipeline_records",id:"pipeline_id",fields:["name"],version:false},
+   {table:"crm_sales_saved_view_records",id:"view_id",fields:["name"],version:false}
+ ];
+ let sqlStateRows=0;
+ for(const contract of nativeSqlStateContracts){
+   const tests=[
+     "json_valid(state) IS NOT 1",
+     "json_extract(state,'$."+contract.id+"') IS NOT id",
+     ...contract.fields.map(path=>"json_type(state,'$."+path+"') IS NOT 'text'"),
+     ...(contract.version?["json_extract(state,'$.version') IS NOT version"]:[])
+   ];
+   if(contract.table==="crm_sales_pipeline_records")
+     tests.push("json_type(state,'$.stages') IS NOT 'array'");
+   const [result]=await sql("SELECT COUNT(*) AS n,SUM(CASE WHEN "+tests.join(" OR ")+
+     " THEN 1 ELSE 0 END) AS broken FROM "+contract.table+" WHERE tenant=?", "tenant-a");
+   assert.ok(result.n>0,contract.table+" must be covered by signed owner fixtures");
+   assert.equal(result.broken,0,contract.table+" SQL paths drifted from the Rust owner codec");
+   sqlStateRows+=result.n;
+ }
+ // The Privacy owner intentionally persists profiled canonical JSON rather
+ // than raw Serde, and SQL must never lose or silently bypass the profile.
+ const [privacySqlState]=await sql("SELECT COUNT(*) AS n,SUM(CASE WHEN "+
+   "json_extract(state,'$.canonicalization_profile') IS NOT 'crm.cjson/v1' "+
+   "THEN 1 ELSE 0 END) AS broken FROM crm_privacy_case_records WHERE tenant=?", "tenant-a");
+ assert.ok(privacySqlState.n>0,"Privacy signed owner scenario must exercise canonical snapshots");
+ assert.equal(privacySqlState.broken,0,"Privacy canonicalization profile must survive D1 writes");
+ sqlStateRows+=privacySqlState.n;
+ console.log(JSON.stringify({event:"crm.native-s2-owner-sql-persistence-contract",result:"PASS",
+   proof:"signed generated Protobuf RPC -> original Rust owner -> real workerd D1 SQL paths",
+   owners:nativeSqlStateContracts.length+1,checked_rows:sqlStateRows,
+   privacy_canonical_profile:true}));
  // The exact production receipt query (not a mocked storage error) must
  // distinguish a proven absent key from an inaccessible receipt table.
  // Use only the existing signed native-ci read-only probe and local D1 fixture.
