@@ -373,12 +373,33 @@ impl sale_wire::DealService for SalesV2Service {
         {
             return Err(ConnectError::not_found("SALES_PIPELINE_NOT_FOUND"));
         }
+        let input = req.to_owned_message();
+        let period = input
+            .analysis_period
+            .as_option()
+            .map(|period| {
+                let date = |value: &core_v2::CalendarDate| sales_deals::DateInput {
+                    year: value.year,
+                    month: value.month,
+                    day: value.day,
+                };
+                let start = period.start_date.as_option().ok_or_else(|| {
+                    ConnectError::invalid_argument("SALES_ANALYSIS_PERIOD_START_REQUIRED")
+                })?;
+                let end = period.end_date.as_option().ok_or_else(|| {
+                    ConnectError::invalid_argument("SALES_ANALYSIS_PERIOD_END_REQUIRED")
+                })?;
+                sales_deals::AnalysisPeriod::new(date(start), date(end))
+                    .map_err(ConnectError::invalid_argument)
+            })
+            .transpose()?;
         let metrics = sales_deals::pipeline_metrics(
             &db,
             &self.tenant,
             req.pipeline_id,
             status,
             req.account_id,
+            period,
         )
         .await
         .map_err(|error| {
@@ -390,6 +411,25 @@ impl sale_wire::DealService for SalesV2Service {
             DomainDealStatus::Won => sale_wire::DealStatus::DEAL_STATUS_WON,
             DomainDealStatus::Lost => sale_wire::DealStatus::DEAL_STATUS_LOST,
         };
+        let forecast_category_metric =
+            |row: sales_deals::ForecastCategoryMetric| sale_wire::ForecastCategoryMetric {
+                category: Self::forecast_wire(row.category).into(),
+                deal_count: row.deal_count,
+                stage_default_count: row.stage_default_count,
+                manual_count: row.manual_count,
+                ..Default::default()
+            };
+        let forecast_currency_metric =
+            |row: sales_deals::ForecastCurrencyMetric| sale_wire::ForecastCurrencyMetric {
+                category: Self::forecast_wire(row.category).into(),
+                currency_code: row.currency_code,
+                total_minor_units: row.total_minor_units.to_string(),
+                weighted_minor_units_times_basis_points: row
+                    .weighted_minor_units_times_basis_points
+                    .to_string(),
+                amount_deal_count: row.amount_deal_count,
+                ..Default::default()
+            };
         RpcResponse::ok(sale_wire::GetPipelineMetricsResponse {
             pipeline_id: req.pipeline_id.to_owned(),
             total_deal_count: metrics.total_deal_count,
@@ -437,28 +477,35 @@ impl sale_wire::DealService for SalesV2Service {
             forecast_categories: metrics
                 .forecast_categories
                 .into_iter()
-                .map(|row| sale_wire::ForecastCategoryMetric {
-                    category: Self::forecast_wire(row.category).into(),
-                    deal_count: row.deal_count,
-                    stage_default_count: row.stage_default_count,
-                    manual_count: row.manual_count,
-                    ..Default::default()
-                })
+                .map(forecast_category_metric)
                 .collect(),
             forecast_currencies: metrics
                 .forecast_currencies
                 .into_iter()
-                .map(|row| sale_wire::ForecastCurrencyMetric {
-                    category: Self::forecast_wire(row.category).into(),
-                    currency_code: row.currency_code,
-                    total_minor_units: row.total_minor_units.to_string(),
-                    weighted_minor_units_times_basis_points: row
-                        .weighted_minor_units_times_basis_points
-                        .to_string(),
-                    amount_deal_count: row.amount_deal_count,
+                .map(forecast_currency_metric)
+                .collect(),
+            undated_forecast_categories: metrics
+                .undated_forecast_categories
+                .into_iter()
+                .map(forecast_category_metric)
+                .collect(),
+            undated_forecast_currencies: metrics
+                .undated_forecast_currencies
+                .into_iter()
+                .map(forecast_currency_metric)
+                .collect(),
+            closed_outcomes: metrics
+                .closed_outcomes
+                .map(|row| sale_wire::SalesClosedOutcomeMetric {
+                    won_count: row.won_count,
+                    lost_count: row.lost_count,
+                    unknown_close_count: row.unknown_close_count,
+                    denominator: row.denominator(),
+                    win_rate_basis_points: row.win_rate_basis_points(),
                     ..Default::default()
                 })
-                .collect(),
+                .into(),
+            analysis_period: input.analysis_period,
             as_of_unix_seconds: metrics.as_of_unix_seconds,
             ..Default::default()
         })
