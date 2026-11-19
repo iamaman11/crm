@@ -158,7 +158,9 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
         if input.authorization_id != input.authorization_id.trim()
             || input.authorization_id.contains('/')
         {
-            return Err(ConnectError::invalid_argument("CONSENT_AUTHORIZATION_ID_INVALID"));
+            return Err(ConnectError::invalid_argument(
+                "CONSENT_AUTHORIZATION_ID_INVALID",
+            ));
         }
         let id = crm_consents::ConsentAuthorizationId::try_new(&input.authorization_id)
             .map_err(|_| ConnectError::invalid_argument("CONSENT_AUTHORIZATION_ID_INVALID"))?;
@@ -176,7 +178,10 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
                 crud_commit_evidence(row, id.as_str(), &self.request_id, |state| {
                     crm_consents::decode_consent_authorization_state(state.as_bytes())
                         .map(|saved| {
-                            (saved.authorization_id().as_str().to_owned(), saved.version())
+                            (
+                                saved.authorization_id().as_str().to_owned(),
+                                saved.version(),
+                            )
                         })
                         .map_err(|error| worker::Error::RustError(error.code))
                 })
