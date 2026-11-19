@@ -130,6 +130,12 @@ async function subprocessEntry(){
        if(variant==="synthetic-private-leak"&&traceIndex===0)events.push({
          $metadata:{type:"log"},source:{traceId:needle,message:"Browser Party 1234567890123"}
        });
+       if(variant==="synthetic-cookie-leak"&&traceIndex===0)events.push({
+         $metadata:{type:"log"},source:{traceId:needle,message:"crm-s3-cookie-1234567890123"}
+       });
+       if(variant==="synthetic-header-leak"&&traceIndex===0)events.push({
+         $metadata:{type:"log"},source:{traceId:needle,message:"crm-s3-header-1234567890123"}
+       });
        return wrap({events:{events}});
      }
      if(mode==="verify-data"&&variant==="transient-html-telemetry"&&telemetryAttempts===1)
@@ -259,6 +265,8 @@ function run(mode,variant="valid"){
      variant==="wrong-recovery-request"?[recovery[0],{...recovery[1],subsequent_request_id:originalCloseId}]:recovery,
    synthetic_private_probes:variant==="missing-private-probes"?[]:[
      {kind:"party-name",request_id:requestId,value:"Browser Party 1234567890123"},
+     {kind:"cookie",request_id:requestId,value:"crm-s3-cookie-1234567890123"},
+     {kind:"header",request_id:requestId,value:"crm-s3-header-1234567890123"},
      {kind:"contact-email",request_id:contactCreateId,value:"browser-1234567890123@example.org"},
      {kind:"task-subject",request_id:taskCreateId,value:"Browser Task 1234567890123"}
    ]});
@@ -319,7 +327,8 @@ for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-err
   "missing-native-span","missing-d1-span","wrong-native-trace-id",
   "unsafe-invocation-event","missing-recovery","wrong-recovery-request",
   "recovery-audited","missing-recovery-span",
-  "missing-private-probes","synthetic-private-leak"])test("release rejects "+variant,()=>{
+  "missing-private-probes","synthetic-private-leak",
+  "synthetic-cookie-leak","synthetic-header-leak"])test("release rejects "+variant,()=>{
  const result=run("verify-data",variant);
  assert.notEqual(result.status,0);assert.equal(result.accepted,false);
 });
