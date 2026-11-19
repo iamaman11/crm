@@ -2,7 +2,7 @@ import {useCallback,useEffect,useLayoutEffect,useState} from "react";
 import {AccountStatus} from "@ultimate-crm/client/cloudflare";
 import {Button,FeedbackPanel,RecordCard,RecordPanel,PageHeader,SelectField} from "@ultimate-crm/ui";
 import {api} from "./api";
-import {useQuery,QueryNotice,Paging} from "./hooks";
+import {useQuery,QueryNotice,Paging,hasPendingRecovery,pendingRecoveryResourceId} from "./hooks";
 import {SearchField} from "./SearchField";
 import {AccountDetails,AccountEditor,AccountCreator,accountStatusLabel} from "./AccountRecord";
 import {accountsHref,accountHref,accountFilterStatus} from "./routes";
@@ -18,11 +18,11 @@ function canDiscard(dirty:boolean) {
 }
 export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;registerBlocker:RegisterBlocker}) {
   const {search,status,cursor}=filters;
-  const [expanded,setExpanded]=useState("");
-  const [mode,setMode]=useState<"view"|"edit">("view");
+  const [expanded,setExpanded]=useState(()=>pendingRecoveryResourceId("crm.account.update.pending.v1")??"");
+  const [mode,setMode]=useState<"view"|"edit">(()=>hasPendingRecovery("crm.account.update.pending.v1")?"edit":"view");
   const [dirty,setDirty]=useState(false);
   const [savedNotice,setSavedNotice]=useState("");
-  const [createOpen,setCreateOpen]=useState(false);
+  const [createOpen,setCreateOpen]=useState(()=>hasPendingRecovery("crm.account.create.pending.v1"));
   const [createDirty,setCreateDirty]=useState(false);
   const [createWarning,setCreateWarning]=useState("");
   useLayoutEffect(()=>{
@@ -38,13 +38,14 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
     setDirty(false);setExpanded("");setSavedNotice("");
   };
   const expand=(id:string,nextMode:"view"|"edit")=>{
+    if(hasPendingRecovery("crm.account.update.pending.v1")&&(expanded!==id||nextMode!=="edit"))return;
     if((expanded!==id||mode!==nextMode)&&!canDiscard(dirty))return;
     setDirty(false);setSavedNotice("");
     if(expanded===id&&mode==="view"&&nextMode==="view")setExpanded("");
     else {setExpanded(id);setMode(nextMode);}
   };
   const collapse=()=>{
-    if(!canDiscard(dirty))return;
+    if(hasPendingRecovery("crm.account.update.pending.v1")||!canDiscard(dirty))return;
     setDirty(false);setSavedNotice("");setExpanded("");
   };
   useEffect(()=>{
@@ -90,12 +91,20 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
     {!query.busy&&!query.error&&query.data?.accounts.length===0&&<p>{search?"Клиенты не найдены.":"Клиентов пока нет."}</p>}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
       onFirst={()=>navigate({cursor:""})} onNext={()=>navigate({cursor:query.data?.pageInfo?.nextPageToken??""})}/>
+    {/* A restored in-flight account may be outside the active filter/page.
+        Its original GetAccount receipt must still be reachable without a new write. */}
+    {mode==="edit"&&expanded&&hasPendingRecovery("crm.account.update.pending.v1")&&
+      !query.data?.accounts.some(account=>account.accountId===expanded)&&
+      <section aria-label="Восстановление изменения клиента">
+        <AccountEditor key={expanded} accountId={expanded} onDirtyChange={setDirty}
+          onCancel={()=>{}} onSaved={async()=>{await query.reload();setMode("view");setExpanded("");}}/>
+      </section>}
     <RecordPanel open={createOpen} dirty={createDirty} title="Новый клиент" onClose={()=>{
-      if(!canDiscard(createDirty))return;
+      if(hasPendingRecovery("crm.account.create.pending.v1")||!canDiscard(createDirty))return;
       setCreateDirty(false);setCreateOpen(false);
     }}>
       <AccountCreator onDirtyChange={setCreateDirty} onCancel={()=>{
-        if(!canDiscard(createDirty))return;
+        if(hasPendingRecovery("crm.account.create.pending.v1")||!canDiscard(createDirty))return;
         setCreateDirty(false);setCreateOpen(false);
       }} onSaved={async()=>{
         setCreateDirty(false);setCreateOpen(false);setSavedNotice("Сохранено. Клиент создан.");
@@ -106,7 +115,7 @@ export function AccountScreen({filters,registerBlocker}:{filters:AccountFilters;
   </>;
 }
 export function AccountPage({accountId,registerBlocker}:{accountId:string;registerBlocker:RegisterBlocker}) {
-  const [mode,setMode]=useState<"view"|"edit">("view");
+  const [mode,setMode]=useState<"view"|"edit">(()=>pendingRecoveryResourceId("crm.account.update.pending.v1")===accountId?"edit":"view");
   const [dirty,setDirty]=useState(false);
   const [revision,setRevision]=useState(0);
   const [savedNotice,setSavedNotice]=useState("");
