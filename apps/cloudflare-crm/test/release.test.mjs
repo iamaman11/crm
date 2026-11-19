@@ -111,6 +111,21 @@ async function subprocessEntry(){
    }
    if(path.endsWith("/telemetry/query")){
      telemetryAttempts++;
+     const needle=JSON.parse(options.body).parameters?.needle?.value;
+     if(needle==="11111111111111111111111111111111"){
+       const events=variant==="missing-native-span"?[]:[{
+         $metadata:{type:"span"},
+         source:{name:"D1 prepare",traceId:needle,
+           ...(variant==="missing-d1-span"?{}:{db:{system:"cloudflare-d1"}})}
+       }];
+       if(variant==="wrong-native-trace-id"&&events.length)
+         events[0].source.traceId="22222222222222222222222222222222";
+       if(variant==="unsafe-invocation-event")events.push({
+         $metadata:{type:"cf-worker-event",traceId:needle},
+         $workers:{event:{request:{headers:{"authorization":"synthetic-secret"}}}}
+       });
+       return wrap({events:{events}});
+     }
      if(mode==="verify-data"&&variant==="transient-html-telemetry"&&telemetryAttempts===1)
        return html(503);
      if(mode==="verify-data"&&variant==="persistent-html-telemetry")
@@ -123,7 +138,9 @@ async function subprocessEntry(){
          headers:{"content-type":"application/json","cf-ray":"fixture-ray-123"}});
      return wrap({events:{events:variant==="missing-logs"?[]:[{
        source:{event:"crm.native.request",request_id:requestId,operation:rpcPath,status:200,
-         error_code:variant==="wrong-error-code"?"aborted":null},$workers:{scriptVersion:{id:"version-new"}}
+         error_code:variant==="wrong-error-code"?"aborted":null},
+       $metadata:{...(variant==="missing-native-trace-id"?{}:{traceId:"11111111111111111111111111111111"})},
+       $workers:{scriptVersion:{id:"version-new"}}
      }]}});
    }
    if(path.endsWith("/query")){
@@ -243,7 +260,9 @@ for(const variant of ["persistent-html-telemetry","html-success-telemetry","pers
  });
 for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-error-code","wrong-actor",
   "trace-redaction-disabled","trace-logs-disabled","trace-disabled",
-  "trace-invocation-logs-enabled"])test("release rejects "+variant,()=>{
+  "trace-invocation-logs-enabled","missing-native-trace-id",
+  "missing-native-span","missing-d1-span","wrong-native-trace-id",
+  "unsafe-invocation-event"])test("release rejects "+variant,()=>{
  const result=run("verify-data",variant);
  assert.notEqual(result.status,0);assert.equal(result.accepted,false);
 });

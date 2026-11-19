@@ -405,6 +405,7 @@ async function verifyData(){
   // Observe every exact browser request, including rejected requests and read-only RPCs.
   // Audit rows are required only for committed mutations, never invented for reads.
   let pending=[...requests.values()];
+  const requestTraces=new Map();
   const from=evidence.started_at-1000;
   // Cloudflare telemetry can become searchable after the browser/D1 readback.
   // A delayed event remains mandatory: extend the bounded indexing window,
@@ -421,11 +422,19 @@ async function verifyData(){
           parameters:{needle:{value:entry.request_id},filters:[
             {key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
         });
-        return (data.events?.events||[]).some(event=>
+        const matched=(data.events?.events||[]).find(event=>
           event.source?.event==="crm.native.request"&&event.source?.request_id===entry.request_id&&
           event.source?.operation===entry.path&&event.source?.status===entry.status&&
           (event.source?.error_code??null)===(entry.error_code??null)&&
           event.$workers?.scriptVersion?.id===liveVersion);
+        if(!matched)return false;
+        // Cloudflare's native request log supplies the trace ID, not a
+        // handwritten correlation key or a second tracing SDK.
+        const traceId=matched.$metadata?.traceId;
+        assert.match(traceId??"",/^[a-f0-9]{32}$/i,
+          "CRM native request log must carry a valid Cloudflare trace ID");
+        requestTraces.set(entry.request_id,traceId);
+        return true;
       }));
       batch.forEach((entry,index)=>{if(!found[index])missing.push(entry);});
     }
@@ -437,12 +446,57 @@ async function verifyData(){
       await new Promise(resolve=>setTimeout(resolve,2500));
   }
   assert.equal(pending.length,0,"Missing Cloudflare request traces: "+pending.map(x=>x.path).join(","));
+  // Validate the actual trace graph, not only the existence of our console
+  // request logs. Representative accepted writes must have D1 spans (their
+  // commit fact was already verified against the audit table above). Reads
+  // and rejected requests may legitimately have no D1 call.
+  const representative=[
+    {entry:requests.get(evidence.writes[0].request_id),needsD1:true},
+    ...[ [...requests.values()].find(e=>!mutationIds.has(e.request_id)&&e.status===200),
+          [...requests.values()].find(e=>e.status>=400) ]
+      .filter(Boolean).map(entry=>({entry,needsD1:false}))
+  ];
+  let spanVerified=0,d1SpanVerified=0;
+  for(const {entry,needsD1} of representative){
+    const traceId=requestTraces.get(entry.request_id);
+    assert.match(traceId??"",/^[a-f0-9]{32}$/i,
+      "Accepted browser request missing its Cloudflare trace ID");
+    let verified=false;
+    for(let attempt=0;attempt<30;attempt++){
+      const data=await cfReadback("/workers/observability/telemetry/query",{
+        queryId:"crm-471-native-trace-span-evidence",view:"events",
+        timeframe:{from,to:Date.now()+1000},limit:100,
+        parameters:{needle:{value:traceId},filters:[
+          {key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
+      });
+      const linked=(data.events?.events||[]).filter(event=>
+        (event.source?.traceId??event.$metadata?.traceId)===traceId);
+      assert.ok(!linked.some(event=>event.$metadata?.type==="cf-worker-event"),
+        "Unsafe automatic invocation log in an accepted CRM trace");
+      const spans=linked.filter(event=>event.$metadata?.type==="span");
+      if(spans.length>0&&(!needsD1||spans.some(event=>event.source?.db))){
+        spanVerified++;
+        if(needsD1)d1SpanVerified++;
+        verified=true;
+        break;
+      }
+      if(attempt<29)await new Promise(resolve=>setTimeout(resolve,2500));
+    }
+    assert.ok(verified,needsD1?
+      "Committed CRM mutation has no native Cloudflare D1 span":
+      "CRM request has no native Cloudflare span");
+  }
+  assert.ok(d1SpanVerified>=1,"D1 trace proof must cover a committed mutation");
+  console.log(JSON.stringify({event:"crm.native-s3-trace-to-d1",
+    result:"PASS",traces:spanVerified,committed_d1_traces:d1SpanVerified,
+    automatic_invocation_logs:false}));
   assert.equal(await version(),liveVersion,"Deployment changed during acceptance");
   assert.deepEqual(await bindings(liveVersion),{sha,db:database});
   await waitForPublicSha(sha,"final");
   record("accepted.json",{result:"PASS",git_sha:sha,worker_version:liveVersion,
     d1_database:database,features:["native"],traffic_percentage:100,
     mutations:mutationIds.size,logs_correlated:requests.size,
+    spans_correlated:spanVerified,d1_mutation_spans:d1SpanVerified,
     trace_settings:traceSettings,steps:evidence.steps,
     request_ids:[...requests.keys()]});
 }
