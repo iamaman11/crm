@@ -67,7 +67,7 @@ type Pending={kind:"live";intent:Extract<MutationIntent,{preserve:true}>}|
 type RecoveryOptions={
   storageKey:string;
   lookup:(marker:ReceiptMarker,signal:AbortSignal)=>Promise<ReceiptProof|undefined>;
-  refresh:()=>Promise<unknown>;
+  refresh:(marker:ReceiptMarker)=>Promise<unknown>;
 };
 type MutationFeedback={tone:"success"|"warning"|"danger";text:string;fields?:CrmFailure["fieldViolations"]};
 
@@ -221,7 +221,7 @@ export function useMutation(recovery?:RecoveryOptions) {
       const saved="Сохранено ранее. Подтверждение найдено. Исходная запись: "+receipt.originalRequestId+
         " Запрос проверки: "+receipt.requestId+(cleared?"":" Не удалось удалить отметку восстановления.");
       setNotice({tone:cleared?"success":"warning",text:saved});if(cleared)setKey(newId());
-      try {await recovery.refresh();}
+      try {await recovery.refresh(marker);}
       catch(error){setNotice({tone:"warning",text:saved+" Список устарел: "+api.describeError(error)});}
     }catch(error){
       setNotice({tone:"warning",text:"Результат записи не подтверждён. "+api.describeError(error)});
