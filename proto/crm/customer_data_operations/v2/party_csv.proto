@@ -22,6 +22,7 @@ message PreviewPartyExportResponse {
 
 message PreviewPartyImportRequest {
   bytes csv = 1;
+  optional string receipt_idempotency_key = 2;
 }
 
 message PreviewPartyImportResponse {
@@ -29,6 +30,7 @@ message PreviewPartyImportResponse {
   string csv_sha256_hex = 2;
   uint32 previously_imported = 3;
   repeated string target_party_ids = 4;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 5;
 }
 
 message ApplyPartyImportRequest {
