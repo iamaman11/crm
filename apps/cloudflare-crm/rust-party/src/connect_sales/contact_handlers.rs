@@ -149,7 +149,8 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
                     .await
                     .map_err(|_| ConnectError::unavailable("CONTACT_POINT_RECEIPT_READ_FAILED"))?;
                 crud_commit_evidence(stored, &id, &self.request_id, |state| {
-                    contact_points::decode(state).map(|row| (row.contact_point_id().as_str().to_owned(), row.version()))
+                    contact_points::decode(state)
+                        .map(|row| (row.contact_point_id().as_str().to_owned(), row.version()))
                 })
                 .map_err(|_| ConnectError::unavailable("CONTACT_POINT_RECEIPT_DECODE_FAILED"))?
             }
