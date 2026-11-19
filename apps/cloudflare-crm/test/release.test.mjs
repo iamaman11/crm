@@ -112,7 +112,7 @@ async function subprocessEntry(){
    if(path.endsWith("/telemetry/query")){
      telemetryAttempts++;
      const needle=JSON.parse(options.body).parameters?.needle?.value;
-     const traceFor=index=>String(index+1).repeat(32);
+     const traceFor=index=>String(index+1).padStart(32,"0");
      const traceIndex=fixtureRequests.findIndex((_,index)=>traceFor(index)===needle);
      if(traceIndex!==-1){
        const events=variant==="missing-native-span"||
