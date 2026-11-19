@@ -3,7 +3,7 @@ import {Button,Card,FeedbackPanel,PageHeader,SelectField,TextField} from "@ultim
 import {api} from "./api";
 import {PartyKind} from "@ultimate-crm/client/cloudflare";
 import {enumValue} from "./enumFields";
-import {useReadAction,useMutation,MutationNotice} from "./hooks";
+import {useReadAction,useMutation,prepareMutation,MutationNotice} from "./hooks";
 
 export function DataScreen() {
   // New file selection supersedes all prior asynchronous file and preview results.
@@ -15,7 +15,21 @@ export function DataScreen() {
   const [preview,setPreview]=useState<Awaited<ReturnType<typeof api.csv.previewPartyImport>>>();
   const [previewBusy,setPreviewBusy]=useState(false);
   const exported=useReadAction<Awaited<ReturnType<typeof api.csv.previewPartyExport>>>();
-  const mutation=useMutation();
+  const mutation=useMutation({
+    storageKey:"crm.data.csv-import.pending.v1",
+    lookup:async(marker,signal)=>{
+      const result=await api.csv.previewPartyImport({
+        csv:new Uint8Array(),receiptIdempotencyKey:marker.key
+      },{signal});
+      return result.csvSha256Hex===marker.resourceId?result.confirmedMutation:undefined;
+    },
+    refresh:async()=>{
+      setBytes(undefined);setFileName("");setPreview(undefined);setFileError("");
+    }
+  });
+  const clearSelection=()=>{
+    setBytes(undefined);setFileName("");setPreview(undefined);setFileError("");
+  };
   return <>
     <PageHeader title="Импорт и экспорт" description="Доступно администратору. CSV-импорт создаёт новых участников; ID исходной системы не заменяют ID CRM."/>
     <Card title="Экспорт участников">
@@ -29,8 +43,9 @@ export function DataScreen() {
       <p>Файл содержит party_id, kind, display_name, resource_version.</p>
     </Card>
     <Card title="Импорт участников">
-      <TextField label="CSV-файл" type="file" accept=".csv,text/csv" disabled={mutation.busy||previewBusy} onChange={async e=>{
+      <TextField label="CSV-файл" type="file" accept=".csv,text/csv" disabled={mutation.busy||mutation.pending||previewBusy} onChange={async e=>{
         const file=e.target.files?.[0],revision=++fileRevision.current;
+        e.target.value="";
         setBytes(undefined);setPreview(undefined);setPreviewBusy(false);
         setFileError("");mutation.changed();
         if(!file){setFileName("");return;}
@@ -44,7 +59,7 @@ export function DataScreen() {
         }
       }}/>
       <p>До 20 строк за операцию. Сначала проверьте файл, затем подтвердите создание.</p>
-      <Button disabled={!bytes||previewBusy||mutation.busy} onClick={async()=>{
+      <Button disabled={!bytes||previewBusy||mutation.busy||mutation.pending} onClick={async()=>{
         if(!bytes)return;
         const revision=fileRevision.current,selectedBytes=bytes;
         setPreviewBusy(true);setFileError("");
@@ -60,17 +75,11 @@ export function DataScreen() {
       {fileError&&<FeedbackPanel tone="danger" title={fileError}/>}
       {preview&&<><p>{fileName}: строк {preview.count}, уже импортировано {preview.previouslyImported}.</p>
         <details><summary>Создаваемые ID</summary><ul>{preview.targetPartyIds.map(id=><li key={id}>{id}</li>)}</ul></details>
-        <p><Button disabled={mutation.busy||!bytes} onClick={()=>void mutation.run(()=>{
+        <p><Button disabled={mutation.busy||mutation.pending||!bytes} onClick={()=>void mutation.runIntent(()=>{
           if(!bytes)throw Error("Выберите файл");
-          return api.csv.applyPartyImport({csv:bytes,expectedSha256Hex:preview.csvSha256Hex,
-            precondition:{idempotencyKey:mutation.key}});
-        },async()=>{
-          const revision=fileRevision.current;
-          if(bytes) {
-            const refreshed=await api.csv.previewPartyImport({csv:bytes});
-            if(revision===fileRevision.current)setPreview(refreshed);
-          }
-        })}>Подтвердить импорт</Button></p>
+          return prepareMutation(api.csv.applyPartyImport,{csv:bytes,expectedSha256Hex:preview.csvSha256Hex,
+            precondition:{idempotencyKey:mutation.key}},preview.csvSha256Hex);
+        },clearSelection)}>Подтвердить импорт</Button></p>
       </>}<MutationNotice state={mutation}/>
     </Card>
   </>;
