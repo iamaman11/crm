@@ -292,6 +292,13 @@ pub(super) async fn preview_import(
         target_ids: plan.commands.into_iter().map(|r| r.0).collect(),
     }))
 }
+pub(super) async fn import_receipt(
+    db: &D1Database,
+    tenant: &str,
+    key: &str,
+) -> Result<Option<parties::ImportReceipt>> {
+    parties::import_operation(db, tenant, key).await
+}
 pub(super) async fn apply_import(
     bytes: &[u8],
     expected: &str,
