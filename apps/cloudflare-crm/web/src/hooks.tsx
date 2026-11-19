@@ -166,7 +166,10 @@ export function useMutation(recovery?:RecoveryOptions) {
         setNotice({tone:"warning",text:"Изменений не было."+
           (cleared?"":" Не удалось удалить отметку восстановления.")});
         if(cleared)setKey(newId());
-        if(intent.refresh)await intent.refresh();
+        if(intent.refresh){
+          try {await intent.refresh();}
+          catch(error){setNotice({tone:"warning",text:"Изменений не было. Список устарел: "+api.describeError(error)});}
+        }
         return;
       }
       if(intent.preserve&&!matchesWriteReceipt(intent.marker,result.receipt))
