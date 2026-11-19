@@ -75,10 +75,13 @@ message CancelPrivacyCaseResponse {
 
 message GetPrivacyCaseRequest {
   string case_id = 1;
+  // Optional original mutation key for tenant-bound, read-only reconciliation.
+  optional string receipt_idempotency_key = 2;
 }
 
 message GetPrivacyCaseResponse {
   PrivacyCase privacy_case = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
 }
 
 message ListPrivacyCasesRequest {

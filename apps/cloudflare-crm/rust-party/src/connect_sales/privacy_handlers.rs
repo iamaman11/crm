@@ -223,13 +223,36 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, privacy_wire::GetPrivacyCaseRequest>,
     ) -> ServiceResult<privacy_wire::GetPrivacyCaseResponse> {
-        let id = Self::id(req.case_id)?;
-        let case = customer_privacy::stored(&self.d1()?, &self.actor.tenant, id.as_str())
+        let input = req.to_owned_message();
+        let id = Self::id(&input.case_id)?;
+        let db = self.d1()?;
+        let case = customer_privacy::stored(&db, &self.actor.tenant, id.as_str())
             .await
             .map_err(|_| ConnectError::internal("PrivacyCase D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("PRIVACY_CASE_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let row = crud_receipt(&db, &self.actor.tenant, key, CrudReceiptOwner::Privacy)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("PRIVACY_RECEIPT_READ_FAILED"))?;
+                crud_commit_evidence(row, id.as_str(), &self.request_id, |state| {
+                    crm_customer_privacy::decode_privacy_case_state(state.as_bytes())
+                        .map_err(|e| worker::Error::RustError(e.code))
+                        .and_then(|case| {
+                            i64::try_from(case.version())
+                                .map(|version| (case.case_id().as_str().to_owned(), version))
+                                .map_err(|_| worker::Error::RustError(
+                                    "PRIVACY_CASE_VERSION_INVALID".into()
+                                ))
+                        })
+                })
+                .map_err(|_| ConnectError::unavailable("PRIVACY_RECEIPT_DECODE_FAILED"))?
+            }
+        };
         RpcResponse::ok(privacy_wire::GetPrivacyCaseResponse {
             privacy_case: Some(Self::convert(&case)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }

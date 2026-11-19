@@ -110,6 +110,7 @@ enum CrudReceiptOwner {
     Contact,
     Relationship,
     Task,
+    Privacy,
 }
 impl CrudReceiptOwner {
     fn sql(self) -> &'static str {
@@ -132,6 +133,10 @@ impl CrudReceiptOwner {
             ),
             Self::Task => concat!(
                 "SELECT state,original_request_id FROM crm_activity_task_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
+            Self::Privacy => concat!(
+                "SELECT state,original_request_id FROM crm_privacy_case_receipts",
                 " WHERE tenant=? AND key=?"
             ),
         }

@@ -1009,6 +1009,48 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Отменить запрос",exact:true}),"CancelPrivacyCase");
    const privacyState=(await sql("SELECT version,json_extract(state,'$.status.code') AS status FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"' AND id='"+privacyId+"'"))[0];
    assert.equal(privacyState.version,3);assert.equal(privacyState.status,"cancelled");
+   // #471 S5b Privacy: a committed intake write loses its browser acknowledgment.
+   // Reload must use original signed GetPrivacyCase receipt provenance, never
+   // repeat CreatePrivacyCase or store the subject's payload in sessionStorage.
+   await page.getByRole("button",{name:"Новое обращение",exact:true}).click();
+   const s5bPrivacyBefore=new Set((await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
+   let s5bPrivacyCalls=0, s5bPrivacyRequestId;
+   const losePrivacyAck=async route=>{
+     s5bPrivacyCalls++;
+     const committed=await route.fetch();
+     recordResponse(committed);
+     await assertMutation(committed,"CreatePrivacyCase");
+     s5bPrivacyRequestId=(await committed.allHeaders())["x-request-id"];
+     await route.abort("failed");
+   };
+   await page.route("**/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase",losePrivacyAck);
+   await page.getByRole("button",{name:"Создать обращение",exact:true}).click();
+   await page.getByRole("dialog").getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   await expect(page.getByRole("button",{name:"Создать обращение",exact:true})).toBeDisabled();
+   const s5bPrivacyMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.privacy.pending.v1")));
+   assert.deepEqual(Object.keys(s5bPrivacyMarker).sort(),["expectedVersion","key","resourceId"]);
+   assert.equal(s5bPrivacyMarker.expectedVersion,"0");
+   const s5bPrivacyNew=(await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'"))
+     .filter(x=>!s5bPrivacyBefore.has(x.id));
+   assert.equal(s5bPrivacyNew.length,1);
+   assert.equal(s5bPrivacyMarker.resourceId,s5bPrivacyNew[0].id);
+   const acceptPrivacyReload=dialog=>void dialog.accept();
+   page.on("dialog",acceptPrivacyReload);
+   try {await page.reload();} finally {page.off("dialog",acceptPrivacyReload);}
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   await expect(page.getByRole("button",{name:"Новое обращение",exact:true})).toBeDisabled();
+   const s5bPrivacyRead=page.waitForResponse(r=>r.url().endsWith("/GetPrivacyCase")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   const s5bPrivacyChecked=await s5bPrivacyRead;
+   assert.equal(s5bPrivacyChecked.status(),200);
+   await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
+     .toContainText(s5bPrivacyRequestId);
+   assert.equal(s5bPrivacyCalls,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bPrivacyRequestId+
+     "' AND action='customer_privacy.create'"))[0].n,1);
+   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.privacy.pending.v1")),null);
+   await page.unroute("**/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase",losePrivacyAck);
+   steps.push("S5b Privacy lost acknowledgement: reload + immutable GetPrivacyCase provenance without duplicate create");
    await navigate("enrichment","Обогащение данных");
    await page.getByRole("button",{name:"Новый профиль",exact:true}).click();
    await page.getByLabel("Ключ провайдера",{exact:true}).fill("browser_registry_"+runId);
