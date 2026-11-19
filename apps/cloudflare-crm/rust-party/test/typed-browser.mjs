@@ -1020,7 +1020,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      const committed=await route.fetch();
      recordResponse(committed);
      await assertMutation(committed,"CreatePrivacyCase");
-     s5bPrivacyRequestId=(await committed.allHeaders())["x-request-id"];
+     s5bPrivacyRequestId=committed.headers()["x-request-id"];
      await route.abort("failed");
    };
    await page.route("**/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase",losePrivacyAck);
