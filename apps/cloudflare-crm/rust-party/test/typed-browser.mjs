@@ -36,7 +36,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      }));
    }else capture(response.headers());
  };
- const watch=context=>{
+   // Match the RPC pathname, not the serialized URL: privacy probes deliberately add query parameters.
+  const responsePathEndsWith=(response,suffix)=>new URL(response.url()).pathname.endsWith(suffix);
+const watch=context=>{
    context.on("page",p=>p.on("pageerror",error=>pageErrors.push(error.message)));
    context.on("response",recordResponse);
  };
@@ -117,7 +119,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  const search=async(label,value,method)=>{
    const input=page.getByLabel(label,{exact:true});
    await input.fill(value);
-   const pending=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
+   const pending=page.waitForResponse(r=>responsePathEndsWith(r,"/"+method)&&r.request().method()==="POST");
    await input.press("Enter");
    const response=await pending;
    assert.equal(response.status(),200);
@@ -139,7 +141,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    }
  };
  const mutation=async(button,method,options)=>{
-   const pending=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
+   const pending=page.waitForResponse(r=>responsePathEndsWith(r,"/"+method)&&r.request().method()==="POST");
    await button.click();const response=await pending;
    await assertMutation(response,method,options);
    await page.getByRole("heading",{name:/^Сохранено/}).last().waitFor();
@@ -165,7 +167,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(await next.count(),1,
      label+" has no further page containing "+id+" (page "+pageNumber+")");
    const pending=page.waitForResponse(response=>
-     response.url().endsWith(method)&&response.request().method()==="POST");
+     responsePathEndsWith(response,method)&&response.request().method()==="POST");
    await next.click();
    assert.equal((await pending).status(),200,label+" pagination RPC failed");
    await picker.getByRole("status").waitFor({state:"hidden"});
@@ -246,7 +248,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        if(last?.status!==404||last.source_sha||last.runtime)
          throw Error("ListParties failed inside CRM; no edge-only recovery allowed: "+
            JSON.stringify(last));
-       const pending=page.waitForResponse(r=>r.url().endsWith("/ListParties")&&
+       const pending=page.waitForResponse(r=>responsePathEndsWith(r,"/ListParties")&&
          r.request().method()==="POST");
        await page.getByRole("button",{name:"Повторить чтение",exact:true}).click();
        const response=await pending;
@@ -321,7 +323,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByRole("button",{name:"Проверить результат записи",exact:true})).toBeEnabled();
    assert.deepEqual(await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.party.pending.v1"))),s5aMarker);
    await page.unroute(s5aGetRoute,failS5aRead);
-   const s5aProofRead=page.waitForResponse(r=>r.url().endsWith("/GetParty")&&r.request().method()==="POST");
+   const s5aProofRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetParty")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5aChecked=await s5aProofRead;
    assert.equal(s5aChecked.status(),200);
@@ -378,7 +380,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await accountFromParty();
    await page.getByLabel("Название клиента",{exact:true}).fill("Browser Party Account "+runId);
    const partyAccountResponse=page.waitForResponse(r=>
-     r.url().endsWith("/CreateAccount")&&r.request().method()==="POST");
+     responsePathEndsWith(r,"/CreateAccount")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Сохранить клиента",exact:true}).click();
    await assertMutation(await partyAccountResponse,"CreateAccount");
    const linkedAccountId=await firstId("crm_account_records","name","Browser Party Account "+runId);
@@ -417,7 +419,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await search("Поиск клиентов",accountId,"ListAccounts");
    await page.getByRole("heading",{name:"Browser Account "+runId,exact:true}).waitFor();
    const accountCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,level:2,exact:true})});
-   const overviewResponse=page.waitForResponse(r=>r.url().endsWith("/GetAccountOverview"));
+   const overviewResponse=page.waitForResponse(r=>responsePathEndsWith(r,"/GetAccountOverview"));
    await accountCard.getByRole("button",{name:"Открыть карточку",exact:true}).click();
    assert.equal((await overviewResponse).status(),200);
    await page.getByText("Основной участник: Browser Updated "+runId,{exact:true}).waitFor();
@@ -533,7 +535,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await sql("SELECT json_extract(state,'$.priority') AS priority FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+urgentId+"'"))[0].priority,"urgent");
    const beforeTaskFilters=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
    const filterTasks=async(label,value)=>{
-     const response=page.waitForResponse(r=>r.url().endsWith("/ListTasks")&&r.request().method()==="POST");
+     const response=page.waitForResponse(r=>responsePathEndsWith(r,"/ListTasks")&&r.request().method()==="POST");
      await page.getByLabel(label,{exact:true}).selectOption(value);
      assert.equal((await response).status(),200);
    };
@@ -599,7 +601,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Категория прогноза",{exact:true}).selectOption("3");
    await page.getByLabel("Вероятность, %",{exact:true}).fill("37.45");
    await page.getByLabel("Название сделки",{exact:true}).fill("   ");
-   const invalidCreate=page.waitForResponse(r=>r.url().endsWith("/CreateDeal")&&r.request().method()==="POST");
+   const invalidCreate=page.waitForResponse(r=>responsePathEndsWith(r,"/CreateDeal")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Сохранить сделку",exact:true}).click();
    assert.equal((await invalidCreate).status(),400);
    await expect(page.getByRole("dialog").getByText(/^deal\.name:/)).toBeVisible();
@@ -722,7 +724,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      "UpdateSalesView");
    assert.equal((await sql("SELECT json_extract(state,'$.archived') AS archived "+
      "FROM crm_sales_saved_view_records WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0].archived,1);
-   const viewsAfterArchive=page.waitForResponse(r=>r.url().endsWith("/ListSalesViews")&&r.request().method()==="POST");
+   const viewsAfterArchive=page.waitForResponse(r=>responsePathEndsWith(r,"/ListSalesViews")&&r.request().method()==="POST");
    await page.reload();
    assert.equal((await viewsAfterArchive).status(),200);
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
@@ -791,7 +793,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // it opens and can be cancelled without a write before testing native DnD.
    const keyboardStageButton=dealCard.getByRole("button",{name:"Изменить этап",exact:true});
    const keyboardStageRead=page.waitForResponse(response=>
-     response.url().endsWith("/GetDeal")&&response.request().method()==="POST");
+     responsePathEndsWith(response,"/GetDeal")&&response.request().method()==="POST");
    await keyboardStageButton.press("Enter");
    const stageReadResponse=await keyboardStageRead;
    assert.equal(stageReadResponse.status(),200,
@@ -855,7 +857,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(attemptedForward,"#accounts");
    await expect(page).toHaveURL(beforePendingNavigation);
    await expect(page.getByRole("dialog")).toBeVisible();
-   const retryAdvance=page.waitForResponse(r=>r.url().endsWith("/AdvanceStage")&&r.request().method()==="POST");
+   const retryAdvance=page.waitForResponse(r=>responsePathEndsWith(r,"/AdvanceStage")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Повторить исходную операцию",exact:true}).click();
    const retryAdvanceResponse=await retryAdvance;
    await assertMutation(retryAdvanceResponse,"AdvanceStage",{replay:true});
@@ -916,7 +918,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(closeCalls,1);
    await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeDisabled();
    await page.unroute(getDealRoute,failLookup);
-   const lookupResponse=page.waitForResponse(r=>r.url().endsWith("/GetDeal")&&r.request().method()==="POST");
+   const lookupResponse=page.waitForResponse(r=>responsePathEndsWith(r,"/GetDeal")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const checked=await lookupResponse;
    assert.equal(checked.status(),200);
@@ -953,7 +955,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      "Occupied reorder must not increment Deal versions");
    await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
    steps.push("Occupied stage reorder in real React keeps Deal version and stable ID");
-   const currentCatalog=page.waitForResponse(r=>r.url().endsWith("/GetPipeline")&&r.request().method()==="POST");
+   const currentCatalog=page.waitForResponse(r=>responsePathEndsWith(r,"/GetPipeline")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
    assert.equal((await currentCatalog).status(),200,
      "Editor must read latest authoritative Pipeline version after reorder");
@@ -1040,14 +1042,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await navigate("review","Качество и совпадения");
    const quality=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить имя",exact:true})});
    await selectPagedPicker(quality,"Участник",partyId);
-   const qualityResponse=page.waitForResponse(r=>r.url().endsWith("/EvaluatePartyName"));
+   const qualityResponse=page.waitForResponse(r=>responsePathEndsWith(r,"/EvaluatePartyName"));
    await quality.getByRole("button",{name:"Проверить качество",exact:true}).click();
    assert.equal((await qualityResponse).status(),200);
    await page.getByText("Не пройдено: 0",{exact:true}).waitFor();
    const compare=page.locator("section").filter({has:page.getByRole("heading",{name:"Сравнить участников",exact:true})});
    await selectPagedPicker(compare,"Первый участник",partyId);
    await selectPagedPicker(compare,"Второй участник",otherPartyId);
-   const compared=page.waitForResponse(r=>r.url().endsWith("/CompareParties"));
+   const compared=page.waitForResponse(r=>responsePathEndsWith(r,"/CompareParties"));
    await compare.getByRole("button",{name:"Сравнить",exact:true}).click();
    assert.equal((await compared).status(),200);
    await compare.getByText(/разные записи; личность не подтверждена/).waitFor();
@@ -1094,7 +1096,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    try{await page.reload();}finally{page.off("dialog",acceptConsentReload);}
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    await expect(page.getByRole("button",{name:"Запретить коммуникацию",exact:true})).toBeDisabled();
-   const s5bConsentRead=page.waitForResponse(r=>r.url().endsWith("/GetConsentAuthorization")
+   const s5bConsentRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetConsentAuthorization")
      &&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bConsentChecked=await s5bConsentRead;
@@ -1155,7 +1157,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    try {await page.reload();} finally {page.off("dialog",acceptPrivacyReload);}
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    await expect(page.getByRole("button",{name:"Новое обращение",exact:true})).toBeDisabled();
-   const s5bPrivacyRead=page.waitForResponse(r=>r.url().endsWith("/GetPrivacyCase")&&r.request().method()==="POST");
+   const s5bPrivacyRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetPrivacyCase")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bPrivacyChecked=await s5bPrivacyRead;
    assert.equal(s5bPrivacyChecked.status(),200);
@@ -1213,7 +1215,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    try{await page.reload();}finally{page.off("dialog",acceptProfileReload);}
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    await expect(page.getByRole("button",{name:"Новый профиль",exact:true})).toBeDisabled();
-   const s5bProfileRead=page.waitForResponse(r=>r.url().endsWith("/GetProviderProfile")&&r.request().method()==="POST");
+   const s5bProfileRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetProviderProfile")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bProfileChecked=await s5bProfileRead;
    assert.equal(s5bProfileChecked.status(),200);
@@ -1267,7 +1269,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    try{await page.reload();}finally{page.off("dialog",acceptMappingReload);}
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    await expect(page.getByRole("button",{name:"Новое сопоставление",exact:true})).toBeDisabled();
-   const s5bMappingRead=page.waitForResponse(r=>r.url().endsWith("/GetMapping")&&r.request().method()==="POST");
+   const s5bMappingRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetMapping")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bMappingChecked=await s5bMappingRead;
    assert.equal(s5bMappingChecked.status(),200);
@@ -1338,7 +1340,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
    assert.equal(await page.getByRole("button",{name:"Подтвердить импорт",exact:true}).count(),0,
      "CSV payload is not restored after reload; only receipt lookup is available");
-   const s5bCsvRead=page.waitForResponse(r=>r.url().endsWith("/PreviewPartyImport")&&r.request().method()==="POST");
+   const s5bCsvRead=page.waitForResponse(r=>responsePathEndsWith(r,"/PreviewPartyImport")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bCsvChecked=await s5bCsvRead;
    assert.equal(s5bCsvChecked.status(),200);
@@ -1355,7 +1357,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.unroute(s5bCsvPath,loseCsvAck);
    assert.ok(await firstId("crm_party_records","display_name","Browser Import "+runId));
 
-   const exportReply=page.waitForResponse(r=>r.url().endsWith("/PreviewPartyExport"));
+   const exportReply=page.waitForResponse(r=>responsePathEndsWith(r,"/PreviewPartyExport"));
    await page.getByRole("button",{name:"Проверить экспорт",exact:true}).click();
    assert.equal((await exportReply).status(),200);
    const downloadPending=page.waitForEvent("download");
@@ -1379,7 +1381,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Winner "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"UpdateParty");
    await stalePage.getByLabel("Имя или название",{exact:true}).fill("Browser Lost Update "+runId);
-   const conflict=stalePage.waitForResponse(r=>r.url().endsWith("/UpdateParty"));
+   const conflict=stalePage.waitForResponse(r=>responsePathEndsWith(r,"/UpdateParty"));
    await stalePage.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    const conflictResponse=await conflict;
    assert.equal(conflictResponse.status(),409);
@@ -1428,7 +1430,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Saved Stale "+runId);
    await page.route("**/crm.parties.v3.PartyService/ListParties",route=>route.abort("failed"));
-   const created=page.waitForResponse(r=>r.url().endsWith("/CreateParty"));
+   const created=page.waitForResponse(r=>responsePathEndsWith(r,"/CreateParty"));
    await page.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    await assertMutation(await created,"CreateParty");
    await page.getByRole("heading",{name:/Сохранено.*Список устарел/}).waitFor();
@@ -1446,7 +1448,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await navigate("accounts","Клиенты");
      await search("Поиск клиентов",accountId,"ListAccounts");
      const [overviewResult]=await Promise.all([
-       page.waitForResponse(r=>r.url().endsWith("/GetAccountOverview")),
+       page.waitForResponse(r=>responsePathEndsWith(r,"/GetAccountOverview")),
        page.locator("section").filter({has:page.getByRole("heading",
          {name:"Browser Account "+runId,level:2,exact:true})})
          .getByRole("button",{name:"Открыть карточку",exact:true}).click(),
@@ -1456,7 +1458,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      // tenant pipeline selection. Stage pages are fetched only when a board
      // is explicitly selected.
      const salesBoard=screen==="sales";
-     const pending=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
+     const pending=page.waitForResponse(r=>responsePathEndsWith(r,"/"+method)&&r.request().method()==="POST");
      await page.getByRole("link",{name:link,exact:true}).click();
      assert.equal((await pending).status(),200);
      await page.getByRole("heading",{name:title,exact:true}).waitFor();
@@ -1469,13 +1471,13 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        await all.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
        await all.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
        // Selecting a specific Kanban must not hide Account Deals in other pipelines.
-       const stageRead=page.waitForResponse(r=>r.url().endsWith("/ListStageDeals")&&
+       const stageRead=page.waitForResponse(r=>responsePathEndsWith(r,"/ListStageDeals")&&
          r.request().method()==="POST");
        await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
        assert.equal((await stageRead).status(),200);
        await all.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
      }
-     const reloaded=page.waitForResponse(r=>r.url().endsWith("/"+method)&&r.request().method()==="POST");
+     const reloaded=page.waitForResponse(r=>responsePathEndsWith(r,"/"+method)&&r.request().method()==="POST");
      await page.reload();assert.equal((await reloaded).status(),200);
      assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value,"Reload must retain the linked scope");
      if(salesBoard){
@@ -1553,7 +1555,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const anonymous=await browser.newContext();
    const anonymousPage=await anonymous.newPage();
    if(features.includes("native-ci")){
-     const refused=anonymousPage.waitForResponse(r=>r.url().endsWith("/ListAccounts"));
+     const refused=anonymousPage.waitForResponse(r=>responsePathEndsWith(r,"/ListAccounts"));
      await anonymousPage.goto(base+"/#accounts");
      assert.equal((await refused).status(),401);
      // Both the account list and its Party picker can report expired access.
