@@ -80,6 +80,22 @@ jobs:
           set -euo pipefail
           cargo fmt --all -- --check
           cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml -- --check
+      # #471 S2: independent root dependency security gate. The root lock is
+      # free of the upstream Cloudflare chrono advisory; do NOT silently ignore
+      # or misreport the separately deferred Worker native/WASM finding.
+      - name: Verify locked ROOT Rust dependencies, licenses and sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive=cargo-deny-0.21.0-x86_64-unknown-linux-musl.tar.gz
+          curl --fail --silent --show-error --location --retry 3 "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.21.0/$archive" --output "$RUNNER_TEMP/$archive"
+          echo "a2170b854ff697e79e39c4c538981c9c1bdd803addbae6719a4cb66b4585a903  $RUNNER_TEMP/$archive" | sha256sum --check --status
+          mkdir -p "$RUNNER_TEMP/crm-cargo-deny"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/crm-cargo-deny" --strip-components=1
+          deny="$RUNNER_TEMP/crm-cargo-deny/cargo-deny"
+          "$deny" --version | grep -Fx 'cargo-deny 0.21.0'
+          "$deny" --locked --config deny.toml --target x86_64-unknown-linux-gnu --target x86_64-pc-windows-msvc check --show-stats
+          echo "CRM_ROOT_DEPENDENCY_SECURITY=PASS (Worker advisory deferred; not checked here)"
       # Fail before the expensive WASM pipeline if the shared contract breaks.
       # The repo's existing frozen workspace provides Buf, Protobuf-ES, and TS.
       - name: Install pinned shared contract toolchain

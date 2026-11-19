@@ -171,11 +171,14 @@ where
     S: DeserializeOwned,
 {
     validate_size(bytes, maximum_bytes, label)?;
-    let state: S = serde_json::from_slice(bytes)
-        .map_err(|error| persisted_error(format!("{label} JSON is invalid: {error}")))?;
+    // Keep the two original canonical-envelope/domain validations and exact
+    // round-trip bytes. Decode diagnostics must never contain provider payloads.
+    let state: S = crm_module_sdk::decode_json(bytes, &[])
+        .map_err(|diagnostic| persisted_error(format!("{label} JSON is invalid: {diagnostic}")))?;
     validate(&state)?;
-    let domain: T = serde_json::from_slice(bytes)
-        .map_err(|error| persisted_error(format!("{label} domain state is invalid: {error}")))?;
+    let domain: T = crm_module_sdk::decode_json(bytes, &[]).map_err(|diagnostic| {
+        persisted_error(format!("{label} domain state is invalid: {diagnostic}"))
+    })?;
     if encode_domain(&domain)? != bytes {
         return Err(persisted_error(format!(
             "persisted {label} is not the strict canonical v1 encoding"
@@ -1128,6 +1131,27 @@ mod tests {
             String::from_utf8(encode_enrichment_request_state(&values.request).unwrap()).unwrap()
         );
         assert!(decode_enrichment_request_state(noncanonical.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn canonical_enrichment_rejects_private_keys_and_values_without_echo() {
+        let values = fixture();
+        let canonical = encode_review_decision_state(&values.review).unwrap();
+        let mut json: Value = serde_json::from_slice(&canonical).unwrap();
+        json["untrusted-471-key"] = Value::String("secret-471-value".to_owned());
+        let untrusted = decode_review_decision_state(&serde_json::to_vec(&json).unwrap())
+            .unwrap_err();
+        assert_eq!(untrusted.code, "CUSTOMER_ENRICHMENT_PERSISTED_STATE_INVALID");
+        let output = format!("{untrusted:?}");
+        assert!(!output.contains("untrusted-471-key"));
+        assert!(!output.contains("secret-471-value"));
+
+        let mut json: Value = serde_json::from_slice(&canonical).unwrap();
+        json["kind"] = Value::String("secret-471-enum".to_owned());
+        let untrusted = decode_review_decision_state(&serde_json::to_vec(&json).unwrap())
+            .unwrap_err();
+        assert_eq!(untrusted.code, "CUSTOMER_ENRICHMENT_PERSISTED_STATE_INVALID");
+        assert!(!format!("{untrusted:?}").contains("secret-471-enum"));
     }
 
     #[test]
