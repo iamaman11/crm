@@ -99,7 +99,9 @@ impl party_v3::PartyService for PartyV3Service {
                     .await
                     .map_err(|_| ConnectError::unavailable("PARTY_RECEIPT_READ_FAILED"))?;
                 crud_commit_evidence(stored, id.as_str(), &self.request_id, |state| {
-                    crm_parties::decode_party_state(state.as_bytes()).map(|row| (row.party_id().as_str().to_owned(), row.version())).map_err(|e| worker::Error::RustError(e.code))
+                    crm_parties::decode_party_state(state.as_bytes())
+                        .map(|row| (row.party_id().as_str().to_owned(), row.version()))
+                        .map_err(|e| worker::Error::RustError(e.code))
                 })
                 .map_err(|_| ConnectError::unavailable("PARTY_RECEIPT_DECODE_FAILED"))?
             }
