@@ -242,9 +242,9 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
                         .and_then(|case| {
                             i64::try_from(case.version())
                                 .map(|version| (case.case_id().as_str().to_owned(), version))
-                                .map_err(|_| worker::Error::RustError(
-                                    "PRIVACY_CASE_VERSION_INVALID".into()
-                                ))
+                                .map_err(|_| {
+                                    worker::Error::RustError("PRIVACY_CASE_VERSION_INVALID".into())
+                                })
                         })
                 })
                 .map_err(|_| ConnectError::unavailable("PRIVACY_RECEIPT_DECODE_FAILED"))?
