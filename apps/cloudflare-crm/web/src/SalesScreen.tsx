@@ -94,7 +94,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const [stageEdits,setStageEdits]=useState<StageDraft[]>([]);
   const mutation=useMutation({
     storageKey:"crm.deal.pending.v1",
-    lookup:async({dealId,key},signal)=>(await api.deals.getDeal({dealId,receiptIdempotencyKey:key},{signal})).confirmedMutation,
+    lookup:async({resourceId,key},signal)=>(await api.deals.getDeal({dealId:resourceId,receiptIdempotencyKey:key},{signal})).confirmedMutation,
     refresh:async()=>{setDetailRevision(v=>v+1);await refreshSales();}
   });
   const editorRead=useReadAction<Deal>();
@@ -651,13 +651,13 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           const precondition={idempotencyKey:mutation.key,expectedVersion:advance.version};
           if(editorMode==="reopen")return prepareMutation(api.deals.reopenDeal,{
             dealId:advance.dealId,reasonCode:field(data,"reason"),precondition
-          });
+          },advance.dealId);
           if(editorMode==="close")return prepareMutation(api.deals.closeDeal,{
             dealId:advance.dealId,
             outcome:enumValue(field(data,"targetStatus"),
               [DealStatus.WON,DealStatus.LOST],"Результат сделки"),
             reasonCode:field(data,"reason"),precondition
-          });
+          },advance.dealId);
           const currentStage=advance.stage;
           if(!currentStage)throw Error("У сделки отсутствует текущий этап");
           const next=nextStages.find(s=>s.stageId===field(data,"nextStage"));
@@ -669,7 +669,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
               ordinal:next.ordinal
             },
             targetStatus:DealStatus.OPEN,precondition
-          });
+          },advance.dealId);
         },async()=>{setEditorMode(null);setAdvance(undefined);setDetailRevision(v=>v+1);await refreshSales();});
       }}><fieldset className={styles.intentFields} disabled={mutation.busy||mutation.pending}><FormGrid>{editorMode==="close"?<>
         <p>Текущий этап сохраняется: {advancePipeline?.stages.find(s=>s.stageId===advance.stage?.stageId)?.name??advance.stage?.stageId??"неизвестен"}.</p>
@@ -738,7 +738,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
                 mode==="set"?(amount?{amount:{operation:{case:"set" as const,value:amount}}}:
                   (()=>{throw Error("Введите сумму");})()):{}),
               precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
-            });
+            },selected.dealId);
           }
           const stage=activePipeline?.stages.find(s=>s.stageId===field(data,"stageId"));
           if(!activePipeline||!stage||stage.archived)throw Error("Выберите существующий активный этап");
@@ -749,7 +749,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
             ...(contactId?{primaryContactId:contactId}:{}),
             ...(expectedCloseDate?{expectedCloseDate}:{}),
             precondition:{idempotencyKey:mutation.key}
-          });
+          },draftId);
         },async()=>{setEditorMode(null);setSelected(undefined);setDraftId(newId());setDetailRevision(v=>v+1);await refreshSales();});
       }}><fieldset className={styles.intentFields} disabled={mutation.busy||mutation.pending}><FormGrid>
         <TextField label="Название сделки" name="name" defaultValue={selected?.name??""} required/>
