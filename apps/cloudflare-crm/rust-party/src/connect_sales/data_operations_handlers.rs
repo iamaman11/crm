@@ -103,4 +103,42 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
             ..Default::default()
         })
     }
+    #[worker::send]
+    async fn get_party_import_result(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, csv_wire::GetPartyImportResultRequest>,
+    ) -> ServiceResult<csv_wire::GetPartyImportResultResponse> {
+        let input = req.to_owned_message();
+        let key = receipt_key(Some(&input.receipt_idempotency_key))?
+            .ok_or_else(|| ConnectError::invalid_argument("IDEMPOTENCY_KEY_REQUIRED"))?;
+        let hash = input.source_sha256_hex.as_str();
+        if hash.len() != 64
+            || !hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || hash != hash.to_ascii_lowercase()
+        {
+            return Err(ConnectError::invalid_argument("CSV_IMPORT_HASH_INVALID"));
+        }
+        let (original_request_id, row_count) = parties::import_commit(
+            &self.d1()?,
+            &self.actor.tenant,
+            key,
+            hash,
+        )
+        .await
+        .map_err(|_| ConnectError::unavailable("CSV_IMPORT_RECEIPT_READ_FAILED"))?
+        .ok_or_else(|| ConnectError::not_found("CSV_IMPORT_RESULT_NOT_FOUND"))?;
+        RpcResponse::ok(csv_wire::GetPartyImportResultResponse {
+            source_sha256_hex: hash.to_owned(),
+            row_count: row_count as u32,
+            confirmed_mutation: Some(core_v2::MutationCommitEvidence {
+                request_id: self.request_id.clone(),
+                original_request_id,
+                resource_version: 1,
+                ..Default::default()
+            })
+            .into(),
+            ..Default::default()
+        })
+    }
 }

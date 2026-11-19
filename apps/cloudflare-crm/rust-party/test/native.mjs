@@ -3026,6 +3026,27 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(applied.body.receipt.replayed,false);
  assert.equal(applied.body.receipt.requestId,applied.headers.get("x-request-id"));
  assert.equal(applied.body.receipt.resourceVersion,1n);
+ const importAuditBeforeProof=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
+ const importProof=await csv("GetPartyImportResult",admin,{
+   sourceSha256Hex:importPreview.body.csvSha256Hex,
+   receiptIdempotencyKey:applyInput.precondition.idempotencyKey});
+ assert.equal(importProof.status,200,describeProtobuf(importProof.body));
+ assert.equal(importProof.body.sourceSha256Hex,importPreview.body.csvSha256Hex);
+ assert.equal(importProof.body.rowCount,2);
+ assert.equal(importProof.body.confirmedMutation?.originalRequestId,applied.headers.get("x-request-id"));
+ assert.equal(importProof.body.confirmedMutation?.requestId,importProof.headers.get("x-request-id"));
+ assert.equal(importProof.body.confirmedMutation?.resourceVersion,1n);
+ assert.equal((await csv("GetPartyImportResult",tenantB,{
+   sourceSha256Hex:importPreview.body.csvSha256Hex,
+   receiptIdempotencyKey:applyInput.precondition.idempotencyKey})).status,404);
+ assert.equal((await csv("GetPartyImportResult",viewer,{
+   sourceSha256Hex:importPreview.body.csvSha256Hex,
+   receiptIdempotencyKey:applyInput.precondition.idempotencyKey})).status,403);
+ assert.equal((await csv("GetPartyImportResult",admin,{
+   sourceSha256Hex:"0".repeat(64),
+   receiptIdempotencyKey:applyInput.precondition.idempotencyKey})).status,404);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,importAuditBeforeProof,
+   "Import receipt lookup is admin-only and read-only");
  const importReplay=await csv("ApplyPartyImport",knownService,applyInput);
  assert.equal(importReplay.body.createdCount,0);assert.equal(importReplay.body.replayedCount,2);
  assert.equal(importReplay.body.receipt.replayed,true);

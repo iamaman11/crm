@@ -44,6 +44,20 @@ message ApplyPartyImportResponse {
   crm.core.v2.MutationReceipt receipt = 4;
 }
 
+// Read-only proof for an import whose bytes intentionally are not persisted
+// in the browser. The tenant-bound receipt already stores hash, row count and
+// original request ID atomically with the imported Party records.
+message GetPartyImportResultRequest {
+  string source_sha256_hex = 1;
+  string receipt_idempotency_key = 2;
+}
+
+message GetPartyImportResultResponse {
+  string source_sha256_hex = 1;
+  uint32 row_count = 2;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 3;
+}
+
 service PartyCsvService {
   rpc PreviewPartyExport(PreviewPartyExportRequest) returns (PreviewPartyExportResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -53,5 +67,8 @@ service PartyCsvService {
   }
   rpc ApplyPartyImport(ApplyPartyImportRequest) returns (ApplyPartyImportResponse) {
     option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetPartyImportResult(GetPartyImportResultRequest) returns (GetPartyImportResultResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
   }
 }

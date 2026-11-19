@@ -379,6 +379,12 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
         },
     ),
     (
+        "/crm.customer_data_operations.v2.PartyCsvService/GetPartyImportResult",
+        RpcPolicy {
+            permission: RpcPermission::AdminRead,
+        },
+    ),
+    (
         "/crm.customer_data_operations.v2.PartyCsvService/ApplyPartyImport",
         RpcPolicy {
             permission: RpcPermission::Write,

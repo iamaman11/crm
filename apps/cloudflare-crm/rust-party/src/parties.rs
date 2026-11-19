@@ -74,6 +74,7 @@ pub(super) struct ImportSaved {
 struct ImportReceipt {
     source_sha256: String,
     row_count: usize,
+    request_id: String,
 }
 async fn import_operation(
     db: &D1Database,
@@ -82,11 +83,25 @@ async fn import_operation(
 ) -> Result<Option<ImportReceipt>> {
     bind(
         db,
-        "SELECT source_sha256,row_count FROM crm_party_import_receipts WHERE tenant=? AND key=?",
+        "SELECT source_sha256,row_count,request_id FROM crm_party_import_receipts WHERE tenant=? AND key=?",
         &[JsValue::from_str(tenant), JsValue::from_str(key)],
     )?
     .first::<ImportReceipt>(None)
     .await
+}
+pub(super) async fn import_commit(
+    db: &D1Database,
+    tenant: &str,
+    key: &str,
+    source_hash: &str,
+) -> Result<Option<(String, usize)>> {
+    let Some(receipt) = import_operation(db, tenant, key).await? else {
+        return Ok(None);
+    };
+    if receipt.source_sha256 != source_hash {
+        return Ok(None);
+    }
+    Ok(Some((receipt.request_id, receipt.row_count)))
 }
 pub(super) async fn import_batch(
     db: &D1Database,
