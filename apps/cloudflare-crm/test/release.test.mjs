@@ -180,7 +180,7 @@ async function subprocessEntry(){
      return wrap({events:{events:variant==="missing-logs"||!entry?[]:[{
        source:{event:"crm.native.request",request_id:entry.request_id,operation:entry.path,status:entry.status,
          error_code:variant==="wrong-error-code"?"aborted":entry.error_code??null},
-       $metadata:{...(variant==="missing-native-trace-id"&&index===0?{}:{traceId:String(index+1).repeat(32)})},
+       $metadata:{...(variant==="missing-native-trace-id"&&index===0?{}:{traceId:traceFor(index)})},
        $workers:{scriptVersion:{id:"version-new"}}
      }]}});
    }
