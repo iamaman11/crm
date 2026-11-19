@@ -62,21 +62,19 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
         let key = receipt_key(input.receipt_idempotency_key.as_deref())?;
         let db = self.d1()?;
         if input.csv.is_empty() {
-            let key = key.ok_or_else(|| {
-                ConnectError::invalid_argument("IMPORT_FILE_SIZE_INVALID")
-            })?;
+            let key =
+                key.ok_or_else(|| ConnectError::invalid_argument("IMPORT_FILE_SIZE_INVALID"))?;
             let receipt = owner::import_receipt(&db, &self.actor.tenant, key)
                 .await
                 .map_err(|_| ConnectError::unavailable("CSV_IMPORT_RECEIPT_READ_FAILED"))?
                 .ok_or_else(|| ConnectError::not_found("CSV_IMPORT_RECEIPT_NOT_FOUND"))?;
-            let confirmed_mutation = (!receipt.request_id.is_empty()).then(|| {
-                core_v2::MutationCommitEvidence {
+            let confirmed_mutation =
+                (!receipt.request_id.is_empty()).then(|| core_v2::MutationCommitEvidence {
                     request_id: self.request_id.clone(),
                     original_request_id: receipt.request_id,
                     resource_version: 1,
                     ..Default::default()
-                }
-            });
+                });
             return RpcResponse::ok(csv_wire::PreviewPartyImportResponse {
                 count: receipt.row_count as u32,
                 csv_sha256_hex: receipt.source_sha256,
