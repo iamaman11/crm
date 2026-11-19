@@ -1100,14 +1100,17 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await route.abort("failed");
    });
    await page.getByRole("button",{name:"Сохранить участника",exact:true}).click();
-   await page.getByRole("heading",{name:/Ошибка сервиса|Сервис временно недоступен/}).waitFor();
+   await page.getByRole("dialog").getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   await expect(page.getByRole("button",{name:"Сохранить участника",exact:true})).toBeDisabled();
    const retryId=await firstId("crm_party_records","display_name","Browser Retry "+runId);
-   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty",{replay:true});
+   // Only the explicit recovery action may replay the original immutable command.
+   await mutation(page.getByRole("dialog").getByRole("button",
+     {name:"Повторить исходную операцию",exact:true}),"CreateParty",{replay:true});
    await page.getByRole("heading",{name:/Сохранено ранее/}).waitFor();
    assert.equal(await firstId("crm_party_records","display_name","Browser Retry "+runId),retryId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+retryId+"'"))[0].n,1);
    await page.unroute("**/crm.parties.v3.PartyService/CreateParty");
-   steps.push("Committed response loss and same-form retry replay without duplicate audit");
+   steps.push("Committed response loss and explicit same-key recovery replay without duplicate audit");
 
    // Commit succeeds but only the following list refresh fails.
    await navigate("parties","Люди и организации");
