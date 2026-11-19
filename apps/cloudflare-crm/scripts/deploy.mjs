@@ -5,7 +5,12 @@ import {createHash} from "node:crypto";
 import {join,relative} from "node:path";
 import {spawnSync} from "node:child_process";
 import {DatabaseSync} from "node:sqlite";
-import {verifyAnonymousDenial,verifyNfcMigrationNames,verifyTracePrivacySettings,classifySignedSessionReadback} from "./release-readback.mjs";
+import {
+  verifyAnonymousDenial,
+  verifyNfcMigrationNames,
+  verifyTracePrivacySettings,
+  classifySignedSessionReadback
+} from "./release-readback.mjs";
 const required=n=>{if(!process.env[n])throw Error("Missing "+n);return process.env[n];};
 const sha=required("GITHUB_SHA");
 if(!/^[0-9a-f]{40}$/.test(sha)||process.env.GITHUB_REF!=="refs/heads/dev"||process.env.GITHUB_EVENT_NAME!=="push")throw Error("Untrusted deployment");
