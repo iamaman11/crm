@@ -31,7 +31,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // Browser Response headers may arrive with later network extra-info. Await
    // Playwright's complete headers; route.fetch() returns an APIResponse instead.
    if(typeof response.allHeaders==="function"){
-     headerReads.push(response.allHeaders().then(capture).catch(error=>{
+     headerReads.push(response.headers().then(capture).catch(error=>{
        entry.header_error=String(error.message);
      }));
    }else capture(response.headers());
@@ -123,11 +123,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await input.press("Enter");
    const response=await pending;
    assert.equal(response.status(),200);
-   assert.equal((await response.allHeaders())["x-crm-source-sha"],sourceSha);
+   assert.equal((await response.headers())["x-crm-source-sha"],sourceSha);
  };
  const assertMutation=async(response,method,{replay=false}={})=>{
    assert.equal(response.status(),200,method+" "+await response.text());
-   const headers=typeof response.allHeaders==="function"?await response.allHeaders():response.headers();
+   const headers=typeof response.allHeaders==="function"?await response.headers():response.headers();
    const requestId=headers["x-request-id"];
    assert.match(requestId??"",/^[a-f0-9-]{36}$/i);
    const audit=await sql("SELECT action,subject_id,actor FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND request_id='"+requestId+"'");
@@ -158,7 +158,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      calls++;
      const committed=await route.fetch();
      recordResponse(committed);await assertMutation(committed,method);
-     originalRequestId=(await committed.allHeaders())["x-request-id"];
+     originalRequestId=(await committed.headers())["x-request-id"];
      await route.abort("failed");
    };
    await page.route(writeRoute,loseAcknowledgement);
@@ -177,7 +177,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await check.click();
    const readResponse=await pending;
    assert.equal(readResponse.status(),200,owner+" receipt lookup");
-   const readRequestId=(await readResponse.allHeaders())["x-request-id"];
+   const readRequestId=(await readResponse.headers())["x-request-id"];
    assert.match(readRequestId??"",/^[a-f0-9-]{36}$/i);
    assert.ok(originalRequestId,owner+" original request id");
    assert.equal(calls,1,owner+" recovery must not re-execute the original write");
@@ -239,7 +239,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await context.addCookies([{name:"crm_s3_test_cookie",value:privateCookie,url:base}]);
    let privateHeaderRequests=0;
    const privateRoute=async route=>{
-     const headers=await route.request().allHeaders();
+     const headers=await route.request().headers();
      assert.ok((headers.cookie??"").includes("crm_s3_test_cookie="+privateCookie),
        "Synthetic test cookie must be present in the real signed request");
      privateHeaderRequests++;
@@ -298,7 +298,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
          r.request().method()==="POST");
        await page.getByRole("button",{name:"Повторить чтение",exact:true}).click();
        const response=await pending;
-       const headers=await response.allHeaders();
+       const headers=await response.headers();
        if(response.status()===200)
          assert.equal(headers["x-crm-source-sha"],sourceSha,
            "Recovered read must come from the exact native Worker");
@@ -373,7 +373,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5aChecked=await s5aProofRead;
    assert.equal(s5aChecked.status(),200);
-   const s5aReadRequestId=(await s5aChecked.allHeaders())["x-request-id"];
+   const s5aReadRequestId=(await s5aChecked.headers())["x-request-id"];
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5aOriginalRequestId);
    assert.equal(s5aCreateCalls,1,"Recovery must not retry the original Party mutation after reload");
@@ -649,7 +649,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      pipelineCreateCalls++;
      const committed=await route.fetch();
      recordResponse(committed);await assertMutation(committed,"CreatePipeline");
-     originalPipelineCreateRequestId=(await committed.allHeaders())["x-request-id"];
+     originalPipelineCreateRequestId=(await committed.headers())["x-request-id"];
      await route.abort("failed");
    });
    await page.getByRole("button",{name:"Сохранить воронку",exact:true}).click();
@@ -665,7 +665,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const pipelineLookupResponse=await pipelineLookup;
    assert.equal(pipelineLookupResponse.status(),200);
-   const pipelineLookupRequestId=(await pipelineLookupResponse.allHeaders())["x-request-id"];
+   const pipelineLookupRequestId=(await pipelineLookupResponse.headers())["x-request-id"];
    assert.match(pipelineLookupRequestId??"",/^[a-f0-9-]{36}$/i);
    const newPipelineId=await firstId("crm_sales_pipeline_records","name","Browser Pipeline "+runId);
    assert.equal(pipelineMarker.resourceId,newPipelineId);
@@ -764,7 +764,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      createViewCalls++;
      const committed=await route.fetch();
      recordResponse(committed);await assertMutation(committed,"CreateSalesView");
-     originalViewCreateRequestId=(await committed.allHeaders())["x-request-id"];
+     originalViewCreateRequestId=(await committed.headers())["x-request-id"];
      await route.abort("failed");
    });
    await page.getByRole("button",{name:"Сохранить новое представление",exact:true}).click();
@@ -780,7 +780,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const viewLookupResponse=await viewLookup;
    assert.equal(viewLookupResponse.status(),200);
-   const viewLookupRequestId=(await viewLookupResponse.allHeaders())["x-request-id"];
+   const viewLookupRequestId=(await viewLookupResponse.headers())["x-request-id"];
    assert.match(viewLookupRequestId??"",/^[a-f0-9-]{36}$/i);
    const viewId=await firstId("crm_sales_saved_view_records","name",savedViewName);
    assert.equal(viewMarker.resourceId,viewId);
@@ -859,7 +859,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      updateViewCalls++;
      const committed=await route.fetch();
      recordResponse(committed);await assertMutation(committed,"UpdateSalesView");
-     originalViewUpdateRequestId=(await committed.allHeaders())["x-request-id"];
+     originalViewUpdateRequestId=(await committed.headers())["x-request-id"];
      await route.abort("failed");
    });
    await page.getByRole("button",{name:"Обновить представление",exact:true}).click();
@@ -874,7 +874,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const viewUpdateLookupResponse=await viewUpdateLookup;
    assert.equal(viewUpdateLookupResponse.status(),200);
-   const viewUpdateLookupRequestId=(await viewUpdateLookupResponse.allHeaders())["x-request-id"];
+   const viewUpdateLookupRequestId=(await viewUpdateLookupResponse.headers())["x-request-id"];
    assert.equal(updateViewCalls,1,"Reload recovery must not re-execute UpdateSalesView");
    assert.ok(originalViewUpdateRequestId);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
@@ -1033,7 +1033,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Повторить исходную операцию",exact:true}).click();
    const retryAdvanceResponse=await retryAdvance;
    await assertMutation(retryAdvanceResponse,"AdvanceStage",{replay:true});
-   const retryAdvanceRequestId=(await retryAdvanceResponse.allHeaders())["x-request-id"];
+   const retryAdvanceRequestId=(await retryAdvanceResponse.headers())["x-request-id"];
    assert.match(retryAdvanceRequestId??"",/^[a-f0-9-]{36}$/i);
    assert.notEqual(retryAdvanceRequestId,originalAdvanceRequestId);
    recovery.push({kind:"replay",original_request_id:originalAdvanceRequestId,
@@ -1094,7 +1094,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const checked=await lookupResponse;
    assert.equal(checked.status(),200);
-   const checkId=(await checked.allHeaders())["x-request-id"];
+   const checkId=(await checked.headers())["x-request-id"];
    assert.match(checkId??"",/^[a-f0-9-]{36}$/i);
    assert.ok(originalCloseRequestId);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
@@ -1123,7 +1123,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      updatePipelineCalls++;
      const committed=await route.fetch();
      recordResponse(committed);await assertMutation(committed,"UpdatePipeline");
-     originalPipelineUpdateRequestId=(await committed.allHeaders())["x-request-id"];
+     originalPipelineUpdateRequestId=(await committed.headers())["x-request-id"];
      await route.abort("failed");
    });
    await page.getByRole("button",{name:"Сохранить воронку",exact:true}).click();
@@ -1138,7 +1138,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const pipelineUpdateLookupResponse=await pipelineUpdateLookup;
    assert.equal(pipelineUpdateLookupResponse.status(),200);
-   const pipelineUpdateLookupRequestId=(await pipelineUpdateLookupResponse.allHeaders())["x-request-id"];
+   const pipelineUpdateLookupRequestId=(await pipelineUpdateLookupResponse.headers())["x-request-id"];
    assert.equal(updatePipelineCalls,1,"Reload recovery must not re-execute UpdatePipeline");
    assert.ok(originalPipelineUpdateRequestId);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
@@ -1304,7 +1304,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bConsentChecked=await s5bConsentRead;
    assert.equal(s5bConsentChecked.status(),200);
-   const s5bConsentReadId=(await s5bConsentChecked.allHeaders())["x-request-id"];
+   const s5bConsentReadId=(await s5bConsentChecked.headers())["x-request-id"];
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5bConsentRequestId);
    assert.equal(s5bConsentCalls,1);
@@ -1364,7 +1364,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bPrivacyChecked=await s5bPrivacyRead;
    assert.equal(s5bPrivacyChecked.status(),200);
-   const s5bPrivacyReadId=(await s5bPrivacyChecked.allHeaders())["x-request-id"];
+   const s5bPrivacyReadId=(await s5bPrivacyChecked.headers())["x-request-id"];
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5bPrivacyRequestId);
    assert.equal(s5bPrivacyCalls,1);
@@ -1422,7 +1422,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bProfileChecked=await s5bProfileRead;
    assert.equal(s5bProfileChecked.status(),200);
-   const s5bProfileReadId=(await s5bProfileChecked.allHeaders())["x-request-id"];
+   const s5bProfileReadId=(await s5bProfileChecked.headers())["x-request-id"];
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5bProfileRequestId);
    assert.equal(s5bProfileCalls,1,"Enrichment profile recovery must not publish twice");
@@ -1476,7 +1476,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bMappingChecked=await s5bMappingRead;
    assert.equal(s5bMappingChecked.status(),200);
-   const s5bMappingReadId=(await s5bMappingChecked.allHeaders())["x-request-id"];
+   const s5bMappingReadId=(await s5bMappingChecked.headers())["x-request-id"];
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5bMappingRequestId);
    assert.equal(s5bMappingCalls,1,"Enrichment mapping recovery must not publish twice");
@@ -1547,7 +1547,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bCsvChecked=await s5bCsvRead;
    assert.equal(s5bCsvChecked.status(),200);
-   const s5bCsvReadId=(await s5bCsvChecked.allHeaders())["x-request-id"];
+   const s5bCsvReadId=(await s5bCsvChecked.headers())["x-request-id"];
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5bCsvRequestId);
    assert.equal(s5bCsvCalls,1,"CSV recovery must not apply the import twice");
@@ -1588,7 +1588,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await stalePage.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    const conflictResponse=await conflict;
    assert.equal(conflictResponse.status(),409);
-   const conflictHeaders=await conflictResponse.allHeaders();
+   const conflictHeaders=await conflictResponse.headers();
    assert.equal(conflictHeaders["x-crm-error-code"],"aborted");
    const conflictRequestId=conflictHeaders["x-request-id"];
    assert.match(conflictRequestId??"",/^[a-f0-9-]{36}$/i);
