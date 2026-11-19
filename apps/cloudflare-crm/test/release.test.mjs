@@ -137,6 +137,32 @@ async function subprocessEntry(){
        if(variant==="synthetic-header-leak"&&traceIndex===0)events.push({
          $metadata:{type:"log"},source:{traceId:needle,message:"crm-s3-header-1234567890123"}
        });
+       if(variant==="synthetic-authorization-leak"&&traceIndex===0)events.push({
+         $metadata:{type:"log"},source:{traceId:needle,message:"Bearer crm-s3-authorization-1234567890123"}
+       });
+       if(variant==="synthetic-jwt-leak"&&traceIndex===0)events.push({
+         $metadata:{type:"log"},source:{traceId:needle,
+           message:"eyJhbGciOiJub25lIn0.eyJzdWIiOiJjcm0tc3ludGhldGljIn0.signature-1234567890123"}
+       });
+       if(variant==="synthetic-query-leak"&&traceIndex===0)events.push({
+         $metadata:{type:"log"},source:{traceId:needle,message:"crm-s3-query-1234567890123"}
+       });
+       if(variant==="synthetic-phone-leak"&&traceIndex===8)events.push({
+         $metadata:{type:"log"},source:{traceId:needle,message:"+447700900123"}
+       });
+       if(variant==="synthetic-enrichment-leak"&&traceIndex===13)events.push({
+         $metadata:{type:"log"},source:{traceId:needle,message:"browser_registry_1234567890123"}
+       });
+       if(variant==="synthetic-credential-handle-leak"&&traceIndex===13)events.push({
+         $metadata:{type:"log"},source:{traceId:needle,message:"browser-credential-handle-1234567890123"}
+       });
+       if(variant==="synthetic-mapping-leak"&&traceIndex===15)events.push({
+         $metadata:{type:"log"},source:{traceId:needle,message:"browser_mapping_1234567890123"}
+       });
+       if(variant==="synthetic-csv-leak"&&traceIndex===17)events.push({
+         $metadata:{type:"log"},source:{traceId:needle,
+           message:"party_id,kind,display_name,resource_version\\r\\nbrowser-import,person,Browser Import 1234567890123,1\\r\\n"}
+       });
        return wrap({events:{events}});
      }
      if(mode==="verify-data"&&variant==="transient-html-telemetry"&&telemetryAttempts===1)
@@ -153,7 +179,7 @@ async function subprocessEntry(){
      const entry=fixtureRequests[index];
      return wrap({events:{events:variant==="missing-logs"||!entry?[]:[{
        source:{event:"crm.native.request",request_id:entry.request_id,operation:entry.path,status:entry.status,
-         error_code:variant==="wrong-error-code"?"aborted":null},
+         error_code:variant==="wrong-error-code"?"aborted":entry.error_code??null},
        $metadata:{...(variant==="missing-native-trace-id"&&index===0?{}:{traceId:String(index+1).repeat(32)})},
        $workers:{scriptVersion:{id:"version-new"}}
      }]}});
@@ -184,8 +210,14 @@ async function subprocessEntry(){
        return wrap([{success:true,results}]);
      }
      const {sql,params=[]}=JSON.parse(options.body);
-     if(sql.startsWith("SELECT COUNT(*) AS n FROM crm_audit"))
-       return wrap([{success:true,results:[{n:variant==="recovery-audited"?1:0}]}]);
+     if(sql.startsWith("SELECT COUNT(*) AS n FROM crm_audit")){
+       const sourceWrite=fixtureWrites.find(write=>write.request_id===params[1]);
+       const action=params[2];
+       const n=params.length>=3
+         ?Number(variant!=="missing-audit"&&!!sourceWrite?.audit?.some(row=>row.action===action))
+         :Number(variant==="recovery-audited");
+       return wrap([{success:true,results:[{n}]}]);
+     }
      const sourceWrite=fixtureWrites.find(write=>write.request_id===params[1]);
      return wrap([{success:true,results:variant==="missing-audit"?[]:sourceWrite?.audit??[]}]);
    }
@@ -232,12 +264,38 @@ function run(mode,variant="valid"){
  const contactCreateId="66666666-6666-4666-8666-666666666666";
  const taskCreateId="77777777-7777-4777-8777-777777777777";
  const partyRecoveryReadId="88888888-8888-4888-8888-888888888888";
+ const contactPhoneId="99999999-9999-4999-8999-999999999999";
+ const consentWriteId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+ const consentReadId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+ const privacyWriteId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+ const privacyReadId="dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+ const profileWriteId="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+ const profileReadId="ffffffff-ffff-4fff-8fff-ffffffffffff";
+ const mappingWriteId="18181818-1818-4818-8818-181818181818";
+ const mappingReadId="19191919-1919-4919-8919-191919191919";
+ const csvWriteId="20202020-2020-4020-8020-202020202020";
+ const csvReadId="21212121-2121-4121-8121-212121212121";
+ const invalidDealId="23232323-2323-4323-8323-232323232323";
+ const deniedPartyId="24242424-2424-4424-8424-242424242424";
+ const conflictPartyId="25252525-2525-4525-8525-252525252525";
  const advancePath="/crm.sales.v2.DealService/AdvanceStage";
  const closePath="/crm.sales.v2.DealService/CloseDeal";
  const lookupPath="/crm.sales.v2.DealService/GetDeal";
  const contactPath="/crm.contact_points.v2.ContactPointService/CreateContactPoint";
  const taskPath="/crm.activities.v2.TaskService/CreateTask";
  const partyLookupPath="/crm.parties.v3.PartyService/GetParty";
+ const consentPath="/crm.consents.v2.ConsentAuthorizationService/SuppressCommunication";
+ const consentLookupPath="/crm.consents.v2.ConsentAuthorizationService/GetConsentAuthorization";
+ const privacyPath="/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase";
+ const privacyLookupPath="/crm.customer_privacy.v2.PrivacyCaseService/GetPrivacyCase";
+ const profilePath="/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishProviderProfile";
+ const profileLookupPath="/crm.customer_enrichment.v2.EnrichmentConfigurationService/GetProviderProfile";
+ const mappingPath="/crm.customer_enrichment.v2.EnrichmentConfigurationService/PublishMapping";
+ const mappingLookupPath="/crm.customer_enrichment.v2.EnrichmentConfigurationService/GetMapping";
+ const csvPath="/crm.customer_data_operations.v2.PartyCsvService/ApplyPartyImport";
+ const csvLookupPath="/crm.customer_data_operations.v2.PartyCsvService/PreviewPartyImport";
+ const invalidDealPath="/crm.sales.v2.DealService/CreateDeal";
+ const conflictPartyPath="/crm.parties.v3.PartyService/UpdateParty";
  const fixtureRequests=[
    {path:rpcPath,status:200,request_id:requestId,source_sha:sha,runtime:"native-workers-rs"},
    {path:advancePath,status:200,request_id:originalAdvanceId,source_sha:sha,runtime:"native-workers-rs"},
@@ -246,7 +304,21 @@ function run(mode,variant="valid"){
    {path:lookupPath,status:200,request_id:subsequentLookupId,source_sha:sha,runtime:"native-workers-rs"},
    {path:contactPath,status:200,request_id:contactCreateId,source_sha:sha,runtime:"native-workers-rs"},
    {path:taskPath,status:200,request_id:taskCreateId,source_sha:sha,runtime:"native-workers-rs"},
-   {path:partyLookupPath,status:200,request_id:partyRecoveryReadId,source_sha:sha,runtime:"native-workers-rs"}
+   {path:partyLookupPath,status:200,request_id:partyRecoveryReadId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:contactPath,status:200,request_id:contactPhoneId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:consentPath,status:200,request_id:consentWriteId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:consentLookupPath,status:200,request_id:consentReadId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:privacyPath,status:200,request_id:privacyWriteId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:privacyLookupPath,status:200,request_id:privacyReadId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:profilePath,status:200,request_id:profileWriteId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:profileLookupPath,status:200,request_id:profileReadId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:mappingPath,status:200,request_id:mappingWriteId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:mappingLookupPath,status:200,request_id:mappingReadId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:csvPath,status:200,request_id:csvWriteId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:csvLookupPath,status:200,request_id:csvReadId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:invalidDealPath,status:400,request_id:invalidDealId,error_code:"invalid_argument",source_sha:sha,runtime:"native-workers-rs"},
+   {path:rpcPath,status:403,request_id:deniedPartyId,error_code:"permission_denied",source_sha:sha,runtime:"native-workers-rs"},
+   {path:conflictPartyPath,status:409,request_id:conflictPartyId,error_code:"aborted",source_sha:sha,runtime:"native-workers-rs"}
  ];
  const fixtureWrites=[
    {path:rpcPath,request_id:requestId,audit},
@@ -257,11 +329,31 @@ function run(mode,variant="valid"){
    {path:contactPath,request_id:contactCreateId,
      audit:[{action:"contact_points.create",subject_id:"contact",actor:"service:synthetic.access"}]},
    {path:taskPath,request_id:taskCreateId,
-     audit:[{action:"tasks.create",subject_id:"task",actor:"service:synthetic.access"}]}
+     audit:[{action:"tasks.create",subject_id:"task",actor:"service:synthetic.access"}]},
+   {path:contactPath,request_id:contactPhoneId,
+     audit:[{action:"contact_points.create",subject_id:"phone",actor:"service:synthetic.access"}]},
+   {path:consentPath,request_id:consentWriteId,
+     audit:[{action:"consents.operator_suppress",subject_id:"consent",actor:"service:synthetic.access"}]},
+   {path:privacyPath,request_id:privacyWriteId,
+     audit:[{action:"customer_privacy.create",subject_id:"privacy",actor:"service:synthetic.access"}]},
+   {path:profilePath,request_id:profileWriteId,
+     audit:[{action:"customer_enrichment.profile_publish",subject_id:"profile",actor:"service:synthetic.access"}]},
+   {path:mappingPath,request_id:mappingWriteId,
+     audit:[{action:"customer_enrichment.mapping_publish",subject_id:"mapping",actor:"service:synthetic.access"}]},
+   {path:csvPath,request_id:csvWriteId,
+     audit:[{action:"parties.create",subject_id:"csv-party",actor:"service:synthetic.access"}]}
  ];
  const recovery=[
    {kind:"replay",original_request_id:originalAdvanceId,subsequent_request_id:subsequentReplayId},
    {kind:"lookup",original_request_id:originalCloseId,subsequent_request_id:subsequentLookupId}
+ ];
+ const ownerRecovery=[
+   {owner:"party",kind:"lookup",original_request_id:requestId,subsequent_request_id:partyRecoveryReadId},
+   {owner:"consent",kind:"lookup",original_request_id:consentWriteId,subsequent_request_id:consentReadId},
+   {owner:"privacy",kind:"lookup",original_request_id:privacyWriteId,subsequent_request_id:privacyReadId},
+   {owner:"enrichment-profile",kind:"lookup",original_request_id:profileWriteId,subsequent_request_id:profileReadId},
+   {owner:"enrichment-mapping",kind:"lookup",original_request_id:mappingWriteId,subsequent_request_id:mappingReadId},
+   {owner:"party-csv-import",kind:"lookup",original_request_id:csvWriteId,subsequent_request_id:csvReadId}
  ];
  save(join(app,"e2e-evidence/typed-browser.json"),{result:"PASS",source_sha:sha,features:variant==="wrong-features"?["native-ci"]:["native"],
    tenant:"fixture-a",started_at:2,steps:["synthetic fixture"],requests:fixtureRequests,
@@ -269,17 +361,26 @@ function run(mode,variant="valid"){
    recovery:variant==="missing-recovery"?[]:
      variant==="wrong-recovery-request"?[recovery[0],{...recovery[1],subsequent_request_id:originalCloseId}]:recovery,
    owner_recovery:variant==="missing-owner-recovery"?[]:variant==="wrong-owner-recovery"?
-     [{owner:"party",kind:"lookup",original_request_id:requestId,
-       subsequent_request_id:originalAdvanceId}]:
-     [{owner:"party",kind:"lookup",original_request_id:requestId,
-       subsequent_request_id:partyRecoveryReadId}],
+     [{...ownerRecovery[0],subsequent_request_id:originalAdvanceId}]:ownerRecovery,
    synthetic_private_probes:variant==="missing-private-probes"?[]:[
      {kind:"party-name",request_id:requestId,value:"Browser Party 1234567890123"},
      {kind:"cookie",request_id:requestId,value:"crm-s3-cookie-1234567890123"},
      {kind:"header",request_id:requestId,value:"crm-s3-header-1234567890123"},
+     {kind:"authorization",request_id:requestId,value:"Bearer crm-s3-authorization-1234567890123"},
+     {kind:"jwt",request_id:requestId,value:"eyJhbGciOiJub25lIn0.eyJzdWIiOiJjcm0tc3ludGhldGljIn0.signature-1234567890123"},
+     {kind:"query-string",request_id:requestId,value:"crm-s3-query-1234567890123"},
      {kind:"contact-email",request_id:contactCreateId,value:"browser-1234567890123@example.org"},
-     {kind:"task-subject",request_id:taskCreateId,value:"Browser Task 1234567890123"}
+     {kind:"contact-phone",request_id:contactPhoneId,value:"+447700900123"},
+     {kind:"task-subject",request_id:taskCreateId,value:"Browser Task 1234567890123"},
+     {kind:"enrichment-provider-key",request_id:profileWriteId,value:"browser_registry_1234567890123"},
+     {kind:"enrichment-license",request_id:profileWriteId,value:"Browser test license"},
+     {kind:"enrichment-credential-handle",request_id:profileWriteId,value:"browser-credential-handle-1234567890123"},
+     {kind:"enrichment-mapping-key",request_id:mappingWriteId,value:"browser_mapping_1234567890123"},
+     {kind:"csv-party-name",request_id:csvWriteId,value:"Browser Import 1234567890123"},
+     {kind:"csv-payload",request_id:csvWriteId,
+       value:"party_id,kind,display_name,resource_version\\r\\nbrowser-import,person,Browser Import 1234567890123,1\\r\\n"}
    ]});
+;
  try{
    const result=spawnSync(process.execPath,["--input-type=module","-e","("+subprocessEntry.toString()+")()"],{cwd:dir,encoding:"utf8",
      env:{...process.env,GITHUB_SHA:sha,GITHUB_REF:"refs/heads/dev",GITHUB_EVENT_NAME:"push",
