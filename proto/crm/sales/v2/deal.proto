@@ -234,10 +234,14 @@ message UpdatePipelineResponse {
 
 message GetPipelineRequest {
   string pipeline_id = 1;
+  // Optional opaque key of the original command; never re-executes it.
+  optional string receipt_idempotency_key = 2;
 }
 
 message GetPipelineResponse {
   SalesPipeline pipeline = 1;
+  // Positive proof for this tenant, pipeline and key only.
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
 }
 
 message ListPipelinesRequest {
@@ -315,9 +319,13 @@ message UpdateSalesViewResponse {
 }
 message GetSalesViewRequest {
   string view_id = 1;
+  // Optional opaque key of the original command; never re-executes it.
+  optional string receipt_idempotency_key = 2;
 }
 message GetSalesViewResponse {
   SalesDealView view = 1;
+  // Positive proof for this tenant, view and key only.
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
 }
 message ListSalesViewsRequest {
   crm.core.v2.PageRequest page = 1;

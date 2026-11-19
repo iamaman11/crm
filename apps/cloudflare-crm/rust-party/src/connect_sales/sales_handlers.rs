@@ -90,13 +90,51 @@ impl sale_wire::DealService for SalesV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, sale_wire::GetSalesViewRequest>,
     ) -> ServiceResult<sale_wire::GetSalesViewResponse> {
-        Self::id(req.view_id)?;
-        let value = sales_views::get(&self.d1()?, &self.tenant, req.view_id)
+        let input = req.to_owned_message();
+        Self::id(&input.view_id)?;
+        let db = self.d1()?;
+        let value = sales_views::get(&db, &self.tenant, &input.view_id)
             .await
-            .map_err(|_| ConnectError::internal("Sales view D1 read failed"))?
+            .map_err(|_| {
+                diagnostics::read_failure(
+                    &self.request_id,
+                    "sales_view_read",
+                    diagnostics::ReadFailureReason::InternalReadError,
+                );
+                ConnectError::internal("Sales view D1 read failed")
+            })?
             .ok_or_else(|| ConnectError::not_found("SALES_VIEW_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let row = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::SalesView)
+                    .await
+                    .map_err(|_| {
+                        diagnostics::read_failure(
+                            &self.request_id,
+                            "sales_view_receipt_lookup",
+                            diagnostics::ReadFailureReason::InternalReadError,
+                        );
+                        ConnectError::unavailable("SALES_VIEW_RECEIPT_READ_FAILED")
+                    })?;
+                crud_commit_evidence(row, &input.view_id, &self.request_id, |state| {
+                    let view = crm_sales::SalesDealView::decode(state.as_bytes())
+                        .map_err(|error| worker::Error::RustError(error.code))?;
+                    Ok((view.view_id, view.version))
+                })
+                .map_err(|_| {
+                    diagnostics::read_failure(
+                        &self.request_id,
+                        "sales_view_receipt_decode",
+                        diagnostics::ReadFailureReason::SalesStateDecodeFailed,
+                    );
+                    ConnectError::unavailable("SALES_VIEW_RECEIPT_READ_FAILED")
+                })?
+            }
+        };
         RpcResponse::ok(sale_wire::GetSalesViewResponse {
             view: Some(Self::view(&value)).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }
@@ -205,13 +243,51 @@ impl sale_wire::DealService for SalesV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, sale_wire::GetPipelineRequest>,
     ) -> ServiceResult<sale_wire::GetPipelineResponse> {
-        Self::pipeline_id(req.pipeline_id)?;
-        let pipeline = sales_pipelines::get(&self.d1()?, &self.tenant, req.pipeline_id)
+        let input = req.to_owned_message();
+        Self::pipeline_id(&input.pipeline_id)?;
+        let db = self.d1()?;
+        let pipeline = sales_pipelines::get(&db, &self.tenant, &input.pipeline_id)
             .await
-            .map_err(|_| ConnectError::internal("Pipeline D1 get failed"))?
+            .map_err(|_| {
+                diagnostics::read_failure(
+                    &self.request_id,
+                    "sales_pipeline_read",
+                    diagnostics::ReadFailureReason::InternalReadError,
+                );
+                ConnectError::internal("Pipeline D1 get failed")
+            })?
             .ok_or_else(|| ConnectError::not_found("SALES_PIPELINE_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let row = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::Pipeline)
+                    .await
+                    .map_err(|_| {
+                        diagnostics::read_failure(
+                            &self.request_id,
+                            "sales_pipeline_receipt_lookup",
+                            diagnostics::ReadFailureReason::InternalReadError,
+                        );
+                        ConnectError::unavailable("SALES_PIPELINE_RECEIPT_READ_FAILED")
+                    })?;
+                crud_commit_evidence(row, &input.pipeline_id, &self.request_id, |state| {
+                    let pipeline = crm_sales::SalesPipeline::decode(state.as_bytes())
+                        .map_err(|error| worker::Error::RustError(error.code))?;
+                    Ok((pipeline.pipeline_id, pipeline.version))
+                })
+                .map_err(|_| {
+                    diagnostics::read_failure(
+                        &self.request_id,
+                        "sales_pipeline_receipt_decode",
+                        diagnostics::ReadFailureReason::SalesStateDecodeFailed,
+                    );
+                    ConnectError::unavailable("SALES_PIPELINE_RECEIPT_READ_FAILED")
+                })?
+            }
+        };
         RpcResponse::ok(sale_wire::GetPipelineResponse {
             pipeline: Some(Self::pipeline(&pipeline)).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }

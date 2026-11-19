@@ -1540,6 +1540,21 @@ const pipelineCreated=await salesV2("CreatePipeline",admin,pipelineSeed);
 assert.equal(pipelineCreated.status,200,describeProtobuf(pipelineCreated.body));
 assert.equal(pipelineCreated.body.pipeline?.version,1n);
 assert.deepEqual(pipelineCreated.body.pipeline?.stages.map(s=>s.ordinal),[1,2,3]);
+const pipelineCreateProof=await salesV2("GetPipeline",viewer,{
+  pipelineId:"pipeline.enterprise",receiptIdempotencyKey:"connect-r7-pipeline-create-1"
+});
+assert.equal(pipelineCreateProof.status,200,describeProtobuf(pipelineCreateProof.body));
+assert.equal(pipelineCreateProof.body.confirmedMutation?.originalRequestId,
+  pipelineCreated.body.receipt?.requestId);
+assert.equal(pipelineCreateProof.body.confirmedMutation?.resourceVersion,1n);
+assert.notEqual(pipelineCreateProof.body.confirmedMutation?.requestId,
+  pipelineCreated.body.receipt?.requestId);
+assert.equal((await sql("SELECT original_request_id FROM crm_sales_pipeline_receipts "+
+  "WHERE tenant='tenant-a' AND key='connect-r7-pipeline-create-1'"))[0].original_request_id,
+  pipelineCreated.body.receipt?.requestId);
+assert.equal((await salesV2("GetPipeline",viewer,{
+  pipelineId:"pipeline.enterprise",receiptIdempotencyKey:"short"
+})).status,400);
 assert.equal((await salesV2("CreatePipeline",admin,pipelineSeed)).body.receipt?.replayed,true);
 assert.equal((await salesV2("CreatePipeline",admin,{...pipelineSeed,name:"modified"})).status,409);
 assert.equal((await salesV2("GetPipeline",tenantB,{pipelineId:"pipeline.enterprise"})).status,404);
@@ -1548,6 +1563,12 @@ const pipelineOther=await salesV2("CreatePipeline",admin,{
   pipelineId:"pipeline.other",name:"Other",stages:[pipelineSeed.stages[0]],
   precondition:{idempotencyKey:"connect-r7-pipeline-create-2"}});
 assert.equal(pipelineOther.status,200,describeProtobuf(pipelineOther.body));
+const wrongPipelineProof=await salesV2("GetPipeline",viewer,{
+  pipelineId:"pipeline.other",receiptIdempotencyKey:"connect-r7-pipeline-create-1"
+});
+assert.equal(wrongPipelineProof.status,200);
+assert.equal(wrongPipelineProof.body.confirmedMutation,undefined,
+  "A receipt for another pipeline must never be disclosed as commit evidence");
 const pipelineList=await salesV2("ListPipelines",viewer,{page:{pageSize:1}});
 assert.equal(pipelineList.status,200,describeProtobuf(pipelineList.body));
 assert.equal(pipelineList.body.pipelines.length,1);
@@ -1569,6 +1590,23 @@ const pipelineUpdated=await salesV2("UpdatePipeline",admin,{
   precondition:{expectedVersion:1n,idempotencyKey:"connect-r7-pipeline-rename-1"}});
 assert.equal(pipelineUpdated.status,200,describeProtobuf(pipelineUpdated.body));
 assert.equal(pipelineUpdated.body.pipeline?.version,2n);
+const pipelineUpdateProof=await salesV2("GetPipeline",viewer,{
+  pipelineId:"pipeline.enterprise",receiptIdempotencyKey:"connect-r7-pipeline-rename-1"
+});
+assert.equal(pipelineUpdateProof.status,200);
+assert.equal(pipelineUpdateProof.body.confirmedMutation?.originalRequestId,
+  pipelineUpdated.body.receipt?.requestId);
+assert.equal(pipelineUpdateProof.body.confirmedMutation?.resourceVersion,2n);
+const oldPipelineCreateProof=await salesV2("GetPipeline",viewer,{
+  pipelineId:"pipeline.enterprise",receiptIdempotencyKey:"connect-r7-pipeline-create-1"
+});
+assert.equal(oldPipelineCreateProof.body.confirmedMutation?.originalRequestId,
+  pipelineCreated.body.receipt?.requestId);
+assert.equal(oldPipelineCreateProof.body.confirmedMutation?.resourceVersion,1n,
+  "A later update must not overwrite immutable create evidence");
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
+  pipelineUpdateProof.body.confirmedMutation?.requestId+"'"))[0].n,0,
+  "Receipt lookup is read-only and must not append audit");
 assert.equal((await salesV2("UpdatePipeline",admin,{
   pipelineId:"pipeline.enterprise",name:"stale",
   stages:pipelineSeed.stages,archived:false,
@@ -1598,6 +1636,16 @@ assert.equal((await salesV2("CreateSalesView",admin,{
 const viewCreated=await salesV2("CreateSalesView",admin,viewAInput);
 assert.equal(viewCreated.status,200,describeProtobuf(viewCreated.body));
 assert.equal(viewCreated.body.view?.version,1n);
+const viewCreateProof=await salesV2("GetSalesView",viewer,{
+  viewId:viewAId,receiptIdempotencyKey:"r73-view-create-1"
+});
+assert.equal(viewCreateProof.status,200);
+assert.equal(viewCreateProof.body.confirmedMutation?.originalRequestId,
+  viewCreated.body.receipt?.requestId);
+assert.equal(viewCreateProof.body.confirmedMutation?.resourceVersion,1n);
+assert.equal((await sql("SELECT original_request_id FROM crm_sales_saved_view_receipts "+
+  "WHERE tenant='tenant-a' AND key='r73-view-create-1'"))[0].original_request_id,
+  viewCreated.body.receipt?.requestId);
 assert.equal(viewCreated.body.view?.status,1);
 assert.equal(viewCreated.body.view?.accountId,accountId);
 assert.equal((await salesV2("CreateSalesView",admin,viewAInput)).body.receipt?.replayed,true);
@@ -1607,6 +1655,12 @@ assert.equal((await salesV2("CreateSalesView",admin,{
 assert.equal((await salesV2("GetSalesView",tenantB,{viewId:viewAId})).status,404);
 assert.equal((await salesV2("ListSalesViews",tenantB,{page:{pageSize:10}})).body.views.length,0);
 assert.equal((await salesV2("GetSalesView",viewer,{viewId:viewAId})).body.view?.viewId,viewAId);
+const wrongViewProof=await salesV2("GetSalesView",viewer,{
+  viewId:viewBId,receiptIdempotencyKey:"r73-view-create-1"
+});
+assert.equal(wrongViewProof.status,200);
+assert.equal(wrongViewProof.body.confirmedMutation,undefined,
+  "A receipt for another saved view must never be disclosed");
 const viewBCreated=await salesV2("CreateSalesView",admin,{
   viewId:viewBId,name:"Won across pipelines",status:2,
   precondition:{idempotencyKey:"r73-view-create-2"}
@@ -1630,6 +1684,22 @@ const viewUpdate={
 const updatedView=await salesV2("UpdateSalesView",admin,viewUpdate);
 assert.equal(updatedView.status,200,describeProtobuf(updatedView.body));
 assert.equal(updatedView.body.view?.version,2n);
+const viewUpdateProof=await salesV2("GetSalesView",viewer,{
+  viewId:viewAId,receiptIdempotencyKey:"r73-view-update-1"
+});
+assert.equal(viewUpdateProof.status,200);
+assert.equal(viewUpdateProof.body.confirmedMutation?.originalRequestId,
+  updatedView.body.receipt?.requestId);
+assert.equal(viewUpdateProof.body.confirmedMutation?.resourceVersion,2n);
+const oldViewCreateProof=await salesV2("GetSalesView",viewer,{
+  viewId:viewAId,receiptIdempotencyKey:"r73-view-create-1"
+});
+assert.equal(oldViewCreateProof.body.confirmedMutation?.originalRequestId,
+  viewCreated.body.receipt?.requestId);
+assert.equal(oldViewCreateProof.body.confirmedMutation?.resourceVersion,1n);
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
+  viewUpdateProof.body.confirmedMutation?.requestId+"'"))[0].n,0,
+  "Saved-view receipt lookup is read-only");
 assert.equal(updatedView.body.view?.accountId,undefined);
 assert.equal((await salesV2("UpdateSalesView",admin,viewUpdate)).body.receipt?.replayed,true);
 assert.equal((await salesV2("UpdateSalesView",admin,{
