@@ -73,6 +73,25 @@ export async function verifyNfcMigrationNames(query){
   }
 }
 
+
+// A signed Access session can be routed to an older Workers.dev edge during
+// version propagation. Retry only a well-formed, authenticated admin session
+// whose explicit source SHA is stale. Invalid auth/role or missing provenance
+// must fail immediately; an old version is never accepted as release proof.
+export function classifySignedSessionReadback({status,source,session,expectedSha}) {
+  if(status===404&&source===null)
+    return {kind:"retry",reason:"edge_not_ready"};
+  if(status!==200)
+    throw Error("CRM_SIGNED_E2E_ACCESS_HTTP_"+status);
+  if(session?.authenticated!==true||session?.role!=="admin")
+    throw Error("CRM_SIGNED_E2E_ACCESS_SESSION_INVALID");
+  if(source===expectedSha)
+    return {kind:"pass"};
+  if(typeof source==="string"&&/^[a-f0-9]{40}$/i.test(source))
+    return {kind:"retry",reason:"stale_worker_version"};
+  throw Error("CRM_SIGNED_E2E_ACCESS_SOURCE_INVALID");
+}
+
 // Native Cloudflare observability only. Check both the committed Wrangler
 // config and the deployed Worker settings; do not trust source config alone.
 // Native invocation logs also capture arbitrary request header values under
