@@ -135,13 +135,28 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, contact_wire::GetContactPointRequest>,
     ) -> ServiceResult<contact_wire::GetContactPointResponse> {
-        let id = Self::valid_id(req.contact_point_id)?;
-        let point = contact_points::load(&self.d1()?, &self.actor.tenant, &id)
+        let input = req.to_owned_message();
+        let id = Self::valid_id(&input.contact_point_id)?;
+        let db = self.d1()?;
+        let item = contact_points::load(&db, &self.actor.tenant, &id)
             .await
-            .map_err(|_| ConnectError::internal("ContactPoint D1 read failed"))?
+            .map_err(|_| ConnectError::internal("CONTACT_POINT original D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("CONTACT_POINTS_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let stored = crud_receipt(&db, &self.actor.tenant, key, CrudReceiptOwner::Contact)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("CONTACT_POINT_RECEIPT_READ_FAILED"))?;
+                crud_commit_evidence(stored, &id, &self.request_id, |state| {
+                    contact_points::decode(state).map(|row| (row.contact_point_id().as_str().to_owned(), row.version()))
+                })
+                .map_err(|_| ConnectError::unavailable("CONTACT_POINT_RECEIPT_DECODE_FAILED"))?
+            }
+        };
         RpcResponse::ok(contact_wire::GetContactPointResponse {
-            contact_point: Some(Self::convert(&point)?).into(),
+            contact_point: Some(Self::convert(&item)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }
