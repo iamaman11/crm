@@ -161,7 +161,7 @@ async function subprocessEntry(){
        });
        if(variant==="synthetic-csv-leak"&&traceIndex===17)events.push({
          $metadata:{type:"log"},source:{traceId:needle,
-           message:"party_id,kind,display_name,resource_version\\r\\nbrowser-import,person,Browser Import 1234567890123,1\\r\\n"}
+           message:"party_id,kind,display_name,resource_version\r\nbrowser-import,person,Browser Import 1234567890123,1\r\n"}
        });
        return wrap({events:{events}});
      }
@@ -378,9 +378,8 @@ function run(mode,variant="valid"){
      {kind:"enrichment-mapping-key",request_id:mappingWriteId,value:"browser_mapping_1234567890123"},
      {kind:"csv-party-name",request_id:csvWriteId,value:"Browser Import 1234567890123"},
      {kind:"csv-payload",request_id:csvWriteId,
-       value:"party_id,kind,display_name,resource_version\\r\\nbrowser-import,person,Browser Import 1234567890123,1\\r\\n"}
+       value:"party_id,kind,display_name,resource_version\r\nbrowser-import,person,Browser Import 1234567890123,1\r\n"}
    ]});
-;
  try{
    const result=spawnSync(process.execPath,["--input-type=module","-e","("+subprocessEntry.toString()+")()"],{cwd:dir,encoding:"utf8",
      env:{...process.env,GITHUB_SHA:sha,GITHUB_REF:"refs/heads/dev",GITHUB_EVENT_NAME:"push",
@@ -440,7 +439,10 @@ for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-err
   "recovery-audited","missing-recovery-span",
   "missing-owner-recovery","wrong-owner-recovery","missing-owner-span",
   "missing-private-probes","synthetic-private-leak",
-  "synthetic-cookie-leak","synthetic-header-leak"])test("release rejects "+variant,()=>{
+  "synthetic-cookie-leak","synthetic-header-leak","synthetic-authorization-leak",
+  "synthetic-jwt-leak","synthetic-query-leak","synthetic-phone-leak",
+  "synthetic-enrichment-leak","synthetic-credential-handle-leak",
+  "synthetic-mapping-leak","synthetic-csv-leak"])test("release rejects "+variant,()=>{
  const result=run("verify-data",variant);
  assert.notEqual(result.status,0);assert.equal(result.accepted,false);
 });
