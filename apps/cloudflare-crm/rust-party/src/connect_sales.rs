@@ -100,6 +100,82 @@ fn wire_precondition(
     }
 }
 
+// S5a: one read-only, tenant-bound lookup for the existing original D1 receipts.
+// Receipt provenance is written by the SAME trigger as domain state and audit;
+// pre-0017 rows deliberately have NULL provenance and cannot certify a commit.
+#[derive(Clone, Copy)]
+enum CrudReceiptOwner {
+    Party,
+    Account,
+    Contact,
+    Relationship,
+    Task,
+}
+impl CrudReceiptOwner {
+    fn sql(self) -> &'static str {
+        match self {
+            Self::Party => "SELECT state,original_request_id FROM crm_party_receipts WHERE tenant=? AND key=?",
+            Self::Account => "SELECT state,original_request_id FROM crm_account_receipts WHERE tenant=? AND key=?",
+            Self::Contact => "SELECT state,original_request_id FROM crm_contact_point_receipts WHERE tenant=? AND key=?",
+            Self::Relationship => "SELECT state,original_request_id FROM crm_party_relationship_receipts WHERE tenant=? AND key=?",
+            Self::Task => "SELECT state,original_request_id FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+        }
+    }
+}
+#[derive(serde::Deserialize)]
+struct CrudReceiptRow {
+    state: String,
+    original_request_id: Option<String>,
+}
+async fn crud_receipt(
+    db: &D1Database,
+    tenant: &str,
+    key: &str,
+    owner: CrudReceiptOwner,
+) -> worker::Result<Option<CrudReceiptRow>> {
+    super::bind(
+        db,
+        owner.sql(),
+        &[
+            wasm_bindgen::JsValue::from_str(tenant),
+            wasm_bindgen::JsValue::from_str(key),
+        ],
+    )?
+    .first::<CrudReceiptRow>(None)
+    .await
+}
+fn receipt_key(raw: Option<&str>) -> std::result::Result<Option<&str>, ConnectError> {
+    match raw {
+        None => Ok(None),
+        Some(key) if (8..=120).contains(&key.len()) => Ok(Some(key)),
+        _ => Err(ConnectError::invalid_argument("IDEMPOTENCY_KEY_REQUIRED")),
+    }
+}
+fn crud_commit_evidence(
+    row: Option<CrudReceiptRow>,
+    requested_id: &str,
+    read_request_id: &str,
+    decode: impl FnOnce(&str) -> worker::Result<(String, i64)>,
+) -> worker::Result<Option<core_v2::MutationCommitEvidence>> {
+    let Some(row) = row else { return Ok(None); };
+    // No false proof for historical receipts created before 0017.
+    let Some(original) = row.original_request_id.filter(|id| !id.is_empty()) else {
+        return Ok(None);
+    };
+    // Original domain snapshot codec checks version and resource identity;
+    // never use the current mutable record version to prove an older commit.
+    let (receipt_id, version) = decode(&row.state)?;
+    if receipt_id != requested_id || version <= 0 {
+        return Ok(None);
+    }
+    Ok(Some(core_v2::MutationCommitEvidence {
+        request_id: read_request_id.to_owned(),
+        original_request_id: original,
+        resource_version: version,
+        ..Default::default()
+    }))
+}
+
 fn wire_search(value: &str) -> std::result::Result<&str, ConnectError> {
     if value.chars().count() > 200 {
         return Err(ConnectError::invalid_argument(
