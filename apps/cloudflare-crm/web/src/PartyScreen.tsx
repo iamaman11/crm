@@ -69,8 +69,8 @@ export function PartyScreen({initialPartyId=""}:{initialPartyId?:string}) {
         <Button type="submit" disabled={mutation.busy||mutation.pending}>Сохранить участника</Button>{" "}
         {selected&&<Button type="button" variant="secondary" disabled={mutation.busy||mutation.pending} onClick={()=>{setEditorOpen(false);setSelected(undefined);mutation.changed();}}>Отмена</Button>}
       </form>
-      {mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}
+      <MutationNotice state={mutation}/>
     </RecordPanel>
-    <MutationNotice state={mutation}/>
+    {!editorOpen&&<MutationNotice state={mutation}/>}
   </>;
 }

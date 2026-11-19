@@ -71,7 +71,7 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
         <TimeFields name="from" label="Действует с" editing={!!selected}/><TimeFields name="until" label="Действует до" editing={!!selected}/>
       </FormGrid><Button type="submit" disabled={mutation.busy||mutation.pending}>Сохранить контакт</Button>{" "}
       {selected&&<Button type="button" variant="secondary" disabled={mutation.busy||mutation.pending} onClick={()=>{setEditorOpen(false);setSelected(undefined);mutation.changed();}}>Отмена</Button>}
-    </form>{mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}</RecordPanel>
-    <MutationNotice state={mutation}/>
+    </form><MutationNotice state={mutation}/></RecordPanel>
+    {!editorOpen&&<MutationNotice state={mutation}/>}
   </>;
 }

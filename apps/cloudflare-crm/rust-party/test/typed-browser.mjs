@@ -245,7 +245,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    };
    await page.route(s5aRoute,loseS5aAcknowledgement);
    await page.getByRole("button",{name:"Сохранить участника",exact:true}).click();
-   await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   await page.getByRole("dialog").getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
    const s5aPartyId=await firstId("crm_party_records","display_name",s5aPartyName);
    const s5aMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.party.pending.v1")));
    assert.deepEqual(Object.keys(s5aMarker).sort(),["expectedVersion","key","resourceId"]);

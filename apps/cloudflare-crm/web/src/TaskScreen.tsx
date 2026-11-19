@@ -111,7 +111,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
       </FormGrid>
         <Button type="submit" disabled={mutation.busy||mutation.pending}>Сохранить изменения задачи</Button>{" "}
         <Button type="button" variant="secondary" disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorMode(null);mutation.changed();}}>Отмена</Button>
-      </form>{mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}
+      </form><MutationNotice state={mutation}/>
     </>}</RecordPanel>
     <RecordPanel open={editorMode==="create"} title="Новая задача" onClose={()=>{if(!mutation.busy&&!mutation.pending)setEditorMode(null);}}><form key={draftId} onChange={mutation.changed} onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
@@ -131,8 +131,8 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
       <TextField label="Срок" name="due" type="datetime-local" step="1"/>
       <TextField label="Напоминание" name="reminder" type="datetime-local" step="1"/>
     </FormGrid><Button type="submit" disabled={mutation.busy||mutation.pending}>Создать задачу</Button></form>
-      {mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}
+      <MutationNotice state={mutation}/>
     </RecordPanel>
-    <MutationNotice state={mutation}/>
+    {editorMode===null&&<MutationNotice state={mutation}/>}
   </>;
 }
