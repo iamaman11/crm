@@ -1416,10 +1416,8 @@ pub(super) async fn pipeline_metrics(
                 Some(outcome) => {
                     // Domain close timestamp is an instant, never a locally
                     // interpreted date or another Gregorian implementation.
-                    let date = crm_core_contracts::UtcInstant::from_unix_nanos(
-                        outcome.closed_at_unix_nanos(),
-                    )
-                    .utc_date();
+                    let closed_at = outcome.closed_at_unix_nanos();
+                    let date = crm_core_contracts::UtcInstant::from_unix_nanos(closed_at).utc_date();
                     if period.is_none_or(|period| period.includes(date)) {
                         match status {
                             DealStatus::Won => count_one(&mut counts.won_count)?,
