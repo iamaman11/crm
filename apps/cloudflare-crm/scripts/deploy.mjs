@@ -441,11 +441,13 @@ async function verifyData(){
   }
   assert.deepEqual([...recoveryKinds.keys()].sort(),["lookup","replay"],
     "Both response-loss recovery paths are mandatory release evidence");
-  // S5a adds one independent original Party owner, not a fabricated Deal
-  // write. It must prove a committed request and a distinct read-only GetParty.
+  // Every active S5 owner proves a committed write and its own read-only
+  // receipt lookup. These are original owners, not fabricated Deal writes.
   const ownerProofs=evidence.owner_recovery??[];
   const ownerContracts={
     party:{write:"/CreateParty",read:"/GetParty",audit:"parties.create"},
+    "sales-pipeline":{write:"/CreatePipeline",read:"/GetPipeline",audit:"sales_pipeline.create"},
+    "sales-view":{write:"/CreateSalesView",read:"/GetSalesView",audit:"sales_view.create"},
     consent:{write:"/SuppressCommunication",read:"/GetConsentAuthorization",audit:"consents.operator_suppress"},
     privacy:{write:"/CreatePrivacyCase",read:"/GetPrivacyCase",audit:"customer_privacy.create"},
     "enrichment-profile":{write:"/PublishProviderProfile",read:"/GetProviderProfile",audit:"customer_enrichment.profile_publish"},

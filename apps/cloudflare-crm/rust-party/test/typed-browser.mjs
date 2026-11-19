@@ -146,6 +146,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await assertMutation(response,method,options);
    await page.getByRole("heading",{name:/^Сохранено/}).last().waitFor();
  };
+ const reloadAfterPending=async()=>{
+   const accept=dialog=>void dialog.accept();
+   page.on("dialog",accept);
+   try{await page.reload();}finally{page.off("dialog",accept);}
+ };
  // Pickers show one bounded page of options; randomly generated IDs
  // need not be on the first page. Use real UI pagination, not sleeps.
  const selectPagedPicker=async(scope,label,id,kind="party")=>{
@@ -580,8 +585,46 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await navigate("sales","Сделки");
    await page.getByRole("button",{name:"Создать воронку",exact:true}).click();
    await page.getByLabel("Название воронки",{exact:true}).fill("Browser Pipeline "+runId);
-   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"CreatePipeline");
+   const pipelineCreateRoute="**/crm.sales.v2.DealService/CreatePipeline";
+   let pipelineCreateCalls=0,originalPipelineCreateRequestId;
+   await page.route(pipelineCreateRoute,async route=>{
+     pipelineCreateCalls++;
+     const committed=await route.fetch();
+     recordResponse(committed);await assertMutation(committed,"CreatePipeline");
+     originalPipelineCreateRequestId=(await committed.allHeaders())["x-request-id"];
+     await route.abort("failed");
+   });
+   await page.getByRole("button",{name:"Сохранить воронку",exact:true}).click();
+   await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   const pipelineMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.sales.pipeline.pending.v1")));
+   assert.deepEqual(Object.keys(pipelineMarker).sort(),["expectedVersion","key","resourceId"]);
+   assert.equal(pipelineMarker.expectedVersion,"0");
+   assert.match(pipelineMarker.key,/^[a-f0-9-]{36}$/i);
+   await reloadAfterPending();
+   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   const pipelineLookup=page.waitForResponse(r=>responsePathEndsWith(r,"/GetPipeline")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   const pipelineLookupResponse=await pipelineLookup;
+   assert.equal(pipelineLookupResponse.status(),200);
+   const pipelineLookupRequestId=(await pipelineLookupResponse.allHeaders())["x-request-id"];
+   assert.match(pipelineLookupRequestId??"",/^[a-f0-9-]{36}$/i);
    const newPipelineId=await firstId("crm_sales_pipeline_records","name","Browser Pipeline "+runId);
+   assert.equal(pipelineMarker.resourceId,newPipelineId);
+   assert.equal(pipelineCreateCalls,1,"Reload recovery must not re-execute CreatePipeline");
+   assert.ok(originalPipelineCreateRequestId);
+   await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
+     .toContainText(originalPipelineCreateRequestId);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
+     originalPipelineCreateRequestId+"' AND action='sales_pipeline.create'"))[0].n,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
+     pipelineLookupRequestId+"'"))[0].n,0);
+   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.pipeline.pending.v1")),null);
+   ownerRecovery.push({owner:"sales-pipeline",kind:"lookup",
+     original_request_id:originalPipelineCreateRequestId,subsequent_request_id:pipelineLookupRequestId});
+   await page.unroute(pipelineCreateRoute);
+   await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
+   steps.push("S5 pipeline lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
    assert.equal((await sql("SELECT version FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].version,1);
    const recordedPipelines=await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+newPipelineId+"' AND action='sales_pipeline.create'");
    assert.equal(recordedPipelines[0].n,1);
@@ -657,9 +700,47 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Статус сделки",{exact:true}).selectOption("1");
    await page.getByRole("button",{name:"Сохранить как новое",exact:true}).click();
    await page.getByLabel("Название представления",{exact:true}).fill(savedViewName);
-   await mutation(page.getByRole("button",{name:"Сохранить новое представление",exact:true}),
-     "CreateSalesView");
+   const createViewRoute="**/crm.sales.v2.DealService/CreateSalesView";
+   let createViewCalls=0,originalViewCreateRequestId;
+   await page.route(createViewRoute,async route=>{
+     createViewCalls++;
+     const committed=await route.fetch();
+     recordResponse(committed);await assertMutation(committed,"CreateSalesView");
+     originalViewCreateRequestId=(await committed.allHeaders())["x-request-id"];
+     await route.abort("failed");
+   });
+   await page.getByRole("button",{name:"Сохранить новое представление",exact:true}).click();
+   await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   const viewMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.sales.view.pending.v1")));
+   assert.deepEqual(Object.keys(viewMarker).sort(),["expectedVersion","key","resourceId"]);
+   assert.equal(viewMarker.expectedVersion,"0");
+   assert.match(viewMarker.key,/^[a-f0-9-]{36}$/i);
+   await reloadAfterPending();
+   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   const viewLookup=page.waitForResponse(r=>responsePathEndsWith(r,"/GetSalesView")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   const viewLookupResponse=await viewLookup;
+   assert.equal(viewLookupResponse.status(),200);
+   const viewLookupRequestId=(await viewLookupResponse.allHeaders())["x-request-id"];
+   assert.match(viewLookupRequestId??"",/^[a-f0-9-]{36}$/i);
    const viewId=await firstId("crm_sales_saved_view_records","name",savedViewName);
+   assert.equal(viewMarker.resourceId,viewId);
+   assert.equal(createViewCalls,1,"Reload recovery must not re-execute CreateSalesView");
+   assert.ok(originalViewCreateRequestId);
+   await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
+     .toContainText(originalViewCreateRequestId);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
+     originalViewCreateRequestId+"' AND action='sales_view.create'"))[0].n,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
+     viewLookupRequestId+"'"))[0].n,0);
+   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.view.pending.v1")),null);
+   ownerRecovery.push({owner:"sales-view",kind:"lookup",
+     original_request_id:originalViewCreateRequestId,subsequent_request_id:viewLookupRequestId});
+   await page.unroute(createViewRoute);
+   await expect(page.getByLabel("Сохранённое представление",{exact:true})).toHaveValue(viewId);
+   await expect(page.getByLabel("Статус сделки",{exact:true})).toHaveValue("1");
+   steps.push("S5 saved-view lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
    const createdView=JSON.parse((await sql("SELECT state FROM crm_sales_saved_view_records "+
      "WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0].state);
    assert.equal(createdView.pipeline_id,newPipelineId);
@@ -714,8 +795,40 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await statusFilter.selectOption("2");
    await page.getByLabel("Название представления",{exact:true})
      .fill("Browser Won View "+runId);
-   await mutation(page.getByRole("button",{name:"Обновить представление",exact:true}),
-     "UpdateSalesView");
+   const updateViewRoute="**/crm.sales.v2.DealService/UpdateSalesView";
+   let updateViewCalls=0,originalViewUpdateRequestId;
+   await page.route(updateViewRoute,async route=>{
+     updateViewCalls++;
+     const committed=await route.fetch();
+     recordResponse(committed);await assertMutation(committed,"UpdateSalesView");
+     originalViewUpdateRequestId=(await committed.allHeaders())["x-request-id"];
+     await route.abort("failed");
+   });
+   await page.getByRole("button",{name:"Обновить представление",exact:true}).click();
+   await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   const viewUpdateMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.sales.view.pending.v1")));
+   assert.equal(viewUpdateMarker.resourceId,viewId);
+   assert.equal(viewUpdateMarker.expectedVersion,"1");
+   await reloadAfterPending();
+   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   const viewUpdateLookup=page.waitForResponse(r=>responsePathEndsWith(r,"/GetSalesView")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   const viewUpdateLookupResponse=await viewUpdateLookup;
+   assert.equal(viewUpdateLookupResponse.status(),200);
+   const viewUpdateLookupRequestId=(await viewUpdateLookupResponse.allHeaders())["x-request-id"];
+   assert.equal(updateViewCalls,1,"Reload recovery must not re-execute UpdateSalesView");
+   assert.ok(originalViewUpdateRequestId);
+   await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
+     .toContainText(originalViewUpdateRequestId);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
+     originalViewUpdateRequestId+"' AND action='sales_view.update'"))[0].n,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
+     viewUpdateLookupRequestId+"'"))[0].n,0);
+   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.view.pending.v1")),null);
+   await page.unroute(updateViewRoute);
+   await expect(page.getByLabel("Сохранённое представление",{exact:true})).toHaveValue(viewId);
+   await expect(page.getByLabel("Статус сделки",{exact:true})).toHaveValue("2");
    const updatedView=JSON.parse((await sql("SELECT state FROM crm_sales_saved_view_records "+
      "WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0].state);
    assert.equal(updatedView.version,2);
@@ -946,7 +1059,38 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // The same visible editor may reorder stages already used by closed Deals.
    await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
    await page.getByRole("button",{name:"Выше",exact:true}).last().click();
-   await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
+   const updatePipelineRoute="**/crm.sales.v2.DealService/UpdatePipeline";
+   let updatePipelineCalls=0,originalPipelineUpdateRequestId;
+   await page.route(updatePipelineRoute,async route=>{
+     updatePipelineCalls++;
+     const committed=await route.fetch();
+     recordResponse(committed);await assertMutation(committed,"UpdatePipeline");
+     originalPipelineUpdateRequestId=(await committed.allHeaders())["x-request-id"];
+     await route.abort("failed");
+   });
+   await page.getByRole("button",{name:"Сохранить воронку",exact:true}).click();
+   await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   const pipelineUpdateMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.sales.pipeline.pending.v1")));
+   assert.equal(pipelineUpdateMarker.resourceId,newPipelineId);
+   assert.equal(pipelineUpdateMarker.expectedVersion,"1");
+   await reloadAfterPending();
+   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   const pipelineUpdateLookup=page.waitForResponse(r=>responsePathEndsWith(r,"/GetPipeline")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   const pipelineUpdateLookupResponse=await pipelineUpdateLookup;
+   assert.equal(pipelineUpdateLookupResponse.status(),200);
+   const pipelineUpdateLookupRequestId=(await pipelineUpdateLookupResponse.allHeaders())["x-request-id"];
+   assert.equal(updatePipelineCalls,1,"Reload recovery must not re-execute UpdatePipeline");
+   assert.ok(originalPipelineUpdateRequestId);
+   await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
+     .toContainText(originalPipelineUpdateRequestId);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
+     originalPipelineUpdateRequestId+"' AND action='sales_pipeline.update'"))[0].n,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
+     pipelineUpdateLookupRequestId+"'"))[0].n,0);
+   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.pipeline.pending.v1")),null);
+   await page.unroute(updatePipelineRoute);
    const newCatalog=JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+
      tenantSql+"' AND id='"+newPipelineId+"'"))[0].state);
    assert.deepEqual(newCatalog.stages.map(s=>s.stage_id),[ownStageIds[1],ownStageIds[0]]);

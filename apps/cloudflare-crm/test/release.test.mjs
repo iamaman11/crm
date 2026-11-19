@@ -275,6 +275,10 @@ function run(mode,variant="valid"){
  const mappingReadId="19191919-1919-4919-8919-191919191919";
  const csvWriteId="20202020-2020-4020-8020-202020202020";
  const csvReadId="21212121-2121-4121-8121-212121212121";
+ const pipelineWriteId="26262626-2626-4626-8626-262626262626";
+ const pipelineReadId="27272727-2727-4727-8727-272727272727";
+ const viewWriteId="28282828-2828-4828-8828-282828282828";
+ const viewReadId="29292929-2929-4929-8929-292929292929";
  const invalidDealId="23232323-2323-4323-8323-232323232323";
  const deniedPartyId="24242424-2424-4424-8424-242424242424";
  const conflictPartyId="25252525-2525-4525-8525-252525252525";
@@ -294,6 +298,10 @@ function run(mode,variant="valid"){
  const mappingLookupPath="/crm.customer_enrichment.v2.EnrichmentConfigurationService/GetMapping";
  const csvPath="/crm.customer_data_operations.v2.PartyCsvService/ApplyPartyImport";
  const csvLookupPath="/crm.customer_data_operations.v2.PartyCsvService/PreviewPartyImport";
+ const pipelinePath="/crm.sales.v2.DealService/CreatePipeline";
+ const pipelineLookupPath="/crm.sales.v2.DealService/GetPipeline";
+ const viewPath="/crm.sales.v2.DealService/CreateSalesView";
+ const viewLookupPath="/crm.sales.v2.DealService/GetSalesView";
  const invalidDealPath="/crm.sales.v2.DealService/CreateDeal";
  const conflictPartyPath="/crm.parties.v3.PartyService/UpdateParty";
  const fixtureRequests=[
@@ -316,6 +324,10 @@ function run(mode,variant="valid"){
    {path:mappingLookupPath,status:200,request_id:mappingReadId,source_sha:sha,runtime:"native-workers-rs"},
    {path:csvPath,status:200,request_id:csvWriteId,source_sha:sha,runtime:"native-workers-rs"},
    {path:csvLookupPath,status:200,request_id:csvReadId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:pipelinePath,status:200,request_id:pipelineWriteId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:pipelineLookupPath,status:200,request_id:pipelineReadId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:viewPath,status:200,request_id:viewWriteId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:viewLookupPath,status:200,request_id:viewReadId,source_sha:sha,runtime:"native-workers-rs"},
    {path:invalidDealPath,status:400,request_id:invalidDealId,error_code:"invalid_argument",source_sha:sha,runtime:"native-workers-rs"},
    {path:rpcPath,status:403,request_id:deniedPartyId,error_code:"permission_denied",source_sha:sha,runtime:"native-workers-rs"},
    {path:conflictPartyPath,status:409,request_id:conflictPartyId,error_code:"aborted",source_sha:sha,runtime:"native-workers-rs"}
@@ -341,7 +353,11 @@ function run(mode,variant="valid"){
    {path:mappingPath,request_id:mappingWriteId,
      audit:[{action:"customer_enrichment.mapping_publish",subject_id:"mapping",actor:"service:synthetic.access"}]},
    {path:csvPath,request_id:csvWriteId,
-     audit:[{action:"parties.create",subject_id:"csv-party",actor:"service:synthetic.access"}]}
+     audit:[{action:"parties.create",subject_id:"csv-party",actor:"service:synthetic.access"}]},
+   {path:pipelinePath,request_id:pipelineWriteId,
+     audit:[{action:"sales_pipeline.create",subject_id:"pipeline",actor:"service:synthetic.access"}]},
+   {path:viewPath,request_id:viewWriteId,
+     audit:[{action:"sales_view.create",subject_id:"view",actor:"service:synthetic.access"}]}
  ];
  const recovery=[
    {kind:"replay",original_request_id:originalAdvanceId,subsequent_request_id:subsequentReplayId},
@@ -353,7 +369,9 @@ function run(mode,variant="valid"){
    {owner:"privacy",kind:"lookup",original_request_id:privacyWriteId,subsequent_request_id:privacyReadId},
    {owner:"enrichment-profile",kind:"lookup",original_request_id:profileWriteId,subsequent_request_id:profileReadId},
    {owner:"enrichment-mapping",kind:"lookup",original_request_id:mappingWriteId,subsequent_request_id:mappingReadId},
-   {owner:"party-csv-import",kind:"lookup",original_request_id:csvWriteId,subsequent_request_id:csvReadId}
+   {owner:"party-csv-import",kind:"lookup",original_request_id:csvWriteId,subsequent_request_id:csvReadId},
+   {owner:"sales-pipeline",kind:"lookup",original_request_id:pipelineWriteId,subsequent_request_id:pipelineReadId},
+   {owner:"sales-view",kind:"lookup",original_request_id:viewWriteId,subsequent_request_id:viewReadId}
  ];
  save(join(app,"e2e-evidence/typed-browser.json"),{result:"PASS",source_sha:sha,features:variant==="wrong-features"?["native-ci"]:["native"],
    tenant:"fixture-a",started_at:2,steps:["synthetic fixture"],requests:fixtureRequests,

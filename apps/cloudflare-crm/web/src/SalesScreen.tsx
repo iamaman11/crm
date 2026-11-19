@@ -98,8 +98,38 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
     refresh:async()=>{setDetailRevision(v=>v+1);await refreshSales();}
   });
   const editorRead=useReadAction<Deal>();
-  const pipelineMutation=useMutation();
-  const viewMutation=useMutation();
+  const pipelineMutation=useMutation({
+    storageKey:"crm.sales.pipeline.pending.v1",
+    lookup:async({resourceId,key},signal)=>(await api.deals.getPipeline({
+      pipelineId:resourceId,receiptIdempotencyKey:key
+    },{signal})).confirmedMutation,
+    refresh:async marker=>{
+      await pipelinesQuery.reload();
+      setPipelineId(marker.resourceId);
+      setPipelineEditor(null);setPipelineDirty(false);setStageCursors({});
+    }
+  });
+  const viewMutation=useMutation({
+    storageKey:"crm.sales.view.pending.v1",
+    lookup:async({resourceId,key},signal)=>(await api.deals.getSalesView({
+      viewId:resourceId,receiptIdempotencyKey:key
+    },{signal})).confirmedMutation,
+    refresh:async marker=>{
+      const current=(await api.deals.getSalesView({viewId:marker.resourceId})).view;
+      await savedViewsQuery.reload();
+      setCreateViewOpen(false);setViewDraftId(newId());
+      setStageCursors({});setAllDealsCursor("");
+      if(!current||current.archived){
+        setSelectedViewId("");setViewName("");
+        setPipelineId("");setStatus("");setAccountId("");
+      }else{
+        setSelectedViewId(current.viewId);setViewName(current.name);
+        setPipelineId(current.pipelineId??"");
+        setStatus(current.status===undefined?"":String(current.status));
+        setAccountId(current.accountId??"");
+      }
+    }
+  });
   const savedViewsQuery=useQuery(useCallback(allSalesViews,[]));
   const savedViews=savedViewsQuery.data??[];
   const selectedView=savedViews.find(view=>view.viewId===selectedViewId);
@@ -128,22 +158,25 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   };
   const saveView=(archive=false,asNew=false)=>{
     const old=selectedView;
-    void viewMutation.run(()=>asNew?
-      api.deals.createSalesView({
-        viewId:viewDraftId,name:viewName,...currentViewFilters(),
-        precondition:{idempotencyKey:viewMutation.key}
-      }):old?api.deals.updateSalesView({
-        viewId:old.viewId,name:viewName,...currentViewFilters(),
-        archived:archive,
-        precondition:{idempotencyKey:viewMutation.key,expectedVersion:old.version}
-      }):Promise.reject(Error("Представление не выбрано")),
-      async()=>{
-        const createdId=viewDraftId;
-        await savedViewsQuery.reload();
-        if(asNew){setSelectedViewId(createdId);setViewDraftId(newId());setCreateViewOpen(false);}
-        if(archive){setSelectedViewId("");setViewName("");setCreateViewOpen(false);}
-      }
-    );
+    void viewMutation.runIntent(()=>{
+      if(asNew)return prepareMutation(
+        input=>api.deals.createSalesView(input),{
+          viewId:viewDraftId,name:viewName,...currentViewFilters(),
+          precondition:{idempotencyKey:viewMutation.key}
+        },viewDraftId
+      );
+      if(!old)throw Error("Представление не выбрано");
+      return prepareMutation(
+        input=>api.deals.updateSalesView(input),{
+          viewId:old.viewId,name:viewName,...currentViewFilters(),archived:archive,
+          precondition:{idempotencyKey:viewMutation.key,expectedVersion:old.version}
+        },old.viewId
+      );
+    },async()=>{
+      await savedViewsQuery.reload();
+      if(asNew){setSelectedViewId(viewDraftId);setViewDraftId(newId());setCreateViewOpen(false);}
+      if(archive){setSelectedViewId("");setViewName("");setCreateViewOpen(false);}
+    });
   };
   const pipelinesQuery=useQuery(useCallback(allPipelines,[]));
   const pipelines=pipelinesQuery.data?.pipelines??[];
@@ -200,6 +233,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
     setEditorMode(mode);mutation.changed();
   };
   const editPipeline=async(pipeline?:SalesPipeline)=>{
+    if(pipelineMutation.busy||pipelineMutation.pending)return;
     try {
       // A catalog mutation may have committed before the React list re-renders.
       // Always open an existing editor with the current CAS version from Rust,
@@ -239,6 +273,8 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
     <PageHeader title="Сделки"/><QueryNotice query={pipelinesQuery}/>
     <Button variant="secondary" disabled={pipelinesQuery.busy}
       onClick={()=>void pipelinesQuery.reload().catch(()=>{})}>Повторить загрузку</Button>
+    <MutationNotice state={pipelineMutation}/>
+    <MutationNotice state={viewMutation}/>
     <MutationNotice state={mutation}/>
   </>;
   const currencyDefinitions=pipelinesQuery.data.currencies;
@@ -252,8 +288,10 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
         onReopen={()=>void open(focusedDealId,"reopen")}/>
     </section>:<>
     <PageHeader title="Сделки" description="Сначала все сделки из всех воронок. Выберите воронку для Kanban: количество по этапам вычисляется на сервере, колонки имеют независимую пагинацию." actions={<>
-      <Button variant="secondary" onClick={()=>void editPipeline()}>Создать воронку</Button>{" "}
-      {activePipeline&&<Button variant="secondary" onClick={()=>void editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
+      <Button variant="secondary" disabled={pipelineMutation.busy||pipelineMutation.pending}
+        onClick={()=>void editPipeline()}>Создать воронку</Button>{" "}
+      {activePipeline&&<Button variant="secondary" disabled={pipelineMutation.busy||pipelineMutation.pending}
+        onClick={()=>void editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
       <Button disabled={mutation.busy||mutation.pending||editorRead.busy||!activePipeline||!readyStage} onClick={()=>{
         setSelected(undefined);setAdvance(undefined);setFormAccountId("");
         setProbabilityChoice(String(ProbabilitySource.STAGE_DEFAULT));
@@ -272,23 +310,23 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
         {savedViews.map(view=><option value={view.viewId} key={view.viewId}>{view.name}</option>)}
       </SelectField>
       {" "}
-      <Button variant="secondary" onClick={()=>{
+      <Button variant="secondary" disabled={viewMutation.busy||viewMutation.pending} onClick={()=>{
         if(!selectedView)setViewName("");
         viewMutation.changed();setCreateViewOpen(true);
       }}>Сохранить как новое</Button>
       {selectedView&&<>
         {" "}
-        <Button variant="secondary" disabled={viewMutation.busy}
+        <Button variant="secondary" disabled={viewMutation.busy||viewMutation.pending}
           onClick={()=>saveView()}>Обновить представление</Button>
         {" "}
-        <Button variant="secondary" disabled={viewMutation.busy}
+        <Button variant="secondary" disabled={viewMutation.busy||viewMutation.pending}
           onClick={()=>saveView(true)}>Архивировать представление</Button>
       </>}
       {(selectedView||createViewOpen)&&<TextField label="Название представления"
         value={viewName} onChange={e=>{setViewName(e.target.value);viewMutation.changed();}}
         required/>}
       {createViewOpen&&<p>
-        <Button disabled={viewMutation.busy||!viewName.trim()}
+        <Button disabled={viewMutation.busy||viewMutation.pending||!viewName.trim()}
           onClick={()=>saveView(false,true)}>Сохранить новое представление</Button>{" "}
         <Button variant="secondary" onClick={()=>setCreateViewOpen(false)}>Отмена</Button>
       </p>}
@@ -579,24 +617,26 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       }}>
       <form onChange={()=>{pipelineMutation.changed();setPipelineDirty(true);}} onSubmit={e=>{
         e.preventDefault();
-        void pipelineMutation.run(()=>{
+        void pipelineMutation.runIntent(()=>{
           const stages=stageEdits.map(stage=>({
             stageId:stage.stageId,name:stage.name,
             probabilityBasisPoints:basisPoints(stage.probability),archived:stage.archived
           }));
-          return pipelineEditor==="new"?
-            api.deals.createPipeline({
+          if(pipelineEditor==="new")return prepareMutation(
+            input=>api.deals.createPipeline(input),{
               pipelineId:pipelineDraftId,name:pipelineName,stages,
               precondition:{idempotencyKey:pipelineMutation.key}
-            }):
-            pipelineEditor?
-              api.deals.updatePipeline({
-                pipelineId:pipelineEditor.pipelineId,name:pipelineName,stages,
-                archived:pipelineArchived,
-                precondition:{idempotencyKey:pipelineMutation.key,
-                  expectedVersion:pipelineEditor.version}
-              }):
-              Promise.reject(Error("Воронка не выбрана"));
+            },pipelineDraftId
+          );
+          if(pipelineEditor)return prepareMutation(
+            input=>api.deals.updatePipeline(input),{
+              pipelineId:pipelineEditor.pipelineId,name:pipelineName,stages,
+              archived:pipelineArchived,
+              precondition:{idempotencyKey:pipelineMutation.key,
+                expectedVersion:pipelineEditor.version}
+            },pipelineEditor.pipelineId
+          );
+          throw Error("Воронка не выбрана");
         },async()=>{
           const destination=pipelineEditor==="new"?pipelineDraftId:pipelineEditor?.pipelineId;
           setPipelineDirty(false);setPipelineEditor(null);
@@ -630,7 +670,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           setStageEdits(before=>[...before,{stageId:newId(),name:"",probability:"10",archived:false}]);
           pipelineMutation.changed();setPipelineDirty(true);
         }}>Добавить этап</Button>{" "}
-        <Button type="submit" disabled={pipelineMutation.busy}>Сохранить воронку</Button>{" "}
+        <Button type="submit" disabled={pipelineMutation.busy||pipelineMutation.pending}>Сохранить воронку</Button>{" "}
         <Button type="button" variant="secondary" onClick={()=>{
           if(!pipelineDirty||window.confirm("Несохранённые изменения воронки будут потеряны. Закрыть?"))
             setPipelineEditor(null);
