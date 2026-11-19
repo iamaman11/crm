@@ -185,6 +185,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // single request header into the original Rust Worker, never real secrets.
    const privateCookie="crm-s3-cookie-"+runId;
    const privateHeader="crm-s3-header-"+runId;
+   const privateAuthorization="Bearer crm-s3-authorization-"+runId;
+   const privateJwt="eyJhbGciOiJub25lIn0.eyJzdWIiOiJjcm0tc3ludGhldGljIn0.signature-"+runId;
+   const privateQuery="crm-s3-query-"+runId;
    await context.addCookies([{name:"crm_s3_test_cookie",value:privateCookie,url:base}]);
    let privateHeaderRequests=0;
    const privateRoute=async route=>{
@@ -192,7 +195,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      assert.ok((headers.cookie??"").includes("crm_s3_test_cookie="+privateCookie),
        "Synthetic test cookie must be present in the real signed request");
      privateHeaderRequests++;
-     await route.continue({headers:{...headers,"x-crm-s3-test-probe":privateHeader}});
+     const url=new URL(route.request().url());
+     url.searchParams.set("crm_s3_test",privateQuery);
+     await route.continue({url:url.toString(),headers:{
+       ...headers,"x-crm-s3-test-probe":privateHeader,
+       authorization:privateAuthorization,"x-crm-s3-test-jwt":privateJwt
+     }});
    };
    const createPartyRoute="**/crm.parties.v3.PartyService/CreateParty";
    await page.route(createPartyRoute,privateRoute);
@@ -207,7 +215,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    syntheticPrivateProbes.push(
      {kind:"party-name",request_id:firstMutationId,value:"Browser Party "+runId},
      {kind:"cookie",request_id:firstMutationId,value:privateCookie},
-     {kind:"header",request_id:firstMutationId,value:privateHeader});
+     {kind:"header",request_id:firstMutationId,value:privateHeader},
+     {kind:"authorization",request_id:firstMutationId,value:privateAuthorization},
+     {kind:"jwt",request_id:firstMutationId,value:privateJwt},
+     {kind:"query-string",request_id:firstMutationId,value:privateQuery});
    partyId=await firstId("crm_party_records","display_name","Browser Party "+runId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+partyId+"'"))[0].n,1);
    await page.reload();
@@ -493,6 +504,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Предпочтительный",{exact:true}).check();
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"UpdateContactPoint");
    assert.equal((await sql("SELECT version FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].version,2);
+   const privatePhone="+447700900"+runId.slice(-3);
+   await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
+   await selectPagedPicker(page,"Участник",partyId);
+   await page.getByLabel("Тип контакта",{exact:true}).selectOption("2");
+   await page.getByLabel("Значение контакта",{exact:true}).fill(privatePhone);
+   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
+   syntheticPrivateProbes.push({kind:"contact-phone",request_id:writes.at(-1)?.request_id,value:privatePhone});
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_contact_point_records WHERE tenant='"+tenantSql+
+     "' AND party_id='"+partyId+"' AND normalized_value='"+privatePhone+"'"))[0].n,1);
    await navigate("tasks","Задачи");
    await page.getByRole("button",{name:"Новая задача",exact:true}).click();
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Task "+runId);
@@ -1168,6 +1188,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Новый профиль",exact:true}).click();
    await page.getByLabel("Ключ провайдера",{exact:true}).fill(providerKey);
    await page.getByLabel("Лицензия",{exact:true}).fill("Browser test license");
+   await page.getByLabel("Имена ссылок на учётные данные (не секреты)",{exact:true})
+     .fill("browser-credential-handle-"+runId);
    await page.getByLabel("Начало действия",{exact:true}).fill("2026-11-12T12:00");
    assert.equal(await page.getByLabel("Начало действия",{exact:true}).inputValue(),"2026-11-12T12:00");
    const profileDialog=page.getByRole("dialog");
@@ -1183,7 +1205,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(s5bProfileCreated.length,1);
    syntheticPrivateProbes.push(
      {kind:"enrichment-provider-key",request_id:s5bProfileRequestId,value:providerKey},
-     {kind:"enrichment-license",request_id:s5bProfileRequestId,value:"Browser test license"});
+     {kind:"enrichment-license",request_id:s5bProfileRequestId,value:"Browser test license"},
+     {kind:"enrichment-credential-handle",request_id:s5bProfileRequestId,
+       value:"browser-credential-handle-"+runId});
    const acceptProfileReload=dialog=>void dialog.accept();
    page.on("dialog",acceptProfileReload);
    try{await page.reload();}finally{page.off("dialog",acceptProfileReload);}
