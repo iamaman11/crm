@@ -54,13 +54,12 @@ export function useQuery<T>(load:ReadLoad<T>) {
 }
 
 type ReceiptProof=Pick<MutationReceipt,"requestId"|"originalRequestId"|"resourceVersion">;
-type MutationWrite=()=>Promise<{receipt?:MutationReceipt|undefined}>;
-type ReceiptMarker={dealId:string;key:string;expectedVersion:string};
+type MutationWrite=()=>Promise<{receipt?:MutationReceipt|undefined;changed?:boolean|undefined}>;
+type ReceiptMarker={resourceId:string;key:string;expectedVersion:string};
 type MutationIntent={write:MutationWrite;refresh:(()=>Promise<unknown>)|undefined}&
   ({preserve:false}|{preserve:true;marker:ReceiptMarker});
 type PreparedMutation={write:MutationWrite;marker:ReceiptMarker};
 type ReceiptInput={
-  dealId?:string|undefined;
   precondition?:{idempotencyKey?:string|undefined;expectedVersion?:bigint|undefined}|undefined;
 };
 type Pending={kind:"live";intent:Extract<MutationIntent,{preserve:true}>}|
@@ -81,11 +80,15 @@ function restoredPending(storageKey:string|undefined):Pending|null {
     if(raw===null)return null;
     const value:unknown=JSON.parse(raw);
     if(value!==null&&typeof value==="object"&&
-      "dealId" in value&&typeof value.dealId==="string"&&value.dealId.length>0&&
       "key" in value&&typeof value.key==="string"&&/^[a-f0-9-]{36}$/i.test(value.key)&&
       "expectedVersion" in value&&typeof value.expectedVersion==="string"&&
-      /^(0|[1-9][0-9]{0,18})$/.test(value.expectedVersion))
-      return {kind:"stored",marker:{dealId:value.dealId,key:value.key,expectedVersion:value.expectedVersion}};
+      /^(0|[1-9][0-9]{0,18})$/.test(value.expectedVersion)) {
+      // Read legacy in-flight Deal markers written by the previously accepted S1.
+      const id="resourceId" in value?value.resourceId:
+        "dealId" in value?value.dealId:undefined;
+      if(typeof id==="string"&&id.length>0)
+        return {kind:"stored",marker:{resourceId:id,key:value.key,expectedVersion:value.expectedVersion}};
+    }
   } catch {/* Unreadable evidence is not proof that no command is pending. */}
   return {kind:"unreadable"};
 }
@@ -95,14 +98,21 @@ function matchesReceipt(marker:ReceiptMarker,receipt:ReceiptProof|undefined):
   return !!receipt?.requestId&&!!receipt.originalRequestId&&
     receipt.resourceVersion===BigInt(marker.expectedVersion)+1n;
 }
+// A signed mutation's own receipt proves the attempted write; older owners
+// do not carry originalRequestId in the write response. Recovery via GetX
+// deliberately demands the stronger persisted provenance above.
+function matchesWriteReceipt(marker:ReceiptMarker,receipt:MutationReceipt|undefined):boolean {
+  return !!receipt?.requestId&&receipt.resourceVersion===BigInt(marker.expectedVersion)+1n;
+}
 
 export function prepareMutation<Input extends ReceiptInput, Result extends {receipt?:MutationReceipt|undefined}>(
-  send:(input:Input)=>Promise<Result>, input:NoInfer<Input>,
+  send:(input:Input)=>Promise<Result>, input:NoInfer<Input>, resourceId:string,
 ):PreparedMutation {
   const snapshot=structuredClone(input);
-  const {dealId,precondition}=snapshot;
-  if(!dealId||!precondition?.idempotencyKey)throw Error("Отсутствует идентификатор исходной операции.");
-  return {write:()=>send(snapshot),marker:{dealId,key:precondition.idempotencyKey,
+  const {precondition}=snapshot;
+  if(!resourceId||!precondition?.idempotencyKey)
+    throw Error("Отсутствует идентификатор исходной операции.");
+  return {write:()=>send(snapshot),marker:{resourceId,key:precondition.idempotencyKey,
     expectedVersion:String(precondition.expectedVersion??0n)}};
 }
 
@@ -124,7 +134,7 @@ export function useMutation(recovery?:RecoveryOptions) {
       const stored=restoredPending(recovery.storageKey);
       // A read may finish after navigation. Never remove another intent.
       if(stored?.kind==="stored"&&(!marker||stored.marker.key!==marker.key||
-        stored.marker.dealId!==marker.dealId||stored.marker.expectedVersion!==marker.expectedVersion)){
+        stored.marker.resourceId!==marker.resourceId||stored.marker.expectedVersion!==marker.expectedVersion)){
         changePending(stored);return false;
       }
       try {
@@ -149,9 +159,10 @@ export function useMutation(recovery?:RecoveryOptions) {
     if(intent.preserve)changePending({kind:"live",intent});
     try {
       const result=await intent.write();
-      if(intent.preserve&&!matchesReceipt(intent.marker,result.receipt))
+      if(intent.preserve&&!matchesWriteReceipt(intent.marker,result.receipt))
         throw Error("Ответ без совпадающего подтверждения записи.");
-      const saved=result.receipt?.replayed?"Сохранено ранее. Повторная запись не выполнялась.":"Сохранено.";
+      const saved=result.changed===false?"Изменений не было.":result.receipt?.replayed?
+        "Сохранено ранее. Повторная запись не выполнялась.":"Сохранено.";
       const correlation=result.receipt?.requestId?" Запрос: "+result.receipt.requestId:"";
       const original=result.receipt?.originalRequestId&&result.receipt.originalRequestId!==result.receipt.requestId?
         " Исходная запись: "+result.receipt.originalRequestId:"";
