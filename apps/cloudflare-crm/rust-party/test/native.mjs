@@ -1273,6 +1273,27 @@ assert.equal(consentReplay.status,200,describeProtobuf(consentReplay.body));
 assert.equal(consentReplay.body.receipt?.replayed,true);
 assert.equal((await consentV2("SuppressCommunication",admin,{
   ...denyInput,purpose:"marketing.different"})).status,409);
+const consentAuditBeforeRead=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+denyInput.authorizationId+"'"))[0].n;
+const consentProof=await consentV2("GetConsentAuthorization",viewer,{
+  authorizationId:denyInput.authorizationId,
+  receiptIdempotencyKey:denyInput.precondition.idempotencyKey});
+assert.equal(consentProof.status,200,describeProtobuf(consentProof.body));
+assert.equal(consentProof.body.authorization?.authorizationId,denyInput.authorizationId);
+assert.equal(consentProof.body.confirmedMutation?.originalRequestId,suppressed.headers.get("x-request-id"));
+assert.equal(consentProof.body.confirmedMutation?.requestId,consentProof.headers.get("x-request-id"));
+assert.equal(consentProof.body.confirmedMutation?.resourceVersion,1n);
+assert.equal((await consentV2("GetConsentAuthorization",tenantB,{
+  authorizationId:denyInput.authorizationId,
+  receiptIdempotencyKey:denyInput.precondition.idempotencyKey})).status,404);
+const wrongConsentProof=await consentV2("GetConsentAuthorization",viewer,{
+  authorizationId:denyInput.authorizationId,receiptIdempotencyKey:"wrong-consent-key"});
+assert.equal(wrongConsentProof.status,200);
+assert.equal(wrongConsentProof.body.confirmedMutation,undefined,
+  "A different tenant-bound idempotency key cannot prove this write");
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+  "AND subject_id='"+denyInput.authorizationId+"'"))[0].n,consentAuditBeforeRead,
+  "Consent receipt lookup is read-only");
 const consentDenied=await consentV2("EvaluateConsent",viewer,consentScope);
 assert.equal(consentDenied.status,200,describeProtobuf(consentDenied.body));
 assert.equal(consentDenied.body.allowed,false);
