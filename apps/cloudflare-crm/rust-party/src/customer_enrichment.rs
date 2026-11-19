@@ -272,6 +272,57 @@ pub(super) async fn mapping(
         .map(|s| decode_mapping(&s))
         .transpose()
 }
+
+#[derive(Deserialize)]
+struct CommitRow {
+    state: String,
+    request_id: String,
+}
+async fn committed_row(
+    db: &D1Database,
+    table: &str,
+    kind: &str,
+    tenant: &str,
+    key: &str,
+) -> Result<Option<CommitRow>> {
+    // The immutable owner row carries the original request id and digest.
+    // Its existing trigger receipt must match tenant, kind, digest and snapshot.
+    // No parallel receipt table or migration is required.
+    let query = format!(
+        "SELECT record.state,record.request_id FROM {table} AS record INNER JOIN crm_enrichment_receipts AS receipt ON receipt.tenant=record.tenant AND receipt.key=record.idem_key AND receipt.kind=? AND receipt.digest=record.idem_digest AND receipt.state=record.state WHERE record.tenant=? AND record.idem_key=? AND length(trim(record.request_id))>0"
+    );
+    bind(
+        db,
+        &query,
+        &[
+            JsValue::from_str(kind),
+            JsValue::from_str(tenant),
+            JsValue::from_str(key),
+        ],
+    )?
+    .first::<CommitRow>(None)
+    .await
+}
+pub(super) async fn profile_by_receipt(
+    db: &D1Database,
+    tenant: &str,
+    key: &str,
+) -> Result<Option<(ProviderProfileVersion, String)>> {
+    let Some(row) = committed_row(db, PROFILES, "profile", tenant, key).await? else {
+        return Ok(None);
+    };
+    Ok(Some((decode_profile(&row.state)?, row.request_id)))
+}
+pub(super) async fn mapping_by_receipt(
+    db: &D1Database,
+    tenant: &str,
+    key: &str,
+) -> Result<Option<(MappingVersion, String)>> {
+    let Some(row) = committed_row(db, MAPPINGS, "mapping", tenant, key).await? else {
+        return Ok(None);
+    };
+    Ok(Some((decode_mapping(&row.state)?, row.request_id)))
+}
 #[derive(Deserialize)]
 struct PageRow {
     id: String,
