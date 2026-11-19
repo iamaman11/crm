@@ -191,13 +191,52 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, enrichment_wire::GetProviderProfileRequest>,
     ) -> ServiceResult<enrichment_wire::GetProviderProfileResponse> {
-        Self::id(req.profile_version_id)?;
-        let value = owner::profile(&self.d1()?, &self.actor.tenant, req.profile_version_id)
+        let input = req.to_owned_message();
+        let key = receipt_key(input.receipt_idempotency_key.as_deref())?;
+        let db = self.d1()?;
+        let (value, original_request_id) = if input.profile_version_id.is_empty() {
+            let key = key.ok_or_else(|| {
+                ConnectError::invalid_argument("ENRICHMENT_PROFILE_ID_OR_RECEIPT_REQUIRED")
+            })?;
+            let (value, original_request_id) = owner::profile_by_receipt(
+                &db,
+                &self.actor.tenant,
+                key,
+            )
             .await
-            .map_err(|_| ConnectError::internal("profile D1 read failed"))?
+            .map_err(|_| ConnectError::unavailable("ENRICHMENT_RECEIPT_READ_FAILED"))?
             .ok_or_else(|| ConnectError::not_found("ENRICHMENT_PROVIDER_PROFILE_NOT_FOUND"))?;
+            (value, Some(original_request_id))
+        } else {
+            Self::id(&input.profile_version_id)?;
+            let value = owner::profile(&db, &self.actor.tenant, &input.profile_version_id)
+                .await
+                .map_err(|_| ConnectError::internal("profile D1 read failed"))?
+                .ok_or_else(|| ConnectError::not_found("ENRICHMENT_PROVIDER_PROFILE_NOT_FOUND"))?;
+            let original_request_id = if let Some(key) = key {
+                owner::profile_by_receipt(&db, &self.actor.tenant, key)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("ENRICHMENT_RECEIPT_READ_FAILED"))?
+                    .filter(|(saved, _)| {
+                        saved.version_id().as_str() == input.profile_version_id.as_str()
+                    })
+                    .map(|(_, request_id)| request_id)
+            } else {
+                None
+            };
+            (value, original_request_id)
+        };
+        let confirmed_mutation = original_request_id.map(|original_request_id| {
+            core_v2::MutationCommitEvidence {
+                request_id: self.request_id.clone(),
+                original_request_id,
+                resource_version: 1,
+                ..Default::default()
+            }
+        });
         RpcResponse::ok(enrichment_wire::GetProviderProfileResponse {
             profile: Some(Self::profile(&value)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }
@@ -207,13 +246,52 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, enrichment_wire::GetMappingRequest>,
     ) -> ServiceResult<enrichment_wire::GetMappingResponse> {
-        Self::id(req.mapping_version_id)?;
-        let value = owner::mapping(&self.d1()?, &self.actor.tenant, req.mapping_version_id)
+        let input = req.to_owned_message();
+        let key = receipt_key(input.receipt_idempotency_key.as_deref())?;
+        let db = self.d1()?;
+        let (value, original_request_id) = if input.mapping_version_id.is_empty() {
+            let key = key.ok_or_else(|| {
+                ConnectError::invalid_argument("ENRICHMENT_MAPPING_ID_OR_RECEIPT_REQUIRED")
+            })?;
+            let (value, original_request_id) = owner::mapping_by_receipt(
+                &db,
+                &self.actor.tenant,
+                key,
+            )
             .await
-            .map_err(|_| ConnectError::internal("mapping D1 read failed"))?
+            .map_err(|_| ConnectError::unavailable("ENRICHMENT_RECEIPT_READ_FAILED"))?
             .ok_or_else(|| ConnectError::not_found("ENRICHMENT_MAPPING_NOT_FOUND"))?;
+            (value, Some(original_request_id))
+        } else {
+            Self::id(&input.mapping_version_id)?;
+            let value = owner::mapping(&db, &self.actor.tenant, &input.mapping_version_id)
+                .await
+                .map_err(|_| ConnectError::internal("mapping D1 read failed"))?
+                .ok_or_else(|| ConnectError::not_found("ENRICHMENT_MAPPING_NOT_FOUND"))?;
+            let original_request_id = if let Some(key) = key {
+                owner::mapping_by_receipt(&db, &self.actor.tenant, key)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("ENRICHMENT_RECEIPT_READ_FAILED"))?
+                    .filter(|(saved, _)| {
+                        saved.version_id().as_str() == input.mapping_version_id.as_str()
+                    })
+                    .map(|(_, request_id)| request_id)
+            } else {
+                None
+            };
+            (value, original_request_id)
+        };
+        let confirmed_mutation = original_request_id.map(|original_request_id| {
+            core_v2::MutationCommitEvidence {
+                request_id: self.request_id.clone(),
+                original_request_id,
+                resource_version: 1,
+                ..Default::default()
+            }
+        });
         RpcResponse::ok(enrichment_wire::GetMappingResponse {
             mapping: Some(Self::mapping(&value)).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }
