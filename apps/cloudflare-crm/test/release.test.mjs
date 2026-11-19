@@ -363,7 +363,7 @@ function run(mode,variant="valid"){
    {path:contactPath,request_id:contactCreateId,
      audit:[{action:"contact_points.create",subject_id:"contact",actor:"service:synthetic.access"}]},
    {path:taskPath,request_id:taskCreateId,
-     audit:[{action:"tasks.create",subject_id:"task",actor:"service:synthetic.access"}]},
+     audit:[{action:"activity_tasks.create",subject_id:"task",actor:"service:synthetic.access"}]},
    {path:contactPath,request_id:contactPhoneId,
      audit:[{action:"contact_points.create",subject_id:"phone",actor:"service:synthetic.access"}]},
    {path:consentPath,request_id:consentWriteId,

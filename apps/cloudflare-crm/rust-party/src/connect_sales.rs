@@ -100,7 +100,7 @@ fn wire_precondition(
     }
 }
 
-// S5a: one read-only, tenant-bound lookup for the existing original D1 receipts.
+// S5: one read-only, tenant-bound lookup for original owner receipts.
 // Receipt provenance is written by the SAME trigger as domain state and audit;
 // pre-0017 rows deliberately have NULL provenance and cannot certify a commit.
 #[derive(Clone, Copy)]
