@@ -439,7 +439,9 @@ async function verifyData(){
   const syntheticFormats={
     "party-name":/^Browser Party [0-9]{10,}$/,
     "contact-email":/^browser-[0-9]{10,}@example\.org$/,
-    "task-subject":/^Browser Task [0-9]{10,}$/
+    "task-subject":/^Browser Task [0-9]{10,}$/,
+    "cookie":/^crm-s3-cookie-[0-9]{10,}$/,
+    "header":/^crm-s3-header-[0-9]{10,}$/
   };
   const probeValuesByRequest=new Map(),probeKinds=[];
   for(const probe of evidence.synthetic_private_probes??[]){
@@ -449,10 +451,12 @@ async function verifyData(){
       "Synthetic privacy probe must refer to a committed browser request");
     assert.ok(!probeKinds.includes(probe.kind),"Duplicate privacy probe kind");
     probeKinds.push(probe.kind);
-    probeValuesByRequest.set(probe.request_id,probe.value);
+    const values=probeValuesByRequest.get(probe.request_id)??[];
+    values.push(probe.value);
+    probeValuesByRequest.set(probe.request_id,values);
   }
   assert.deepEqual(probeKinds.sort(),Object.keys(syntheticFormats).sort(),
-    "Party, Contact and Task synthetic private-value probes are mandatory");
+    "Party, Contact, Task, cookie and header probes are mandatory");
   // Observe every exact browser request, including rejected requests and read-only RPCs.
   // Audit rows are required only for committed mutations, never invented for reads.
   let pending=[...requests.values()];
@@ -540,9 +544,10 @@ async function verifyData(){
       });
       const linked=(data.events?.events||[]).filter(event=>
         (event.source?.traceId??event.$metadata?.traceId)===traceId);
-      const syntheticValue=probeValuesByRequest.get(entry.request_id);
-      if(syntheticValue)assert.ok(!JSON.stringify(linked).includes(syntheticValue),
-        "A synthetic private business value appeared in a Cloudflare trace");
+      const eventsText=JSON.stringify(linked);
+      for(const marker of probeValuesByRequest.get(entry.request_id)??[])
+        assert.ok(!eventsText.includes(marker),
+          "A synthetic private value appeared in a Cloudflare trace");
       assert.ok(!linked.some(event=>event.$metadata?.type==="cf-worker-event"),
         "Unsafe automatic invocation log in an accepted CRM trace");
       const spans=linked.filter(event=>event.$metadata?.type==="span");
