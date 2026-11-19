@@ -4,7 +4,7 @@ import type {PartyRelationship} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId,timestamp,dateText} from "./api";
 import {RelationshipDirectionality,RelationshipStatus} from "@ultimate-crm/client/cloudflare";
 import {enumValue} from "./enumFields";
-import {useQuery,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
+import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker} from "./Pickers";
 import {TimeFields} from "./TimeFields";
 import {timePatch} from "./timePatch";
@@ -15,40 +15,46 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
   const [selected,setSelected]=useState<PartyRelationship>();
   const [editorOpen,setEditorOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
-  const mutation=useMutation();
   const query=useQuery(useCallback((signal:AbortSignal)=>api.relationships.listPartyRelationships({page:{pageSize:25,pageToken:cursor},
     ...(partyId?{partyId}:{})},{signal}),[cursor,partyId]));
+  const mutation=useMutation({
+    storageKey:"crm.relationship.pending.v1",
+    lookup:async({resourceId,key},signal)=>(await api.relationships.getPartyRelationship({
+      relationshipId:resourceId,receiptIdempotencyKey:key
+    },{signal})).confirmedMutation,
+    refresh:query.reload
+  });
   return <>
-    <PageHeader title="Связи" description="Отношения между людьми и организациями." actions={<Button onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать связь</Button>}/>
+    <PageHeader title="Связи" description="Отношения между людьми и организациями." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать связь</Button>}/>
     <TextField label="Фильтр по ID участника" value={partyId} onChange={e=>{setPartyId(e.target.value);setCursor("");}}/>
     <QueryNotice query={query}/>
     {query.data?.relationships.map(r=><Card key={r.relationshipId} title={r.type?.code??"Связь"}>
       <p>{r.type?.fromRole}: {r.fromPartyId} → {r.type?.toRole}: {r.toPartyId}</p>
       <p>{r.status===RelationshipStatus.ACTIVE?"Активна":r.status===RelationshipStatus.INACTIVE?"Неактивна":"Неизвестный статус"} · с {dateText(r.validFrom)} до {dateText(r.validUntil)}</p>
-      <Button variant="secondary" onClick={async()=>{
+      <Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={async()=>{
         try {setSelected((await api.relationships.getPartyRelationship({relationshipId:r.relationshipId})).relationship);setEditorOpen(true);mutation.changed();}
         catch(error){await mutation.run(()=>Promise.reject(error));}
       }}>Редактировать связь</Button>
     </Card>)}
     {!query.busy&&query.data?.relationships.length===0&&<p>Связей пока нет.</p>}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
-    <RecordPanel open={editorOpen} title={selected?"Изменить связь":"Новая связь"} onClose={()=>{setEditorOpen(false);setSelected(undefined);}}><form key={selected?selected.relationshipId+selected.version:draftId}
+    <RecordPanel open={editorOpen} title={selected?"Изменить связь":"Новая связь"} onClose={()=>{if(mutation.busy||mutation.pending)return;setEditorOpen(false);setSelected(undefined);}}><form key={selected?selected.relationshipId+selected.version:draftId}
       onChange={mutation.changed} onSubmit={e=>{
         e.preventDefault();const data=new FormData(e.currentTarget);
-        void mutation.run(()=>{
+        void mutation.runIntent(()=>{
           if(selected){
             const validFrom=timePatch(data,"from"),validUntil=timePatch(data,"until");
-            return api.relationships.updatePartyRelationship({relationshipId:selected.relationshipId,
+            return prepareMutation(api.relationships.updatePartyRelationship,{relationshipId:selected.relationshipId,
               status:enumValue(field(data,"status"),[RelationshipStatus.ACTIVE,RelationshipStatus.INACTIVE],"Статус связи"),...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
-              precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}});
+              precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}},selected.relationshipId);
           }
           const validFrom=timestamp(field(data,"from")),validUntil=timestamp(field(data,"until"));
-          return api.relationships.createPartyRelationship({relationshipId:draftId,
+          return prepareMutation(api.relationships.createPartyRelationship,{relationshipId:draftId,
             fromPartyId:field(data,"fromParty"),toPartyId:field(data,"toParty"),
             type:{code:field(data,"code"),directionality:enumValue(field(data,"direction"),[RelationshipDirectionality.DIRECTIONAL,RelationshipDirectionality.RECIPROCAL],"Направление"),
               fromRole:field(data,"fromRole"),toRole:field(data,"toRole")},
             ...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
-            precondition:{idempotencyKey:mutation.key}});
+            precondition:{idempotencyKey:mutation.key}},draftId);
         },async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await query.reload();});
       }}><FormGrid>
       {!selected&&<><PartyPicker name="fromParty" label="Первый участник"/><PartyPicker name="toParty" label="Второй участник"/>
@@ -58,8 +64,8 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
         <SelectField label="Направление" name="direction" defaultValue="1"><option value={RelationshipDirectionality.DIRECTIONAL}>Направленная</option><option value={RelationshipDirectionality.RECIPROCAL}>Взаимная</option></SelectField></>}
       {selected&&<SelectField label="Статус" name="status" defaultValue={selected.status}><option value={RelationshipStatus.ACTIVE}>Активна</option><option value={RelationshipStatus.INACTIVE}>Неактивна</option></SelectField>}
       <TimeFields name="from" label="Действует с" editing={!!selected}/><TimeFields name="until" label="Действует до" editing={!!selected}/>
-    </FormGrid><Button type="submit" disabled={mutation.busy}>Сохранить связь</Button>{" "}
-    {selected&&<Button variant="secondary" onClick={()=>{setEditorOpen(false);setSelected(undefined);mutation.changed();}}>Отмена</Button>}
+    </FormGrid><Button type="submit" disabled={mutation.busy||mutation.pending}>Сохранить связь</Button>{" "}
+    {selected&&<Button type="button" variant="secondary" disabled={mutation.busy||mutation.pending} onClick={()=>{setEditorOpen(false);setSelected(undefined);mutation.changed();}}>Отмена</Button>
     </form>{mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}</RecordPanel>
     <MutationNotice state={mutation}/>
   </>;
