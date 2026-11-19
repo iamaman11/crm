@@ -3,7 +3,7 @@ import {Button,Card,RecordPanel,RecordActions,FeedbackPanel,FormGrid,PageHeader,
 import {api,field,newId} from "./api";
 import {CommunicationChannel,ConsentEffect,ConsentStatus,EvaluationReason} from "@ultimate-crm/client/cloudflare";
 import {enumValue} from "./enumFields";
-import {useQuery,useReadAction,useMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
+import {useQuery,useReadAction,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker} from "./Pickers";
 const reasonLabels:Partial<Record<EvaluationReason,string>>={
   [EvaluationReason.UNSPECIFIED]:"Не указано",
@@ -30,12 +30,18 @@ export function ConsentScreen() {
   const [partyId,setPartyId]=useState("");
   const [draftId,setDraftId]=useState(newId);
   const [composer,setComposer]=useState<"grant"|"suppress"|null>(null);
-  const mutation=useMutation();
   const evaluation=useReadAction<Awaited<ReturnType<typeof api.consents.evaluateConsent>>>();
   const query=useQuery(useCallback((signal:AbortSignal)=>api.consents.listConsentAuthorizations({page:{pageSize:25,pageToken:cursor},
     ...(partyId?{partyId}:{})},{signal}),[cursor,partyId]));
+  const mutation=useMutation({
+    storageKey:"crm.consents.pending.v1",
+    lookup:async({resourceId,key},signal)=>(await api.consents.getConsentAuthorization({
+      authorizationId:resourceId,receiptIdempotencyKey:key
+    },{signal})).confirmedMutation,
+    refresh:query.reload
+  });
   return <>
-    <PageHeader title="Коммуникации" description="Проверка разрешений, отзыв и запрет. Подписанный Access-владелец выдаёт личное согласие; сервисный администратор dev может проводить отдельный тестовый сценарий." actions={<RecordActions><Button onClick={()=>{setComposer("grant");mutation.changed();}}>Выдать согласие</Button><Button variant="secondary" onClick={()=>{setComposer("suppress");mutation.changed();}}>Запретить коммуникацию</Button></RecordActions>}/>
+    <PageHeader title="Коммуникации" description="Проверка разрешений, отзыв и запрет. Подписанный Access-владелец выдаёт личное согласие; сервисный администратор dev может проводить отдельный тестовый сценарий." actions={<RecordActions><Button disabled={mutation.busy||mutation.pending} onClick={()=>{setComposer("grant");mutation.changed();}}>Выдать согласие</Button><Button disabled={mutation.busy||mutation.pending} variant="secondary" onClick={()=>{setComposer("suppress");mutation.changed();}}>Запретить коммуникацию</Button></RecordActions>}/>
     <Card title="Проверить возможность контакта"><form onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
       void evaluation.run(signal=>api.consents.evaluateConsent(scope(data),{signal}));
@@ -49,23 +55,25 @@ export function ConsentScreen() {
     <QueryNotice query={query}/>
     {query.data?.authorizations.map(a=><Card key={a.authorizationId} title={a.effect===ConsentEffect.DENY?"Запрет":a.effect===ConsentEffect.GRANT?"Согласие":"Неизвестный тип"}>
       <p>{a.partyId} · {a.purpose} · {a.jurisdiction}</p><p>{a.status===ConsentStatus.ACTIVE?"Действует":a.status===ConsentStatus.WITHDRAWN?"Отозвано":"Неизвестный статус"} · версия {a.version.toString()}</p>
-      {a.effect===ConsentEffect.GRANT&&a.status===ConsentStatus.ACTIVE&&<Button variant="danger" disabled={mutation.busy}
-        onClick={()=>void mutation.run(()=>api.consents.withdrawConsentAuthorization({
-          authorizationId:a.authorizationId,
-          precondition:{idempotencyKey:mutation.key,expectedVersion:a.version}
-        }),query.reload)}>Отозвать согласие</Button>}
+      {a.effect===ConsentEffect.GRANT&&a.status===ConsentStatus.ACTIVE&&<Button variant="danger" disabled={mutation.busy||mutation.pending}
+        onClick={()=>void mutation.runIntent(
+          ()=>prepareMutation(api.consents.withdrawConsentAuthorization,{
+            authorizationId:a.authorizationId,
+            precondition:{idempotencyKey:mutation.key,expectedVersion:a.version}
+          },a.authorizationId),query.reload
+        )}>Отозвать согласие</Button>}
     </Card>)}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
-    <RecordPanel open={composer==="grant"} title="Согласие для подтверждённого email" onClose={()=>setComposer(null)}>
+    <RecordPanel open={composer==="grant"} title="Согласие для подтверждённого email" onClose={()=>{if(!mutation.busy&&!mutation.pending)setComposer(null);}}>
       <p>Сначала подтвердите email в разделе «Контакты». Сервисный администратор проверяет только тестовые контакты и записывается в аудит как агент, не как человек.</p>
       <form key={"grant-"+draftId} onChange={mutation.changed} onSubmit={e=>{
         e.preventDefault();const data=new FormData(e.currentTarget);
-        void mutation.run(()=>api.consents.grantVerifiedEmailConsent({
+        void mutation.runIntent(()=>prepareMutation(api.consents.grantVerifiedEmailConsent,{
           authorizationId:draftId,partyId:field(data,"partyId"),
           contactPointId:field(data,"verifiedContactId"),purpose:field(data,"grantPurpose"),
           jurisdiction:field(data,"grantJurisdiction"),
           precondition:{idempotencyKey:mutation.key}
-        }),async()=>{setComposer(null);setDraftId(newId());await query.reload();});
+        },draftId),async()=>{setComposer(null);setDraftId(newId());await query.reload();});
       }}>
         <FormGrid>
           <PartyPicker/>
@@ -73,18 +81,19 @@ export function ConsentScreen() {
           <TextField label="Цель согласия" name="grantPurpose" defaultValue="marketing" required/>
           <TextField label="Юрисдикция согласия" name="grantJurisdiction" defaultValue="EU" required/>
         </FormGrid>
-        <Button type="submit" disabled={mutation.busy}>Выдать согласие на email-коммуникацию</Button>
+        <Button type="submit" disabled={mutation.busy||mutation.pending}>Выдать согласие на email-коммуникацию</Button>
       </form>
-      {mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}
+      <MutationNotice state={mutation}/>
     </RecordPanel>
-    <RecordPanel open={composer==="suppress"} title="Запретить коммуникацию" onClose={()=>setComposer(null)}><form key={draftId} onChange={mutation.changed} onSubmit={e=>{
+    <RecordPanel open={composer==="suppress"} title="Запретить коммуникацию" onClose={()=>{if(!mutation.busy&&!mutation.pending)setComposer(null);}}><form key={draftId} onChange={mutation.changed} onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
-      void mutation.run(()=>api.consents.suppressCommunication({authorizationId:draftId,...scope(data),
-        jurisdiction:field(data,"jurisdiction"),precondition:{idempotencyKey:mutation.key}}),
-        async()=>{setComposer(null);setDraftId(newId());await query.reload();});
+      void mutation.runIntent(()=>prepareMutation(api.consents.suppressCommunication,{
+        authorizationId:draftId,...scope(data),
+        jurisdiction:field(data,"jurisdiction"),precondition:{idempotencyKey:mutation.key}
+      },draftId),async()=>{setComposer(null);setDraftId(newId());await query.reload();});
     }}><FormGrid><ScopeFields/><TextField label="Юрисдикция" name="jurisdiction" defaultValue="EU" required/></FormGrid>
-      <Button type="submit" disabled={mutation.busy} variant="danger">Запретить контакт</Button>
-    </form>{mutation.notice?.tone==="danger"&&<MutationNotice state={mutation}/>}</RecordPanel>
-    <MutationNotice state={mutation}/>
+      <Button type="submit" disabled={mutation.busy||mutation.pending} variant="danger">Запретить контакт</Button>
+    </form><MutationNotice state={mutation}/></RecordPanel>
+    {composer===null&&<MutationNotice state={mutation}/>}
   </>;
 }

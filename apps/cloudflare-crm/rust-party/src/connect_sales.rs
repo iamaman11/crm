@@ -111,6 +111,7 @@ enum CrudReceiptOwner {
     Relationship,
     Task,
     Privacy,
+    Consent,
 }
 impl CrudReceiptOwner {
     fn sql(self) -> &'static str {
@@ -137,6 +138,10 @@ impl CrudReceiptOwner {
             ),
             Self::Privacy => concat!(
                 "SELECT state,original_request_id FROM crm_privacy_case_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
+            Self::Consent => concat!(
+                "SELECT state,original_request_id FROM crm_consent_receipts",
                 " WHERE tenant=? AND key=?"
             ),
         }

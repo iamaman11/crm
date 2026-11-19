@@ -149,6 +149,47 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
         })
     }
     #[worker::send]
+    async fn get_consent_authorization(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, consent_wire::GetConsentAuthorizationRequest>,
+    ) -> ServiceResult<consent_wire::GetConsentAuthorizationResponse> {
+        let input = req.to_owned_message();
+        if input.authorization_id != input.authorization_id.trim()
+            || input.authorization_id.contains('/')
+        {
+            return Err(ConnectError::invalid_argument("CONSENT_AUTHORIZATION_ID_INVALID"));
+        }
+        let id = crm_consents::ConsentAuthorizationId::try_new(&input.authorization_id)
+            .map_err(|_| ConnectError::invalid_argument("CONSENT_AUTHORIZATION_ID_INVALID"))?;
+        let db = self.d1()?;
+        let item = consents::stored(&db, &self.actor.tenant, id.as_str())
+            .await
+            .map_err(|_| ConnectError::internal("CONSENT_READ_FAILED"))?
+            .ok_or_else(|| ConnectError::not_found("CONSENT_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let row = crud_receipt(&db, &self.actor.tenant, key, CrudReceiptOwner::Consent)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("CONSENT_RECEIPT_READ_FAILED"))?;
+                crud_commit_evidence(row, id.as_str(), &self.request_id, |state| {
+                    crm_consents::decode_consent_authorization_state(state.as_bytes())
+                        .map(|saved| {
+                            (saved.authorization_id().as_str().to_owned(), saved.version())
+                        })
+                        .map_err(|error| worker::Error::RustError(error.code))
+                })
+                .map_err(|_| ConnectError::unavailable("CONSENT_RECEIPT_DECODE_FAILED"))?
+            }
+        };
+        RpcResponse::ok(consent_wire::GetConsentAuthorizationResponse {
+            authorization: Some(Self::convert(&item)).into(),
+            confirmed_mutation: confirmed_mutation.into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
     async fn list_consent_authorizations(
         &self,
         _ctx: RequestContext,

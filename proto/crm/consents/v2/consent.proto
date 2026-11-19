@@ -100,6 +100,16 @@ message WithdrawConsentAuthorizationResponse {
   crm.core.v2.MutationReceipt receipt = 2;
 }
 
+// A tenant-scoped read, never permission to GRANT or replay a mutation.
+message GetConsentAuthorizationRequest {
+  string authorization_id = 1;
+  optional string receipt_idempotency_key = 2;
+}
+message GetConsentAuthorizationResponse {
+  ConsentAuthorization authorization = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+
 message ListConsentAuthorizationsRequest {
   crm.core.v2.PageRequest page = 1;
   optional string party_id = 2;
@@ -122,6 +132,9 @@ service ConsentAuthorizationService {
   }
   rpc WithdrawConsentAuthorization(WithdrawConsentAuthorizationRequest) returns (WithdrawConsentAuthorizationResponse) {
     option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetConsentAuthorization(GetConsentAuthorizationRequest) returns (GetConsentAuthorizationResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc ListConsentAuthorizations(ListConsentAuthorizationsRequest) returns (ListConsentAuthorizationsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;

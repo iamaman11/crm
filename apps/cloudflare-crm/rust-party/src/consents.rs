@@ -136,6 +136,22 @@ async fn receipt(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Rece
     .first::<Receipt>(None)
     .await
 }
+// Read the original owner state only; the receipt snapshot is verified separately.
+pub(super) async fn stored(
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+) -> Result<Option<ConsentAuthorization>> {
+    let row = bind(
+        db,
+        "SELECT state FROM crm_consent_records WHERE tenant=? AND id=?",
+        &[JsValue::from_str(tenant), JsValue::from_str(id)],
+    )?
+    .first::<Row>(None)
+    .await?;
+    row.map(|found| decode(&found.state)).transpose()
+}
+
 async fn party_exists(db: &D1Database, tenant: &str, id: &str) -> Result<bool> {
     Ok(bind(
         db,

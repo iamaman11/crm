@@ -1041,6 +1041,51 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await evaluate.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
    await page.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
    steps.push("Quality and consent evaluation/suppression");
+   // #471 S5b Consent DENY: verify immutable original commit after HTTP ack loss.
+   // The recovery must never issue a second suppression or create a GRANT.
+   await page.getByRole("button",{name:"Запретить коммуникацию",exact:true}).click();
+   const s5bConsentDialog=page.getByRole("dialog");
+   await selectPagedPicker(s5bConsentDialog,"Участник",partyId);
+   await s5bConsentDialog.getByLabel("Цель",{exact:true}).fill("s5b_recovery_"+runId);
+   const s5bConsentBefore=new Set((await sql("SELECT id FROM crm_consent_records WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
+   let s5bConsentCalls=0,s5bConsentRequestId;
+   const loseConsentAck=async route=>{
+     s5bConsentCalls++;
+     const committed=await route.fetch();
+     recordResponse(committed);
+     await assertMutation(committed,"SuppressCommunication");
+     s5bConsentRequestId=committed.headers()["x-request-id"];
+     await route.abort("failed");
+   };
+   const s5bConsentPath="**/crm.consents.v2.ConsentAuthorizationService/SuppressCommunication";
+   await page.route(s5bConsentPath,loseConsentAck);
+   await s5bConsentDialog.getByRole("button",{name:"Запретить контакт",exact:true}).click();
+   await s5bConsentDialog.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   await expect(s5bConsentDialog.getByRole("button",{name:"Запретить контакт",exact:true})).toBeDisabled();
+   const s5bConsentMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.consents.pending.v1")));
+   assert.deepEqual(Object.keys(s5bConsentMarker).sort(),["expectedVersion","key","resourceId"]);
+   assert.equal(s5bConsentMarker.expectedVersion,"0");
+   const s5bConsentCreated=(await sql("SELECT id FROM crm_consent_records WHERE tenant='"+tenantSql+"'"))
+     .filter(x=>!s5bConsentBefore.has(x.id));
+   assert.equal(s5bConsentCreated.length,1);
+   assert.equal(s5bConsentMarker.resourceId,s5bConsentCreated[0].id);
+   const acceptConsentReload=dialog=>void dialog.accept();
+   page.on("dialog",acceptConsentReload);
+   try{await page.reload();}finally{page.off("dialog",acceptConsentReload);}
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   await expect(page.getByRole("button",{name:"Запретить коммуникацию",exact:true})).toBeDisabled();
+   const s5bConsentRead=page.waitForResponse(r=>r.url().endsWith("/GetConsentAuthorization")
+     &&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   assert.equal((await s5bConsentRead).status(),200);
+   await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
+     .toContainText(s5bConsentRequestId);
+   assert.equal(s5bConsentCalls,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bConsentRequestId+
+     "' AND action='consents.operator_suppress'"))[0].n,1);
+   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.consents.pending.v1")),null);
+   await page.unroute(s5bConsentPath,loseConsentAck);
+   steps.push("S5b consent DENY lost acknowledgment: read-only receipt after reload, no duplicate write");
    await navigate("privacy","Запросы о данных");
    await page.getByRole("button",{name:"Новое обращение",exact:true}).click();
    const privacyBefore=new Set((await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'")).map(x=>x.id));

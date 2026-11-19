@@ -41,9 +41,7 @@ async function subprocessEntry(){
        assert.deepEqual(args,["wrangler","d1","migrations","apply","crm-dev","--remote"]);
        if(variant==="migration-fails")return{status:1};
        for(const name of readdirSync("apps/cloudflare-crm/migrations").sort()){
-         if(nfcLegacy&&name!=="0016_nfc_search_name.sql"&&
-            name!=="0017_s5a_commit_receipt_provenance.sql"&&
-            name!=="0018_privacy_commit_receipt_provenance.sql")continue;
+         if(nfcLegacy&&name<"0016_nfc_search_name.sql")continue;
          db.exec(readFileSync("apps/cloudflare-crm/migrations/"+name,"utf8"));
        }
        migrated=true;
