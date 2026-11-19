@@ -1367,6 +1367,70 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
    precondition:{idempotencyKey:"r3-grant2-"+secondId}};
  assert.equal((await consentV2("GrantVerifiedEmailConsent",admin,second)).status,200);
  assert.equal((await consentV2("EvaluateConsent",viewer,r3Scope)).body.allowed,true);
+
+ // #471 S5b Consent: the existing read endpoint proves the original receipt,
+ // even after the authorization has advanced to a later version.
+ const consentReceiptInput={authorizationId:r3Id,
+   receiptIdempotencyKey:r3Grant.precondition.idempotencyKey};
+ assert.equal((await consentV2("GetConsentAuthorization",null,consentReceiptInput)).status,401);
+ const consentAuditBefore=(await sql(
+   "SELECT COUNT(*) AS n FROM crm_audit WHERE subject_id=?",r3Id))[0].n;
+ const recoveredGrant=await consentV2("GetConsentAuthorization",viewer,consentReceiptInput);
+ assert.equal(recoveredGrant.status,200,describeProtobuf(recoveredGrant.body));
+ assert.equal(recoveredGrant.body.authorization?.status,2,
+   "Get returns the current withdrawn authorization");
+ assert.equal(recoveredGrant.body.confirmedMutation?.originalRequestId,
+   granted.headers.get("x-request-id"));
+ assert.equal(recoveredGrant.body.confirmedMutation?.resourceVersion,1n,
+   "receipt evidence retains the original grant version, not the current withdrawn version");
+ assert.equal(recoveredGrant.body.confirmedMutation?.requestId,
+   recoveredGrant.headers.get("x-request-id"));
+ assert.equal((await consentV2("GetConsentAuthorization",tenantB,consentReceiptInput)).status,404);
+ assert.equal((await consentV2("GetConsentAuthorization",viewer,{
+   ...consentReceiptInput,receiptIdempotencyKey:"short"})).status,400);
+ const missingConsentReceipt=await consentV2("GetConsentAuthorization",viewer,{
+   authorizationId:r3Id,receiptIdempotencyKey:"consent-missing-receipt-01"});
+ assert.equal(missingConsentReceipt.status,200);
+ assert.equal(missingConsentReceipt.body.confirmedMutation,undefined,
+   "a missing key is not evidence of a committed mutation");
+ const wrongConsentResource=await consentV2("GetConsentAuthorization",viewer,{
+   authorizationId:secondId,receiptIdempotencyKey:r3Grant.precondition.idempotencyKey});
+ assert.equal(wrongConsentResource.status,200);
+ assert.equal(wrongConsentResource.body.confirmedMutation,undefined,
+   "a receipt for another authorization cannot confirm this resource");
+ await sql("UPDATE crm_consent_receipts SET original_request_id=NULL WHERE tenant=? AND key=?",
+   "tenant-a",r3Grant.precondition.idempotencyKey);
+ try {
+   const legacyConsent=await consentV2("GetConsentAuthorization",viewer,consentReceiptInput);
+   assert.equal(legacyConsent.status,200);
+   assert.equal(legacyConsent.body.confirmedMutation,undefined,
+     "legacy receipts without original provenance are not certified");
+ } finally {
+   await sql("UPDATE crm_consent_receipts SET original_request_id=? WHERE tenant=? AND key=?",
+     granted.headers.get("x-request-id"),"tenant-a",r3Grant.precondition.idempotencyKey);
+ }
+ await sql("ALTER TABLE crm_consent_receipts RENAME TO fixture_unavailable_consent_receipts");
+ try {
+   const unavailableConsent=await consentV2("GetConsentAuthorization",viewer,consentReceiptInput);
+   assert.equal(unavailableConsent.status,503,
+     "an inaccessible receipt source must remain unconfirmed");
+   assert.equal((await consentV2("GetConsentAuthorization",viewer,{
+     authorizationId:r3Id})).status,200,
+     "ordinary Get remains available without receipt recovery");
+ } finally {
+   await sql("ALTER TABLE fixture_unavailable_consent_receipts RENAME TO crm_consent_receipts");
+ }
+ const restoredConsent=await consentV2("GetConsentAuthorization",viewer,consentReceiptInput);
+ assert.equal(restoredConsent.status,200);
+ assert.equal(restoredConsent.body.confirmedMutation?.originalRequestId,
+   granted.headers.get("x-request-id"));
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE subject_id=?",r3Id))[0].n,
+   consentAuditBefore,"read-only receipt recovery must never append an audit row");
+ console.log(JSON.stringify({event:"crm.native-s5b-consent-commit-provenance",result:"PASS",
+   original_request_id:true,original_version:true,tenant_isolation:true,
+   wrong_resource_rejected:true,legacy_null_fail_closed:true,
+   receipt_read_failure_unconfirmed:true,read_only:true}));
+
  const failingGrantId="r3-audit-fault-"+randomUUID();
  const failingKey="r3-audit-fault-key-"+failingGrantId;
  const beforeGrantFault=(await sql("SELECT "+
