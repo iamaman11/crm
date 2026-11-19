@@ -42,7 +42,8 @@ async function subprocessEntry(){
        if(variant==="migration-fails")return{status:1};
        for(const name of readdirSync("apps/cloudflare-crm/migrations").sort()){
          if(nfcLegacy&&name!=="0016_nfc_search_name.sql"&&
-            name!=="0017_s5a_commit_receipt_provenance.sql")continue;
+            name!=="0017_s5a_commit_receipt_provenance.sql"&&
+            name!=="0018_privacy_commit_receipt_provenance.sql")continue;
          db.exec(readFileSync("apps/cloudflare-crm/migrations/"+name,"utf8"));
        }
        migrated=true;
@@ -178,7 +179,8 @@ async function subprocessEntry(){
        const {sql,params=[]}=JSON.parse(options.body);
        const names=readdirSync("apps/cloudflare-crm/migrations").filter(n=>n.endsWith(".sql")).sort();
        const ledger=variant==="migration-fails"?names.slice(0,1):
-         variant==="migration-history-drift"?["unrecognized.sql"]:nfcLegacy&&!migrated?names.slice(0,-2):names;
+         variant==="migration-history-drift"?["unrecognized.sql"]:nfcLegacy&&!migrated?
+            names.filter(name=>name<"0016_nfc_search_name.sql"):names;
        const results=sql.includes("FROM d1_migrations")?ledger.map(name=>({name})):
          !migrated&&!nfcLegacy?[]:db.prepare(sql).all(...params);
        return wrap([{success:true,results}]);
