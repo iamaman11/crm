@@ -23,7 +23,7 @@ async function subprocessEntry(){
    db=new DatabaseSync(":memory:");
    // The ordinary release starts with the full current SQL schema.
    if(migrated||nfcLegacy)for(const name of readdirSync("apps/cloudflare-crm/migrations").filter(n=>n.endsWith(".sql")).sort()){
-     if(nfcLegacy&&name==="0016_nfc_search_name.sql")continue;
+     if(nfcLegacy&&name>="0016_nfc_search_name.sql")continue;
      db.exec(readFileSync("apps/cloudflare-crm/migrations/"+name,"utf8"));
    }
    if(nfcLegacy){
@@ -41,7 +41,8 @@ async function subprocessEntry(){
        assert.deepEqual(args,["wrangler","d1","migrations","apply","crm-dev","--remote"]);
        if(variant==="migration-fails")return{status:1};
        for(const name of readdirSync("apps/cloudflare-crm/migrations").sort()){
-         if(nfcLegacy&&name!=="0016_nfc_search_name.sql")continue;
+         if(nfcLegacy&&name!=="0016_nfc_search_name.sql"&&
+            name!=="0017_s5a_commit_receipt_provenance.sql")continue;
          db.exec(readFileSync("apps/cloudflare-crm/migrations/"+name,"utf8"));
        }
        migrated=true;
@@ -116,7 +117,8 @@ async function subprocessEntry(){
      const traceIndex=fixtureRequests.findIndex((_,index)=>traceFor(index)===needle);
      if(traceIndex!==-1){
        const events=variant==="missing-native-span"||
-         (variant==="missing-recovery-span"&&traceIndex===2)?[]:[{
+         (variant==="missing-recovery-span"&&traceIndex===2)||
+         (variant==="missing-owner-span"&&traceIndex===7)?[]:[{
          $metadata:{type:"span"},
          source:{name:"D1 prepare",traceId:needle,
            ...(variant==="missing-d1-span"?{}:{db:{system:"cloudflare-d1"}})}
@@ -229,11 +231,13 @@ function run(mode,variant="valid"){
  const subsequentLookupId="55555555-5555-4555-8555-555555555555";
  const contactCreateId="66666666-6666-4666-8666-666666666666";
  const taskCreateId="77777777-7777-4777-8777-777777777777";
+ const partyRecoveryReadId="88888888-8888-4888-8888-888888888888";
  const advancePath="/crm.sales.v2.DealService/AdvanceStage";
  const closePath="/crm.sales.v2.DealService/CloseDeal";
  const lookupPath="/crm.sales.v2.DealService/GetDeal";
  const contactPath="/crm.contact_points.v2.ContactPointService/CreateContactPoint";
  const taskPath="/crm.activities.v2.TaskService/CreateTask";
+ const partyLookupPath="/crm.parties.v3.PartyService/GetParty";
  const fixtureRequests=[
    {path:rpcPath,status:200,request_id:requestId,source_sha:sha,runtime:"native-workers-rs"},
    {path:advancePath,status:200,request_id:originalAdvanceId,source_sha:sha,runtime:"native-workers-rs"},
@@ -241,7 +245,8 @@ function run(mode,variant="valid"){
    {path:closePath,status:200,request_id:originalCloseId,source_sha:sha,runtime:"native-workers-rs"},
    {path:lookupPath,status:200,request_id:subsequentLookupId,source_sha:sha,runtime:"native-workers-rs"},
    {path:contactPath,status:200,request_id:contactCreateId,source_sha:sha,runtime:"native-workers-rs"},
-   {path:taskPath,status:200,request_id:taskCreateId,source_sha:sha,runtime:"native-workers-rs"}
+   {path:taskPath,status:200,request_id:taskCreateId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:partyLookupPath,status:200,request_id:partyRecoveryReadId,source_sha:sha,runtime:"native-workers-rs"}
  ];
  const fixtureWrites=[
    {path:rpcPath,request_id:requestId,audit},
@@ -263,6 +268,11 @@ function run(mode,variant="valid"){
    writes:fixtureWrites,
    recovery:variant==="missing-recovery"?[]:
      variant==="wrong-recovery-request"?[recovery[0],{...recovery[1],subsequent_request_id:originalCloseId}]:recovery,
+   owner_recovery:variant==="missing-owner-recovery"?[]:variant==="wrong-owner-recovery"?
+     [{owner:"party",kind:"lookup",original_request_id:requestId,
+       subsequent_request_id:originalAdvanceId}]:
+     [{owner:"party",kind:"lookup",original_request_id:requestId,
+       subsequent_request_id:partyRecoveryReadId}],
    synthetic_private_probes:variant==="missing-private-probes"?[]:[
      {kind:"party-name",request_id:requestId,value:"Browser Party 1234567890123"},
      {kind:"cookie",request_id:requestId,value:"crm-s3-cookie-1234567890123"},
@@ -327,6 +337,7 @@ for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-err
   "missing-native-span","missing-d1-span","wrong-native-trace-id",
   "unsafe-invocation-event","missing-recovery","wrong-recovery-request",
   "recovery-audited","missing-recovery-span",
+  "missing-owner-recovery","wrong-owner-recovery","missing-owner-span",
   "missing-private-probes","synthetic-private-leak",
   "synthetic-cookie-leak","synthetic-header-leak"])test("release rejects "+variant,()=>{
  const result=run("verify-data",variant);
