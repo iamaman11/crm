@@ -3712,7 +3712,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const nativeSqlStateContracts=[
    {table:"crm_party_records",id:"party_id",fields:["kind","display_name"],version:true},
    {table:"crm_account_records",id:"account_id",fields:["name","status"],version:true},
-   {table:"crm_contact_point_records",id:"contact_point_id",fields:["kind","status"],version:true},
+   {table:"crm_contact_point_records",id:"contact_point_id",fields:["kind","normalized_value","status"],version:true},
    {table:"crm_party_relationship_records",id:"party_relationship_id",fields:["status"],version:true},
    {table:"crm_activity_task_records",id:"task_id",fields:["status","priority"],version:true},
    {table:"crm_sales_deal_records",id:"deal_id",

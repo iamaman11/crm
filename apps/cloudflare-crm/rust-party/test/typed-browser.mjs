@@ -515,7 +515,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
    syntheticPrivateProbes.push({kind:"contact-phone",request_id:writes.at(-1)?.request_id,value:privatePhone});
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_contact_point_records WHERE tenant='"+tenantSql+
-     "' AND party_id='"+partyId+"' AND normalized_value='"+privatePhone+"'"))[0].n,1);
+     "' AND party_id='"+partyId+"' AND json_extract(state,'$.normalized_value')='"+privatePhone+"'"))[0].n,1);
    await navigate("tasks","Задачи");
    await page.getByRole("button",{name:"Новая задача",exact:true}).click();
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Task "+runId);
