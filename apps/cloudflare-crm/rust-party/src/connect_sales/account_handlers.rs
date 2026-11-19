@@ -91,7 +91,9 @@ impl account_wire::AccountService for AccountV2Service {
                     .await
                     .map_err(|_| ConnectError::unavailable("ACCOUNT_RECEIPT_READ_FAILED"))?;
                 crud_commit_evidence(stored, &id, &self.request_id, |state| {
-                    crm_customer_accounts::decode_account_state(state.as_bytes()).map(|row| (row.account_id().as_str().to_owned(), row.version())).map_err(|e| worker::Error::RustError(e.code))
+                    crm_customer_accounts::decode_account_state(state.as_bytes())
+                        .map(|row| (row.account_id().as_str().to_owned(), row.version()))
+                        .map_err(|e| worker::Error::RustError(e.code))
                 })
                 .map_err(|_| ConnectError::unavailable("ACCOUNT_RECEIPT_DECODE_FAILED"))?
             }
