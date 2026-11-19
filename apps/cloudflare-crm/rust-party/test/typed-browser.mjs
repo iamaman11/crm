@@ -1250,7 +1250,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByText("ID: "+mappingId+"; поле: organization.legal_name; профиль: "+profileId,{exact:true}).waitFor();
 
    await navigate("data","Импорт и экспорт");
-   const csv="party_id,kind,display_name,resource_version\\r\\nbrowser-import,person,Browser Import "+runId+",1\\r\\n";
+   const csv="party_id,kind,display_name,resource_version\r\nbrowser-import,person,Browser Import "+runId+",1\r\n";
    const obsoleteCsv=csv.replace("Browser Import ","Browser Obsolete ");
    await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
      name:"obsolete.csv",mimeType:"text/csv",buffer:Buffer.from(obsoleteCsv)});
