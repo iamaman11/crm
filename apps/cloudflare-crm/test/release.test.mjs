@@ -127,6 +127,9 @@ async function subprocessEntry(){
          $metadata:{type:"cf-worker-event",traceId:needle},
          $workers:{event:{request:{headers:{"authorization":"synthetic-secret"}}}}
        });
+       if(variant==="synthetic-private-leak"&&traceIndex===0)events.push({
+         $metadata:{type:"log"},source:{traceId:needle,message:"Browser Party 1234567890123"}
+       });
        return wrap({events:{events}});
      }
      if(mode==="verify-data"&&variant==="transient-html-telemetry"&&telemetryAttempts===1)
@@ -218,22 +221,32 @@ function run(mode,variant="valid"){
  const subsequentReplayId="33333333-3333-4333-8333-333333333333";
  const originalCloseId="44444444-4444-4444-8444-444444444444";
  const subsequentLookupId="55555555-5555-4555-8555-555555555555";
+ const contactCreateId="66666666-6666-4666-8666-666666666666";
+ const taskCreateId="77777777-7777-4777-8777-777777777777";
  const advancePath="/crm.sales.v2.DealService/AdvanceStage";
  const closePath="/crm.sales.v2.DealService/CloseDeal";
  const lookupPath="/crm.sales.v2.DealService/GetDeal";
+ const contactPath="/crm.contact_points.v2.ContactPointService/CreateContactPoint";
+ const taskPath="/crm.activities.v2.TaskService/CreateTask";
  const fixtureRequests=[
    {path:rpcPath,status:200,request_id:requestId,source_sha:sha,runtime:"native-workers-rs"},
    {path:advancePath,status:200,request_id:originalAdvanceId,source_sha:sha,runtime:"native-workers-rs"},
    {path:advancePath,status:200,request_id:subsequentReplayId,source_sha:sha,runtime:"native-workers-rs"},
    {path:closePath,status:200,request_id:originalCloseId,source_sha:sha,runtime:"native-workers-rs"},
-   {path:lookupPath,status:200,request_id:subsequentLookupId,source_sha:sha,runtime:"native-workers-rs"}
+   {path:lookupPath,status:200,request_id:subsequentLookupId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:contactPath,status:200,request_id:contactCreateId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:taskPath,status:200,request_id:taskCreateId,source_sha:sha,runtime:"native-workers-rs"}
  ];
  const fixtureWrites=[
    {path:rpcPath,request_id:requestId,audit},
    {path:advancePath,request_id:originalAdvanceId,
      audit:[{action:"sales_deals.advance",subject_id:"deal",actor:"service:synthetic.access"}]},
    {path:closePath,request_id:originalCloseId,
-     audit:[{action:"sales_deals.close",subject_id:"deal",actor:"service:synthetic.access"}]}
+     audit:[{action:"sales_deals.close",subject_id:"deal",actor:"service:synthetic.access"}]},
+   {path:contactPath,request_id:contactCreateId,
+     audit:[{action:"contact_points.create",subject_id:"contact",actor:"service:synthetic.access"}]},
+   {path:taskPath,request_id:taskCreateId,
+     audit:[{action:"tasks.create",subject_id:"task",actor:"service:synthetic.access"}]}
  ];
  const recovery=[
    {kind:"replay",original_request_id:originalAdvanceId,subsequent_request_id:subsequentReplayId},
@@ -243,7 +256,12 @@ function run(mode,variant="valid"){
    tenant:"fixture-a",started_at:2,steps:["synthetic fixture"],requests:fixtureRequests,
    writes:fixtureWrites,
    recovery:variant==="missing-recovery"?[]:
-     variant==="wrong-recovery-request"?[recovery[0],{...recovery[1],subsequent_request_id:originalCloseId}]:recovery});
+     variant==="wrong-recovery-request"?[recovery[0],{...recovery[1],subsequent_request_id:originalCloseId}]:recovery,
+   synthetic_private_probes:variant==="missing-private-probes"?[]:[
+     {kind:"party-name",request_id:requestId,value:"Browser Party 1234567890123"},
+     {kind:"contact-email",request_id:contactCreateId,value:"browser-1234567890123@example.org"},
+     {kind:"task-subject",request_id:taskCreateId,value:"Browser Task 1234567890123"}
+   ]});
  try{
    const result=spawnSync(process.execPath,["--input-type=module","-e","("+subprocessEntry.toString()+")()"],{cwd:dir,encoding:"utf8",
      env:{...process.env,GITHUB_SHA:sha,GITHUB_REF:"refs/heads/dev",GITHUB_EVENT_NAME:"push",
@@ -300,7 +318,8 @@ for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-err
   "trace-invocation-logs-enabled","missing-native-trace-id",
   "missing-native-span","missing-d1-span","wrong-native-trace-id",
   "unsafe-invocation-event","missing-recovery","wrong-recovery-request",
-  "recovery-audited","missing-recovery-span"])test("release rejects "+variant,()=>{
+  "recovery-audited","missing-recovery-span",
+  "missing-private-probes","synthetic-private-leak"])test("release rejects "+variant,()=>{
  const result=run("verify-data",variant);
  assert.notEqual(result.status,0);assert.equal(result.accepted,false);
 });
