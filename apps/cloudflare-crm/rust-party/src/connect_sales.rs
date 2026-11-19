@@ -195,7 +195,7 @@ fn crud_commit_evidence(
     let Some(row) = row else {
         return Ok(None);
     };
-    // No false proof for historical receipts created before 0017.
+    // Receipts predating an owner's provenance migration remain unprovable.
     let Some(original) = row.original_request_id.filter(|id| !id.is_empty()) else {
         return Ok(None);
     };

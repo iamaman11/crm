@@ -279,6 +279,14 @@ function run(mode,variant="valid"){
  const pipelineReadId="27272727-2727-4727-8727-272727272727";
  const viewWriteId="28282828-2828-4828-8828-282828282828";
  const viewReadId="29292929-2929-4929-8929-292929292929";
+ const accountWriteId="34343434-3434-4434-8434-343434343434";
+ const accountReadId="35353535-3535-4535-8535-353535353535";
+ const contactWriteId="36363636-3636-4636-8636-363636363636";
+ const contactReadId="37373737-3737-4737-8737-373737373737";
+ const relationshipWriteId="38383838-3838-4838-8838-383838383838";
+ const relationshipReadId="39393939-3939-4939-8939-393939393939";
+ const taskWriteId="40404040-4040-4040-8040-404040404040";
+ const taskReadId="41414141-4141-4141-8141-414141414141";
  const invalidDealId="23232323-2323-4323-8323-232323232323";
  const deniedPartyId="24242424-2424-4424-8424-242424242424";
  const conflictPartyId="25252525-2525-4525-8525-252525252525";
@@ -302,6 +310,14 @@ function run(mode,variant="valid"){
  const pipelineLookupPath="/crm.sales.v2.DealService/GetPipeline";
  const viewPath="/crm.sales.v2.DealService/CreateSalesView";
  const viewLookupPath="/crm.sales.v2.DealService/GetSalesView";
+ const accountPath="/crm.accounts.v2.AccountService/CreateAccount";
+ const accountLookupPath="/crm.accounts.v2.AccountService/GetAccount";
+ const contactPath="/crm.contact_points.v2.ContactPointService/CreateContactPoint";
+ const contactLookupPath="/crm.contact_points.v2.ContactPointService/GetContactPoint";
+ const relationshipPath="/crm.party_relationships.v2.PartyRelationshipService/CreatePartyRelationship";
+ const relationshipLookupPath="/crm.party_relationships.v2.PartyRelationshipService/GetPartyRelationship";
+ const taskPath="/crm.activities.v2.TaskService/CreateTask";
+ const taskLookupPath="/crm.activities.v2.TaskService/GetTask";
  const invalidDealPath="/crm.sales.v2.DealService/CreateDeal";
  const conflictPartyPath="/crm.parties.v3.PartyService/UpdateParty";
  const fixtureRequests=[
@@ -328,6 +344,14 @@ function run(mode,variant="valid"){
    {path:pipelineLookupPath,status:200,request_id:pipelineReadId,source_sha:sha,runtime:"native-workers-rs"},
    {path:viewPath,status:200,request_id:viewWriteId,source_sha:sha,runtime:"native-workers-rs"},
    {path:viewLookupPath,status:200,request_id:viewReadId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:accountPath,status:200,request_id:accountWriteId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:accountLookupPath,status:200,request_id:accountReadId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:contactPath,status:200,request_id:contactWriteId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:contactLookupPath,status:200,request_id:contactReadId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:relationshipPath,status:200,request_id:relationshipWriteId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:relationshipLookupPath,status:200,request_id:relationshipReadId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:taskPath,status:200,request_id:taskWriteId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:taskLookupPath,status:200,request_id:taskReadId,source_sha:sha,runtime:"native-workers-rs"},
    {path:invalidDealPath,status:400,request_id:invalidDealId,error_code:"invalid_argument",source_sha:sha,runtime:"native-workers-rs"},
    {path:rpcPath,status:403,request_id:deniedPartyId,error_code:"permission_denied",source_sha:sha,runtime:"native-workers-rs"},
    {path:conflictPartyPath,status:409,request_id:conflictPartyId,error_code:"aborted",source_sha:sha,runtime:"native-workers-rs"}
@@ -357,7 +381,15 @@ function run(mode,variant="valid"){
    {path:pipelinePath,request_id:pipelineWriteId,
      audit:[{action:"sales_pipeline.create",subject_id:"pipeline",actor:"service:synthetic.access"}]},
    {path:viewPath,request_id:viewWriteId,
-     audit:[{action:"sales_view.create",subject_id:"view",actor:"service:synthetic.access"}]}
+     audit:[{action:"sales_view.create",subject_id:"view",actor:"service:synthetic.access"}]},
+   {path:accountPath,request_id:accountWriteId,
+     audit:[{action:"accounts.create",subject_id:"account",actor:"service:synthetic.access"}]},
+   {path:contactPath,request_id:contactWriteId,
+     audit:[{action:"contact_points.create",subject_id:"contact-point",actor:"service:synthetic.access"}]},
+   {path:relationshipPath,request_id:relationshipWriteId,
+     audit:[{action:"party_relationships.create",subject_id:"relationship",actor:"service:synthetic.access"}]},
+   {path:taskPath,request_id:taskWriteId,
+     audit:[{action:"activity_tasks.create",subject_id:"task",actor:"service:synthetic.access"}]}
  ];
  const recovery=[
    {kind:"replay",original_request_id:originalAdvanceId,subsequent_request_id:subsequentReplayId},
@@ -371,7 +403,11 @@ function run(mode,variant="valid"){
    {owner:"enrichment-mapping",kind:"lookup",original_request_id:mappingWriteId,subsequent_request_id:mappingReadId},
    {owner:"party-csv-import",kind:"lookup",original_request_id:csvWriteId,subsequent_request_id:csvReadId},
    {owner:"sales-pipeline",kind:"lookup",original_request_id:pipelineWriteId,subsequent_request_id:pipelineReadId},
-   {owner:"sales-view",kind:"lookup",original_request_id:viewWriteId,subsequent_request_id:viewReadId}
+   {owner:"sales-view",kind:"lookup",original_request_id:viewWriteId,subsequent_request_id:viewReadId},
+   {owner:"account",kind:"lookup",original_request_id:accountWriteId,subsequent_request_id:accountReadId},
+   {owner:"contact-point",kind:"lookup",original_request_id:contactWriteId,subsequent_request_id:contactReadId},
+   {owner:"relationship",kind:"lookup",original_request_id:relationshipWriteId,subsequent_request_id:relationshipReadId},
+   {owner:"task",kind:"lookup",original_request_id:taskWriteId,subsequent_request_id:taskReadId}
  ];
  save(join(app,"e2e-evidence/typed-browser.json"),{result:"PASS",source_sha:sha,features:variant==="wrong-features"?["native-ci"]:["native"],
    tenant:"fixture-a",started_at:2,steps:["synthetic fixture"],requests:fixtureRequests,

@@ -151,6 +151,47 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    page.on("dialog",accept);
    try{await page.reload();}finally{page.off("dialog",accept);}
  };
+ const recoverOwnerWrite=async({owner,writeRoute,method,readSuffix,storageKey,
+   auditAction,heading,trigger})=>{
+   let calls=0,originalRequestId;
+   const loseAcknowledgement=async route=>{
+     calls++;
+     const committed=await route.fetch();
+     recordResponse(committed);await assertMutation(committed,method);
+     originalRequestId=(await committed.allHeaders())["x-request-id"];
+     await route.abort("failed");
+   };
+   await page.route(writeRoute,loseAcknowledgement);
+   await trigger();
+   await page.getByRole("heading",{name:/Результат записи не подтверждён/}).last().waitFor();
+   const marker=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)),storageKey);
+   assert.deepEqual(Object.keys(marker).sort(),["expectedVersion","key","resourceId"]);
+   assert.equal(marker.expectedVersion,"0");
+   assert.match(marker.key,/^[a-f0-9-]{36}$/i);
+   await reloadAfterPending();
+   await page.getByRole("heading",{name:heading,exact:true}).waitFor();
+   const check=page.getByRole("button",{name:"Проверить результат записи",exact:true}).last();
+   await check.waitFor();
+   const pending=page.waitForResponse(response=>
+     responsePathEndsWith(response,readSuffix)&&response.request().method()==="POST");
+   await check.click();
+   const readResponse=await pending;
+   assert.equal(readResponse.status(),200,owner+" receipt lookup");
+   const readRequestId=(await readResponse.allHeaders())["x-request-id"];
+   assert.match(readRequestId??"",/^[a-f0-9-]{36}$/i);
+   assert.ok(originalRequestId,owner+" original request id");
+   assert.equal(calls,1,owner+" recovery must not re-execute the original write");
+   await expect.poll(()=>page.evaluate(key=>sessionStorage.getItem(key),storageKey)).toBe(null);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
+     originalRequestId+"' AND action='"+auditAction+"'"))[0].n,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
+     readRequestId+"'"))[0].n,0,owner+" receipt lookup must be read-only");
+   ownerRecovery.push({owner,kind:"lookup",original_request_id:originalRequestId,
+     subsequent_request_id:readRequestId});
+   await page.unroute(writeRoute,loseAcknowledgement);
+   steps.push("S5 "+owner+" lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
+   return marker.resourceId;
+ };
  // Pickers show one bounded page of options; randomly generated IDs
  // need not be on the first page. Use real UI pagination, not sleeps.
  const selectPagedPicker=async(scope,label,id,kind="party")=>{
@@ -384,10 +425,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      partyAccountAuditBefore,"Cancel/Back must not create an Account");
    await accountFromParty();
    await page.getByLabel("Название клиента",{exact:true}).fill("Browser Party Account "+runId);
-   const partyAccountResponse=page.waitForResponse(r=>
-     responsePathEndsWith(r,"/CreateAccount")&&r.request().method()==="POST");
-   await page.getByRole("button",{name:"Сохранить клиента",exact:true}).click();
-   await assertMutation(await partyAccountResponse,"CreateAccount");
+   await recoverOwnerWrite({
+     owner:"account",writeRoute:"**/CreateAccount",method:"CreateAccount",
+     readSuffix:"/GetAccount",storageKey:"crm.account.create.pending.v1",
+     auditAction:"accounts.create",heading:"Новый клиент",
+     trigger:()=>page.getByRole("button",{name:"Сохранить клиента",exact:true}).click()
+   });
    const linkedAccountId=await firstId("crm_account_records","name","Browser Party Account "+runId);
    await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    assert.equal(new URL(await page.url()).hash,"#accounts/"+linkedAccountId,
@@ -399,7 +442,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await selectPagedPicker(page,"Первый участник",partyId);
    await selectPagedPicker(page,"Второй участник",otherPartyId);
    await page.getByLabel("Код отношения",{exact:true}).fill("browser_relation_"+runId);
-   await mutation(page.getByRole("button",{name:"Сохранить связь",exact:true}),"CreatePartyRelationship");
+   await recoverOwnerWrite({
+     owner:"relationship",writeRoute:"**/CreatePartyRelationship",method:"CreatePartyRelationship",
+     readSuffix:"/GetPartyRelationship",storageKey:"crm.relationship.pending.v1",
+     auditAction:"party_relationships.create",heading:"Связи",
+     trigger:()=>page.getByRole("button",{name:"Сохранить связь",exact:true}).click()
+   });
    await page.locator("section").filter({has:page.getByRole("heading",{name:"browser_relation_"+runId,exact:true})})
      .getByRole("button",{name:"Редактировать связь",exact:true}).click();
    await page.getByRole("heading",{name:"Изменить связь",exact:true}).waitFor();
@@ -499,7 +547,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
    await selectPagedPicker(page,"Участник",partyId);
    await page.getByLabel("Значение контакта",{exact:true}).fill("browser-"+runId+"@example.org");
-   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
+   await recoverOwnerWrite({
+     owner:"contact-point",writeRoute:"**/CreateContactPoint",method:"CreateContactPoint",
+     readSuffix:"/GetContactPoint",storageKey:"crm.contact.pending.v1",
+     auditAction:"contact_points.create",heading:"Контакты",
+     trigger:()=>page.getByRole("button",{name:"Сохранить контакт",exact:true}).click()
+   });
    syntheticPrivateProbes.push({kind:"contact-email",request_id:writes.at(-1)?.request_id,
      value:"browser-"+runId+"@example.org"});
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].n,1);
@@ -525,7 +578,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Новая задача",exact:true}).click();
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Task "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
-   await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
+   await recoverOwnerWrite({
+     owner:"task",writeRoute:"**/CreateTask",method:"CreateTask",
+     readSuffix:"/GetTask",storageKey:"crm.task.pending.v1",
+     auditAction:"activity_tasks.create",heading:"Задачи",
+     trigger:()=>page.getByRole("button",{name:"Создать задачу",exact:true}).click()
+   });
    syntheticPrivateProbes.push({kind:"task-subject",request_id:writes.at(-1)?.request_id,
      value:"Browser Task "+runId});
    const taskId=await firstId("crm_activity_task_records","subject","Browser Task "+runId);

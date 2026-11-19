@@ -446,6 +446,10 @@ async function verifyData(){
   const ownerProofs=evidence.owner_recovery??[];
   const ownerContracts={
     party:{write:"/CreateParty",read:"/GetParty",audit:"parties.create"},
+    account:{write:"/CreateAccount",read:"/GetAccount",audit:"accounts.create"},
+    "contact-point":{write:"/CreateContactPoint",read:"/GetContactPoint",audit:"contact_points.create"},
+    relationship:{write:"/CreatePartyRelationship",read:"/GetPartyRelationship",audit:"party_relationships.create"},
+    task:{write:"/CreateTask",read:"/GetTask",audit:"activity_tasks.create"},
     "sales-pipeline":{write:"/CreatePipeline",read:"/GetPipeline",audit:"sales_pipeline.create"},
     "sales-view":{write:"/CreateSalesView",read:"/GetSalesView",audit:"sales_view.create"},
     consent:{write:"/SuppressCommunication",read:"/GetConsentAuthorization",audit:"consents.operator_suppress"},
