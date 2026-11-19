@@ -433,6 +433,26 @@ async function verifyData(){
   }
   assert.deepEqual([...recoveryKinds.keys()].sort(),["lookup","replay"],
     "Both response-loss recovery paths are mandatory release evidence");
+  // Synthetic-only business values actually sent by the browser must not
+  // appear in the native Cloudflare events of their committed requests.
+  // Validate known fixture formats and never log the values in diagnostics.
+  const syntheticFormats={
+    "party-name":/^Browser Party [0-9]{10,}$/,
+    "contact-email":/^browser-[0-9]{10,}@example\.org$/,
+    "task-subject":/^Browser Task [0-9]{10,}$/
+  };
+  const probeValuesByRequest=new Map(),probeKinds=[];
+  for(const probe of evidence.synthetic_private_probes??[]){
+    assert.ok(syntheticFormats[probe.kind]?.test(probe.value),
+      "Only approved synthetic privacy probes may be released");
+    assert.ok(mutationIds.has(probe.request_id),
+      "Synthetic privacy probe must refer to a committed browser request");
+    assert.ok(!probeKinds.includes(probe.kind),"Duplicate privacy probe kind");
+    probeKinds.push(probe.kind);
+    probeValuesByRequest.set(probe.request_id,probe.value);
+  }
+  assert.deepEqual(probeKinds.sort(),Object.keys(syntheticFormats).sort(),
+    "Party, Contact and Task synthetic private-value probes are mandatory");
   // Observe every exact browser request, including rejected requests and read-only RPCs.
   // Audit rows are required only for committed mutations, never invented for reads.
   let pending=[...requests.values()];
@@ -487,6 +507,7 @@ async function verifyData(){
       {entry:requests.get(item.original_request_id),needsD1:true},
       {entry:requests.get(item.subsequent_request_id),needsD1:true}
     ]),
+    ...[...probeValuesByRequest.keys()].map(id=>({entry:requests.get(id),needsD1:true})),
     ...[ [...requests.values()].find(e=>!mutationIds.has(e.request_id)&&e.status===200),
           [...requests.values()].find(e=>e.status>=400) ]
       .filter(Boolean).map(entry=>({entry,needsD1:false}))
@@ -519,6 +540,9 @@ async function verifyData(){
       });
       const linked=(data.events?.events||[]).filter(event=>
         (event.source?.traceId??event.$metadata?.traceId)===traceId);
+      const syntheticValue=probeValuesByRequest.get(entry.request_id);
+      if(syntheticValue)assert.ok(!JSON.stringify(linked).includes(syntheticValue),
+        "A synthetic private business value appeared in a Cloudflare trace");
       assert.ok(!linked.some(event=>event.$metadata?.type==="cf-worker-event"),
         "Unsafe automatic invocation log in an accepted CRM trace");
       const spans=linked.filter(event=>event.$metadata?.type==="span");
@@ -537,7 +561,8 @@ async function verifyData(){
   assert.ok(d1SpanVerified>=1,"D1 trace proof must cover a committed mutation");
   console.log(JSON.stringify({event:"crm.native-s3-trace-to-d1",
     result:"PASS",traces:spanVerified,committed_d1_traces:d1SpanVerified,
-    recovery_paths:[...recoveryKinds.keys()].sort(),automatic_invocation_logs:false}));
+    recovery_paths:[...recoveryKinds.keys()].sort(),synthetic_private_probes:probeKinds.length,
+    automatic_invocation_logs:false}));
   assert.equal(await version(),liveVersion,"Deployment changed during acceptance");
   assert.deepEqual(await bindings(liveVersion),{sha,db:database});
   await waitForPublicSha(sha,"final");
@@ -545,7 +570,7 @@ async function verifyData(){
     d1_database:database,features:["native"],traffic_percentage:100,
     mutations:mutationIds.size,logs_correlated:requests.size,
     spans_correlated:spanVerified,d1_mutation_spans:d1SpanVerified,
-    recovery_paths:[...recoveryKinds.keys()].sort(),
+    recovery_paths:[...recoveryKinds.keys()].sort(),synthetic_private_probes:probeKinds.length,
     trace_settings:traceSettings,steps:evidence.steps,
     request_ids:[...requests.keys()]});
 }
