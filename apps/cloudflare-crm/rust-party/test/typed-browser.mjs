@@ -17,7 +17,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  const tenantSql=tenantA.replaceAll("'","''");
  assert.ok(adminIdentity,"Expected signed actor is required for browser audit assertions");
  const startedAt=Date.now();
- const requests=[],writes=[],recovery=[],pageErrors=[],steps=[];
+ const requests=[],writes=[],recovery=[],syntheticPrivateProbes=[],pageErrors=[],steps=[];
  const headerReads=[];
  let restoreViewer=async()=>{};
  const recordResponse=response=>{
@@ -138,6 +138,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Party "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty");
+   syntheticPrivateProbes.push({kind:"party-name",request_id:writes.at(-1)?.request_id,
+     value:"Browser Party "+runId});
    partyId=await firstId("crm_party_records","display_name","Browser Party "+runId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+partyId+"'"))[0].n,1);
    await page.reload();
@@ -358,6 +360,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await selectPagedPicker(page,"Участник",partyId);
    await page.getByLabel("Значение контакта",{exact:true}).fill("browser-"+runId+"@example.org");
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
+   syntheticPrivateProbes.push({kind:"contact-email",request_id:writes.at(-1)?.request_id,
+     value:"browser-"+runId+"@example.org"});
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].n,1);
    const browserSalesContactId=await firstId("crm_contact_point_records","normalized_value",
      "browser-"+runId+"@example.org");
@@ -372,6 +376,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Task "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
    await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
+   syntheticPrivateProbes.push({kind:"task-subject",request_id:writes.at(-1)?.request_id,
+     value:"Browser Task "+runId});
    const taskId=await firstId("crm_activity_task_records","subject","Browser Task "+runId);
    const taskCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Task "+runId,exact:true})});
    await mutation(taskCard.getByRole("button",{name:"Выполнить задачу",exact:true}),"CompleteTask");
@@ -1153,7 +1159,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    }
    const evidence={result:"PASS",source_sha:sourceSha,features,browser:"Chromium",
      started_at:startedAt,finished_at:Date.now(),tenant:tenantA,
-     tested:"built React and generated Connect client against Rust Worker/D1",steps,requests,writes,recovery};
+     tested:"built React and generated Connect client against Rust Worker/D1",steps,requests,writes,recovery,
+     synthetic_private_probes:syntheticPrivateProbes};
    writeFileSync(resolve(directory,"typed-browser.json"),JSON.stringify(evidence,null,2)+"\n");
    return evidence;
  } catch(error) {
