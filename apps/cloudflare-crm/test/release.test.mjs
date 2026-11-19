@@ -11,7 +11,7 @@ const requestId="11111111-1111-4111-8111-111111111111";
 async function subprocessEntry(){
  const {default:assert}=await import("node:assert/strict");
  const {writeFileSync,readFileSync,readdirSync}=await import("node:fs");
- const {mode,variant,sha,database,audit,requestId,rpcPath}=JSON.parse(process.env.CRM_RELEASE_TEST_FIXTURE);
+ const {mode,variant,sha,database,audit,requestId,rpcPath,fixtureRequests}=JSON.parse(process.env.CRM_RELEASE_TEST_FIXTURE);
  const posts=[];
  const nfcLegacy=variant==="nfc-migration"||variant==="nfc-noncanonical";
  let enabled=mode==="deploy",migrated=variant!=="migration-fails"&&!nfcLegacy,published=false,edgeAttempts=0,role="viewer";
@@ -112,14 +112,17 @@ async function subprocessEntry(){
    if(path.endsWith("/telemetry/query")){
      telemetryAttempts++;
      const needle=JSON.parse(options.body).parameters?.needle?.value;
-     if(needle==="11111111111111111111111111111111"){
-       const events=variant==="missing-native-span"?[]:[{
+     const traceFor=index=>String(index+1).repeat(32);
+     const traceIndex=fixtureRequests.findIndex((_,index)=>traceFor(index)===needle);
+     if(traceIndex!==-1){
+       const events=variant==="missing-native-span"||
+         (variant==="missing-recovery-span"&&traceIndex===1)?[]:[{
          $metadata:{type:"span"},
          source:{name:"D1 prepare",traceId:needle,
            ...(variant==="missing-d1-span"?{}:{db:{system:"cloudflare-d1"}})}
        }];
        if(variant==="wrong-native-trace-id"&&events.length)
-         events[0].source.traceId="22222222222222222222222222222222";
+         events[0].source.traceId="f".repeat(32);
        if(variant==="unsafe-invocation-event")events.push({
          $metadata:{type:"cf-worker-event",traceId:needle},
          $workers:{event:{request:{headers:{"authorization":"synthetic-secret"}}}}
@@ -136,10 +139,12 @@ async function subprocessEntry(){
         variant==="persistent-invalid-json-telemetry"))
        return new Response('{"success":true,"result":',{status:200,
          headers:{"content-type":"application/json","cf-ray":"fixture-ray-123"}});
-     return wrap({events:{events:variant==="missing-logs"?[]:[{
-       source:{event:"crm.native.request",request_id:requestId,operation:rpcPath,status:200,
+     const index=fixtureRequests.findIndex(entry=>entry.request_id===needle);
+     const entry=fixtureRequests[index];
+     return wrap({events:{events:variant==="missing-logs"||!entry?[]:[{
+       source:{event:"crm.native.request",request_id:entry.request_id,operation:entry.path,status:entry.status,
          error_code:variant==="wrong-error-code"?"aborted":null},
-       $metadata:{...(variant==="missing-native-trace-id"?{}:{traceId:"11111111111111111111111111111111"})},
+       $metadata:{...(variant==="missing-native-trace-id"&&index===0?{}:{traceId:String(index+1).repeat(32)})},
        $workers:{scriptVersion:{id:"version-new"}}
      }]}});
    }
@@ -167,6 +172,9 @@ async function subprocessEntry(){
          !migrated&&!nfcLegacy?[]:db.prepare(sql).all(...params);
        return wrap([{success:true,results}]);
      }
+     const {sql,params=[]}=JSON.parse(options.body);
+     if(sql.startsWith("SELECT COUNT(*) AS n FROM crm_audit"))
+       return wrap([{success:true,results:[{n:variant==="recovery-audited"?1:0}]}]);
      return wrap([{success:true,results:variant==="missing-audit"?[]:audit}]);
    }
    throw Error("Unexpected Cloudflare endpoint "+path);
@@ -205,17 +213,30 @@ function run(mode,variant="valid"){
  }
  const rpcPath="/crm.parties.v3.PartyService/CreateParty",audit=[{action:"parties.create",subject_id:"party",
    actor:variant==="wrong-actor"?"forged@example.test":"service:synthetic.access"}];
+ const subsequentReplayId="22222222-2222-4222-8222-222222222222";
+ const subsequentLookupId="33333333-3333-4333-8333-333333333333";
+ const fixtureRequests=[
+   {path:rpcPath,status:200,request_id:requestId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:rpcPath,status:200,request_id:subsequentReplayId,source_sha:sha,runtime:"native-workers-rs"},
+   {path:"/crm.parties.v3.PartyService/GetParty",status:200,request_id:subsequentLookupId,
+     source_sha:sha,runtime:"native-workers-rs"}
+ ];
+ const recovery=[
+   {kind:"replay",original_request_id:requestId,subsequent_request_id:subsequentReplayId},
+   {kind:"lookup",original_request_id:requestId,subsequent_request_id:subsequentLookupId}
+ ];
  save(join(app,"e2e-evidence/typed-browser.json"),{result:"PASS",source_sha:sha,features:variant==="wrong-features"?["native-ci"]:["native"],
-   tenant:"fixture-a",started_at:2,steps:["synthetic fixture"],requests:[
-     {path:rpcPath,status:200,request_id:requestId,source_sha:sha,runtime:"native-workers-rs"}],
-   writes:[{path:rpcPath,request_id:requestId,audit}]});
+   tenant:"fixture-a",started_at:2,steps:["synthetic fixture"],requests:fixtureRequests,
+   writes:[{path:rpcPath,request_id:requestId,audit}],
+   recovery:variant==="missing-recovery"?[]:
+     variant==="wrong-recovery-request"?[recovery[0],{...recovery[1],subsequent_request_id:requestId}]:recovery});
  try{
    const result=spawnSync(process.execPath,["--input-type=module","-e","("+subprocessEntry.toString()+")()"],{cwd:dir,encoding:"utf8",
      env:{...process.env,GITHUB_SHA:sha,GITHUB_REF:"refs/heads/dev",GITHUB_EVENT_NAME:"push",
        GITHUB_RUN_ID:"123",GITHUB_RUN_ATTEMPT:"1",
        CLOUDFLARE_ACCOUNT_ID:"5bd5e1e1e813f061afc259e91334262d",CRM_D1_DATABASE_ID:database,
        CLOUDFLARE_API_TOKEN:"synthetic-token",CRM_E2E_A_CLIENT_ID:"synthetic.access",CRM_E2E_A_CLIENT_SECRET:"synthetic-secret",
-       CRM_RELEASE_TEST_FIXTURE:JSON.stringify({mode,variant,sha,database,audit,requestId,rpcPath})}});
+       CRM_RELEASE_TEST_FIXTURE:JSON.stringify({mode,variant,sha,database,audit,requestId,rpcPath,fixtureRequests})}});
    return {status:result.status,error:result.stderr,posts:JSON.parse(readFileSync(join(dir,"posts.json"),"utf8")),
      state:JSON.parse(readFileSync(join(dir,"state.json"),"utf8")),deployed:existsSync(join(out,"deployed.json")),
      stopped:existsSync(join(out,"failed-release.json")),accepted:existsSync(join(out,"accepted.json")),checkpoint:existsSync(join(out,"checkpoint.json"))};
@@ -262,7 +283,8 @@ for(const variant of ["wrong-features","missing-audit","missing-logs","wrong-err
   "trace-redaction-disabled","trace-logs-disabled","trace-disabled",
   "trace-invocation-logs-enabled","missing-native-trace-id",
   "missing-native-span","missing-d1-span","wrong-native-trace-id",
-  "unsafe-invocation-event"])test("release rejects "+variant,()=>{
+  "unsafe-invocation-event","missing-recovery","wrong-recovery-request",
+  "recovery-audited","missing-recovery-span"])test("release rejects "+variant,()=>{
  const result=run("verify-data",variant);
  assert.notEqual(result.status,0);assert.equal(result.accepted,false);
 });

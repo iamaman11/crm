@@ -402,6 +402,37 @@ async function verifyData(){
       if(row.action.startsWith("parties."))assert.equal(row.actor,setup.actor_a,"Party audit must attribute the enrolled Access actor");
     }
   }
+  // The browser executed two distinct recovery semantics: same-key replay
+  // without a second commit, and receipt lookup after response-loss/reload.
+  // Check the independently persisted audit again; never equate HTTP 200
+  // or a Cloudflare D1 span with a committed mutation.
+  const recoveryKinds=new Map();
+  for(const item of evidence.recovery??[]){
+    assert.ok(["replay","lookup"].includes(item.kind),"Unknown recovery evidence");
+    assert.ok(!recoveryKinds.has(item.kind),"Duplicate recovery proof");
+    const original=requests.get(item.original_request_id);
+    const subsequent=requests.get(item.subsequent_request_id);
+    assert.ok(original&&subsequent,"Recovery request not observed in signed browser");
+    assert.notEqual(item.original_request_id,item.subsequent_request_id,
+      "Recovery must be a separate signed request");
+    assert.equal(original.status,200);
+    assert.equal(subsequent.status,200);
+    assert.ok(mutationIds.has(item.original_request_id),"Recovery has no original commit");
+    assert.ok(!mutationIds.has(item.subsequent_request_id),"Recovery must not create a new commit");
+    if(item.kind==="replay")assert.equal(subsequent.path,original.path,
+      "Same-key replay must target the original RPC");
+    else assert.ok(subsequent.path.endsWith("/GetDeal"),
+      "Receipt reconciliation must use read-only GetDeal");
+    const result=await cfReadback("/d1/database/"+database+"/query",{
+      sql:"SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND request_id=?",
+      params:[evidence.tenant,item.subsequent_request_id]});
+    assert.equal(result?.[0]?.success,true);
+    assert.equal(Number(result[0].results?.[0]?.n),0,
+      "Recovery request must not commit a second audit row");
+    recoveryKinds.set(item.kind,item);
+  }
+  assert.deepEqual([...recoveryKinds.keys()].sort(),["lookup","replay"],
+    "Both response-loss recovery paths are mandatory release evidence");
   // Observe every exact browser request, including rejected requests and read-only RPCs.
   // Audit rows are required only for committed mutations, never invented for reads.
   let pending=[...requests.values()];
@@ -452,12 +483,29 @@ async function verifyData(){
   // and rejected requests may legitimately have no D1 call.
   const representative=[
     {entry:requests.get(evidence.writes[0].request_id),needsD1:true},
+    ...[...recoveryKinds.values()].flatMap(item=>[
+      {entry:requests.get(item.original_request_id),needsD1:true},
+      {entry:requests.get(item.subsequent_request_id),needsD1:true}
+    ]),
     ...[ [...requests.values()].find(e=>!mutationIds.has(e.request_id)&&e.status===200),
           [...requests.values()].find(e=>e.status>=400) ]
       .filter(Boolean).map(entry=>({entry,needsD1:false}))
   ];
+  // A recovery scenario is proved only by distinct Cloudflare traces for
+  // its original and follow-up requests. Do not pass on the same trace twice.
+  for(const item of recoveryKinds.values())
+    assert.notEqual(requestTraces.get(item.original_request_id),
+      requestTraces.get(item.subsequent_request_id),
+      "Recovery reused the original Cloudflare trace ID");
+  const required=new Map();
+  for(const candidate of representative){
+    const prior=required.get(candidate.entry.request_id);
+    required.set(candidate.entry.request_id,{
+      entry:candidate.entry,needsD1:candidate.needsD1||(prior?.needsD1??false)
+    });
+  }
   let spanVerified=0,d1SpanVerified=0;
-  for(const {entry,needsD1} of representative){
+  for(const {entry,needsD1} of required.values()){
     const traceId=requestTraces.get(entry.request_id);
     assert.match(traceId??"",/^[a-f0-9]{32}$/i,
       "Accepted browser request missing its Cloudflare trace ID");
@@ -489,7 +537,7 @@ async function verifyData(){
   assert.ok(d1SpanVerified>=1,"D1 trace proof must cover a committed mutation");
   console.log(JSON.stringify({event:"crm.native-s3-trace-to-d1",
     result:"PASS",traces:spanVerified,committed_d1_traces:d1SpanVerified,
-    automatic_invocation_logs:false}));
+    recovery_paths:[...recoveryKinds.keys()].sort(),automatic_invocation_logs:false}));
   assert.equal(await version(),liveVersion,"Deployment changed during acceptance");
   assert.deepEqual(await bindings(liveVersion),{sha,db:database});
   await waitForPublicSha(sha,"final");
@@ -497,6 +545,7 @@ async function verifyData(){
     d1_database:database,features:["native"],traffic_percentage:100,
     mutations:mutationIds.size,logs_correlated:requests.size,
     spans_correlated:spanVerified,d1_mutation_spans:d1SpanVerified,
+    recovery_paths:[...recoveryKinds.keys()].sort(),
     trace_settings:traceSettings,steps:evidence.steps,
     request_ids:[...requests.keys()]});
 }

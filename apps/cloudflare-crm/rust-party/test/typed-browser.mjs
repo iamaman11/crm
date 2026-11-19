@@ -17,7 +17,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  const tenantSql=tenantA.replaceAll("'","''");
  assert.ok(adminIdentity,"Expected signed actor is required for browser audit assertions");
  const startedAt=Date.now();
- const requests=[],writes=[],pageErrors=[],steps=[];
+ const requests=[],writes=[],recovery=[],pageErrors=[],steps=[];
  const headerReads=[];
  let restoreViewer=async()=>{};
  const recordResponse=response=>{
@@ -690,7 +690,13 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByRole("dialog")).toBeVisible();
    const retryAdvance=page.waitForResponse(r=>r.url().endsWith("/AdvanceStage")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Повторить исходную операцию",exact:true}).click();
-   await assertMutation(await retryAdvance,"AdvanceStage",{replay:true});
+   const retryAdvanceResponse=await retryAdvance;
+   await assertMutation(retryAdvanceResponse,"AdvanceStage",{replay:true});
+   const retryAdvanceRequestId=(await retryAdvanceResponse.allHeaders())["x-request-id"];
+   assert.match(retryAdvanceRequestId??"",/^[a-f0-9-]{36}$/i);
+   assert.notEqual(retryAdvanceRequestId,originalAdvanceRequestId);
+   recovery.push({kind:"replay",original_request_id:originalAdvanceRequestId,
+     subsequent_request_id:retryAdvanceRequestId});
    await page.getByRole("heading",{name:/Сохранено ранее/}).waitFor();
    assert.ok(originalAdvanceRequestId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+originalAdvanceRequestId+"' AND action='sales_deals.advance'"))[0].n,1);
@@ -757,6 +763,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+originalCloseRequestId+
      "' AND action='sales_deals.close'"))[0].n,1);
    assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.deal.pending.v1")),null);
+   recovery.push({kind:"lookup",original_request_id:originalCloseRequestId,
+     subsequent_request_id:checkId});
    await page.unroute(closeRoute);
    steps.push("S1 reload: opaque marker, read original receipt, no second CloseDeal");
    const terminal=(await sql("SELECT version,json_extract(state,'$.status') AS status,json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
@@ -1145,7 +1153,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    }
    const evidence={result:"PASS",source_sha:sourceSha,features,browser:"Chromium",
      started_at:startedAt,finished_at:Date.now(),tenant:tenantA,
-     tested:"built React and generated Connect client against Rust Worker/D1",steps,requests,writes};
+     tested:"built React and generated Connect client against Rust Worker/D1",steps,requests,writes,recovery};
    writeFileSync(resolve(directory,"typed-browser.json"),JSON.stringify(evidence,null,2)+"\n");
    return evidence;
  } catch(error) {
