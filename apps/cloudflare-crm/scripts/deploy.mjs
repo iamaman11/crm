@@ -485,7 +485,7 @@ async function verifyData(){
   const syntheticFormats={
     "party-name":/^Browser Party [0-9]{10,}$/,
     "contact-email":/^browser-[0-9]{10,}@example\.org$/,
-    "contact-phone":/^\+447700900[0-9]{3}$/,
+    "contact-phone":/^\+12025550102$/,
     "task-subject":/^Browser Task [0-9]{10,}$/,
     "cookie":/^crm-s3-cookie-[0-9]{10,}$/,
     "header":/^crm-s3-header-[0-9]{10,}$/,
