@@ -178,7 +178,7 @@ async function subprocessEntry(){
        const {sql,params=[]}=JSON.parse(options.body);
        const names=readdirSync("apps/cloudflare-crm/migrations").filter(n=>n.endsWith(".sql")).sort();
        const ledger=variant==="migration-fails"?names.slice(0,1):
-         variant==="migration-history-drift"?["unrecognized.sql"]:nfcLegacy&&!migrated?names.slice(0,-1):names;
+         variant==="migration-history-drift"?["unrecognized.sql"]:nfcLegacy&&!migrated?names.slice(0,-2):names;
        const results=sql.includes("FROM d1_migrations")?ledger.map(name=>({name})):
          !migrated&&!nfcLegacy?[]:db.prepare(sql).all(...params);
        return wrap([{success:true,results}]);
