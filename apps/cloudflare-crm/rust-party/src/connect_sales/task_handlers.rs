@@ -202,7 +202,8 @@ impl task_wire::TaskService for TaskV2Service {
                     .await
                     .map_err(|_| ConnectError::unavailable("TASK_RECEIPT_READ_FAILED"))?;
                 crud_commit_evidence(stored, &id, &self.request_id, |state| {
-                    activity_tasks::decode(state).map(|row| (row.task_id().as_str().to_owned(), row.version()))
+                    activity_tasks::decode(state)
+                        .map(|row| (row.task_id().as_str().to_owned(), row.version()))
                 })
                 .map_err(|_| ConnectError::unavailable("TASK_RECEIPT_DECODE_FAILED"))?
             }
