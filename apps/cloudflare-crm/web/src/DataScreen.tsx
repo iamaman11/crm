@@ -14,7 +14,13 @@ export function DataScreen() {
   const [kind,setKind]=useState("");
   const [preview,setPreview]=useState<Awaited<ReturnType<typeof api.csv.previewPartyImport>>>();
   const [previewBusy,setPreviewBusy]=useState(false);
+  const [fileInputRevision,setFileInputRevision]=useState(0);
   const exported=useReadAction<Awaited<ReturnType<typeof api.csv.previewPartyExport>>>();
+  const clearSelection=async()=>{
+    fileRevision.current++;
+    setFileInputRevision(revision=>revision+1);
+    setBytes(undefined);setFileName("");setPreview(undefined);setFileError("");
+  };
   const mutation=useMutation({
     storageKey:"crm.data.csv-import.pending.v1",
     lookup:async(marker,signal)=>{
@@ -23,13 +29,8 @@ export function DataScreen() {
       },{signal});
       return result.csvSha256Hex===marker.resourceId?result.confirmedMutation:undefined;
     },
-    refresh:async()=>{
-      setBytes(undefined);setFileName("");setPreview(undefined);setFileError("");
-    }
+    refresh:clearSelection
   });
-  const clearSelection=()=>{
-    setBytes(undefined);setFileName("");setPreview(undefined);setFileError("");
-  };
   return <>
     <PageHeader title="Импорт и экспорт" description="Доступно администратору. CSV-импорт создаёт новых участников; ID исходной системы не заменяют ID CRM."/>
     <Card title="Экспорт участников">
@@ -43,9 +44,8 @@ export function DataScreen() {
       <p>Файл содержит party_id, kind, display_name, resource_version.</p>
     </Card>
     <Card title="Импорт участников">
-      <TextField label="CSV-файл" type="file" accept=".csv,text/csv" disabled={mutation.busy||mutation.pending||previewBusy} onChange={async e=>{
+      <TextField key={fileInputRevision} label="CSV-файл" type="file" accept=".csv,text/csv" disabled={mutation.busy||mutation.pending||previewBusy} onChange={async e=>{
         const file=e.target.files?.[0],revision=++fileRevision.current;
-        e.target.value="";
         setBytes(undefined);setPreview(undefined);setPreviewBusy(false);
         setFileError("");mutation.changed();
         if(!file){setFileName("");return;}
