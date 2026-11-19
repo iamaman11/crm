@@ -633,8 +633,13 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByText("90071992547409.93 USD · 38.50%",{exact:true}).waitFor();
    // Keyboard/select fallback remains the original mutation form; verify
    // it opens and can be cancelled without a write before testing native DnD.
-   await dealCard.getByRole("button",{name:"Изменить этап",exact:true}).focus();
-   await page.keyboard.press("Enter");
+   const keyboardStageButton=dealCard.getByRole("button",{name:"Изменить этап",exact:true});
+   const keyboardStageRead=page.waitForResponse(response=>
+     response.url().endsWith("/GetDeal")&&response.request().method()==="POST");
+   await keyboardStageButton.press("Enter");
+   const stageReadResponse=await keyboardStageRead;
+   assert.equal(stageReadResponse.status(),200,
+     "Keyboard fallback must load the current Deal from its original owner");
    await page.getByRole("heading",{name:"Этап сделки: Browser Deal "+runId,exact:true}).waitFor();
    await page.getByLabel("Следующий этап",{exact:true}).selectOption(ownStageIds[1]);
    await page.getByRole("button",{name:"Отмена",exact:true}).last().click();
