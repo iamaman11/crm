@@ -123,7 +123,8 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
                     .await
                     .map_err(|_| ConnectError::unavailable("RELATIONSHIP_RECEIPT_READ_FAILED"))?;
                 crud_commit_evidence(stored, &id, &self.request_id, |state| {
-                    party_relationships::decoded(state).map(|row| (row.party_relationship_id().as_str().to_owned(), row.version()))
+                    party_relationships::decoded(state)
+                        .map(|row| (row.party_relationship_id().as_str().to_owned(), row.version()))
                 })
                 .map_err(|_| ConnectError::unavailable("RELATIONSHIP_RECEIPT_DECODE_FAILED"))?
             }
