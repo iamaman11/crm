@@ -1,6 +1,94 @@
 // A read-only anonymous GET can be replayed after transport or edge propagation failure.
 // Never replay a write, accept a network error as denial, or accept an
 // unauthorized success. Each attempt has its own bounded connection.
+
+const retryableReadbackCodes = new Set([
+  "ECONNRESET","ETIMEDOUT","EPIPE","UND_ERR_SOCKET",
+  "UND_ERR_CONNECT_TIMEOUT","UND_ERR_HEADERS_TIMEOUT","EAI_AGAIN"
+]);
+
+export function isRetryableReadbackTransportError(error) {
+  const code=error?.cause?.code;
+  return ["TimeoutError","AbortError"].includes(error?.name)||
+    (error?.name==="TypeError"&&retryableReadbackCodes.has(code));
+}
+
+// The live browser suite starts only after three consecutive signed GETs prove
+// the exact deployed source. Transport failures and edge propagation may be
+// retried; authorization failures and unexpected responses remain fail-closed.
+export async function waitForExactSourceSha(endpoint,expectedSha,{
+  headers={},
+  request=fetch,
+  pause=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+  log=entry=>console.log(JSON.stringify(entry)),
+  maxAttempts=40,
+  stableReads=3,
+  intervalMs=1500,
+  timeoutMs=10000,
+  deadlineMs=90000,
+  now=Date.now
+}={}) {
+  if(!/^[a-f0-9]{40}$/.test(expectedSha))
+    throw Error("CRM_E2E_VERSION_EXPECTED_SHA_INVALID");
+  if(![maxAttempts,stableReads,intervalMs,timeoutMs,deadlineMs].every(Number.isInteger)||
+    maxAttempts<1||stableReads<1||stableReads>maxAttempts||
+    intervalMs<0||timeoutMs<1||deadlineMs<1)
+    throw Error("CRM_E2E_VERSION_READBACK_OPTIONS_INVALID");
+
+  const started=now(),deadline=started+deadlineMs;
+  let stable=0,attempts=0,lastStatus=null,lastSource=null,lastTransportError=null;
+  while(attempts<maxAttempts&&stable<stableReads&&now()<deadline) {
+    attempts++;
+    let response;
+    try {
+      response=await request(endpoint,{method:"GET",headers,redirect:"manual",
+        cache:"no-store",signal:AbortSignal.timeout(
+          Math.max(1,Math.min(timeoutMs,deadline-now())))});
+    } catch(error) {
+      if(!isRetryableReadbackTransportError(error))throw error;
+      stable=0;
+      lastTransportError=error;
+      const delayMs=Math.min(intervalMs,Math.max(0,deadline-now()));
+      log({event:"crm.e2e-version-readback",result:"RETRY",attempt:attempts,
+        reason:error?.cause?.code??error.name,delay_ms:delayMs});
+      if(delayMs>0)await pause(delayMs);
+      continue;
+    }
+
+    lastTransportError=null;
+    lastStatus=response.status;
+    lastSource=null;
+    if(response.status===401||response.status===403)
+      throw Error("CRM_E2E_VERSION_ACCESS_HTTP_"+response.status);
+    if(response.status===200) {
+      const body=await response.json();
+      lastSource=typeof body?.source==="string"?body.source:null;
+    } else if(response.status!==404&&response.status!==429&&
+      !(response.status>=500&&response.status<=599)) {
+      throw Error("CRM_E2E_VERSION_HTTP_"+response.status);
+    }
+
+    stable=response.status===200&&lastSource===expectedSha?stable+1:0;
+    if(stable===stableReads)break;
+    const delayMs=Math.min(intervalMs,Math.max(0,deadline-now()));
+    if(attempts===1||attempts%5===0||response.status!==200)
+      log({event:"crm.e2e-version-readback",result:"RETRY",attempt:attempts,
+        http_status:response.status,observed_sha:lastSource,
+        cf_ray:response.headers?.get?.("cf-ray")??null,
+        stable_reads:stable,delay_ms:delayMs});
+    if(delayMs>0)await pause(delayMs);
+  }
+
+  if(stable!==stableReads) {
+    const detail=lastTransportError
+      ?" transport="+(lastTransportError?.cause?.code??lastTransportError.name)
+      :" http_status="+(lastStatus??"none")+" observed_sha="+(lastSource??"none");
+    throw Error("CRM_E2E_VERSION_READBACK_UNSTABLE expected="+expectedSha+
+      " stable="+stable+"/"+stableReads+" attempts="+attempts+detail);
+  }
+  log({event:"crm.e2e-version-readback",result:"PASS",source_sha:expectedSha,
+    attempts,elapsed_ms:now()-started});
+}
 export async function verifyAnonymousDenial(endpoint,{
   request=fetch,
   pause=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
@@ -14,11 +102,7 @@ export async function verifyAnonymousDenial(endpoint,{
         signal:AbortSignal.timeout(20000)});
     }catch(error){
       const code=error?.cause?.code;
-      const retryable=["TimeoutError","AbortError"].includes(error?.name)||
-        (error?.name==="TypeError"&&["ECONNRESET","ETIMEDOUT","EPIPE",
-          "UND_ERR_SOCKET","UND_ERR_CONNECT_TIMEOUT","UND_ERR_HEADERS_TIMEOUT",
-          "EAI_AGAIN"].includes(code));
-      if(!retryable||attempt===3)throw error;
+      if(!isRetryableReadbackTransportError(error)||attempt===3)throw error;
       const delayMs=attempt*1000;
       log({event:"crm.anonymous-denial-readback",result:"RETRY",attempt,
         reason:code??error.name,delay_ms:delayMs});

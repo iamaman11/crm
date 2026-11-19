@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from "node:fs";
 import {typedBrowser} from "../rust-party/test/typed-browser.mjs";
+import {waitForExactSourceSha} from "../scripts/release-readback.mjs";
 const required=name=>{const value=process.env[name];if(!value)throw Error("Missing "+name);return value;};
 const sha=required("GITHUB_SHA");
 assert.match(sha,/^[a-f0-9]{40}$/);
@@ -38,14 +39,9 @@ async function restoreRole(){
  roleMayHaveChanged=false;
 }
 try{
- let stable=0;
- for(let attempt=0;attempt<40&&stable<3;attempt++){
-   const response=await fetch(base+"/api/version?browser-preflight="+Date.now(),{
-     headers:{...access("A"),"cache-control":"no-cache"},redirect:"manual"});
-   stable=response.status===200&&(await response.json()).source===sha?stable+1:0;
-   if(stable<3)await new Promise(resolve=>setTimeout(resolve,1500));
- }
- assert.equal(stable,3,"Browser suite must start on the expected deployed source");
+ await waitForExactSourceSha(base+"/api/version?browser-preflight="+Date.now(),sha,{
+   headers:{...access("A"),"cache-control":"no-cache",connection:"close"}
+ });
  await typedBrowser({base,sourceSha:sha,adminHeaders:access("A"),viewerHeaders:access("A"),
    tenantBHeaders:access("B"),tenantA:setup.tenant_a,adminIdentity:principal,features:["native"],directory,
    sql:async sql=>(await query(sql)).results,

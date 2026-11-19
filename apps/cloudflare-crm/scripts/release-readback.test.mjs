@@ -1,8 +1,87 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {verifyAnonymousDenial,verifyTracePrivacySettings,classifySignedSessionReadback} from "./release-readback.mjs";
+import {verifyAnonymousDenial,verifyTracePrivacySettings,classifySignedSessionReadback,
+  isRetryableReadbackTransportError,waitForExactSourceSha} from "./release-readback.mjs";
 
 const endpoint="https://example.test/api/version";
+
+const expectedSha="a".repeat(40);
+const versionRun=(sequence,overrides={})=>{
+  const calls=[],events=[],delays=[];
+  const result=waitForExactSourceSha(endpoint,expectedSha,{
+    request:async(url,options)=>{
+      calls.push({url,options});
+      const item=sequence[calls.length-1];
+      if(item instanceof Error)throw item;
+      if(item instanceof Response)return item;
+      const status=item?.status??200;
+      const body=typeof item==="string"?{source:item}:{source:item?.source};
+      return new Response(JSON.stringify(body),{status,headers:{"cf-ray":"test-ray"}});
+    },
+    pause:async ms=>{delays.push(ms);},
+    log:event=>events.push(event),
+    maxAttempts:10,intervalMs:5,timeoutMs:100,deadlineMs:1000,
+    ...overrides
+  });
+  return {result,calls,events,delays};
+};
+
+test("exact source readback retries a reset and requires three consecutive signed GETs",async()=>{
+  const x=versionRun([reset(),expectedSha,expectedSha,expectedSha]);
+  await x.result;
+  assert.equal(x.calls.length,4);
+  assert.deepEqual(x.delays,[5,5,5]);
+  for(const call of x.calls){
+    assert.equal(call.url,endpoint);
+    assert.equal(call.options.method,"GET");
+    assert.equal(call.options.redirect,"manual");
+    assert.equal(call.options.cache,"no-store");
+    assert.ok(call.options.signal instanceof AbortSignal);
+  }
+  assert.deepEqual(x.events.map(e=>e.result),["RETRY","PASS"]);
+});
+test("exact source readback resets its stability count after stale and edge responses",async()=>{
+  const x=versionRun([
+    "b".repeat(40),expectedSha,
+    new Response(null,{status:404,headers:{"cf-ray":"edge-not-ready"}}),
+    expectedSha,expectedSha,expectedSha
+  ]);
+  await x.result;
+  assert.equal(x.calls.length,6);
+  assert.equal(x.events.at(-1).result,"PASS");
+  assert.equal(x.events.at(-1).attempts,6);
+});
+test("exact source readback retries transient server failures but never accepts them",async()=>{
+  const x=versionRun([
+    new Response(null,{status:503}),
+    expectedSha,expectedSha,expectedSha
+  ]);
+  await x.result;
+  assert.equal(x.calls.length,4);
+});
+test("exact source readback fails immediately on invalid Access authorization",async()=>{
+  const x=versionRun([new Response(null,{status:403}),expectedSha,expectedSha,expectedSha]);
+  await assert.rejects(x.result,/CRM_E2E_VERSION_ACCESS_HTTP_403/);
+  assert.equal(x.calls.length,1);
+});
+test("exact source readback never retries an invalid request or accepts a stale SHA",async()=>{
+  const x=versionRun([new TypeError("invalid URL"),expectedSha,expectedSha,expectedSha]);
+  await assert.rejects(x.result,/invalid URL/);
+  assert.equal(x.calls.length,1);
+});
+test("exact source readback bounds persistent transport failure",async()=>{
+  const x=versionRun([reset(),reset(),reset()],{maxAttempts:3});
+  await assert.rejects(x.result,/transport=ECONNRESET/);
+  assert.equal(x.calls.length,3);
+  assert.deepEqual(x.delays,[5,5]);
+});
+test("readback transport classifier recognizes only known transient failures",()=>{
+  assert.equal(isRetryableReadbackTransportError(reset()),true);
+  for(const name of ["AbortError","TimeoutError"])
+    assert.equal(isRetryableReadbackTransportError(Object.assign(new Error(name),{name})),true);
+  assert.equal(isRetryableReadbackTransportError(new TypeError("invalid URL")),false);
+  assert.equal(isRetryableReadbackTransportError(new Error("application failure")),false);
+});
 const reset=()=>Object.assign(new TypeError("fetch failed"),{
   cause:Object.assign(new Error("read ECONNRESET"),{code:"ECONNRESET"})
 });
