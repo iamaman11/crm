@@ -2838,6 +2838,23 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await enrichment("PublishProviderProfile",admin,{...profileInput,retentionDays:31})).body.code,"aborted");
  assert.equal((await enrichment("GetProviderProfile",viewer,{profileVersionId:profileId})).body.profile.profileVersionId,profileId);
  assert.equal((await enrichment("GetProviderProfile",tenantB,{profileVersionId:profileId})).body.code,"not_found");
+ const enrichmentAuditBeforeProfileReceiptReads=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
+ const profileReceiptRead=await enrichment("GetProviderProfile",viewer,{
+   profileVersionId:"",receiptIdempotencyKey:profileInput.precondition.idempotencyKey});
+ assert.equal(profileReceiptRead.status,200,describeProtobuf(profileReceiptRead.body));
+ assert.equal(profileReceiptRead.body.profile.profileVersionId,profileId);
+ assert.equal(profileReceiptRead.body.confirmedMutation?.originalRequestId,profileResult.headers.get("x-request-id"));
+ assert.equal(profileReceiptRead.body.confirmedMutation?.resourceVersion,1n);
+ assert.equal(profileReceiptRead.body.confirmedMutation?.requestId,profileReceiptRead.headers.get("x-request-id"));
+ assert.equal((await enrichment("GetProviderProfile",tenantB,{
+   profileVersionId:"",receiptIdempotencyKey:profileInput.precondition.idempotencyKey})).body.code,"not_found");
+ assert.equal((await enrichment("GetProviderProfile",viewer,{profileVersionId:""})).body.code,"invalid_argument");
+ assert.equal((await enrichment("GetProviderProfile",viewer,{
+   profileVersionId:"",receiptIdempotencyKey:"short"})).body.code,"invalid_argument");
+ assert.equal((await enrichment("GetProviderProfile",viewer,{
+   profileVersionId:"",receiptIdempotencyKey:"enrichment-profile-missing"})).body.code,"not_found");
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,enrichmentAuditBeforeProfileReceiptReads,
+   "Profile receipt lookup is read-only");
  const mappingInput={
    mappingKey:"party_display_name",providerProfileVersionId:profileId,
    providerResponseFieldPath:"organization.legal_name",maximumSuggestionsPerResponse:1,
@@ -2856,6 +2873,33 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    precondition:{idempotencyKey:"enrichment-profile-main"}})).body.code,"aborted");
  assert.equal((await enrichment("GetMapping",viewer,{mappingVersionId:mappingId})).body.mapping.mappingVersionId,mappingId);
  assert.equal((await enrichment("GetMapping",tenantB,{mappingVersionId:mappingId})).body.code,"not_found");
+ const enrichmentAuditBeforeMappingReceiptReads=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
+ const mappingReceiptRead=await enrichment("GetMapping",viewer,{
+   mappingVersionId:"",receiptIdempotencyKey:mappingInput.precondition.idempotencyKey});
+ assert.equal(mappingReceiptRead.status,200,describeProtobuf(mappingReceiptRead.body));
+ assert.equal(mappingReceiptRead.body.mapping.mappingVersionId,mappingId);
+ assert.equal(mappingReceiptRead.body.confirmedMutation?.originalRequestId,mappingResult.headers.get("x-request-id"));
+ assert.equal(mappingReceiptRead.body.confirmedMutation?.resourceVersion,1n);
+ assert.equal(mappingReceiptRead.body.confirmedMutation?.requestId,mappingReceiptRead.headers.get("x-request-id"));
+ assert.equal((await enrichment("GetMapping",tenantB,{
+   mappingVersionId:"",receiptIdempotencyKey:mappingInput.precondition.idempotencyKey})).body.code,"not_found");
+ assert.equal((await enrichment("GetMapping",viewer,{
+   mappingVersionId:"",receiptIdempotencyKey:"enrichment-profile-main"})).body.code,"not_found");
+ assert.equal((await enrichment("GetMapping",viewer,{
+   mappingVersionId:mappingId,receiptIdempotencyKey:"enrichment-profile-main"
+ })).body.confirmedMutation,undefined,"a profile receipt cannot confirm a mapping");
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,enrichmentAuditBeforeMappingReceiptReads,
+   "Mapping receipt lookup is read-only");
+ await sql("ALTER TABLE crm_enrichment_receipts RENAME TO fixture_unavailable_enrichment_receipts");
+ try {
+   assert.equal((await enrichment("GetProviderProfile",viewer,{
+     profileVersionId:"",receiptIdempotencyKey:profileInput.precondition.idempotencyKey})).status,503,
+     "an unavailable receipt source must not confirm a profile write");
+   assert.equal((await enrichment("GetProviderProfile",viewer,{profileVersionId:profileId})).status,200,
+     "ordinary immutable Get by ID remains available without receipt recovery");
+ } finally {
+   await sql("ALTER TABLE fixture_unavailable_enrichment_receipts RENAME TO crm_enrichment_receipts");
+ }
  assert.deepEqual((await sql("SELECT action,subject_id,request_id,actor FROM crm_audit WHERE "+
    "tenant_id='tenant-a' AND subject_id IN ('"+profileId+"','"+mappingId+"') ORDER BY rowid")),[
    {action:"customer_enrichment.profile_publish",subject_id:profileId,
@@ -3050,6 +3094,35 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const importReplay=await csv("ApplyPartyImport",knownService,applyInput);
  assert.equal(importReplay.body.createdCount,0);assert.equal(importReplay.body.replayedCount,2);
  assert.equal(importReplay.body.receipt.replayed,true);
+
+ const csvReceiptAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
+ const csvReceiptInput={csv:new Uint8Array(),receiptIdempotencyKey:applyInput.precondition.idempotencyKey};
+ const csvReceiptRead=await csv("PreviewPartyImport",admin,csvReceiptInput);
+ assert.equal(csvReceiptRead.status,200,describeProtobuf(csvReceiptRead.body));
+ assert.equal(csvReceiptRead.body.csvSha256Hex,applyInput.expectedSha256Hex);
+ assert.equal(csvReceiptRead.body.count,2);
+ assert.equal(csvReceiptRead.body.previouslyImported,2);
+ assert.deepEqual(csvReceiptRead.body.targetPartyIds,[]);
+ assert.equal(csvReceiptRead.body.confirmedMutation?.originalRequestId,applied.headers.get("x-request-id"));
+ assert.equal(csvReceiptRead.body.confirmedMutation?.resourceVersion,1n);
+ assert.equal(csvReceiptRead.body.confirmedMutation?.requestId,csvReceiptRead.headers.get("x-request-id"));
+ assert.equal((await csv("PreviewPartyImport",tenantB,csvReceiptInput)).body.code,"not_found");
+ assert.equal((await csv("PreviewPartyImport",admin,{csv:new Uint8Array()})).body.code,"invalid_argument");
+ assert.equal((await csv("PreviewPartyImport",admin,{
+   csv:new Uint8Array(),receiptIdempotencyKey:"short"})).body.code,"invalid_argument");
+ assert.equal((await csv("PreviewPartyImport",admin,{
+   csv:new Uint8Array(),receiptIdempotencyKey:"csv-import-missing-key"})).body.code,"not_found");
+ assert.equal((await csv("PreviewPartyImport",admin,{
+   csv:csvBytes,receiptIdempotencyKey:applyInput.precondition.idempotencyKey})).body.code,"invalid_argument");
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,csvReceiptAuditBefore,
+   "CSV receipt lookup must not append audit");
+ await sql("ALTER TABLE crm_party_import_receipts RENAME TO fixture_unavailable_party_import_receipts");
+ try {
+   assert.equal((await csv("PreviewPartyImport",admin,csvReceiptInput)).status,503,
+     "an unavailable batch receipt must remain unconfirmed");
+ } finally {
+   await sql("ALTER TABLE fixture_unavailable_party_import_receipts RENAME TO crm_party_import_receipts");
+ }
  assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,
    precondition:{idempotencyKey:"csv-import-another-operation"}})).body.replayedCount,2);
  assert.equal((await csv("PreviewPartyImport",admin,{csv:csvBytes})).body.previouslyImported,2);
