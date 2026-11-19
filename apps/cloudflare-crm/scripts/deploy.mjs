@@ -433,6 +433,27 @@ async function verifyData(){
   }
   assert.deepEqual([...recoveryKinds.keys()].sort(),["lookup","replay"],
     "Both response-loss recovery paths are mandatory release evidence");
+  // S5a adds one independent original Party owner, not a fabricated Deal
+  // write. It must prove a committed request and a distinct read-only GetParty.
+  const ownerProofs=evidence.owner_recovery??[];
+  assert.equal(ownerProofs.length,1,"S5a Party reload-recovery proof required");
+  for(const proof of ownerProofs){
+    assert.equal(proof.owner,"party");assert.equal(proof.kind,"lookup");
+    const original=requests.get(proof.original_request_id);
+    const read=requests.get(proof.subsequent_request_id);
+    assert.ok(original&&read,"S5a signed owner requests missing");
+    assert.ok(original.path.endsWith("/CreateParty")&&read.path.endsWith("/GetParty"));
+    assert.equal(original.status,200);assert.equal(read.status,200);
+    assert.ok(mutationIds.has(proof.original_request_id));
+    assert.ok(!mutationIds.has(proof.subsequent_request_id));
+    assert.notEqual(proof.original_request_id,proof.subsequent_request_id);
+    const checked=await cfReadback("/d1/database/"+database+"/query",{
+      sql:"SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND request_id=?",
+      params:[evidence.tenant,proof.subsequent_request_id]});
+    assert.equal(checked?.[0]?.success,true);
+    assert.equal(Number(checked[0].results?.[0]?.n),0,
+      "S5a GetParty must never commit a second audit row");
+  }
   // Synthetic-only business values actually sent by the browser must not
   // appear in the native Cloudflare events of their committed requests.
   // Validate known fixture formats and never log the values in diagnostics.
@@ -512,13 +533,17 @@ async function verifyData(){
       {entry:requests.get(item.subsequent_request_id),needsD1:true}
     ]),
     ...[...probeValuesByRequest.keys()].map(id=>({entry:requests.get(id),needsD1:true})),
+    ...ownerProofs.flatMap(item=>[
+      {entry:requests.get(item.original_request_id),needsD1:true},
+      {entry:requests.get(item.subsequent_request_id),needsD1:true}
+    ]),
     ...[ [...requests.values()].find(e=>!mutationIds.has(e.request_id)&&e.status===200),
           [...requests.values()].find(e=>e.status>=400) ]
       .filter(Boolean).map(entry=>({entry,needsD1:false}))
   ];
   // A recovery scenario is proved only by distinct Cloudflare traces for
   // its original and follow-up requests. Do not pass on the same trace twice.
-  for(const item of recoveryKinds.values())
+  for(const item of [...recoveryKinds.values(),...ownerProofs])
     assert.notEqual(requestTraces.get(item.original_request_id),
       requestTraces.get(item.subsequent_request_id),
       "Recovery reused the original Cloudflare trace ID");
@@ -566,7 +591,8 @@ async function verifyData(){
   assert.ok(d1SpanVerified>=1,"D1 trace proof must cover a committed mutation");
   console.log(JSON.stringify({event:"crm.native-s3-trace-to-d1",
     result:"PASS",traces:spanVerified,committed_d1_traces:d1SpanVerified,
-    recovery_paths:[...recoveryKinds.keys()].sort(),synthetic_private_probes:probeKinds.length,
+    recovery_paths:[...recoveryKinds.keys()].sort(),owner_recovery_proofs:ownerProofs.length,
+    synthetic_private_probes:probeKinds.length,
     automatic_invocation_logs:false}));
   assert.equal(await version(),liveVersion,"Deployment changed during acceptance");
   assert.deepEqual(await bindings(liveVersion),{sha,db:database});
@@ -575,7 +601,8 @@ async function verifyData(){
     d1_database:database,features:["native"],traffic_percentage:100,
     mutations:mutationIds.size,logs_correlated:requests.size,
     spans_correlated:spanVerified,d1_mutation_spans:d1SpanVerified,
-    recovery_paths:[...recoveryKinds.keys()].sort(),synthetic_private_probes:probeKinds.length,
+    recovery_paths:[...recoveryKinds.keys()].sort(),owner_recovery_proofs:ownerProofs.length,
+    synthetic_private_probes:probeKinds.length,
     trace_settings:traceSettings,steps:evidence.steps,
     request_ids:[...requests.keys()]});
 }
