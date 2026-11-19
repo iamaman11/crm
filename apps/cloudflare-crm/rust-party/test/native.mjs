@@ -3480,6 +3480,75 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    console.log(JSON.stringify({event:"crm.native-r73-forecast",result:"PASS",stage_default:true,
      manual_zero:true,move:true,reset:true,category:true,currency:true,close_reopen:true,cas:true,tenant:true}));
  }
+ // #471 S5a: five existing original owners expose a READ-only keyed receipt
+ // that proves exactly the original signed commit, not the latest row version.
+ const s5aReceipts=[
+   {owner:"party",call:v3,method:"GetParty",idField:"partyId",id,key:creation.precondition.idempotencyKey,
+     original:created.headers.get("x-request-id"),table:"crm_party_receipts"},
+   {owner:"account",call:accountV2,method:"GetAccount",idField:"accountId",id:accountId,
+     key:accountInput.precondition.idempotencyKey,original:accountCreated.headers.get("x-request-id"),
+     table:"crm_account_receipts"},
+   {owner:"contact",call:contactV2,method:"GetContactPoint",idField:"contactPointId",id:contactId,
+     key:contactInput.precondition.idempotencyKey,original:contactCreated.headers.get("x-request-id"),
+     table:"crm_contact_point_receipts"},
+   {owner:"relationship",call:relationV2,method:"GetPartyRelationship",idField:"relationshipId",id:rMid,
+     key:midRelation.precondition.idempotencyKey,original:midCreated.headers.get("x-request-id"),
+     table:"crm_party_relationship_receipts"},
+   {owner:"task",call:taskV2,method:"GetTask",idField:"taskId",id:taskMid,
+     key:taskMidInput.precondition.idempotencyKey,original:taskCreated.headers.get("x-request-id"),
+     table:"crm_activity_task_receipts"}
+ ];
+ for(const entry of s5aReceipts) {
+   const input={[entry.idField]:entry.id,receiptIdempotencyKey:entry.key};
+   const read=await entry.call(entry.method,viewer,input);
+   assert.equal(read.status,200,entry.owner+" "+describeProtobuf(read.body));
+   assert.equal(read.body.confirmedMutation?.originalRequestId,entry.original,
+     "original signed D1 receipt provenance must survive subsequent owner updates");
+   assert.equal(read.body.confirmedMutation?.resourceVersion,1n,
+     "read-only recovery must use the receipt snapshot version, not mutable latest state");
+   assert.equal(read.body.confirmedMutation?.requestId,read.headers.get("x-request-id"));
+   const saved=await sql("SELECT original_request_id FROM "+entry.table+" WHERE tenant=? AND key=?",
+     "tenant-a",entry.key);
+   assert.deepEqual(saved,[{original_request_id:entry.original}]);
+   assert.equal((await entry.call(entry.method,tenantB,input)).status,404,
+     "tenant isolation precedes receipt lookup");
+   assert.equal((await entry.call(entry.method,null,input)).status,401);
+   assert.equal((await entry.call(entry.method,viewer,
+     {...input,receiptIdempotencyKey:"short"})).status,400);
+   const missing=await entry.call(entry.method,viewer,
+     {...input,receiptIdempotencyKey:"s5a-unknown-key-"+entry.owner});
+   assert.equal(missing.status,200);
+   assert.equal(missing.body.confirmedMutation,undefined);
+   // A same-tenant unrelated resource cannot inherit somebody else's key.
+   const other=entry.owner==="party"?"binary-rpc-proof-01":
+     entry.owner==="account"?accountNextId:
+     entry.owner==="contact"?contactLastId:
+     entry.owner==="relationship"?rLast:taskLast;
+   const unrelated=await entry.call(entry.method,viewer,
+     {[entry.idField]:other,receiptIdempotencyKey:entry.key});
+   assert.equal(unrelated.status,200,entry.owner+" other record");
+   assert.equal(unrelated.body.confirmedMutation,undefined);
+   // Legacy receipts without known origin must not be inferred from row order.
+   await sql("UPDATE "+entry.table+" SET original_request_id=NULL WHERE tenant=? AND key=?",
+     "tenant-a",entry.key);
+   try {
+     const historical=await entry.call(entry.method,viewer,input);
+     assert.equal(historical.status,200);
+     assert.equal(historical.body.confirmedMutation,undefined,
+       "historical NULL provenance is not evidence of a committed mutation");
+   } finally {
+     await sql("UPDATE "+entry.table+" SET original_request_id=? WHERE tenant=? AND key=?",
+       entry.original,"tenant-a",entry.key);
+   }
+   const after=await entry.call(entry.method,viewer,input);
+   assert.equal(after.body.confirmedMutation?.originalRequestId,entry.original);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?",
+     read.headers.get("x-request-id")))[0].n,0,"receipt checks never append audit");
+ }
+ console.log(JSON.stringify({event:"crm.native-s5a-crud-commit-provenance",result:"PASS",
+   owners:s5aReceipts.map(x=>x.owner),original_request_ids:true,read_only:true,
+   latest_version_independent:true,legacy_null_fail_closed:true,
+   tenant_isolation:true,wrong_resource_rejected:true}));
  // #471 S2: prove SQL JSON paths and native persisted Rust state agree
  // for all active owner records created through generated binary Connect.
  // These are *SQL usage contracts*, not a new JSON business-schema registry.
