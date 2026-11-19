@@ -48,10 +48,12 @@ export async function waitForExactSourceSha(endpoint,expectedSha,{
       if(!isRetryableReadbackTransportError(error))throw error;
       stable=0;
       lastTransportError=error;
-      const delayMs=Math.min(intervalMs,Math.max(0,deadline-now()));
-      log({event:"crm.e2e-version-readback",result:"RETRY",attempt:attempts,
-        reason:error?.cause?.code??error.name,delay_ms:delayMs});
-      if(delayMs>0)await pause(delayMs);
+      if(attempts<maxAttempts&&now()<deadline) {
+        const delayMs=Math.min(intervalMs,Math.max(0,deadline-now()));
+        log({event:"crm.e2e-version-readback",result:"RETRY",attempt:attempts,
+          reason:error?.cause?.code??error.name,delay_ms:delayMs});
+        if(delayMs>0)await pause(delayMs);
+      }
       continue;
     }
 
@@ -70,13 +72,15 @@ export async function waitForExactSourceSha(endpoint,expectedSha,{
 
     stable=response.status===200&&lastSource===expectedSha?stable+1:0;
     if(stable===stableReads)break;
-    const delayMs=Math.min(intervalMs,Math.max(0,deadline-now()));
-    if(attempts===1||attempts%5===0||response.status!==200)
-      log({event:"crm.e2e-version-readback",result:"RETRY",attempt:attempts,
-        http_status:response.status,observed_sha:lastSource,
-        cf_ray:response.headers?.get?.("cf-ray")??null,
-        stable_reads:stable,delay_ms:delayMs});
-    if(delayMs>0)await pause(delayMs);
+    if(attempts<maxAttempts&&now()<deadline) {
+      const delayMs=Math.min(intervalMs,Math.max(0,deadline-now()));
+      if(attempts===1||attempts%5===0||response.status!==200)
+        log({event:"crm.e2e-version-readback",result:"RETRY",attempt:attempts,
+          http_status:response.status,observed_sha:lastSource,
+          cf_ray:response.headers?.get?.("cf-ray")??null,
+          stable_reads:stable,delay_ms:delayMs});
+      if(delayMs>0)await pause(delayMs);
+    }
   }
 
   if(stable!==stableReads) {
