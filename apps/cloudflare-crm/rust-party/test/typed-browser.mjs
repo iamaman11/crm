@@ -17,7 +17,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  const tenantSql=tenantA.replaceAll("'","''");
  assert.ok(adminIdentity,"Expected signed actor is required for browser audit assertions");
  const startedAt=Date.now();
- const requests=[],writes=[],recovery=[],syntheticPrivateProbes=[],pageErrors=[],steps=[];
+ const requests=[],writes=[],recovery=[],ownerRecovery=[],syntheticPrivateProbes=[],pageErrors=[],steps=[];
  const headerReads=[];
  let restoreViewer=async()=>{};
  const recordResponse=response=>{
@@ -227,6 +227,60 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"UpdateParty");
    assert.equal((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0].version,2);
    steps.push("Party create/edit/reload and D1 version/audit");
+   // S5a: original Party commit happens, its HTTP acknowledgement is lost,
+   // and a fresh React instance MUST use GetParty + typed D1 receipt, not
+   // blindly POST another CreateParty with a newly generated key.
+   await page.getByRole("button",{name:"Создать участника",exact:true}).click();
+   const s5aPartyName="S5a Recovery "+runId;
+   await page.getByLabel("Имя или название",{exact:true}).fill(s5aPartyName);
+   const s5aRoute="**/crm.parties.v3.PartyService/CreateParty";
+   let s5aOriginalRequestId, s5aCreateCalls=0;
+   const loseS5aAcknowledgement=async route=>{
+     s5aCreateCalls++;
+     const committed=await route.fetch();
+     recordResponse(committed);
+     await assertMutation(committed,"CreateParty");
+     s5aOriginalRequestId=committed.headers()["x-request-id"];
+     await route.abort("failed");
+   };
+   await page.route(s5aRoute,loseS5aAcknowledgement);
+   await page.getByRole("button",{name:"Сохранить участника",exact:true}).click();
+   await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
+   const s5aPartyId=await firstId("crm_party_records","display_name",s5aPartyName);
+   const s5aMarker=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.party.pending.v1")));
+   assert.deepEqual(Object.keys(s5aMarker).sort(),["expectedVersion","key","resourceId"]);
+   assert.equal(s5aMarker.resourceId,s5aPartyId);
+   assert.equal(s5aMarker.expectedVersion,"0");
+   await expect(page.getByRole("button",{name:"Сохранить участника",exact:true})).toBeDisabled();
+   const acceptS5aReload=dialog=>void dialog.accept();
+   page.on("dialog",acceptS5aReload);
+   try {await page.reload();} finally {page.off("dialog",acceptS5aReload);}
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).waitFor();
+   await expect(page.getByRole("button",{name:"Создать участника",exact:true})).toBeDisabled();
+   const s5aGetRoute="**/crm.parties.v3.PartyService/GetParty";
+   const failS5aRead=route=>route.abort("failed");
+   await page.route(s5aGetRoute,failS5aRead);
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   await expect(page.getByRole("button",{name:"Проверить результат записи",exact:true})).toBeEnabled();
+   assert.deepEqual(await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.party.pending.v1"))),s5aMarker);
+   await page.unroute(s5aGetRoute,failS5aRead);
+   const s5aProofRead=page.waitForResponse(r=>r.url().endsWith("/GetParty")&&r.request().method()==="POST");
+   await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
+   const s5aChecked=await s5aProofRead;
+   assert.equal(s5aChecked.status(),200);
+   const s5aReadRequestId=(await s5aChecked.allHeaders())["x-request-id"];
+   await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
+     .toContainText(s5aOriginalRequestId);
+   assert.equal(s5aCreateCalls,1,"Recovery must not retry the original Party mutation after reload");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5aOriginalRequestId+
+     "' AND action='parties.create'"))[0].n,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5aReadRequestId+"'"))[0].n,0);
+   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.party.pending.v1")),null);
+   ownerRecovery.push({owner:"party",kind:"lookup",original_request_id:s5aOriginalRequestId,
+     subsequent_request_id:s5aReadRequestId});
+   await page.unroute(s5aRoute,loseS5aAcknowledgement);
+   steps.push("S5a lost Party acknowledgment: opaque reload marker, signed GetParty receipt, no second commit");
+
    await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Other "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty");
@@ -776,8 +830,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Завершить сделку",exact:true}).last().click();
    await page.getByRole("heading",{name:/Результат записи не подтверждён/}).waitFor();
    const mark=await page.evaluate(()=>JSON.parse(sessionStorage.getItem("crm.deal.pending.v1")));
-   assert.deepEqual(Object.keys(mark).sort(),["dealId","expectedVersion","key"]);
-   assert.equal(mark.dealId,dealId);
+   assert.deepEqual(Object.keys(mark).sort(),["expectedVersion","key","resourceId"]);
+   assert.equal(mark.resourceId,dealId);
    assert.equal(mark.expectedVersion,"3");
    assert.match(mark.key,/^[a-f0-9-]{36}$/i);
    const acceptReload=dialog=>void dialog.accept();
@@ -1208,7 +1262,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const evidence={result:"PASS",source_sha:sourceSha,features,browser:"Chromium",
      started_at:startedAt,finished_at:Date.now(),tenant:tenantA,
      tested:"built React and generated Connect client against Rust Worker/D1",steps,requests,writes,recovery,
-     synthetic_private_probes:syntheticPrivateProbes};
+     synthetic_private_probes:syntheticPrivateProbes,owner_recovery:ownerRecovery};
    writeFileSync(resolve(directory,"typed-browser.json"),JSON.stringify(evidence,null,2)+"\n");
    return evidence;
  } catch(error) {
