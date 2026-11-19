@@ -288,8 +288,10 @@ for(const variant of ["persistent-html-telemetry","html-success-telemetry","pers
    assert.equal(result.accepted,false);
    assert.match(result.error,/NON_JSON/);
    assert.match(result.error,/cf_ray=fixture-ray-123/);
-    if(variant==="persistent-invalid-json-telemetry")assert.equal(result.state.telemetryAttempts,3);
-    if(variant==="html-success-telemetry")assert.equal(result.state.telemetryAttempts,1);
+   // Four concurrent request-correlation probes: one HTTP 200 HTML response,
+   // or three bounded attempts per probe for invalid JSON. No write is retried.
+   if(variant==="persistent-invalid-json-telemetry")assert.equal(result.state.telemetryAttempts,12);
+   if(variant==="html-success-telemetry")assert.equal(result.state.telemetryAttempts,4);
    assert.ok(!result.error.includes("<!DOCTYPE"),
      "never print an HTML error body or upstream credentials");
  });
