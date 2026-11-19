@@ -114,11 +114,26 @@ enum CrudReceiptOwner {
 impl CrudReceiptOwner {
     fn sql(self) -> &'static str {
         match self {
-            Self::Party => "SELECT state,original_request_id FROM crm_party_receipts WHERE tenant=? AND key=?",
-            Self::Account => "SELECT state,original_request_id FROM crm_account_receipts WHERE tenant=? AND key=?",
-            Self::Contact => "SELECT state,original_request_id FROM crm_contact_point_receipts WHERE tenant=? AND key=?",
-            Self::Relationship => "SELECT state,original_request_id FROM crm_party_relationship_receipts WHERE tenant=? AND key=?",
-            Self::Task => "SELECT state,original_request_id FROM crm_activity_task_receipts WHERE tenant=? AND key=?",
+            Self::Party => concat!(
+                "SELECT state,original_request_id FROM crm_party_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
+            Self::Account => concat!(
+                "SELECT state,original_request_id FROM crm_account_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
+            Self::Contact => concat!(
+                "SELECT state,original_request_id FROM crm_contact_point_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
+            Self::Relationship => concat!(
+                "SELECT state,original_request_id FROM crm_party_relationship_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
+            Self::Task => concat!(
+                "SELECT state,original_request_id FROM crm_activity_task_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
         }
     }
 }
@@ -157,7 +172,9 @@ fn crud_commit_evidence(
     read_request_id: &str,
     decode: impl FnOnce(&str) -> worker::Result<(String, i64)>,
 ) -> worker::Result<Option<core_v2::MutationCommitEvidence>> {
-    let Some(row) = row else { return Ok(None); };
+    let Some(row) = row else {
+        return Ok(None);
+    };
     // No false proof for historical receipts created before 0017.
     let Some(original) = row.original_request_id.filter(|id| !id.is_empty()) else {
         return Ok(None);
