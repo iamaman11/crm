@@ -1655,17 +1655,17 @@ assert.equal((await salesV2("CreateSalesView",admin,{
 assert.equal((await salesV2("GetSalesView",tenantB,{viewId:viewAId})).status,404);
 assert.equal((await salesV2("ListSalesViews",tenantB,{page:{pageSize:10}})).body.views.length,0);
 assert.equal((await salesV2("GetSalesView",viewer,{viewId:viewAId})).body.view?.viewId,viewAId);
+const viewBCreated=await salesV2("CreateSalesView",admin,{
+  viewId:viewBId,name:"Won across pipelines",status:2,
+  precondition:{idempotencyKey:"r73-view-create-2"}
+});
+assert.equal(viewBCreated.status,200,describeProtobuf(viewBCreated.body));
 const wrongViewProof=await salesV2("GetSalesView",viewer,{
   viewId:viewBId,receiptIdempotencyKey:"r73-view-create-1"
 });
 assert.equal(wrongViewProof.status,200);
 assert.equal(wrongViewProof.body.confirmedMutation,undefined,
   "A receipt for another saved view must never be disclosed");
-const viewBCreated=await salesV2("CreateSalesView",admin,{
-  viewId:viewBId,name:"Won across pipelines",status:2,
-  precondition:{idempotencyKey:"r73-view-create-2"}
-});
-assert.equal(viewBCreated.status,200,describeProtobuf(viewBCreated.body));
 const firstViewsPage=await salesV2("ListSalesViews",viewer,{page:{pageSize:1}});
 assert.equal(firstViewsPage.status,200,describeProtobuf(firstViewsPage.body));
 assert.equal(firstViewsPage.body.views.length,1);
