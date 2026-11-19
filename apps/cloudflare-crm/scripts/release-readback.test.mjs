@@ -78,12 +78,16 @@ test("unexpected error fails without replay",async()=>{
 
 test("Cloudflare tracing requires enabled logs, traces and query redaction",()=>{
   const safe={enabled:true,redact_query_string:true,
-    logs:{enabled:true,head_sampling_rate:1},traces:{enabled:true,head_sampling_rate:1}};
+    logs:{enabled:true,head_sampling_rate:1,invocation_logs:false},
+    traces:{enabled:true,head_sampling_rate:1}};
   assert.deepEqual(verifyTracePrivacySettings(safe),{
-    traces_enabled:true,query_string_redacted:true,logs_enabled:true,trace_sampling_rate:1});
+    traces_enabled:true,query_string_redacted:true,logs_enabled:true,
+    invocation_logs_enabled:false,trace_sampling_rate:1});
   for(const unsafe of [
     null,{}, {...safe,enabled:false}, {...safe,redact_query_string:false},
     {...safe,redact_query_string:undefined}, {...safe,logs:{enabled:false}},
+    {...safe,logs:{enabled:true,head_sampling_rate:1}},
+    {...safe,logs:{enabled:true,head_sampling_rate:1,invocation_logs:true}},
     {...safe,traces:{enabled:false,head_sampling_rate:1}},
     {...safe,traces:{enabled:true,head_sampling_rate:0}},
     {...safe,traces:{enabled:true}}

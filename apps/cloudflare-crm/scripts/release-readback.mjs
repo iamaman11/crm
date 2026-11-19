@@ -75,13 +75,16 @@ export async function verifyNfcMigrationNames(query){
 
 // Native Cloudflare observability only. Check both the committed Wrangler
 // config and the deployed Worker settings; do not trust source config alone.
-// Query strings can contain private values and Cloudflare captures URLs in
-// automatic spans, so disabling redaction must fail the release.
+// Native invocation logs also capture arbitrary request header values under
+// $workers.event.request.headers. A live synthetic-header probe demonstrated
+// this can include credentials; disable invocation logs, keep app logs/spans.
+// Refuse release when settings drift or header capture is re-enabled.
 export function verifyTracePrivacySettings(observability) {
   if(observability?.enabled!==true||observability?.redact_query_string!==true||
-    observability?.logs?.enabled!==true||observability?.traces?.enabled!==true||
+    observability?.logs?.enabled!==true||observability?.logs?.invocation_logs!==false||
+    observability?.traces?.enabled!==true||
     observability.traces.head_sampling_rate!==1)
     throw Error("CRM_TRACE_PRIVACY_SETTINGS_UNSAFE");
   return {traces_enabled:true,query_string_redacted:true,logs_enabled:true,
-    trace_sampling_rate:observability.traces.head_sampling_rate};
+    invocation_logs_enabled:false,trace_sampling_rate:observability.traces.head_sampling_rate};
 }

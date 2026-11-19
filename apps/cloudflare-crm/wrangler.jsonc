@@ -25,7 +25,7 @@
   "observability": {
     "enabled": true,
     "redact_query_string": true,
-    "logs": {"enabled": true, "head_sampling_rate": 1},
+    "logs": {"enabled": true, "head_sampling_rate": 1, "invocation_logs": false},
     "traces": {"enabled": true, "head_sampling_rate": 1}
   }
 }
