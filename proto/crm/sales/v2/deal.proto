@@ -389,6 +389,7 @@ message ForecastCurrencyMetric {
   string weighted_minor_units_times_basis_points = 4;
   uint64 amount_deal_count = 5;
 }
+
 // Currently closed deals with a recorded final close outcome in the period.
 // Reopened deals and unknown close dates are excluded from the denominator.
 message SalesClosedOutcomeMetric {
