@@ -207,7 +207,7 @@ jobs:
           set -euo pipefail
           # PostgreSQL process E2E needs a separate DATABASE_URL environment.
           # Check the locked root production graph without starting that runtime.
-          if git diff --name-only HEAD^ HEAD | grep -Eq '^(Cargo\.lock|Cargo\.toml|crates/|modules/|services/crm-api/|\.github/workflows/cloudflare-crm-spike\.yml)'; then
+          if git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -Eq '^(Cargo\.lock|Cargo\.toml|crates/|modules/|services/crm-api/)'; then
             cargo check --locked -p crm-api --lib --bin crm-api
           else
             echo "Root graph unchanged; legacy crm-api compile check not needed"
