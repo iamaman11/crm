@@ -607,6 +607,12 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
         },
     ),
     (
+        "/crm.consents.v2.ConsentAuthorizationService/GetConsentAuthorization",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
         "/crm.consents.v2.ConsentAuthorizationService/SuppressCommunication",
         RpcPolicy {
             permission: RpcPermission::Write,
