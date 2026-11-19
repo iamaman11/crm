@@ -80,10 +80,14 @@ message CompleteTaskResponse {
 
 message GetTaskRequest {
   string task_id = 1;
+  // Optional original key: read-only, tenant-bound receipt reconciliation.
+  optional string receipt_idempotency_key = 2;
 }
 
 message GetTaskResponse {
   Task task = 1;
+  // Present only for a proven original commit; legacy unknown is absent.
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
 }
 
 message ListTasksRequest {
