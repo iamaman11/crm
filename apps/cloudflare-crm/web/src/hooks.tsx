@@ -159,6 +159,16 @@ export function useMutation(recovery?:RecoveryOptions) {
     if(intent.preserve)changePending({kind:"live",intent});
     try {
       const result=await intent.write();
+      // A typed no-op (notably an already completed Task) did not commit;
+      // never fabricate a D1 receipt or report it as saved.
+      if(intent.preserve&&result.changed===false&&!result.receipt){
+        const cleared=clearPending();
+        setNotice({tone:"warning",text:"Изменений не было."+
+          (cleared?"":" Не удалось удалить отметку восстановления.")});
+        if(cleared)setKey(newId());
+        if(intent.refresh)await intent.refresh();
+        return;
+      }
       if(intent.preserve&&!matchesWriteReceipt(intent.marker,result.receipt))
         throw Error("Ответ без совпадающего подтверждения записи.");
       const saved=result.changed===false?"Изменений не было.":result.receipt?.replayed?
