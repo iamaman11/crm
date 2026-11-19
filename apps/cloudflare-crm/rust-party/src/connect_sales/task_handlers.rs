@@ -188,13 +188,28 @@ impl task_wire::TaskService for TaskV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, task_wire::GetTaskRequest>,
     ) -> ServiceResult<task_wire::GetTaskResponse> {
-        let id = Self::valid_id(req.task_id)?;
-        let task = activity_tasks::stored(&self.d1()?, &self.tenant, &id)
+        let input = req.to_owned_message();
+        let id = Self::valid_id(&input.task_id)?;
+        let db = self.d1()?;
+        let item = activity_tasks::stored(&db, &self.tenant, &id)
             .await
-            .map_err(|_| ConnectError::internal("Task D1 get failed"))?
+            .map_err(|_| ConnectError::internal("TASK original D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("ACTIVITIES_TASK_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let stored = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::Task)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("TASK_RECEIPT_READ_FAILED"))?;
+                crud_commit_evidence(stored, &id, &self.request_id, |state| {
+                    activity_tasks::decode(state).map(|row| (row.task_id().as_str().to_owned(), row.version()))
+                })
+                .map_err(|_| ConnectError::unavailable("TASK_RECEIPT_DECODE_FAILED"))?
+            }
+        };
         RpcResponse::ok(task_wire::GetTaskResponse {
-            task: Some(Self::convert(&task, &self.persisted_account(&id).await?)?).into(),
+            task: Some(Self::convert(&item, &self.persisted_account(&id).await?)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }
