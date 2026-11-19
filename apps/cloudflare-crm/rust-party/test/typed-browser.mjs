@@ -1077,13 +1077,18 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const s5bConsentRead=page.waitForResponse(r=>r.url().endsWith("/GetConsentAuthorization")
      &&r.request().method()==="POST");
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
-   assert.equal((await s5bConsentRead).status(),200);
+   const s5bConsentChecked=await s5bConsentRead;
+   assert.equal(s5bConsentChecked.status(),200);
+   const s5bConsentReadId=(await s5bConsentChecked.allHeaders())["x-request-id"];
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5bConsentRequestId);
    assert.equal(s5bConsentCalls,1);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bConsentRequestId+
      "' AND action='consents.operator_suppress'"))[0].n,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bConsentReadId+"'"))[0].n,0);
    assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.consents.pending.v1")),null);
+   ownerRecovery.push({owner:"consent",kind:"lookup",original_request_id:s5bConsentRequestId,
+     subsequent_request_id:s5bConsentReadId});
    await page.unroute(s5bConsentPath,loseConsentAck);
    steps.push("S5b consent DENY lost acknowledgment: read-only receipt after reload, no duplicate write");
    await navigate("privacy","Запросы о данных");
@@ -1134,12 +1139,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Проверить результат записи",exact:true}).click();
    const s5bPrivacyChecked=await s5bPrivacyRead;
    assert.equal(s5bPrivacyChecked.status(),200);
+   const s5bPrivacyReadId=(await s5bPrivacyChecked.allHeaders())["x-request-id"];
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5bPrivacyRequestId);
    assert.equal(s5bPrivacyCalls,1);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bPrivacyRequestId+
      "' AND action='customer_privacy.create'"))[0].n,1);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bPrivacyReadId+"'"))[0].n,0);
    assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.privacy.pending.v1")),null);
+   ownerRecovery.push({owner:"privacy",kind:"lookup",original_request_id:s5bPrivacyRequestId,
+     subsequent_request_id:s5bPrivacyReadId});
    await page.unroute("**/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase",losePrivacyAck);
    steps.push("S5b Privacy lost acknowledgement: reload + immutable GetPrivacyCase provenance without duplicate create");
    await navigate("enrichment","Обогащение данных");
@@ -1172,6 +1181,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const s5bProfileCreated=(await sql("SELECT id FROM crm_enrichment_profiles WHERE tenant='"+tenantSql+"'"))
      .filter(x=>!profileBefore.has(x.id));
    assert.equal(s5bProfileCreated.length,1);
+   syntheticPrivateProbes.push(
+     {kind:"enrichment-provider-key",request_id:s5bProfileRequestId,value:providerKey},
+     {kind:"enrichment-license",request_id:s5bProfileRequestId,value:"Browser test license"});
    const acceptProfileReload=dialog=>void dialog.accept();
    page.on("dialog",acceptProfileReload);
    try{await page.reload();}finally{page.off("dialog",acceptProfileReload);}
@@ -1225,6 +1237,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const s5bMappingCreated=(await sql("SELECT id FROM crm_enrichment_mappings WHERE tenant='"+tenantSql+"'"))
      .filter(x=>!mappingBefore.has(x.id));
    assert.equal(s5bMappingCreated.length,1);
+   syntheticPrivateProbes.push({kind:"enrichment-mapping-key",request_id:s5bMappingRequestId,value:mappingKey});
    const acceptMappingReload=dialog=>void dialog.accept();
    page.on("dialog",acceptMappingReload);
    try{await page.reload();}finally{page.off("dialog",acceptMappingReload);}
@@ -1282,6 +1295,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(s5bCsvMarker.resourceId,s5bCsvReceipt[0].source_sha256);
    assert.equal(s5bCsvReceipt[0].row_count,1);
    assert.equal(s5bCsvReceipt[0].request_id,s5bCsvRequestId);
+   syntheticPrivateProbes.push(
+     {kind:"csv-party-name",request_id:s5bCsvRequestId,value:"Browser Import "+runId},
+     {kind:"csv-payload",request_id:s5bCsvRequestId,value:csv});
    const csvCreated=(await sql("SELECT id FROM crm_party_records WHERE tenant='"+tenantSql+"'"))
      .filter(x=>!csvBefore.has(x.id));
    assert.equal(csvCreated.length,1);
