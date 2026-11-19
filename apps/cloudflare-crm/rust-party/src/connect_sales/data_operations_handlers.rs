@@ -58,7 +58,39 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, csv_wire::PreviewPartyImportRequest>,
     ) -> ServiceResult<csv_wire::PreviewPartyImportResponse> {
-        let preview = owner::preview_import(req.csv, &self.d1()?, &self.actor.tenant)
+        let input = req.to_owned_message();
+        let key = receipt_key(input.receipt_idempotency_key.as_deref())?;
+        let db = self.d1()?;
+        if input.csv.is_empty() {
+            let key = key.ok_or_else(|| {
+                ConnectError::invalid_argument("CSV_OR_RECEIPT_KEY_REQUIRED")
+            })?;
+            let receipt = owner::import_receipt(&db, &self.actor.tenant, key)
+                .await
+                .map_err(|_| ConnectError::unavailable("CSV_IMPORT_RECEIPT_READ_FAILED"))?
+                .ok_or_else(|| ConnectError::not_found("CSV_IMPORT_RECEIPT_NOT_FOUND"))?;
+            let confirmed_mutation = (!receipt.request_id.is_empty()).then(|| {
+                core_v2::MutationCommitEvidence {
+                    request_id: self.request_id.clone(),
+                    original_request_id: receipt.request_id,
+                    resource_version: 1,
+                    ..Default::default()
+                }
+            });
+            return RpcResponse::ok(csv_wire::PreviewPartyImportResponse {
+                count: receipt.row_count as u32,
+                csv_sha256_hex: receipt.source_sha256,
+                previously_imported: receipt.row_count as u32,
+                confirmed_mutation: confirmed_mutation.into(),
+                ..Default::default()
+            });
+        }
+        if key.is_some() {
+            return Err(ConnectError::invalid_argument(
+                "CSV_RECEIPT_LOOKUP_REQUIRES_EMPTY_FILE",
+            ));
+        }
+        let preview = owner::preview_import(&input.csv, &db, &self.actor.tenant)
             .await
             .map_err(|_| ConnectError::internal("import preview D1 read failed"))?
             .map_err(PartyV3Service::mutation_error)?;
