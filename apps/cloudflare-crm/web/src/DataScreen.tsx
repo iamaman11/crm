@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useRef,useState} from "react";
 import {Button,Card,FeedbackPanel,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import {api} from "./api";
 import {PartyKind} from "@ultimate-crm/client/cloudflare";
@@ -6,6 +6,8 @@ import {enumValue} from "./enumFields";
 import {useReadAction,useMutation,MutationNotice} from "./hooks";
 
 export function DataScreen() {
+  // New file selection supersedes all prior asynchronous file and preview results.
+  const fileRevision=useRef(0);
   const [bytes,setBytes]=useState<Uint8Array>();
   const [fileName,setFileName]=useState("");
   const [fileError,setFileError]=useState("");
@@ -28,20 +30,32 @@ export function DataScreen() {
     </Card>
     <Card title="Импорт участников">
       <TextField label="CSV-файл" type="file" accept=".csv,text/csv" disabled={mutation.busy||previewBusy} onChange={async e=>{
-        const file=e.target.files?.[0];
-        setBytes(undefined);setPreview(undefined);setFileError("");mutation.changed();
+        const file=e.target.files?.[0],revision=++fileRevision.current;
+        setBytes(undefined);setPreview(undefined);setPreviewBusy(false);
+        setFileError("");mutation.changed();
         if(!file){setFileName("");return;}
         setFileName(file.name);
         if(file.size>16*1024){setFileError("Максимальный размер — 16 КиБ.");return;}
-        try {setBytes(new Uint8Array(await file.arrayBuffer()));}
-        catch(error){setFileError(api.describeError(error));}
+        try {
+          const selectedBytes=new Uint8Array(await file.arrayBuffer());
+          if(revision===fileRevision.current)setBytes(selectedBytes);
+        } catch(error) {
+          if(revision===fileRevision.current)setFileError(api.describeError(error));
+        }
       }}/>
       <p>До 20 строк за операцию. Сначала проверьте файл, затем подтвердите создание.</p>
       <Button disabled={!bytes||previewBusy||mutation.busy} onClick={async()=>{
-        if(!bytes)return;setPreviewBusy(true);setFileError("");
-        try {setPreview(await api.csv.previewPartyImport({csv:bytes}));}
-        catch(error){setFileError(api.describeError(error));}
-        finally {setPreviewBusy(false);}
+        if(!bytes)return;
+        const revision=fileRevision.current,selectedBytes=bytes;
+        setPreviewBusy(true);setFileError("");
+        try {
+          const candidate=await api.csv.previewPartyImport({csv:selectedBytes});
+          if(revision===fileRevision.current)setPreview(candidate);
+        } catch(error) {
+          if(revision===fileRevision.current)setFileError(api.describeError(error));
+        } finally {
+          if(revision===fileRevision.current)setPreviewBusy(false);
+        }
       }}>Проверить импорт</Button>
       {fileError&&<FeedbackPanel tone="danger" title={fileError}/>}
       {preview&&<><p>{fileName}: строк {preview.count}, уже импортировано {preview.previouslyImported}.</p>
@@ -50,7 +64,13 @@ export function DataScreen() {
           if(!bytes)throw Error("Выберите файл");
           return api.csv.applyPartyImport({csv:bytes,expectedSha256Hex:preview.csvSha256Hex,
             precondition:{idempotencyKey:mutation.key}});
-        },async()=>{if(bytes)setPreview(await api.csv.previewPartyImport({csv:bytes}));})}>Подтвердить импорт</Button></p>
+        },async()=>{
+          const revision=fileRevision.current;
+          if(bytes) {
+            const refreshed=await api.csv.previewPartyImport({csv:bytes});
+            if(revision===fileRevision.current)setPreview(refreshed);
+          }
+        })}>Подтвердить импорт</Button></p>
       </>}<MutationNotice state={mutation}/>
     </Card>
   </>;
