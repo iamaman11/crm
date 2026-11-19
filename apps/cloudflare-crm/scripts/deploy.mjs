@@ -5,7 +5,7 @@ import {createHash} from "node:crypto";
 import {join,relative} from "node:path";
 import {spawnSync} from "node:child_process";
 import {DatabaseSync} from "node:sqlite";
-import {verifyAnonymousDenial,verifyNfcMigrationNames,verifyTracePrivacySettings} from "./release-readback.mjs";
+import {verifyAnonymousDenial,verifyNfcMigrationNames,verifyTracePrivacySettings,classifySignedSessionReadback} from "./release-readback.mjs";
 const required=n=>{if(!process.env[n])throw Error("Missing "+n);return process.env[n];};
 const sha=required("GITHUB_SHA");
 if(!/^[0-9a-f]{40}$/.test(sha)||process.env.GITHUB_REF!=="refs/heads/dev"||process.env.GITHUB_EVENT_NAME!=="push")throw Error("Untrusted deployment");
@@ -328,27 +328,30 @@ async function prepareE2e(){
           "cache-control":"no-cache"},
         redirect:"manual",cache:"no-store"});
       const source=reply.headers.get("x-crm-source-sha");
-      if(reply.status===200){
-        const session=await reply.json();
-        if(source!==sha||session.authenticated!==true||session.role!=="admin")
-          throw Error("Signed E2E service "+n+" returned a non-authoritative session");
+      const session=reply.status===200?await reply.json():null;
+      let classification;
+      try{
+        classification=classifySignedSessionReadback({
+          status:reply.status,source,session,expectedSha:sha
+        });
+      }catch(error){
+        throw Error("Signed E2E service "+n+" failed Access verification: "+error.message);
+      }
+      if(classification.kind==="pass"){
         console.log(JSON.stringify({event:"crm.e2e-access-readback",service:n,
           result:"PASS",attempts,elapsed_ms:Date.now()-started,sha:source}));
         break;
       }
-      // The Workers.dev route may still be converging on another Cloudflare
-      // edge after /api/version succeeds. Retry only its non-Worker 404 page:
-      // never retry an authenticated Worker error or bypass Access verification.
-      if(reply.status!==404||source!==null)
-        throw Error("Signed E2E service "+n+" failed Access verification: HTTP "+
-          reply.status+" source="+(source||"none"));
+      // Workers.dev can briefly serve either its edge 404 page or a previous
+      // signed Worker version. Retry only those two proven propagation states.
+      // Authentication, admin role, and explicit SHA provenance remain mandatory.
       if(Date.now()>=deadline)
-        throw Error("Signed E2E service "+n+" Workers.dev route not ready after "+
+        throw Error("Signed E2E service "+n+" Workers.dev source not ready after "+
           attempts+" attempts and "+(Date.now()-started)+"ms");
       if(attempts===1||attempts%5===0)
         console.log(JSON.stringify({event:"crm.e2e-access-readback",service:n,
-          result:"RETRY",http_status:reply.status,attempts,
-          elapsed_ms:Date.now()-started}));
+          result:"RETRY",reason:classification.reason,http_status:reply.status,
+          observed_sha:source,attempts,elapsed_ms:Date.now()-started}));
       await new Promise(resolve=>setTimeout(resolve,Math.min(attempts*600,3500)));
     }
   }
