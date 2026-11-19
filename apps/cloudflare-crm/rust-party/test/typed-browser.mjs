@@ -64,9 +64,55 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      window.addEventListener(name,capture);
  });
 
+ // Only browser document/assets, never authenticated response bodies or headers.
+ // After a protected D1 migration, Workers.dev can briefly serve its own HTML
+ // 404 before the static asset route has propagated to every edge.
+ const shellResponses=[];
+ page.on("response",response=>{
+   const kind=response.request().resourceType();
+   if(!["document","script","stylesheet"].includes(kind))return;
+   const url=new URL(response.url());
+   if(url.origin!==new URL(base).origin)return;
+   const headers=response.headers();
+   shellResponses.push({kind,path:url.pathname,status:response.status(),
+     fromWorker:Boolean(headers["x-crm-runtime"])});
+   if(shellResponses.length>40)shellResponses.shift();
+ });
+ let firstBrowserNavigation=true;
  const navigate=async(hash,title)=>{
-   await page.goto(base+"/#"+hash);
-   await page.getByRole("heading",{name:title,exact:true}).waitFor();
+   const first=firstBrowserNavigation;
+   const limit=first?6:1;
+   for(let attempt=0;attempt<limit;attempt++){
+     const offset=shellResponses.length;
+     const response=await page.goto(base+"/#"+hash);
+     try {
+       await page.getByRole("heading",{name:title,exact:true})
+         .waitFor({timeout:first?8000:30000});
+       firstBrowserNavigation=false;
+       return;
+     }catch(error){
+       const shell=shellResponses.slice(offset);
+       const edgeOnly404=shell.some(x=>x.status===404&&!x.fromWorker);
+       if(first&&edgeOnly404&&attempt+1<limit){
+         await new Promise(resolve=>setTimeout(resolve,1500));
+         continue;
+       }
+       // Fail closed on application errors, a missing React root, or a Worker
+       // 404. The only recoverable case above is independently observed
+       // edge-owned 404 on initial document or static-asset GET.
+       const documentState=await page.evaluate(()=>({
+         path:location.pathname,hash:location.hash,
+         readyState:document.readyState,
+         hasReactRoot:Boolean(document.getElementById("root")),
+         hasRoute:Boolean(document.querySelector("[data-crm-route-kind]"))
+       })).catch(()=>({unavailable:"navigation-in-progress"}));
+       throw new Error("CRM_BROWSER_ROUTE_START_FAILED "+JSON.stringify({
+         expected:title,first,attempt:attempt+1,
+         documentStatus:response?.status()??null,
+         shell,documentState
+       }),{cause:error});
+     }
+   }
  };
  const search=async(label,value,method)=>{
    const input=page.getByLabel(label,{exact:true});
