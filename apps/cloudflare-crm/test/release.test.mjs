@@ -148,7 +148,7 @@ async function subprocessEntry(){
          $metadata:{type:"log"},source:{traceId:needle,message:"crm-s3-query-1234567890123"}
        });
        if(variant==="synthetic-phone-leak"&&traceIndex===8)events.push({
-         $metadata:{type:"log"},source:{traceId:needle,message:"+447700900123"}
+         $metadata:{type:"log"},source:{traceId:needle,message:"+12025550102"}
        });
        if(variant==="synthetic-enrichment-leak"&&traceIndex===13)events.push({
          $metadata:{type:"log"},source:{traceId:needle,message:"browser_registry_1234567890123"}
@@ -370,7 +370,7 @@ function run(mode,variant="valid"){
      {kind:"jwt",request_id:requestId,value:"eyJhbGciOiJub25lIn0.eyJzdWIiOiJjcm0tc3ludGhldGljIn0.signature-1234567890123"},
      {kind:"query-string",request_id:requestId,value:"crm-s3-query-1234567890123"},
      {kind:"contact-email",request_id:contactCreateId,value:"browser-1234567890123@example.org"},
-     {kind:"contact-phone",request_id:contactPhoneId,value:"+447700900123"},
+     {kind:"contact-phone",request_id:contactPhoneId,value:"+12025550102"},
      {kind:"task-subject",request_id:taskCreateId,value:"Browser Task 1234567890123"},
      {kind:"enrichment-provider-key",request_id:profileWriteId,value:"browser_registry_1234567890123"},
      {kind:"enrichment-license",request_id:profileWriteId,value:"Browser test license"},
