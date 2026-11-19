@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {verifyAnonymousDenial,verifyTracePrivacySettings} from "./release-readback.mjs";
+import {verifyAnonymousDenial,verifyTracePrivacySettings,classifySignedSessionReadback} from "./release-readback.mjs";
 
 const endpoint="https://example.test/api/version";
 const reset=()=>Object.assign(new TypeError("fetch failed"),{
@@ -76,6 +76,46 @@ test("unexpected error fails without replay",async()=>{
   assert.equal(x.calls.length,1);
 });
 
+test("signed E2E session accepts only the exact deployed source and admin identity",()=>{
+  const expectedSha="3f28905bf3a157762ae35ded7bf2dde6043c2bc2";
+  const session={authenticated:true,role:"admin"};
+  assert.deepEqual(classifySignedSessionReadback({
+    status:200,source:expectedSha,session,expectedSha
+  }),{kind:"pass"});
+  assert.deepEqual(classifySignedSessionReadback({
+    status:404,source:null,session:null,expectedSha
+  }),{kind:"retry",reason:"edge_not_ready"});
+});
+test("signed E2E session retries an authenticated response from an older Worker version",()=>{
+  const expectedSha="3f28905bf3a157762ae35ded7bf2dde6043c2bc2";
+  assert.deepEqual(classifySignedSessionReadback({
+    status:200,source:"ffc3f1a1477d40c50cc415d6701afc2fe4e29725",
+    session:{authenticated:true,role:"admin"},expectedSha
+  }),{kind:"retry",reason:"stale_worker_version"});
+});
+test("signed E2E session never retries invalid authorization or missing source provenance",()=>{
+  const expectedSha="3f28905bf3a157762ae35ded7bf2dde6043c2bc2";
+  for(const session of [
+    {authenticated:false,role:"admin"},
+    {authenticated:true,role:"viewer"},
+    {authenticated:true,role:""}
+  ])assert.throws(()=>classifySignedSessionReadback({
+    status:200,source:"ffc3f1a1477d40c50cc415d6701afc2fe4e29725",session,expectedSha
+  }),/CRM_SIGNED_E2E_ACCESS_SESSION_INVALID/);
+  assert.throws(()=>classifySignedSessionReadback({
+    status:200,source:null,session:{authenticated:true,role:"admin"},expectedSha
+  }),/CRM_SIGNED_E2E_ACCESS_SOURCE_INVALID/);
+  assert.throws(()=>classifySignedSessionReadback({
+    status:200,source:"not-a-sha",session:{authenticated:true,role:"admin"},expectedSha
+  }),/CRM_SIGNED_E2E_ACCESS_SOURCE_INVALID/);
+  assert.throws(()=>classifySignedSessionReadback({
+    status:404,source:expectedSha,session:null,expectedSha
+  }),/CRM_SIGNED_E2E_ACCESS_HTTP_404/);
+  for(const status of [401,403,500])
+    assert.throws(()=>classifySignedSessionReadback({
+      status,source:null,session:null,expectedSha
+    }),new RegExp("CRM_SIGNED_E2E_ACCESS_HTTP_"+status));
+});
 test("Cloudflare tracing requires enabled logs, traces and query redaction",()=>{
   const safe={enabled:true,redact_query_string:true,
     logs:{enabled:true,head_sampling_rate:1,invocation_logs:false},
