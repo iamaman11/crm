@@ -2888,6 +2888,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await enrichment("GetMapping",viewer,{
    mappingVersionId:mappingId,receiptIdempotencyKey:"enrichment-profile-main"
  })).body.confirmedMutation,undefined,"a profile receipt cannot confirm a mapping");
+ assert.equal((await enrichment("GetProviderProfile",viewer,{
+   profileVersionId:"",receiptIdempotencyKey:mappingInput.precondition.idempotencyKey
+ })).body.code,"not_found","a mapping receipt cannot confirm a provider profile");
+ assert.equal((await enrichment("GetMapping",viewer,{mappingVersionId:""})).body.code,"invalid_argument");
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,enrichmentAuditBeforeMappingReceiptReads,
    "Mapping receipt lookup is read-only");
  await sql("ALTER TABLE crm_enrichment_receipts RENAME TO fixture_unavailable_enrichment_receipts");
@@ -3107,6 +3111,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(csvReceiptRead.body.confirmedMutation?.resourceVersion,1n);
  assert.equal(csvReceiptRead.body.confirmedMutation?.requestId,csvReceiptRead.headers.get("x-request-id"));
  assert.equal((await csv("PreviewPartyImport",tenantB,csvReceiptInput)).body.code,"not_found");
+ assert.equal((await csv("PreviewPartyImport",viewer,csvReceiptInput)).status,403,
+   "CSV receipt lookup must preserve the existing admin-only permission");
  assert.equal((await csv("PreviewPartyImport",admin,{csv:new Uint8Array()})).body.code,"invalid_argument");
  assert.equal((await csv("PreviewPartyImport",admin,{
    csv:new Uint8Array(),receiptIdempotencyKey:"short"})).body.code,"invalid_argument");
