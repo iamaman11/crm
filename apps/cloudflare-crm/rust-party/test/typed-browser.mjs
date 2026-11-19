@@ -135,11 +135,33 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  let partyId,accountId;
  try {
    await navigate("parties","Люди и организации");
+   // Use only synthetic markers; signed browser sends a real Cookie and a
+   // single request header into the original Rust Worker, never real secrets.
+   const privateCookie="crm-s3-cookie-"+runId;
+   const privateHeader="crm-s3-header-"+runId;
+   await context.addCookies([{name:"crm_s3_test_cookie",value:privateCookie,url:base}]);
+   let privateHeaderRequests=0;
+   const privateRoute=async route=>{
+     const headers=await route.request().allHeaders();
+     assert.ok((headers.cookie??"").includes("crm_s3_test_cookie="+privateCookie),
+       "Synthetic test cookie must be present in the real signed request");
+     privateHeaderRequests++;
+     await route.continue({headers:{...headers,"x-crm-s3-test-probe":privateHeader}});
+   };
+   const createPartyRoute="**/crm.parties.v3.PartyService/CreateParty";
+   await page.route(createPartyRoute,privateRoute);
    await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Party "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty");
-   syntheticPrivateProbes.push({kind:"party-name",request_id:writes.at(-1)?.request_id,
-     value:"Browser Party "+runId});
+   await page.unroute(createPartyRoute,privateRoute);
+   assert.equal(privateHeaderRequests,1,
+     "Synthetic header must accompany exactly one real signed mutation");
+   await context.clearCookies({name:"crm_s3_test_cookie"});
+   const firstMutationId=writes.at(-1)?.request_id;
+   syntheticPrivateProbes.push(
+     {kind:"party-name",request_id:firstMutationId,value:"Browser Party "+runId},
+     {kind:"cookie",request_id:firstMutationId,value:privateCookie},
+     {kind:"header",request_id:firstMutationId,value:privateHeader});
    partyId=await firstId("crm_party_records","display_name","Browser Party "+runId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+partyId+"'"))[0].n,1);
    await page.reload();
@@ -941,11 +963,18 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    steps.push("Privacy draft/submit/cancel and immutable Enrichment profile/mapping readback");
    await navigate("data","Импорт и экспорт");
    const csv="party_id,kind,display_name,resource_version\r\nbrowser-import,person,Browser Import "+runId+",1\r\n";
-   await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({name:"browser.csv",mimeType:"text/csv",buffer:Buffer.from(csv)});
+   const obsoleteCsv=csv.replace("Browser Import ","Browser Obsolete ");
+   await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
+     name:"obsolete.csv",mimeType:"text/csv",buffer:Buffer.from(obsoleteCsv)});
+   await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
+     name:"browser.csv",mimeType:"text/csv",buffer:Buffer.from(csv)});
    await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
    await page.getByRole("button",{name:"Подтвердить импорт",exact:true}).waitFor();
    await mutation(page.getByRole("button",{name:"Подтвердить импорт",exact:true}),"ApplyPartyImport");
    assert.ok(await firstId("crm_party_records","display_name","Browser Import "+runId));
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+
+     "' AND json_extract(state,'$.display_name')='Browser Obsolete "+runId+"'"))[0].n,0,
+     "A replaced CSV file must never commit its superseded records");
    const exportReply=page.waitForResponse(r=>r.url().endsWith("/PreviewPartyExport"));
    await page.getByRole("button",{name:"Проверить экспорт",exact:true}).click();
    assert.equal((await exportReply).status(),200);
@@ -956,7 +985,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const exported=await readFile(await download.path(),"utf8");
    assert.ok(exported.includes("Browser Import "+runId));
    assert.ok(exported.includes("Browser Updated "+runId));
-   steps.push("CSV preview/confirmed import through generated client");
+   steps.push("CSV rapid file replacement, generated preview and confirmed import");
 
    // Two actual browser forms hold the same version. Only one may commit.
    await navigate("parties","Люди и организации");
