@@ -71,18 +71,19 @@ pub(super) struct ImportSaved {
     pub(super) operation_replayed: bool,
 }
 #[derive(Deserialize)]
-struct ImportReceipt {
-    source_sha256: String,
-    row_count: usize,
+pub(super) struct ImportReceipt {
+    pub(super) source_sha256: String,
+    pub(super) row_count: usize,
+    pub(super) request_id: String,
 }
-async fn import_operation(
+pub(super) async fn import_operation(
     db: &D1Database,
     tenant: &str,
     key: &str,
 ) -> Result<Option<ImportReceipt>> {
     bind(
         db,
-        "SELECT source_sha256,row_count FROM crm_party_import_receipts WHERE tenant=? AND key=?",
+        "SELECT source_sha256,row_count,request_id FROM crm_party_import_receipts WHERE tenant=? AND key=?",
         &[JsValue::from_str(tenant), JsValue::from_str(key)],
     )?
     .first::<ImportReceipt>(None)
