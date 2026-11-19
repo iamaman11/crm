@@ -65,10 +65,14 @@ message UpdatePartyRelationshipResponse {
 
 message GetPartyRelationshipRequest {
   string relationship_id = 1;
+  // Optional original key: read-only, tenant-bound receipt reconciliation.
+  optional string receipt_idempotency_key = 2;
 }
 
 message GetPartyRelationshipResponse {
   PartyRelationship relationship = 1;
+  // Present only for a proven original commit; legacy unknown is absent.
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
 }
 
 message ListPartyRelationshipsRequest {
