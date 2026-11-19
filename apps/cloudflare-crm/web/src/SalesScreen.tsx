@@ -160,14 +160,14 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
     const old=selectedView;
     void viewMutation.runIntent(()=>{
       if(asNew)return prepareMutation(
-        input=>api.deals.createSalesView(input),{
+        api.deals.createSalesView,{
           viewId:viewDraftId,name:viewName,...currentViewFilters(),
           precondition:{idempotencyKey:viewMutation.key}
         },viewDraftId
       );
       if(!old)throw Error("Представление не выбрано");
       return prepareMutation(
-        input=>api.deals.updateSalesView(input),{
+        api.deals.updateSalesView,{
           viewId:old.viewId,name:viewName,...currentViewFilters(),archived:archive,
           precondition:{idempotencyKey:viewMutation.key,expectedVersion:old.version}
         },old.viewId
@@ -623,13 +623,13 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
             probabilityBasisPoints:basisPoints(stage.probability),archived:stage.archived
           }));
           if(pipelineEditor==="new")return prepareMutation(
-            input=>api.deals.createPipeline(input),{
+            api.deals.createPipeline,{
               pipelineId:pipelineDraftId,name:pipelineName,stages,
               precondition:{idempotencyKey:pipelineMutation.key}
             },pipelineDraftId
           );
           if(pipelineEditor)return prepareMutation(
-            input=>api.deals.updatePipeline(input),{
+            api.deals.updatePipeline,{
               pipelineId:pipelineEditor.pipelineId,name:pipelineName,stages,
               archived:pipelineArchived,
               precondition:{idempotencyKey:pipelineMutation.key,
