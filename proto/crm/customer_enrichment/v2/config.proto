@@ -75,18 +75,22 @@ message PublishMappingResponse {
 
 message GetProviderProfileRequest {
   string profile_version_id = 1;
+  optional string receipt_idempotency_key = 2;
 }
 
 message GetProviderProfileResponse {
   ProviderProfileVersion profile = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
 }
 
 message GetMappingRequest {
   string mapping_version_id = 1;
+  optional string receipt_idempotency_key = 2;
 }
 
 message GetMappingResponse {
   MappingVersion mapping = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
 }
 
 message ListProviderProfilesRequest {
