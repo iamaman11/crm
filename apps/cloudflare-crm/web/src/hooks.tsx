@@ -93,6 +93,15 @@ function restoredPending(storageKey:string|undefined):Pending|null {
   return {kind:"unreadable"};
 }
 
+// The route owns editor visibility; the shared hook owns all marker parsing.
+export function pendingRecoveryResourceId(storageKey:string):string|undefined {
+  const marker=restoredPending(storageKey);
+  return marker?.kind==="stored"?marker.marker.resourceId:undefined;
+}
+export function hasPendingRecovery(storageKey:string):boolean {
+  return restoredPending(storageKey)!==null;
+}
+
 function matchesReceipt(marker:ReceiptMarker,receipt:ReceiptProof|undefined):
   receipt is ReceiptProof&{originalRequestId:string} {
   return !!receipt?.requestId&&!!receipt.originalRequestId&&
