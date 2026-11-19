@@ -6,7 +6,7 @@ import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useReadAction,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
 import {AccountPicker} from "./Pickers";
-import {DealContactPicker,DealDetails,forecastCategoryText,probabilitySourceText} from "./DealRecord";
+import {DealContactPicker,DealDetails,dealStatusText,forecastCategoryText,probabilitySourceText} from "./DealRecord";
 import {inputDate,parseDate} from "./calendarInput";
 import {dealHref} from "./routes";
 import {currencyCatalog,minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText} from "./money";
@@ -396,11 +396,13 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           {pipeline&&<Button variant="secondary" onClick={()=>{setPipelineId(pipeline.pipelineId);setStageCursors({});}}>Открыть воронку</Button>}
           <p>{moneyText(deal.amount,currencyDefinitions)} · {percent(deal.probabilityBasisPoints)}%</p>
           {deal.status===DealStatus.OPEN&&<p>{probabilitySourceText(deal.probabilitySource)} · {forecastCategoryText(deal.forecastCategory)}</p>}
-          <p>{deal.status===DealStatus.OPEN?"Открыта":deal.status===DealStatus.WON?"Выиграна":"Проиграна"} · версия {deal.version.toString()}</p>
+          <p>{dealStatusText(deal.status)} · версия {deal.version.toString()}</p>
           {deal.status===DealStatus.OPEN?<>
             <Button variant="secondary" onClick={()=>void open(deal.dealId,"edit")}>Редактировать</Button>{" "}
             <Button variant="secondary" onClick={()=>void open(deal.dealId,"close")}>Завершить</Button>
-          </>:<Button variant="secondary" onClick={()=>void open(deal.dealId,"reopen")}>Открыть повторно</Button>}
+          </>:(deal.status===DealStatus.WON||deal.status===DealStatus.LOST)?
+            <Button variant="secondary" onClick={()=>void open(deal.dealId,"reopen")}>Открыть повторно</Button>:
+            <p role="status">Неизвестный статус: изменение недоступно</p>}
           {expandedDeal===deal.dealId&&<DealDetails currencies={currencyDefinitions} key={deal.dealId+":"+detailRevision}
             dealId={deal.dealId} onEdit={()=>void open(deal.dealId,"edit")}
             onClose={()=>void open(deal.dealId,"close")}
@@ -474,13 +476,14 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
             <p>{moneyText(d.amount,currencyDefinitions)} · {percent(d.probabilityBasisPoints)}%</p>
             {d.status===DealStatus.OPEN&&<p>{probabilitySourceText(d.probabilitySource)} · {forecastCategoryText(d.forecastCategory)}</p>}
             <p>Клиент: {d.accountId}</p>
-            <p>{d.status===DealStatus.WON?"Выиграна":d.status===DealStatus.LOST?"Проиграна":
-              d.status===DealStatus.OPEN?"Открыта":"Неизвестный статус"} · версия {d.version.toString()}</p>
+            <p>{dealStatusText(d.status)} · версия {d.version.toString()}</p>
             {d.status===DealStatus.OPEN?<>
               <Button variant="secondary" onClick={()=>void open(d.dealId,"edit")}>Изменить сделку</Button>{" "}
               <Button variant="secondary" onClick={()=>void open(d.dealId,"advance")}>Изменить этап</Button>{" "}
               <Button variant="secondary" onClick={()=>void open(d.dealId,"close")}>Завершить сделку</Button>
-            </>:<Button variant="secondary" onClick={()=>void open(d.dealId,"reopen")}>Открыть повторно</Button>}
+            </>:(d.status===DealStatus.WON||d.status===DealStatus.LOST)?
+              <Button variant="secondary" onClick={()=>void open(d.dealId,"reopen")}>Открыть повторно</Button>:
+              <p role="status">Неизвестный статус: изменение недоступно</p>}
             {expandedDeal===d.dealId&&<DealDetails currencies={currencyDefinitions} key={d.dealId+":"+detailRevision}
               dealId={d.dealId} onEdit={()=>void open(d.dealId,"edit")}
               onClose={()=>void open(d.dealId,"close")}
