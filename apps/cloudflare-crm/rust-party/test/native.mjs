@@ -3545,6 +3545,20 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id=?",
      read.headers.get("x-request-id")))[0].n,0,"receipt checks never append audit");
  }
+ // Genuine D1 read failure must remain UNCONFIRMED; ordinary GetParty without
+ // a recovery key still works and the client must not claim "no commit".
+ await sql("ALTER TABLE crm_party_receipts RENAME TO fixture_unavailable_party_receipts");
+ try {
+   const denied=await v3("GetParty",viewer,{
+     partyId:id,receiptIdempotencyKey:creation.precondition.idempotencyKey});
+   assert.equal(denied.status,503,describeProtobuf(denied.body));
+   assert.equal((await v3("GetParty",viewer,{partyId:id})).status,200);
+ } finally {
+   await sql("ALTER TABLE fixture_unavailable_party_receipts RENAME TO crm_party_receipts");
+ }
+ assert.equal((await v3("GetParty",viewer,{
+   partyId:id,receiptIdempotencyKey:creation.precondition.idempotencyKey
+ })).body.confirmedMutation?.originalRequestId,created.headers.get("x-request-id"));
  console.log(JSON.stringify({event:"crm.native-s5a-crud-commit-provenance",result:"PASS",
    owners:s5aReceipts.map(x=>x.owner),original_request_ids:true,read_only:true,
    latest_version_independent:true,legacy_null_fail_closed:true,
