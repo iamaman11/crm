@@ -4,7 +4,7 @@ import {AccountStatus,TaskStatus} from "@ultimate-crm/client/cloudflare";
 import type {Account,AccountOverview,Party} from "@ultimate-crm/client/cloudflare";
 import {api,field,dateText,newId} from "./api";
 import {enumValue} from "./enumFields";
-import {useQuery,useMutation,MutationNotice,QueryNotice} from "./hooks";
+import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
 import {scopeHref} from "./routes";
 import {PartyPicker} from "./Pickers";
 
@@ -43,7 +43,13 @@ export function AccountEditor({accountId,onSaved,onCancel,onDirtyChange}:{
   accountId:string;onSaved:()=>Promise<unknown>;onCancel:()=>void;onDirtyChange:(dirty:boolean)=>void;
 }) {
   const query=useQuery(useCallback((signal:AbortSignal)=>api.accounts.getAccount({accountId},{signal}),[accountId]));
-  const mutation=useMutation();
+  const mutation=useMutation({
+    storageKey:"crm.account.update."+accountId+".pending.v1",
+    lookup:async({resourceId,key},signal)=>(await api.accounts.getAccount({
+      accountId:resourceId,receiptIdempotencyKey:key
+    },{signal})).confirmedMutation,
+    refresh:async()=>{onDirtyChange(false);await query.reload();await onSaved();}
+  });
   const account:Account|undefined=query.data?.account;
   return <div><QueryNotice query={query}/>
     {account&&<form key={account.accountId+":"+account.version.toString()}
@@ -51,13 +57,13 @@ export function AccountEditor({accountId,onSaved,onCancel,onDirtyChange}:{
       onSubmit={event=>{
         event.preventDefault();
         const data=new FormData(event.currentTarget);
-        void mutation.run(()=>api.accounts.updateAccount({
+        void mutation.runIntent(()=>prepareMutation(api.accounts.updateAccount,{
           accountId:account.accountId,name:field(data,"name"),
           status:enumValue(field(data,"status"),[
             AccountStatus.ACTIVE,AccountStatus.INACTIVE
           ],"Статус клиента"),
           precondition:{idempotencyKey:mutation.key,expectedVersion:account.version}
-        }),async()=>{
+        },account.accountId),async()=>{
           // A committed RPC is no longer a dirty draft, even if the readback is slow.
           // Clear the navigation guard before the first awaited refresh.
           onDirtyChange(false);
@@ -72,8 +78,8 @@ export function AccountEditor({accountId,onSaved,onCancel,onDirtyChange}:{
           <option value={AccountStatus.INACTIVE}>Неактивен</option>
         </SelectField>
       </FormGrid>
-      <Button type="submit" disabled={mutation.busy||mutation.notice?.tone==="warning"}>Сохранить клиента</Button>{" "}
-      <Button type="button" variant="secondary" disabled={mutation.busy} onClick={onCancel}>Отмена</Button>
+      <Button type="submit" disabled={mutation.busy||mutation.pending}>Сохранить клиента</Button>{" "}
+      <Button type="button" variant="secondary" disabled={mutation.busy||mutation.pending} onClick={onCancel}>Отмена</Button>
     </form>}
     <MutationNotice state={mutation}/>
   </div>;
@@ -87,7 +93,13 @@ export function AccountCreator({initialParty,onSaved,onCancel,onDirtyChange}:{
   onDirtyChange?:(dirty:boolean)=>void;
 }) {
   const [draftId,setDraftId]=useState(newId);
-  const mutation=useMutation();
+  const mutation=useMutation({
+    storageKey:"crm.account.create.pending.v1",
+    lookup:async({resourceId,key},signal)=>(await api.accounts.getAccount({
+      accountId:resourceId,receiptIdempotencyKey:key
+    },{signal})).confirmedMutation,
+    refresh:async(marker)=>{onDirtyChange?.(false);await onSaved(marker.resourceId);}
+  });
   return <>
     <form key={draftId} onChange={()=>{
       mutation.changed();
@@ -95,12 +107,12 @@ export function AccountCreator({initialParty,onSaved,onCancel,onDirtyChange}:{
     }} onSubmit={event=>{
       event.preventDefault();
       const data=new FormData(event.currentTarget);
-      void mutation.run(()=>api.accounts.createAccount({
+      void mutation.runIntent(()=>prepareMutation(api.accounts.createAccount,{
         accountId:draftId,
         name:field(data,"name"),
         primaryPartyId:field(data,"partyId"),
         precondition:{idempotencyKey:mutation.key}
-      }),async()=>{
+      },draftId),async()=>{
         // The write is committed: navigation must not treat a successful save as a dirty draft.
         onDirtyChange?.(false);
         await onSaved(draftId);
@@ -111,8 +123,8 @@ export function AccountCreator({initialParty,onSaved,onCancel,onDirtyChange}:{
         <TextField label="Название клиента" name="name" defaultValue={initialParty?.displayName??""} required/>
         <PartyPicker label="Основной участник" {...(initialParty?{initialParty}:{})}/>
       </FormGrid>
-      <Button type="submit" disabled={mutation.busy}>Сохранить клиента</Button>{" "}
-      <Button type="button" variant="secondary" disabled={mutation.busy} onClick={onCancel}>Отмена</Button>
+      <Button type="submit" disabled={mutation.busy||mutation.pending}>Сохранить клиента</Button>{" "}
+      <Button type="button" variant="secondary" disabled={mutation.busy||mutation.pending} onClick={onCancel}>Отмена</Button>
     </form>
     <MutationNotice state={mutation}/>
   </>;
