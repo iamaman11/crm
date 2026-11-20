@@ -160,8 +160,7 @@ class AffectedScopeTests(unittest.TestCase):
                 names = [w["name"] for w in report["selected_workflows"]]
                 if "repository-packet.json" in changed:
                     self.assertIn("operations", [s["id"] for s in report["selected_scopes"]])
-                    self.assertIn("Governance CI", names)
-                    self.assertIn("Cloudflare CRM Spike CI", names)
+                    self.assertEqual(names, ["Cloudflare CRM Spike CI"])
                 else:
                     self.assertNotIn("operations", [s["id"] for s in report["selected_scopes"]])
                     self.assertNotIn("Governance CI", names)
