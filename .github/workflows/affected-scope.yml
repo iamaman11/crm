@@ -34,7 +34,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # Rust 1.100.0
         with:
           toolchain: 1.100.0
-        with:
           components: clippy, rustfmt
       - name: Install analysis dependencies
         run: python -m pip install --requirement requirements-dev.txt

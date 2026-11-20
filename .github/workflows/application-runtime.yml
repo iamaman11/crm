@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - upgrade/stable-2026-11-final
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

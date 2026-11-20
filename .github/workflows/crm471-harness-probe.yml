@@ -32,8 +32,11 @@ jobs:
           pnpm install --no-frozen-lockfile
           python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
           python scripts/generate_contract_bindings.py --write
+          python scripts/generate_contract_bindings.py
+          python -m unittest tests.test_contract_bindings
           cargo update --manifest-path Cargo.toml
           cargo update --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml
+          cargo fmt --all -- --check
       - name: Commit generated lockfiles only to this isolated upgrade branch
         run: |
           set -euo pipefail
@@ -42,7 +45,7 @@ jobs:
           git add pnpm-lock.yaml Cargo.lock apps/cloudflare-crm/rust-party/Cargo.lock contracts/module-contract-bindings.json
           if ! git diff --cached --quiet; then
             git commit -m "chore(deps): refresh generated stable lockfiles [skip ci]"
-            git push origin HEAD:upgrade/stable-2026-11-final-final
+            git push origin HEAD:upgrade/stable-2026-11-final
           fi
           echo "CRM_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Verify current Python dependency environment
@@ -53,10 +56,14 @@ jobs:
         run: |
           set -euo pipefail
           pnpm exec buf --version
+          pnpm exec buf format -d --exit-code proto
+          pnpm exec buf lint proto
           pnpm exec buf generate --template buf.gen.web.yaml
           pnpm exec buf build proto --as-file-descriptor-set -o /tmp/crm-proto-descriptors.binpb
           pnpm --filter cloudflare-crm build
           test -s apps/cloudflare-crm/dist/index.html
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo test --locked --workspace --lib
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # Rust 1.100.0
         with:
           toolchain: 1.100.0
@@ -109,6 +116,7 @@ jobs:
           pnpm --filter cloudflare-crm typecheck
           pnpm --filter @ultimate-crm/client typecheck
           pnpm --filter @ultimate-crm/ui typecheck
+          pnpm test
           pnpm web:typecheck
           pnpm web:lint
           pnpm web:test
@@ -131,3 +139,117 @@ jobs:
             /tmp/crm-module-coverage.json
           if-no-files-found: warn
           retention-days: 14
+
+  postgres-18-integration:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:18.7-alpine3.23
+        env:
+          POSTGRES_DB: crm_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: crm_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DATABASE_URL: postgres://crm_app_test:crm_app_test@127.0.0.1:5432/crm_test
+      ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/crm_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # Rust 1.100.0
+        with:
+          toolchain: 1.100.0
+          components: rustfmt, clippy
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply clean migrations and seed platform foundation
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify PostgreSQL adapter, replay, query and delivery semantics
+        run: |
+          set -euo pipefail
+          cargo test -p crm-core-data --features postgres-integration --test postgres_foundation
+          cargo test -p crm-core-data --features postgres-integration --test postgres_advanced -- --nocapture
+          cargo test -p crm-core-data --features postgres-integration --test postgres_query -- --nocapture
+          cargo test -p crm-core-data --features postgres-integration --test postgres_event_delivery -- --nocapture
+          cargo test -p crm-capability-ingress --features postgres-integration --test postgres_gateway_e2e -- --nocapture
+      - name: Verify migration rollback and reapplication
+        run: |
+          set -euo pipefail
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.down.sql' | sort -r)
+          count="$(psql --tuples-only --no-align --command "SELECT count(*) FROM pg_namespace WHERE nspname = 'crm'")"
+          test "${count}" = "0"
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+      - name: Verify production mutations, queries and rollback evidence
+        run: |
+          set -euo pipefail
+          cargo test -p crm-capability-ingress --features postgres-integration --test postgres_production_mutations -- --nocapture
+          cargo test -p crm-sales-activities-capability-composition --features postgres-integration --test postgres_queries -- --nocapture
+          cargo test -p crm-capability-ingress --features postgres-integration --test postgres_production_queries -- --nocapture
+          cargo test -p crm-capability-ingress --features postgres-integration --test postgres_production_evidence_rollback -- --nocapture
+          cargo test -p crm-parties-capability-adapter --features postgres-integration --test postgres_evidence_rollback -- --nocapture
+          cargo test -p crm-sales-capability-adapter --features postgres-integration --test postgres_mutations -- --nocapture
+          cargo test -p crm-activities-capability-adapter --features postgres-integration --test postgres_noop -- --nocapture
+      - name: Verify full crm-api process lifecycle on PostgreSQL 18.7
+        run: |
+          set -euo pipefail
+          cat > /tmp/reset-application-database.sh <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          psql --set ON_ERROR_STOP=1 --command "DROP SCHEMA IF EXISTS crm CASCADE"
+          while IFS= read -r migration; do
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.up.sql' | sort)
+          psql --set ON_ERROR_STOP=1 --file database/tests/0001_platform_foundation.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0003_sales_activities_adapters.sql
+          psql --set ON_ERROR_STOP=1 --file database/tests/0004_search_runtime_role_grants.sql
+          psql --set ON_ERROR_STOP=1 --command "ALTER ROLE crm_app_test LOGIN PASSWORD 'crm_app_test'"
+          SH
+          chmod +x /tmp/reset-application-database.sh
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test process_e2e -- --nocapture
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test party_process_e2e -- --nocapture
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test account_process_e2e -- --nocapture
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test contact_point_process_e2e -- --nocapture
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test party_relationship_process_e2e -- --nocapture
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test consent_process_e2e -- --nocapture
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test identity_resolution_process_e2e -- --nocapture
+          /tmp/reset-application-database.sh
+          cargo test -p crm-api --test merge_unmerge_process_e2e -- --nocapture
+          bash scripts/prepare_customer_enrichment_consent_policy_database.sh
+          cargo test -p crm-api --test customer_enrichment_process_e2e -- --nocapture

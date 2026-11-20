@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - dev
-      - upgrade/stable-2026-11-final
     paths-ignore:
       - '*.md'
       - '**/*.md'
