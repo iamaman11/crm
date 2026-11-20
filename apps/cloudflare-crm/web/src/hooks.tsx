@@ -54,15 +54,15 @@ export function useQuery<T>(load:ReadLoad<T>) {
 }
 
 type ReceiptProof=Pick<MutationReceipt,"requestId"|"originalRequestId"|"resourceVersion">;
-type MutationWrite=()=>Promise<{receipt?:MutationReceipt|undefined;changed?:boolean|undefined}>;
+type MutationOutcome={kind:"committed";receipt:MutationReceipt}|{kind:"no_change"};
+type MutationWrite=()=>Promise<MutationOutcome>;
 type ReceiptMarker={resourceId:string;key:string;expectedVersion:string};
-type MutationIntent={write:MutationWrite;refresh:(()=>Promise<unknown>)|undefined}&
-  ({preserve:false}|{preserve:true;marker:ReceiptMarker});
+type MutationIntent={write:MutationWrite;refresh:(()=>Promise<unknown>)|undefined;marker:ReceiptMarker};
 type PreparedMutation={write:MutationWrite;marker:ReceiptMarker};
 type ReceiptInput={
   precondition?:{idempotencyKey?:string|undefined;expectedVersion?:bigint|undefined}|undefined;
 };
-type Pending={kind:"live";intent:Extract<MutationIntent,{preserve:true}>}|
+type Pending={kind:"live";intent:MutationIntent}|
   {kind:"stored";marker:ReceiptMarker}|{kind:"unreadable"};
 type RecoveryOptions={
   storageKey:string;
@@ -114,14 +114,22 @@ function matchesWriteReceipt(marker:ReceiptMarker,receipt:MutationReceipt|undefi
   return !!receipt?.requestId&&receipt.resourceVersion===BigInt(marker.expectedVersion)+1n;
 }
 
-export function prepareMutation<Input extends ReceiptInput, Result extends {receipt?:MutationReceipt|undefined}>(
+export function prepareMutation<Input extends ReceiptInput,
+  Result extends {receipt?:MutationReceipt|undefined;changed?:boolean|undefined}>(
   send:(input:Input)=>Promise<Result>, input:NoInfer<Input>, resourceId:string,
 ):PreparedMutation {
   const snapshot=structuredClone(input);
   const {precondition}=snapshot;
   if(!resourceId||!precondition?.idempotencyKey)
     throw Error("Отсутствует идентификатор исходной операции.");
-  return {write:()=>send(snapshot),marker:{resourceId,key:precondition.idempotencyKey,
+  return {write:async()=>{
+    const result=await send(snapshot);
+    if(result.changed===false&&!result.receipt)return {kind:"no_change" as const};
+    // Protobuf's optional receipt is not sufficient proof of a successful write.
+    if(result.changed===false||!result.receipt)
+      throw Error("Ответ без подтверждения записи.");
+    return {kind:"committed" as const,receipt:result.receipt};
+  },marker:{resourceId,key:precondition.idempotencyKey,
     expectedVersion:String(precondition.expectedVersion??0n)}};
 }
 
@@ -165,12 +173,12 @@ export function useMutation(recovery?:RecoveryOptions) {
     if(inFlight.current)return;
     const recovering=pendingRef.current?.kind==="live"&&pendingRef.current.intent===intent;
     inFlight.current=true;setBusy(true);setNotice(undefined);
-    if(intent.preserve)changePending({kind:"live",intent});
+    changePending({kind:"live",intent});
     try {
       const result=await intent.write();
       // A typed no-op (notably an already completed Task) did not commit;
       // never fabricate a D1 receipt or report it as saved.
-      if(intent.preserve&&result.changed===false&&!result.receipt){
+      if(result.kind==="no_change"){
         const cleared=clearPending();
         setNotice({tone:"warning",text:"Изменений не было."+
           (cleared?"":" Не удалось удалить отметку восстановления.")});
@@ -181,12 +189,12 @@ export function useMutation(recovery?:RecoveryOptions) {
         }
         return;
       }
-      if(intent.preserve&&!matchesWriteReceipt(intent.marker,result.receipt))
+      if(!matchesWriteReceipt(intent.marker,result.receipt))
         throw Error("Ответ без совпадающего подтверждения записи.");
-      const saved=result.changed===false?"Изменений не было.":result.receipt?.replayed?
+      const saved=result.receipt.replayed?
         "Сохранено ранее. Повторная запись не выполнялась.":"Сохранено.";
-      const correlation=result.receipt?.requestId?" Запрос: "+result.receipt.requestId:"";
-      const original=result.receipt?.originalRequestId&&result.receipt.originalRequestId!==result.receipt.requestId?
+      const correlation=" Запрос: "+result.receipt.requestId;
+      const original=result.receipt.originalRequestId&&result.receipt.originalRequestId!==result.receipt.requestId?
         " Исходная запись: "+result.receipt.originalRequestId:"";
       const cleared=clearPending();
       const text=saved+correlation+original+(cleared?"":" Не удалось удалить отметку восстановления.");
@@ -198,7 +206,7 @@ export function useMutation(recovery?:RecoveryOptions) {
     } catch(error) {
       const failure=api.decodeError(error);
       // A later rejection cannot prove the outcome of an earlier attempt.
-      if(intent.preserve&&(recovering||failure.outcome==="unconfirmed")){
+      if(recovering||failure.outcome==="unconfirmed"){
         setNotice({tone:"warning",text:"Результат записи не подтверждён. "+failure.text+
           " Повторите именно исходную операцию."});
       }else{
@@ -208,9 +216,11 @@ export function useMutation(recovery?:RecoveryOptions) {
       }
     } finally {inFlight.current=false;setBusy(false);}
   };
-  const run=async(write:MutationWrite,refresh?:()=>Promise<unknown>)=>{
-    if(pendingRef.current)return;
-    await perform({write,refresh,preserve:false});
+  // Editor loading is read-only: report its error without starting a mutation.
+  const reportError=(error:unknown)=>{
+    if(inFlight.current||pendingRef.current)return;
+    const failure=api.decodeError(error);
+    setNotice({tone:"danger",text:failure.text,fields:failure.fieldViolations});
   };
   const runIntent=async(prepare:()=>PreparedMutation,refresh?:()=>Promise<unknown>)=>{
     if(inFlight.current||pendingRef.current)return;
@@ -228,7 +238,7 @@ export function useMutation(recovery?:RecoveryOptions) {
       // If the marker cannot be written, do not send the command.
       sessionStorage.setItem(recovery.storageKey,JSON.stringify(prepared.marker));
     }catch(error){setNotice({tone:"danger",text:api.describeError(error)});return;}
-    await perform({write:prepared.write,marker:prepared.marker,refresh,preserve:true});
+    await perform({write:prepared.write,marker:prepared.marker,refresh});
   };
   const checkStored=async(marker:ReceiptMarker)=>{
     if(!recovery||inFlight.current)return;
@@ -275,7 +285,7 @@ export function useMutation(recovery?:RecoveryOptions) {
     };
   },[pending,recoveryOnly,busy]);
   return {key,busy,notice,pending,recoveryOnly,canCheck:pendingState?.kind!=="unreadable",
-    changed,run,runIntent,retryPending,acknowledgeUnknown};
+    changed,reportError,runIntent,retryPending,acknowledgeUnknown};
 }
 export function MutationNotice({state}:{state:ReturnType<typeof useMutation>}) {
   return state.notice?<div className="crm-mutation-notice">

@@ -68,7 +68,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
           setSelected((await api.tasks.getTask({taskId:t.taskId})).task);
           setEditorMode("edit");mutation.changed();
         } catch(error) {
-          await mutation.run(()=>Promise.reject(error));
+          await mutation.reportError(error);
         }
       }}>Редактировать задачу</Button>{" "}
       {t.status===TaskStatus.OPEN&&<Button disabled={mutation.busy||mutation.pending}

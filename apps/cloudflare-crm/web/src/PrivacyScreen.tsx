@@ -51,7 +51,7 @@ export function PrivacyScreen() {
       <p>{statuses[c.status]??"Неизвестный статус"} · версия {c.version.toString()}</p>
       <p><small>ID: {c.caseId}</small></p><Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={async()=>{
         try {setSelected((await api.privacy.getPrivacyCase({caseId:c.caseId})).privacyCase);mutation.changed();}
-        catch(error){await mutation.run(()=>Promise.reject(error));}
+        catch(error){await mutation.reportError(error);}
       }}>Открыть запрос</Button>
     </Card>)}
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>

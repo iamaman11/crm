@@ -33,7 +33,7 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
       <p>{r.status===RelationshipStatus.ACTIVE?"Активна":r.status===RelationshipStatus.INACTIVE?"Неактивна":"Неизвестный статус"} · с {dateText(r.validFrom)} до {dateText(r.validUntil)}</p>
       <Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={async()=>{
         try {setSelected((await api.relationships.getPartyRelationship({relationshipId:r.relationshipId})).relationship);setEditorOpen(true);mutation.changed();}
-        catch(error){await mutation.run(()=>Promise.reject(error));}
+        catch(error){await mutation.reportError(error);}
       }}>Редактировать связь</Button>
     </Card>)}
     {!query.busy&&query.data?.relationships.length===0&&<p>Связей пока нет.</p>}

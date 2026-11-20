@@ -247,7 +247,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       setStageEdits(stageDrafts(current));
       setPipelineDirty(false);
       pipelineMutation.changed();
-    } catch(error) {await pipelineMutation.run(()=>Promise.reject(error));}
+    } catch(error) {await pipelineMutation.reportError(error);}
   };
   const changeStage=(index:number,change:Partial<StageDraft>)=>{
     setStageEdits(before=>before.map((s,i)=>i===index?{...s,...change}:s));

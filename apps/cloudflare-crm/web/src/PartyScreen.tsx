@@ -32,7 +32,7 @@ export function PartyScreen({initialPartyId=""}:{initialPartyId?:string}) {
   },[initialPartyId,query.busy,query.data]);
   const edit=async(id:string)=>{
     try {const result=await api.partyRecords.getParty({partyId:id});setSelected(result.party);setEditorOpen(true);mutation.changed();}
-    catch(error){await mutation.run(()=>Promise.reject(error));}
+    catch(error){await mutation.reportError(error);}
   };
   return <>
     <PageHeader title="Люди и организации" description="Исходные участники клиентских отношений." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать участника</Button>}/>

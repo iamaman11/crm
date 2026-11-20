@@ -40,7 +40,7 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
       <p>С {dateText(p.validFrom)} до {dateText(p.validUntil)}</p>
       <Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={async()=>{
         try {setSelected((await api.contactPoints.getContactPoint({contactPointId:p.contactPointId})).contactPoint);setEditorOpen(true);mutation.changed();}
-        catch(error){await mutation.run(()=>Promise.reject(error));}
+        catch(error){await mutation.reportError(error);}
       }}>Редактировать контакт</Button>
     </Card>)}
     {!query.busy&&query.data?.contactPoints.length===0&&<p>Контактов пока нет.</p>}
