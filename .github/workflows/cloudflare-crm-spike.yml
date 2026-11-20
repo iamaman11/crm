@@ -68,19 +68,6 @@ jobs:
           echo "CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json" >> "$GITHUB_ENV"
           CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json \
             node apps/cloudflare-crm/scripts/architecture-gate.mjs
-      - name: Resolve exact TypeScript 6 compiler API dependency (temporary, fail-closed)
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm install --global pnpm@12.21.0
-          pnpm install --no-frozen-lockfile
-          test -n "$(pnpm exec node -e 'const ts=require("@typescript/typescript6"); if(!ts.sys?.readFile || !ts.createSourceFile) process.exit(1); console.log(ts.version)')"
-          echo CRM_PNPM_LOCK_BEGIN
-          base64 -w 240 pnpm-lock.yaml
-          echo
-          echo CRM_PNPM_LOCK_END
-          echo "::error::Generated pnpm lock must be committed before release"
-          exit 1
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned existing Rust CI
         with:
           toolchain: 1.100.0
