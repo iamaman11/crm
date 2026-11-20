@@ -133,12 +133,20 @@ test("transient edge failure is retried but requires actual denial",async()=>{
     assert.deepEqual(x.events.map(e=>e.result),["RETRY","PASS"]);
   }
 });
+test("delayed edge propagation still requires a positive Access denial",async()=>{
+  const x=await run([...Array(8).fill(404),403]);
+  await x.result;
+  assert.equal(x.calls.length,9);
+  assert.equal(x.delays.length,8);
+  assert.equal(x.events.at(-1).result,"PASS");
+});
 test("persistent edge failure never passes the bounded readback",async()=>{
   for(const status of [404,429,502,503,504,524]){
-    const x=await run([status,status,status,403]);
+    const x=await run([...Array(40).fill(status),403]);
     await assert.rejects(x.result,new RegExp("HTTP "+status));
-    assert.equal(x.calls.length,3);
-    assert.deepEqual(x.delays,[1000,2000]);
+    assert.equal(x.calls.length,40);
+    assert.equal(x.delays.length,39);
+    assert.deepEqual(x.delays.slice(0,4),[1000,2000,3000,3500]);
     assert.ok(x.events.every(e=>e.result==="RETRY"));
   }
 });
