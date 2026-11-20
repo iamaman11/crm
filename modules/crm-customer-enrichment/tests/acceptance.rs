@@ -125,7 +125,9 @@ fn production_acceptance_is_bound_to_exact_inventory_and_real_process_evidence()
     // The accepted process evidence below is historical and remains reviewable.
     // Active CRM acceptance now runs the real Rust Worker against D1 in one CI.
     assert!(
-        !root.join(".github/workflows/application-runtime.yml").exists(),
+        !root
+            .join(".github/workflows/application-runtime.yml")
+            .exists(),
         "retired PostgreSQL process CI must remain absent"
     );
     let workflow = read_text(&root.join(".github/workflows/cloudflare-crm-spike.yml"));
