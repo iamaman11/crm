@@ -88,17 +88,12 @@ validateWorkerConfig(production,local);
  for(const file of sources)validateNativeFixtureSource(read(scope+"/"+file),file);
  const native=read(scope+"/native.mjs");
  const integration=policy.integration_runtime;
- check(integration?.owner==="Wrangler createTestHarness/workerd"&&integration.fixture_binding==="DB"&&
+ check(integration?.owner==="Miniflare/workerd"&&integration.fixture_binding==="DB"&&
    integration.direct_sqlite===false&&integration.production_worker_count===1&&integration.local_d1_count===1,
    "one canonical integration runtime policy required");
- check(sources.reduce((count,file)=>count+(read(scope+"/"+file).match(/createTestHarness\(/g)||[]).length,0)===1&&
-   native.includes('import {createTestHarness} from "wrangler";')&&
-   native.includes('worker.applyD1Migrations("DB")')&&
-   native.includes('const env=await worker.getEnv();')&&
-   native.includes('fixtureDb=env.DB;')&&
-   native.includes('await testHarness.close();')&&
-   sources.every(file=>!read(scope+"/"+file).includes("new Miniflare(")),
-   "one Wrangler test harness must own the canonical D1 fixture binding");
+ check(sources.reduce((count,file)=>count+(read(scope+"/"+file).match(/new Miniflare\(/g)||[]).length,0)===1&&
+   native.includes('getD1Database("DB",config.name)'),
+   "one integration runtime must own the canonical D1 fixture binding");
 }
 const reportPath=process.env.CRM_MODULE_COVERAGE_REPORT;
 check(!!reportPath,"canonical manifest/Cargo report required");

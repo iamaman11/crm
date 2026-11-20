@@ -20,9 +20,8 @@ POLICY_SCHEMA_VERSION = "crm.affected-scope-policy/v1"
 POLICY_PATH = Path("affected-scope-policy.json")
 WORKFLOW_SUFFIXES = {".yml", ".yaml"}
 REQUIRED_SCOPE_IDS = {
-    "contracts", "protobuf_api_compatibility", "database_migrations",
-    "postgresql_acceptance", "process_runtime_acceptance", "product_plane",
-    "frontend", "operations",
+    "contracts", "protobuf_api_compatibility", "d1_migrations",
+    "d1_runtime_acceptance", "cloudflare_product_plane", "frontend", "operations",
 }
 BROAD_PATH_PATTERNS = (
     "Cargo.toml", "Cargo.lock", ".github/workflows/**",

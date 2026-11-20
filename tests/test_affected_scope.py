@@ -193,7 +193,7 @@ class AffectedScopeTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         empty = {"packages": [], "workspace_members": []}
         for path, expected in (
-            ("crates/crm-application-runtime/tests/customer_privacy_owner_execution_postgres.rs", "Customer Privacy Owner Execution CI"),
+            ("apps/cloudflare-crm/rust-party/src/lib.rs", "Cloudflare CRM Spike CI"),
             ("apps/cloudflare-crm/worker/unified.mjs", "Cloudflare CRM Spike CI"),
         ):
             with self.subTest(path=path):
@@ -274,55 +274,45 @@ class AffectedScopeTests(unittest.TestCase):
                 [workflow["name"] for workflow in report["selected_workflows"]],
             )
 
-    def test_migration_scope_selects_database_process_and_product(self) -> None:
+    def test_d1_migrations_and_runtime_acceptance_use_cloudflare_ci(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            for filename, name in (
-                ("application.yml", "Application Runtime CI"),
-                ("database.yml", "Database CI"),
-                ("product.yml", "Product Plane CI"),
-            ):
-                workflow(root, filename, name, ["database/**"])
+            workflow(root, "cloudflare.yml", "Cloudflare CRM Spike CI", ["apps/cloudflare-crm/**"])
             workflow(root, "always.yml", "Always CI", None)
             policy(
                 root,
                 overrides={
-                    "database_migrations": {
-                        "path_patterns": ["database/migrations/**"],
-                        "required_workflows": [
-                            "Application Runtime CI",
-                            "Database CI",
-                            "Product Plane CI",
-                        ],
+                    "d1_migrations": {
+                        "path_patterns": ["apps/cloudflare-crm/migrations/**"],
+                        "required_workflows": ["Cloudflare CRM Spike CI"],
                     },
-                    "postgresql_acceptance": {
-                        "path_patterns": ["database/**"],
-                        "required_workflows": ["Database CI"],
+                    "d1_runtime_acceptance": {
+                        "path_patterns": ["apps/cloudflare-crm/rust-party/test/**"],
+                        "required_workflows": ["Cloudflare CRM Spike CI"],
                     },
                 },
             )
-            report = build_report(
-                root,
-                "origin/main",
-                paths=["database/migrations/9999_example.up.sql"],
-                metadata=metadata(root),
-                head_sha="abc",
+            cases = (
+                ("apps/cloudflare-crm/migrations/0004.sql", ["d1_migrations"]),
+                ("apps/cloudflare-crm/rust-party/test/native.mjs", ["d1_runtime_acceptance"]),
             )
-            self.assertFalse(report["broadened"])
-            self.assertEqual(
-                [scope["id"] for scope in report["selected_scopes"]],
-                ["database_migrations", "postgresql_acceptance"],
-            )
-            selected = {
-                workflow["name"] for workflow in report["selected_workflows"]
-            }
-            self.assertTrue(
-                {
-                    "Application Runtime CI",
-                    "Database CI",
-                    "Product Plane CI",
-                }.issubset(selected)
-            )
+            for path, expected_scopes in cases:
+                report = build_report(
+                    root,
+                    "origin/main",
+                    paths=[path],
+                    metadata=metadata(root),
+                    head_sha="abc",
+                )
+                self.assertFalse(report["broadened"])
+                self.assertEqual(
+                    [scope["id"] for scope in report["selected_scopes"]],
+                    expected_scopes,
+                )
+                self.assertIn(
+                    "Cloudflare CRM Spike CI",
+                    [workflow["name"] for workflow in report["selected_workflows"]],
+                )
 
     def test_undercovered_required_workflow_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -376,35 +366,35 @@ class AffectedScopeTests(unittest.TestCase):
                     head_sha="abc",
                 )
 
-    def test_frontend_and_product_scopes_are_cumulative(self) -> None:
+    def test_frontend_and_cloudflare_product_scopes_are_cumulative(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            workflow(root, "product.yml", "Product Plane CI", ["apps/web/**"])
+            workflow(root, "cloudflare.yml", "Cloudflare CRM Spike CI", ["apps/cloudflare-crm/**"])
             workflow(root, "always.yml", "Always CI", None)
             policy(
                 root,
                 overrides={
                     "frontend": {
-                        "path_patterns": ["apps/web/**"],
-                        "required_workflows": ["Product Plane CI"],
+                        "path_patterns": ["apps/cloudflare-crm/web/**"],
+                        "required_workflows": ["Cloudflare CRM Spike CI"],
                     },
-                    "product_plane": {
-                        "path_patterns": ["apps/web/**"],
-                        "required_workflows": ["Product Plane CI"],
+                    "cloudflare_product_plane": {
+                        "path_patterns": ["apps/cloudflare-crm/**"],
+                        "required_workflows": ["Cloudflare CRM Spike CI"],
                     },
                 },
             )
             report = build_report(
                 root,
                 "origin/main",
-                paths=["apps/web/src/app.tsx"],
+                paths=["apps/cloudflare-crm/web/src/app.tsx"],
                 metadata=metadata(root),
                 head_sha="abc",
             )
             self.assertFalse(report["broadened"])
             self.assertEqual(
                 [scope["id"] for scope in report["selected_scopes"]],
-                ["frontend", "product_plane"],
+                ["cloudflare_product_plane", "frontend"],
             )
 
     def test_operations_scope_is_owned_and_enforced(self) -> None:
@@ -449,27 +439,28 @@ class AffectedScopeTests(unittest.TestCase):
                 "packages/client/src/contract_hashes.ts",
                 "scripts/contract_bindings.py",
             ),
-            "database_migrations": ("database/migrations/9999_example.up.sql",),
-            "postgresql_acceptance": (
-                "database/tests/0001_platform_foundation.sql",
-                "crates/crm-core-data/src/lib.rs",
+            "d1_migrations": ("apps/cloudflare-crm/migrations/0004.sql",),
+            "d1_runtime_acceptance": (
+                "apps/cloudflare-crm/rust-party/src/lib.rs",
+                "apps/cloudflare-crm/rust-party/test/native.mjs",
+                "apps/cloudflare-crm/e2e/live.mjs",
             ),
-            "process_runtime_acceptance": (
-                "services/crm-api/src/main.rs",
-                "crates/crm-application-runtime/src/lib.rs",
-                "scripts/prepare_customer_enrichment_worker_process_database.sh",
-            ),
-            "product_plane": (
+            "cloudflare_product_plane": (
                 "package.json",
-                "apps/web/src/app.tsx",
-                "scripts/run_e2e.sh",
+                "apps/cloudflare-crm/web/src/app.tsx",
+                "packages/ui/src/Forms.tsx",
             ),
-            "frontend": ("apps/web/src/app.tsx", "buf.gen.web.yaml"),
+            "frontend": (
+                "apps/cloudflare-crm/web/src/app.tsx",
+                "packages/client/src/contract_hashes.ts",
+            ),
             "operations": (
                 ".github/workflows/governance.yml",
                 "repository-packet.json",
                 "scripts/check_native_module_composition.py",
-                "scripts/prepare_isolated_process_database.sh",
+                "scripts/local_lifecycle.py",
+                "scripts/affected_scope.py",
+                "tests/test_affected_scope.py",
             ),
         }
         empty_metadata = {"packages": [], "workspace_members": []}

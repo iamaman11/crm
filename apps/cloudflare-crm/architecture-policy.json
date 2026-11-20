@@ -10,7 +10,7 @@
     "/api/customer-data-operations/parties.csv"
   ],
   "integration_runtime": {
-    "owner": "Wrangler createTestHarness/workerd",
+    "owner": "Miniflare/workerd",
     "fixture_binding": "DB",
     "direct_sqlite": false,
     "production_worker_count": 1,
