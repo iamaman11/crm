@@ -20,7 +20,7 @@ jobs:
         run: |
           npm install --global pnpm@11.13.1
           pnpm install --no-frozen-lockfile
-          node --input-type=module -e 'import {createTestHarness} from "./apps/cloudflare-crm/node_modules/wrangler/wrangler-dist/cli.js"; if(typeof createTestHarness!=="function") throw Error("missing createTestHarness");' || node --input-type=module -e 'import("wrangler").then(m=>{if(typeof m.createTestHarness!=="function")throw Error("missing createTestHarness")})'
+          (cd apps/cloudflare-crm && node --input-type=module -e 'import("wrangler").then(m=>{if(typeof m.createTestHarness!=="function") throw Error("missing createTestHarness")})')
           pnpm --filter cloudflare-crm exec wrangler --version
       - name: Generate original Buf contracts, descriptor and React build
         run: |

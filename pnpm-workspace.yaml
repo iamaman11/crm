@@ -8,3 +8,8 @@ allowBuilds:
   'esbuild@0.25.4 || 0.25.12': true
   'workerd@1.20251011.0': true
   'sharp@0.33.5': true
+
+# Explicit experiment-only allowlist for Wrangler 4.99.0; not approved for dev.
+  'esbuild@0.27.3': true
+  'sharp@0.34.5': true
+  'workerd@1.20260609.1': true
