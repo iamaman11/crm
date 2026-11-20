@@ -120,7 +120,7 @@ assert.equal(config.vars.CRM_CI_LOCAL_ONLY,"yes");
 const testHarness=createTestHarness({
  root:cwd,
  workers:[{
-   configPath:join(cwd,"rust-party/wrangler.jsonc"),
+   configPath,
    vars:{CRM_NATIVE_CI_JWKS:jwks,GIT_SHA:sourceSha},
  }]
 });
