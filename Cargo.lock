@@ -324,38 +324,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crm-api"
-version = "0.1.0"
-dependencies = [
- "crm-application-runtime",
- "crm-capability-adapters",
- "crm-capability-ingress",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-360-composition",
- "crm-customer-privacy-cancel-capability-adapter",
- "crm-customer-privacy-capability-adapter",
- "crm-customer-privacy-query-adapter",
- "crm-customer-privacy-subject-capability-adapter",
- "crm-data-quality",
- "crm-data-quality-capability-adapter",
- "crm-data-quality-source-composition",
- "crm-module-sdk",
- "crm-parties-query-adapter",
- "crm-party-relationships-projection",
- "crm-proto-contracts",
- "crm-query-runtime",
- "crm-sales-activities-capability-composition",
- "prost",
- "reqwest",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
- "tonic",
-]
-
-[[package]]
 name = "crm-application-composition"
 version = "0.1.0"
 dependencies = [
@@ -363,82 +331,6 @@ dependencies = [
  "crm-module-sdk",
  "crm-query-runtime",
  "tokio",
-]
-
-[[package]]
-name = "crm-application-runtime"
-version = "0.1.0"
-dependencies = [
- "axum",
- "crm-application-composition",
- "crm-capability-adapters",
- "crm-capability-ingress",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-consents",
- "crm-consents-capability-adapter",
- "crm-consents-query-adapter",
- "crm-contact-points-capability-composition",
- "crm-core-data",
- "crm-core-events",
- "crm-customer-360-composition",
- "crm-customer-accounts-capability-adapter",
- "crm-customer-data-operations-capability-adapter",
- "crm-customer-data-operations-execution-composition",
- "crm-customer-data-operations-query-adapter",
- "crm-customer-data-operations-source-composition",
- "crm-customer-enrichment",
- "crm-customer-enrichment-application-adapter",
- "crm-customer-enrichment-application-composition",
- "crm-customer-enrichment-capability-adapter",
- "crm-customer-enrichment-capability-composition",
- "crm-customer-enrichment-materialization-adapter",
- "crm-customer-enrichment-materialization-composition",
- "crm-customer-enrichment-provider-process-composition",
- "crm-customer-enrichment-provider-registry",
- "crm-customer-enrichment-query-adapter",
- "crm-customer-enrichment-registry-http-transport",
- "crm-customer-enrichment-request-list-query-adapter",
- "crm-customer-enrichment-review-adapter",
- "crm-customer-enrichment-review-composition",
- "crm-customer-enrichment-suggestion-query-adapter",
- "crm-customer-enrichment-visibility",
- "crm-customer-enrichment-worker-composition",
- "crm-customer-privacy-production",
- "crm-data-quality-source-composition",
- "crm-first-party-modules",
- "crm-global-search-composition",
- "crm-identity-resolution-capability-adapter",
- "crm-metadata-api-adapter",
- "crm-metadata-query-adapter",
- "crm-module-sdk",
- "crm-parties-query-adapter",
- "crm-party-reference-composition",
- "crm-party-relationships-capability-adapter",
- "crm-party-relationships-projection",
- "crm-proto-contracts",
- "crm-query-runtime",
- "crm-sales-activities-capability-composition",
- "crm-sales-activities-link",
- "crm-sales-activities-query-adapter",
- "crm-search-query-adapter",
- "crm-search-runtime",
- "http",
- "prost",
- "prost-build",
- "protoc-bin-vendored",
- "ring",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
- "tokio-stream",
- "tonic",
- "tonic-health",
- "tonic-prost",
- "tonic-prost-build",
- "tonic-web",
 ]
 
 [[package]]
@@ -3256,16 +3148,6 @@ dependencies = [
 
 [[package]]
 name = "prettyplease"
-version = "0.2.37"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
-dependencies = [
- "proc-macro2",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "prettyplease"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bfe0f4c752e450fc2faf62654f1c134747922825d5b04ca717b8874f41a40c0"
@@ -4422,76 +4304,6 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tower",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "tonic-build"
-version = "0.14.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac6d916d206ed7bdda1778ddff9bda43303789c258877e7bc22fb44ee5c984b4"
-dependencies = [
- "prettyplease 0.2.37",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "tonic-health"
-version = "0.14.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc97d645691d64d96db1afe386d0d2918ac84ab56e2c91e153f22f6349a378cd"
-dependencies = [
- "prost",
- "tokio",
- "tokio-stream",
- "tonic",
- "tonic-prost",
-]
-
-[[package]]
-name = "tonic-prost"
-version = "0.14.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eba464054e2226f182a34489b8b079bf4c6e3e7ab5fd7fc30e024f24aa92a484"
-dependencies = [
- "bytes",
- "prost",
- "tonic",
-]
-
-[[package]]
-name = "tonic-prost-build"
-version = "0.14.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ea216ddc448e08e7839ab09e20e60b06b6a1c32745ccb212c0ebd161c199f1b"
-dependencies = [
- "prettyplease 0.2.37",
- "proc-macro2",
- "prost-build",
- "prost-types",
- "quote",
- "syn 2.0.119",
- "tempfile",
- "tonic-build",
-]
-
-[[package]]
-name = "tonic-web"
-version = "0.14.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "323c7492987fadf7b27005a4597c977ffa51907a146621273bda37e231aff406"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "http",
- "http-body",
- "pin-project",
- "tokio-stream",
- "tonic",
  "tower-layer",
  "tower-service",
  "tracing",
