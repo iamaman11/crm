@@ -84,7 +84,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo metadata --format-version 1 --no-deps >/dev/null
+          cargo metadata --format-version 1 >/dev/null
+          cargo metadata --locked --format-version 1 >/dev/null
           echo CRM_CARGO_LOCK_BEGIN
           base64 -w 240 Cargo.lock
           echo
