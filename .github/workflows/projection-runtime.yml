@@ -59,11 +59,11 @@ permissions:
 
 jobs:
   projection-runtime:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 35
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:19.0-alpine
         env:
           POSTGRES_DB: crm_projection_test
           POSTGRES_USER: postgres

@@ -74,7 +74,7 @@ permissions:
 jobs:
   isolated-process:
     name: isolated-${{ matrix.suite }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -88,7 +88,7 @@ jobs:
             test_target: account_process_e2e
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:19.0-alpine
         env:
           POSTGRES_DB: ${{ matrix.database }}
           POSTGRES_USER: postgres
@@ -176,7 +176,7 @@ jobs:
         run: |
           set +e
           mkdir -p "${ARTIFACT_DIR}"
-          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:19.0-alpine | head -n 1)"
           if [ -n "${postgres_container}" ]; then
             docker logs "${postgres_container}" > "${ARTIFACT_DIR}/postgres.log" 2>&1
           else
@@ -241,7 +241,7 @@ jobs:
           PY
       - name: Upload isolated process evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: postgres-isolation-${{ matrix.suite }}
           path: artifacts/postgres-isolation/${{ matrix.suite }}/

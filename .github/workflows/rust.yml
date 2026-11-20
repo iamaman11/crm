@@ -17,15 +17,15 @@ permissions:
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # exact Rust 1.97.1 policy
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # exact Rust 1.100.0 policy
         with:
-          toolchain: 1.97.1
+          toolchain: 1.100.0
           components: rustfmt, clippy
       - name: Test Rust governance analyzer
         run: python -m unittest tests.test_rust_governance
@@ -37,7 +37,7 @@ jobs:
           python scripts/check_architecture.py 2>&1 | tee architecture.txt
       - name: Upload architecture diagnostics
         if: always() && steps.architecture.outcome != 'skipped'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: architecture-diagnostics
           path: architecture.txt
@@ -60,7 +60,7 @@ jobs:
         run: cargo fmt --all
       - name: Upload formatted source diagnostics
         if: failure() && steps.rustfmt.outcome == 'failure'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rustfmt-diagnostics
           path: |
@@ -80,7 +80,7 @@ jobs:
             2> >(tee rustc-stderr.txt >&2) | tee rustc.json > /dev/null
       - name: Upload Rust compiler diagnostics
         if: always() && steps.rustc.outcome != 'skipped'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rustc-diagnostics
           path: |
@@ -97,7 +97,7 @@ jobs:
             2> >(tee clippy-stderr.txt >&2) | tee clippy.json > /dev/null
       - name: Upload Clippy diagnostics
         if: always() && steps.clippy.outcome != 'skipped'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: clippy-diagnostics
           path: |
@@ -120,7 +120,7 @@ jobs:
             --markdown-output rust-governance.md
       - name: Upload Rust governance report
         if: always() && steps.rustc.outcome == 'success' && steps.clippy.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rust-governance-report
           path: |
@@ -136,7 +136,7 @@ jobs:
           cargo test --locked --workspace --all-features 2>&1 | tee tests.txt
       - name: Upload test diagnostics
         if: always() && steps.tests.outcome != 'skipped'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-diagnostics
           path: tests.txt
