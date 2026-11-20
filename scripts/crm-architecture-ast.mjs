@@ -1,7 +1,7 @@
 // Enforce the *reachable* CRM frontend module graph through the TypeScript AST.
 // No regex-only source matching, no legacy barrel import, no alternative browser transport.
 // Backend Rust and generated code have their own independent compile/runtime gates.
-import ts from "typescript";
+import ts from "@typescript/typescript6";
 import {readFileSync,existsSync,readdirSync} from "node:fs";
 import {resolve,dirname,extname,relative,sep} from "node:path";
 import {fileURLToPath} from "node:url";
