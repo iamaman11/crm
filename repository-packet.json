@@ -52,7 +52,6 @@
     ".github/workflows/postgres-process-isolation.yml",
     ".github/workflows/product-plane.yml",
     ".github/workflows/projection-runtime.yml",
-    ".github/workflows/regenerate-navigation.yml",
     ".github/workflows/rust-generated-sync.yml",
     ".github/workflows/rust.yml",
     ".github/workflows/search-runtime.yml",
