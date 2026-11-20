@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - dev
+      - upgrade/stable-2026-11
     paths-ignore:
       - '*.md'
       - '**/*.md'
@@ -87,15 +88,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          archive=cargo-deny-0.21.0-x86_64-unknown-linux-musl.tar.gz
-          curl --fail --silent --show-error --location --retry 3 "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.21.0/$archive" --output "$RUNNER_TEMP/$archive"
-          echo "a2170b854ff697e79e39c4c538981c9c1bdd803addbae6719a4cb66b4585a903  $RUNNER_TEMP/$archive" | sha256sum --check --status
-          mkdir -p "$RUNNER_TEMP/crm-cargo-deny"
-          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/crm-cargo-deny" --strip-components=1
-          deny="$RUNNER_TEMP/crm-cargo-deny/cargo-deny"
-          "$deny" --version | grep -Fx 'cargo-deny 0.21.0'
+          cargo install --locked --root "$RUNNER_TEMP/crm-cargo-deny" cargo-deny --version 0.22.0
+          deny="$RUNNER_TEMP/crm-cargo-deny/bin/cargo-deny"
+          "$deny" --version | grep -Fx 'cargo-deny 0.22.0'
           "$deny" --locked --config deny.toml --target x86_64-unknown-linux-gnu --target x86_64-pc-windows-msvc check --show-stats
-          echo "CRM_ROOT_DEPENDENCY_SECURITY=PASS (Worker advisory deferred; not checked here)"
+          (cd apps/cloudflare-crm/rust-party && "$deny" --locked --config "$GITHUB_WORKSPACE/deny.toml" --target wasm32-unknown-unknown check --show-stats)
+          echo "CRM_ROOT_AND_WORKER_DEPENDENCY_SECURITY=PASS"
       # Fail before the expensive WASM pipeline if the shared contract breaks.
       # The repo's existing frozen workspace provides Buf, Protobuf-ES, and TS.
       - name: Install pinned shared contract toolchain
@@ -103,7 +101,7 @@ jobs:
         run: |
           set -euo pipefail
           npm install --global pnpm@12.21.0
-          pnpm --version | grep -Fx '11.13.1'
+          pnpm --version | grep -Fx '12.21.0'
           pnpm install --frozen-lockfile
       - name: Validate current Protobuf contracts
         shell: bash
@@ -144,7 +142,7 @@ jobs:
       # Cargo still validates freshness and runs for this exact source. Changing
       # toolchain/config/lock/codegen inputs starts a new cache family.
       - name: Restore Cargo compilation cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v7.1.0.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -215,12 +213,12 @@ jobs:
           fi
       # Installer binaries are cached separately from Cargo compilation outputs.
       - name: Cache pinned native Rust tool CLIs
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v7.1.0.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/bin/wasm-bindgen
             ~/.cargo/bin/worker-build
-          key: ${{ runner.os }}-crm-rust1100-wasm-bindgen-0.2.130-worker-build-0.8.7-v1
+          key: ${{ runner.os }}-crm-rust1100-wasm-bindgen-0.2.130-worker-build-0.9.0-v1
       - name: Install exact native wasm-bindgen CLI from Cargo registry
         # worker-build 0.9.0 officially supports WASM_BINDGEN_BIN. Fetching the
         # pinned CLI from crates.io avoids unstable GitHub Releases binary URLs.

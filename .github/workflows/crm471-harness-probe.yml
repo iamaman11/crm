@@ -1,44 +1,68 @@
-name: CRM #471 temporary Wrangler harness experiment
-# EXPIRE: this workflow exists only on experiment/471-wrangler-harness; never merge it to dev.
+name: CRM #471 latest stable compatibility and full native acceptance
+# Temporary validation only on upgrade/stable-2026-11; never deploys or changes dev.
 on:
   push:
     branches:
-      - experiment/471-wrangler-harness
+      - upgrade/stable-2026-11
 permissions:
-  contents: read
+  contents: write
   actions: read
 jobs:
   harness-probe:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: '24.18.0'
-      - name: Install exact Wrangler 4.165 and original workspace packages (experimental lock)
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26.13.1'
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 12.21.0
+          run_install: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.15.2'
+      - name: Install current workspace packages and refresh lockfiles
         run: |
-          npm install --global pnpm@11.13.1
+          set -euo pipefail
+          pnpm --version | grep -Fx '12.21.0'
           pnpm install --no-frozen-lockfile
-          # Temporary CI-only textual lock export: exact reproducible bytes, no secrets.
-          echo CRM471_LOCK_BEGIN
-          base64 -w0 pnpm-lock.yaml
-          echo
-          echo CRM471_LOCK_END
-          (cd apps/cloudflare-crm && node --input-type=module -e 'import("wrangler").then(m=>{if(typeof m.createTestHarness!=="function") throw Error("missing createTestHarness")})')
-          pnpm --filter cloudflare-crm exec wrangler --version
+          cargo update --manifest-path Cargo.toml
+          cargo update --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml
+      - name: Commit generated lockfiles only to this isolated upgrade branch
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml Cargo.lock apps/cloudflare-crm/rust-party/Cargo.lock
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(deps): refresh generated stable lockfiles [skip ci]"
+            git push origin HEAD:upgrade/stable-2026-11
+          fi
+          echo "CRM_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Verify Python dependency environment
+        run: |
+          python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
+          python -m pip check
+          python -c "import sys, grpc, google.protobuf; print(sys.version); print('grpcio', grpc.__version__, 'protobuf', google.protobuf.__version__)"
       - name: Generate original Buf contracts, descriptor and React build
         run: |
+          set -euo pipefail
+          pnpm exec buf --version
           pnpm exec buf generate --template buf.gen.web.yaml
           pnpm exec buf build proto --as-file-descriptor-set -o /tmp/crm-proto-descriptors.binpb
           pnpm --filter cloudflare-crm build
           test -s apps/cloudflare-crm/dist/index.html
-      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # Rust 1.100.0
         with:
           toolchain: 1.100.0
           targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
       - name: Cache exact Rust/WASM source graph and pinned build tools
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -47,53 +71,62 @@ jobs:
             ~/.cargo/bin/worker-build
             target
             apps/cloudflare-crm/rust-party/target
-          key: crm471-probe-native-ci-1.100.0-0.8.7-${{ hashFiles('apps/cloudflare-crm/rust-party/Cargo.lock') }}-v1
-      - name: Install pinned original workers-rs compiler tools
+          key: crm471-probe-native-ci-1.100.0-wasm-bindgen-0.2.130-worker-build-0.9.0-${{ hashFiles('apps/cloudflare-crm/rust-party/Cargo.lock') }}-v2
+      - name: Install pinned workers-rs compiler tools
         run: |
+          set -euo pipefail
           if ! command -v wasm-bindgen >/dev/null || [ "$(wasm-bindgen --version)" != "wasm-bindgen 0.2.130" ]; then
             cargo install --locked wasm-bindgen-cli --version 0.2.130
           fi
-          if ! command -v worker-build >/dev/null || ! worker-build --version 2>&1 | grep -Fq '0.8.7'; then
-            cargo install --locked worker-build --version 0.8.7
+          if ! command -v worker-build >/dev/null || ! worker-build --version 2>&1 | grep -Fq '0.9.0'; then
+            cargo install --locked worker-build --version 0.9.0
           fi
+          echo "WASM_BINDGEN_BIN=$(command -v wasm-bindgen)" >> "$GITHUB_ENV"
+          worker-build --version
       - name: Build same real native-ci Rust WASM
         working-directory: apps/cloudflare-crm/rust-party
         env:
-          WASM_OPT_BIN: /home/runner/work/crm/crm/node_modules/binaryen/bin/wasm-opt
+          WASM_OPT_BIN: ${{ github.workspace }}/node_modules/binaryen/bin/wasm-opt
         run: |
           worker-build --release --locked --features native-ci
           test -s build/index.js
           test -s build/index_bg.wasm
       - name: Install actual Chromium
         working-directory: apps/cloudflare-crm
-        run: |
-          pnpm exec playwright install chromium
+        run: pnpm exec playwright install chromium
       - name: Verify native harness preserves ALL original Rust owner and Chromium evidence
         working-directory: apps/cloudflare-crm
         env:
           CRM_PROTO_DESCRIPTOR_FILE: /tmp/crm-proto-descriptors.binpb
-          CRM_SOURCE_SHA: ${{ github.sha }}
-          CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
         run: node rust-party/test/native.mjs
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: '3.13.18'
-      - name: Install original governance dependencies
-        run: python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
-      - name: Verify no compiled policy/RPC proof was dropped
+      - name: Verify all compiled policy and RPC evidence
         run: |
           python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json --runtime-proof /tmp/crm-rpc-runtime.json
           CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json node apps/cloudflare-crm/scripts/architecture-gate.mjs
-          node scripts/crm-rpc-descriptors.mjs /tmp/crm-proto-descriptors.binpb --require-runtime
+          CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json node scripts/crm-rpc-descriptors.mjs /tmp/crm-proto-descriptors.binpb --require-runtime
           pnpm --filter cloudflare-crm test
           pnpm --filter cloudflare-crm typecheck
-      - name: Keep compatibility report and experimental lock
+          pnpm --filter @ultimate-crm/client typecheck
+          pnpm --filter @ultimate-crm/ui typecheck
+          pnpm web:typecheck
+          pnpm web:lint
+          pnpm web:test
+          pnpm web:build
+      - name: Verify original Python governance tests
+        run: |
+          python -m unittest tests.test_affected_scope tests.test_crm_module_coverage tests.test_action_pinning
+          python scripts/check_ci_event_policy.py
+      - name: Keep complete compatibility evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: crm-471-harness-experiment
+          name: crm-stable-upgrade-and-471-evidence
           path: |
             apps/cloudflare-crm/e2e-evidence-native/
             pnpm-lock.yaml
+            Cargo.lock
+            apps/cloudflare-crm/rust-party/Cargo.lock
+            /tmp/crm-rpc-runtime.json
+            /tmp/crm-module-coverage.json
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 14
