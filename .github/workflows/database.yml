@@ -75,11 +75,11 @@ permissions:
 
 jobs:
   postgres-foundation:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 40
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:19.0-alpine
         env:
           POSTGRES_DB: crm_test
           POSTGRES_USER: postgres
@@ -228,7 +228,7 @@ jobs:
         run: cargo test -p crm-activities-capability-adapter --features postgres-integration --test postgres_noop -- --nocapture
       - name: Upload database and Rust diagnostics on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: database-adapter-diagnostics
           path: |
@@ -251,11 +251,11 @@ jobs:
           retention-days: 7
 
   legacy-upgrade:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:19.0-alpine
         env:
           POSTGRES_DB: crm_upgrade_test
           POSTGRES_USER: postgres

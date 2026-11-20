@@ -57,11 +57,11 @@ permissions:
 
 jobs:
   planning:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:19.0-alpine
         env:
           POSTGRES_DB: crm_customer_privacy_planning_test
           POSTGRES_USER: postgres
@@ -173,13 +173,13 @@ jobs:
         shell: bash
         run: |
           set +e
-          postgres_container="$(docker ps -aq --filter ancestor=postgres:17-alpine | head -n 1)"
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:19.0-alpine | head -n 1)"
           if [ -n "${postgres_container}" ]; then
             docker logs "${postgres_container}" > database/customer-privacy-planning-postgres.log 2>&1
           fi
       - name: Upload planning diagnostics
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: customer-privacy-planning-diagnostics
           path: |
