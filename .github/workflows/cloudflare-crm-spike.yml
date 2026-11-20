@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - dev
-      - crm-471-retire-sqlx-20261121 # one-time root lock resolver proof; removed before dev merge
+      - crm-471-typed-architecture-20261121 # temporary isolated architecture validation; do not carry to dev
     paths-ignore:
       - '*.md'
       - '**/*.md'
