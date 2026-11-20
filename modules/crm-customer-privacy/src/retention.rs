@@ -678,7 +678,7 @@ fn retention_hex_decode(value: &str, field: &'static str) -> Result<[u8; 32], Re
         return Err(retention_state_error(format!("{field} must contain 64 hexadecimal characters")));
     }
     let mut output = [0; 32];
-    for (index, chunk) in value.as_bytes().chunks_exact(2).enumerate() {
+    for (index, chunk) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         let high = retention_hex_nibble(chunk[0])
             .ok_or_else(|| retention_state_error(format!("{field} is not hexadecimal")))?;
         let low = retention_hex_nibble(chunk[1])

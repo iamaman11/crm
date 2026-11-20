@@ -699,7 +699,7 @@ fn validate_execution_state_size(bytes: &[u8], maximum: u64, label: &str) -> Res
 fn decode_digest(value: &str) -> Result<[u8; 32], SdkError> {
     if value.len() != 64 { return Err(execution_invalid("digest must contain 64 lowercase hex characters")); }
     let mut output = [0u8; 32];
-    for (index, chunk) in value.as_bytes().chunks_exact(2).enumerate() {
+    for (index, chunk) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         let text = std::str::from_utf8(chunk).map_err(execution_invalid)?;
         output[index] = u8::from_str_radix(text, 16).map_err(execution_invalid)?;
     }
