@@ -125,6 +125,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      const offset=shellResponses.length;
      const response=await page.reload();
      const shell=shellResponses.slice(offset);
+     // The navigation response is authoritative even if Chromium did not
+     // dispatch a separate "response" event to the shell observer.
+     if(response) {
+       const doc={kind:"document",path:new URL(response.url()).pathname,
+         status:response.status(),fromWorker:Boolean(response.headers()["x-crm-runtime"])};
+       if(!shell.some(item=>item.kind==="document"&&item.path===doc.path&&
+         item.status===doc.status))shell.unshift(doc);
+     }
      const invalid=shell.filter(item=>item.status>=400&&
        (item.status!==404||item.fromWorker));
      if(invalid.length)
