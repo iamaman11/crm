@@ -16,13 +16,6 @@ from scripts.check_rust_governance import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RETIRED_DIRECT_LINT_MANIFESTS = (
-    "crates/crm-application-runtime/Cargo.toml",
-    "crates/crm-customer-data-operations-execution-composition/Cargo.toml",
-    "services/crm-api/Cargo.toml",
-)
-
-
 class RustGovernanceTests(unittest.TestCase):
     def temporary_root(self) -> tuple[TemporaryDirectory, Path]:
         temporary = TemporaryDirectory()
@@ -150,19 +143,26 @@ version = "0.1.0"
         ]
         self.assertEqual(rust_exceptions, [])
 
-        for relative in RETIRED_DIRECT_LINT_MANIFESTS:
+        members = tomllib.loads(
+            (ROOT / "Cargo.toml").read_text(encoding="utf-8")
+        )["workspace"]["members"]
+        for member in members:
+            relative = f"{member}/Cargo.toml"
             with self.subTest(manifest=relative):
                 manifest = tomllib.loads(
                     (ROOT / relative).read_text(encoding="utf-8")
                 )
                 self.assertEqual(manifest.get("lints"), {"workspace": True})
+                self.assertEqual(
+                    manifest["package"].get("rust-version"), {"workspace": True}
+                )
 
         policy = json.loads(
             (ROOT / "rust-governance-policy.json").read_text(encoding="utf-8")
         )
         baseline = policy["measured_baseline"]
         self.assertEqual(baseline["maximum_direct_lint_tables"], 0)
-        self.assertEqual(baseline["maximum_missing_workspace_lints_packages"], 109)
+        self.assertEqual(baseline["maximum_missing_workspace_lints_packages"], 0)
         self.assertEqual(baseline["active_rust_governance_exceptions"], 0)
 
     def test_workspace_member_parser_uses_only_declared_members(self) -> None:

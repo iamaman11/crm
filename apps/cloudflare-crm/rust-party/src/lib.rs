@@ -297,7 +297,7 @@ async fn native_doctor(env: &Env, tenant: &str) -> Result<Response> {
                     "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
                 "crm.consents": {"read":read_checks.get("consents"),
                     "business_owner":"original-crm-consents","api":"native-workers-rs",
-                    "ui":"REACT_CONNECTED","grant_evidence":"NOT_CONNECTED",
+                    "ui":"REACT_CONNECTED","grant_evidence":"SIGNED_SELF_VERIFIED_EMAIL_ONLY",
                     "operator_suppressions":"ENABLED",
                     "functional_cycle":"EXTERNAL_PROTECTED_CI_CHECK_REQUIRED"},
                 "crm.sales": {"read":read_checks.get("sales-deals"),

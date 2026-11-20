@@ -16,6 +16,34 @@ root = Path(__file__).resolve().parents[1]
 policy = json.loads((root / "architecture-policy.json").read_text(encoding="utf-8"))
 errors: list[str] = []
 
+# Fail closed if an old SQLx/PostgreSQL runtime enters either active lockfile.
+# Historical source-only crates are intentionally not part of these graphs.
+for label, relative in (
+    ("root Rust workspace", Path("Cargo.lock")),
+    ("deployable Rust Worker", Path("apps/cloudflare-crm/rust-party/Cargo.lock")),
+):
+    lockfile = root / relative
+    if not lockfile.is_file():
+        errors.append(f"{label}: missing Cargo lockfile {relative}")
+        continue
+    packages = tomllib.loads(lockfile.read_text(encoding="utf-8")).get("package", [])
+    forbidden = sorted({
+        name
+        for package in packages
+        if isinstance(package, dict)
+        for name in [package.get("name", "")]
+        if isinstance(name, str)
+        and (
+            name == "sqlx"
+            or name.startswith("sqlx-")
+            or name == "postgres"
+            or name.startswith("postgres-")
+            or name == "tokio-postgres"
+        )
+    })
+    if forbidden:
+        errors.append(f"{label}: forbidden SQLx/PostgreSQL packages: {forbidden}")
+
 for pattern in policy["business_module_globs"]:
     for module_dir in root.glob(pattern):
         cargo = module_dir / "Cargo.toml"

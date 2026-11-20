@@ -258,10 +258,22 @@ def validate(
     packages = workspace_packages(metadata)
     adoption_counts, package_rows = package_adoption(root, packages)
     package_count = len(packages)
-    expected_package_count = baseline.get("effective_workspace_packages")
-    if package_count != expected_package_count:
+    # Member count is measured, not a hard-coded limit: future owners and
+    # safe consolidation must not require rewriting a count in governance.
+    declared_members = workspace_members_from_text(
+        (root / "Cargo.toml").read_text(encoding="utf-8")
+    )
+    effective_members = {
+        Path(package["manifest_path"]).resolve()
+        .relative_to(root.resolve())
+        .parent.as_posix()
+        for package in packages
+    }
+    if declared_members != effective_members:
         errors.append(
-            f"effective workspace package count must be {expected_package_count}, found {package_count}"
+            "effective Rust workspace differs from declared members: "
+            f"undeclared={sorted(effective_members - declared_members)}; "
+            f"missing={sorted(declared_members - effective_members)}"
         )
 
     active_exceptions, exception_errors = active_rust_exceptions(root)
@@ -274,14 +286,6 @@ def validate(
         )
 
     limits = {
-        "rust_version_inherited": (
-            ">=",
-            baseline.get("minimum_rust_version_inherited_packages", 0),
-        ),
-        "lints_inherited": (
-            ">=",
-            baseline.get("minimum_workspace_lints_inherited_packages", 0),
-        ),
         "rust_version_missing": (
             "<=",
             baseline.get("maximum_missing_rust_version_packages", package_count),

@@ -12,12 +12,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "allocator-api2"
-version = "0.2.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
-
-[[package]]
 name = "anyhow"
 version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -30,15 +24,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
-name = "atoi"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f28d99ec8bfea296261ca1af174f24225171fea9664ba9003cbebee704810528"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "atomic-polyfill"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -48,89 +33,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "atomic-waker"
-version = "1.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
-
-[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
-name = "axum"
-version = "0.8.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31b698c5f9a010f6573133b09e0de5408834d0c82f8d7475a89fc1867a71cd90"
-dependencies = [
- "axum-core",
- "bytes",
- "form_urlencoded",
- "futures-util",
- "http",
- "http-body",
- "http-body-util",
- "hyper",
- "hyper-util",
- "itoa",
- "matchit",
- "memchr",
- "mime",
- "percent-encoding",
- "pin-project-lite",
- "serde_core",
- "serde_json",
- "serde_path_to_error",
- "serde_urlencoded",
- "sync_wrapper",
- "tokio",
- "tower",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "axum-core"
-version = "0.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08c78f31d7b1291f7ee735c1c6780ccde7785daae9a9206026862dab7d8792d1"
-dependencies = [
- "bytes",
- "futures-core",
- "http",
- "http-body",
- "http-body-util",
- "mime",
- "pin-project-lite",
- "sync_wrapper",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "base64"
-version = "0.22.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
-
-[[package]]
-name = "base64"
-version = "0.23.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
-
-[[package]]
 name = "bitflags"
 version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
-dependencies = [
- "serde_core",
-]
 
 [[package]]
 name = "block-buffer"
@@ -139,15 +51,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
-]
-
-[[package]]
-name = "block-buffer"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa"
-dependencies = [
- "hybrid-array",
 ]
 
 [[package]]
@@ -193,16 +96,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "776dfebd015e2d8732c684a2c71003674ccb49457b539b9e82151ba38e96dd7c"
 
 [[package]]
-name = "cc"
-version = "1.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ef9e3e8154a45c7a95cff4c1299702106ad94062d7bb85fdc5d3a5afd91d45"
-dependencies = [
- "find-msvc-tools",
- "shlex",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -224,12 +117,6 @@ dependencies = [
  "cpufeatures 0.3.1",
  "rand_core 0.10.1",
 ]
-
-[[package]]
-name = "cmov"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "cobs"
@@ -265,21 +152,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crc"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5eb8a2a1cd12ab0d987a5d5e825195d372001a4094a0376319d5a0ad71c1ba0d"
-dependencies = [
- "crc-catalog",
-]
-
-[[package]]
-name = "crc-catalog"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "217698eaf96b4a3f0bc4f3662aaa55bdf913cd54d7204591faa790070c6d0853"
-
-[[package]]
 name = "critical-section"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -293,87 +165,7 @@ dependencies = [
  "crm-module-sdk",
  "serde",
  "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-activities-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-activities",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-contracts",
- "crm-core-data",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-application-composition"
-version = "0.1.0"
-dependencies = [
- "crm-capability-runtime",
- "crm-module-sdk",
- "crm-query-runtime",
- "tokio",
-]
-
-[[package]]
-name = "crm-capability-adapters"
-version = "0.1.0"
-dependencies = [
- "crm-capability-runtime",
- "crm-module-sdk",
- "crm-query-runtime",
- "sha2 0.10.9",
- "tokio",
-]
-
-[[package]]
-name = "crm-capability-ingress"
-version = "0.1.0"
-dependencies = [
- "crm-capability-adapters",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "crm-sales-activities-capability-composition",
- "crm-sales-activities-query-adapter",
- "http",
- "prost",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
- "tonic",
-]
-
-[[package]]
-name = "crm-capability-plan-support"
-version = "0.1.0"
-dependencies = [
- "crm-capability-runtime",
- "crm-core-contracts",
- "crm-core-data",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
- "prost-types",
- "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-capability-runtime"
-version = "0.1.0"
-dependencies = [
- "crm-module-sdk",
- "serde",
+ "sha2",
 ]
 
 [[package]]
@@ -383,75 +175,7 @@ dependencies = [
  "crm-module-sdk",
  "serde",
  "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-consents-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-consents",
- "crm-core-data",
- "crm-module-sdk",
- "crm-proto-contracts",
-]
-
-[[package]]
-name = "crm-consents-capability-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-runtime",
- "crm-consents",
- "crm-consents-capability-adapter",
- "crm-consents-query-adapter",
- "crm-contact-points",
- "crm-contact-points-capability-adapter",
- "crm-core-data",
- "crm-module-sdk",
- "crm-parties-capability-adapter",
- "crm-query-runtime",
- "tokio",
-]
-
-[[package]]
-name = "crm-consents-privacy-scope-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-consents",
- "crm-consents-capability-adapter",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-owner-scope-support",
- "crm-identity-resolution-capability-adapter",
- "crm-module-sdk",
- "crm-parties",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-consents-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-consents",
- "crm-consents-capability-adapter",
- "crm-core-data",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
+ "sha2",
 ]
 
 [[package]]
@@ -466,74 +190,8 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2",
  "url",
-]
-
-[[package]]
-name = "crm-contact-points-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-contact-points",
- "crm-core-data",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
-]
-
-[[package]]
-name = "crm-contact-points-capability-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-runtime",
- "crm-contact-points-capability-adapter",
- "crm-contact-points-query-adapter",
- "crm-core-data",
- "crm-identity-resolution-topology-composition",
- "crm-module-sdk",
- "crm-party-reference-composition",
- "crm-query-runtime",
-]
-
-[[package]]
-name = "crm-contact-points-privacy-scope-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-contact-points",
- "crm-contact-points-capability-adapter",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-owner-scope-support",
- "crm-identity-resolution-capability-adapter",
- "crm-module-sdk",
- "crm-parties",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-contact-points-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-contact-points",
- "crm-contact-points-capability-adapter",
- "crm-core-data",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
 ]
 
 [[package]]
@@ -549,103 +207,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "crm-core-data"
-version = "0.1.0"
-dependencies = [
- "crm-capability-runtime",
- "crm-core-contracts",
- "crm-core-events",
- "crm-core-files",
- "crm-metadata-api-adapter",
- "crm-metadata-query-adapter",
- "crm-metadata-runtime",
- "crm-metadata-schema",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-search-runtime",
- "prost",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-core-events"
-version = "0.1.0"
-dependencies = [
- "crm-core-contracts",
- "crm-module-sdk",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "crm-core-files"
-version = "0.1.0"
-dependencies = [
- "crm-module-sdk",
-]
-
-[[package]]
-name = "crm-core-integrations"
-version = "0.1.0"
-dependencies = [
- "crm-core-contracts",
- "crm-core-permissions",
-]
-
-[[package]]
-name = "crm-core-permissions"
-version = "0.1.0"
-dependencies = [
- "crm-core-contracts",
-]
-
-[[package]]
-name = "crm-core-workflow"
-version = "0.1.0"
-dependencies = [
- "crm-core-contracts",
- "crm-core-permissions",
-]
-
-[[package]]
-name = "crm-customer-360-composition"
-version = "0.1.0"
-dependencies = [
- "crm-core-data",
- "crm-core-events",
- "crm-module-sdk",
- "crm-projection-runtime",
- "crm-proto-contracts",
- "prost",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "crm-customer-360-query-adapter"
 version = "0.1.0"
 dependencies = [
  "crm-activities",
- "crm-application-composition",
- "crm-capability-plan-support",
- "crm-capability-runtime",
  "crm-contact-points",
- "crm-core-data",
- "crm-customer-360-composition",
  "crm-customer-accounts",
  "crm-module-sdk",
  "crm-parties",
  "crm-party-relationships",
- "crm-proto-contracts",
- "crm-query-runtime",
  "crm-sales",
- "prost",
- "serde_json",
- "sqlx",
 ]
 
 [[package]]
@@ -656,61 +227,7 @@ dependencies = [
  "crm-module-sdk",
  "serde",
  "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-customer-accounts-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-accounts",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
- "serde_json",
-]
-
-[[package]]
-name = "crm-customer-accounts-privacy-scope-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-accounts",
- "crm-customer-accounts-capability-adapter",
- "crm-customer-privacy",
- "crm-customer-privacy-owner-scope-support",
- "crm-identity-resolution-capability-adapter",
- "crm-module-sdk",
- "crm-parties",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-customer-accounts-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-accounts",
- "crm-customer-accounts-capability-adapter",
- "crm-module-sdk",
- "crm-party-reference-composition",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
+ "sha2",
 ]
 
 [[package]]
@@ -721,97 +238,7 @@ dependencies = [
  "csv",
  "serde",
  "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-customer-data-operations-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-data-operations",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
-]
-
-[[package]]
-name = "crm-customer-data-operations-execution-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-adapters",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-core-files",
- "crm-customer-data-operations",
- "crm-customer-data-operations-capability-adapter",
- "crm-customer-data-operations-query-adapter",
- "crm-customer-data-operations-source-composition",
- "crm-module-sdk",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "sha2 0.10.9",
- "tokio",
-]
-
-[[package]]
-name = "crm-customer-data-operations-privacy-scope-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-data-operations",
- "crm-customer-data-operations-capability-adapter",
- "crm-customer-privacy",
- "crm-customer-privacy-owner-scope-support",
- "crm-identity-resolution",
- "crm-identity-resolution-capability-adapter",
- "crm-identity-resolution-topology-composition",
- "crm-module-sdk",
- "crm-parties",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-customer-data-operations-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-data-operations",
- "crm-customer-data-operations-capability-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
-]
-
-[[package]]
-name = "crm-customer-data-operations-source-composition"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-core-files",
- "crm-customer-data-operations",
- "crm-customer-data-operations-capability-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
+ "sha2",
 ]
 
 [[package]]
@@ -822,320 +249,7 @@ dependencies = [
  "crm-module-sdk",
  "serde",
  "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-customer-enrichment-application-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-enrichment",
- "crm-customer-enrichment-capability-adapter",
- "crm-customer-enrichment-review-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "crm-customer-enrichment-application-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-ingress",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-core-events",
- "crm-customer-enrichment",
- "crm-customer-enrichment-application-adapter",
- "crm-customer-enrichment-capability-adapter",
- "crm-customer-enrichment-review-adapter",
- "crm-module-sdk",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "prost",
- "serde",
- "serde_json",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-customer-enrichment-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-enrichment",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "crm-customer-enrichment-capability-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-consents-capability-adapter",
- "crm-consents-query-adapter",
- "crm-core-data",
- "crm-customer-enrichment",
- "crm-customer-enrichment-capability-adapter",
- "crm-customer-enrichment-query-adapter",
- "crm-customer-enrichment-request-list-query-adapter",
- "crm-customer-enrichment-suggestion-query-adapter",
- "crm-module-sdk",
- "crm-parties-query-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "sqlx",
-]
-
-[[package]]
-name = "crm-customer-enrichment-materialization-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-enrichment",
- "crm-customer-enrichment-capability-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "crm-customer-enrichment-materialization-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-ingress",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-core-events",
- "crm-core-files",
- "crm-customer-enrichment",
- "crm-customer-enrichment-application-adapter",
- "crm-customer-enrichment-application-composition",
- "crm-customer-enrichment-capability-adapter",
- "crm-customer-enrichment-materialization-adapter",
- "crm-customer-enrichment-review-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-customer-enrichment-privacy-scope-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-enrichment",
- "crm-customer-enrichment-application-adapter",
- "crm-customer-enrichment-capability-adapter",
- "crm-customer-enrichment-provider-process-composition",
- "crm-customer-enrichment-review-adapter",
- "crm-customer-privacy",
- "crm-customer-privacy-owner-scope-support",
- "crm-identity-resolution",
- "crm-identity-resolution-capability-adapter",
- "crm-identity-resolution-topology-composition",
- "crm-module-sdk",
- "crm-parties",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-customer-enrichment-provider-process-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-ingress",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-core-events",
- "crm-customer-enrichment",
- "crm-customer-enrichment-capability-adapter",
- "crm-customer-enrichment-worker-composition",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-customer-enrichment-provider-registry"
-version = "0.1.0"
-dependencies = [
- "crm-customer-enrichment",
- "crm-module-sdk",
-]
-
-[[package]]
-name = "crm-customer-enrichment-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-enrichment",
- "crm-customer-enrichment-capability-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
-]
-
-[[package]]
-name = "crm-customer-enrichment-registry-http-transport"
-version = "0.1.0"
-dependencies = [
- "axum",
- "crm-customer-enrichment",
- "crm-customer-enrichment-provider-registry",
- "crm-module-sdk",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tokio",
-]
-
-[[package]]
-name = "crm-customer-enrichment-request-list-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-enrichment",
- "crm-customer-enrichment-capability-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
-]
-
-[[package]]
-name = "crm-customer-enrichment-review-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-enrichment",
- "crm-customer-enrichment-capability-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "crm-customer-enrichment-review-composition"
-version = "0.1.0"
-dependencies = [
- "crm-capability-ingress",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-enrichment",
- "crm-customer-enrichment-capability-adapter",
- "crm-customer-enrichment-review-adapter",
- "crm-customer-enrichment-suggestion-query-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "serde",
- "serde_json",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-customer-enrichment-suggestion-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-enrichment",
- "crm-customer-enrichment-capability-adapter",
- "crm-customer-enrichment-review-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
-]
-
-[[package]]
-name = "crm-customer-enrichment-visibility"
-version = "0.1.0"
-dependencies = [
- "crm-customer-enrichment",
- "crm-customer-enrichment-query-adapter",
- "crm-customer-enrichment-request-list-query-adapter",
- "crm-customer-enrichment-suggestion-query-adapter",
-]
-
-[[package]]
-name = "crm-customer-enrichment-worker-composition"
-version = "0.1.0"
-dependencies = [
- "axum",
- "crm-capability-ingress",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-enrichment",
- "crm-customer-enrichment-capability-adapter",
- "crm-customer-enrichment-provider-registry",
- "crm-customer-enrichment-registry-http-transport",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
+ "sha2",
 ]
 
 [[package]]
@@ -1146,184 +260,7 @@ dependencies = [
  "crm-module-sdk",
  "serde",
  "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-customer-privacy-application"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-customer-privacy",
- "crm-customer-privacy-cancel-capability-adapter",
- "crm-customer-privacy-capability-adapter",
- "crm-customer-privacy-query-adapter",
- "crm-customer-privacy-subject-capability-adapter",
- "crm-customer-privacy-submit-capability-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
-]
-
-[[package]]
-name = "crm-customer-privacy-cancel-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-persistence-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
-]
-
-[[package]]
-name = "crm-customer-privacy-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-persistence-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-customer-privacy-capability-composition"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-cancel-capability-adapter",
- "crm-customer-privacy-capability-adapter",
- "crm-customer-privacy-persistence-adapter",
- "crm-customer-privacy-subject-capability-adapter",
- "crm-customer-privacy-submit-capability-adapter",
- "crm-identity-resolution",
- "crm-identity-resolution-topology-composition",
- "crm-module-sdk",
- "crm-parties-capability-adapter",
- "crm-party-reference-composition",
- "crm-proto-contracts",
- "prost",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-customer-privacy-owner-scope-support"
-version = "0.1.0"
-dependencies = [
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-identity-resolution-capability-adapter",
- "crm-module-sdk",
- "crm-parties",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "sha2 0.10.9",
- "sqlx",
-]
-
-[[package]]
-name = "crm-customer-privacy-persistence-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-customer-privacy",
- "crm-module-sdk",
-]
-
-[[package]]
-name = "crm-customer-privacy-postgres"
-version = "0.1.0"
-dependencies = [
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-application",
- "crm-customer-privacy-capability-composition",
- "crm-customer-privacy-persistence-adapter",
- "crm-module-sdk",
-]
-
-[[package]]
-name = "crm-customer-privacy-production"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-runtime",
- "crm-consents-privacy-scope-adapter",
- "crm-contact-points-privacy-scope-adapter",
- "crm-core-data",
- "crm-customer-accounts-privacy-scope-adapter",
- "crm-customer-data-operations-privacy-scope-adapter",
- "crm-customer-enrichment-privacy-scope-adapter",
- "crm-customer-privacy",
- "crm-customer-privacy-application",
- "crm-customer-privacy-postgres",
- "crm-customer-privacy-query-adapter",
- "crm-data-quality-privacy-scope-adapter",
- "crm-identity-resolution-privacy-scope-adapter",
- "crm-module-sdk",
- "crm-parties-privacy-scope-adapter",
- "crm-party-relationships-privacy-scope-adapter",
- "crm-query-runtime",
-]
-
-[[package]]
-name = "crm-customer-privacy-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-persistence-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
-]
-
-[[package]]
-name = "crm-customer-privacy-subject-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-persistence-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
-]
-
-[[package]]
-name = "crm-customer-privacy-submit-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-persistence-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
+ "sha2",
 ]
 
 [[package]]
@@ -1333,116 +270,7 @@ dependencies = [
  "crm-module-sdk",
  "serde",
  "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-data-quality-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-data-quality",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
-]
-
-[[package]]
-name = "crm-data-quality-privacy-scope-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-owner-scope-support",
- "crm-data-quality",
- "crm-data-quality-capability-adapter",
- "crm-identity-resolution",
- "crm-identity-resolution-capability-adapter",
- "crm-identity-resolution-topology-composition",
- "crm-module-sdk",
- "crm-parties",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-data-quality-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-data-quality",
- "crm-data-quality-capability-adapter",
- "crm-module-sdk",
- "crm-parties-query-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
-]
-
-[[package]]
-name = "crm-data-quality-source-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-adapters",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-data-quality",
- "crm-data-quality-capability-adapter",
- "crm-data-quality-query-adapter",
- "crm-module-sdk",
- "crm-parties-capability-adapter",
- "crm-parties-query-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
-]
-
-[[package]]
-name = "crm-first-party-modules"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-runtime",
- "crm-consents-capability-composition",
- "crm-contact-points-capability-composition",
- "crm-core-data",
- "crm-customer-360-query-adapter",
- "crm-customer-accounts-query-adapter",
- "crm-customer-data-operations-execution-composition",
- "crm-customer-enrichment-capability-composition",
- "crm-data-quality-source-composition",
- "crm-identity-resolution-capability-composition",
- "crm-module-sdk",
- "crm-party-reference-composition",
- "crm-party-relationships-capability-composition",
- "crm-query-runtime",
- "crm-sales-activities-capability-composition",
-]
-
-[[package]]
-name = "crm-global-search-composition"
-version = "0.1.0"
-dependencies = [
- "crm-core-data",
- "crm-core-events",
- "crm-module-sdk",
- "crm-projection-runtime",
- "crm-proto-contracts",
- "crm-search-runtime",
- "prost",
+ "sha2",
 ]
 
 [[package]]
@@ -1452,183 +280,7 @@ dependencies = [
  "crm-module-sdk",
  "serde",
  "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-identity-resolution-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-identity-resolution",
- "crm-module-sdk",
- "crm-proto-contracts",
-]
-
-[[package]]
-name = "crm-identity-resolution-capability-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-identity-resolution",
- "crm-identity-resolution-capability-adapter",
- "crm-identity-resolution-merge-composition",
- "crm-identity-resolution-merge-query-adapter",
- "crm-identity-resolution-query-adapter",
- "crm-module-sdk",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "tokio",
-]
-
-[[package]]
-name = "crm-identity-resolution-merge-composition"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-identity-resolution",
- "crm-identity-resolution-capability-adapter",
- "crm-module-sdk",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
-]
-
-[[package]]
-name = "crm-identity-resolution-merge-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-identity-resolution",
- "crm-identity-resolution-capability-adapter",
- "crm-module-sdk",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
-]
-
-[[package]]
-name = "crm-identity-resolution-privacy-scope-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-owner-scope-support",
- "crm-identity-resolution",
- "crm-identity-resolution-capability-adapter",
- "crm-module-sdk",
- "crm-parties",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-identity-resolution-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-identity-resolution",
- "crm-identity-resolution-capability-adapter",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
-]
-
-[[package]]
-name = "crm-identity-resolution-topology-composition"
-version = "0.1.0"
-dependencies = [
- "crm-identity-resolution",
- "crm-identity-resolution-capability-adapter",
- "crm-module-sdk",
- "crm-parties-capability-adapter",
- "crm-party-reference-composition",
- "sqlx",
-]
-
-[[package]]
-name = "crm-metadata-api-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-runtime",
- "crm-metadata-runtime",
- "crm-metadata-schema",
- "crm-module-sdk",
- "crm-proto-contracts",
- "prost",
- "serde_json",
-]
-
-[[package]]
-name = "crm-metadata-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-runtime",
- "crm-metadata-api-adapter",
- "crm-metadata-runtime",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "tokio",
-]
-
-[[package]]
-name = "crm-metadata-runtime"
-version = "0.1.0"
-dependencies = [
- "crm-module-sdk",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-metadata-schema"
-version = "0.1.0"
-dependencies = [
- "crm-metadata-runtime",
- "crm-module-sdk",
- "semver",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "crm-module-manifest"
-version = "0.1.0"
-dependencies = [
- "semver",
- "serde",
- "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-module-registry"
-version = "0.1.0"
-dependencies = [
- "crm-module-manifest",
- "crm-module-sdk",
- "semver",
+ "sha2",
 ]
 
 [[package]]
@@ -1649,75 +301,7 @@ dependencies = [
  "crm-module-sdk",
  "serde",
  "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-parties-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-adapters",
- "crm-capability-ingress",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-module-sdk",
- "crm-parties",
- "crm-proto-contracts",
- "http",
- "prost",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-parties-privacy-scope-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-owner-scope-support",
- "crm-identity-resolution-capability-adapter",
- "crm-module-sdk",
- "crm-parties",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-parties-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-module-sdk",
- "crm-parties",
- "crm-parties-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
-]
-
-[[package]]
-name = "crm-party-reference-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-module-sdk",
- "crm-parties-capability-adapter",
- "crm-parties-query-adapter",
- "crm-query-runtime",
- "sqlx",
+ "sha2",
 ]
 
 [[package]]
@@ -1727,96 +311,7 @@ dependencies = [
  "crm-module-sdk",
  "serde",
  "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-party-relationships-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-module-sdk",
- "crm-party-relationships",
- "crm-proto-contracts",
- "prost",
-]
-
-[[package]]
-name = "crm-party-relationships-capability-composition"
-version = "0.1.0"
-dependencies = [
- "crm-application-composition",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-module-sdk",
- "crm-party-reference-composition",
- "crm-party-relationships-capability-adapter",
- "crm-party-relationships-query-adapter",
- "crm-query-runtime",
-]
-
-[[package]]
-name = "crm-party-relationships-privacy-scope-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-customer-privacy",
- "crm-customer-privacy-owner-scope-support",
- "crm-identity-resolution-capability-adapter",
- "crm-module-sdk",
- "crm-parties",
- "crm-parties-capability-adapter",
- "crm-party-relationships",
- "crm-party-relationships-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
- "sha2 0.10.9",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-party-relationships-projection"
-version = "0.1.0"
-dependencies = [
- "crm-core-data",
- "crm-core-events",
- "crm-module-sdk",
- "crm-projection-runtime",
- "crm-proto-contracts",
- "prost",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "crm-party-relationships-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-module-sdk",
- "crm-party-relationships",
- "crm-party-relationships-capability-adapter",
- "crm-proto-contracts",
- "crm-query-runtime",
- "prost",
-]
-
-[[package]]
-name = "crm-projection-runtime"
-version = "0.1.0"
-dependencies = [
- "crm-core-events",
- "crm-module-sdk",
- "serde_json",
- "tokio",
+ "sha2",
 ]
 
 [[package]]
@@ -1827,19 +322,7 @@ dependencies = [
  "prost-build",
  "prost-types",
  "protoc-bin-vendored",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-query-runtime"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "crm-capability-runtime",
- "crm-module-sdk",
- "hmac 0.12.1",
- "sha2 0.10.9",
- "tokio",
+ "sha2",
 ]
 
 [[package]]
@@ -1851,34 +334,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "crm-sales-activities-capability-composition"
-version = "0.1.0"
-dependencies = [
- "crm-activities-capability-adapter",
- "crm-application-composition",
- "crm-capability-adapters",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-core-events",
- "crm-global-search-composition",
- "crm-module-sdk",
- "crm-projection-runtime",
- "crm-proto-contracts",
- "crm-query-runtime",
- "crm-sales-activities-link",
- "crm-sales-activities-link-contract-adapter",
- "crm-sales-activities-query-adapter",
- "crm-sales-capability-adapter",
- "crm-search-query-adapter",
- "crm-search-runtime",
- "prost",
- "serde_json",
- "sqlx",
- "tokio",
+ "sha2",
 ]
 
 [[package]]
@@ -1888,7 +344,7 @@ dependencies = [
  "crm-module-sdk",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2",
 ]
 
 [[package]]
@@ -1902,82 +358,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crm-sales-activities-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-activities",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-data",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "crm-sales",
- "prost",
- "tokio",
-]
-
-[[package]]
-name = "crm-sales-capability-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-core-contracts",
- "crm-core-data",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-sales",
- "prost",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "crm-search-query-adapter"
-version = "0.1.0"
-dependencies = [
- "crm-capability-adapters",
- "crm-capability-plan-support",
- "crm-capability-runtime",
- "crm-module-sdk",
- "crm-proto-contracts",
- "crm-query-runtime",
- "crm-search-runtime",
- "prost",
- "tokio",
-]
-
-[[package]]
-name = "crm-search-runtime"
-version = "0.1.0"
-dependencies = [
- "crm-core-events",
- "crm-module-sdk",
- "crm-projection-runtime",
- "crm-query-runtime",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tokio",
-]
-
-[[package]]
-name = "crossbeam-queue"
-version = "0.3.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03e8bd762f7479489c70ed6c768ddca99d7296857de437a68dcb2a94365b3fae"
-dependencies = [
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-utils"
-version = "0.8.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
-
-[[package]]
 name = "crypto-common"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1985,15 +365,6 @@ checksum = "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a"
 dependencies = [
  "generic-array",
  "typenum",
-]
-
-[[package]]
-name = "crypto-common"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453"
-dependencies = [
- "hybrid-array",
 ]
 
 [[package]]
@@ -2018,34 +389,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "ctutils"
-version = "0.4.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "261af4dc7a06ea8a527a8717d8cbba3417530d6ea14e1edb3de6b67806be474f"
-dependencies = [
- "cmov",
-]
-
-[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
- "block-buffer 0.10.4",
- "crypto-common 0.1.7",
- "subtle",
-]
-
-[[package]]
-name = "digest"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1dd6dbb5841937940781866fa1281a1ff7bd3bf827091440879f9994983d5c2"
-dependencies = [
- "block-buffer 0.12.1",
- "crypto-common 0.2.2",
- "ctutils",
+ "block-buffer",
+ "crypto-common",
 ]
 
 [[package]]
@@ -2060,19 +410,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "dotenvy"
-version = "0.15.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
-
-[[package]]
 name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "email_address"
@@ -2105,27 +446,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e35d6e78f4cebb90e51d543db8fe41528851d6deeef6ef21ebd4bfdc1e784776"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "etcetera"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de48cc4d1c1d97a20fd819def54b890cadde72ed3ad0c614822a0a433361be96"
-dependencies = [
- "cfg-if",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "event-listener"
-version = "5.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a23add41df1562121a9393cb065eab5146a1242410f23a644851e90cfd669d2"
-dependencies = [
- "parking",
- "pin-project-lite",
+ "windows-sys",
 ]
 
 [[package]]
@@ -2135,27 +456,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
-name = "find-msvc-tools"
-version = "0.1.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
-
-[[package]]
 name = "fixedbitset"
 version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5905ec755cc8386d7928353e4d356d2be3e89e81e5ca01fe630a1ca4d08dc175"
-
-[[package]]
-name = "flume"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e139bc46ca777eb5efaf62df0ab8cc5fd400866427e56c68b22e414e53bd3be"
-dependencies = [
- "futures-core",
- "futures-sink",
- "spin",
-]
 
 [[package]]
 name = "fnv"
@@ -2170,101 +474,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
-name = "foldhash"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
-
-[[package]]
 name = "form_urlencoded"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "futures-channel"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1f9e3d69d39e4862ffed03ed071a76f9a13ba1d9109d355b0f0aa6b15e393c4"
-dependencies = [
- "futures-core",
- "futures-sink",
-]
-
-[[package]]
-name = "futures-core"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
-
-[[package]]
-name = "futures-executor"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "031b47cf1a3c6cc8bc2fc76cd437f521619387907d469316e7c0bc278f1f5432"
-dependencies = [
- "futures-core",
- "futures-task",
- "futures-util",
-]
-
-[[package]]
-name = "futures-intrusive"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d930c203dd0b6ff06e0201a4a2fe9149b43c684fd4420555b26d21b1a02956f"
-dependencies = [
- "futures-core",
- "lock_api",
- "parking_lot",
-]
-
-[[package]]
-name = "futures-io"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53c0fa8157de1303bfffdaa1cc2a673bfffb60102f76b0ef4441659124373fed"
-
-[[package]]
-name = "futures-macro"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fb9654ba8355388abeb8dcb4fc62f511300867002afc858860463bdd9fe0c44"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.10",
-]
-
-[[package]]
-name = "futures-sink"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1944426bf7d03f1d14f708785e4b33efd750b36d48a157b836b3efc15ede8e1d"
-
-[[package]]
-name = "futures-task"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd"
-
-[[package]]
-name = "futures-util"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc"
-dependencies = [
- "futures-core",
- "futures-io",
- "futures-macro",
- "futures-sink",
- "futures-task",
- "memchr",
- "pin-project-lite",
- "slab",
 ]
 
 [[package]]
@@ -2284,10 +499,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "wasi",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -2309,11 +522,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "r-efi 6.0.0",
  "rand_core 0.10.1",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -2331,18 +542,7 @@ version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 dependencies = [
- "foldhash 0.1.5",
-]
-
-[[package]]
-name = "hashbrown"
-version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
-dependencies = [
- "allocator-api2",
- "equivalent",
- "foldhash 0.2.0",
+ "foldhash",
 ]
 
 [[package]]
@@ -2350,15 +550,6 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
-
-[[package]]
-name = "hashlink"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "824e001ac4f3012dd16a264bec811403a67ca9deb6c102fc5049b32c4574b35f"
-dependencies = [
- "hashbrown 0.16.1",
-]
 
 [[package]]
 name = "heapless"
@@ -2379,153 +570,6 @@ name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
-
-[[package]]
-name = "hex"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-
-[[package]]
-name = "hkdf"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4aaa26c720c68b866f2c96ef5c1264b3e6f473fe5d4ce61cd44bbe913e553018"
-dependencies = [
- "hmac 0.13.0",
-]
-
-[[package]]
-name = "hmac"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
-dependencies = [
- "digest 0.10.7",
-]
-
-[[package]]
-name = "hmac"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
-dependencies = [
- "digest 0.11.3",
-]
-
-[[package]]
-name = "http"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "918d3568bebf352712bc2ef3d46a8bcf1a75b373be6539de198e9105cbbf9ce0"
-dependencies = [
- "bytes",
- "itoa",
-]
-
-[[package]]
-name = "http-body"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca2a8f2913ee65f60facd6a5905613afaa448497a0230cc41ce022d93290bc2c"
-dependencies = [
- "bytes",
- "http",
-]
-
-[[package]]
-name = "http-body-util"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23169fe34a5fbcdd3f3862e78fb9b6fccd5f02a6dc6f732547005d45631ce71c"
-dependencies = [
- "bytes",
- "futures-core",
- "http",
- "http-body",
- "pin-project-lite",
-]
-
-[[package]]
-name = "httparse"
-version = "1.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
-
-[[package]]
-name = "httpdate"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
-
-[[package]]
-name = "hybrid-array"
-version = "0.4.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27f864f10dfb56725ce5ce5472bc52252c8f93a4ab86327122cebf62c5f59a17"
-dependencies = [
- "typenum",
-]
-
-[[package]]
-name = "hyper"
-version = "1.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c3e324da4c95177d6291d4c8730197c0d1822f8a9766814a4a44fa5ab797c9c"
-dependencies = [
- "atomic-waker",
- "bytes",
- "futures-core",
- "http",
- "http-body",
- "httparse",
- "httpdate",
- "itoa",
- "pin-project-lite",
- "smallvec",
- "tokio",
- "want",
-]
-
-[[package]]
-name = "hyper-rustls"
-version = "0.27.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfa8e654703247911e29c23fbeaa261834bd9bb74efba2f9acddc37bfb127f53"
-dependencies = [
- "http",
- "hyper",
- "hyper-util",
- "rustls",
- "tokio",
- "tokio-rustls",
- "tower-service",
- "webpki-roots",
-]
-
-[[package]]
-name = "hyper-util"
-version = "0.1.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddc03d96684f9226b8a787cdb71488417b53ab5ea8fdb1dac946cb9431cc8bff"
-dependencies = [
- "base64 0.23.1",
- "bytes",
- "futures-channel",
- "futures-util",
- "http",
- "http-body",
- "httparse",
- "hyper",
- "ipnet",
- "libc",
- "percent-encoding",
- "pin-project-lite",
- "socket2",
- "tokio",
- "tower-service",
- "tracing",
-]
 
 [[package]]
 name = "icu_collections"
@@ -2640,12 +684,6 @@ dependencies = [
  "equivalent",
  "hashbrown 0.17.1",
 ]
-
-[[package]]
-name = "ipnet"
-version = "2.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "791930b43c0d5973160d90a8f3894509f2b273430f5c5c73b668636d0287c5c0"
 
 [[package]]
 name = "iso3166-macros"
@@ -2774,40 +812,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0980fca2cc272465bd60e82397607ba9f33add9e48defd77923301bbd03808f2"
 
 [[package]]
-name = "js-sys"
-version = "0.3.107"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8dc09d2154098bbf4ef54eab6b117a3c24cbbffe94046b16ee6d6d4510584d3a"
-dependencies = [
- "cfg-if",
- "futures-util",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
-
-[[package]]
-name = "libredox"
-version = "0.1.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61ff90caf6077a803a240f62fdbe88645a890bbca49ef8174c3cb0404362171d"
-dependencies = [
- "libc",
-]
-
-[[package]]
-name = "libsqlite3-sys"
-version = "0.40.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b06e69070b7e12262b0cd90832f0a7396f142a2b330181255562decf9f0c6215"
-dependencies = [
- "pkg-config",
- "vcpkg",
-]
 
 [[package]]
 name = "linked-hash-map"
@@ -2852,55 +860,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "lru-slab"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4050469837a6ff301cd14c1f8f24f88549e6d548f24f64e2148eb0f72cebc51f"
-
-[[package]]
-name = "matchit"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
-
-[[package]]
-name = "md-5"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69b6441f590336821bb897fb28fc622898ccceb1d6cea3fde5ea86b090c4de98"
-dependencies = [
- "cfg-if",
- "digest 0.11.3",
-]
-
-[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
-name = "mime"
-version = "0.3.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5848f5a9e8117cf94f2f90faac24a87ff81600ff8628c1e3deaab572e76bfa1"
-
-[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
-
-[[package]]
-name = "mio"
-version = "1.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20521a903f02b0a573cd6840e9d0a5a0cc043d361fe924092cd70f8556cc9c4a"
-dependencies = [
- "libc",
- "wasi",
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "multimap"
@@ -2928,24 +897,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "objc2-core-foundation"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536"
-dependencies = [
- "bitflags",
-]
-
-[[package]]
-name = "objc2-system-configuration"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7216bd11cbda54ccabcab84d523dc93b858ec75ecfb3a7d89513fa22464da396"
-dependencies = [
- "objc2-core-foundation",
-]
-
-[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2956,35 +907,6 @@ name = "oncemutex"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44d11de466f4a3006fe8a5e7ec84e93b79c70cb992ae0aa0eb631ad2df8abfe2"
-
-[[package]]
-name = "parking"
-version = "2.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
-
-[[package]]
-name = "parking_lot"
-version = "0.12.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a"
-dependencies = [
- "lock_api",
- "parking_lot_core",
-]
-
-[[package]]
-name = "parking_lot_core"
-version = "0.9.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2621685985a2ebf1c516881c026032ac7deafcda1a2c9b7850dc81e3dfcb64c1"
-dependencies = [
- "cfg-if",
- "libc",
- "redox_syscall",
- "smallvec",
- "windows-link",
-]
 
 [[package]]
 name = "percent-encoding"
@@ -3022,38 +944,6 @@ dependencies = [
  "strum",
  "thiserror",
 ]
-
-[[package]]
-name = "pin-project"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6c2123f4708bbd422630a6dae7c03f678b1ce1f1c99e4c4b3beac69c8174cc9"
-dependencies = [
- "pin-project-internal",
-]
-
-[[package]]
-name = "pin-project-internal"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "358938fd6df944c1e44bb328b60fb275f13c804aac47ba26a1165d45a3f87756"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.10",
-]
-
-[[package]]
-name = "pin-project-lite"
-version = "0.2.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c938015719552d665fd0553b90d96cd7ff58e83e4c061ca99e6bb78865a72752"
-
-[[package]]
-name = "pkg-config"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "portable-atomic"
@@ -3280,62 +1170,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "quinn"
-version = "0.11.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4051e23e9185c255a7e33ef59cdbca87a22d359052eecd22fc6b901fb37d9d11"
-dependencies = [
- "bytes",
- "cfg_aliases",
- "pin-project-lite",
- "quinn-proto",
- "quinn-udp",
- "rustc-hash",
- "rustls",
- "socket2",
- "thiserror",
- "tokio",
- "tracing",
- "web-time",
-]
-
-[[package]]
-name = "quinn-proto"
-version = "0.11.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e750cca55fe4f0439a15d0bb529da9651e79993e8e72c61a899a36d462befbe"
-dependencies = [
- "bytes",
- "getrandom 0.4.3",
- "lru-slab",
- "rand 0.10.4",
- "rand_pcg",
- "ring",
- "rustc-hash",
- "rustls",
- "rustls-pki-types",
- "slab",
- "thiserror",
- "tinyvec",
- "tracing",
- "web-time",
-]
-
-[[package]]
-name = "quinn-udp"
-version = "0.5.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af66907df18639dcf4db56ca65490cabc4b27a97dbadd96f2926cca73298f016"
-dependencies = [
- "cfg_aliases",
- "libc",
- "once_cell",
- "socket2",
- "tracing",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3383,7 +1217,6 @@ version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f6fa277c67e6ea590466f04c3fe82cb509f0864fe470643e5570de9514a9b11"
 dependencies = [
- "chacha20",
  "getrandom 0.4.3",
  "rand_core 0.10.1",
 ]
@@ -3433,30 +1266,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
-name = "rand_pcg"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb95882a1e14462c69aea9984bb261293ccfe6022ef8de0eda18bd5afb0052df"
-dependencies = [
- "rand_core 0.10.1",
-]
-
-[[package]]
 name = "rand_xorshift"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60aa6af80be32871323012e02e6e65f8a7cc7890931ae421d217ad8fe0df2ccf"
 dependencies = [
  "rand_core 0.10.1",
-]
-
-[[package]]
-name = "redox_syscall"
-version = "0.5.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
-dependencies = [
- "bitflags",
 ]
 
 [[package]]
@@ -3507,61 +1322,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d902046e6a28a1e4c3cab97258a0ce11e994903f01c2d97a9447a0b3df85f4f6"
 
 [[package]]
-name = "reqwest"
-version = "0.12.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "futures-core",
- "futures-util",
- "http",
- "http-body",
- "http-body-util",
- "hyper",
- "hyper-rustls",
- "hyper-util",
- "js-sys",
- "log",
- "percent-encoding",
- "pin-project-lite",
- "quinn",
- "rustls",
- "rustls-pki-types",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "sync_wrapper",
- "tokio",
- "tokio-rustls",
- "tokio-util",
- "tower",
- "tower-http",
- "tower-service",
- "url",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "wasm-streams",
- "web-sys",
- "webpki-roots",
-]
-
-[[package]]
-name = "ring"
-version = "0.17.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7"
-dependencies = [
- "cc",
- "cfg-if",
- "getrandom 0.2.17",
- "libc",
- "untrusted",
- "windows-sys 0.52.0",
-]
-
-[[package]]
 name = "rust_decimal"
 version = "1.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3577,12 +1337,6 @@ dependencies = [
  "serde_json",
  "wasm-bindgen",
 ]
-
-[[package]]
-name = "rustc-hash"
-version = "2.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
 
 [[package]]
 name = "rustc_version"
@@ -3603,42 +1357,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "rustls"
-version = "0.23.46"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
-dependencies = [
- "once_cell",
- "ring",
- "rustls-pki-types",
- "rustls-webpki",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "rustls-pki-types"
-version = "1.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "102f35f7de7b06d8c61f1cff6592f5253e0dea431c74867aad5dfd70f44663fb"
-dependencies = [
- "web-time",
- "zeroize",
-]
-
-[[package]]
-name = "rustls-webpki"
-version = "0.103.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3a0760a887c14823fca5a1c970b01d47c328c696c0c64829d1df50e8f853fd5"
-dependencies = [
- "ring",
- "rustls-pki-types",
- "untrusted",
+ "windows-sys",
 ]
 
 [[package]]
@@ -3720,29 +1439,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_urlencoded"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
-dependencies = [
- "form_urlencoded",
- "itoa",
- "ryu",
- "serde",
-]
-
-[[package]]
-name = "sha1"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aacc4cc499359472b4abe1bf11d0b12e688af9a805fa5e3016f9a386dc2d0214"
-dependencies = [
- "cfg-if",
- "cpufeatures 0.3.1",
- "digest 0.11.3",
-]
-
-[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3750,50 +1446,14 @@ checksum = "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
- "digest 0.10.7",
+ "digest",
 ]
-
-[[package]]
-name = "sha2"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47d7069beb7d6ac7b9acd1039986e73443f24234f41074da099d6f994ac9ad19"
-dependencies = [
- "cfg-if",
- "cpufeatures 0.3.1",
- "digest 0.11.3",
-]
-
-[[package]]
-name = "shlex"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
-
-[[package]]
-name = "slab"
-version = "0.4.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "smallvec"
 version = "1.16.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3244542535d5de959d90ec55d1b5ff0fd2bb7b1310223907d5f11932847f7b59"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "socket2"
-version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
-dependencies = [
- "libc",
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "spin"
@@ -3805,191 +1465,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "sqlx"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edb1dddfbdfe5fb99dba0541a87b2edb8adbd59e45815db22d32d4fbbb8813dd"
-dependencies = [
- "sqlx-core",
- "sqlx-macros",
- "sqlx-mysql",
- "sqlx-postgres",
- "sqlx-sqlite",
-]
-
-[[package]]
-name = "sqlx-core"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c08f9787cc5aff062567dea2205f8ae37a617b04342633ab4f74944858ea6072"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "cfg-if",
- "crc",
- "crossbeam-queue",
- "either",
- "event-listener",
- "futures-core",
- "futures-intrusive",
- "futures-io",
- "futures-util",
- "hashbrown 0.16.1",
- "hashlink",
- "indexmap",
- "log",
- "memchr",
- "percent-encoding",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "smallvec",
- "thiserror",
- "tokio",
- "tokio-stream",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "sqlx-macros"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf62c58a1e7fd6031ee684eee21d07572f5aebe71c273a01ae4f04eeeba47c47"
-dependencies = [
- "proc-macro2",
- "quote",
- "sqlx-core",
- "sqlx-macros-core",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "sqlx-macros-core"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1ff75c9d609ac84aa8a3e0d92b5c0c54bf541a7f70db492fb40c9a4bea792c8"
-dependencies = [
- "cfg-if",
- "dotenvy",
- "either",
- "heck",
- "hex",
- "proc-macro2",
- "quote",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "sqlx-core",
- "sqlx-mysql",
- "sqlx-postgres",
- "sqlx-sqlite",
- "syn 2.0.119",
- "tokio",
- "url",
-]
-
-[[package]]
-name = "sqlx-mysql"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19eeb93b96eb10a3a59dfb436f3daf87d2fc41168ed9e9dc153ec8257dd6a761"
-dependencies = [
- "bitflags",
- "byteorder",
- "bytes",
- "crc",
- "digest 0.11.3",
- "dotenvy",
- "either",
- "futures-core",
- "futures-util",
- "generic-array",
- "log",
- "percent-encoding",
- "serde",
- "sha1",
- "sha2 0.11.1",
- "sqlx-core",
- "thiserror",
- "tracing",
-]
-
-[[package]]
-name = "sqlx-postgres"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0e9e02f764a1fe640eeefc8eb33eeddd274204654ec9f2db8ff851a1dee2364"
-dependencies = [
- "atoi",
- "base64 0.22.1",
- "bitflags",
- "byteorder",
- "crc",
- "dotenvy",
- "etcetera",
- "futures-channel",
- "futures-core",
- "futures-util",
- "hex",
- "hkdf",
- "hmac 0.13.0",
- "itoa",
- "log",
- "md-5",
- "memchr",
- "rand 0.10.4",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "smallvec",
- "sqlx-core",
- "stringprep",
- "thiserror",
- "tracing",
- "whoami",
-]
-
-[[package]]
-name = "sqlx-sqlite"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88b6b78a34ddcb1db4046d462db8f79cee811019d7297b99fca8fac5de26672e"
-dependencies = [
- "atoi",
- "flume",
- "form_urlencoded",
- "futures-channel",
- "futures-core",
- "futures-executor",
- "futures-intrusive",
- "futures-util",
- "libsqlite3-sys",
- "log",
- "percent-encoding",
- "serde",
- "sqlx-core",
- "thiserror",
- "tracing",
- "url",
-]
-
-[[package]]
 name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
-
-[[package]]
-name = "stringprep"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b4df3d392d81bd458a8a621b8bffbd2302a12ffe288a9d931670948749463b1"
-dependencies = [
- "unicode-bidi",
- "unicode-normalization",
- "unicode-properties",
-]
 
 [[package]]
 name = "strum"
@@ -4011,12 +1490,6 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
-
-[[package]]
-name = "subtle"
-version = "2.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "syn"
@@ -4041,15 +1514,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sync_wrapper"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
-dependencies = [
- "futures-core",
-]
-
-[[package]]
 name = "synstructure"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4069,7 +1533,7 @@ dependencies = [
  "fastrand",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys",
 ]
 
 [[package]]
@@ -4109,66 +1573,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
-name = "tokio"
-version = "1.54.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b52fd3255258d26fac7264ab5a76b53c13367136dc011d3d6ad4f8ed070396a3"
-dependencies = [
- "bytes",
- "libc",
- "mio",
- "pin-project-lite",
- "socket2",
- "tokio-macros",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "tokio-macros"
-version = "2.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78773a2a397f451582ce068015985c33193cf6dea8b74d2a639fe457b2f07b0e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.10",
-]
-
-[[package]]
-name = "tokio-rustls"
-version = "0.26.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9cc2678c2cdd569ef8215e2afd7954ada2ae20b4fdd2c5fe6139a3b02d105db"
-dependencies = [
- "rustls",
- "tokio",
-]
-
-[[package]]
-name = "tokio-stream"
-version = "0.1.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3d06f0b082ba57c26b79407372e57cf2a1e28124f78e9479fe80322cf53420b"
-dependencies = [
- "futures-core",
- "pin-project-lite",
- "tokio",
-]
-
-[[package]]
-name = "tokio-util"
-version = "0.7.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e464cf451ba96ebfc6f9b6542f17ee8b8956e33f1e40d9690624e59d7a7f8a4b"
-dependencies = [
- "bytes",
- "futures-core",
- "futures-sink",
- "pin-project-lite",
- "tokio",
-]
-
-[[package]]
 name = "toml_datetime"
 version = "1.1.3+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4199,111 +1603,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tonic"
-version = "0.14.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2cdfc673aabd30fe8fee92e65837b644c37c5d47f0f97ae6d5e0f1237d15e1b"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "http",
- "http-body",
- "http-body-util",
- "percent-encoding",
- "pin-project",
- "sync_wrapper",
- "tokio-stream",
- "tokio-util",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "tower"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebe5ef63511595f1344e2d5cfa636d973292adc0eec1f0ad45fae9f0851ab1d4"
-dependencies = [
- "futures-core",
- "futures-util",
- "pin-project-lite",
- "sync_wrapper",
- "tokio",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "tower-http"
-version = "0.6.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cfcf7e2740e6fc6d4d688b4ef00650406bb94adf4731e43c096c3a19fe40840"
-dependencies = [
- "bitflags",
- "bytes",
- "futures-util",
- "http",
- "http-body",
- "pin-project-lite",
- "tower",
- "tower-layer",
- "tower-service",
- "url",
-]
-
-[[package]]
-name = "tower-layer"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "121c2a6cda46980bb0fcd1647ffaf6cd3fc79a013de288782836f6df9c48780e"
-
-[[package]]
-name = "tower-service"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
-
-[[package]]
-name = "tracing"
-version = "0.1.44"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
-dependencies = [
- "log",
- "pin-project-lite",
- "tracing-attributes",
- "tracing-core",
-]
-
-[[package]]
-name = "tracing-attributes"
-version = "0.1.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "tracing-core"
-version = "0.1.36"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
-dependencies = [
- "once_cell",
-]
-
-[[package]]
-name = "try-lock"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
-
-[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4314,12 +1613,6 @@ name = "unarray"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
-
-[[package]]
-name = "unicode-bidi"
-version = "0.3.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
 
 [[package]]
 name = "unicode-ident"
@@ -4335,18 +1628,6 @@ checksum = "75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d"
 dependencies = [
  "tinyvec",
 ]
-
-[[package]]
-name = "unicode-properties"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "993ad287eb20e8ba755312801cfe1413e0f25d604075863acaddca10b04c1833"
-
-[[package]]
-name = "untrusted"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "url"
@@ -4376,25 +1657,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a3b425286980a367278453f3b6d28cdcb134b574e5a35824a6ff5eebad50bb6"
 
 [[package]]
-name = "vcpkg"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
-
-[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "want"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec4cdd0dd910afe868b7ef477227d8d538b46b3075031afee8a9f2acb0a2ed0b"
-dependencies = [
- "try-lock",
-]
 
 [[package]]
 name = "wasi"
@@ -4421,17 +1687,6 @@ dependencies = [
  "rustversion",
  "wasm-bindgen-macro",
  "wasm-bindgen-shared",
-]
-
-[[package]]
-name = "wasm-bindgen-futures"
-version = "0.4.80"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e14e0327cb5368ad60ccb22d04a9827a693c95a926d8d125e9fa39e0baec501"
-dependencies = [
- "js-sys",
- "tokio",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -4467,73 +1722,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasm-streams"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
-dependencies = [
- "futures-util",
- "js-sys",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
-name = "web-sys"
-version = "0.3.107"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7d179596ff5ec0f6de4db64d54011bde6289cc49603d3a6e4ce3f329207ab88"
-dependencies = [
- "js-sys",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "web-time"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
-dependencies = [
- "js-sys",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "webpki-roots"
-version = "1.0.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7265c9301c16a8711c992c2d8da90ee77ef54b1ed51482d6dfeb00dc756b1297"
-dependencies = [
- "rustls-pki-types",
-]
-
-[[package]]
-name = "whoami"
-version = "2.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "626c4bac6755d76ffc12cb01b2eac751db1996b9e0041de9aa02c8c211ddc82c"
-dependencies = [
- "libc",
- "libredox",
- "objc2-system-configuration",
- "web-sys",
-]
-
-[[package]]
 name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
-
-[[package]]
-name = "windows-sys"
-version = "0.52.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
-dependencies = [
- "windows-targets",
-]
 
 [[package]]
 name = "windows-sys"
@@ -4543,70 +1735,6 @@ checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
 dependencies = [
  "windows-link",
 ]
-
-[[package]]
-name = "windows-targets"
-version = "0.52.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b724f72796e036ab90c1021d4780d4d3d648aca59e491e6b98e725b84e99973"
-dependencies = [
- "windows_aarch64_gnullvm",
- "windows_aarch64_msvc",
- "windows_i686_gnu",
- "windows_i686_gnullvm",
- "windows_i686_msvc",
- "windows_x86_64_gnu",
- "windows_x86_64_gnullvm",
- "windows_x86_64_msvc",
-]
-
-[[package]]
-name = "windows_aarch64_gnullvm"
-version = "0.52.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32a4622180e7a0ec044bb555404c800bc9fd9ec262ec147edd5989ccd0c02cd3"
-
-[[package]]
-name = "windows_aarch64_msvc"
-version = "0.52.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09ec2a7bb152e2252b53fa7803150007879548bc709c039df7627cabbd05d469"
-
-[[package]]
-name = "windows_i686_gnu"
-version = "0.52.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e9b5ad5ab802e97eb8e295ac6720e509ee4c243f69d781394014ebfe8bbfa0b"
-
-[[package]]
-name = "windows_i686_gnullvm"
-version = "0.52.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0eee52d38c090b3caa76c563b86c3a4bd71ef1a819287c19d586d7334ae8ed66"
-
-[[package]]
-name = "windows_i686_msvc"
-version = "0.52.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "240948bc05c5e7c6dabba28bf89d89ffce3e303022809e73deaefe4f6ec56c66"
-
-[[package]]
-name = "windows_x86_64_gnu"
-version = "0.52.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "147a5c80aabfbf0c7d901cb5895d1de30ef2907eb21fbbab29ca94c5b08b1a78"
-
-[[package]]
-name = "windows_x86_64_gnullvm"
-version = "0.52.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24d5b23dc417412679681396f2b49f3de8c1473deb516bd34410872eff51ed0d"
-
-[[package]]
-name = "windows_x86_64_msvc"
-version = "0.52.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
 name = "winnow"
@@ -4692,12 +1820,6 @@ dependencies = [
  "syn 3.0.10",
  "synstructure",
 ]
-
-[[package]]
-name = "zeroize"
-version = "1.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85ccff8a4805aba1eaa4cd4afcd49f7557dd2cf5fd79ffc37f8959466effc5aa"
 
 [[package]]
 name = "zerotrie"
