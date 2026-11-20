@@ -56,7 +56,8 @@ async function cfReadback(path,body,phaseDeadline=Infinity){
     typeof body?.sql==="string"&&/^SELECT\b/i.test(body.sql.trim())&&
     !body.sql.includes(";");
   const traces=path==="/workers/observability/telemetry/query"&&
-    body?.view==="events"&&typeof body?.parameters?.needle?.value==="string";
+    body?.view==="events"&&body?.queryId==="crm-471-native-batch"&&
+    body?.parameters?.filters?.some(f=>f.key==="$workers.scriptName"&&f.operation==="eq"&&f.value==="crm-dev");
   if(!audit&&!traces)throw Error("CRM_READBACK_RETRY_NOT_READ_ONLY");
   const target=audit?"d1-audit":"telemetry";
   const deadline=Math.min(Date.now()+90000,phaseDeadline);
@@ -391,6 +392,30 @@ async function prepareE2e(){
     result:"PASS",database:"existing D1",actors:2,tenants:2,previous_data_deleted:false}));
 }
 
+// Complete native Cloudflare Observability cursor, with no per-request HTTP loop.
+async function readTelemetrySnapshot(from,to,deadline){
+  const limit=2000,seen=new Set(),events=[];
+  let offset=null;
+  for(let page=0;page<32;page++){
+    const data=await cfReadback("/workers/observability/telemetry/query",{
+      queryId:"crm-471-native-batch",view:"events",timeframe:{from,to},limit,
+      ...(offset===null?{}:{offset,offsetDirection:"next"}),
+      parameters:{filters:[{key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
+    },deadline);
+    const batch=data?.events?.events;
+    assert.ok(Array.isArray(batch)&&batch.length<=limit,"CRM_TELEMETRY_PAGE_INVALID");
+    for(const event of batch){
+      const id=event?.$metadata?.id;
+      assert.ok(typeof id==="string"&&id,"CRM_TELEMETRY_CURSOR_MISSING");
+      assert.ok(!seen.has(id),"CRM_TELEMETRY_CURSOR_REPEATED");
+      seen.add(id);events.push(event);
+    }
+    if(batch.length<limit)return events;
+    offset=batch.at(-1).$metadata.id;
+  }
+  throw Error("CRM_TELEMETRY_PAGE_LIMIT_EXCEEDED");
+}
+
 async function verifyData(){
   const deployed=load("deployed.json");
   assert.equal(deployed.git_sha,sha);
@@ -542,56 +567,34 @@ async function verifyData(){
   assert.deepEqual(probeKinds.sort(),Object.keys(syntheticFormats).sort(),
     "Party, email/phone, Task, cookies, Authorization/JWT, query, Enrichment and CSV probes are mandatory");
   // Observe every exact browser request, including rejected requests and read-only RPCs.
-  // Audit rows are required only for committed mutations, never invented for reads.
-  let pending=[...requests.values()];
-  const requestTraces=new Map();
-  const from=evidence.started_at-1000;
-  // Cloudflare telemetry can become searchable after the browser/D1 readback.
-  // A delayed event remains mandatory: extend the bounded indexing window,
-  // never weaken the exact source-version/request-id/path/status match below.
-  const traceAttempts=120;
-  const traceStarted=Date.now(),traceDeadline=traceStarted+16*60*1000;
+  // Every browser RPC requires an exact native version, path, status and trace.
+  const pending=new Map([...requests.values()].map(x=>[x.request_id,x]));
+  const requestTraces=new Map(),from=evidence.started_at-1000;
+  const traceStarted=Date.now(),traceDeadline=traceStarted+120000;
+  let observedEvents=[];
   console.log(JSON.stringify({event:"crm.telemetry-readback-scope",
-    requests:pending.length,max_concurrency:2,deadline_ms:16*60*1000}));
-  for(let attempt=0;attempt<traceAttempts&&pending.length&&Date.now()<traceDeadline;attempt++){
-    const missing=[];
-    // Two read lanes preserve all 338+ exact request checks without a
-    // serial queue that consumes the whole release acceptance budget.
-    for(let i=0;i<pending.length;i+=2){
-      const batch=pending.slice(i,i+2);
-      const found=await Promise.all(batch.map(async entry=>{
-        const data=await cfReadback("/workers/observability/telemetry/query",{
-          queryId:"crm-350-typed-browser",view:"events",
-          timeframe:{from,to:Date.now()+1000},limit:20,
-          parameters:{needle:{value:entry.request_id},filters:[
-            {key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
-        },traceDeadline);
-        const matched=(data.events?.events||[]).find(event=>
-          event.source?.event==="crm.native.request"&&event.source?.request_id===entry.request_id&&
-          event.source?.operation===entry.path&&event.source?.status===entry.status&&
-          (event.source?.error_code??null)===(entry.error_code??null)&&
-          event.$workers?.scriptVersion?.id===liveVersion);
-        if(!matched)return false;
-        const traceId=matched.$metadata?.traceId;
-        assert.match(traceId??"",/^[a-f0-9]{32}$/i,
-          "CRM native request log must carry a valid Cloudflare trace ID");
-        requestTraces.set(entry.request_id,traceId);
-        return true;
-      }));
-      batch.forEach((entry,index)=>{if(!found[index])missing.push(entry);});
-      if((i+batch.length)%32===0||i+batch.length===pending.length)
-        console.log(JSON.stringify({event:"crm.telemetry-readback-progress",
-          round:attempt+1,checked:i+batch.length,total:pending.length,
-          still_missing:missing.length,elapsed_ms:Date.now()-traceStarted}));
+    requests:pending.size,page_limit:2000,deadline_ms:120000}));
+  for(let attempt=0;attempt<30&&pending.size&&Date.now()<traceDeadline;attempt++){
+    observedEvents=await readTelemetrySnapshot(from,Date.now()+1000,traceDeadline);
+    for(const event of observedEvents){
+      const entry=pending.get(event.source?.request_id);
+      if(!entry||event.source?.event!=="crm.native.request"||
+         event.source?.operation!==entry.path||event.source?.status!==entry.status||
+         (event.source?.error_code??null)!==(entry.error_code??null)||
+         event.$workers?.scriptVersion?.id!==liveVersion)continue;
+      const traceId=event.$metadata?.traceId;
+      assert.match(traceId??"",/^[a-f0-9]{32}$/i,
+        "CRM native request log must carry a valid Cloudflare trace ID");
+      requestTraces.set(entry.request_id,traceId);pending.delete(entry.request_id);
     }
-    pending=missing;
-    if(pending.length&&(attempt===0||(attempt+1)%20===0))
-      console.log(JSON.stringify({event:"crm.request-trace-readback",result:"WAIT",
-        attempt:attempt+1,pending:pending.length,elapsed_ms:Date.now()-evidence.started_at}));
-    if(pending.length&&attempt<traceAttempts-1&&Date.now()<traceDeadline)
-      await pause(Math.min(2500,Math.max(0,traceDeadline-Date.now())));
+    console.log(JSON.stringify({event:"crm.telemetry-readback-progress",round:attempt+1,
+      observed_events:observedEvents.length,accepted:requestTraces.size,
+      still_missing:pending.size,elapsed_ms:Date.now()-traceStarted}));
+    if(pending.size&&attempt<29&&Date.now()<traceDeadline)
+      await pause(Math.min(2000,Math.max(0,traceDeadline-Date.now())));
   }
-  assert.equal(pending.length,0,"Missing Cloudflare request traces: "+pending.map(x=>x.path).join(","));
+  assert.equal(pending.size,0,"Missing Cloudflare request traces: "+
+    [...pending.values()].map(x=>x.path).join(","));
   // Validate the actual trace graph, not only the existence of our console
   // request logs. Representative accepted writes must have D1 spans (their
   // commit fact was already verified against the audit table above). Reads
@@ -632,40 +635,38 @@ async function verifyData(){
     });
   }
   let spanVerified=0,d1SpanVerified=0;
-  for(const {entry,needsD1} of required.values()){
-    const traceId=requestTraces.get(entry.request_id);
-    assert.match(traceId??"",/^[a-f0-9]{32}$/i,
-      "Accepted browser request missing its Cloudflare trace ID");
-    let verified=false;
-    for(let attempt=0;attempt<30&&Date.now()<traceDeadline;attempt++){
-      const data=await cfReadback("/workers/observability/telemetry/query",{
-        queryId:"crm-471-native-trace-span-evidence",view:"events",
-        timeframe:{from,to:Date.now()+1000},limit:100,
-        parameters:{needle:{value:traceId},filters:[
-          {key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
-      },traceDeadline);
-      const linked=(data.events?.events||[]).filter(event=>
-        (event.source?.traceId??event.$metadata?.traceId)===traceId);
-      const eventsText=JSON.stringify(linked);
+  let outstanding=[...required.values()];
+  for(let attempt=0;attempt<30&&outstanding.length&&Date.now()<traceDeadline;attempt++){
+    if(attempt>0)observedEvents=await readTelemetrySnapshot(from,Date.now()+1000,traceDeadline);
+    const byTrace=new Map();
+    for(const event of observedEvents){
+      const traceId=event.source?.traceId??event.$metadata?.traceId;
+      if(typeof traceId!=="string")continue;
+      if(!byTrace.has(traceId))byTrace.set(traceId,[]);
+      byTrace.get(traceId).push(event);
+    }
+    const missing=[];
+    for(const {entry,needsD1} of outstanding){
+      const traceId=requestTraces.get(entry.request_id);
+      assert.match(traceId??"",/^[a-f0-9]{32}$/i,
+        "Accepted browser request missing its Cloudflare trace ID");
+      const linked=byTrace.get(traceId)??[],eventsText=JSON.stringify(linked);
       for(const marker of probeValuesByRequest.get(entry.request_id)??[])
         assert.ok(!eventsText.includes(marker),
           "A synthetic private value appeared in a Cloudflare trace");
       assert.ok(!linked.some(event=>event.$metadata?.type==="cf-worker-event"),
         "Unsafe automatic invocation log in an accepted CRM trace");
       const spans=linked.filter(event=>event.$metadata?.type==="span");
-      if(spans.length>0&&(!needsD1||spans.some(event=>event.source?.db))){
-        spanVerified++;
-        if(needsD1)d1SpanVerified++;
-        verified=true;
-        break;
-      }
-      if(attempt<29&&Date.now()<traceDeadline)
-        await pause(Math.min(2500,Math.max(0,traceDeadline-Date.now())));
+      if(spans.length&&(!needsD1||spans.some(event=>event.source?.db))){
+        spanVerified++;if(needsD1)d1SpanVerified++;
+      }else missing.push({entry,needsD1});
     }
-    assert.ok(verified,needsD1?
-      "Committed CRM mutation has no native Cloudflare D1 span":
-      "CRM request has no native Cloudflare span");
+    outstanding=missing;
+    if(outstanding.length&&attempt<29&&Date.now()<traceDeadline)
+      await pause(Math.min(2000,Math.max(0,traceDeadline-Date.now())));
   }
+  assert.equal(outstanding.length,0,
+    "CRM native Cloudflare spans missing for: "+outstanding.map(x=>x.entry.path).join(","));
   assert.ok(d1SpanVerified>=1,"D1 trace proof must cover a committed mutation");
   console.log(JSON.stringify({event:"crm.native-s3-trace-to-d1",
     result:"PASS",traces:spanVerified,committed_d1_traces:d1SpanVerified,

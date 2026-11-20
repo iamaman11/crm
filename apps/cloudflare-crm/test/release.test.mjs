@@ -119,84 +119,70 @@ async function subprocessEntry(){
        if(variant.endsWith("-seconds"))headers["retry-after"]="3";
        if(variant.endsWith("-date"))headers["retry-after"]=new Date(Date.now()+3000).toUTCString();
        if(variant.endsWith("-invalid"))headers["retry-after"]="not-a-date";
-       return new Response(JSON.stringify({success:false,errors:[{code:10102}]}),
-         {status:429,headers});
+       return new Response(JSON.stringify({success:false,errors:[{code:10102}]}),{status:429,headers});
      }
      if(mode==="verify-data"&&variant==="telemetry-403")
        return new Response(JSON.stringify({success:false,errors:[{code:10000}]}),
          {status:403,headers:{"content-type":"application/json","cf-ray":"fixture-ray-123"}});
-     const needle=JSON.parse(options.body).parameters?.needle?.value;
-     const traceFor=index=>String(index+1).padStart(32,"0");
-     const traceIndex=fixtureRequests.findIndex((_,index)=>traceFor(index)===needle);
-     if(traceIndex!==-1){
-       const events=variant==="missing-native-span"||
-         (variant==="missing-recovery-span"&&traceIndex===2)||
-         (variant==="missing-owner-span"&&traceIndex===7)?[]:[{
-         $metadata:{type:"span"},
-         source:{name:"D1 prepare",traceId:needle,
-           ...(variant==="missing-d1-span"?{}:{db:{system:"cloudflare-d1"}})}
-       }];
-       if(variant==="wrong-native-trace-id"&&events.length)
-         events[0].source.traceId="f".repeat(32);
-       if(variant==="unsafe-invocation-event")events.push({
-         $metadata:{type:"cf-worker-event",traceId:needle},
-         $workers:{event:{request:{headers:{"authorization":"synthetic-secret"}}}}
-       });
-       if(variant==="synthetic-private-leak"&&traceIndex===0)events.push({
-         $metadata:{type:"log"},source:{traceId:needle,message:"Browser Party 1234567890123"}
-       });
-       if(variant==="synthetic-cookie-leak"&&traceIndex===0)events.push({
-         $metadata:{type:"log"},source:{traceId:needle,message:"crm-s3-cookie-1234567890123"}
-       });
-       if(variant==="synthetic-header-leak"&&traceIndex===0)events.push({
-         $metadata:{type:"log"},source:{traceId:needle,message:"crm-s3-header-1234567890123"}
-       });
-       if(variant==="synthetic-authorization-leak"&&traceIndex===0)events.push({
-         $metadata:{type:"log"},source:{traceId:needle,message:"Bearer crm-s3-authorization-1234567890123"}
-       });
-       if(variant==="synthetic-jwt-leak"&&traceIndex===0)events.push({
-         $metadata:{type:"log"},source:{traceId:needle,
-           message:"eyJhbGciOiJub25lIn0.eyJzdWIiOiJjcm0tc3ludGhldGljIn0.signature-1234567890123"}
-       });
-       if(variant==="synthetic-query-leak"&&traceIndex===0)events.push({
-         $metadata:{type:"log"},source:{traceId:needle,message:"crm-s3-query-1234567890123"}
-       });
-       if(variant==="synthetic-phone-leak"&&traceIndex===8)events.push({
-         $metadata:{type:"log"},source:{traceId:needle,message:"+12025550102"}
-       });
-       if(variant==="synthetic-enrichment-leak"&&traceIndex===13)events.push({
-         $metadata:{type:"log"},source:{traceId:needle,message:"browser_registry_1234567890123"}
-       });
-       if(variant==="synthetic-credential-handle-leak"&&traceIndex===13)events.push({
-         $metadata:{type:"log"},source:{traceId:needle,message:"browser-credential-handle-1234567890123"}
-       });
-       if(variant==="synthetic-mapping-leak"&&traceIndex===15)events.push({
-         $metadata:{type:"log"},source:{traceId:needle,message:"browser_mapping_1234567890123"}
-       });
-       if(variant==="synthetic-csv-leak"&&traceIndex===17)events.push({
-         $metadata:{type:"log"},source:{traceId:needle,
-           message:"party_id,kind,display_name,resource_version\r\nbrowser-import,person,Browser Import 1234567890123,1\r\n"}
-       });
-       return wrap({events:{events}});
-     }
-     if(mode==="verify-data"&&variant==="transient-html-telemetry"&&telemetryAttempts===1)
-       return html(503);
-     if(mode==="verify-data"&&variant==="persistent-html-telemetry")
-       return html(503);
-     if(mode==="verify-data"&&variant==="html-success-telemetry")
-       return html(200);
+     if(mode==="verify-data"&&variant==="transient-html-telemetry"&&telemetryAttempts===1)return html(503);
+     if(mode==="verify-data"&&variant==="persistent-html-telemetry")return html(503);
+     if(mode==="verify-data"&&variant==="html-success-telemetry")return html(200);
      if(mode==="verify-data"&&((variant==="transient-invalid-json-telemetry"&&telemetryAttempts===1)||
         variant==="persistent-invalid-json-telemetry"))
        return new Response('{"success":true,"result":',{status:200,
          headers:{"content-type":"application/json","cf-ray":"fixture-ray-123"}});
-     const index=fixtureRequests.findIndex(entry=>entry.request_id===needle);
-     const entry=fixtureRequests[index];
-     return wrap({events:{events:variant==="missing-logs"||!entry?[]:[{
-       source:{event:"crm.native.request",request_id:entry.request_id,operation:entry.path,status:entry.status,
-         error_code:variant==="wrong-error-code"?"aborted":entry.error_code??null},
-       $metadata:{...(variant==="missing-native-trace-id"&&index===0?{}:{traceId:traceFor(index)})},
-       $workers:{scriptVersion:{id:"version-new"}}
-     }]}});
+     const query=JSON.parse(options.body);
+     assert.equal(query.queryId,"crm-471-native-batch");
+     assert.equal(query.view,"events");
+     assert.ok(query.limit>=1&&query.limit<=2000);
+     assert.equal(query.parameters.filters[0].value,"crm-dev");
+     const traceFor=index=>String(index+1).padStart(32,"0"),events=[];
+     const add=(id,metadata,source,workers)=>events.push({
+       $metadata:{id,...metadata},...(source?{source}:{}),...(workers?{$workers:workers}:{})});
+     for(let index=0;index<fixtureRequests.length;index++){
+       const entry=fixtureRequests[index],traceId=traceFor(index);
+       if(variant!=="missing-logs")add("request-"+index,
+         {type:"cf-worker",...(variant==="missing-native-trace-id"&&index===0?{}:{traceId})},
+         {event:"crm.native.request",request_id:entry.request_id,operation:entry.path,
+          status:entry.status,error_code:variant==="wrong-error-code"?"aborted":entry.error_code??null},
+         {scriptVersion:{id:"version-new"}});
+       if(variant!=="missing-native-span"&&
+          !(variant==="missing-recovery-span"&&index===2)&&
+          !(variant==="missing-owner-span"&&index===7))
+         add("span-"+index,{type:"span",traceId},{
+           name:"D1 prepare",traceId:variant==="wrong-native-trace-id"?"f".repeat(32):traceId,
+           ...(variant==="missing-d1-span"?{}:{db:{system:"cloudflare-d1"}})});
+       if(variant==="unsafe-invocation-event")add("invocation-"+index,
+         {type:"cf-worker-event",traceId},null,
+         {event:{request:{headers:{authorization:"synthetic-secret"}}}});
+       const leaks={
+         "synthetic-private-leak":[0,"Browser Party 1234567890123"],
+         "synthetic-cookie-leak":[0,"crm-s3-cookie-1234567890123"],
+         "synthetic-header-leak":[0,"crm-s3-header-1234567890123"],
+         "synthetic-authorization-leak":[0,"Bearer crm-s3-authorization-1234567890123"],
+         "synthetic-jwt-leak":[0,"eyJhbGciOiJub25lIn0.eyJzdWIiOiJjcm0tc3ludGhldGljIn0.signature-1234567890123"],
+         "synthetic-query-leak":[0,"crm-s3-query-1234567890123"],
+         "synthetic-phone-leak":[8,"+12025550102"],
+         "synthetic-enrichment-leak":[13,"browser_registry_1234567890123"],
+         "synthetic-credential-handle-leak":[13,"browser-credential-handle-1234567890123"],
+         "synthetic-mapping-leak":[15,"browser_mapping_1234567890123"],
+         "synthetic-csv-leak":[17,"party_id,kind,display_name,resource_version\\r\\nbrowser-import,person,Browser Import 1234567890123,1\\r\\n"]
+       };
+       if(leaks[variant]?.[0]===index)add("leak-"+index,{type:"log",traceId},
+         {traceId,message:leaks[variant][1]});
+     }
+     // Generate >2000 events for native pagination and duplicate-cursor proofs.
+     if(variant==="large-telemetry-scope"||variant==="telemetry-cursor-repeat")
+       for(let i=0;i<2200;i++)add("unrelated-"+i,{type:"log",traceId:"unrelated"},
+         {event:"unrelated"});
+     let start=0;
+     if(query.offset!==undefined){
+       const i=events.findIndex(e=>e.$metadata.id===query.offset);
+       assert.ok(i>=0,"Cursor must come from prior page");
+       start=variant==="telemetry-cursor-repeat"?0:i+1;
+     }
+     const page=events.slice(start,start+query.limit);
+     return wrap({events:{events:page,count:page.length}});
    }
    if(path.endsWith("/query")){
      if(mode==="verify-data"){
@@ -490,16 +476,23 @@ for(const variant of ["unrelated","wrong-database"])test("failure cannot stop "+
 test("matching browser, D1 and version-specific Logs evidence passes the release validator",()=>{
  const result=run("verify-data");
  assert.equal(result.status,0,result.error);assert.equal(result.accepted,true);
- assert.equal(result.state.maxTelemetryInFlight,2,
-   "Cloudflare Telemetry must be checked through two bounded read lanes");
+ assert.equal(result.state.maxTelemetryInFlight,1,
+   "Cloudflare Telemetry must use one native cursor reader");
 });
 test("338 exact RPC readbacks retain request and span evidence without a burst",()=>{
  const result=run("verify-data","large-telemetry-scope");
  assert.equal(result.status,0,result.error);
  assert.equal(result.accepted,true);
- assert.equal(result.state.maxTelemetryInFlight,2);
+ assert.equal(result.state.maxTelemetryInFlight,1);
  assert.ok(result.stdout.includes('"requests":338'));
- assert.equal(result.state.telemetryAttempts>=338,true);
+ assert.ok(result.state.telemetryAttempts>=2&&result.state.telemetryAttempts<10,
+   "338 RPCs and native spans must use only a few cursor pages");
+});
+test("repeating a Cloudflare telemetry cursor cannot pass release acceptance",()=>{
+ const result=run("verify-data","telemetry-cursor-repeat");
+ assert.notEqual(result.status,0);assert.equal(result.accepted,false);
+ assert.match(result.error,/CRM_TELEMETRY_CURSOR_REPEATED/);
+ assert.ok(result.state.telemetryAttempts<=3);
 });
 test("Retry-After delta-seconds, HTTP-date and invalid headers are parsed safely",async()=>{
  const {parseRetryAfterMs}=await import("../scripts/release-readback.mjs");
@@ -517,7 +510,7 @@ for(const variant of [
  const result=run("verify-data",variant);
  assert.equal(result.status,0,result.error);
  assert.equal(result.accepted,true);
- assert.equal(result.state.maxTelemetryInFlight,2);
+ assert.equal(result.state.maxTelemetryInFlight,1);
  assert.equal(result.posts.filter(p=>p.endsWith("/subdomain")).length,0);
  const retry=result.stdout.split("\n").filter(x=>x.includes("crm.cf-readback-retry"))
    .map(x=>JSON.parse(x)).find(x=>x.http_status===429);
@@ -532,8 +525,8 @@ for(const variant of ["telemetry-429-persistent-seconds","telemetry-429-persiste
    assert.equal(result.accepted,false);
    assert.match(result.error,/HTTP 429/);
    assert.ok(result.state.telemetryAttempts>=3&&result.state.telemetryAttempts<=6,
-     "Each of the two read lanes must stop after at most three attempts");
-   assert.equal(result.state.maxTelemetryInFlight,2);
+     "The cursor reader must stop after at most three attempts");
+   assert.equal(result.state.maxTelemetryInFlight,1);
    assert.equal(result.posts.filter(p=>p.endsWith("/subdomain")).length,0);
  });
 test("Telemetry nonretryable 403 fails closed without another POST",()=>{
@@ -558,12 +551,12 @@ for(const variant of ["persistent-html-telemetry","html-success-telemetry","pers
    assert.equal(result.accepted,false);
    assert.match(result.error,/NON_JSON/);
    assert.match(result.error,/cf_ray=fixture-ray-123/);
-   // Only two bounded concurrent read-only probes may retry.
+   // Only the read-only cursor query may retry.
    if(variant==="persistent-invalid-json-telemetry")
      assert.ok(result.state.telemetryAttempts>=3&&result.state.telemetryAttempts<=6);
    if(variant==="html-success-telemetry")
      assert.ok(result.state.telemetryAttempts>=1&&result.state.telemetryAttempts<=2);
-   assert.equal(result.state.maxTelemetryInFlight,2);
+   assert.equal(result.state.maxTelemetryInFlight,1);
    assert.ok(!result.error.includes("<!DOCTYPE"),
      "never print an HTML error body or upstream credentials");
  });
