@@ -31,7 +31,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // Browser Response headers may arrive with later network extra-info. Await
    // Playwright's complete headers; route.fetch() returns an APIResponse instead.
    if(typeof response.allHeaders==="function"){
-     headerReads.push(response.headers().then(capture).catch(error=>{
+     headerReads.push(response.allHeaders().then(capture).catch(error=>{
        entry.header_error=String(error.message);
      }));
    }else capture(response.headers());
