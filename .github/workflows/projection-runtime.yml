@@ -63,7 +63,7 @@ jobs:
     timeout-minutes: 35
     services:
       postgres:
-        image: postgres:19.0-alpine3.23
+        image: postgres:18.7-alpine3.23
         env:
           POSTGRES_DB: crm_projection_test
           POSTGRES_USER: postgres

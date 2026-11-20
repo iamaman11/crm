@@ -151,12 +151,12 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  postgres-19-integration:
+  postgres-18-integration:
     runs-on: ubuntu-26.04
     timeout-minutes: 90
     services:
       postgres:
-        image: postgres:19.0-alpine3.23
+        image: postgres:18.7-alpine3.23
         env:
           POSTGRES_DB: crm_test
           POSTGRES_USER: postgres
@@ -230,7 +230,7 @@ jobs:
           cargo test -p crm-parties-capability-adapter --features postgres-integration --test postgres_evidence_rollback -- --nocapture
           cargo test -p crm-sales-capability-adapter --features postgres-integration --test postgres_mutations -- --nocapture
           cargo test -p crm-activities-capability-adapter --features postgres-integration --test postgres_noop -- --nocapture
-      - name: Verify full crm-api process lifecycle on PostgreSQL 19.0
+      - name: Verify full crm-api process lifecycle on PostgreSQL 18.7
         run: |
           set -euo pipefail
           cat > /tmp/reset-application-database.sh <<'SH'

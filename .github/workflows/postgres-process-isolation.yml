@@ -88,7 +88,7 @@ jobs:
             test_target: account_process_e2e
     services:
       postgres:
-        image: postgres:19.0-alpine3.23
+        image: postgres:18.7-alpine3.23
         env:
           POSTGRES_DB: ${{ matrix.database }}
           POSTGRES_USER: postgres
@@ -176,7 +176,7 @@ jobs:
         run: |
           set +e
           mkdir -p "${ARTIFACT_DIR}"
-          postgres_container="$(docker ps -aq --filter ancestor=postgres:19.0-alpine3.23 | head -n 1)"
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:18.7-alpine3.23 | head -n 1)"
           if [ -n "${postgres_container}" ]; then
             docker logs "${postgres_container}" > "${ARTIFACT_DIR}/postgres.log" 2>&1
           else
