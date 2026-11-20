@@ -252,7 +252,7 @@ def workflow_decisions(root: Path, paths: list[str]) -> list[WorkflowDecision]:
             events = {events: None}
         elif isinstance(events, list):
             events = {str(event): None for event in events}
-        # CRM development has one push pipeline; other products retain PR gates.
+        # The canonical CRM runs one dev push pipeline; the generic analyzer also supports PR fixtures.
         event = "push" if workflow_path.name == "cloudflare-crm-spike.yml" else "pull_request"
         if not isinstance(events, dict) or event not in events:
             continue
@@ -289,11 +289,11 @@ def enforce_scope_workflow_coverage(
             continue
         absent = sorted(set(rule.required_workflows) - set(by_name))
         if absent:
-            raise RuntimeError(f"scope {rule.id} requires missing permanent PR workflows: {absent}")
+            raise RuntimeError(f"scope {rule.id} requires missing required CI workflows: {absent}")
         for required in rule.required_workflows:
             if not by_name[required].selected:
                 raise RuntimeError(
-                    f"scope {rule.id} requires {required}, but its governed pull-request path filters did not select it"
+                    f"scope {rule.id} requires {required}, but its governed CI path filters did not select it"
                 )
 
 

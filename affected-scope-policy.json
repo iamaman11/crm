@@ -18,8 +18,7 @@
         "scripts/generate_contract_telemetry_catalog.py"
       ],
       "required_workflows": [
-        "Contract CI",
-        "Governance CI"
+        "Cloudflare CRM Spike CI"
       ]
     },
     {
@@ -43,9 +42,7 @@
         "tests/test_crm_module_coverage.py"
       ],
       "required_workflows": [
-        "Contract CI",
-        "Cloudflare CRM Spike CI",
-        "Rust Generated Sync"
+        "Cloudflare CRM Spike CI"
       ]
     },
     {
@@ -152,7 +149,7 @@
         "docs/DEVELOPMENT_WORKFLOW.md"
       ],
       "required_workflows": [
-        "Governance CI"
+        "Cloudflare CRM Spike CI"
       ]
     }
   ],

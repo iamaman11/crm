@@ -356,7 +356,7 @@ class AffectedScopeTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(
                 RuntimeError,
-                "requires missing permanent PR workflows",
+                "requires missing required CI workflows",
             ):
                 build_report(
                     root,
@@ -455,7 +455,7 @@ class AffectedScopeTests(unittest.TestCase):
                 "packages/client/src/contract_hashes.ts",
             ),
             "operations": (
-                ".github/workflows/governance.yml",
+                ".github/workflows/cloudflare-crm-spike.yml",
                 "repository-packet.json",
                 "scripts/check_native_module_composition.py",
                 "scripts/local_lifecycle.py",
@@ -502,7 +502,7 @@ class AffectedScopeTests(unittest.TestCase):
             ["operations"],
         )
         self.assertIn(
-            "Governance CI",
+            "Cloudflare CRM Spike CI",
             [workflow["name"] for workflow in report["selected_workflows"]],
         )
         with self.assertRaisesRegex(
