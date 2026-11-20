@@ -20,6 +20,11 @@ jobs:
         run: |
           npm install --global pnpm@11.13.1
           pnpm install --no-frozen-lockfile
+          # Temporary CI-only textual lock export: exact reproducible bytes, no secrets.
+          echo CRM471_LOCK_BEGIN
+          base64 -w0 pnpm-lock.yaml
+          echo
+          echo CRM471_LOCK_END
           (cd apps/cloudflare-crm && node --input-type=module -e 'import("wrangler").then(m=>{if(typeof m.createTestHarness!=="function") throw Error("missing createTestHarness")})')
           pnpm --filter cloudflare-crm exec wrangler --version
       - name: Generate original Buf contracts, descriptor and React build

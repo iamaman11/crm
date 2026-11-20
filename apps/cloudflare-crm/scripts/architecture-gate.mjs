@@ -91,7 +91,7 @@ validateWorkerConfig(production,local);
  check(integration?.owner==="Wrangler/createTestHarness(workerd)"&&integration.fixture_binding==="DB"&&
    integration.direct_sqlite===false&&integration.production_worker_count===1&&integration.local_d1_count===1,
    "one canonical integration runtime policy required");
- check(sources.reduce((count,file)=>count+(read(scope+"/"+file).match(/\bcreateTestHarness\s*\(/g)||[]).length,0)===1&&
+ check(sources.reduce((count,file)=>count+(read(scope+"/"+file).match(/\bruntime\s*=\s*createTestHarness\s*\(/g)||[]).length,0)===1&&
    native.includes("getWorker(config.name)")&&native.includes('applyD1Migrations("DB")')&&
    native.includes("getEnv()")&&!native.includes("new Miniflare("),
    "one native Wrangler harness must own the isolated D1 fixture binding");
