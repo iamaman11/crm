@@ -279,11 +279,15 @@ jobs:
           mkdir -p apps/cloudflare-crm/.release/native-build
           cp -a apps/cloudflare-crm/rust-party/build/. apps/cloudflare-crm/.release/native-build/
           test -s apps/cloudflare-crm/.release/native-build/index_bg.wasm
-      # worker-build 0.9.0 forwards --no-opt into cargo build (CI #791).
-      # Keep the verified native-ci build until upstream supports this flag end-to-end.
+      # Test-key workerd uses wasm-pack's supported dev profile, which skips
+      # Binaryen. The production Worker is still built once with --release and
+      # restored verbatim after the signed D1/Chromium test. Do not replace
+      # this with --no-opt: worker-build 0.9.0 passes that flag to Cargo.
+      # Accept this speed experiment only if the full normal CI + live Gate
+      # passes, with a measured reduction in overall CI time.
       - name: Compile native Rust Access gate using isolated RSA test keys
         working-directory: apps/cloudflare-crm/rust-party
-        run: worker-build --release --locked --features native-ci
+        run: worker-build --dev --locked --features native-ci
       - name: Install and launch Chromium after native compilation
         working-directory: apps/cloudflare-crm
         shell: bash
