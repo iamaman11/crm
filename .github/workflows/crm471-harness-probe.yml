@@ -63,17 +63,28 @@ jobs:
         working-directory: apps/cloudflare-crm
         run: |
           pnpm exec playwright install chromium
-      - name: Execute one native harness against compiled Worker D1 signed Access Proto and Chromium
+      - name: Verify native harness preserves ALL original Rust owner and Chromium evidence
+        working-directory: apps/cloudflare-crm
         env:
           CRM_PROTO_DESCRIPTOR_FILE: /tmp/crm-proto-descriptors.binpb
-        run: node apps/cloudflare-crm/rust-party/test/harness-probe.mjs
+          CRM_SOURCE_SHA: ${{ github.sha }}
+          CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
+        run: node rust-party/test/native.mjs
+      - name: Verify no compiled policy/RPC proof was dropped
+        run: |
+          python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json --runtime-proof /tmp/crm-rpc-runtime.json
+          CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json node apps/cloudflare-crm/scripts/architecture-gate.mjs
+          node scripts/crm-rpc-descriptors.mjs /tmp/crm-proto-descriptors.binpb --require-runtime
+          pnpm --filter cloudflare-crm test
+          pnpm --filter cloudflare-crm typecheck
       - name: Keep compatibility report and experimental lock
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: crm-471-harness-experiment
           path: |
-            apps/cloudflare-crm/harness-probe-report.json
+            apps/cloudflare-crm/e2e-evidence-native/
+            pnpm-lock.yaml
             pnpm-lock.yaml
           if-no-files-found: warn
           retention-days: 7

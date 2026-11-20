@@ -1,11 +1,9 @@
 // Full generated binary Connect contract and actual React against signed workerd/D1.
 import {execFileSync} from "node:child_process";
 import {generateKeyPairSync,createSign,randomUUID,createHash} from "node:crypto";
-import {mkdtempSync,rmSync,writeFileSync,readFileSync} from "node:fs";
-import {Miniflare,Log,LogLevel} from "miniflare";
-import {unstable_getMiniflareWorkerOptions} from "wrangler";
-import {tmpdir} from "node:os";
-import {dirname,join,resolve} from "node:path";
+import {writeFileSync,readFileSync} from "node:fs";
+import {createTestHarness} from "wrangler";
+import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
 import {chromium} from "playwright";
@@ -25,7 +23,6 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryCsvV2,decodeCsvV2,csvV2Path,
   binaryOverviewV2,decodeOverviewV2,overviewV2Path,decodeDomainErrorDetail} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
-const data=mkdtempSync(join(tmpdir(),"crm-native-connect-"));
 let base,runtime,fixtureDb;
 const successfulCalls=new Set();
 // The CLI migrations finish before the runtime starts. Every live fixture
@@ -93,7 +90,6 @@ const rpcFetch=async(path,options)=>{
 const sourceSha=execFileSync("git",["rev-parse","HEAD"],{cwd,encoding:"utf8"}).trim();
 assert.equal(process.env.CRM_SOURCE_SHA,sourceSha,"runtime evidence must identify tested checkout");
 assert.ok(process.env.CRM_RPC_RUNTIME_PROOF,"CI runtime output path required");
-const run=(args)=>execFileSync("npx",["wrangler",...args],{cwd,encoding:"utf8"});
 // SQL fixture access goes through the same native D1 binding as CRM.
 const partySnapshot=async()=>(await sql("SELECT "+
   "(SELECT json_group_array(json_array(tenant,id,state,version,actor)) FROM crm_party_records) AS states,"+
@@ -116,48 +112,41 @@ function signedJwt(identityClaims){
 const jwt=email=>signedJwt({sub:email,email});
 const serviceJwt=common_name=>signedJwt({sub:"",common_name});
 try{
- run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
- run(["d1","execute","crm-rust-party-local","--local","--persist-to",data,
-   "--command","INSERT INTO crm_tenants VALUES('tenant-a','A'),('tenant-b','B');"+
-   "INSERT INTO crm_users(email,tenant_id,role,active) VALUES"+
-   "('native-a@example.test','tenant-a','admin',1),"+
-   "('native-viewer@example.test','tenant-a','viewer',1),"+
-   "('native-b@example.test','tenant-b','admin',1),"+
-   "('service:ci-fixture.access','tenant-a','admin',1);"]);
- // This is a fixture row created in isolated D1 before the Worker starts,
- // not a second implementation of CRM's Party persistence.
- const state=JSON.stringify({party_id:"binary-rpc-proof-01",kind:"organization",
-   display_name:"Original Rust Party",created_at_unix_nanos:10,
-   updated_at_unix_nanos:10,version:1});
- run(["d1","execute","crm-rust-party-local","--local","--persist-to",data,
-   "--command","INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) "+
-     "VALUES('tenant-a','binary-rpc-proof-01','"+state.replaceAll("'","''")+
-     "',1,'fixture-key-01','fixture-digest-01',NULL,'native-a@example.test','Original Rust Party');"]);
- // Wrangler's applied-migration ledger must prevent a second reset.
- run(["d1","migrations","apply","crm-rust-party-local","--local","--persist-to",data]);
- // Use the pinned Wrangler config translator: no second routing or asset
- // configuration, no testing Worker, no direct access to storage files.
+ // Original Rust/WASM entrypoint, isolated original D1, no custom Miniflare lifecycle.
  const configPath=join(cwd,"wrangler.jsonc");
  const config=JSON.parse(readFileSync(configPath,"utf8"));
- const {workerOptions,externalWorkers}=unstable_getMiniflareWorkerOptions(configPath);
- assert.deepEqual(externalWorkers,[],"one CRM Worker; no external fixture Worker");
  assert.equal(config.d1_databases.length,1);
  assert.equal(config.d1_databases[0].binding,"DB");
  assert.equal(config.d1_databases[0].database_id,"00000000-0000-4000-8000-000000000001");
  assert.equal(config.vars.CRM_CI_LOCAL_ONLY,"yes");
- const scriptPath=resolve(cwd,config.main);
- runtime=new Miniflare({
-   host:"127.0.0.1",port:0,defaultPersistRoot:join(data,"v3"),
-   log:new Log(LogLevel.INFO),
-   workers:[{
-     ...workerOptions,name:config.name,scriptPath,modules:true,modulesRoot:dirname(scriptPath),
-     // workers-rs emits ESM with .js names; Miniflare defaults .js to CommonJS.
-     modulesRules:[{type:"ESModule",include:["**/*.js","**/*.mjs"]},...workerOptions.modulesRules],
-     bindings:{...workerOptions.bindings,CRM_NATIVE_CI_JWKS:jwks,GIT_SHA:sourceSha},
-   }],
- });
- base=(await runtime.ready).origin;
- fixtureDb=await runtime.getD1Database("DB",config.name);
+ runtime=createTestHarness({workers:[{
+   configPath,vars:{CRM_NATIVE_CI_JWKS:jwks,GIT_SHA:sourceSha}
+ }]});
+ const listening=await runtime.listen();
+ base=listening.url.origin;
+ const local=runtime.getWorker(config.name);
+ await local.applyD1Migrations("DB");
+ fixtureDb=(await local.getEnv()).DB;
+ assert.ok(fixtureDb,"one original native D1 binding must be accessible");
+ const seededTenants=await fixtureDb.prepare("INSERT INTO crm_tenants VALUES('tenant-a','A'),('tenant-b','B')").run();
+ assert.equal(seededTenants.success,true);
+ const seededUsers=await fixtureDb.prepare("INSERT INTO crm_users(email,tenant_id,role,active) VALUES"+
+   "('native-a@example.test','tenant-a','admin',1),"+
+   "('native-viewer@example.test','tenant-a','viewer',1),"+
+   "('native-b@example.test','tenant-b','admin',1),"+
+   "('service:ci-fixture.access','tenant-a','admin',1)").run();
+ assert.equal(seededUsers.success,true);
+ const state=JSON.stringify({party_id:"binary-rpc-proof-01",kind:"organization",
+   display_name:"Original Rust Party",created_at_unix_nanos:10,
+   updated_at_unix_nanos:10,version:1});
+ const seededState=await fixtureDb.prepare("INSERT INTO crm_party_records"+
+   "(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name)"+
+   " VALUES(?,?,?,?,?,?,?,?,?)").bind(
+     "tenant-a","binary-rpc-proof-01",state,1,"fixture-key-01","fixture-digest-01",
+     null,"native-a@example.test","Original Rust Party").run();
+ assert.equal(seededState.success,true);
+ // Reapply migrations to prove the original migration ledger is idempotent.
+ await local.applyD1Migrations("DB");
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_tenants"))[0].n,2,
    "runtime must bind the exact Wrangler-migrated isolated test database");
  console.log(JSON.stringify({event:"crm.native-ci.d1-runtime",source_sha:sourceSha,
@@ -3881,6 +3870,5 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    result:"PASS",admin:true,viewer:true,unauthenticated_denied:true,
    legacy_mutations:0,verified_auth:true}));
 }finally{
- if(runtime)await runtime.dispose();
- rmSync(data,{recursive:true,force:true});
+ if(runtime)await runtime.close();
 }

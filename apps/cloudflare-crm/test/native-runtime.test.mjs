@@ -22,7 +22,7 @@ test("Wrangler cannot publish a public or preview URL before release verificatio
 });
 
 test("active D1 fixtures cannot use an independent SQLite connection",()=>{
- assert.doesNotThrow(()=>validateNativeFixtureSource('const db=await runtime.getD1Database("DB"); await db.batch(statements);',"fixture.mjs"));
+ assert.doesNotThrow(()=>validateNativeFixtureSource('const db=(await runtime.getWorker("crm-rust-party-ci-local").getEnv()).DB; await db.batch(statements);',"fixture.mjs"));
  for(const source of ['import {DatabaseSync} from "node:sqlite";','import SQLite from "better-sqlite3";','db.exec("BEGIN IMMEDIATE")','open("private.sqlite")'])
   assert.throws(()=>validateNativeFixtureSource(source,"fixture.mjs"),/direct SQLite access/);
 });

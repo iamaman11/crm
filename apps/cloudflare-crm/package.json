@@ -16,7 +16,6 @@
   },
   "devDependencies": {
     "vite": "7.2.2",
-    "miniflare": "4.20251011.1",
     "wrangler": "4.165.0",
     "playwright": "1.57.0",
     "@types/react": "19.2.17",
