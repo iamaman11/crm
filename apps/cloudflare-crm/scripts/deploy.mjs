@@ -9,7 +9,8 @@ import {
   verifyAnonymousDenial,
   verifyNfcMigrationNames,
   verifyTracePrivacySettings,
-  classifySignedSessionReadback
+  classifySignedSessionReadback,
+  parseRetryAfterMs
 } from "./release-readback.mjs";
 const required=n=>{if(!process.env[n])throw Error("Missing "+n);return process.env[n];};
 const sha=required("GITHUB_SHA");
@@ -28,6 +29,7 @@ async function cf(path,method="GET",body,timeoutMs=0){
   // The API can return an HTML edge error (502/503/524) instead of JSON.
   // Never echo its body, request headers, Access credentials or bearer token.
   const ray=r.headers.get("cf-ray");
+  const retryAfterMs=parseRetryAfterMs(r.headers.get("retry-after"));
   const contentType=r.headers.get("content-type")||"";
   let j;
   try{j=await r.json();}
@@ -35,21 +37,21 @@ async function cf(path,method="GET",body,timeoutMs=0){
     throw Object.assign(new Error("Cloudflare "+method+" "+path+
       " HTTP "+r.status+" NON_JSON content_type="+
       (contentType||"none").slice(0,80)+" cf_ray="+(ray||"none")),
-      {cfHttpStatus:r.status,cfRay:ray,cfInvalidJson:true,
+      {cfHttpStatus:r.status,cfRay:ray,cfRetryAfterMs:retryAfterMs,cfInvalidJson:true,
         cfJsonContent:/^application\/(?:json|[^;]+\+json)(?:\s*;|\s*$)/i.test(contentType)});
   }
   if(!r.ok||!j?.success)throw Object.assign(new Error(
     "Cloudflare "+method+" "+path+" HTTP "+r.status+" cf_ray="+(ray||"none")+
     " codes="+JSON.stringify((j?.errors||[]).map(e=>e.code))),
-    {cfHttpStatus:r.status,cfRay:ray});
+    {cfHttpStatus:r.status,cfRay:ray,cfRetryAfterMs:retryAfterMs});
   return j.result;
 }
-// Only explicitly read-only D1 audit SELECT and telemetry search are replayable.
-// Never retry a D1 mutation, Worker deploy, subdomain POST or an ambiguous
-// business request. A failing 401/403/400 or HTML 200 remains fail-closed.
-// A malformed/truncated declared JSON 200 from read-only telemetry can
-// be replayed within the same existing bounded readback budget.
-async function cfReadback(path,body){
+// Only read-only D1 SELECT and Cloudflare telemetry may be retried.
+// Telemetry calls are serialized at this single owner: no burst of concurrent
+// POST queries, no second rate-limit worker or test-only infrastructure.
+let telemetryNextAt=0;
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function cfReadback(path,body,phaseDeadline=Infinity){
   const audit=path==="/d1/database/"+database+"/query"&&
     typeof body?.sql==="string"&&/^SELECT\b/i.test(body.sql.trim())&&
     !body.sql.includes(";");
@@ -57,20 +59,40 @@ async function cfReadback(path,body){
     body?.view==="events"&&typeof body?.parameters?.needle?.value==="string";
   if(!audit&&!traces)throw Error("CRM_READBACK_RETRY_NOT_READ_ONLY");
   const target=audit?"d1-audit":"telemetry";
-  const started=Date.now();
+  const deadline=Math.min(Date.now()+90000,phaseDeadline);
   for(let attempt=1;;attempt++){
-    try{return await cf(path,"POST",body,30000);}
-    catch(error){
+    const remaining=deadline-Date.now();
+    if(remaining<=0)throw Error("CRM_READBACK_DEADLINE_EXCEEDED "+target);
+    if(traces){
+      const delayMs=Math.max(0,telemetryNextAt-Date.now());
+      if(delayMs>0){
+        if(delayMs>=deadline-Date.now())
+          throw Error("CRM_TELEMETRY_COOLDOWN_EXCEEDS_DEADLINE");
+        await pause(delayMs);
+      }
+    }
+    try{
+      const result=await cf(path,"POST",body,
+        Math.max(1,Math.min(30000,deadline-Date.now())));
+      // One query/second across request-log and span phases, not per batch.
+      if(traces)telemetryNextAt=Date.now()+1000;
+      return result;
+    }catch(error){
       const status=error?.cfHttpStatus;
       const retryable=status===429||(typeof status==="number"&&status>=500&&status<=599)||
         (status===undefined&&["TimeoutError","AbortError","TypeError"].includes(error?.name))||
         (traces&&status===200&&error?.cfInvalidJson===true&&error.cfJsonContent===true);
-      if(!retryable||attempt>=3||Date.now()-started>=90000)throw error;
-      const delayMs=Math.min(attempt*2500,5000);
+      // A valid Retry-After is a floor, not a hint to cap at our backoff.
+      const delayMs=Math.max(Math.min(2500*2**(attempt-1),10000)+
+        Math.floor(Math.random()*250),error?.cfRetryAfterMs??0);
+      if(traces&&status===429)
+        telemetryNextAt=Math.max(telemetryNextAt,Date.now()+delayMs);
+      if(!retryable||attempt>=3||Date.now()+delayMs>=deadline)throw error;
       console.log(JSON.stringify({event:"crm.cf-readback-retry",target,attempt,
         http_status:status??"transport",cf_ray:error?.cfRay??null,
         ...(error?.cfInvalidJson?{reason:"NON_JSON"}:{}),delay_ms:delayMs}));
-      await new Promise(resolve=>setTimeout(resolve,delayMs));
+      // Telemetry waits through the shared cooldown at the next attempt.
+      if(!traces)await pause(delayMs);
     }
   }
 }
@@ -528,39 +550,34 @@ async function verifyData(){
   // A delayed event remains mandatory: extend the bounded indexing window,
   // never weaken the exact source-version/request-id/path/status match below.
   const traceAttempts=120;
-  for(let attempt=0;attempt<traceAttempts&&pending.length;attempt++){
+  const traceDeadline=Date.now()+8*60*1000;
+  for(let attempt=0;attempt<traceAttempts&&pending.length&&Date.now()<traceDeadline;attempt++){
     const missing=[];
-    for(let i=0;i<pending.length;i+=4){
-      const batch=pending.slice(i,i+4);
-      const found=await Promise.all(batch.map(async entry=>{
-        const data=await cfReadback("/workers/observability/telemetry/query",{
-          queryId:"crm-350-typed-browser",view:"events",
-          timeframe:{from,to:Date.now()+1000},limit:20,
-          parameters:{needle:{value:entry.request_id},filters:[
-            {key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
-        });
-        const matched=(data.events?.events||[]).find(event=>
-          event.source?.event==="crm.native.request"&&event.source?.request_id===entry.request_id&&
-          event.source?.operation===entry.path&&event.source?.status===entry.status&&
-          (event.source?.error_code??null)===(entry.error_code??null)&&
-          event.$workers?.scriptVersion?.id===liveVersion);
-        if(!matched)return false;
-        // Cloudflare's native request log supplies the trace ID, not a
-        // handwritten correlation key or a second tracing SDK.
-        const traceId=matched.$metadata?.traceId;
-        assert.match(traceId??"",/^[a-f0-9]{32}$/i,
-          "CRM native request log must carry a valid Cloudflare trace ID");
-        requestTraces.set(entry.request_id,traceId);
-        return true;
-      }));
-      batch.forEach((entry,index)=>{if(!found[index])missing.push(entry);});
+    // Sequential search avoids the account-wide Telemetry 429 burst.
+    for(const entry of pending){
+      const data=await cfReadback("/workers/observability/telemetry/query",{
+        queryId:"crm-350-typed-browser",view:"events",
+        timeframe:{from,to:Date.now()+1000},limit:20,
+        parameters:{needle:{value:entry.request_id},filters:[
+          {key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
+      },traceDeadline);
+      const matched=(data.events?.events||[]).find(event=>
+        event.source?.event==="crm.native.request"&&event.source?.request_id===entry.request_id&&
+        event.source?.operation===entry.path&&event.source?.status===entry.status&&
+        (event.source?.error_code??null)===(entry.error_code??null)&&
+        event.$workers?.scriptVersion?.id===liveVersion);
+      if(!matched){missing.push(entry);continue;}
+      const traceId=matched.$metadata?.traceId;
+      assert.match(traceId??"",/^[a-f0-9]{32}$/i,
+        "CRM native request log must carry a valid Cloudflare trace ID");
+      requestTraces.set(entry.request_id,traceId);
     }
     pending=missing;
     if(pending.length&&(attempt===0||(attempt+1)%20===0))
       console.log(JSON.stringify({event:"crm.request-trace-readback",result:"WAIT",
         attempt:attempt+1,pending:pending.length,elapsed_ms:Date.now()-evidence.started_at}));
-    if(pending.length&&attempt<traceAttempts-1)
-      await new Promise(resolve=>setTimeout(resolve,2500));
+    if(pending.length&&attempt<traceAttempts-1&&Date.now()<traceDeadline)
+      await pause(Math.min(2500,Math.max(0,traceDeadline-Date.now())));
   }
   assert.equal(pending.length,0,"Missing Cloudflare request traces: "+pending.map(x=>x.path).join(","));
   // Validate the actual trace graph, not only the existence of our console
@@ -608,13 +625,13 @@ async function verifyData(){
     assert.match(traceId??"",/^[a-f0-9]{32}$/i,
       "Accepted browser request missing its Cloudflare trace ID");
     let verified=false;
-    for(let attempt=0;attempt<30;attempt++){
+    for(let attempt=0;attempt<30&&Date.now()<traceDeadline;attempt++){
       const data=await cfReadback("/workers/observability/telemetry/query",{
         queryId:"crm-471-native-trace-span-evidence",view:"events",
         timeframe:{from,to:Date.now()+1000},limit:100,
         parameters:{needle:{value:traceId},filters:[
           {key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
-      });
+      },traceDeadline);
       const linked=(data.events?.events||[]).filter(event=>
         (event.source?.traceId??event.$metadata?.traceId)===traceId);
       const eventsText=JSON.stringify(linked);
@@ -630,7 +647,8 @@ async function verifyData(){
         verified=true;
         break;
       }
-      if(attempt<29)await new Promise(resolve=>setTimeout(resolve,2500));
+      if(attempt<29&&Date.now()<traceDeadline)
+        await pause(Math.min(2500,Math.max(0,traceDeadline-Date.now())));
     }
     assert.ok(verified,needsD1?
       "Committed CRM mutation has no native Cloudflare D1 span":

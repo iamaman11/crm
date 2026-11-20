@@ -16,6 +16,7 @@ async function subprocessEntry(){
  const nfcLegacy=variant==="nfc-migration"||variant==="nfc-noncanonical";
  let enabled=mode==="deploy",migrated=variant!=="migration-fails"&&!nfcLegacy,published=false,edgeAttempts=0,role="viewer";
  let auditAttempts=0,telemetryAttempts=0,anonymousAttempts=0;
+ let telemetryInFlight=0,maxTelemetryInFlight=0;
  const commands=[];
  let db;
  if(mode==="deploy"){
@@ -111,6 +112,18 @@ async function subprocessEntry(){
    }
    if(path.endsWith("/telemetry/query")){
      telemetryAttempts++;
+     if(mode==="verify-data"&&variant.startsWith("telemetry-429-")&&
+        (variant.includes("-persistent-")||telemetryAttempts===1)){
+       const headers={"content-type":"application/json","cf-ray":"fixture-ray-123"};
+       if(variant.endsWith("-seconds"))headers["retry-after"]="3";
+       if(variant.endsWith("-date"))headers["retry-after"]=new Date(Date.now()+3000).toUTCString();
+       if(variant.endsWith("-invalid"))headers["retry-after"]="not-a-date";
+       return new Response(JSON.stringify({success:false,errors:[{code:10102}]}),
+         {status:429,headers});
+     }
+     if(mode==="verify-data"&&variant==="telemetry-403")
+       return new Response(JSON.stringify({success:false,errors:[{code:10000}]}),
+         {status:403,headers:{"content-type":"application/json","cf-ray":"fixture-ray-123"}});
      const needle=JSON.parse(options.body).parameters?.needle?.value;
      const traceFor=index=>String(index+1).padStart(32,"0");
      const traceIndex=fixtureRequests.findIndex((_,index)=>traceFor(index)===needle);
@@ -223,10 +236,20 @@ async function subprocessEntry(){
    }
    throw Error("Unexpected Cloudflare endpoint "+path);
  };
+ // A microtask boundary makes any accidental Promise.all burst observable.
+ const originalFetch=globalThis.fetch;
+ globalThis.fetch=async (...args)=>{
+   const telemetry=new URL(args[0]).pathname.endsWith("/telemetry/query");
+   if(!telemetry)return originalFetch(...args);
+   telemetryInFlight++;
+   maxTelemetryInFlight=Math.max(maxTelemetryInFlight,telemetryInFlight);
+   try{await Promise.resolve();return await originalFetch(...args);}
+   finally{telemetryInFlight--;}
+ };
  process.argv[2]=mode;
  try{await import("./deploy.mjs");}finally{
    writeFileSync("posts.json",JSON.stringify(posts));
-   writeFileSync("state.json",JSON.stringify({enabled,migrated,published,edgeAttempts,anonymousAttempts,telemetryAttempts,commands,role}));
+   writeFileSync("state.json",JSON.stringify({enabled,migrated,published,edgeAttempts,anonymousAttempts,telemetryAttempts,maxTelemetryInFlight,commands,role}));
    db?.close();
  }
 }
@@ -439,7 +462,7 @@ function run(mode,variant="valid"){
        CLOUDFLARE_ACCOUNT_ID:"5bd5e1e1e813f061afc259e91334262d",CRM_D1_DATABASE_ID:database,
        CLOUDFLARE_API_TOKEN:"synthetic-token",CRM_E2E_A_CLIENT_ID:"synthetic.access",CRM_E2E_A_CLIENT_SECRET:"synthetic-secret",
        CRM_RELEASE_TEST_FIXTURE:JSON.stringify({mode,variant,sha,database,audit,requestId,rpcPath,fixtureRequests,fixtureWrites})}});
-   return {status:result.status,error:result.stderr,posts:JSON.parse(readFileSync(join(dir,"posts.json"),"utf8")),
+   return {status:result.status,error:result.stderr,stdout:result.stdout,posts:JSON.parse(readFileSync(join(dir,"posts.json"),"utf8")),
      state:JSON.parse(readFileSync(join(dir,"state.json"),"utf8")),deployed:existsSync(join(out,"deployed.json")),
      stopped:existsSync(join(out,"failed-release.json")),accepted:existsSync(join(out,"accepted.json")),checkpoint:existsSync(join(out,"checkpoint.json"))};
  }finally{rmSync(dir,{recursive:true,force:true});}
@@ -460,6 +483,49 @@ for(const variant of ["unrelated","wrong-database"])test("failure cannot stop "+
 test("matching browser, D1 and version-specific Logs evidence passes the release validator",()=>{
  const result=run("verify-data");
  assert.equal(result.status,0,result.error);assert.equal(result.accepted,true);
+ assert.equal(result.state.maxTelemetryInFlight,1,
+   "Cloudflare Telemetry must be queried serially");
+});
+test("Retry-After delta-seconds, HTTP-date and invalid headers are parsed safely",async()=>{
+ const {parseRetryAfterMs}=await import("../scripts/release-readback.mjs");
+ const now=Date.parse("Fri, 20 Nov 2026 18:00:00 GMT");
+ assert.equal(parseRetryAfterMs("3",now),3000);
+ assert.equal(parseRetryAfterMs("Fri, 20 Nov 2026 18:00:04 GMT",now),4000);
+ assert.equal(parseRetryAfterMs("Fri, 20 Nov 2026 17:59:59 GMT",now),0);
+ for(const invalid of [null,"","not-a-date","-1","3.5","999999999999999999999999"])
+   assert.equal(parseRetryAfterMs(invalid,now),null);
+});
+for(const variant of [
+ "telemetry-429-transient-seconds","telemetry-429-transient-date",
+ "telemetry-429-transient-invalid","telemetry-429-transient-missing"
+])test("transient Telemetry 429 recovers without retrying writes: "+variant,()=>{
+ const result=run("verify-data",variant);
+ assert.equal(result.status,0,result.error);
+ assert.equal(result.accepted,true);
+ assert.equal(result.state.maxTelemetryInFlight,1);
+ assert.equal(result.posts.filter(p=>p.endsWith("/subdomain")).length,0);
+ const retry=result.stdout.split("\n").filter(x=>x.includes("crm.cf-readback-retry"))
+   .map(x=>JSON.parse(x)).find(x=>x.http_status===429);
+ assert.ok(retry,"A 429 must be observable");
+ if(variant.endsWith("-seconds"))assert.ok(retry.delay_ms>=3000,
+   "A valid Retry-After must not be shortened");
+});
+for(const variant of ["telemetry-429-persistent-seconds","telemetry-429-persistent-date"])
+ test("persistent Telemetry 429 stays fail-closed after three reads: "+variant,()=>{
+   const result=run("verify-data",variant);
+   assert.notEqual(result.status,0);
+   assert.equal(result.accepted,false);
+   assert.match(result.error,/HTTP 429/);
+   assert.equal(result.state.telemetryAttempts,3);
+   assert.equal(result.state.maxTelemetryInFlight,1);
+   assert.equal(result.posts.filter(p=>p.endsWith("/subdomain")).length,0);
+ });
+test("Telemetry nonretryable 403 fails closed without another POST",()=>{
+ const result=run("verify-data","telemetry-403");
+ assert.notEqual(result.status,0);
+ assert.equal(result.accepted,false);
+ assert.match(result.error,/HTTP 403/);
+ assert.equal(result.state.telemetryAttempts,1);
 });
 for(const variant of ["transient-html-audit","transient-html-telemetry","transient-invalid-json-telemetry"])
  test("transient HTML Cloudflare API readback is retried without replaying a mutation: "+variant,()=>{
@@ -476,10 +542,10 @@ for(const variant of ["persistent-html-telemetry","html-success-telemetry","pers
    assert.equal(result.accepted,false);
    assert.match(result.error,/NON_JSON/);
    assert.match(result.error,/cf_ray=fixture-ray-123/);
-   // Four concurrent request-correlation probes: one HTTP 200 HTML response,
-   // or three bounded attempts per probe for invalid JSON. No write is retried.
-   if(variant==="persistent-invalid-json-telemetry")assert.equal(result.state.telemetryAttempts,12);
-   if(variant==="html-success-telemetry")assert.equal(result.state.telemetryAttempts,4);
+   // Serialized request-correlation probes: only the current read retries.
+   if(variant==="persistent-invalid-json-telemetry")assert.equal(result.state.telemetryAttempts,3);
+   if(variant==="html-success-telemetry")assert.equal(result.state.telemetryAttempts,1);
+   assert.equal(result.state.maxTelemetryInFlight,1);
    assert.ok(!result.error.includes("<!DOCTYPE"),
      "never print an HTML error body or upstream credentials");
  });

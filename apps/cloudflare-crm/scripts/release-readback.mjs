@@ -2,6 +2,23 @@
 // Never replay a write, accept a network error as denial, or accept an
 // unauthorized success. Each attempt has its own bounded connection.
 
+
+ // Retry-After applies only to replayable read-only Cloudflare API calls.
+ // Return null for invalid or absent headers; never clip a valid server delay.
+ export function parseRetryAfterMs(value,now=Date.now()){
+   if(typeof value!=="string")return null;
+   const text=value.trim();
+   if(/^\d+$/.test(text)){
+     const seconds=Number(text);
+     return Number.isSafeInteger(seconds)&&Number.isSafeInteger(seconds*1000)?
+       seconds*1000:null;
+   }
+   if(!/^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(text))
+     return null;
+   const at=Date.parse(text);
+   return Number.isFinite(at)?Math.max(0,at-now):null;
+ }
+
 const retryableReadbackCodes = new Set([
   "ECONNRESET","ETIMEDOUT","EPIPE","UND_ERR_SOCKET",
   "UND_ERR_CONNECT_TIMEOUT","UND_ERR_HEADERS_TIMEOUT","EAI_AGAIN"
