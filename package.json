@@ -14,7 +14,7 @@
     "web:lint": "pnpm -r --if-present lint",
     "web:test": "pnpm -r --if-present test",
     "web:build": "pnpm web:generate && pnpm --filter @ultimate-crm/web build",
-    "web:check": "pnpm web:typecheck && pnpm web:lint && pnpm web:test && pnpm web:build"
+    "web:check": "pnpm gen && pnpm --filter @ultimate-crm/client typecheck && pnpm --filter @ultimate-crm/ui typecheck && pnpm web:lint && pnpm web:test && pnpm --filter @ultimate-crm/web build"
   },
   "devDependencies": {
     "binaryen": "132.0.0",

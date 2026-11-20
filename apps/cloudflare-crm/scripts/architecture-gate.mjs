@@ -136,6 +136,29 @@ check(tomlScalar("apps/cloudflare-crm/rust-party/Cargo.toml","package","edition"
   "native Worker compiler boundary differs from workspace policy");
 check(read(".github/workflows/cloudflare-crm-spike.yml").includes(
   "toolchain: "+compiler+"\n"),"CRM CI compiler drift from source toolchain");
+// Keep one developer codegen path and the two intentionally distinct Worker builds.
+// This extends the existing architecture gate; no second registry or generator.
+const rootPackage=JSON.parse(read("package.json"));
+check(rootPackage.scripts?.gen==="pnpm web:generate"&&
+  rootPackage.scripts?.["web:generate"]==="buf generate --template buf.gen.web.yaml",
+  "active TypeScript generation must use the single Buf command");
+check(!Object.values(rootPackage.scripts||{}).some(command=>
+  /generate_contract_bindings|generate_contract_lifecycle|generate_contract_telemetry_catalog|generate_hashes/.test(command)),
+  "legacy contract generators must not enter developer scripts");
+check(rootPackage.scripts?.["web:check"]?.split("pnpm gen").length===2&&
+  !rootPackage.scripts["web:check"].includes("pnpm web:typecheck")&&
+  !rootPackage.scripts["web:check"].includes("pnpm web:build"),
+  "web:check must generate contracts exactly once");
+
+const ciWorkflow=read(".github/workflows/cloudflare-crm-spike.yml");
+const buildCount=needle=>ciWorkflow.split(needle).length-1;
+check(buildCount("run: worker-build --release --locked --features native")===1&&
+  buildCount("run: worker-build --dev --locked --features native-ci")===1,
+  "build production Worker once and isolated test-key Worker once");
+check(buildCount('subprocess.run(["cargo", "test", "--locked", "--workspace", "--all-targets"], check=True)')===1&&
+  !ciWorkflow.includes("run: cargo check --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml"),
+  "CI must test active Rust workspace once and use Clippy for WASM check");
+
 const appPackage=JSON.parse(read("apps/cloudflare-crm/package.json"));
 check(!!appPackage.dependencies?.["@ultimate-crm/client"]&&!!appPackage.dependencies?.["@ultimate-crm/ui"],
  "existing typed client and UI packages required");

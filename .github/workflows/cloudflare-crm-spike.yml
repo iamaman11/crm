@@ -52,7 +52,7 @@ jobs:
           node --check apps/cloudflare-crm/rust-party/test/ui-diagnostics.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
           node --check apps/cloudflare-crm/scripts/deploy.mjs
-          node --test apps/cloudflare-crm/scripts/release-readback.test.mjs
+          # release-readback.test.mjs is executed by the application suite below.
           node --check apps/cloudflare-crm/test/native-runtime.test.mjs
       - name: Verify Python governance and affected-scope tests using declared dependencies
         shell: bash
@@ -117,7 +117,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "Checking current CRM source $GITHUB_SHA; development API compatibility is not frozen" >> "$GITHUB_STEP_SUMMARY"
-          pnpm exec buf build proto
+          # The next step builds the one descriptor set used by all gates.
           pnpm exec buf format -d --exit-code proto
           pnpm exec buf lint proto
       - name: Generate types and check descriptors, architecture and TypeScript
@@ -161,8 +161,7 @@ jobs:
           key: ${{ runner.os }}-crm-rust1100-wasm-v1-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/build.rs', '**/.cargo/config*', 'rust-toolchain*', 'proto/**') }}-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-crm-rust1100-wasm-v1-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/build.rs', '**/.cargo/config*', 'rust-toolchain*', 'proto/**') }}-
-      - name: Compile the actual Worker owner graph for WebAssembly
-        run: cargo check --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native
+      # Clippy checks WASM compilation, so a separate cargo check repeats the work.
       - name: Run Clippy on the actual Worker for WebAssembly
         run: cargo clippy --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations
       - name: Test original Rust owners with the Worker dependency features
@@ -195,9 +194,10 @@ jobs:
               if dep.get("features"):
                   flags.extend(["--features", ",".join(dep["features"])])
               owner_features[module["crate_name"]] = flags
+          # Test every active owner and shared crate with a single Cargo invocation.
+          subprocess.run(["cargo", "test", "--locked", "--workspace", "--all-targets"], check=True)
           native_graphs = {}
           for owner, flags in sorted(owner_features.items()):
-              subprocess.run(["cargo", "test", "--locked", "-p", owner, *flags], check=True)
               native_graphs[owner] = {
                   "feature_flags": flags,
                   "normal_build_dev": subprocess.check_output([

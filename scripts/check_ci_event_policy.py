@@ -176,7 +176,20 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=Path.cwd())
     args = parser.parse_args()
 
-    failures = [result for path in discover_workflows(args.root) if (result := check_workflow(path)).errors]
+    workflows = discover_workflows(args.root)
+    # The former main-only product-plane workflows are not part of CRM.
+    # Only the exact-SHA dev pipeline may build, test or publish this app.
+    canonical = {".github/workflows/cloudflare-crm-spike.yml"}
+    observed = {path.relative_to(args.root).as_posix() for path in workflows}
+    if observed != canonical:
+        print(
+            f"CRM requires exactly one workflow: missing={sorted(canonical - observed)}, "
+            f"unexpected={sorted(observed - canonical)}",
+            file=sys.stderr,
+        )
+        return 1
+
+    failures = [result for path in workflows if (result := check_workflow(path)).errors]
     if failures:
         for result in failures:
             for error in result.errors:
