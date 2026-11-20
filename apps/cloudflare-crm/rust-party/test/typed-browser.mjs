@@ -129,8 +129,24 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        (item.status!==404||item.fromWorker));
      if(invalid.length)
        throw Error("CRM_BROWSER_RELOAD_HTTP_FAILED "+JSON.stringify({attempt,shell}));
-     if(!shell.some(item=>item.status===404&&!item.fromWorker))
+     if(!shell.some(item=>item.status===404&&!item.fromWorker)){
+       // A 200 document without a mounted React shell is an application
+       // failure, not an edge 404. Fail early with bounded safe diagnostics.
+       try {await page.locator(".crm-skip-link").waitFor({state:"attached",timeout:10000});}
+       catch(error){
+         const documentState=await page.evaluate(()=>({
+           path:location.pathname,hash:location.hash,
+           hasReactRoot:Boolean(document.getElementById("root")),
+           hasRoute:Boolean(document.querySelector("[data-crm-route-kind]"))
+         })).catch(()=>({unavailable:true}));
+         throw Error("CRM_BROWSER_RELOAD_RENDER_FAILED "+JSON.stringify({
+           attempt,documentStatus:response?.status()??null,
+           shell,documentState,pageErrors:pageErrors.slice(-3)
+         }),{cause:error});
+       }
+       if(attempt>1)steps.push("Read-only SPA edge 404 recovered after "+attempt+" document requests");
        return response;
+     }
      if(attempt===5)
        throw Error("CRM_BROWSER_RELOAD_EDGE_404_EXHAUSTED "+JSON.stringify({attempt,shell}));
      await new Promise(resolve=>setTimeout(resolve,1500));
