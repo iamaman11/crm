@@ -80,6 +80,18 @@ jobs:
           set -euo pipefail
           cargo fmt --all -- --check
           cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml -- --check
+      - name: Derive authoritative active Cargo.lock (temporary CI-only probe)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo metadata --format-version 1 --no-deps >/dev/null
+          echo CRM_CARGO_LOCK_BEGIN
+          base64 -w 240 Cargo.lock
+          echo
+          echo CRM_CARGO_LOCK_END
+          git diff --stat -- Cargo.lock
+          echo "::error::Lockfile regeneration must be committed before a release can be verified"
+          exit 1
       # #471 S2: independent root dependency security gate. The root lock is
       # free of the upstream Cloudflare chrono advisory; do NOT silently ignore
       # or misreport the separately deferred Worker native/WASM finding.
