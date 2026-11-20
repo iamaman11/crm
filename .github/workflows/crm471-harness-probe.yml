@@ -1,9 +1,9 @@
 name: CRM #471 latest stable compatibility and full native acceptance
-# Temporary validation only on upgrade/stable-2026-11; never deploys or changes dev.
+# Temporary validation only on upgrade/stable-2026-11-final; never deploys or changes dev.
 on:
   push:
     branches:
-      - upgrade/stable-2026-11
+      - upgrade/stable-2026-11-final
 permissions:
   contents: write
   actions: read
@@ -30,6 +30,8 @@ jobs:
           set -euo pipefail
           pnpm --version | grep -Fx '12.21.0'
           pnpm install --no-frozen-lockfile
+          python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
+          python scripts/generate_contract_bindings.py --write
           cargo update --manifest-path Cargo.toml
           cargo update --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml
       - name: Commit generated lockfiles only to this isolated upgrade branch
@@ -37,15 +39,14 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pnpm-lock.yaml Cargo.lock apps/cloudflare-crm/rust-party/Cargo.lock
+          git add pnpm-lock.yaml Cargo.lock apps/cloudflare-crm/rust-party/Cargo.lock contracts/module-contract-bindings.json
           if ! git diff --cached --quiet; then
             git commit -m "chore(deps): refresh generated stable lockfiles [skip ci]"
-            git push origin HEAD:upgrade/stable-2026-11
+            git push origin HEAD:upgrade/stable-2026-11-final-final
           fi
           echo "CRM_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-      - name: Verify Python dependency environment
+      - name: Verify current Python dependency environment
         run: |
-          python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
           python -m pip check
           python -c "import sys, grpc, google.protobuf; print(sys.version); print('grpcio', grpc.__version__, 'protobuf', google.protobuf.__version__)"
       - name: Generate original Buf contracts, descriptor and React build

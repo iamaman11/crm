@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - upgrade/stable-2026-11
     paths:
       - "package.json"
       - "requirements-dev.txt"

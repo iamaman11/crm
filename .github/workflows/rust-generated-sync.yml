@@ -4,7 +4,6 @@ on:
   pull_request:
     branches:
       - main
-      - upgrade/stable-2026-11
     types: [opened, synchronize, reopened]
     paths:
       - "Cargo.toml"
