@@ -394,7 +394,7 @@ async function prepareE2e(){
 
 // Complete native Cloudflare Observability cursor, with no per-request HTTP loop.
 async function readTelemetrySnapshot(from,to,deadline){
-  const limit=2000,seen=new Set(),events=[];
+  const limit=2000,cursors=new Set(),events=[];
   let offset=null;
   for(let page=0;page<32;page++){
     const data=await cfReadback("/workers/observability/telemetry/query",{
@@ -407,11 +407,15 @@ async function readTelemetrySnapshot(from,to,deadline){
     for(const event of batch){
       const id=event?.$metadata?.id;
       assert.ok(typeof id==="string"&&id,"CRM_TELEMETRY_CURSOR_MISSING");
-      assert.ok(!seen.has(id),"CRM_TELEMETRY_CURSOR_REPEATED");
-      seen.add(id);events.push(event);
+      // Cloudflare may reuse one metadata ID for multiple legitimate
+      // events on the same page. Never drop those logs or native spans.
+      events.push(event);
     }
     if(batch.length<limit)return events;
-    offset=batch.at(-1).$metadata.id;
+    const nextCursor=batch.at(-1).$metadata.id;
+    assert.ok(!cursors.has(nextCursor),"CRM_TELEMETRY_CURSOR_REPEATED");
+    cursors.add(nextCursor);
+    offset=nextCursor;
   }
   throw Error("CRM_TELEMETRY_PAGE_LIMIT_EXCEEDED");
 }

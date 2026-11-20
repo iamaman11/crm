@@ -138,7 +138,10 @@ async function subprocessEntry(){
      assert.equal(query.parameters.filters[0].value,"crm-dev");
      const traceFor=index=>String(index+1).padStart(32,"0"),events=[];
      const add=(id,metadata,source,workers)=>events.push({
-       $metadata:{id,...metadata},...(source?{source}:{}),...(workers?{$workers:workers}:{})});
+       // Match real Cloudflare pages: distinct span and request events may
+       // share $metadata.id; only a repeated *pagination cursor* is invalid.
+       $metadata:{id:variant==="large-telemetry-scope"&&id==="span-0"?"request-0":id,...metadata},
+       ...(source?{source}:{}),...(workers?{$workers:workers}:{})});
      for(let index=0;index<fixtureRequests.length;index++){
        const entry=fixtureRequests[index],traceId=traceFor(index);
        if(variant!=="missing-logs")add("request-"+index,
