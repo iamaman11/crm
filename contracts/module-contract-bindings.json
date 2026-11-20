@@ -12,11 +12,25 @@
           "response": "crm.activities.v1.CompleteTaskResponse"
         },
         {
+          "id": "activities.task.complete",
+          "version": "2.0.0",
+          "rpc": "crm.activities.v2.TaskService.CompleteTask",
+          "request": "crm.activities.v2.CompleteTaskRequest",
+          "response": "crm.activities.v2.CompleteTaskResponse"
+        },
+        {
           "id": "activities.task.create",
           "version": "1.1.0",
           "rpc": "crm.activities.v1.TaskService.CreateTask",
           "request": "crm.activities.v1.CreateTaskRequest",
           "response": "crm.activities.v1.CreateTaskResponse"
+        },
+        {
+          "id": "activities.task.create",
+          "version": "2.0.0",
+          "rpc": "crm.activities.v2.TaskService.CreateTask",
+          "request": "crm.activities.v2.CreateTaskRequest",
+          "response": "crm.activities.v2.CreateTaskResponse"
         },
         {
           "id": "activities.task.get",
@@ -26,11 +40,25 @@
           "response": "crm.activities.v1.GetTaskResponse"
         },
         {
+          "id": "activities.task.get",
+          "version": "2.0.0",
+          "rpc": "crm.activities.v2.TaskService.GetTask",
+          "request": "crm.activities.v2.GetTaskRequest",
+          "response": "crm.activities.v2.GetTaskResponse"
+        },
+        {
           "id": "activities.task.list",
           "version": "1.0.0",
           "rpc": "crm.activities.v1.TaskService.ListTasks",
           "request": "crm.activities.v1.ListTasksRequest",
           "response": "crm.activities.v1.ListTasksResponse"
+        },
+        {
+          "id": "activities.task.list",
+          "version": "2.0.0",
+          "rpc": "crm.activities.v2.TaskService.ListTasks",
+          "request": "crm.activities.v2.ListTasksRequest",
+          "response": "crm.activities.v2.ListTasksResponse"
         },
         {
           "id": "activities.task.schedule_reminder",
@@ -45,6 +73,13 @@
           "rpc": "crm.activities.v1.TaskService.UpdateTask",
           "request": "crm.activities.v1.UpdateTaskRequest",
           "response": "crm.activities.v1.UpdateTaskResponse"
+        },
+        {
+          "id": "activities.task.update",
+          "version": "2.0.0",
+          "rpc": "crm.activities.v2.TaskService.UpdateTask",
+          "request": "crm.activities.v2.UpdateTaskRequest",
+          "response": "crm.activities.v2.UpdateTaskResponse"
         }
       ],
       "events": [
@@ -88,11 +123,32 @@
           "response": "crm.consents.v1.GetConsentAuthorizationResponse"
         },
         {
+          "id": "consents.authorization.get",
+          "version": "2.0.0",
+          "rpc": "crm.consents.v2.ConsentAuthorizationService.GetConsentAuthorization",
+          "request": "crm.consents.v2.GetConsentAuthorizationRequest",
+          "response": "crm.consents.v2.GetConsentAuthorizationResponse"
+        },
+        {
+          "id": "consents.authorization.grant-verified-email",
+          "version": "2.0.0",
+          "rpc": "crm.consents.v2.ConsentAuthorizationService.GrantVerifiedEmailConsent",
+          "request": "crm.consents.v2.GrantVerifiedEmailConsentRequest",
+          "response": "crm.consents.v2.GrantVerifiedEmailConsentResponse"
+        },
+        {
           "id": "consents.authorization.list",
           "version": "1.0.0",
           "rpc": "crm.consents.v1.ConsentAuthorizationService.ListConsentAuthorizations",
           "request": "crm.consents.v1.ListConsentAuthorizationsRequest",
           "response": "crm.consents.v1.ListConsentAuthorizationsResponse"
+        },
+        {
+          "id": "consents.authorization.list",
+          "version": "2.0.0",
+          "rpc": "crm.consents.v2.ConsentAuthorizationService.ListConsentAuthorizations",
+          "request": "crm.consents.v2.ListConsentAuthorizationsRequest",
+          "response": "crm.consents.v2.ListConsentAuthorizationsResponse"
         },
         {
           "id": "consents.authorization.withdraw",
@@ -102,11 +158,32 @@
           "response": "crm.consents.v1.WithdrawConsentAuthorizationResponse"
         },
         {
+          "id": "consents.authorization.withdraw",
+          "version": "2.0.0",
+          "rpc": "crm.consents.v2.ConsentAuthorizationService.WithdrawConsentAuthorization",
+          "request": "crm.consents.v2.WithdrawConsentAuthorizationRequest",
+          "response": "crm.consents.v2.WithdrawConsentAuthorizationResponse"
+        },
+        {
           "id": "consents.communication.authorize",
           "version": "1.0.0",
           "rpc": "crm.consents.v1.ConsentAuthorizationService.AuthorizeCommunication",
           "request": "crm.consents.v1.AuthorizeCommunicationRequest",
           "response": "crm.consents.v1.AuthorizeCommunicationResponse"
+        },
+        {
+          "id": "consents.communication.evaluate",
+          "version": "2.0.0",
+          "rpc": "crm.consents.v2.ConsentAuthorizationService.EvaluateConsent",
+          "request": "crm.consents.v2.EvaluateConsentRequest",
+          "response": "crm.consents.v2.EvaluateConsentResponse"
+        },
+        {
+          "id": "consents.communication.suppress",
+          "version": "2.0.0",
+          "rpc": "crm.consents.v2.ConsentAuthorizationService.SuppressCommunication",
+          "request": "crm.consents.v2.SuppressCommunicationRequest",
+          "response": "crm.consents.v2.SuppressCommunicationResponse"
         },
         {
           "id": "consents.privacy.scope.contribute",
@@ -140,11 +217,25 @@
           "response": "crm.contact_points.v1.CreateContactPointResponse"
         },
         {
+          "id": "contact-points.contact-point.create",
+          "version": "2.0.0",
+          "rpc": "crm.contact_points.v2.ContactPointService.CreateContactPoint",
+          "request": "crm.contact_points.v2.CreateContactPointRequest",
+          "response": "crm.contact_points.v2.CreateContactPointResponse"
+        },
+        {
           "id": "contact-points.contact-point.get",
           "version": "1.0.0",
           "rpc": "crm.contact_points.v1.ContactPointService.GetContactPoint",
           "request": "crm.contact_points.v1.GetContactPointRequest",
           "response": "crm.contact_points.v1.GetContactPointResponse"
+        },
+        {
+          "id": "contact-points.contact-point.get",
+          "version": "2.0.0",
+          "rpc": "crm.contact_points.v2.ContactPointService.GetContactPoint",
+          "request": "crm.contact_points.v2.GetContactPointRequest",
+          "response": "crm.contact_points.v2.GetContactPointResponse"
         },
         {
           "id": "contact-points.contact-point.list",
@@ -154,6 +245,13 @@
           "response": "crm.contact_points.v1.ListContactPointsResponse"
         },
         {
+          "id": "contact-points.contact-point.list",
+          "version": "2.0.0",
+          "rpc": "crm.contact_points.v2.ContactPointService.ListContactPoints",
+          "request": "crm.contact_points.v2.ListContactPointsRequest",
+          "response": "crm.contact_points.v2.ListContactPointsResponse"
+        },
+        {
           "id": "contact-points.contact-point.update",
           "version": "1.0.0",
           "rpc": "crm.contact_points.v1.ContactPointService.UpdateContactPoint",
@@ -161,11 +259,25 @@
           "response": "crm.contact_points.v1.UpdateContactPointResponse"
         },
         {
+          "id": "contact-points.contact-point.update",
+          "version": "2.0.0",
+          "rpc": "crm.contact_points.v2.ContactPointService.UpdateContactPoint",
+          "request": "crm.contact_points.v2.UpdateContactPointRequest",
+          "response": "crm.contact_points.v2.UpdateContactPointResponse"
+        },
+        {
           "id": "contact-points.contact-point.verify",
           "version": "1.0.0",
           "rpc": "crm.contact_points.v1.ContactPointService.VerifyContactPoint",
           "request": "crm.contact_points.v1.VerifyContactPointRequest",
           "response": "crm.contact_points.v1.VerifyContactPointResponse"
+        },
+        {
+          "id": "contact-points.contact-point.verify-own-email",
+          "version": "2.0.0",
+          "rpc": "crm.contact_points.v2.ContactPointService.VerifyOwnEmailContactPoint",
+          "request": "crm.contact_points.v2.VerifyOwnEmailContactPointRequest",
+          "response": "crm.contact_points.v2.VerifyOwnEmailContactPointResponse"
         },
         {
           "id": "contact_points.privacy.scope.contribute",
@@ -204,11 +316,25 @@
           "response": "crm.accounts.v1.CreateAccountResponse"
         },
         {
+          "id": "accounts.account.create",
+          "version": "2.0.0",
+          "rpc": "crm.accounts.v2.AccountService.CreateAccount",
+          "request": "crm.accounts.v2.CreateAccountRequest",
+          "response": "crm.accounts.v2.CreateAccountResponse"
+        },
+        {
           "id": "accounts.account.get",
           "version": "1.0.0",
           "rpc": "crm.accounts.v1.AccountService.GetAccount",
           "request": "crm.accounts.v1.GetAccountRequest",
           "response": "crm.accounts.v1.GetAccountResponse"
+        },
+        {
+          "id": "accounts.account.get",
+          "version": "2.0.0",
+          "rpc": "crm.accounts.v2.AccountService.GetAccount",
+          "request": "crm.accounts.v2.GetAccountRequest",
+          "response": "crm.accounts.v2.GetAccountResponse"
         },
         {
           "id": "accounts.account.list",
@@ -218,11 +344,25 @@
           "response": "crm.accounts.v1.ListAccountsResponse"
         },
         {
+          "id": "accounts.account.list",
+          "version": "2.0.0",
+          "rpc": "crm.accounts.v2.AccountService.ListAccounts",
+          "request": "crm.accounts.v2.ListAccountsRequest",
+          "response": "crm.accounts.v2.ListAccountsResponse"
+        },
+        {
           "id": "accounts.account.update",
           "version": "1.0.0",
           "rpc": "crm.accounts.v1.AccountService.UpdateAccount",
           "request": "crm.accounts.v1.UpdateAccountRequest",
           "response": "crm.accounts.v1.UpdateAccountResponse"
+        },
+        {
+          "id": "accounts.account.update",
+          "version": "2.0.0",
+          "rpc": "crm.accounts.v2.AccountService.UpdateAccount",
+          "request": "crm.accounts.v2.UpdateAccountRequest",
+          "response": "crm.accounts.v2.UpdateAccountResponse"
         },
         {
           "id": "customer_accounts.privacy.scope.contribute",
@@ -248,6 +388,27 @@
     {
       "module_id": "crm.customer-data-operations",
       "capabilities": [
+        {
+          "id": "customer_data.csv.export.preview",
+          "version": "2.0.0",
+          "rpc": "crm.customer_data_operations.v2.PartyCsvService.PreviewPartyExport",
+          "request": "crm.customer_data_operations.v2.PreviewPartyExportRequest",
+          "response": "crm.customer_data_operations.v2.PreviewPartyExportResponse"
+        },
+        {
+          "id": "customer_data.csv.import.apply",
+          "version": "2.0.0",
+          "rpc": "crm.customer_data_operations.v2.PartyCsvService.ApplyPartyImport",
+          "request": "crm.customer_data_operations.v2.ApplyPartyImportRequest",
+          "response": "crm.customer_data_operations.v2.ApplyPartyImportResponse"
+        },
+        {
+          "id": "customer_data.csv.import.preview",
+          "version": "2.0.0",
+          "rpc": "crm.customer_data_operations.v2.PartyCsvService.PreviewPartyImport",
+          "request": "crm.customer_data_operations.v2.PreviewPartyImportRequest",
+          "response": "crm.customer_data_operations.v2.PreviewPartyImportResponse"
+        },
         {
           "id": "customer_data.export.party.cancel",
           "version": "1.0.0",
@@ -508,11 +669,32 @@
           "response": "crm.customer_enrichment.v1.GetMappingVersionResponse"
         },
         {
+          "id": "customer_enrichment.mapping.get",
+          "version": "2.0.0",
+          "rpc": "crm.customer_enrichment.v2.EnrichmentConfigurationService.GetMapping",
+          "request": "crm.customer_enrichment.v2.GetMappingRequest",
+          "response": "crm.customer_enrichment.v2.GetMappingResponse"
+        },
+        {
+          "id": "customer_enrichment.mapping.list",
+          "version": "2.0.0",
+          "rpc": "crm.customer_enrichment.v2.EnrichmentConfigurationService.ListMappings",
+          "request": "crm.customer_enrichment.v2.ListMappingsRequest",
+          "response": "crm.customer_enrichment.v2.ListMappingsResponse"
+        },
+        {
           "id": "customer_enrichment.mapping.publish",
           "version": "1.0.0",
           "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentDefinitionService.PublishMappingVersion",
           "request": "crm.customer_enrichment.v1.PublishMappingVersionRequest",
           "response": "crm.customer_enrichment.v1.PublishMappingVersionResponse"
+        },
+        {
+          "id": "customer_enrichment.mapping.publish",
+          "version": "2.0.0",
+          "rpc": "crm.customer_enrichment.v2.EnrichmentConfigurationService.PublishMapping",
+          "request": "crm.customer_enrichment.v2.PublishMappingRequest",
+          "response": "crm.customer_enrichment.v2.PublishMappingResponse"
         },
         {
           "id": "customer_enrichment.party.display_name.apply",
@@ -536,11 +718,32 @@
           "response": "crm.customer_enrichment.v1.GetProviderProfileVersionResponse"
         },
         {
+          "id": "customer_enrichment.provider_profile.get",
+          "version": "2.0.0",
+          "rpc": "crm.customer_enrichment.v2.EnrichmentConfigurationService.GetProviderProfile",
+          "request": "crm.customer_enrichment.v2.GetProviderProfileRequest",
+          "response": "crm.customer_enrichment.v2.GetProviderProfileResponse"
+        },
+        {
+          "id": "customer_enrichment.provider_profile.list",
+          "version": "2.0.0",
+          "rpc": "crm.customer_enrichment.v2.EnrichmentConfigurationService.ListProviderProfiles",
+          "request": "crm.customer_enrichment.v2.ListProviderProfilesRequest",
+          "response": "crm.customer_enrichment.v2.ListProviderProfilesResponse"
+        },
+        {
           "id": "customer_enrichment.provider_profile.publish",
           "version": "1.0.0",
           "rpc": "crm.customer_enrichment.v1.CustomerEnrichmentDefinitionService.PublishProviderProfileVersion",
           "request": "crm.customer_enrichment.v1.PublishProviderProfileVersionRequest",
           "response": "crm.customer_enrichment.v1.PublishProviderProfileVersionResponse"
+        },
+        {
+          "id": "customer_enrichment.provider_profile.publish",
+          "version": "2.0.0",
+          "rpc": "crm.customer_enrichment.v2.EnrichmentConfigurationService.PublishProviderProfile",
+          "request": "crm.customer_enrichment.v2.PublishProviderProfileRequest",
+          "response": "crm.customer_enrichment.v2.PublishProviderProfileResponse"
         },
         {
           "id": "customer_enrichment.request.cancel",
@@ -691,11 +894,25 @@
           "response": "crm.customer_privacy.v1.CancelPrivacyCaseResponse"
         },
         {
+          "id": "customer_privacy.case.cancel",
+          "version": "2.0.0",
+          "rpc": "crm.customer_privacy.v2.PrivacyCaseService.CancelPrivacyCase",
+          "request": "crm.customer_privacy.v2.CancelPrivacyCaseRequest",
+          "response": "crm.customer_privacy.v2.CancelPrivacyCaseResponse"
+        },
+        {
           "id": "customer_privacy.case.create",
           "version": "1.0.0",
           "rpc": "crm.customer_privacy.v1.CustomerPrivacyCaseService.CreatePrivacyCase",
           "request": "crm.customer_privacy.v1.CreatePrivacyCaseRequest",
           "response": "crm.customer_privacy.v1.CreatePrivacyCaseResponse"
+        },
+        {
+          "id": "customer_privacy.case.create",
+          "version": "2.0.0",
+          "rpc": "crm.customer_privacy.v2.PrivacyCaseService.CreatePrivacyCase",
+          "request": "crm.customer_privacy.v2.CreatePrivacyCaseRequest",
+          "response": "crm.customer_privacy.v2.CreatePrivacyCaseResponse"
         },
         {
           "id": "customer_privacy.case.get",
@@ -705,11 +922,25 @@
           "response": "crm.customer_privacy.v1.GetPrivacyCaseResponse"
         },
         {
+          "id": "customer_privacy.case.get",
+          "version": "2.0.0",
+          "rpc": "crm.customer_privacy.v2.PrivacyCaseService.GetPrivacyCase",
+          "request": "crm.customer_privacy.v2.GetPrivacyCaseRequest",
+          "response": "crm.customer_privacy.v2.GetPrivacyCaseResponse"
+        },
+        {
           "id": "customer_privacy.case.list",
           "version": "1.0.0",
           "rpc": "crm.customer_privacy.v1.CustomerPrivacyCaseService.ListPrivacyCases",
           "request": "crm.customer_privacy.v1.ListPrivacyCasesRequest",
           "response": "crm.customer_privacy.v1.ListPrivacyCasesResponse"
+        },
+        {
+          "id": "customer_privacy.case.list",
+          "version": "2.0.0",
+          "rpc": "crm.customer_privacy.v2.PrivacyCaseService.ListPrivacyCases",
+          "request": "crm.customer_privacy.v2.ListPrivacyCasesRequest",
+          "response": "crm.customer_privacy.v2.ListPrivacyCasesResponse"
         },
         {
           "id": "customer_privacy.case.owner_outcomes.list",
@@ -738,6 +969,13 @@
           "rpc": "crm.customer_privacy.v1.CustomerPrivacyCaseService.SubmitPrivacyCase",
           "request": "crm.customer_privacy.v1.SubmitPrivacyCaseRequest",
           "response": "crm.customer_privacy.v1.SubmitPrivacyCaseResponse"
+        },
+        {
+          "id": "customer_privacy.case.submit",
+          "version": "2.0.0",
+          "rpc": "crm.customer_privacy.v2.PrivacyCaseService.SubmitPrivacyCase",
+          "request": "crm.customer_privacy.v2.SubmitPrivacyCaseRequest",
+          "response": "crm.customer_privacy.v2.SubmitPrivacyCaseResponse"
         },
         {
           "id": "customer_privacy.legal_hold.get",
@@ -830,6 +1068,13 @@
     {
       "module_id": "crm.customer360",
       "capabilities": [
+        {
+          "id": "customer360.account.overview",
+          "version": "2.0.0",
+          "rpc": "crm.customer_360.v2.Customer360Service.GetAccountOverview",
+          "request": "crm.customer_360.v2.GetAccountOverviewRequest",
+          "response": "crm.customer_360.v2.GetAccountOverviewResponse"
+        },
         {
           "id": "customer360.customer.get",
           "version": "1.0.0",
@@ -926,6 +1171,13 @@
           "rpc": "crm.data_quality.v1.DataQualityEvaluationService.RequestPartyEvaluation",
           "request": "crm.data_quality.v1.RequestPartyEvaluationRequest",
           "response": "crm.data_quality.v1.RequestPartyEvaluationResponse"
+        },
+        {
+          "id": "data_quality.party.name.evaluate",
+          "version": "2.0.0",
+          "rpc": "crm.data_quality.v2.DataQualityService.EvaluatePartyName",
+          "request": "crm.data_quality.v2.EvaluatePartyNameRequest",
+          "response": "crm.data_quality.v2.EvaluatePartyNameResponse"
         },
         {
           "id": "data_quality.party.rule_set.get",
@@ -1066,11 +1318,25 @@
           "response": "crm.identity_resolution.v1.UnmergePartyResponse"
         },
         {
+          "id": "identity_resolution.party.compare",
+          "version": "2.0.0",
+          "rpc": "crm.identity_resolution.v2.IdentityResolutionService.CompareParties",
+          "request": "crm.identity_resolution.v2.ComparePartiesRequest",
+          "response": "crm.identity_resolution.v2.ComparePartiesResponse"
+        },
+        {
           "id": "identity_resolution.party.resolve_canonical",
           "version": "1.0.0",
           "rpc": "crm.identity_resolution.v1.IdentityResolutionService.ResolveCanonicalParty",
           "request": "crm.identity_resolution.v1.ResolveCanonicalPartyRequest",
           "response": "crm.identity_resolution.v1.ResolveCanonicalPartyResponse"
+        },
+        {
+          "id": "identity_resolution.party.shared_email_candidates",
+          "version": "2.0.0",
+          "rpc": "crm.identity_resolution.v2.IdentityResolutionService.FindSharedEmailCandidates",
+          "request": "crm.identity_resolution.v2.FindSharedEmailCandidatesRequest",
+          "response": "crm.identity_resolution.v2.FindSharedEmailCandidatesResponse"
         },
         {
           "id": "identity_resolution.privacy.scope.contribute",
@@ -1124,11 +1390,32 @@
           "response": "crm.parties.v1.CreatePartyResponse"
         },
         {
+          "id": "parties.party.create",
+          "version": "3.0.0",
+          "rpc": "crm.parties.v3.PartyService.CreateParty",
+          "request": "crm.parties.v3.CreatePartyRequest",
+          "response": "crm.parties.v3.CreatePartyResponse"
+        },
+        {
           "id": "parties.party.get",
           "version": "1.0.0",
           "rpc": "crm.parties.v1.PartyService.GetParty",
           "request": "crm.parties.v1.GetPartyRequest",
           "response": "crm.parties.v1.GetPartyResponse"
+        },
+        {
+          "id": "parties.party.get",
+          "version": "2.0.0",
+          "rpc": "crm.parties.v2.PartyService.GetParty",
+          "request": "crm.parties.v2.GetPartyRequest",
+          "response": "crm.parties.v2.GetPartyResponse"
+        },
+        {
+          "id": "parties.party.get",
+          "version": "3.0.0",
+          "rpc": "crm.parties.v3.PartyService.GetParty",
+          "request": "crm.parties.v3.GetPartyRequest",
+          "response": "crm.parties.v3.GetPartyResponse"
         },
         {
           "id": "parties.party.list",
@@ -1138,11 +1425,25 @@
           "response": "crm.parties.v1.ListPartiesResponse"
         },
         {
+          "id": "parties.party.list",
+          "version": "3.0.0",
+          "rpc": "crm.parties.v3.PartyService.ListParties",
+          "request": "crm.parties.v3.ListPartiesRequest",
+          "response": "crm.parties.v3.ListPartiesResponse"
+        },
+        {
           "id": "parties.party.update",
           "version": "1.0.0",
           "rpc": "crm.parties.v1.PartyService.UpdateParty",
           "request": "crm.parties.v1.UpdatePartyRequest",
           "response": "crm.parties.v1.UpdatePartyResponse"
+        },
+        {
+          "id": "parties.party.update",
+          "version": "3.0.0",
+          "rpc": "crm.parties.v3.PartyService.UpdateParty",
+          "request": "crm.parties.v3.UpdatePartyRequest",
+          "response": "crm.parties.v3.UpdatePartyResponse"
         },
         {
           "id": "parties.privacy.scope.contribute",
@@ -1176,11 +1477,25 @@
           "response": "crm.party_relationships.v1.CreatePartyRelationshipResponse"
         },
         {
+          "id": "party-relationships.party-relationship.create",
+          "version": "2.0.0",
+          "rpc": "crm.party_relationships.v2.PartyRelationshipService.CreatePartyRelationship",
+          "request": "crm.party_relationships.v2.CreatePartyRelationshipRequest",
+          "response": "crm.party_relationships.v2.CreatePartyRelationshipResponse"
+        },
+        {
           "id": "party-relationships.party-relationship.get",
           "version": "1.0.0",
           "rpc": "crm.party_relationships.v1.PartyRelationshipService.GetPartyRelationship",
           "request": "crm.party_relationships.v1.GetPartyRelationshipRequest",
           "response": "crm.party_relationships.v1.GetPartyRelationshipResponse"
+        },
+        {
+          "id": "party-relationships.party-relationship.get",
+          "version": "2.0.0",
+          "rpc": "crm.party_relationships.v2.PartyRelationshipService.GetPartyRelationship",
+          "request": "crm.party_relationships.v2.GetPartyRelationshipRequest",
+          "response": "crm.party_relationships.v2.GetPartyRelationshipResponse"
         },
         {
           "id": "party-relationships.party-relationship.list",
@@ -1190,11 +1505,25 @@
           "response": "crm.party_relationships.v1.ListPartyRelationshipsResponse"
         },
         {
+          "id": "party-relationships.party-relationship.list",
+          "version": "2.0.0",
+          "rpc": "crm.party_relationships.v2.PartyRelationshipService.ListPartyRelationships",
+          "request": "crm.party_relationships.v2.ListPartyRelationshipsRequest",
+          "response": "crm.party_relationships.v2.ListPartyRelationshipsResponse"
+        },
+        {
           "id": "party-relationships.party-relationship.update",
           "version": "1.0.0",
           "rpc": "crm.party_relationships.v1.PartyRelationshipService.UpdatePartyRelationship",
           "request": "crm.party_relationships.v1.UpdatePartyRelationshipRequest",
           "response": "crm.party_relationships.v1.UpdatePartyRelationshipResponse"
+        },
+        {
+          "id": "party-relationships.party-relationship.update",
+          "version": "2.0.0",
+          "rpc": "crm.party_relationships.v2.PartyRelationshipService.UpdatePartyRelationship",
+          "request": "crm.party_relationships.v2.UpdatePartyRelationshipRequest",
+          "response": "crm.party_relationships.v2.UpdatePartyRelationshipResponse"
         },
         {
           "id": "party_relationships.privacy.scope.contribute",
@@ -1228,11 +1557,32 @@
           "response": "crm.sales.v1.AdvanceStageResponse"
         },
         {
+          "id": "sales.deal.advance_stage",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.AdvanceStage",
+          "request": "crm.sales.v2.AdvanceStageRequest",
+          "response": "crm.sales.v2.AdvanceStageResponse"
+        },
+        {
+          "id": "sales.deal.close",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.CloseDeal",
+          "request": "crm.sales.v2.CloseDealRequest",
+          "response": "crm.sales.v2.CloseDealResponse"
+        },
+        {
           "id": "sales.deal.create",
           "version": "1.0.0",
           "rpc": "crm.sales.v1.DealService.CreateDeal",
           "request": "crm.sales.v1.CreateDealRequest",
           "response": "crm.sales.v1.CreateDealResponse"
+        },
+        {
+          "id": "sales.deal.create",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.CreateDeal",
+          "request": "crm.sales.v2.CreateDealRequest",
+          "response": "crm.sales.v2.CreateDealResponse"
         },
         {
           "id": "sales.deal.get",
@@ -1242,6 +1592,20 @@
           "response": "crm.sales.v1.GetDealResponse"
         },
         {
+          "id": "sales.deal.get",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.GetDeal",
+          "request": "crm.sales.v2.GetDealRequest",
+          "response": "crm.sales.v2.GetDealResponse"
+        },
+        {
+          "id": "sales.deal.history",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.ListDealEvents",
+          "request": "crm.sales.v2.ListDealEventsRequest",
+          "response": "crm.sales.v2.ListDealEventsResponse"
+        },
+        {
           "id": "sales.deal.list",
           "version": "1.0.0",
           "rpc": "crm.sales.v1.DealService.ListDeals",
@@ -1249,11 +1613,102 @@
           "response": "crm.sales.v1.ListDealsResponse"
         },
         {
+          "id": "sales.deal.list",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.ListDeals",
+          "request": "crm.sales.v2.ListDealsRequest",
+          "response": "crm.sales.v2.ListDealsResponse"
+        },
+        {
+          "id": "sales.deal.list_by_stage",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.ListStageDeals",
+          "request": "crm.sales.v2.ListStageDealsRequest",
+          "response": "crm.sales.v2.ListStageDealsResponse"
+        },
+        {
+          "id": "sales.deal.reopen",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.ReopenDeal",
+          "request": "crm.sales.v2.ReopenDealRequest",
+          "response": "crm.sales.v2.ReopenDealResponse"
+        },
+        {
           "id": "sales.deal.update",
           "version": "1.0.0",
           "rpc": "crm.sales.v1.DealService.UpdateDeal",
           "request": "crm.sales.v1.UpdateDealRequest",
           "response": "crm.sales.v1.UpdateDealResponse"
+        },
+        {
+          "id": "sales.deal.update",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.UpdateDeal",
+          "request": "crm.sales.v2.UpdateDealRequest",
+          "response": "crm.sales.v2.UpdateDealResponse"
+        },
+        {
+          "id": "sales.pipeline.create",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.CreatePipeline",
+          "request": "crm.sales.v2.CreatePipelineRequest",
+          "response": "crm.sales.v2.CreatePipelineResponse"
+        },
+        {
+          "id": "sales.pipeline.get",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.GetPipeline",
+          "request": "crm.sales.v2.GetPipelineRequest",
+          "response": "crm.sales.v2.GetPipelineResponse"
+        },
+        {
+          "id": "sales.pipeline.list",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.ListPipelines",
+          "request": "crm.sales.v2.ListPipelinesRequest",
+          "response": "crm.sales.v2.ListPipelinesResponse"
+        },
+        {
+          "id": "sales.pipeline.metrics",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.GetPipelineMetrics",
+          "request": "crm.sales.v2.GetPipelineMetricsRequest",
+          "response": "crm.sales.v2.GetPipelineMetricsResponse"
+        },
+        {
+          "id": "sales.pipeline.update",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.UpdatePipeline",
+          "request": "crm.sales.v2.UpdatePipelineRequest",
+          "response": "crm.sales.v2.UpdatePipelineResponse"
+        },
+        {
+          "id": "sales.view.create",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.CreateSalesView",
+          "request": "crm.sales.v2.CreateSalesViewRequest",
+          "response": "crm.sales.v2.CreateSalesViewResponse"
+        },
+        {
+          "id": "sales.view.get",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.GetSalesView",
+          "request": "crm.sales.v2.GetSalesViewRequest",
+          "response": "crm.sales.v2.GetSalesViewResponse"
+        },
+        {
+          "id": "sales.view.list",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.ListSalesViews",
+          "request": "crm.sales.v2.ListSalesViewsRequest",
+          "response": "crm.sales.v2.ListSalesViewsResponse"
+        },
+        {
+          "id": "sales.view.update",
+          "version": "2.0.0",
+          "rpc": "crm.sales.v2.DealService.UpdateSalesView",
+          "request": "crm.sales.v2.UpdateSalesViewRequest",
+          "response": "crm.sales.v2.UpdateSalesViewResponse"
         }
       ],
       "events": [

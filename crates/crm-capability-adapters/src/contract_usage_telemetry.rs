@@ -353,7 +353,7 @@ impl ContractUsageMetrics {
 }
 
 fn increment(count: &AtomicU64) {
-    let _ = count.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+    let _ = count.try_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
         current.checked_add(1)
     });
 }

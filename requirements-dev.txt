@@ -1,12 +1,11 @@
-grpcio-tools==1.74.0
-grpcio==1.85.1
-protobuf==6.33.6
-setuptools==68.1.2
+grpcio-tools==1.85.3
+grpcio==1.85.3
+protobuf==7.36.2
+setuptools==84.2.1
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 referencing==0.37.0
 rpds-py==2026.9.1
-attrs==23.2.0
-ruamel.yaml==0.18.17
-ruamel.yaml.clib==0.2.15; platform_python_implementation == "CPython" and python_version < "3.14"
+attrs==26.1.0
+ruamel.yaml==0.19.1
 typing-extensions==4.16.0
