@@ -11,11 +11,8 @@ on:
       - "contracts/**"
       - "crates/**/Cargo.toml"
       - "modules/**/Cargo.toml"
-      - "services/**/Cargo.toml"
-      - "services/crm-api/tests/local_demo_smoke_e2e.rs"
       - "crates/crm-application-composition/**"
       - "crates/crm-first-party-modules/**"
-      - "crates/crm-application-runtime/**"
       - "crates/crm-module-manifest/**"
       - "schemas/**"
       - "modules/*/module.yaml"
@@ -30,11 +27,8 @@ on:
       - "scripts/analyze_workspace_governance.py"
       - "scripts/analyze_ci_telemetry.py"
       - "scripts/compile_module_manifest_ir.py"
-      - "scripts/local_demo.py"
-      - "scripts/local_dev.py"
       - "scripts/local_lifecycle.py"
       - "scripts/module_manifest_projection.py"
-      - "scripts/prepare_isolated_process_database.sh"
       - "scripts/validate_module_manifests.py"
       - "scripts/check_architecture.py"
       - "scripts/scaffold_module.py"
@@ -48,11 +42,7 @@ on:
       - "tests/test_ci_event_policy.py"
       - "tests/test_action_pinning.py"
       - "tests/test_affected_scope.py"
-      - "tests/test_local_demo.py"
-      - "tests/test_local_dev.py"
       - "tests/test_local_lifecycle.py"
-      - "tests/test_local_lifecycle_docker.py"
-      - "tests/test_postgres_process_isolation.py"
       - "tests/test_workspace_analysis.py"
       - "tests/test_workspace_governance.py"
       - "tests/test_workspace_dependency_policy.py"
@@ -75,11 +65,8 @@ on:
       - "contracts/**"
       - "crates/**/Cargo.toml"
       - "modules/**/Cargo.toml"
-      - "services/**/Cargo.toml"
-      - "services/crm-api/tests/local_demo_smoke_e2e.rs"
       - "crates/crm-application-composition/**"
       - "crates/crm-first-party-modules/**"
-      - "crates/crm-application-runtime/**"
       - "crates/crm-module-manifest/**"
       - "schemas/**"
       - "modules/*/module.yaml"
@@ -94,11 +81,8 @@ on:
       - "scripts/analyze_workspace_governance.py"
       - "scripts/analyze_ci_telemetry.py"
       - "scripts/compile_module_manifest_ir.py"
-      - "scripts/local_demo.py"
-      - "scripts/local_dev.py"
       - "scripts/local_lifecycle.py"
       - "scripts/module_manifest_projection.py"
-      - "scripts/prepare_isolated_process_database.sh"
       - "scripts/validate_module_manifests.py"
       - "scripts/check_architecture.py"
       - "scripts/scaffold_module.py"
@@ -112,11 +96,7 @@ on:
       - "tests/test_ci_event_policy.py"
       - "tests/test_action_pinning.py"
       - "tests/test_affected_scope.py"
-      - "tests/test_local_demo.py"
-      - "tests/test_local_dev.py"
       - "tests/test_local_lifecycle.py"
-      - "tests/test_local_lifecycle_docker.py"
-      - "tests/test_postgres_process_isolation.py"
       - "tests/test_workspace_analysis.py"
       - "tests/test_workspace_governance.py"
       - "tests/test_workspace_dependency_policy.py"
@@ -179,8 +159,6 @@ jobs:
         run: python -m unittest tests.test_action_pinning
       - name: Test affected-scope analyzer
         run: python -m unittest tests.test_affected_scope
-      - name: Test PostgreSQL process isolation policy
-        run: python -m unittest tests.test_postgres_process_isolation
       - name: Test workspace complexity analyzer
         run: python -m unittest tests.test_workspace_analysis
       - name: Test workspace dependency and exception governance
@@ -197,18 +175,4 @@ jobs:
         run: python -m unittest tests.test_ci_telemetry
       - name: Run permanent native architecture conformance preflight
         run: python scripts/repo.py conformance
-      - name: Run deterministic local PostgreSQL Docker acceptance
-        env:
-          CRM_RUN_LOCAL_DOCKER_ACCEPTANCE: "1"
-          CRM_LOCAL_NAMESPACE: governance-${{ github.run_id }}
-          CRM_LOCAL_POSTGRES_PORT: "55432"
-        run: python -m unittest tests.test_local_lifecycle_docker
-      - name: Run deterministic local demo seed replay and smoke acceptance
-        env:
-          CRM_LOCAL_NAMESPACE: governance-demo-${{ github.run_id }}
-          CRM_LOCAL_POSTGRES_PORT: "55433"
-        run: |
-          python scripts/repo.py dev-reset
-          python scripts/repo.py seed-demo
-          python scripts/repo.py seed-demo
-          python scripts/repo.py smoke
+

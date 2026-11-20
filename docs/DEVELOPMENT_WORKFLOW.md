@@ -2,6 +2,8 @@
 
 Status: **Normative contributor and coding-agent workflow**
 
+The only active CRM runtime is Cloudflare Workers/Rust/Connect/D1. The former PostgreSQL process host and its CI/local lifecycle were retired on 2026-11-20; their source and evidence are historical only.
+
 This document defines how implementation is scoped, validated and merged. Use `docs/README.md` for task navigation, `docs/ACTIVE_PACKET.md` for generated packet orientation and `docs/PROJECT_STATUS.md` for merged state. Architecture invariants and published contracts always take precedence.
 
 ## 1. Unit of delivery
@@ -65,7 +67,7 @@ Unless an accepted ADR says otherwise:
 5. pre-authorization semantic validation
 6. module-owned production contribution
 7. exact route/worker registration and durable activation
-8. focused, PostgreSQL and real-process acceptance
+8. focused workerd/D1 and real-browser acceptance
 9. operational and documentation closure
 ```
 
@@ -82,7 +84,7 @@ An ordinary capability inside an existing owner should:
 - create zero new crates;
 - touch zero generic router or worker algorithms;
 - touch zero unrelated owners, migrations or workflows;
-- reuse the owner application/postgres/production packages;
+- reuse the original Rust owner and existing Worker/D1 integration path;
 - extend the module-owned production contribution;
 - reuse generic conformance and add only owner-specific semantic tests;
 - run an explainable affected closure.
@@ -105,7 +107,7 @@ A deviation requires architecture justification and measured fan-out/change-loca
 ### Checkpoint B — behavior
 
 - focused domain/application tests pass;
-- affected integration/PostgreSQL tests pass;
+- affected workerd/D1/Chromium acceptance passes;
 - tenant, authorization, idempotency/retry and failure behavior is covered;
 - no-op, replay, conflict and crash windows are explicit where relevant;
 - cross-tenant negative proof exists for changed storage/read boundaries.
@@ -114,7 +116,7 @@ A deviation requires architecture justification and measured fan-out/change-loca
 
 - formatting and Clippy pass for Rust scope;
 - required workspace/affected tests pass;
-- Contract, Governance, Database, process and frontend gates pass when applicable;
+- the single Cloudflare CRM pipeline and repository governance checks pass when applicable;
 - rollback/reapply or compensation is proven;
 - generated contracts and navigation are fresh;
 - roadmap/status/catalog/issue claims match merged behavior;
@@ -152,13 +154,13 @@ published contracts
 pure domain aggregates/value objects/policies
 application commands/queries/workers and ports
 pre-authorization validators
-PostgreSQL/external adapters
+Cloudflare D1/external adapters
 module-owned production contribution
 exact routes/workers and durable activation
-focused/PostgreSQL/process acceptance
+focused workerd/D1/Chromium acceptance
 ```
 
-Target physical packaging is domain + application + postgres + production, with one optional real provider/process/trust boundary. Ordinary capabilities stay inside existing packages.
+Target physical packaging is the original domain owner plus the existing Cloudflare Worker/D1 path. There is no separate PostgreSQL process host or second backend. Ordinary capabilities stay inside existing packages.
 
 ## 11. Contract lifecycle
 
@@ -204,43 +206,20 @@ python scripts/generate_repository_navigation.py --check
 
 Generated active-packet and repository-map documents are reproducible navigation outputs, not sources of truth.
 
-The deterministic local lifecycle starts with the implemented Step 18 commands:
-
-```text
-doctor
-→ bootstrap
-→ dev-up
-→ seed-demo
-→ focused implementation
-→ explain/affected/packet-check
-→ smoke
-→ exact-head gates
-```
-
-Use:
+The local prerequisite surface is intentionally small:
 
 ```bash
 python scripts/repo.py doctor
 python scripts/repo.py doctor --profile bootstrap
 python scripts/repo.py bootstrap --dry-run
 python scripts/repo.py bootstrap
-python scripts/repo.py dev-up --dry-run
-python scripts/repo.py dev-up
-python scripts/repo.py dev-reset --dry-run
-python scripts/repo.py dev-reset
-python scripts/repo.py seed-demo --dry-run
-python scripts/repo.py seed-demo
-python scripts/repo.py smoke --dry-run
-python scripts/repo.py smoke
+python scripts/repo.py conformance
+python scripts/repo.py packet-check --base origin/main
 ```
 
-`doctor` reads tool requirements from committed repository configuration and changes nothing. The bootstrap profile validates dependency-preparation prerequisites without requiring Docker; the full profile additionally checks Docker CLI, Compose v2 and daemon availability. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, uses locked Cargo and frozen pnpm dependency resolution, and verifies generated navigation. It does not silently install or globally switch system toolchains.
+`doctor` checks repository-pinned Python, Rust, Node and pnpm prerequisites; neither profile requires Docker or PostgreSQL. `bootstrap` prepares an isolated `.venv`, installs committed Python constraints, fetches only the active Cloudflare Worker Cargo dependencies with `--locked`, installs pnpm dependencies with `--frozen-lockfile`, and verifies generated navigation. It does not install or globally switch system toolchains.
 
-`dev-up` creates or reuses the exact checkout-owned PostgreSQL dependency plane from pinned repository migrations and fixtures. It validates ownership, image, port, volume and schema digest before reuse. `dev-reset` first validates immutable ownership labels, removes the container before the volume, and recreates the current clean database; dry-run performs inspection only. Neither command starts product processes or seeds a demo scenario.
-
-`seed-demo` starts the real production composition through one locked Rust process target, applies the accepted Party production-adapter fixture, and creates or idempotently replays the versioned `local-demo-acme` organization only through `parties.party.create`. `smoke` starts a fresh real `crm-api` process, proves the authenticated Party query is denied without a live grant, then verifies the explicit bootstrap-granted read, missing-authentication denial and tenant-B non-disclosure. `kill_on_drop` plus graceful SIGINT cleanup prevents orphan local API processes.
-
-This bounded packet completes the Repository Step 18 command surface. Step 18 remains in progress until merge and a separate exact evidence synchronization; frontend/browser acceptance and Repository Step 19 remain blocked.
+There is no supported local PostgreSQL runtime, local database lifecycle or demo seed/smoke command. Functional acceptance runs through the existing Cloudflare workflow against isolated workerd/D1 and Chromium, then the protected live release gate. Historical PostgreSQL migrations, service source and prior acceptance evidence remain in the repository for audit only.
 
 ## 15. Multi-agent exact-SHA workflow
 

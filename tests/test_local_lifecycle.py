@@ -27,6 +27,8 @@ def prepare_root(root: Path) -> None:
     for relative in (
         "Cargo.toml",
         "Cargo.lock",
+        "apps/cloudflare-crm/rust-party/Cargo.toml",
+        "apps/cloudflare-crm/rust-party/Cargo.lock",
         "pnpm-lock.yaml",
         "requirements-dev.txt",
         "scripts/repo.py",
@@ -59,9 +61,6 @@ def successful_capture(
         ("cargo", "--version"): "cargo 1.97.1 (example 2026-07-01)",
         ("node", "--version"): "v24.18.0",
         ("pnpm", "--version"): "11.12.0",
-        ("docker", "--version"): "Docker version 29.0.0",
-        ("docker", "compose", "version"): "Docker Compose version v2.40.0",
-        ("docker", "info", "--format", "{{.ServerVersion}}"): "29.0.0",
     }
     key = tuple(command)
     return subprocess.CompletedProcess(list(command), 0, outputs[key], "")
@@ -82,6 +81,7 @@ class LocalLifecycleTests(unittest.TestCase):
         self.assertEqual(report["schema_version"], DOCTOR_SCHEMA)
         self.assertTrue(report["ok"])
         self.assertEqual(report["profile"], "full")
+        self.assertFalse(any(check["id"].startswith("docker") for check in report["checks"]))
         self.assertEqual(
             [check["id"] for check in report["checks"]],
             [
@@ -93,9 +93,6 @@ class LocalLifecycleTests(unittest.TestCase):
                 "cargo",
                 "node",
                 "pnpm",
-                "docker",
-                "docker-compose",
-                "docker-daemon",
             ],
         )
 
@@ -116,6 +113,7 @@ class LocalLifecycleTests(unittest.TestCase):
         ids = [check["id"] for check in report["checks"]]
         self.assertIn("python-venv", ids)
         self.assertNotIn("docker", ids)
+        self.assertNotIn("docker-compose", ids)
         self.assertNotIn("docker-daemon", ids)
 
     def test_doctor_fails_closed_on_wrong_rust_toolchain(self) -> None:
@@ -151,10 +149,10 @@ class LocalLifecycleTests(unittest.TestCase):
             prepare_root(root)
             plan = bootstrap_plan(root)
             self.assertEqual(plan[0][1:4], ["-m", "venv", ".venv"])
-            self.assertIn(["cargo", "fetch", "--locked"], plan)
+            self.assertIn(["cargo", "fetch", "--locked", "--manifest-path", "apps/cloudflare-crm/rust-party/Cargo.toml"], plan)
             self.assertIn(["pnpm", "install", "--frozen-lockfile"], plan)
             self.assertIn(
-                ["cargo", "metadata", "--locked", "--format-version", "1", "--no-deps"],
+                ["cargo", "metadata", "--locked", "--manifest-path", "apps/cloudflare-crm/rust-party/Cargo.toml", "--format-version", "1", "--no-deps"],
                 plan,
             )
             self.assertTrue(

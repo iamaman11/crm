@@ -53,8 +53,9 @@ Generic router and worker algorithms must not change merely to register one owne
 - `proto/` — authoritative RPC, command and event contract sources.
 - `crates/` — platform runtimes, application packages and infrastructure/production adapters.
 - `modules/` — independently governed pure business owner/link modules.
-- `services/` — deployable composition roots; `services/crm-api` is the production process.
-- `database/` — authoritative migrations and PostgreSQL acceptance assets.
+- `apps/cloudflare-crm/` — the sole active CRM application: React → generated Connect → Rust Workers Worker → one D1.
+- `services/crm-api/` and `crates/crm-application-runtime/` — retired PostgreSQL process runtime, excluded from the active Cargo workspace and CI; source retained only as historical reference.
+- `database/` — historical PostgreSQL migrations and acceptance evidence; the active application uses Cloudflare D1 migrations.
 - `schemas/` — strict authoring schemas compiled into typed runtime IR.
 - `docs/` — normative architecture, status, execution plans, generated navigation and historical evidence.
 - `scripts/` — architecture, contract, manifest, affected-scope and repository tooling.
@@ -87,14 +88,6 @@ python scripts/repo.py doctor
 python scripts/repo.py doctor --profile bootstrap
 python scripts/repo.py bootstrap --dry-run
 python scripts/repo.py bootstrap
-python scripts/repo.py dev-up --dry-run
-python scripts/repo.py dev-up
-python scripts/repo.py dev-reset --dry-run
-python scripts/repo.py dev-reset
-python scripts/repo.py seed-demo --dry-run
-python scripts/repo.py seed-demo
-python scripts/repo.py smoke --dry-run
-python scripts/repo.py smoke
 python scripts/repo.py architecture
 python scripts/repo.py manifests
 python scripts/repo.py contracts
@@ -111,13 +104,9 @@ python scripts/repo.py test-all
 python scripts/repo.py quality
 ```
 
-`doctor` inspects the repository-pinned Python, Rust, Node and pnpm prerequisites; its full profile also checks Docker CLI, Compose v2 and daemon availability. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, fetches Cargo dependencies with `--locked`, installs pnpm dependencies with `--frozen-lockfile`, and verifies locked metadata and generated navigation. It does not silently install or globally switch system toolchains.
+`doctor` inspects the repository-pinned Python, Rust, Node and pnpm prerequisites; neither profile requires Docker or a database service. `bootstrap` creates an isolated `.venv`, installs committed Python constraints, fetches the active Cloudflare Worker Cargo dependencies with `--locked`, installs pnpm dependencies with `--frozen-lockfile`, and verifies locked metadata and generated navigation. It does not silently install or globally switch system toolchains.
 
-`dev-up` creates or reuses one checkout-scoped PostgreSQL dependency plane from an immutable PostgreSQL 17 image digest, binds it only to `127.0.0.1`, applies every committed up migration and the accepted platform fixtures through Docker-native `psql`, and refuses partial, foreign or drifted resources. `dev-reset` verifies ownership before deleting only that checkout's container and volume and then recreates a clean ready database; use `--dry-run` before destructive reset.
-
-`seed-demo` reuses that owned database and creates or idempotently replays the versioned `local-demo-acme` organization through the governed production Party mutation gateway. `smoke` starts the real `crm-api`, proves an authenticated query is denied without a live grant, then verifies the bootstrap-granted Party read, missing-authentication denial and tenant-B non-disclosure. Both commands use one exact locked Rust process-test target; neither starts a frontend or writes business tables directly.
-
-Specialized contract, database, process, migration and product-plane gates remain mandatory when their scopes are affected. This implementation packet completes the command surface required by Repository Step 18, but Step 18 remains in progress until the implementation is merged and its exact acceptance evidence is synchronized separately.
+The active CRM is validated by the single Cloudflare pipeline: generated Protobuf, strict TypeScript, Rust/WASM/Clippy, Wrangler workerd with one D1, Chromium and protected live release evidence. PostgreSQL process CI and the local PostgreSQL lifecycle have been retired; historical source and evidence are not active execution paths.
 
 ## Status synchronization rule
 

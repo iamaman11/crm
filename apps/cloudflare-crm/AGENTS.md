@@ -31,7 +31,9 @@
 - Собственный CRM API не обещает совместимость со старыми тестовыми клиентами. Менять контракт,
   обработчик, UI и тесты согласованно. Не вводить accepted SHA, поиск last-green или сравнения
   с прошлыми ветками ради приёмки текущей схемы. Общие контракты других потребителей сохраняют
-  свои обязательства; исторический PostgreSQL runtime и его CI не менять заодно.
+  свои обязательства. Legacy PostgreSQL process runtime (`services/crm-api`,
+  `crates/crm-application-runtime`) выведен из активного workspace и CI; не восстанавливать
+  и не расширять его как альтернативный backend без нового прямого решения владельца.
 - Один Worker, Connect router, `packages/client/cloudflare`, `packages/ui` и одна D1. Никаких
   второго транспорта, business REST, JS backend, generic CRUD/ORM или копии domain rules.
 - Identity, tenant, role и request_id проверяет Rust; одна явная fail-closed policy.

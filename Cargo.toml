@@ -1,5 +1,6 @@
 # Public mutation entrypoints are governed by crm-capability-ingress and ADR-030.
-# Tenant-scoped rebuildable projection orchestration is governed by crm-projection-runtime; PostgreSQL remains an adapter.
+# Tenant-scoped rebuildable projection orchestration is governed by crm-projection-runtime.
+# The former PostgreSQL process host is retired and excluded from this active workspace.
 # Permission-aware search treats projection-backed indexes as candidates and repeats live field/resource visibility before disclosure.
 [workspace]
 resolver = "2"
@@ -98,7 +99,6 @@ members = [
   "crates/crm-data-quality-query-adapter",
   "crates/crm-data-quality-source-composition",
   "crates/crm-data-quality-privacy-scope-adapter",
-  "crates/crm-application-runtime",
   "crates/crm-sales-activities-capability-composition",
   "crates/crm-sales-activities-link-contract-adapter",
   "crates/crm-sales-activities-query-adapter",
@@ -115,6 +115,9 @@ members = [
   "modules/crm-data-quality",
   "modules/crm-customer-enrichment",
   "modules/crm-customer-privacy",
+]
+exclude = [
+  "crates/crm-application-runtime",
   "services/crm-api",
 ]
 

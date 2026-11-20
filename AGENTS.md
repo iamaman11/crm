@@ -8,6 +8,12 @@ acceptance. Its direct-dev, single-pipeline, development-API policy supersedes t
 historical PostgreSQL packet/PR/compatibility process below for that application.
 App Markdown contains stable rules only; Markdown-only pushes do not build or deploy CRM.
 
+The active CRM runtime is `apps/cloudflare-crm`: one Rust Workers Worker, Connect router and D1.
+The former PostgreSQL process runtime (`services/crm-api`, `crates/crm-application-runtime`)
+was retired from the active workspace and CI on 2026-11-20. Its source and PostgreSQL migrations
+remain historical reference only; do not run, extend or restore that runtime. Shared Rust domain
+modules remain active only where linked into the Cloudflare Worker.
+
 ## 1. Start with the smallest correct context
 
 Before changing code:
@@ -160,7 +166,10 @@ Public transport must not contain domain decisions or persistence calls. Mutatio
 
 ## 8. Composition, persistence and Rust API rules
 
-`services/crm-api` is the production composition root. Business functionality enters through exact module-owned contribution sets. Generic registries validate duplicate coordinates, owner/kind mismatch, missing handlers and deterministic worker phases.
+`apps/cloudflare-crm/rust-party` is the sole active CRM runtime and composition root. The former
+`services/crm-api` / `crates/crm-application-runtime` PostgreSQL process host is retired and
+excluded from the active workspace/CI. Business functionality enters through the Cloudflare
+Worker and original Rust owner modules.
 
 Persistence rules:
 
@@ -199,14 +208,6 @@ python scripts/repo.py doctor
 python scripts/repo.py doctor --profile bootstrap
 python scripts/repo.py bootstrap --dry-run
 python scripts/repo.py bootstrap
-python scripts/repo.py dev-up --dry-run
-python scripts/repo.py dev-up
-python scripts/repo.py dev-reset --dry-run
-python scripts/repo.py dev-reset
-python scripts/repo.py seed-demo --dry-run
-python scripts/repo.py seed-demo
-python scripts/repo.py smoke --dry-run
-python scripts/repo.py smoke
 python scripts/repo.py conformance
 python scripts/repo.py affected --base origin/main
 python scripts/repo.py check-affected --base origin/main
@@ -214,13 +215,7 @@ python scripts/repo.py packet-check --base origin/main
 python scripts/repo.py quality
 ```
 
-`doctor` reads repository-pinned tool requirements and never changes the machine. The bootstrap profile excludes Docker so dependency preparation can be diagnosed independently; the full profile checks Docker CLI, Compose v2 and daemon availability. `bootstrap` uses an isolated `.venv`, committed constraints and lockfiles, and does not silently install or globally switch system toolchains.
-
-`dev-up` and `dev-reset` manage only the checkout-scoped PostgreSQL dependency plane. They use immutable image and schema-input digests, loopback-only publishing and ownership labels. Never manually relabel a lifecycle resource; when exact configuration or schema inputs change, inspect `dev-reset --dry-run` and reset the owned state.
-
-`seed-demo` and `smoke` reuse that exact dependency plane and one locked real-process acceptance target. The versioned `local-demo-acme` demo state is created only through the governed Party mutation gateway with a stable versioned identity and idempotency key. Smoke must prove readiness, denial without a live query grant, success with the explicit bootstrap grant, authentication denial and cross-tenant non-disclosure; direct business-table writes or alternate transport paths are forbidden.
-
-This implementation packet completes the Repository Step 18 command surface, but Step 18 is not complete until merged exact-head evidence is synchronized. Frontend/browser acceptance and Repository Step 19 remain outside this packet.
+`doctor` reads repository-pinned tool requirements and never changes the machine. Neither profile requires Docker or a database service. `bootstrap` uses an isolated `.venv`, committed Python constraints, the active Worker Cargo lock and the pnpm lockfile; it does not silently install or globally switch system toolchains. The active runtime and its D1/workerd/Chromium acceptance are owned by the single Cloudflare CRM pipeline.
 
 ## 10. Required checks before completion
 
@@ -229,8 +224,8 @@ Run the checks selected by `packet-check`, then every applicable specialized gat
 - Contract CI for Protobuf or contract changes;
 - Governance CI for manifests, normalized IR, architecture policy and repository governance;
 - Rust CI for architecture, lockfile, formatting, Clippy and workspace tests;
-- Database CI for SQL, migrations, persistence and PostgreSQL behavior;
-- process/runtime/frontend/security/operations gates when their scopes are affected.
+- the Cloudflare CRM CI for Rust/WASM, workerd, D1, Chromium and protected release evidence;
+- repository governance and contract checks when their scopes are affected.
 
 A packet is complete only when applicable workflows are green on one unchanged exact review head and documentation reflects merged behavior.
 

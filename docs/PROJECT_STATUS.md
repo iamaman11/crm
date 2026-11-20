@@ -1,12 +1,12 @@
 # Ultimate CRM — Project Status
 
-Status date: 2026-11-06
+Status date: 2026-11-20
 
 This document is the concise authoritative current-state snapshot. Product dependencies remain normative in `IMPLEMENTATION_ROADMAP.md` and `PHASE8_DELIVERY_PLAN.md`; the single repository execution order remains normative in `ARCHITECTURE_COMPLEXITY_AND_SCALABILITY_PLAN.md` section 2.4; module readiness remains normative in `MODULE_CATALOG.md`.
 
 ## Cloudflare CRM navigation
 
-Current scope, accepted releases, CI/live checkpoints and remaining work are recorded in [Issue #352](https://github.com/iamaman11/crm/issues/352). The app-specific [architecture](../apps/cloudflare-crm/ARCHITECTURE.md) and [contributor rules](../apps/cloudflare-crm/AGENTS.md) describe stable rules. #338 holds architectural decisions; #350 is historical cutover evidence. The PostgreSQL history below is not a statement of current Cloudflare product readiness.
+Current scope, accepted releases, CI/live checkpoints and remaining work are recorded in [Issue #352](https://github.com/iamaman11/crm/issues/352) and #471. The app-specific [architecture](../apps/cloudflare-crm/ARCHITECTURE.md) and [contributor rules](../apps/cloudflare-crm/AGENTS.md) describe stable rules. #338 holds architectural decisions; #350 is historical cutover evidence. The former PostgreSQL process runtime (`services/crm-api`, `crates/crm-application-runtime`), its CI and local Docker lifecycle were retired from active development on 2026-11-20. The PostgreSQL history below is historical evidence, not a current runtime or product-readiness claim.
 
 ## Authoritative references
 
