@@ -67,17 +67,6 @@ jobs:
           # Product documentation and status live in GitHub Issues, not .md.
           python -m unittest tests.test_affected_scope tests.test_crm_module_coverage
           python scripts/repo.py packet-check --base origin/dev
-          python - <<'PY'
-          import sys
-          from pathlib import Path
-          sys.path.insert(0, "scripts")
-          from repository_navigation import generated_documents
-
-          for path, content in generated_documents(Path(".").resolve()).items():
-              print(f"---BEGIN:{path}---")
-              print(content, end="")
-              print(f"---END:{path}---")
-          PY
           python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json
           echo "CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json" >> "$GITHUB_ENV"
           CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json \
