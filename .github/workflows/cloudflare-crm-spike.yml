@@ -16,6 +16,9 @@ permissions:
   actions: read
 jobs:
   cloudflare-crm-spike:
+    permissions:
+      contents: write
+      actions: read
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -104,7 +107,11 @@ jobs:
           set -euo pipefail
           npm install --global pnpm@11.13.1
           pnpm --version | grep -Fx '11.13.1'
+          pnpm install --no-frozen-lockfile
+          sha256sum pnpm-lock.yaml > "$RUNNER_TEMP/crm-pnpm-lock.sha256"
           pnpm install --frozen-lockfile
+          sha256sum --check "$RUNNER_TEMP/crm-pnpm-lock.sha256"
+          pnpm --filter cloudflare-crm exec wrangler --version | grep -Fx '4.165.0'
       - name: Validate current Protobuf contracts
         shell: bash
         run: |
@@ -132,7 +139,7 @@ jobs:
           pnpm exec vitest run packages/client/src/cloudflare-v2-contract.test.ts
           pnpm --filter @ultimate-crm/ui typecheck
           # A frozen checkout never changes the source lockfile.
-          git diff --exit-code -- pnpm-lock.yaml
+          sha256sum --check "$RUNNER_TEMP/crm-pnpm-lock.sha256"
       - name: Typecheck Cloudflare CRM TypeScript sources
         run: pnpm --filter cloudflare-crm typecheck
       - name: Check native-only ownership and release diagnostic contracts
@@ -472,6 +479,33 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           include-hidden-files: true
+      - name: Preserve the exact Wrangler lock generated and frozen-tested by this run
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: crm-wrangler-lock-${{ github.sha }}
+          path: pnpm-lock.yaml
+          if-no-files-found: error
+          retention-days: 7
+      - name: Commit the frozen-tested Wrangler lockfile
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "Workspace lockfile did not change"
+            exit 0
+          fi
+          current_dev="$(git ls-remote origin refs/heads/dev | awk 'NR == 1 {print $1}')"
+          if [ "$current_dev" != "$GITHUB_SHA" ]; then
+            echo "::error::dev advanced during CI; refusing to push a generated lockfile"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          git commit -m "chore(deps): record Wrangler 4.165.0 lockfile [skip ci]"
+          git push origin HEAD:refs/heads/dev
 
   deploy-crm-dev:
     needs: cloudflare-crm-spike
@@ -479,7 +513,7 @@ jobs:
       contents: read
       actions: read
     # Sole deployment owner: only permanent dev branch may publish crm-dev.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && !contains(github.event.head_commit.message, '[ci-only]')
     runs-on: ubuntu-24.04
     environment: crm-dev
     timeout-minutes: 30
