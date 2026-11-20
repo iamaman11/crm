@@ -19,6 +19,7 @@ SCHEMA_VERSION = "crm.affected-scope/v2"
 POLICY_SCHEMA_VERSION = "crm.affected-scope-policy/v1"
 POLICY_PATH = Path("affected-scope-policy.json")
 WORKFLOW_SUFFIXES = {".yml", ".yaml"}
+# Only Cloudflare Workers/D1 is an active CRM runtime; PostgreSQL process scopes are retired.
 REQUIRED_SCOPE_IDS = {
     "contracts", "protobuf_api_compatibility", "d1_migrations",
     "d1_runtime_acceptance", "cloudflare_product_plane", "frontend", "operations",
