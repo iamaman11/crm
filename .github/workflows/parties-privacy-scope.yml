@@ -57,7 +57,7 @@ jobs:
     timeout-minutes: 35
     services:
       postgres:
-        image: postgres:19.0-alpine
+        image: postgres:18.7-alpine3.23
         env:
           POSTGRES_DB: crm_parties_privacy_scope_test
           POSTGRES_USER: postgres
@@ -142,7 +142,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          postgres_container="$(docker ps -aq --filter ancestor=postgres:19.0-alpine | head -n 1)"
+          postgres_container="$(docker ps -aq --filter ancestor=postgres:18.7-alpine3.23 | head -n 1)"
           if [ -n "${postgres_container}" ]; then
             docker logs "${postgres_container}" > database/parties-privacy-scope-postgres.log 2>&1
           fi
