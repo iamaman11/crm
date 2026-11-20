@@ -3,7 +3,7 @@
   "packet_id": "cloudflare-crm-development",
   "title": "Cloudflare CRM: typed application development",
   "status": "active",
-  "objective": "Maintain one Protobuf contract, generated Rust/TS, original owners and one Worker/D1. Issue #352 owns product scope and acceptance; #471 owns the active architecture/typed-runtime work. The former PostgreSQL process runtime and its CI are retired and must not be reintroduced as a second backend.",
+  "objective": "Maintain one native Rust Cloudflare Worker with original domain owners, generated Protobuf/Connect/React and exactly one D1. Retired PostgreSQL/SQLx process runtime, crates, migrations and compatibility are not part of CRM.",
   "baseline": {
     "ref": "dev"
   },

@@ -23,11 +23,6 @@ members = [
   "modules/crm-customer-enrichment",
   "modules/crm-customer-privacy",
 ]
-exclude = [
-  "crates/crm-application-runtime",
-  "services/crm-api",
-]
-
 [workspace.package]
 edition = "2024"
 license = "Proprietary"

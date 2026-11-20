@@ -2,6 +2,7 @@
 name = "crm-customer-360-query-adapter"
 version = "0.1.0"
 edition = "2024"
+rust-version.workspace = true
 publish = false
 
 # Account Overview composes original owner values; no storage, transport,
@@ -14,3 +15,6 @@ crm-contact-points = { path = "../../modules/crm-contact-points" }
 crm-party-relationships = { path = "../../modules/crm-party-relationships" }
 crm-sales = { path = "../../modules/crm-sales" }
 crm-activities = { path = "../../modules/crm-activities" }
+
+[lints]
+workspace = true
