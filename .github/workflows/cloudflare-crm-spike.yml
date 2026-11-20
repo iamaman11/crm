@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - dev
+      - crm-471-retire-sqlx-20261121 # one-time root lock resolver proof; removed before dev merge
     paths-ignore:
       - '*.md'
       - '**/*.md'
@@ -23,6 +24,24 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0 # JSON packet policy checks Git paths; no Markdown inputs
+      # Temporary single-workflow branch diagnostic: only Cargo 1.100.0
+      # generates the candidate lock. Deliberately STOP before any Worker deploy.
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        if: github.ref == 'refs/heads/crm-471-retire-sqlx-20261121'
+        with:
+          toolchain: 1.100.0
+      - name: Candidate-only Rust resolver lock proof (no deployment)
+        if: github.ref == 'refs/heads/crm-471-retire-sqlx-20261121'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo --version | grep -F 'cargo 1.100.0 '
+          cargo generate-lockfile
+          echo 'CRM_CARGO_LOCK_BEGIN'
+          base64 -w120 Cargo.lock
+          echo 'CRM_CARGO_LOCK_END'
+          echo 'Candidate-only: expected stop before ordinary CI/deployment'
+          exit 1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26.13.1'
