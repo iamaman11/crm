@@ -279,7 +279,9 @@ jobs:
           mkdir -p apps/cloudflare-crm/.release/native-build
           cp -a apps/cloudflare-crm/rust-party/build/. apps/cloudflare-crm/.release/native-build/
           test -s apps/cloudflare-crm/.release/native-build/index_bg.wasm
-      # --no-opt skips only Binaryen for the disposable test-key fixture.\n      # The published native artifact remains optimized and is restored below.\n      - name: Compile native Rust Access gate using isolated RSA test keys
+      # --no-opt skips only Binaryen for the disposable test-key fixture.
+      # The published native artifact remains optimized and is restored below.
+      - name: Compile native Rust Access gate using isolated RSA test keys
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --release --locked --features native-ci --no-opt
       - name: Install and launch Chromium after native compilation
