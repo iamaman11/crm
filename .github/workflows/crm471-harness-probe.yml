@@ -246,20 +246,20 @@ jobs:
           SH
           chmod +x /tmp/reset-application-database.sh
           /tmp/reset-application-database.sh
-          cargo test -p crm-api --features postgres-integration --test process_e2e -- --nocapture
+          cargo test -p crm-api --test process_e2e -- --nocapture
           /tmp/reset-application-database.sh
-          cargo test -p crm-api --features postgres-integration --test party_process_e2e -- --nocapture
+          cargo test -p crm-api --test party_process_e2e -- --nocapture
           /tmp/reset-application-database.sh
-          cargo test -p crm-api --features postgres-integration --test account_process_e2e -- --nocapture
+          cargo test -p crm-api --test account_process_e2e -- --nocapture
           /tmp/reset-application-database.sh
-          cargo test -p crm-api --features postgres-integration --test contact_point_process_e2e -- --nocapture
+          cargo test -p crm-api --test contact_point_process_e2e -- --nocapture
           /tmp/reset-application-database.sh
-          cargo test -p crm-api --features postgres-integration --test party_relationship_process_e2e -- --nocapture
+          cargo test -p crm-api --test party_relationship_process_e2e -- --nocapture
           /tmp/reset-application-database.sh
-          cargo test -p crm-api --features postgres-integration --test consent_process_e2e -- --nocapture
+          cargo test -p crm-api --test consent_process_e2e -- --nocapture
           /tmp/reset-application-database.sh
-          cargo test -p crm-api --features postgres-integration --test identity_resolution_process_e2e -- --nocapture
+          cargo test -p crm-api --test identity_resolution_process_e2e -- --nocapture
           /tmp/reset-application-database.sh
-          cargo test -p crm-api --features postgres-integration --test merge_unmerge_process_e2e -- --nocapture
+          cargo test -p crm-api --test merge_unmerge_process_e2e -- --nocapture
           bash scripts/prepare_customer_enrichment_consent_policy_database.sh
-          cargo test -p crm-api --features postgres-integration --test customer_enrichment_process_e2e -- --nocapture
+          cargo test -p crm-api --test customer_enrichment_process_e2e -- --nocapture
