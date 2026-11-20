@@ -72,6 +72,7 @@ async function subprocessEntry(){
              throw Object.assign(new TypeError("fetch failed"),{cause:{code:"ECONNRESET"}});
            }
            if((variant==="anonymous-edge-404"&&anonymousAttempts===1)||
+              (variant==="anonymous-delayed-edge-404"&&anonymousAttempts<=8)||
               variant==="anonymous-persistent-404")
              return new Response("propagating",{status:404,headers:{"cf-ray":"fixture-ray-123"}});
            return new Response(variant==="anonymous-success"?"exposed":"denied",
@@ -616,12 +617,20 @@ test("temporary anonymous edge 404 requires a later positive denial without rede
  assert.equal(result.state.anonymousAttempts,2);
  assert.equal(result.state.commands.filter(c=>c[2]==="deploy").length,1);
 });
+test("delayed Access edge propagation requires a positive denial, not a 404",()=>{
+ const result=run("deploy","anonymous-delayed-edge-404");
+ assert.equal(result.status,0,result.error);
+ assert.equal(result.deployed,true);
+ assert.equal(result.state.anonymousAttempts,9);
+ assert.equal(result.state.commands.filter(c=>c[2]==="deploy").length,1);
+});
 for(const variant of ["anonymous-persistent-reset","anonymous-persistent-404","anonymous-success"])
  test("release rejects "+variant+" without replaying deployment",()=>{
    const result=run("deploy",variant);
    assert.notEqual(result.status,0);
    assert.equal(result.deployed,false);
-   assert.equal(result.state.anonymousAttempts,variant==="anonymous-success"?1:3);
+   assert.equal(result.state.anonymousAttempts,
+   variant==="anonymous-success"?1:variant==="anonymous-persistent-404"?40:3);
    assert.equal(result.state.commands.filter(c=>c[2]==="deploy").length,1);
  });
 test("unknown D1 migration history rejects the release before changing public entry",()=>{

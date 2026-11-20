@@ -113,45 +113,49 @@ export async function waitForExactSourceSha(endpoint,expectedSha,{
 export async function verifyAnonymousDenial(endpoint,{
   request=fetch,
   pause=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
-  log=entry=>console.log(JSON.stringify(entry))
+  log=entry=>console.log(JSON.stringify(entry)),
+  now=Date.now
 }={}){
-  for(let attempt=1;attempt<=3;attempt++){
+  // Workers.dev routing and Access enforcement converge separately. A 404
+  // is never accepted as a protection proof, even after signed SHA readback.
+  const started=now(),deadline=started+90000,maxAttempts=40;
+  let transportFailures=0;
+  for(let attempt=1;attempt<=maxAttempts&&now()<deadline;attempt++){
     let response;
     try{
       response=await request(endpoint,{method:"GET",redirect:"manual",cache:"no-store",
         headers:{"cache-control":"no-cache",connection:"close"},
-        signal:AbortSignal.timeout(20000)});
+        signal:AbortSignal.timeout(Math.max(1,Math.min(20000,deadline-now())))});
     }catch(error){
-      const code=error?.cause?.code;
-      if(!isRetryableReadbackTransportError(error)||attempt===3)throw error;
-      const delayMs=attempt*1000;
+      if(!isRetryableReadbackTransportError(error)||++transportFailures>=3)throw error;
+      const delayMs=Math.min(1000*transportFailures,Math.max(0,deadline-now()));
+      if(delayMs<=0)throw error;
       log({event:"crm.anonymous-denial-readback",result:"RETRY",attempt,
-        reason:code??error.name,delay_ms:delayMs});
+        reason:error?.cause?.code??error.name,delay_ms:delayMs});
       await pause(delayMs);
       continue;
     }
-    const ray=response.headers.get("cf-ray");
-    const status=response.status;
-    // An edge-routing 404 or outage is not a positive Access denial.
-    // A different edge can still be propagating after enabling the subdomain.
-    // Retry only the GET; a persistent 404/outage is not proof of protection.
-    if(attempt<3&&[404,429,502,503,504,524].includes(status)){
-      const delayMs=attempt*1000;
-      log({event:"crm.anonymous-denial-readback",result:"RETRY",attempt,
-        http_status:status,cf_ray:ray,delay_ms:delayMs});
-      await pause(delayMs);
-      continue;
+    const ray=response.headers.get("cf-ray"),status=response.status;
+    if([404,429,502,503,504,524].includes(status)&&attempt<maxAttempts&&now()<deadline){
+      const delayMs=Math.min(Math.min(attempt*1000,3500),Math.max(0,deadline-now()));
+      if(delayMs>0){
+        if(attempt===1||attempt%5===0)
+          log({event:"crm.anonymous-denial-readback",result:"RETRY",attempt,
+            http_status:status,cf_ray:ray,delay_ms:delayMs,
+            elapsed_ms:now()-started});
+        await pause(delayMs);
+        continue;
+      }
     }
-    // A redirect to Access or explicit 401/403 is the expected result.
     if(![301,302,303,307,308,401,403].includes(status))
       throw Error("Cloudflare Access anonymous denial failed: HTTP "+status+
         " ray="+(ray||"missing"));
     log({event:"crm.anonymous-denial-readback",result:"PASS",attempt,
-      http_status:status,cf_ray:ray});
+      http_status:status,cf_ray:ray,elapsed_ms:now()-started});
     return;
   }
+  throw Error("CRM_ACCESS_ANONYMOUS_DENIAL_READBACK_DEADLINE_EXCEEDED");
 }
-
 // One-time migration precondition, not a second production normalization path.
 // Check only; SQL copies already-canonical strings byte-for-byte. Never log names.
 export async function verifyNfcMigrationNames(query){
