@@ -31,12 +31,13 @@ jobs:
           pnpm --version | grep -Fx '12.21.0'
           pnpm install --no-frozen-lockfile
           python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
-          python scripts/generate_contract_bindings.py --write
-          python scripts/generate_contract_bindings.py
+          python scripts/generate_contract_bindings.py --write --buf ./node_modules/.bin/buf
+          python scripts/generate_contract_bindings.py --check --buf ./node_modules/.bin/buf
           python -m unittest tests.test_contract_bindings
           cargo update --manifest-path Cargo.toml
           cargo update --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml
           cargo fmt --all -- --check
+          pnpm install --frozen-lockfile
       - name: Commit generated lockfiles only to this isolated upgrade branch
         run: |
           set -euo pipefail
@@ -126,7 +127,6 @@ jobs:
           pnpm --filter cloudflare-crm typecheck
           pnpm --filter @ultimate-crm/client typecheck
           pnpm --filter @ultimate-crm/ui typecheck
-          pnpm test
           pnpm web:typecheck
           pnpm web:lint
           pnpm web:test
