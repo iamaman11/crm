@@ -2,7 +2,6 @@
 name = "crm-party-relationships"
 version = "0.1.0"
 edition = "2024"
-rust-version.workspace = true
 publish = false
 
 [dependencies]
@@ -10,6 +9,3 @@ crm-module-sdk = { path = "../../crates/crm-module-sdk" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-
-[lints]
-workspace = true

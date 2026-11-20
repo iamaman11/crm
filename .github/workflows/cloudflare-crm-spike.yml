@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - dev
-      - crm-471-retire-sqlx-20261121 # one-time root lock resolver proof; removed before dev merge
     paths-ignore:
       - '*.md'
       - '**/*.md'
@@ -33,8 +32,6 @@ jobs:
       # Code changes execute this pipeline once on dev; PRs are optional discussion.
       # Pure source checks must fail before npm, Cargo builds or Chromium.
       - name: Fast repository CI topology, architecture, and source syntax
-        # The branch-specific push allowance is temporary and never reaches dev.
-        if: github.ref == 'refs/heads/dev'
         shell: bash
         run: |
           set -euo pipefail
@@ -66,9 +63,7 @@ jobs:
           # Machine-readable policies, executable schemas, contracts and owners.
           # Product documentation and status live in GitHub Issues, not .md.
           python -m unittest tests.test_affected_scope tests.test_crm_module_coverage
-          if [ "$GITHUB_REF" = "refs/heads/dev" ]; then
-            python scripts/repo.py packet-check --base origin/dev
-          fi
+          python scripts/repo.py packet-check --base origin/dev
           python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json
           echo "CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json" >> "$GITHUB_ENV"
           CRM_MODULE_COVERAGE_REPORT=/tmp/crm-module-coverage.json \

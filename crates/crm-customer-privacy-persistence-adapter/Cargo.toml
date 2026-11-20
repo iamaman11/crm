@@ -1,0 +1,10 @@
+[package]
+name = "crm-customer-privacy-persistence-adapter"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
+crm-customer-privacy = { path = "../../modules/crm-customer-privacy" }
+crm-module-sdk = { path = "../crm-module-sdk" }

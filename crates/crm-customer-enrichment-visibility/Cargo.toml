@@ -1,0 +1,11 @@
+[package]
+name = "crm-customer-enrichment-visibility"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-customer-enrichment = { path = "../../modules/crm-customer-enrichment" }
+crm-customer-enrichment-query-adapter = { path = "../crm-customer-enrichment-query-adapter" }
+crm-customer-enrichment-request-list-query-adapter = { path = "../crm-customer-enrichment-request-list-query-adapter" }
+crm-customer-enrichment-suggestion-query-adapter = { path = "../crm-customer-enrichment-suggestion-query-adapter" }

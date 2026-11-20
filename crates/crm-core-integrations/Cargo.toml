@@ -1,0 +1,9 @@
+[package]
+name = "crm-core-integrations"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-core-contracts = { path = "../crm-core-contracts" }
+crm-core-permissions = { path = "../crm-core-permissions" }

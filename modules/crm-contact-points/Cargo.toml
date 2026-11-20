@@ -2,7 +2,6 @@
 name = "crm-contact-points"
 version = "0.1.0"
 edition = "2024"
-rust-version.workspace = true
 publish = false
 
 [dependencies]
@@ -18,6 +17,3 @@ phonenumber = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
-
-[lints]
-workspace = true

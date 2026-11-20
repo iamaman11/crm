@@ -20,7 +20,8 @@
     "crm-module-sdk"
   ],
   "sdk_crate_paths": [
-    "crates/crm-module-sdk"
+    "crates/crm-module-sdk",
+    "crates/crm-capability-runtime"
   ],
   "sdk_allowed_dependencies": [
     "crm-module-sdk",
@@ -37,7 +38,20 @@
     "openai::",
     "anthropic::"
   ],
-  "governed_transport_crates": {},
+  "governed_transport_crates": {
+    "services/crm-api": [
+      "crm-application-runtime"
+    ],
+    "crates/crm-capability-ingress": [
+      "crm-capability-runtime",
+      "crm-module-sdk",
+      "crm-query-runtime",
+      "http",
+      "sha2",
+      "tokio",
+      "tonic"
+    ]
+  },
   "governed_transport_forbidden_source_markers": [
     "crm_core_data",
     "crm_sales",
@@ -46,6 +60,30 @@
     "TransactionalCapabilityExecutor",
     "execute_batch("
   ],
-  "restricted_dependency_consumers": {},
-  "restricted_source_markers": {}
+  "restricted_dependency_consumers": {
+    "crm-customer-privacy-owner-scope-support": [
+      "crates/crm-consents-privacy-scope-adapter/Cargo.toml",
+      "crates/crm-contact-points-privacy-scope-adapter/Cargo.toml",
+      "crates/crm-customer-accounts-privacy-scope-adapter/Cargo.toml",
+      "crates/crm-customer-data-operations-privacy-scope-adapter/Cargo.toml",
+      "crates/crm-customer-enrichment-privacy-scope-adapter/Cargo.toml",
+      "crates/crm-data-quality-privacy-scope-adapter/Cargo.toml",
+      "crates/crm-identity-resolution-privacy-scope-adapter/Cargo.toml",
+      "crates/crm-parties-privacy-scope-adapter/Cargo.toml",
+      "crates/crm-party-relationships-privacy-scope-adapter/Cargo.toml"
+    ]
+  },
+  "restricted_source_markers": {
+    ".begin_bound_read_transaction(": [
+      "crates/crm-consents-privacy-scope-adapter/src/postgres.rs",
+      "crates/crm-contact-points-privacy-scope-adapter/src/postgres.rs",
+      "crates/crm-customer-accounts-privacy-scope-adapter/src/postgres.rs",
+      "crates/crm-customer-data-operations-privacy-scope-adapter/src/postgres.rs",
+      "crates/crm-customer-enrichment-privacy-scope-adapter/src/postgres.rs",
+      "crates/crm-data-quality-privacy-scope-adapter/src/postgres.rs",
+      "crates/crm-identity-resolution-privacy-scope-adapter/src/postgres.rs",
+      "crates/crm-parties-privacy-scope-adapter/src/postgres.rs",
+      "crates/crm-party-relationships-privacy-scope-adapter/src/postgres.rs"
+    ]
+  }
 }

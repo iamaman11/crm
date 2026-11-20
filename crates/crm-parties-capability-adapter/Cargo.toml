@@ -1,0 +1,30 @@
+[package]
+name = "crm-parties-capability-adapter"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crm-capability-plan-support = { path = "../crm-capability-plan-support" }
+crm-capability-runtime = { path = "../crm-capability-runtime" }
+crm-core-data = { path = "../crm-core-data" }
+crm-module-sdk = { path = "../crm-module-sdk" }
+crm-proto-contracts = { path = "../crm-proto-contracts" }
+crm-parties = { path = "../../modules/crm-parties" }
+prost = "0.14"
+
+[features]
+default = []
+postgres-integration = ["crm-core-data/postgres-integration"]
+
+[dev-dependencies]
+crm-capability-adapters = { path = "../crm-capability-adapters" }
+crm-capability-ingress = { path = "../crm-capability-ingress" }
+http = "1"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres"] }
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[[test]]
+name = "postgres_evidence_rollback"
+path = "tests/postgres_evidence_rollback.rs"
+required-features = ["postgres-integration"]

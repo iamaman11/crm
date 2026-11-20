@@ -1,0 +1,449 @@
+mod process {
+    include!("../../crm-customer-enrichment-worker-composition/tests/postgres_worker_process.rs");
+
+    use crm_application_runtime::{
+        CustomerEnrichmentProviderAdapterConfig, CustomerEnrichmentProviderAdapterState,
+        CustomerEnrichmentProviderCredentialBinding, CustomerEnrichmentProviderWorkerDependencies,
+        ProviderSecretValueSourcePort, ProviderTransportRegistration,
+        StaticProviderTransportCatalog, build_customer_enrichment_provider_registry,
+        build_customer_enrichment_provider_worker,
+    };
+    use crm_capability_adapters::{
+        AuthorizationGrant, LiveAuthorizationStore, LiveCapabilityAuthorizer,
+    };
+    use crm_capability_runtime::CapabilityDefinition;
+    use crm_core_events::ProjectionStore;
+    use crm_customer_enrichment::{
+        PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE, ProviderAdapterCoordinate,
+        ProviderProcessCanonicalOutcome, ProviderProcessOutcomeKind,
+    };
+    use crm_customer_enrichment_capability_adapter::{
+        enrichment_request_from_snapshot, provider_response_capability_definition,
+    };
+    use crm_customer_enrichment_provider_process_composition::{
+        CustomerEnrichmentProviderProcessWorker, PROVIDER_PROCESS_PROJECTION_ID,
+        PROVIDER_PROCESS_WORKER_ACTOR_ID, ProviderDispatchSourceDisposition,
+        ProviderDispatchSourcePort, ProviderDispatchSourceSnapshot, ProviderDispatchWorkItemInput,
+        build_provider_dispatch_work_item,
+    };
+    use crm_customer_enrichment_registry_http_transport::{
+        REGISTRY_HTTP_ADAPTER_CONTRACT_VERSION, REGISTRY_HTTP_ADAPTER_KIND,
+        REGISTRY_HTTP_TRANSPORT_KEY,
+    };
+    use crm_module_sdk::{ErrorCategory, PortFuture, SdkError};
+    use std::collections::BTreeMap;
+
+    #[derive(Debug, Clone)]
+    struct StaticProcessSecretValues {
+        values: BTreeMap<String, ProviderSecretMaterial>,
+    }
+
+    impl ProviderSecretValueSourcePort for StaticProcessSecretValues {
+        fn resolve(&self, environment_name: &str) -> Result<ProviderSecretMaterial, SdkError> {
+            self.values.get(environment_name).cloned().ok_or_else(|| {
+                SdkError::new(
+                    "TEST_PROVIDER_SECRET_MISSING",
+                    ErrorCategory::Internal,
+                    false,
+                    "The test provider secret is unavailable.",
+                )
+            })
+        }
+    }
+
+    #[derive(Clone)]
+    struct StaticProcessSource {
+        snapshot: ProviderDispatchSourceSnapshot,
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl ProviderDispatchSourcePort for StaticProcessSource {
+        fn load<'a>(
+            &'a self,
+            tenant_id: TenantId,
+            request_id: RecordId,
+            worker_actor_id: ActorId,
+            now_unix_ms: u64,
+        ) -> PortFuture<'a, Result<ProviderDispatchSourceDisposition, SdkError>> {
+            Box::pin(async move {
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                if &tenant_id != self.snapshot.request.tenant_id()
+                    || request_id.as_str() != self.snapshot.request.request_id().as_str()
+                    || worker_actor_id.as_str() != PROVIDER_PROCESS_WORKER_ACTOR_ID
+                    || now_unix_ms != 30
+                {
+                    return Err(SdkError::new(
+                        "TEST_PROVIDER_SOURCE_LINEAGE_MISMATCH",
+                        ErrorCategory::Internal,
+                        false,
+                        "The test provider source received different process lineage.",
+                    ));
+                }
+                Ok(ProviderDispatchSourceDisposition::Ready(Box::new(
+                    self.snapshot.clone(),
+                )))
+            })
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn exact_host_http_transport_records_one_canonical_process_outcome() {
+        let Ok(database_url) = std::env::var("DATABASE_URL") else {
+            eprintln!("skipping provider HTTP process acceptance because DATABASE_URL is absent");
+            return;
+        };
+        let admin_database_url = std::env::var("ADMIN_DATABASE_URL")
+            .expect("ADMIN_DATABASE_URL must accompany DATABASE_URL");
+        let store = PostgresDataStore::connect(&database_url, 6)
+            .await
+            .expect("connect provider HTTP process store");
+        let admin = PgPool::connect(&admin_database_url)
+            .await
+            .expect("connect provider HTTP process evidence reader");
+        let snapshot = provider_process_snapshot();
+        seed_request(&store, &snapshot.request)
+            .await
+            .expect("seed provider HTTP request-created evidence");
+
+        let process_actor = ActorId::try_new(PROVIDER_PROCESS_WORKER_ACTOR_ID).unwrap();
+        let expected_work_item = build_provider_dispatch_work_item(ProviderDispatchWorkItemInput {
+            request: &snapshot.request,
+            provider_profile: &snapshot.provider_profile,
+            party_snapshot: &snapshot.party_snapshot,
+            worker_actor_id: &process_actor,
+            now_unix_ms: 30,
+        })
+        .expect("derive exact provider HTTP work item");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let endpoint = spawn_registry_provider(
+            expected_work_item
+                .provider_request
+                .provider_idempotency_key
+                .clone(),
+            calls.clone(),
+        )
+        .await;
+
+        let clock = Arc::new(FixedClock::new(31_000_000));
+        let transport = RegistryHttpTransport::try_new(
+            RegistryHttpTransportConfig::try_new(
+                &endpoint,
+                [endpoint.clone()],
+                Duration::from_secs(1),
+                64 * 1024,
+                64 * 1024,
+            )
+            .expect("configure exact host HTTP endpoint"),
+            clock.clone(),
+        )
+        .expect("build concrete registry HTTP transport");
+        let coordinate = ProviderAdapterCoordinate::try_new(
+            REGISTRY_HTTP_ADAPTER_KIND,
+            REGISTRY_HTTP_ADAPTER_CONTRACT_VERSION,
+        )
+        .unwrap();
+        let catalog = StaticProviderTransportCatalog::try_new([ProviderTransportRegistration {
+            transport_key: REGISTRY_HTTP_TRANSPORT_KEY.to_owned(),
+            coordinate: coordinate.clone(),
+            transport: Arc::new(transport),
+        }])
+        .expect("build exact host transport catalog");
+        let configuration = CustomerEnrichmentProviderAdapterConfig {
+            coordinate,
+            state: CustomerEnrichmentProviderAdapterState::Enabled,
+            transport_key: Some(REGISTRY_HTTP_TRANSPORT_KEY.to_owned()),
+            maximum_attempts: Some(10),
+            quota_window_seconds: Some(60),
+            circuit_failure_threshold: Some(3),
+            circuit_open_seconds: Some(60),
+            credential_bindings: vec![CustomerEnrichmentProviderCredentialBinding {
+                tenant_id: TenantId::try_new(TENANT_ID).unwrap(),
+                handle_alias: "registry_primary".to_owned(),
+                secret_environment: "TEST_REGISTRY_PRIMARY_TOKEN".to_owned(),
+            }],
+        };
+        let registry = build_customer_enrichment_provider_registry(
+            &[configuration],
+            clock,
+            Arc::new(catalog),
+            Arc::new(StaticProcessSecretValues {
+                values: BTreeMap::from([(
+                    "TEST_REGISTRY_PRIMARY_TOKEN".to_owned(),
+                    ProviderSecretMaterial::try_new(PROVIDER_SECRET.as_bytes().to_vec()).unwrap(),
+                )]),
+            }),
+        )
+        .expect("assemble governed exact provider registry");
+
+        let authorization_store = LiveAuthorizationStore::default();
+        let authorizer = Arc::new(LiveCapabilityAuthorizer::new(
+            authorization_store.clone(),
+            Arc::new(FixedClock::new(30_000_000)),
+        ));
+        for definition in [
+            request_dispatch_capability_definition().unwrap(),
+            provider_response_capability_definition().unwrap(),
+        ] {
+            authorization_store
+                .upsert(process_worker_grant(&definition))
+                .expect("grant exact internal provider capability");
+        }
+        let provider_worker = build_customer_enrichment_provider_worker(
+            CustomerEnrichmentProviderWorkerDependencies {
+                store: store.clone(),
+                registry: Arc::new(registry),
+                authorizer,
+            },
+        )
+        .expect("compose authorized provider worker");
+        let source_calls = Arc::new(AtomicUsize::new(0));
+        let process = CustomerEnrichmentProviderProcessWorker::new(
+            store.clone(),
+            Arc::new(StaticProcessSource {
+                snapshot: snapshot.clone(),
+                calls: source_calls.clone(),
+            }),
+            Arc::new(provider_worker),
+            process_actor,
+        )
+        .expect("compose event-driven provider process");
+
+        let tenant_id = TenantId::try_new(TENANT_ID).unwrap();
+        let first = process
+            .run_cycle(tenant_id.clone(), 30_000_000)
+            .await
+            .expect("dispatch request through concrete HTTP provider");
+        assert_eq!(first.created_events, 1);
+        assert_eq!(first.dispatched, 1);
+        assert_eq!(first.dispatch_replays, 0);
+        assert_eq!(first.response_replays, 0);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(source_calls.load(Ordering::SeqCst), 1);
+
+        let request_snapshot = store
+            .get_record(
+                &read_context(),
+                &enrichment_request_record_ref(&snapshot.request).unwrap(),
+            )
+            .await
+            .unwrap()
+            .expect("response-recorded request exists");
+        let recorded_request = enrichment_request_from_snapshot(&request_snapshot).unwrap();
+        assert_eq!(
+            recorded_request.status(),
+            EnrichmentRequestStatus::ResponseRecorded
+        );
+        let receipt_id = recorded_request
+            .response_receipt_id()
+            .expect("response receipt lineage exists")
+            .as_str()
+            .to_owned();
+
+        let checkpoint = ProjectionStore::projection_checkpoint(
+            &store,
+            tenant_id.clone(),
+            PROVIDER_PROCESS_PROJECTION_ID.to_owned(),
+        )
+        .await
+        .unwrap()
+        .expect("provider process checkpoint exists");
+        assert_eq!(checkpoint.applied_event_count, 1);
+        let document = store
+            .projection_document(
+                &tenant_id,
+                PROVIDER_PROCESS_PROJECTION_ID,
+                PROVIDER_PROCESS_OUTCOME_RESOURCE_TYPE,
+                snapshot.request.request_id().as_str(),
+            )
+            .await
+            .unwrap()
+            .expect("canonical provider process outcome exists");
+        let outcome = ProviderProcessCanonicalOutcome::from_projection_document(document).unwrap();
+        assert_eq!(outcome.request_id(), snapshot.request.request_id().as_str());
+        assert_eq!(outcome.retry_generation(), 0);
+        assert_eq!(outcome.kind(), ProviderProcessOutcomeKind::ResponseRecorded);
+        assert_eq!(
+            outcome.provider_response_receipt_id(),
+            Some(receipt_id.as_str())
+        );
+        assert!(outcome.provider_response_conflict_id().is_none());
+        let created_event_id: String = sqlx::query_scalar(
+            "SELECT event_id FROM crm.outbox_events WHERE tenant_id = 'tenant-a' AND event_type = 'customer_enrichment.request.created' ORDER BY occurred_at, event_id LIMIT 1",
+        )
+        .fetch_one(&admin)
+        .await
+        .unwrap();
+        assert_eq!(outcome.source_created_event_id(), created_event_id);
+
+        let baseline = process_evidence_counts(&admin).await;
+        drop(process);
+        let restarted = CustomerEnrichmentProviderProcessWorker::new(
+            store,
+            Arc::new(StaticProcessSource {
+                snapshot,
+                calls: source_calls.clone(),
+            }),
+            Arc::new(ForbiddenProcessExecutor),
+            ActorId::try_new(PROVIDER_PROCESS_WORKER_ACTOR_ID).unwrap(),
+        )
+        .expect("recompose provider process after checkpoint");
+        let replay = restarted
+            .run_cycle(tenant_id, 40_000_000)
+            .await
+            .expect("checkpointed restart is a no-op");
+        assert_eq!(replay.created_events, 0);
+        assert_eq!(replay.dispatched, 0);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(source_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(process_evidence_counts(&admin).await, baseline);
+    }
+
+    #[derive(Clone)]
+    struct ForbiddenProcessExecutor;
+
+    impl crm_customer_enrichment_provider_process_composition::ProviderDispatchExecutorPort
+        for ForbiddenProcessExecutor
+    {
+        fn execute<'a>(
+            &'a self,
+            _work_item: ProviderDispatchWorkItem,
+        ) -> PortFuture<'a, Result<ProviderDispatchExecution, SdkError>> {
+            Box::pin(async {
+                Err(SdkError::new(
+                    "TEST_PROVIDER_EXECUTOR_MUST_NOT_RUN",
+                    ErrorCategory::Internal,
+                    false,
+                    "The provider executor must not run after checkpoint recovery.",
+                ))
+            })
+        }
+    }
+
+    fn process_worker_grant(definition: &CapabilityDefinition) -> AuthorizationGrant {
+        AuthorizationGrant {
+            tenant_id: TenantId::try_new(TENANT_ID).unwrap(),
+            actor_id: ActorId::try_new(PROVIDER_PROCESS_WORKER_ACTOR_ID).unwrap(),
+            policy_id: definition.authorization_policy_id.clone(),
+            capability_id: definition.capability_id.clone(),
+            capability_version: definition.capability_version.clone(),
+            owner_module_id: definition.owner_module_id.clone(),
+            policy_version: "provider-http-process-policy-v1".to_owned(),
+            expires_at_unix_nanos: Some(60_000_000),
+        }
+    }
+
+    fn provider_process_snapshot() -> ProviderDispatchSourceSnapshot {
+        let provider_profile = ProviderProfileVersion::publish(ProviderProfileDraft {
+            provider_key: "company_registry_http_process".to_owned(),
+            adapter_kind: REGISTRY_HTTP_ADAPTER_KIND.to_owned(),
+            adapter_contract_version: REGISTRY_HTTP_ADAPTER_CONTRACT_VERSION.to_owned(),
+            supported_target_fields: vec![TargetField::PartyDisplayName],
+            purpose_codes: vec!["customer_profile_enrichment".to_owned()],
+            license_id: "Registry HTTP process licence".to_owned(),
+            permitted_use_class: "customer_master_review".to_owned(),
+            residency_region: "eu".to_owned(),
+            retention_days: 30,
+            raw_payload_policy: RawPayloadPolicy::DigestOnly,
+            credential_handle_aliases: vec!["registry_primary".to_owned()],
+            effective_at_unix_ms: 1,
+            expires_at_unix_ms: Some(20_000),
+        })
+        .unwrap();
+        let mapping = MappingVersion::publish(MappingDraft {
+            mapping_key: "party_display_name_http_process".to_owned(),
+            provider_profile_version_id: provider_profile.version_id().clone(),
+            provider_response_field_path: "organization.legal_name".to_owned(),
+            target_field: TargetField::PartyDisplayName,
+            normalization: MappingNormalization::CanonicalPartyDisplayNameV1,
+            maximum_suggestions_per_response: 1,
+            confidence_required: true,
+        })
+        .unwrap();
+        let request = EnrichmentRequest::create(EnrichmentRequestDraft {
+            tenant_id: TenantId::try_new(TENANT_ID).unwrap(),
+            requested_by: ActorId::try_new(ACTOR_ID).unwrap(),
+            idempotency_key: IdempotencyKey::try_new("provider-http-process-request").unwrap(),
+            target: TargetSnapshot::try_new(
+                "party-provider-http-process-1",
+                7,
+                TargetField::PartyDisplayName,
+            )
+            .unwrap(),
+            provider_profile_version_id: provider_profile.version_id().clone(),
+            mapping_version_id: mapping.version_id().clone(),
+            requested_fields: vec![TargetField::PartyDisplayName],
+            policy_evidence: RequestPolicyEvidence::try_new(
+                "customer_profile_enrichment",
+                "legitimate_interest",
+                None,
+                "provider-http-process-policy-v1",
+            )
+            .unwrap(),
+            created_at_unix_ms: 10,
+            deadline_at_unix_ms: 10_000,
+            expires_at_unix_ms: 20_000,
+        })
+        .unwrap();
+        ProviderDispatchSourceSnapshot {
+            request,
+            provider_profile,
+            party_snapshot: PartySnapshot {
+                party_id: RecordId::try_new("party-provider-http-process-1").unwrap(),
+                display_name: "HTTP Process Company".to_owned(),
+                resource_version: 7,
+                observed_at_unix_ms: 15,
+            },
+        }
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct ProcessEvidenceCounts {
+        records: i64,
+        events: i64,
+        audits: i64,
+        idempotency: i64,
+        transactions: i64,
+        projection_events: i64,
+        projection_documents: i64,
+    }
+
+    async fn process_evidence_counts(admin: &PgPool) -> ProcessEvidenceCounts {
+        ProcessEvidenceCounts {
+            records: scalar(
+                admin,
+                "SELECT count(*)::bigint FROM crm.records WHERE tenant_id = 'tenant-a' AND owner_module_id = 'crm.customer-enrichment'",
+            )
+            .await,
+            events: scalar(
+                admin,
+                "SELECT count(*)::bigint FROM crm.outbox_events WHERE tenant_id = 'tenant-a' AND event_type LIKE 'customer_enrichment.%'",
+            )
+            .await,
+            audits: scalar(
+                admin,
+                "SELECT count(*)::bigint FROM crm.audit_records WHERE tenant_id = 'tenant-a' AND capability_id LIKE 'customer_enrichment.%'",
+            )
+            .await,
+            idempotency: scalar(
+                admin,
+                "SELECT count(*)::bigint FROM crm.idempotency_records WHERE tenant_id = 'tenant-a'",
+            )
+            .await,
+            transactions: scalar(
+                admin,
+                "SELECT count(*)::bigint FROM crm.business_transactions WHERE tenant_id = 'tenant-a'",
+            )
+            .await,
+            projection_events: scalar(
+                admin,
+                "SELECT count(*)::bigint FROM crm.projection_applied_events WHERE tenant_id = 'tenant-a' AND projection_id = 'customer-enrichment-provider-process-v1'",
+            )
+            .await,
+            projection_documents: scalar(
+                admin,
+                "SELECT count(*)::bigint FROM crm.projection_documents WHERE tenant_id = 'tenant-a' AND projection_id = 'customer-enrichment-provider-process-v1' AND resource_type = 'customer_enrichment.provider_process_outcome'",
+            )
+            .await,
+        }
+    }
+}

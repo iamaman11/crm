@@ -2,14 +2,10 @@
 name = "crm-sales-activities-link-contract-adapter"
 version = "0.1.0"
 edition = "2024"
-rust-version.workspace = true
 publish = false
 
 [dependencies]
 crm-module-sdk = { path = "../crm-module-sdk" }
 crm-proto-contracts = { path = "../crm-proto-contracts" }
 crm-sales-activities-link = { path = "../../modules/crm-sales-activities-link" }
-prost = { workspace = true }
-
-[lints]
-workspace = true
+prost = "0.14"
