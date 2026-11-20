@@ -453,13 +453,9 @@ fn contact_point_matches_filters(
             return false;
         }
     }
-    if filters
+    !filters
         .preferred
         .is_some_and(|preferred| preferred != contact_point.preferred())
-    {
-        return false;
-    }
-    true
 }
 
 fn contact_point_to_wire_with_visibility(
