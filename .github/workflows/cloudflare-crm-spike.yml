@@ -36,10 +36,12 @@ jobs:
         run: |
           set -euo pipefail
           cargo --version | grep -F 'cargo 1.100.0 '
-          cargo generate-lockfile
-          echo 'CRM_CARGO_LOCK_BEGIN'
-          base64 -w120 Cargo.lock
-          echo 'CRM_CARGO_LOCK_END'
+          # Resolve the separately pinned Worker lock after pruning its
+          # old optional PostgreSQL Account Overview dependencies.
+          cargo generate-lockfile --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml
+          echo 'CRM_WORKER_LOCK_BEGIN'
+          base64 -w120 apps/cloudflare-crm/rust-party/Cargo.lock
+          echo 'CRM_WORKER_LOCK_END'
           echo 'Candidate-only: expected stop before ordinary CI/deployment'
           exit 1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
