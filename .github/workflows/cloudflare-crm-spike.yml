@@ -80,6 +80,14 @@ jobs:
           set -euo pipefail
           cargo fmt --all -- --check
           cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml -- --check
+      # The scanner is pinned independently of application dependencies.
+      # Cache only its executable, not a security result: every run still
+      # evaluates both the root and Worker Cargo.lock files from this SHA.
+      - name: Cache pinned cargo-deny CLI
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/crm-cargo-deny/bin/cargo-deny
+          key: ${{ runner.os }}-crm-rust1100-cargo-deny-0.22.0-v1
       # #471 S2: independent root dependency security gate. The root lock is
       # free of the upstream Cloudflare chrono advisory; do NOT silently ignore
       # or misreport the separately deferred Worker native/WASM finding.
@@ -87,8 +95,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo install --locked --root "$RUNNER_TEMP/crm-cargo-deny" cargo-deny --version 0.22.0
           deny="$RUNNER_TEMP/crm-cargo-deny/bin/cargo-deny"
+          if [ ! -x "$deny" ] || [ "$("$deny" --version 2>/dev/null)" != "cargo-deny 0.22.0" ]; then
+            cargo install --locked --root "$RUNNER_TEMP/crm-cargo-deny" cargo-deny --version 0.22.0
+          fi
           "$deny" --version | grep -Fx 'cargo-deny 0.22.0'
           "$deny" --locked --config deny.toml --target x86_64-unknown-linux-gnu --target x86_64-pc-windows-msvc check --show-stats
           (cd apps/cloudflare-crm/rust-party && "$deny" --locked --config "$GITHUB_WORKSPACE/deny.toml" --target wasm32-unknown-unknown check --show-stats)
