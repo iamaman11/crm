@@ -1,0 +1,64 @@
+name: CRM #471 temporary Wrangler harness experiment
+# EXPIRE: this workflow exists only on experiment/471-wrangler-harness; never merge it to dev.
+on:
+  push:
+    branches:
+      - experiment/471-wrangler-harness
+permissions:
+  contents: read
+  actions: read
+jobs:
+  harness-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.18.0'
+      - name: Install exact Wrangler 4.99 and original workspace packages (experimental lock)
+        run: |
+          npm install --global pnpm@11.13.1
+          pnpm install --no-frozen-lockfile
+          node --input-type=module -e 'import {createTestHarness} from "./apps/cloudflare-crm/node_modules/wrangler/wrangler-dist/cli.js"; if(typeof createTestHarness!=="function") throw Error("missing createTestHarness");' || node --input-type=module -e 'import("wrangler").then(m=>{if(typeof m.createTestHarness!=="function")throw Error("missing createTestHarness")})'
+          pnpm --filter cloudflare-crm exec wrangler --version
+      - name: Generate original Buf contracts, descriptor and React build
+        run: |
+          pnpm exec buf generate --template buf.gen.web.yaml
+          pnpm exec buf build proto --as-file-descriptor-set -o /tmp/crm-proto-descriptors.binpb
+          pnpm --filter cloudflare-crm build
+          test -s apps/cloudflare-crm/dist/index.html
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # pinned
+        with:
+          toolchain: 1.100.0
+          targets: wasm32-unknown-unknown
+      - name: Install pinned original workers-rs compiler tools
+        run: |
+          cargo install --locked wasm-bindgen-cli --version 0.2.130
+          cargo install --locked worker-build --version 0.8.7
+      - name: Build same real native-ci Rust WASM
+        working-directory: apps/cloudflare-crm/rust-party
+        env:
+          WASM_OPT_BIN: /home/runner/work/crm/crm/node_modules/binaryen/bin/wasm-opt
+        run: |
+          worker-build --release --locked --features native-ci
+          test -s build/index.js
+          test -s build/index_bg.wasm
+      - name: Install actual Chromium
+        working-directory: apps/cloudflare-crm
+        run: |
+          pnpm exec playwright install chromium
+      - name: Execute one native harness against compiled Worker D1 signed Access Proto and Chromium
+        env:
+          CRM_PROTO_DESCRIPTOR_FILE: /tmp/crm-proto-descriptors.binpb
+        run: node apps/cloudflare-crm/rust-party/test/harness-probe.mjs
+      - name: Keep compatibility report and experimental lock
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: crm-471-harness-experiment
+          path: |
+            apps/cloudflare-crm/harness-probe-report.json
+            pnpm-lock.yaml
+          if-no-files-found: warn
+          retention-days: 7
