@@ -1,9 +1,4 @@
 #![forbid(unsafe_code)]
 
-#[cfg(feature = "postgres")]
-mod postgres;
-#[cfg(feature = "postgres")]
-pub use postgres::*;
-
-#[cfg(feature = "account-overview")]
+// One storage-independent composition of authoritative owner values.
 pub mod account_overview;

@@ -2,31 +2,19 @@
 name = "crm-customer-360-query-adapter"
 version = "0.1.0"
 edition = "2024"
+rust-version.workspace = true
 publish = false
 
-[features]
-default = ["postgres"]
-postgres = ["dep:crm-application-composition", "dep:crm-capability-plan-support", "dep:crm-capability-runtime", "dep:crm-core-data", "dep:crm-customer-360-composition", "dep:crm-query-runtime", "dep:crm-proto-contracts", "dep:prost", "dep:serde_json", "dep:sqlx"]
-account-overview = [
-    "dep:crm-customer-accounts", "dep:crm-parties", "dep:crm-contact-points",
-    "dep:crm-party-relationships", "dep:crm-sales", "dep:crm-activities",
-]
-
+# Account Overview composes original owner values; no storage, transport,
+# PostgreSQL compatibility mode or optional default feature set.
 [dependencies]
-crm-application-composition = { path = "../crm-application-composition", optional = true }
-crm-capability-plan-support = { path = "../crm-capability-plan-support", optional = true }
-crm-capability-runtime = { path = "../crm-capability-runtime", optional = true }
-crm-core-data = { path = "../crm-core-data", optional = true }
-crm-customer-360-composition = { path = "../crm-customer-360-composition", optional = true }
 crm-module-sdk = { path = "../crm-module-sdk" }
-crm-proto-contracts = { path = "../crm-proto-contracts", optional = true }
-crm-query-runtime = { path = "../crm-query-runtime", optional = true }
-prost = { version = "0.14", optional = true }
-serde_json = { version = "1", optional = true }
-sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "json"], optional = true }
-crm-customer-accounts = { path = "../../modules/crm-customer-accounts", optional = true }
-crm-parties = { path = "../../modules/crm-parties", optional = true }
-crm-contact-points = { path = "../../modules/crm-contact-points", optional = true }
-crm-party-relationships = { path = "../../modules/crm-party-relationships", optional = true }
-crm-sales = { path = "../../modules/crm-sales", optional = true }
-crm-activities = { path = "../../modules/crm-activities", optional = true }
+crm-customer-accounts = { path = "../../modules/crm-customer-accounts" }
+crm-parties = { path = "../../modules/crm-parties" }
+crm-contact-points = { path = "../../modules/crm-contact-points" }
+crm-party-relationships = { path = "../../modules/crm-party-relationships" }
+crm-sales = { path = "../../modules/crm-sales" }
+crm-activities = { path = "../../modules/crm-activities" }
+
+[lints]
+workspace = true
