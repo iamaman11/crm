@@ -377,6 +377,12 @@ function run(mode,variant="valid"){
    {path:rpcPath,status:403,request_id:deniedPartyId,error_code:"permission_denied",source_sha:sha,runtime:"native-workers-rs"},
    {path:conflictPartyPath,status:409,request_id:conflictPartyId,error_code:"aborted",source_sha:sha,runtime:"native-workers-rs"}
  ];
+ // Match the cardinality observed in the real exact-SHA browser artifact.
+ // Extra read-only RPCs must retain individual source/trace evidence.
+ if(variant==="large-telemetry-scope")for(let i=fixtureRequests.length;i<338;i++)
+   fixtureRequests.push({path:partyLookupPath,status:200,
+     request_id:"abababab-abab-4bab-8bab-"+i.toString(16).padStart(12,"0"),
+     source_sha:sha,runtime:"native-workers-rs"});
  const fixtureWrites=[
    {path:rpcPath,request_id:requestId,audit},
    {path:advancePath,request_id:originalAdvanceId,
@@ -483,8 +489,16 @@ for(const variant of ["unrelated","wrong-database"])test("failure cannot stop "+
 test("matching browser, D1 and version-specific Logs evidence passes the release validator",()=>{
  const result=run("verify-data");
  assert.equal(result.status,0,result.error);assert.equal(result.accepted,true);
- assert.equal(result.state.maxTelemetryInFlight,1,
-   "Cloudflare Telemetry must be queried serially");
+ assert.equal(result.state.maxTelemetryInFlight,2,
+   "Cloudflare Telemetry must be checked through two bounded read lanes");
+});
+test("338 exact RPC readbacks retain request and span evidence without a burst",()=>{
+ const result=run("verify-data","large-telemetry-scope");
+ assert.equal(result.status,0,result.error);
+ assert.equal(result.accepted,true);
+ assert.equal(result.state.maxTelemetryInFlight,2);
+ assert.ok(result.stdout.includes('"requests":338'));
+ assert.equal(result.state.telemetryAttempts>=338,true);
 });
 test("Retry-After delta-seconds, HTTP-date and invalid headers are parsed safely",async()=>{
  const {parseRetryAfterMs}=await import("../scripts/release-readback.mjs");
@@ -502,7 +516,7 @@ for(const variant of [
  const result=run("verify-data",variant);
  assert.equal(result.status,0,result.error);
  assert.equal(result.accepted,true);
- assert.equal(result.state.maxTelemetryInFlight,1);
+ assert.equal(result.state.maxTelemetryInFlight,2);
  assert.equal(result.posts.filter(p=>p.endsWith("/subdomain")).length,0);
  const retry=result.stdout.split("\n").filter(x=>x.includes("crm.cf-readback-retry"))
    .map(x=>JSON.parse(x)).find(x=>x.http_status===429);
@@ -516,8 +530,9 @@ for(const variant of ["telemetry-429-persistent-seconds","telemetry-429-persiste
    assert.notEqual(result.status,0);
    assert.equal(result.accepted,false);
    assert.match(result.error,/HTTP 429/);
-   assert.equal(result.state.telemetryAttempts,3);
-   assert.equal(result.state.maxTelemetryInFlight,1);
+   assert.ok(result.state.telemetryAttempts>=3&&result.state.telemetryAttempts<=6,
+     "Each of the two read lanes must stop after at most three attempts");
+   assert.equal(result.state.maxTelemetryInFlight,2);
    assert.equal(result.posts.filter(p=>p.endsWith("/subdomain")).length,0);
  });
 test("Telemetry nonretryable 403 fails closed without another POST",()=>{
@@ -525,7 +540,7 @@ test("Telemetry nonretryable 403 fails closed without another POST",()=>{
  assert.notEqual(result.status,0);
  assert.equal(result.accepted,false);
  assert.match(result.error,/HTTP 403/);
- assert.equal(result.state.telemetryAttempts,1);
+ assert.ok(result.state.telemetryAttempts>=1&&result.state.telemetryAttempts<=2);
 });
 for(const variant of ["transient-html-audit","transient-html-telemetry","transient-invalid-json-telemetry"])
  test("transient HTML Cloudflare API readback is retried without replaying a mutation: "+variant,()=>{
@@ -542,10 +557,12 @@ for(const variant of ["persistent-html-telemetry","html-success-telemetry","pers
    assert.equal(result.accepted,false);
    assert.match(result.error,/NON_JSON/);
    assert.match(result.error,/cf_ray=fixture-ray-123/);
-   // Serialized request-correlation probes: only the current read retries.
-   if(variant==="persistent-invalid-json-telemetry")assert.equal(result.state.telemetryAttempts,3);
-   if(variant==="html-success-telemetry")assert.equal(result.state.telemetryAttempts,1);
-   assert.equal(result.state.maxTelemetryInFlight,1);
+   // Only two bounded concurrent read-only probes may retry.
+   if(variant==="persistent-invalid-json-telemetry")
+     assert.ok(result.state.telemetryAttempts>=3&&result.state.telemetryAttempts<=6);
+   if(variant==="html-success-telemetry")
+     assert.ok(result.state.telemetryAttempts>=1&&result.state.telemetryAttempts<=2);
+   assert.equal(result.state.maxTelemetryInFlight,2);
    assert.ok(!result.error.includes("<!DOCTYPE"),
      "never print an HTML error body or upstream credentials");
  });

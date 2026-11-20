@@ -47,8 +47,8 @@ async function cf(path,method="GET",body,timeoutMs=0){
   return j.result;
 }
 // Only read-only D1 SELECT and Cloudflare telemetry may be retried.
-// Telemetry calls are serialized at this single owner: no burst of concurrent
-// POST queries, no second rate-limit worker or test-only infrastructure.
+// Telemetry readback uses at most two concurrent calls, never the old
+// four-call burst. Shared 429 cooldown applies across both read lanes.
 let telemetryNextAt=0;
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function cfReadback(path,body,phaseDeadline=Infinity){
@@ -74,8 +74,8 @@ async function cfReadback(path,body,phaseDeadline=Infinity){
     try{
       const result=await cf(path,"POST",body,
         Math.max(1,Math.min(30000,deadline-Date.now())));
-      // One query/second across request-log and span phases, not per batch.
-      if(traces)telemetryNextAt=Date.now()+1000;
+      // Pace consecutive read batches; preserve any longer 429 cooldown.
+      if(traces)telemetryNextAt=Math.max(telemetryNextAt,Date.now()+1000);
       return result;
     }catch(error){
       const status=error?.cfHttpStatus;
@@ -550,27 +550,39 @@ async function verifyData(){
   // A delayed event remains mandatory: extend the bounded indexing window,
   // never weaken the exact source-version/request-id/path/status match below.
   const traceAttempts=120;
-  const traceDeadline=Date.now()+8*60*1000;
+  const traceStarted=Date.now(),traceDeadline=traceStarted+16*60*1000;
+  console.log(JSON.stringify({event:"crm.telemetry-readback-scope",
+    requests:pending.length,max_concurrency:2,deadline_ms:16*60*1000}));
   for(let attempt=0;attempt<traceAttempts&&pending.length&&Date.now()<traceDeadline;attempt++){
     const missing=[];
-    // Sequential search avoids the account-wide Telemetry 429 burst.
-    for(const entry of pending){
-      const data=await cfReadback("/workers/observability/telemetry/query",{
-        queryId:"crm-350-typed-browser",view:"events",
-        timeframe:{from,to:Date.now()+1000},limit:20,
-        parameters:{needle:{value:entry.request_id},filters:[
-          {key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
-      },traceDeadline);
-      const matched=(data.events?.events||[]).find(event=>
-        event.source?.event==="crm.native.request"&&event.source?.request_id===entry.request_id&&
-        event.source?.operation===entry.path&&event.source?.status===entry.status&&
-        (event.source?.error_code??null)===(entry.error_code??null)&&
-        event.$workers?.scriptVersion?.id===liveVersion);
-      if(!matched){missing.push(entry);continue;}
-      const traceId=matched.$metadata?.traceId;
-      assert.match(traceId??"",/^[a-f0-9]{32}$/i,
-        "CRM native request log must carry a valid Cloudflare trace ID");
-      requestTraces.set(entry.request_id,traceId);
+    // Two read lanes preserve all 338+ exact request checks without a
+    // serial queue that consumes the whole release acceptance budget.
+    for(let i=0;i<pending.length;i+=2){
+      const batch=pending.slice(i,i+2);
+      const found=await Promise.all(batch.map(async entry=>{
+        const data=await cfReadback("/workers/observability/telemetry/query",{
+          queryId:"crm-350-typed-browser",view:"events",
+          timeframe:{from,to:Date.now()+1000},limit:20,
+          parameters:{needle:{value:entry.request_id},filters:[
+            {key:"$workers.scriptName",operation:"eq",type:"string",value:"crm-dev"}]}
+        },traceDeadline);
+        const matched=(data.events?.events||[]).find(event=>
+          event.source?.event==="crm.native.request"&&event.source?.request_id===entry.request_id&&
+          event.source?.operation===entry.path&&event.source?.status===entry.status&&
+          (event.source?.error_code??null)===(entry.error_code??null)&&
+          event.$workers?.scriptVersion?.id===liveVersion);
+        if(!matched)return false;
+        const traceId=matched.$metadata?.traceId;
+        assert.match(traceId??"",/^[a-f0-9]{32}$/i,
+          "CRM native request log must carry a valid Cloudflare trace ID");
+        requestTraces.set(entry.request_id,traceId);
+        return true;
+      }));
+      batch.forEach((entry,index)=>{if(!found[index])missing.push(entry);});
+      if((i+batch.length)%32===0||i+batch.length===pending.length)
+        console.log(JSON.stringify({event:"crm.telemetry-readback-progress",
+          round:attempt+1,checked:i+batch.length,total:pending.length,
+          still_missing:missing.length,elapsed_ms:Date.now()-traceStarted}));
     }
     pending=missing;
     if(pending.length&&(attempt===0||(attempt+1)%20===0))
