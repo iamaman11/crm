@@ -679,7 +679,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       </form>
       <MutationNotice state={pipelineMutation}/>
     </RecordPanel>
-    {pipelineEditor===null&&<MutationNotice state={pipelineMutation}/ >}
+    {pipelineEditor===null&&<MutationNotice state={pipelineMutation}/>}
     </>}
 
     <RecordPanel open={editorMode!==null}
