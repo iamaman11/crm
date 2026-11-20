@@ -132,6 +132,6 @@ try{
   throw error;
 }finally{
   if(browser)await browser.close();
-  await harness.close();
+  try{await harness.close();}catch(cleanupError){report.cleanup_failure=String(cleanupError);}
   writeReport();
 }

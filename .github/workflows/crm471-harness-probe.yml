@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.18.0'
-      - name: Install exact Wrangler 4.99 and original workspace packages (experimental lock)
+      - name: Install exact Wrangler 4.165 and original workspace packages (experimental lock)
         run: |
           npm install --global pnpm@11.13.1
           pnpm install --no-frozen-lockfile
@@ -32,10 +32,25 @@ jobs:
         with:
           toolchain: 1.100.0
           targets: wasm32-unknown-unknown
+      - name: Cache exact Rust/WASM source graph and pinned build tools
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/wasm-bindgen
+            ~/.cargo/bin/worker-build
+            target
+            apps/cloudflare-crm/rust-party/target
+          key: crm471-probe-native-ci-1.100.0-0.8.7-${{ hashFiles('apps/cloudflare-crm/rust-party/Cargo.lock') }}-v1
       - name: Install pinned original workers-rs compiler tools
         run: |
-          cargo install --locked wasm-bindgen-cli --version 0.2.130
-          cargo install --locked worker-build --version 0.8.7
+          if ! command -v wasm-bindgen >/dev/null || [ "$(wasm-bindgen --version)" != "wasm-bindgen 0.2.130" ]; then
+            cargo install --locked wasm-bindgen-cli --version 0.2.130
+          fi
+          if ! command -v worker-build >/dev/null || ! worker-build --version 2>&1 | grep -Fq '0.8.7'; then
+            cargo install --locked worker-build --version 0.8.7
+          fi
       - name: Build same real native-ci Rust WASM
         working-directory: apps/cloudflare-crm/rust-party
         env:
