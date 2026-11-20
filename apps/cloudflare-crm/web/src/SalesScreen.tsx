@@ -612,6 +612,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
     <RecordPanel open={pipelineEditor!==null} dirty={pipelineDirty}
       title={pipelineEditor==="new"?"Новая воронка":"Настройка воронки"}
       onClose={()=>{
+        if(pipelineMutation.busy||pipelineMutation.pending)return;
         if(!pipelineDirty||window.confirm("Несохранённые изменения воронки будут потеряны. Закрыть?"))
           setPipelineEditor(null);
       }}>
@@ -671,13 +672,14 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           pipelineMutation.changed();setPipelineDirty(true);
         }}>Добавить этап</Button>{" "}
         <Button type="submit" disabled={pipelineMutation.busy||pipelineMutation.pending}>Сохранить воронку</Button>{" "}
-        <Button type="button" variant="secondary" onClick={()=>{
+        <Button type="button" variant="secondary" disabled={pipelineMutation.busy||pipelineMutation.pending} onClick={()=>{
           if(!pipelineDirty||window.confirm("Несохранённые изменения воронки будут потеряны. Закрыть?"))
             setPipelineEditor(null);
         }}>Отмена</Button>
       </form>
+      <MutationNotice state={pipelineMutation}/>
     </RecordPanel>
-    <MutationNotice state={pipelineMutation}/>
+    {pipelineEditor===null&&<MutationNotice state={pipelineMutation}/ >}
     </>}
 
     <RecordPanel open={editorMode!==null}
