@@ -126,7 +126,7 @@ rust-version = "1.100.0"
 [workspace.lints.rust]
 warnings = "deny"
 
-# Stage B wave 1: exact existing requirements only; no library upgrade is intended.
+# Current pinned dependencies; update versions and lockfiles together after compatibility validation.
 [workspace.dependencies]
 prost = "0.14"
 serde = { version = "1", features = ["derive"] }

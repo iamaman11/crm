@@ -77,6 +77,7 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin/wasm-bindgen
             ~/.cargo/bin/worker-build
+            ~/.cargo/bin/cargo-deny
             target
             apps/cloudflare-crm/rust-party/target
           key: crm471-probe-native-ci-1.100.0-wasm-bindgen-0.2.130-worker-build-0.9.0-${{ hashFiles('apps/cloudflare-crm/rust-party/Cargo.lock') }}-v2
@@ -91,6 +92,15 @@ jobs:
           fi
           echo "WASM_BINDGEN_BIN=$(command -v wasm-bindgen)" >> "$GITHUB_ENV"
           worker-build --version
+      - name: Install current cargo-deny and check both Rust lockfiles
+        run: |
+          set -euo pipefail
+          if ! command -v cargo-deny >/dev/null || [ "$(cargo-deny --version)" != "cargo-deny 0.22.0" ]; then
+            cargo install --locked cargo-deny --version 0.22.0
+          fi
+          cargo-deny --version
+          cargo-deny --locked --config deny.toml --target x86_64-unknown-linux-gnu --target x86_64-pc-windows-msvc check --show-stats
+          (cd apps/cloudflare-crm/rust-party && cargo-deny --locked --config "$GITHUB_WORKSPACE/deny.toml" --target wasm32-unknown-unknown check --show-stats)
       - name: Build same real native-ci Rust WASM
         working-directory: apps/cloudflare-crm/rust-party
         env:
