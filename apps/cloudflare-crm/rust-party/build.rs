@@ -25,7 +25,10 @@ fn active_protos(proto_root: &Path) -> Vec<PathBuf> {
             }
             for entry in std::fs::read_dir(version.path()).expect("read CRM Protobuf files") {
                 let path = entry.expect("read CRM Protobuf file").path();
-                if path.extension().is_some_and(|extension| extension == "proto") {
+                if path
+                    .extension()
+                    .is_some_and(|extension| extension == "proto")
+                {
                     files.push(path);
                 }
             }
