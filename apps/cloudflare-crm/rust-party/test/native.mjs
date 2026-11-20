@@ -25,7 +25,7 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 let base,runtime,fixtureDb;
 const successfulCalls=new Set();
-// The CLI migrations finish before the runtime starts. Every live fixture
+// The native Wrangler harness owns migrations and lifecycle. Every fixture
 // read/write and the actual Rust Worker use one native D1 binding.
 const statement=(query,...params)=>{
  assert.ok(fixtureDb,"D1 fixture is not initialized");
@@ -150,7 +150,7 @@ try{
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_tenants"))[0].n,2,
    "runtime must bind the exact Wrangler-migrated isolated test database");
  console.log(JSON.stringify({event:"crm.native-ci.d1-runtime",source_sha:sourceSha,
-   runtime:"Miniflare/workerd",fixture_access:"D1 binding",worker_count:1,d1_count:1}));
+   runtime:"Wrangler/createTestHarness(workerd)",fixture_access:"D1 binding",worker_count:1,d1_count:1}));
  async function call(path,token,method="GET"){
    const response=await rpcFetch(path,{method,
      headers:{...(token?{"cf-access-jwt-assertion":token}:{}),"content-type":"application/json"},
@@ -3863,7 +3863,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    successful_rpc_calls:[...successfulCalls].sort(),
    unauthenticated_denials:unauthenticatedDenials.sort(),
    viewer_denials:viewerDenials.sort(),
-   fixture_access:"D1 binding",runtime:"Miniflare/workerd",
+   fixture_access:"D1 binding",runtime:"Wrangler/createTestHarness(workerd)",
   scenarios:"existing signed workerd assertions completed"
  },null,2)+"\n");
  console.log(JSON.stringify({event:"crm.signed-connect-acceptance",

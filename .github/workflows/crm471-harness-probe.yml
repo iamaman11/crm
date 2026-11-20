@@ -70,6 +70,11 @@ jobs:
           CRM_SOURCE_SHA: ${{ github.sha }}
           CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
         run: node rust-party/test/native.mjs
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13.18'
+      - name: Install original governance dependencies
+        run: python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
       - name: Verify no compiled policy/RPC proof was dropped
         run: |
           python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json --runtime-proof /tmp/crm-rpc-runtime.json
@@ -84,7 +89,6 @@ jobs:
           name: crm-471-harness-experiment
           path: |
             apps/cloudflare-crm/e2e-evidence-native/
-            pnpm-lock.yaml
             pnpm-lock.yaml
           if-no-files-found: warn
           retention-days: 7
