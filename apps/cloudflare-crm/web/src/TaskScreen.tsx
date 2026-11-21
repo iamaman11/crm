@@ -5,7 +5,7 @@ import {api,field,newId,timestamp,dateText} from "./api";
 import {TaskPriority,TaskStatus} from "@ultimate-crm/client/cloudflare";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
-import {AccountPicker} from "./Pickers";
+import {AccountPicker,AccountName} from "./Pickers";
 import {TimeFields} from "./TimeFields";
 import {timePatch} from "./timePatch";
 import {scopeHref} from "./routes";
@@ -50,7 +50,8 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
         ?<a href={scopeHref("tasks",initialAccountId||focused.data?.accountId||"")}>К задачам клиента</a>
         :<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorMode("create");mutation.changed();}}>Новая задача</Button>}/>
     {!focusedTaskId&&<>
-    <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setCursor("");}}/>
+    <AccountPicker label="Фильтр по клиенту" value={accountId} required={false}
+      onSelect={id=>{setAccountId(id);setCursor("");}}/>
     <SelectField label="Статус задачи" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>
       <option value="">Все</option><option value={TaskStatus.OPEN}>Открытые</option><option value={TaskStatus.COMPLETED}>Выполненные</option>
     </SelectField>
@@ -60,7 +61,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
     <QueryNotice query={focusedTaskId?focused:query}/>
     {visibleTasks.map(t=><Card title={t.subject} key={t.taskId}>
       {focusedTaskId&&<p>ID: {t.taskId} · версия {t.version.toString()}</p>}
-      <p>{t.description}</p><p>Клиент: {t.accountId}</p>
+      <p>{t.description}</p><p>Клиент: <AccountName accountId={t.accountId}/></p>
       <p>Срок: {dateText(t.dueAt)} · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?"Открыта":"Неизвестный статус"}</p>
       <p>Напоминание: {dateText(t.reminderAt)}</p>
       <Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={async()=>{
@@ -123,7 +124,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
           ...(dueAt?{dueAt}:{}),...(reminderAt?{reminderAt}:{}),precondition:{idempotencyKey:mutation.key}},draftId);
       },async()=>{setEditorMode(null);setDraftId(newId());await query.reload();});
     }}><FormGrid>
-      <TextField label="Тема задачи" name="subject" required/><AccountPicker/>
+      <TextField label="Тема задачи" name="subject" required/><AccountPicker initialAccountId={accountId}/>
       <TextField label="Описание" name="description"/>
       <SelectField label="Приоритет" name="priority" defaultValue="2">
         <option value={TaskPriority.LOW}>Низкий</option><option value={TaskPriority.NORMAL}>Обычный</option><option value={TaskPriority.HIGH}>Высокий</option><option value={TaskPriority.URGENT}>Срочный</option>

@@ -4,6 +4,7 @@ import type {ContactPoint,Deal} from "@ultimate-crm/client/cloudflare";
 import {DealEventKind} from "@ultimate-crm/client/cloudflare";
 import {ContactPointStatus,DealStatus,ForecastCategory,ProbabilitySource} from "@ultimate-crm/client/cloudflare";
 import {api,dateText} from "./api";
+import {AccountName} from "./Pickers";
 import {useQuery,QueryNotice} from "./hooks";
 import {moneyText,percent} from "./money";
 import type {CurrencyCatalog} from "./money";
@@ -133,7 +134,7 @@ export function DealDetails({dealId,currencies,onEdit,onClose,onReopen}:{dealId:
     {deal&&<>
       <h3>{deal.name}</h3>
       <p>ID: {deal.dealId} · версия {deal.version.toString()}</p>
-      <p>Клиент: <a href={accountHref(deal.accountId)}>{deal.accountId}</a></p>
+      <p>Клиент: <AccountName accountId={deal.accountId}/></p>
       <p>Основной контакт: {details.data?.contact?
         <a href={scopeHref("contacts",details.data.contact.partyId)}>
           {details.data.contact.displayValue}</a>:"Не выбран"}</p>

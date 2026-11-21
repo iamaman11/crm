@@ -5,7 +5,7 @@ import {api,field,newId,timestamp,dateText} from "./api";
 import {ContactPointKind,ContactPointStatus} from "@ultimate-crm/client/cloudflare";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
-import {PartyPicker} from "./Pickers";
+import {PartyPicker,PartyName} from "./Pickers";
 import {TimeFields} from "./TimeFields";
 import {timePatch} from "./timePatch";
 
@@ -26,10 +26,11 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
   });
   return <>
     <PageHeader title="Контакты" description="Email, телефоны и другие способы связи. Email подтверждает владелец через Access или тестовый администратор в dev." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать контакт</Button>}/>
-    <TextField label="Фильтр по ID участника" value={partyId} onChange={e=>{setPartyId(e.target.value);setCursor("");}}/>
+    <PartyPicker label="Фильтр по участнику" value={partyId} required={false}
+      onSelect={id=>{setPartyId(id);setCursor("");}}/>
     <QueryNotice query={query}/>
     {query.data?.contactPoints.map(p=><Card key={p.contactPointId} title={p.displayValue}>
-      <p>Участник: {p.partyId} · {p.status===ContactPointStatus.ACTIVE?"Активен":p.status===ContactPointStatus.INACTIVE?"Неактивен":"Неизвестный статус"}{p.preferred?" · предпочтительный":""}</p>
+      <p>Участник: <PartyName partyId={p.partyId}/> · {p.status===ContactPointStatus.ACTIVE?"Активен":p.status===ContactPointStatus.INACTIVE?"Неактивен":"Неизвестный статус"}{p.preferred?" · предпочтительный":""}</p>
       <p>{p.verified?"Подтверждён доверенными данными":"Не подтверждён"} · {p.normalizedValue}</p>
       <p>ID контакта: {p.contactPointId}</p>
       {p.kind===ContactPointKind.EMAIL&&!p.verified&&<Button variant="secondary" disabled={mutation.busy||mutation.pending}
@@ -62,7 +63,7 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
             precondition:{idempotencyKey:mutation.key}},draftId);
         },async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await query.reload();});
       }}><FormGrid>
-        {!selected&&<><PartyPicker/><SelectField label="Тип контакта" name="kind" defaultValue="1">
+        {!selected&&<><PartyPicker initialPartyId={partyId}/><SelectField label="Тип контакта" name="kind" defaultValue="1">
           <option value={ContactPointKind.EMAIL}>Email</option><option value={ContactPointKind.PHONE}>Телефон</option><option value={ContactPointKind.POSTAL}>Почтовый адрес</option><option value={ContactPointKind.WEB}>Сайт</option><option value={ContactPointKind.MESSAGING}>Мессенджер</option>
         </SelectField></>}
         <TextField label="Значение контакта" name="value" defaultValue={selected?.displayValue??""} required/>

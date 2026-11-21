@@ -518,6 +518,24 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const relationship=(await sql("SELECT version,json_extract(state,'$.status') AS status FROM crm_party_relationship_records WHERE tenant='"+tenantSql+"' AND from_party='"+partyId+"' AND to_party='"+otherPartyId+"'"))[0];
    assert.equal(relationship.version,2);assert.equal(relationship.status,"inactive");
    checkpoint("Relationship create/edit through original owner with D1 version/status");
+   // S-M1-A: the relationship must show authorized names, and its Party
+   // permalink must load GetParty directly, not search the text index by ID.
+   const namedRelationship=page.locator("section").filter({has:page.getByRole("heading",
+     {name:"browser_relation_"+runId,exact:true})});
+   await namedRelationship.getByRole("link",{name:"Browser Updated "+runId,exact:true}).waitFor();
+   const linkedParty=namedRelationship.getByRole("link",{name:"Browser Other "+runId,exact:true});
+   await linkedParty.waitFor();
+   const directPartyRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetParty")&&
+     r.request().method()==="POST");
+   await linkedParty.click();
+   assert.equal((await directPartyRead).status(),200);
+   assert.equal(new URL(await page.url()).hash,"#parties?partyId="+encodeURIComponent(otherPartyId));
+   await page.getByRole("heading",{name:"Browser Other "+runId,exact:true}).waitFor();
+   await reloadDocument();
+   await page.getByRole("heading",{name:"Browser Other "+runId,exact:true}).waitFor();
+   await page.getByRole("link",{name:"К списку участников",exact:true}).click();
+   await page.getByRole("heading",{name:"Люди и организации",exact:true}).waitFor();
+   checkpoint("S-M1-A relationship names and direct Party Get permalink/reload");
    await navigate("accounts","Клиенты");
    await page.getByRole("button",{name:"Создать клиента",exact:true}).click();
    await page.getByLabel("Название клиента",{exact:true}).fill("Browser Account "+runId);
@@ -626,6 +644,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Предпочтительный",{exact:true}).check();
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"UpdateContactPoint");
    assert.equal((await sql("SELECT version FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].version,2);
+   // Filter by the known user-facing name, never by copying the Party ID.
+   await search("Поиск: Фильтр по участнику","Browser Updated "+runId,"ListParties");
+   await page.getByLabel("Фильтр по участнику",{exact:true})
+     .locator('option[value="'+partyId+'"]').waitFor({state:"attached"});
+   await page.getByLabel("Фильтр по участнику",{exact:true}).selectOption(partyId);
+   await page.getByRole("heading",{name:"browser-"+runId+"@example.org",exact:true}).waitFor();
+   const contactCard=page.locator("section").filter({has:page.getByRole("heading",
+     {name:"browser-"+runId+"@example.org",exact:true})});
+   await contactCard.getByRole("link",{name:"Browser Updated "+runId,exact:true}).waitFor();
+   checkpoint("S-M1-A named Contact filter and authorized Party link");
    // Use the owner-tested fictional NANP 555-0102 fixture, not the UK drama range.
    const privatePhone="+12025550102";
    await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
@@ -652,6 +680,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const taskCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Task "+runId,exact:true})});
    await mutation(taskCard.getByRole("button",{name:"Выполнить задачу",exact:true}),"CompleteTask");
    assert.equal((await sql("SELECT json_extract(state,'$.status') AS status FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0].status,"completed");
+   await search("Поиск: Фильтр по клиенту","Browser Account "+runId,"ListAccounts");
+   await page.getByLabel("Фильтр по клиенту",{exact:true})
+     .locator('option[value="'+accountId+'"]').waitFor({state:"attached"});
+   await page.getByLabel("Фильтр по клиенту",{exact:true}).selectOption(accountId);
+   await page.getByRole("heading",{name:"Browser Task "+runId,exact:true}).waitFor();
+   const taskAccount=page.locator("section").filter({has:page.getByRole("heading",
+     {name:"Browser Task "+runId,exact:true})});
+   await taskAccount.getByRole("link",{name:"Browser Account "+runId,exact:true}).waitFor();
+   checkpoint("S-M1-A named Task Account filter and detail link");
    await page.getByRole("button",{name:"Новая задача",exact:true}).click();
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Urgent "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
@@ -1400,7 +1437,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await selectPagedPicker(page,"Участник",privacyPartyId);
    await page.getByLabel("Значение контакта",{exact:true}).fill(adminIdentity);
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
-   await page.getByLabel("Фильтр по ID участника",{exact:true}).fill(privacyPartyId);
+   await selectPagedPicker(page,"Фильтр по участнику",privacyPartyId);
    await page.getByRole("heading",{name:adminIdentity,exact:true}).waitFor();
    const ownContactSection=page.locator("section").filter({
      has:page.getByRole("heading",{name:adminIdentity,exact:true})
@@ -1764,10 +1801,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
 
    const navigationAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
    for(const [link,screen,title,filter,value,method] of [
-     ["Все контакты участника","contacts","Контакты","Фильтр по ID участника",partyId,"ListContactPoints"],
-     ["Все связи участника","relationships","Связи","Фильтр по ID участника",partyId,"ListPartyRelationships"],
-     ["Все сделки клиента","sales","Сделки","Фильтр по ID клиента",accountId,"ListDeals"],
-     ["Все задачи клиента","tasks","Задачи","Фильтр по ID клиента",accountId,"ListTasks"],
+     ["Все контакты участника","contacts","Контакты","Фильтр по участнику",partyId,"ListContactPoints"],
+     ["Все связи участника","relationships","Связи","Фильтр по участнику",partyId,"ListPartyRelationships"],
+     ["Все сделки клиента","sales","Сделки","Фильтр по клиенту",accountId,"ListDeals"],
+     ["Все задачи клиента","tasks","Задачи","Фильтр по клиенту",accountId,"ListTasks"],
    ]){
      await navigate("accounts","Клиенты");
      await search("Поиск клиентов",accountId,"ListAccounts");
@@ -1787,6 +1824,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      assert.equal((await pending).status(),200);
      await page.getByRole("heading",{name:title,exact:true}).waitFor();
      assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value);
+     await expect(page.getByLabel(filter,{exact:true}).locator("option:checked"))
+       .toHaveText((screen==="sales"||screen==="tasks"?
+         "Browser Account ":"Browser Updated ")+runId);
      assert.equal(new URL(await page.url()).hash,"#"+screen+"?"+(screen==="sales"||screen==="tasks"?"accountId":"partyId")+"="+encodeURIComponent(value));
      if(salesBoard){
        assert.equal(await page.getByLabel("Воронка продаж",{exact:true}).inputValue(),"",
@@ -1804,6 +1844,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      const reloaded=page.waitForResponse(r=>responsePathEndsWith(r,"/"+method)&&r.request().method()==="POST");
      await reloadDocument();assert.equal((await reloaded).status(),200);
      assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value,"Reload must retain the linked scope");
+     await expect(page.getByLabel(filter,{exact:true}).locator("option:checked"))
+       .toHaveText((screen==="sales"||screen==="tasks"?
+         "Browser Account ":"Browser Updated ")+runId);
      if(salesBoard){
        assert.equal(await page.getByLabel("Воронка продаж",{exact:true}).inputValue(),"",
          "Reload must keep the global all-pipelines default");

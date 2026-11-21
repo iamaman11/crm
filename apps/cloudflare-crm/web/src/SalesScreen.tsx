@@ -5,7 +5,7 @@ import {DealStatus,ProbabilitySource,ForecastCategory} from "@ultimate-crm/clien
 import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useReadAction,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
-import {AccountPicker} from "./Pickers";
+import {AccountPicker,AccountName} from "./Pickers";
 import {DealContactPicker,DealDetails,dealStatusText,forecastCategoryText,probabilitySourceText} from "./DealRecord";
 import {inputDate,parseDate} from "./calendarInput";
 import {dealHref} from "./routes";
@@ -342,7 +342,8 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
         {p.name}{p.archived?" (архив)":""}
       </option>)}
     </SelectField>
-    <TextField label="Фильтр по ID клиента" value={accountId} onChange={e=>{setAccountId(e.target.value);setStageCursors({});setAllDealsCursor("");viewMutation.changed();}}/>
+    <AccountPicker label="Фильтр по клиенту" value={accountId} required={false}
+      onSelect={id=>{setAccountId(id);setStageCursors({});setAllDealsCursor("");viewMutation.changed();}}/>
     <SelectField label="Статус сделки" value={status} onChange={e=>{setStatus(e.target.value);setStageCursors({});setAllDealsCursor("");viewMutation.changed();}}>
       <option value="">Все</option><option value={DealStatus.OPEN}>Открытые</option>
       <option value={DealStatus.WON}>Выигранные</option><option value={DealStatus.LOST}>Проигранные</option>
@@ -583,7 +584,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
               </span>}
             <p>{moneyText(d.amount,currencyDefinitions)} · {percent(d.probabilityBasisPoints)}%</p>
             {d.status===DealStatus.OPEN&&<p>{probabilitySourceText(d.probabilitySource)} · {forecastCategoryText(d.forecastCategory)}</p>}
-            <p>Клиент: {d.accountId}</p>
+            <p>Клиент: <AccountName accountId={d.accountId}/></p>
             <p>{dealStatusText(d.status)} · версия {d.version.toString()}</p>
             {d.status===DealStatus.OPEN?<>
               <Button variant="secondary" onClick={()=>void open(d.dealId,"edit")}>Изменить сделку</Button>{" "}

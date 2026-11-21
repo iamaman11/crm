@@ -5,7 +5,7 @@ import {api,field,newId,timestamp,dateText} from "./api";
 import {RelationshipDirectionality,RelationshipStatus} from "@ultimate-crm/client/cloudflare";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
-import {PartyPicker} from "./Pickers";
+import {PartyPicker,PartyName} from "./Pickers";
 import {TimeFields} from "./TimeFields";
 import {timePatch} from "./timePatch";
 
@@ -26,10 +26,11 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
   });
   return <>
     <PageHeader title="Связи" description="Отношения между людьми и организациями." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать связь</Button>}/>
-    <TextField label="Фильтр по ID участника" value={partyId} onChange={e=>{setPartyId(e.target.value);setCursor("");}}/>
+    <PartyPicker label="Фильтр по участнику" value={partyId} required={false}
+      onSelect={id=>{setPartyId(id);setCursor("");}}/>
     <QueryNotice query={query}/>
     {query.data?.relationships.map(r=><Card key={r.relationshipId} title={r.type?.code??"Связь"}>
-      <p>{r.type?.fromRole}: {r.fromPartyId} → {r.type?.toRole}: {r.toPartyId}</p>
+      <p>{r.type?.fromRole}: <PartyName partyId={r.fromPartyId}/> → {r.type?.toRole}: <PartyName partyId={r.toPartyId}/></p>
       <p>{r.status===RelationshipStatus.ACTIVE?"Активна":r.status===RelationshipStatus.INACTIVE?"Неактивна":"Неизвестный статус"} · с {dateText(r.validFrom)} до {dateText(r.validUntil)}</p>
       <Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={async()=>{
         try {setSelected((await api.relationships.getPartyRelationship({relationshipId:r.relationshipId})).relationship);setEditorOpen(true);mutation.changed();}
@@ -57,7 +58,7 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
             precondition:{idempotencyKey:mutation.key}},draftId);
         },async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await query.reload();});
       }}><FormGrid>
-      {!selected&&<><PartyPicker name="fromParty" label="Первый участник"/><PartyPicker name="toParty" label="Второй участник"/>
+      {!selected&&<><PartyPicker name="fromParty" label="Первый участник" initialPartyId={partyId}/><PartyPicker name="toParty" label="Второй участник"/>
         <TextField label="Код отношения" name="code" defaultValue="employment" required/>
         <TextField label="Роль первого" name="fromRole" defaultValue="employer" required/>
         <TextField label="Роль второго" name="toRole" defaultValue="employee" required/>
