@@ -391,7 +391,8 @@ pub(super) async fn preview_own_scope(
             kind: None,
             status: None,
         },
-    ).await?;
+    )
+    .await?;
     if next.is_some() {
         return Ok(Err(fail("PRIVACY_SCOPE_CONTACT_BOUND_EXCEEDED", 412)));
     }

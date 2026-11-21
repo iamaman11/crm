@@ -201,7 +201,11 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
             Some(x) if x == contact_wire::ContactPointKind::CONTACT_POINT_KIND_MESSAGING => {
                 Some(contact_points::KindInput::Messaging)
             }
-            _ => return Err(ConnectError::invalid_argument("invalid ContactPointKind filter")),
+            _ => {
+                return Err(ConnectError::invalid_argument(
+                    "invalid ContactPointKind filter",
+                ));
+            }
         };
         let status = match req.status {
             None => None,
@@ -211,7 +215,11 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
             Some(x) if x == contact_wire::ContactPointStatus::CONTACT_POINT_STATUS_INACTIVE => {
                 Some(contact_points::StatusInput::Inactive)
             }
-            _ => return Err(ConnectError::invalid_argument("invalid ContactPointStatus filter")),
+            _ => {
+                return Err(ConnectError::invalid_argument(
+                    "invalid ContactPointStatus filter",
+                ));
+            }
         };
         let (list, next) = contact_points::list_page_typed(
             &self.d1()?,

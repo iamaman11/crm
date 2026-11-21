@@ -170,7 +170,11 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
             Some(x) if x == rel_wire::RelationshipStatus::RELATIONSHIP_STATUS_INACTIVE => {
                 Some(party_relationships::StatusInput::Inactive)
             }
-            _ => return Err(ConnectError::invalid_argument("invalid RelationshipStatus filter")),
+            _ => {
+                return Err(ConnectError::invalid_argument(
+                    "invalid RelationshipStatus filter",
+                ));
+            }
         };
         let (list, next) = party_relationships::list_page_typed(
             &self.d1()?,

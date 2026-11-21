@@ -325,9 +325,8 @@ pub(super) async fn list_page_typed(
 ) -> Result<(Vec<PartyRelationship>, Option<String>)> {
     // Tenant, either-party and status predicates run before LIMIT/page token.
     // The exact status value is the original owner's canonical persisted enum.
-    let mut query = String::from(
-        "SELECT id,state FROM crm_party_relationship_records WHERE tenant=? AND id>?",
-    );
+    let mut query =
+        String::from("SELECT id,state FROM crm_party_relationship_records WHERE tenant=? AND id>?");
     let mut params = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
     if let Some(id) = party {
         query.push_str(" AND (from_party=? OR to_party=?)");

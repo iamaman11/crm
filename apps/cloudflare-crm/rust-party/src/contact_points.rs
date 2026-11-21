@@ -433,9 +433,8 @@ pub(super) async fn list_page_typed(
     size: usize,
     filters: ContactListFilters<'_>,
 ) -> Result<(Vec<ContactPoint>, Option<String>)> {
-    let mut query = String::from(
-        "SELECT id,state FROM crm_contact_point_records WHERE tenant=? AND id>?",
-    );
+    let mut query =
+        String::from("SELECT id,state FROM crm_contact_point_records WHERE tenant=? AND id>?");
     let mut params = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
     if let Some(id) = filters.party {
         // Already a native indexed column, not parsed from JSON.
