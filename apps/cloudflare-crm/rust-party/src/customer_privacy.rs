@@ -1,11 +1,11 @@
 //! D1 operations for the original PrivacyCase domain. No HTTP/JSON business API.
 //! Verification and privacy execution remain outside this intake capability.
 use super::{access, bind, contact_points, now_nanos, parties};
+use crm_contact_points::{ContactPointKind, ContactPointStatus, VerificationState};
 use crm_customer_privacy::{
     PrivacyCase, PrivacyCaseKind, PrivacyDomainError, decode_privacy_case_state,
     encode_privacy_case_state,
 };
-use crm_contact_points::{ContactPointKind, ContactPointStatus, VerificationState};
 use crm_module_sdk::{ActorId, RecordId, SchemaVersion, TenantId};
 use crm_parties::PartyKind;
 use serde::Deserialize;
@@ -171,7 +171,11 @@ pub(super) async fn transition_typed(
             contact_point_id,
         } => (
             "verify-own-subject",
-            json!([expected_version, submitted_party_id.as_str(), contact_point_id.as_str()]),
+            json!([
+                expected_version,
+                submitted_party_id.as_str(),
+                contact_point_id.as_str()
+            ]),
         ),
     };
     let hash = digest(operation, id, &payload);
@@ -186,8 +190,7 @@ pub(super) async fn transition_typed(
         let Some(email) = contact_points::signed_human_email(&actor.identity) else {
             return Ok(Err(fail("PRIVACY_SIGNED_HUMAN_EMAIL_REQUIRED", 403)));
         };
-        let Some(point) = contact_points::load(db, tenant, contact_point_id.as_str()).await?
-        else {
+        let Some(point) = contact_points::load(db, tenant, contact_point_id.as_str()).await? else {
             return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
         };
         let trusted = matches!(
@@ -216,8 +219,7 @@ pub(super) async fn transition_typed(
         if creator.is_none_or(|row| row.created_by != actor.identity) {
             return Ok(Err(fail("PRIVACY_CASE_OWNERSHIP_REQUIRED", 403)));
         }
-        let Some(party) = parties::stored(db, tenant, submitted_party_id.as_str()).await?
-        else {
+        let Some(party) = parties::stored(db, tenant, submitted_party_id.as_str()).await? else {
             return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
         };
         if party.kind() != PartyKind::Person {
@@ -242,8 +244,7 @@ pub(super) async fn transition_typed(
         Transition::Submit => case.submit(expected_version, now),
         Transition::Cancel => case.cancel(expected_version, now),
         Transition::VerifyOwnSubject {
-            submitted_party_id,
-            ..
+            submitted_party_id, ..
         } => {
             let verified_by = ActorId::try_new(actor.identity.clone())
                 .map_err(|_| worker::Error::RustError("PRIVACY_ACTOR_INVALID".into()))?;
