@@ -193,8 +193,18 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
       );
     },async()=>{
       await savedViewsQuery.reload();
-      if(asNew){setSelectedViewId(viewDraftId);setViewDraftId(newId());setCreateViewOpen(false);}
-      if(archive){setSelectedViewId("");setViewName("");setCreateViewOpen(false);}
+      if(asNew){
+        setSelectedViewId(viewDraftId);setViewDraftId(newId());setCreateViewOpen(false);
+        // Normal confirmed writes and lost-ack receipt recovery converge to the
+        // same native URL. No second source of selection state.
+        navigateTo(salesViewHref(initialAccountId,viewDraftId,dealSearch));
+      }
+      if(archive){
+        setSelectedViewId("");setViewName("");setCreateViewOpen(false);
+        setPipelineId("");setStatus("");setAccountId("");
+        setStageCursors({});setAllDealsCursor("");
+        navigateTo(salesViewHref(initialAccountId,"",dealSearch));
+      }
     });
   };
   const pipelinesQuery=useQuery(useCallback(allPipelines,[]));
