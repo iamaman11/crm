@@ -12,7 +12,7 @@
 
 ## Единица разработки: крупный логический срез, а не микропатч
 
-**Обязательные code packets (первый — `S-M1-A`):**
+**Обязательные логические срезы (S-M1-A/S-M1-B приняты для dev/MVP; сейчас S-M2):**
 
 | Срез | Связанный пользовательский результат | Реестр ID | Граница приёмки |
 |---|---|---|---|
@@ -21,7 +21,7 @@
 | **S-M2** | Удобная воронка, этапы, контакт, views и точные метрики; lead решён как B/C | `M2-01…M2-05` | Полный Sales user journey, stage/currency/permission регрессии |
 | **S-NEXT** | Один **только востребованный** ограниченный поток CSV или Customer360/quality | Один связанный subset `N-01…N-06` | Каждая самостоятельная история имеет полный user outcome; не объединять несвязанные ради размера |
 
-**Порядок:** в первую очередь сделать S-M1-A → S-M1-B → S-M2; NEXT по требованию, LATER/END только по новому продуктовому решению. Связанные protobuf/owner/policy/D1/React/browser тесты готовить **одним рабочим срезом** до обращения к полному CI. Поскольку существующий `.github/workflows/cloudflare-crm-spike.yml` запускается **на каждом code push в `dev`** и concurrency стоит `cancel-in-progress: false`, **не делать промежуточных code push в `dev` по отдельным файлам**: подготовить полный связанный diff (рабочие commits/подготовленные blobs/tree без обновления `dev` допустимы), затем **ОДИН атомарный push готового кандидата в `dev`** → один обычный CI. После реального FAIL исправлять и повторять только необходимый полный code gate; docs-only не запускают CI. **Не начинать новый полный CI на каждый отдельный файл, RPC, форматирование или частичное изменение.** Если в срезе обнаружен дополнительный необходимый guard/UX/contract, включить его в тот же срез; отдельную независимую функцию не присоединять ради размера.
+**Порядок:** S-M1-A и S-M1-B уже ACCEPTED для dev/MVP по #7070842108; продолжать с первого непринятого результата S-M2 → NEXT по спросу; NEXT по требованию, LATER/END только по новому продуктовому решению. Связанные protobuf/owner/policy/D1/React/browser тесты готовить **одним рабочим срезом** до обращения к полному CI. Поскольку существующий `.github/workflows/cloudflare-crm-spike.yml` запускается **на каждом code push в `dev`** и concurrency стоит `cancel-in-progress: false`, **не делать промежуточных code push в `dev` по отдельным файлам**: подготовить полный связанный diff (рабочие commits/подготовленные blobs/tree без обновления `dev` допустимы), затем **ОДИН атомарный push готового кандидата в `dev`** → один обычный CI. После реального FAIL исправлять и повторять только необходимый полный code gate; docs-only не запускают CI. **Не начинать новый полный CI на каждый отдельный файл, RPC, форматирование или частичное изменение.** Если в срезе обнаружен дополнительный необходимый guard/UX/contract, включить его в тот же срез; отдельную независимую функцию не присоединять ради размера.
 
 **ОБА обязательных gate на ОДНОМ code/source SHA для КАЖДОГО принятого среза:**
 
@@ -40,62 +40,49 @@
 5. После каждого завершённого логического среза — обязательные ДВА отдельных Gate A и Gate B на одном опубликованном SHA (см. раздел выше): штатный CI/workerd/D1/Chromium/exact-artifact deploy, затем **отдельный независимый LIVE Browser MCP**, без исключения для обычного UX. Отдельные human-only prerequisites отмечать честно. В #352 записать **ID, исходный метод/отрицательный тест, точный B-gap либо решение C, SHA, CI/live/Gate B, доказательство и остаток**. Только после **Gate A=PASS + Gate B=PASS** и исходного A/B/C/D evidence пометить ID как ACCEPTED. **Новый чат продолжает с первого непринятого ID, без повторных планов.**
 6. Действующие auth, tenant, signed identity, policy, CAS/idempotency, audit, PII redaction и fail-closed действуют **сейчас**. Partial Privacy 2/9 `complete=false` остаётся закрыт для export/erasure. Полная 93-crate behavioral parity **ещё не доказана**, поэтому старый исходный код не удалять массово.
 
-## Принятое правило полей M1 — решение владельца (22.11.2026)
+## Финальная приёмка M1 для dev/MVP (22.11.2026; принята, не перепроверять без регрессии)
 
-**Все бизнес-поля доступных записей собственного tenant открыты для `viewer` и
-`admin`** в Get/List/Customer360. Отдельная маскировка полей по роли, включая
-historical `QueryVisibilityAuthorizer`, **C / сознательно не нужна MVP**.
-Это не отменяет Rust Access/policy, существующие ограничения Write/AdminRead,
-tenant/cross-reference и проверки CAS/replay/audit. Подавление JWT, secrets,
-PII и raw payload в **диагностических логах** сохраняется, к UI-полям оно
-не относится. В действующих `parties/accounts/contact_points/
-party_relationships/account_overview` owner/handlers не обнаружено
-полевого маскирования по viewer (read-only source inspection), однако
-полную приёмку M1 это само по себе не доказывает. При следующем связанном
-срезе использовать имеющиеся native workerd+D1 тесты для admin/viewer
-**одинакового readback всех возвращаемых бизнес-полей**, чужого tenant = denied,
-а не добавлять новый ACL, mask engine, CI или отдельный полный rebuild.
-Решение и факт его принятия — [#352](https://github.com/iamaman11/crm/issues/352).
+**S-M1-A + S-M1-B / M1-01…M1-10 = ACCEPTED для текущей dev/MVP. M1-11 = DECIDED C, не реализовывать generic Delete/archive.** Канонический code/source SHA [`af84e93766f0238a7536669efa6135a2acc28904`](https://github.com/iamaman11/crm/commit/af84e93766f0238a7536669efa6135a2acc28904): изменён только существующий `native.mjs`, без нового runtime, D1 schema, proto или дублирования CI. [Штатный Gate A #44960331611](https://github.com/iamaman11/crm/actions/runs/44960331611) PASS (оба job, exact-artifact deploy). **Отдельный независимый Browser MCP Gate B PASS** на том же SHA, HAR и D1 readback; полный per-ID legacy A/B/C + сцепленные postconditions и границы в [финальном #352 / #7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108). Архив HAR: 97 entries, 54 POST/RPC, 78 HTTP 200, 0 HTTP 4xx/5xx (19 aborted favicon без ответа). D1 audit 182→182, Task receipts 28→28 по сохранённому read-only proof. Ранее отдельно приняты B-slices для контактов/связей [#7069314351](https://github.com/iamaman11/crm/issues/352#issuecomment-7069314351), Customer360 [#7070322333](https://github.com/iamaman11/crm/issues/352#issuecomment-7070322333) и Task [#7068829386](https://github.com/iamaman11/crm/issues/352#issuecomment-7068829386).
 
-## Актуальный checkpoint M1 (22.11.2026; read-only documentation, без повторного CI)
+**Решение по правам:** все бизнес-поля собственного tenant-authorized Get/List/Customer360 доступны `viewer` и `admin` без field-level masks. Signed native workerd+D1 проверил `deepEqual` семи полных Get-бизнес-объектов и шести List-ответов admin/viewer, другой tenant = 404, отсутствие read-аудита (`crm.native-m1-read-parity-linked-flow: PASS`). Старый `QueryVisibilityAuthorizer` и generic field masks = C для MVP. Это **не** отменяет verified Access identity, compiled policy, Write/AdminRead denial, tenant isolation, CAS/replay, receipts/audit и приватность диагностических логов.
 
-- **M1-04/M1-05 ограниченный B-slice ACCEPTED** на [`979ada2f`](https://github.com/iamaman11/crm/commit/979ada2f65e92ffb9f03bb90cb21027653356e94): [Gate A #44948933795](https://github.com/iamaman11/crm/actions/runs/44948933795) success both jobs, отдельный LIVE Browser MCP+D1 **Gate B PASS** с тем же source SHA, точными категориями Contact kind/status и Relationship status, корректными подписями выбора контакта Deal и неизменными `audit=182`, `contact receipts=13`, `relationship receipts=5`. [Полная приёмка/legacy A/B/C/OPEN #7069314351](https://github.com/iamaman11/crm/issues/352#issuecomment-7069314351). **Весь M1-04 НЕ закрыт:** оставшиеся CRUD/security и human-path acceptance (field mask по viewer решён как C, отдельный mapping не нужен); произвольные старые query filters C для MVP, старые sources сохраняются.
-- **M1-11 DECIDED C для MVP**, не реализовывать физическое удаление и generic archive ради чистки тестовой базы. Исторические конкретные Party/Account/Contact/Relationship/Task/Sales planners проверены: **общего Delete не было**; текущие `Inactive/Completed/Closed` — бизнес-состояния, не удаление. [Решение #7069323040](https://github.com/iamaman11/crm/issues/352#issuecomment-7069323040). Нет code change/нового Gate A+B, поскольку это решение **не** о реализованной операции.
-- **Следующая очередь:** M2-01…M2-05; перед изменением сверить исторический конкретный метод и уже активный Sales owner, пройти полный linked-user flow, выбрать ровно один реальный B gap или доказанную A-эквивалентность/сознательное C. Не стартовать новый инфраструктурный аудит и не переносить логику, которая работает.
+**Граница приёмки:** admin service-browser разрешён для обычных UI-сценариев M1; **положительный интерактивный human Cloudflare Access login/verification остаётся отдельным pre-real-user release check** и не притворяется доказанным service session. Глобальная поведенческая эквивалентность **93 crates НЕ принята**: сохранённые ниже 93 legacy crosswalk строки / «все операции OPEN» относятся именно к индивидуальным historical operations за пределами доказанного M1 dev/MVP, не открывают M1 заново. Privacy scope 2/9 остаётся fail-closed.
+
+**Следующая исполнимая очередь — M2-01…M2-04 по реальному пользовательскому gap** (M2-05 = C). Не запускать новые M1 QA-срезы, новый CI или ACL engine ради формальной галочки. Проверять существующий owner и историческую операцию *до* выбора B; уже принятые M2 stage labels и Deal name search не дублировать. #352 остаётся открытой до остальной функциональной очереди.
 
 ## M2-01 accepted scope (22.11.2026): пользовательские названия стадий в Deal
 
 - **B→ACCEPTED только конкретный UX-срез**: общий `DealDetails/DealHistory` показывает текущие имена Pipeline и Stage вместо внутренних кодов, как исходная Kanban; immutable `DealEvent` продолжает хранить original IDs, отсутствующий stage отображается по ID, поясняется происхождение текущего имени. Вынесен каталог из уже загруженного `ListPipelines`, **без дополнительного RPC/таблиц/генератора**.
 - **Gate A=PASS** [#44950874461](https://github.com/iamaman11/crm/actions/runs/44950874461), точный code source [`c7eddfb5`](https://github.com/iamaman11/crm/commit/c7eddfb577e7ed349ed9d8fad32227467c449ab3) (45 основного job + 14 deploy), **Gate B=PASS** через независимый LIVE Browser MCP на том же SHA: полная и встроенная Deal, `Согласование → Входящие`, reload/back, D1 original stage IDs/events v1/v2 без новых записей audit 182→182. [Фактическая приёмка с legacy source и HAR #7069532306](https://github.com/iamaman11/crm/issues/352#issuecomment-7069532306).
-- **M2-01 целиком и M2-02…M2-05 остаются пооперационно OPEN** до отдельной сверки существующих owners/артефактов; не записывать false MVP-completion. Следующая задача выбирается по реальному product gap, а не по названию старого crate. Предыдущий M1 human-only verify и visibility также остаются OPEN.
+- **M2-01 целиком и M2-02…M2-05 остаются пооперационно OPEN** до отдельной сверки существующих owners/артефактов; не записывать false MVP-completion. Следующая задача выбирается по реальному product gap, а не по названию старого crate. Human-only Cloudflare Access positive login остаётся pre-real-user check; viewer business-field parity M1 уже ACCEPTED по #7070842108.
 
 ## M2 continuation decision (22.11.2026): не дублировать работающий Sales runtime
 
 - [Пооперационный product-first review #7069547465](https://github.com/iamaman11/crm/issues/352#issuecomment-7069547465): **M2-02 (Deal primary Contact), M2-03 (saved Sales views), M2-04 (exact metrics/forecast/conversion) — A-кандидаты**, существующие typed protobuf/owners/D1/UI/native tests есть, но целый ID не объявлять ACCEPTED без проверки соответствующей исторической семантики и independent Gate B по полному user flow. Дублирующие API/калькулятор/генератор запрещены.
 - **M2-05 = DECIDED C для MVP**: отдельную Lead сущность **не** создавать; квалификация запроса сейчас выражается через original Deal, Party/Account, pipeline stages `lead→qualified`, immutable events, linked Task. Исторические просмотренные `crm-sales-capability-adapter::plan_create/update/advance` относятся к Deal и не доказывают обязательный `Lead` CRUD. Если когда-либо появится конкретный user-flow и потребность в независимом Lead lifecycle — решение пересмотреть как B с исходной source проверкой. C не удаляет legacy code и не означает автоматический Gate B PASS для несуществующей операции.
-- Следующим новым кодовым срезом выбирать **только доказанный B-пробел**, не продолжать ради заполнения чисел очереди. Остальная per-operation parity и M1 human-only/visibility остаётся OPEN.
+- Следующим новым кодовым срезом выбирать **только доказанный B-пробел**, не продолжать ради заполнения чисел очереди. Остальная per-operation legacy parity остаётся OPEN; M1 viewer visibility принята, а human login отдельно ожидает pre-real-user release.
 
 ## M2 Deal name-search checkpoint (22.11.2026): один принятый product-first B-срез
 
 - **M2-01 / M2-03 — B→ACCEPTED только «найти сделку по названию/ID»**, не полный M2: исторический `crm-sales-activities-query-adapter/src/executor.rs::execute_list_deals/collect_deals` имел tenant+pipeline/status/owner и cursor, **не поиск по названию**. Единственный typed `crm.sales.v2.ListDeals` теперь принимает `search` (generated Protobuf → existing Rust `wire_search`/owner parameterized D1 `instr(name,?) OR instr(id,?)` before limit/cursor → existing React SearchField). Account/Status применяются вместе с поиском; results across pipelines отдельны от Kanban/forecast; `#sales?search=` выдерживает Back/reload. Нет второго query runtime, RPC, Worker, D1 migration, генератора, индекса или SQLx.
 - **Точный опубликованный код** [`d94248fd145ea15c04d8ba6db5f15dc02a5c3450`](https://github.com/iamaman11/crm/commit/d94248fd145ea15c04d8ba6db5f15dc02a5c3450), [штатный Gate A #44954180291](https://github.com/iamaman11/crm/actions/runs/44954180291) **PASS** (45+14 steps, signed native workerd, real Chromium, exact artifact deploy/live E2E+traces). **Отдельный Gate B PASS**: native LIVE Browser MCP on same SHA + read-only D1: 2 matching deals for `SM1B`, 1 exact; status intersects, Back/reload and empty/reset, total Kanban unaffected. D1 14 Deal / 56 receipts / 182 audit rows unchanged. [Полный исходный A/B/C, отказавшие проверки и Gate B evidence #7069992607](https://github.com/iamaman11/crm/issues/352#issuecomment-7069992607). **Admin service session ≠ human-only proof**.
-- **Что дальше:** не перечёркивать принятый B-срез и не дублировать серверный поиск; M2-02/03/04 целиком остаются пооперационными A-кандидатами/OPEN, M2-05 уже C для MVP. M1 human-only verify/field-record visibility и вся семантическая 93-crate parity не приняты по этому Gate.
+- **Что дальше:** не перечёркивать принятый B-срез и не дублировать серверный поиск; M2-02/03/04 целиком остаются пооперационными A-кандидатами/OPEN, M2-05 уже C для MVP. M1 viewer business-field visibility принята позднейшим #7070842108; human login остаётся отдельной проверкой перед реальными пользователями; 93-crate parity остаётся OPEN.
 
 ## Упорядоченная матрица бизнес-функций
 
 | ID | Очередь | Функция | Уже имеется | Историческая реализация (вскрыть до работы) |
 |---|---|---|---|---|
-| [M1-01](#m1-01) | M1 | Выбор по имени вместо ID | UX GAP | [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-query-adapter/src/lib.rs) |
-| [M1-02](#m1-02) | M1 | Люди и организации — CRUD | ACTIVE/VERIFY | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-capability-adapter/src/planner.rs) |
-| [M1-03](#m1-03) | M1 | Клиент (Account) из Party | ACTIVE/VERIFY | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-accounts-capability-adapter/src/planner.rs) |
-| [M1-04](#m1-04) | M1 | Контактные точки / verified email | ACTIVE/UX GAP | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-contact-points-capability-adapter/src/planner.rs) |
-| [M1-05](#m1-05) | M1 | Связи Party ↔ Party | ACTIVE/UX GAP | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-party-relationships-capability-adapter/src/planner.rs) |
-| [M1-06](#m1-06) | M1 | Навигация Account→Contacts/Deals/Tasks | PARTIAL/UX GAP | [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-360-composition/src/lib.rs) |
-| [M1-07](#m1-07) | M1 | Создание и изменение Deal | ACTIVE/VERIFY | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-capability-adapter/src/planner.rs) |
-| [M1-08](#m1-08) | M1 | Задача — создать, изменить, выполнить | ACTIVE/UX GAP | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-activities-capability-adapter/src/planner.rs) |
-| [M1-09](#m1-09) | M1 | Sales→Task внутренняя связь | PARTIAL/PROOF | [src/link_event_processor.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/link_event_processor.rs) |
-| [M1-10](#m1-10) | M1 | Единая приемка Party→Account→Deal→Task | NOT ACCEPTED | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-capability-adapter/src/planner.rs) |
-| [M1-11](#m1-11) | M1 | Архивирование и чистка тестовых записей | DECISION/CONDITIONAL | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-capability-adapter/src/planner.rs) |
+| [M1-01](#m1-01) | M1 | Выбор по имени вместо ID | A ACCEPTED — именованные Party/Account pickers, фильтры и переходы без ID | [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-query-adapter/src/lib.rs) |
+| [M1-02](#m1-02) | M1 | Люди и организации — CRUD | A ACCEPTED — Person/Organization create/update, reload, CAS/replay/tenant | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-capability-adapter/src/planner.rs) |
+| [M1-03](#m1-03) | M1 | Клиент (Account) из Party | A ACCEPTED — связка Party→Account и primary association | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-accounts-capability-adapter/src/planner.rs) |
+| [M1-04](#m1-04) | M1 | Контактные точки / verified email | A+B ACCEPTED — Contact CRUD, kind/status, точная навигация | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-contact-points-capability-adapter/src/planner.rs) |
+| [M1-05](#m1-05) | M1 | Связи Party ↔ Party | A+B ACCEPTED — directed Party Relationship, status, reload, ограничения | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-party-relationships-capability-adapter/src/planner.rs) |
+| [M1-06](#m1-06) | M1 | Навигация Account→Contacts/Deals/Tasks | A+B ACCEPTED — Customer360 linked original records, Contact/Relationship/Deal/Task | [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-360-composition/src/lib.rs) |
+| [M1-07](#m1-07) | M1 | Создание и изменение Deal | A+B ACCEPTED — Deal create/edit/stage/close/reopen/history | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-capability-adapter/src/planner.rs) |
+| [M1-08](#m1-08) | M1 | Задача — создать, изменить, выполнить | A+B ACCEPTED — Task create/edit/complete/reminders/linked Deal | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-activities-capability-adapter/src/planner.rs) |
+| [M1-09](#m1-09) | M1 | Sales→Task внутренняя связь | A ACCEPTED — atomic Sales→Task и replay/rollback | [src/link_event_processor.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/link_event_processor.rs) |
+| [M1-10](#m1-10) | M1 | Единая приемка Party→Account→Deal→Task | A ACCEPTED — единый Party→Account→Deal→Task→Customer360 live-путь | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-capability-adapter/src/planner.rs) |
+| [M1-11](#m1-11) | M1 | Архивирование и чистка тестовых записей | C DECIDED — generic Delete/archive не нужен MVP | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-capability-adapter/src/planner.rs) |
 | [M2-01](#m2-01) | M2 | Sales pipeline, стадии, Kanban | ACTIVE/VERIFY | [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/lib.rs) |
 | [M2-02](#m2-02) | M2 | Основной контакт Deal | ACTIVE/VERIFY | [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-contact-points-query-adapter/src/lib.rs) |
 | [M2-03](#m2-03) | M2 | Сохраненные views и фильтры Sales | ACTIVE/VERIFY | [src/query_catalog.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/query_catalog.rs) |
@@ -129,7 +116,7 @@ party_relationships/account_overview` owner/handlers не обнаружено
 
 ### M1-01
 
-**Бизнес-функция:** Выбор по имени вместо ID. **Очередь:** M1. **Что уже есть:** UX GAP. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Выбор по имени вместо ID. **Очередь:** M1. **Что уже есть:** проверенный связанный dev/MVP flow. **Статус пользовательской приёмки:** **A ACCEPTED — именованные Party/Account pickers, фильтры и переходы без ID**. [Финальная приёмка M1 #7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 **Legacy — прочитать перед разработкой:** [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-query-adapter/src/lib.rs); [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-accounts-query-adapter/src/lib.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -139,11 +126,11 @@ party_relationships/account_overview` owner/handlers не обнаружено
 
 **DONE только при:** На 4 экранах фильтры по имени вместо ввода ID; выбор, пустое состояние, cursor, refresh; tenant denied.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `A/B/C/D: A for dev/MVP · code SHA: af84e93766f0238a7536669efa6135a2acc28904 · Gate A: #44960331611 PASS · independent Gate B: PASS, same SHA · 93-crate parity: OPEN`; source/negative tests, ранее принятые B-части и полный linked readback: [#7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 ### M1-02
 
-**Бизнес-функция:** Люди и организации — CRUD. **Очередь:** M1. **Что уже есть:** ACTIVE/VERIFY. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Люди и организации — CRUD. **Очередь:** M1. **Что уже есть:** проверенный связанный dev/MVP flow. **Статус пользовательской приёмки:** **A ACCEPTED — Person/Organization create/update, reload, CAS/replay/tenant**. [Финальная приёмка M1 #7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 **Legacy — прочитать перед разработкой:** [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-capability-adapter/src/planner.rs); [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-query-adapter/src/lib.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -153,11 +140,11 @@ party_relationships/account_overview` owner/handlers не обнаружено
 
 **DONE только при:** Создать/найти/изменить Person и Organization; reload, stale version, tenant/actor denied, audit.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `A/B/C/D: A for dev/MVP · code SHA: af84e93766f0238a7536669efa6135a2acc28904 · Gate A: #44960331611 PASS · independent Gate B: PASS, same SHA · 93-crate parity: OPEN`; source/negative tests, ранее принятые B-части и полный linked readback: [#7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 ### M1-03
 
-**Бизнес-функция:** Клиент (Account) из Party. **Очередь:** M1. **Что уже есть:** ACTIVE/VERIFY. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Клиент (Account) из Party. **Очередь:** M1. **Что уже есть:** проверенный связанный dev/MVP flow. **Статус пользовательской приёмки:** **A ACCEPTED — связка Party→Account и primary association**. [Финальная приёмка M1 #7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 **Legacy — прочитать перед разработкой:** [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-accounts-capability-adapter/src/planner.rs); [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-accounts-query-adapter/src/lib.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -167,11 +154,11 @@ party_relationships/account_overview` owner/handlers не обнаружено
 
 **DONE только при:** Party→Account, роли и статус, изменение и карточка после reload; CAS, missing/cross-tenant ref denied.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `A/B/C/D: A for dev/MVP · code SHA: af84e93766f0238a7536669efa6135a2acc28904 · Gate A: #44960331611 PASS · independent Gate B: PASS, same SHA · 93-crate parity: OPEN`; source/negative tests, ранее принятые B-части и полный linked readback: [#7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 ### M1-04
 
-**Бизнес-функция:** Контактные точки / verified email. **Очередь:** M1. **Что уже есть:** ACTIVE/UX GAP. **Статус пользовательской приёмки:** **B-slice ACCEPTED** Gate A+B `979ada2f`; viewer field masks C по решению владельца, остальные human/operation proofs OPEN (см. checkpoint и #7069314351).
+**Бизнес-функция:** Контактные точки / verified email. **Очередь:** M1. **Что уже есть:** проверенный связанный dev/MVP flow. **Статус пользовательской приёмки:** **A+B ACCEPTED — Contact CRUD, kind/status, точная навигация**. [Финальная приёмка M1 #7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108). Настоящий human Cloudflare Access login отдельно проверить перед запуском для реальных пользователей; это не незавершённый M1 dev/MVP.
 
 **Legacy — прочитать перед разработкой:** [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-contact-points-capability-adapter/src/planner.rs); [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-contact-points-query-adapter/src/lib.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -181,11 +168,11 @@ party_relationships/account_overview` owner/handlers не обнаружено
 
 **DONE только при:** Email/phone сохраняются, status/validity/verification правильны; чужой owner/tenant, stale, fake identity rejected.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `A/B/C/D: A+B for dev/MVP · code SHA: af84e93766f0238a7536669efa6135a2acc28904 · Gate A: #44960331611 PASS · independent Gate B: PASS, same SHA · 93-crate parity: OPEN`; source/negative tests, ранее принятые B-части и полный linked readback: [#7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 ### M1-05
 
-**Бизнес-функция:** Связи Party ↔ Party. **Очередь:** M1. **Что уже есть:** ACTIVE/UX GAP. **Статус пользовательской приёмки:** **B-slice ACCEPTED** Gate A+B `979ada2f`; viewer field masks C; generic type filters C для MVP; остальные proofs OPEN (см. checkpoint и #7069314351).
+**Бизнес-функция:** Связи Party ↔ Party. **Очередь:** M1. **Что уже есть:** проверенный связанный dev/MVP flow. **Статус пользовательской приёмки:** **A+B ACCEPTED — directed Party Relationship, status, reload, ограничения**. [Финальная приёмка M1 #7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 **Legacy — прочитать перед разработкой:** [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-party-relationships-capability-adapter/src/planner.rs); [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-party-relationships-query-adapter/src/lib.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -195,11 +182,11 @@ party_relationships/account_overview` owner/handlers не обнаружено
 
 **DONE только при:** Создать/редактировать связь по выбранным именам; роли, порядок, временные границы и tenant верны после reload.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `A/B/C/D: A+B for dev/MVP · code SHA: af84e93766f0238a7536669efa6135a2acc28904 · Gate A: #44960331611 PASS · independent Gate B: PASS, same SHA · 93-crate parity: OPEN`; source/negative tests, ранее принятые B-части и полный linked readback: [#7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 ### M1-06
 
-**Бизнес-функция:** Навигация Account→Contacts/Deals/Tasks. **Очередь:** M1. **Что уже есть:** PARTIAL/UX GAP. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Навигация Account→Contacts/Deals/Tasks. **Очередь:** M1. **Что уже есть:** проверенный связанный dev/MVP flow. **Статус пользовательской приёмки:** **A+B ACCEPTED — Customer360 linked original records, Contact/Relationship/Deal/Task**. [Финальная приёмка M1 #7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 **Legacy — прочитать перед разработкой:** [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-360-composition/src/lib.rs); [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-party-relationships-query-adapter/src/lib.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -209,11 +196,11 @@ party_relationships/account_overview` owner/handlers не обнаружено
 
 **DONE только при:** Переходы и обратные ссылки по названиям, Back/refresh, правильный Account/tenant.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `A/B/C/D: A+B for dev/MVP · code SHA: af84e93766f0238a7536669efa6135a2acc28904 · Gate A: #44960331611 PASS · independent Gate B: PASS, same SHA · 93-crate parity: OPEN`; source/negative tests, ранее принятые B-части и полный linked readback: [#7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 ### M1-07
 
-**Бизнес-функция:** Создание и изменение Deal. **Очередь:** M1. **Что уже есть:** ACTIVE/VERIFY. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Создание и изменение Deal. **Очередь:** M1. **Что уже есть:** проверенный связанный dev/MVP flow. **Статус пользовательской приёмки:** **A+B ACCEPTED — Deal create/edit/stage/close/reopen/history**. [Финальная приёмка M1 #7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 **Legacy — прочитать перед разработкой:** [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-capability-adapter/src/planner.rs); [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-query-adapter/src/lib.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -223,11 +210,11 @@ party_relationships/account_overview` owner/handlers не обнаружено
 
 **DONE только при:** Account→Deal, primaryContact, stage, amount; save/reload, currency precision, CAS/replay/audit.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `A/B/C/D: A+B for dev/MVP · code SHA: af84e93766f0238a7536669efa6135a2acc28904 · Gate A: #44960331611 PASS · independent Gate B: PASS, same SHA · 93-crate parity: OPEN`; source/negative tests, ранее принятые B-части и полный linked readback: [#7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 ### M1-08
 
-**Бизнес-функция:** Задача — создать, изменить, выполнить. **Очередь:** M1. **Что уже есть:** ACTIVE/UX GAP. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Задача — создать, изменить, выполнить. **Очередь:** M1. **Что уже есть:** проверенный связанный dev/MVP flow. **Статус пользовательской приёмки:** **A+B ACCEPTED — Task create/edit/complete/reminders/linked Deal**. [Финальная приёмка M1 #7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 **Legacy — прочитать перед разработкой:** [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-activities-capability-adapter/src/planner.rs); [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-query-adapter/src/lib.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -237,11 +224,11 @@ party_relationships/account_overview` owner/handlers не обнаружено
 
 **DONE только при:** Из Account создать Task, изменить, выполнить; readback, stale CAS, tenant и idempotency.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `A/B/C/D: A+B for dev/MVP · code SHA: af84e93766f0238a7536669efa6135a2acc28904 · Gate A: #44960331611 PASS · independent Gate B: PASS, same SHA · 93-crate parity: OPEN`; source/negative tests, ранее принятые B-части и полный linked readback: [#7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 ### M1-09
 
-**Бизнес-функция:** Sales→Task внутренняя связь. **Очередь:** M1. **Что уже есть:** PARTIAL/PROOF. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Sales→Task внутренняя связь. **Очередь:** M1. **Что уже есть:** проверенный связанный dev/MVP flow. **Статус пользовательской приёмки:** **A ACCEPTED — atomic Sales→Task и replay/rollback**. [Финальная приёмка M1 #7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 **Legacy — прочитать перед разработкой:** [src/link_event_processor.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/link_event_processor.rs); [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-activities-capability-adapter/src/planner.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -251,11 +238,11 @@ party_relationships/account_overview` owner/handlers не обнаружено
 
 **DONE только при:** Предусмотренная linked Task создаётся не более одного раза; failed write не даёт partial side effect; receipt/audit PASS.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `A/B/C/D: A for dev/MVP · code SHA: af84e93766f0238a7536669efa6135a2acc28904 · Gate A: #44960331611 PASS · independent Gate B: PASS, same SHA · 93-crate parity: OPEN`; source/negative tests, ранее принятые B-части и полный linked readback: [#7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 ### M1-10
 
-**Бизнес-функция:** Единая приемка Party→Account→Deal→Task. **Очередь:** M1. **Что уже есть:** NOT ACCEPTED. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Единая приемка Party→Account→Deal→Task. **Очередь:** M1. **Что уже есть:** проверенный связанный dev/MVP flow. **Статус пользовательской приёмки:** **A ACCEPTED — единый Party→Account→Deal→Task→Customer360 live-путь**. [Финальная приёмка M1 #7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 **Legacy — прочитать перед разработкой:** [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-capability-adapter/src/planner.rs); [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-capability-adapter/src/planner.rs); [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-activities-capability-adapter/src/planner.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -265,11 +252,11 @@ party_relationships/account_overview` owner/handlers не обнаружено
 
 **DONE только при:** Один связанный пользовательский поток и negative tenant/CAS/replay; единственный CI+publish exact SHA, отдельный Gate B.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `A/B/C/D: A for dev/MVP · code SHA: af84e93766f0238a7536669efa6135a2acc28904 · Gate A: #44960331611 PASS · independent Gate B: PASS, same SHA · 93-crate parity: OPEN`; source/negative tests, ранее принятые B-части и полный linked readback: [#7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 ### M1-11
 
-**Бизнес-функция:** Архивирование и чистка тестовых записей. **Очередь:** M1. **Что уже есть:** DECISION/CONDITIONAL. **Статус пользовательской приёмки:** **DECIDED C / MVP не блокируется**, не путать отсутствие generic Delete с потерей legacy CRUD (см. #7069323040).
+**Бизнес-функция:** Архивирование и чистка тестовых записей. **Очередь:** M1. **Что уже есть:** осознанно исключён из MVP. **Статус пользовательской приёмки:** **C DECIDED — generic Delete/archive не нужен MVP**. [Финальная приёмка M1 #7070842108](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108).
 
 **Legacy — прочитать перед разработкой:** [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-capability-adapter/src/planner.rs); [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-accounts-capability-adapter/src/planner.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -279,7 +266,7 @@ party_relationships/account_overview` owner/handlers не обнаружено
 
 **DONE только при:** Документированное решение C или B; если B — owner-mediated archive/disable без нарушения ссылок/аудита.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `A/B/C/D: C (generic deletion not an MVP user operation) · legacy: concrete planners reviewed · code: no new implementation · Gate A/B: not applicable to C decision`; [#7069323040](https://github.com/iamaman11/crm/issues/352#issuecomment-7069323040), [final M1](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108). Решение C не разрешает удалять старые исходники.
 
 ### M2-01
 
