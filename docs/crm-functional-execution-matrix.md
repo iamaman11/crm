@@ -46,6 +46,12 @@
 - **M1-11 DECIDED C для MVP**, не реализовывать физическое удаление и generic archive ради чистки тестовой базы. Исторические конкретные Party/Account/Contact/Relationship/Task/Sales planners проверены: **общего Delete не было**; текущие `Inactive/Completed/Closed` — бизнес-состояния, не удаление. [Решение #7069323040](https://github.com/iamaman11/crm/issues/352#issuecomment-7069323040). Нет code change/нового Gate A+B, поскольку это решение **не** о реализованной операции.
 - **Следующая очередь:** M2-01…M2-05; перед изменением сверить исторический конкретный метод и уже активный Sales owner, пройти полный linked-user flow, выбрать ровно один реальный B gap или доказанную A-эквивалентность/сознательное C. Не стартовать новый инфраструктурный аудит и не переносить логику, которая работает.
 
+## M2-01 accepted scope (22.11.2026): пользовательские названия стадий в Deal
+
+- **B→ACCEPTED только конкретный UX-срез**: общий `DealDetails/DealHistory` показывает текущие имена Pipeline и Stage вместо внутренних кодов, как исходная Kanban; immutable `DealEvent` продолжает хранить original IDs, отсутствующий stage отображается по ID, поясняется происхождение текущего имени. Вынесен каталог из уже загруженного `ListPipelines`, **без дополнительного RPC/таблиц/генератора**.
+- **Gate A=PASS** [#44950874461](https://github.com/iamaman11/crm/actions/runs/44950874461), точный code source [`c7eddfb5`](https://github.com/iamaman11/crm/commit/c7eddfb577e7ed349ed9d8fad32227467c449ab3) (45 основного job + 14 deploy), **Gate B=PASS** через независимый LIVE Browser MCP на том же SHA: полная и встроенная Deal, `Согласование → Входящие`, reload/back, D1 original stage IDs/events v1/v2 без новых записей audit 182→182. [Фактическая приёмка с legacy source и HAR #7069532306](https://github.com/iamaman11/crm/issues/352#issuecomment-7069532306).
+- **M2-01 целиком и M2-02…M2-05 остаются пооперационно OPEN** до отдельной сверки существующих owners/артефактов; не записывать false MVP-completion. Следующая задача выбирается по реальному product gap, а не по названию старого crate. Предыдущий M1 human-only verify и visibility также остаются OPEN.
+
 ## Упорядоченная матрица бизнес-функций
 
 | ID | Очередь | Функция | Уже имеется | Историческая реализация (вскрыть до работы) |
@@ -248,7 +254,7 @@
 
 ### M2-01
 
-**Бизнес-функция:** Sales pipeline, стадии, Kanban. **Очередь:** M2. **Что уже есть:** ACTIVE/VERIFY. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Sales pipeline, стадии, Kanban. **Очередь:** M2. **Что уже есть:** ACTIVE/VERIFY. **Статус пользовательской приёмки:** **B-срез имён стадий в полной/встроенной Deal ACCEPTED Gate A+B на `c7eddfb5`; M2-01 whole OPEN** (см. M2 checkpoint и #7069532306).
 
 **Legacy — прочитать перед разработкой:** [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/lib.rs); [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-capability-adapter/src/planner.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
