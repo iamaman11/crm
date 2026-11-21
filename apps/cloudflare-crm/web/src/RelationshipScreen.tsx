@@ -7,28 +7,52 @@ import {enumValue} from "./enumFields";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker,PartyName} from "./Pickers";
 import {TimeFields} from "./TimeFields";
+import {relationshipHref,scopeHref} from "./routes";
 import {timePatch} from "./timePatch";
 
-export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string}) {
+export function RelationshipScreen({initialPartyId="",focusedRelationshipId=""}:{
+  initialPartyId?:string;focusedRelationshipId?:string;
+}) {
   const [cursor,setCursor]=useState("");
   const [partyId,setPartyId]=useState(initialPartyId);
   const [status,setStatus]=useState("");
   const [selected,setSelected]=useState<PartyRelationship>();
   const [editorOpen,setEditorOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
-  const query=useQuery(useCallback((signal:AbortSignal)=>api.relationships.listPartyRelationships({page:{pageSize:25,pageToken:cursor},
-    ...(partyId?{partyId}:{}),
-    ...(status?{status:enumValue(status,[RelationshipStatus.ACTIVE,RelationshipStatus.INACTIVE],"Статус связи")}:{})
-  },{signal}),[cursor,partyId,status]));
+  const query=useQuery(useCallback(async(signal:AbortSignal)=>{
+    if(focusedRelationshipId)return undefined;
+    return api.relationships.listPartyRelationships({page:{pageSize:25,pageToken:cursor},
+      ...(partyId?{partyId}:{}),
+      ...(status?{status:enumValue(status,[RelationshipStatus.ACTIVE,RelationshipStatus.INACTIVE],"Статус связи")}:{})
+    },{signal});
+  },[focusedRelationshipId,cursor,partyId,status]));
+  const focused=useQuery(useCallback(async(signal:AbortSignal)=>{
+    if(!focusedRelationshipId)return undefined;
+    const relationship=(await api.relationships.getPartyRelationship({
+      relationshipId:focusedRelationshipId
+    },{signal})).relationship;
+    // Both ends of a directional/reciprocal relation are legitimate Party roots.
+    if(!relationship||initialPartyId&&relationship.fromPartyId!==initialPartyId&&
+      relationship.toPartyId!==initialPartyId)
+      throw Error("Связь не относится к выбранному участнику");
+    return relationship;
+  },[focusedRelationshipId,initialPartyId]));
+  const refresh=async()=>{await Promise.all([query.reload(),focused.reload()]);};
+  const visible=focusedRelationshipId?(focused.data?[focused.data]:[]):query.data?.relationships??[];
   const mutation=useMutation({
     storageKey:"crm.relationship.pending.v1",
     lookup:async({resourceId,key},signal)=>(await api.relationships.getPartyRelationship({
       relationshipId:resourceId,receiptIdempotencyKey:key
     },{signal})).confirmedMutation,
-    refresh:query.reload
+    refresh
   });
   return <>
-    <PageHeader title="Связи" description="Отношения между людьми и организациями." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать связь</Button>}/>
+    <PageHeader title={focusedRelationshipId?"Карточка связи":"Связи"}
+      description="Отношения между людьми и организациями."
+      actions={focusedRelationshipId
+        ?<a href={scopeHref("relationships",initialPartyId||focused.data?.fromPartyId||"")}>К связям участника</a>
+        :<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать связь</Button>}/>
+    {!focusedRelationshipId&&<>
     <PartyPicker label="Фильтр по участнику" value={partyId} required={false}
       onSelect={id=>{setPartyId(id);setCursor("");}}/>
     <SelectField label="Статус связей" value={status} onChange={event=>{setStatus(event.target.value);setCursor("");}}>
@@ -36,17 +60,20 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
       <option value={RelationshipStatus.ACTIVE}>Активные</option>
       <option value={RelationshipStatus.INACTIVE}>Неактивные</option>
     </SelectField>
-    <QueryNotice query={query}/>
-    {query.data?.relationships.map(r=><Card key={r.relationshipId} title={r.type?.code??"Связь"}>
+    </>}
+    <QueryNotice query={focusedRelationshipId?focused:query}/>
+    {visible.map(r=><Card key={r.relationshipId} title={r.type?.code??"Связь"}>
       <p>{r.type?.fromRole}: <PartyName partyId={r.fromPartyId}/> → {r.type?.toRole}: <PartyName partyId={r.toPartyId}/></p>
       <p>{r.status===RelationshipStatus.ACTIVE?"Активна":r.status===RelationshipStatus.INACTIVE?"Неактивна":"Неизвестный статус"} · с {dateText(r.validFrom)} до {dateText(r.validUntil)}</p>
+      {!focusedRelationshipId&&<p><a href={relationshipHref(r.relationshipId,partyId||r.fromPartyId)}>Открыть карточку связи</a></p>}
       <Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={async()=>{
         try {setSelected((await api.relationships.getPartyRelationship({relationshipId:r.relationshipId})).relationship);setEditorOpen(true);mutation.changed();}
         catch(error){await mutation.reportError(error);}
       }}>Редактировать связь</Button>
     </Card>)}
-    {!query.busy&&query.data?.relationships.length===0&&<p>Связей пока нет.</p>}
-    <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
+    {!focusedRelationshipId&&!query.busy&&visible.length===0&&<p>Связей пока нет.</p>}
+    {!focusedRelationshipId&&<Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
+      onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>}
     <RecordPanel open={editorOpen} title={selected?"Изменить связь":"Новая связь"} onClose={()=>{if(mutation.busy||mutation.pending)return;setEditorOpen(false);setSelected(undefined);}}><form key={selected?selected.relationshipId+selected.version:draftId}
       onChange={mutation.changed} onSubmit={e=>{
         e.preventDefault();const data=new FormData(e.currentTarget);
@@ -64,7 +91,7 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
               fromRole:field(data,"fromRole"),toRole:field(data,"toRole")},
             ...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
             precondition:{idempotencyKey:mutation.key}},draftId);
-        },async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await query.reload();});
+        },async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await refresh();});
       }}><FormGrid>
       {!selected&&<><PartyPicker name="fromParty" label="Первый участник" initialPartyId={partyId}/><PartyPicker name="toParty" label="Второй участник"/>
         <TextField label="Код отношения" name="code" defaultValue="employment" required/>

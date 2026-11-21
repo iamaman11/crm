@@ -39,8 +39,10 @@ function App() {
     route.kind==="deal"?<SalesScreen key={route.dealId} focusedDealId={route.dealId}/>:
     route.kind==="not-found"?<><PageHeader title="Страница не найдена"/><a href="#accounts">К списку клиентов</a></>:
     route.screen==="parties"?<PartyScreen key={route.partyId} initialPartyId={route.partyId}/>:
-    route.screen==="contacts"?<ContactScreen key={route.partyId} initialPartyId={route.partyId}/>:
-    route.screen==="relationships"?<RelationshipScreen key={route.partyId} initialPartyId={route.partyId}/>:
+    route.screen==="contacts"?<ContactScreen key={route.partyId+"/"+(route.contactPointId??"")}
+      initialPartyId={route.partyId} focusedContactPointId={route.contactPointId??""}/>:
+    route.screen==="relationships"?<RelationshipScreen key={route.partyId+"/"+(route.relationshipId??"")}
+      initialPartyId={route.partyId} focusedRelationshipId={route.relationshipId??""}/>:
     route.screen==="tasks"?<TaskScreen key={route.accountId+"/"+(route.taskId??"")+"/"+(route.dealId??"")}
       initialAccountId={route.accountId} focusedTaskId={route.taskId??""}
       initialDealId={route.dealId??""}/>:

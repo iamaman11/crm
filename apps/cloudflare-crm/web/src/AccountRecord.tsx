@@ -5,7 +5,7 @@ import type {Account,AccountOverview,Party} from "@ultimate-crm/client/cloudflar
 import {api,field,dateText,newId} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
-import {scopeHref,partyHref,dealHref,taskHref} from "./routes";
+import {scopeHref,partyHref,dealHref,taskHref,contactHref,relationshipHref} from "./routes";
 import {PartyPicker,PartyName} from "./Pickers";
 
 export function accountStatusLabel(status:AccountStatus):string {
@@ -25,10 +25,12 @@ export function AccountDetails({accountId}:{accountId:string}) {
     <p>ID: {accountId} · версия {card.account?.version.toString()??"—"}</p>
     <p>Основной участник: {card.primaryParty?<a href={partyHref(card.primaryParty.partyId)}>{card.primaryParty.displayName}</a>:"Не указан"}</p>
     <h3>Контакты</h3><ul>{card.contactPoints.map(p=><li key={p.contactPointId}>
-      <a href={scopeHref("contacts",p.partyId)}>{p.displayValue}</a>{p.verified?" · подтверждён":""}</li>)}</ul>
+      <a href={contactHref(p.contactPointId,p.partyId)}>{p.displayValue}</a>{p.verified?" · подтверждён":""}</li>)}</ul>
     {card.truncated?.contactPoints&&<p>Показаны первые {card.perCollectionLimit} контактов.</p>}
     {card.primaryParty&&<a href={scopeHref("contacts",card.primaryParty.partyId)}>Все контакты участника</a>}
-    <h3>Связи</h3><ul>{card.relationships.map(r=><li key={r.relationshipId}>{r.type?.code}: <PartyName partyId={r.fromPartyId}/> → <PartyName partyId={r.toPartyId}/></li>)}</ul>
+    <h3>Связи</h3><ul>{card.relationships.map(r=><li key={r.relationshipId}>
+      <a href={relationshipHref(r.relationshipId,card.primaryParty?.partyId??r.fromPartyId)}>
+        {r.type?.code??"Связь"}</a>: <PartyName partyId={r.fromPartyId}/> → <PartyName partyId={r.toPartyId}/></li>)}</ul>
     {card.truncated?.relationships&&<p>Показаны первые {card.perCollectionLimit} связей.</p>}
     {card.primaryParty&&<a href={scopeHref("relationships",card.primaryParty.partyId)}>Все связи участника</a>}
     <h3>Сделки</h3><ul>{card.deals.map(d=><li key={d.dealId}><a href={dealHref(d.dealId)}>{d.name}</a> · {d.stage?.stageId}</li>)}</ul>

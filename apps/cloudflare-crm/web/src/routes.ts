@@ -8,7 +8,7 @@ export type Route =
   | {kind:"account";accountId:string}
   | {kind:"account-create";partyId:string}
   | {kind:"deal";dealId:string}
-  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;search?:string}
+  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string}
   | {kind:"not-found";path:string};
 
 const sections:readonly Section[]=["parties","contacts","relationships","sales","tasks","consents","review","privacy","enrichment","data"];
@@ -57,14 +57,23 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     const ids=path==="tasks"?params.getAll("taskId"):[];
     const deals=path==="tasks"?params.getAll("dealId"):[];
     const searches=path==="sales"?params.getAll("search"):[];
+    const contacts=path==="contacts"?params.getAll("contactPointId"):[];
+    const relations=path==="relationships"?params.getAll("relationshipId"):[];
     const taskId=ids[0]??"",dealId=deals[0]??"";
+    const contactPointId=contacts[0]??"",relationshipId=relations[0]??"";
+    const partyIds=params.getAll("partyId");
+    const partyId=partyIds[0]??"";
+    const focusedPartyRecord=contacts.length>0||relations.length>0;
     if(ids.length>1||deals.length>1||searches.length>1||
+       contacts.length>1||relations.length>1||
+       (focusedPartyRecord&&(partyIds.length!==1||!partyId||!contactPointId&&!relationshipId))||
        searches.some(search=>[...search].length>200)||(taskId&&dealId)||
-       [taskId,dealId].some(id=>id.length>128||id.includes("/")||
-         id.includes("\\")||id==="."||id===".."||id.includes("%")))
+       [taskId,dealId,contactPointId,relationshipId,...(focusedPartyRecord?[partyId]:[])].some(id=>
+         id.length>128||id.includes("/")||id.includes("\\")||id==="."||id===".."||id.includes("%")))
       return {kind:"not-found",path:source};
-    return {kind:"section",screen:path,partyId:params.get("partyId")??"",
+    return {kind:"section",screen:path,partyId,
       accountId:params.get("accountId")??"",...(taskId?{taskId}:{}),...(dealId?{dealId}:{}),
+      ...(contactPointId?{contactPointId}:{}),...(relationshipId?{relationshipId}:{}),
       ...(searches[0]?{search:searches[0]}:{})};
   }
   return {kind:"not-found",path:source};
@@ -87,6 +96,14 @@ export function partyHref(partyId:string):string {
 export function scopeHref(screen:"contacts"|"relationships"|"sales"|"tasks",id:string):string {
   const parameter=screen==="sales"||screen==="tasks"?"accountId":"partyId";
   return "#"+screen+"?"+new URLSearchParams({[parameter]:id}).toString();
+}
+
+/** One canonical deep-link per record, scoped to the original Party. */
+export function contactHref(contactPointId:string,partyId:string):string {
+  return "#contacts?"+new URLSearchParams({partyId,contactPointId}).toString();
+}
+export function relationshipHref(relationshipId:string,partyId:string):string {
+  return "#relationships?"+new URLSearchParams({partyId,relationshipId}).toString();
 }
 
 export function taskHref(taskId:string,accountId:string):string {

@@ -697,6 +697,69 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
      contactFilterAuditBefore,"Contact filter requests must not write audit");
    checkpoint("M1-04 typed Contact kind+status filters before page limit, Party scope unchanged");
+   // M1-06: Account360 must link straight to the exact owned ContactPoint
+   // and either end of a Relationship, never to a 25-row list page where
+   // the record may not be visible. Direct Get checks both tenant and Party.
+   const linkedRelationshipRows=await sql("SELECT id FROM crm_party_relationship_records "+
+     "WHERE tenant='"+tenantSql+"' AND from_party='"+partyId+"' AND to_party='"+otherPartyId+"'");
+   assert.equal(linkedRelationshipRows.length,1);
+   const linkedRelationshipId=linkedRelationshipRows[0].id;
+   const overviewNavigationAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await navigate("accounts/"+accountId,"Карточка клиента");
+   const emailFromAccount=page.getByRole("link",{name:"browser-"+runId+"@example.org",exact:true});
+   await emailFromAccount.waitFor();
+   assert.equal(await emailFromAccount.getAttribute("href"),
+     "#contacts?partyId="+partyId+"&contactPointId="+browserSalesContactId);
+   const contactFromOverviewRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetContactPoint")&&
+     r.request().method()==="POST");
+   await emailFromAccount.click();
+   assert.equal((await contactFromOverviewRead).status(),200);
+   await page.getByRole("heading",{name:"Карточка контакта",exact:true}).waitFor();
+   await page.getByText("ID контакта: "+browserSalesContactId,{exact:true}).waitFor();
+   assert.equal(new URL(await page.url()).hash,
+     "#contacts?partyId="+partyId+"&contactPointId="+browserSalesContactId);
+   await reloadDocument();
+   await page.getByRole("heading",{name:"Карточка контакта",exact:true}).waitFor();
+   await page.getByText("ID контакта: "+browserSalesContactId,{exact:true}).waitFor();
+   await page.goBack();
+   await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
+   const relationshipFromAccount=page.getByRole("link",{name:"browser_relation_"+runId,exact:true});
+   await relationshipFromAccount.waitFor();
+   assert.equal(await relationshipFromAccount.getAttribute("href"),
+     "#relationships?partyId="+partyId+"&relationshipId="+linkedRelationshipId);
+   const relationshipFromOverviewRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetPartyRelationship")&&
+     r.request().method()==="POST");
+   await relationshipFromAccount.click();
+   assert.equal((await relationshipFromOverviewRead).status(),200);
+   await page.getByRole("heading",{name:"Карточка связи",exact:true}).waitFor();
+   await page.getByRole("heading",{name:"browser_relation_"+runId,exact:true}).waitFor();
+   await page.getByText(/Неактивна · с/).waitFor();
+   assert.equal(new URL(await page.url()).hash,
+     "#relationships?partyId="+partyId+"&relationshipId="+linkedRelationshipId);
+   await reloadDocument();
+   await page.getByRole("heading",{name:"Карточка связи",exact:true}).waitFor();
+   await page.getByRole("heading",{name:"browser_relation_"+runId,exact:true}).waitFor();
+   await page.goBack();
+   await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
+   checkpoint("M1-06 Account360 direct Contact/Relationship Get, exact named links, reload and Back");
+   // A real contact for another Party (or a real relation between other
+   // Parties) must never be rendered as belonging to the scoped Party.
+   await navigate("contacts?partyId="+otherPartyId+"&contactPointId="+browserSalesContactId,
+     "Карточка контакта");
+   await page.getByRole("heading",{name:/Контакт не принадлежит выбранному участнику/}).waitFor();
+   await expect(page.getByRole("heading",{name:"browser-"+runId+"@example.org",exact:true}))
+     .toHaveCount(0);
+   await navigate("relationships?partyId="+accountId+"&relationshipId="+linkedRelationshipId,
+     "Карточка связи");
+   await page.getByRole("heading",{name:/Связь не относится к выбранному участнику/}).waitFor();
+   await expect(page.getByRole("heading",{name:"browser_relation_"+runId,exact:true}))
+     .toHaveCount(0);
+   await navigate("contacts?partyId="+partyId+"&contactPointId=bad%2Fid","Страница не найдена");
+   await navigate("relationships?partyId="+partyId+"&relationshipId="+linkedRelationshipId+
+     "&relationshipId="+linkedRelationshipId,"Страница не найдена");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     overviewNavigationAudit,"Account360 and focused Get navigation may never write audit");
+   checkpoint("M1-06 wrong-party, malformed and duplicate routes fail closed, no write");
    await navigate("tasks","Задачи");
    await page.getByRole("button",{name:"Новая задача",exact:true}).click();
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Task "+runId);

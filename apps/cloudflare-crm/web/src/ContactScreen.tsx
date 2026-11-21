@@ -8,9 +8,12 @@ import {contactKindLabel} from "./contactLabels";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker,PartyName} from "./Pickers";
 import {TimeFields} from "./TimeFields";
+import {contactHref,scopeHref} from "./routes";
 import {timePatch} from "./timePatch";
 
-export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
+export function ContactScreen({initialPartyId="",focusedContactPointId=""}:{
+  initialPartyId?:string;focusedContactPointId?:string;
+}) {
   const [cursor,setCursor]=useState("");
   const [partyId,setPartyId]=useState(initialPartyId);
   const [kind,setKind]=useState("");
@@ -18,20 +21,40 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
   const [selected,setSelected]=useState<ContactPoint>();
   const [editorOpen,setEditorOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
-  const query=useQuery(useCallback((signal:AbortSignal)=>api.contactPoints.listContactPoints({page:{pageSize:25,pageToken:cursor},
-    ...(partyId?{partyId}:{}),
-    ...(kind?{kind:enumValue(kind,[ContactPointKind.EMAIL,ContactPointKind.PHONE,ContactPointKind.POSTAL,ContactPointKind.WEB,ContactPointKind.MESSAGING],"Способ связи")}:{}),
-    ...(status?{status:enumValue(status,[ContactPointStatus.ACTIVE,ContactPointStatus.INACTIVE],"Статус контакта")}:{})
-  },{signal}),[cursor,partyId,kind,status]));
+  const query=useQuery(useCallback(async(signal:AbortSignal)=>{
+    if(focusedContactPointId)return undefined; // Direct Get, never a paginated search.
+    return api.contactPoints.listContactPoints({page:{pageSize:25,pageToken:cursor},
+      ...(partyId?{partyId}:{}),
+      ...(kind?{kind:enumValue(kind,[ContactPointKind.EMAIL,ContactPointKind.PHONE,ContactPointKind.POSTAL,ContactPointKind.WEB,ContactPointKind.MESSAGING],"Способ связи")}:{}),
+      ...(status?{status:enumValue(status,[ContactPointStatus.ACTIVE,ContactPointStatus.INACTIVE],"Статус контакта")}:{})
+    },{signal});
+  },[focusedContactPointId,cursor,partyId,kind,status]));
+  const focused=useQuery(useCallback(async(signal:AbortSignal)=>{
+    if(!focusedContactPointId)return undefined;
+    const contact=(await api.contactPoints.getContactPoint({
+      contactPointId:focusedContactPointId
+    },{signal})).contactPoint;
+    // A valid record for an unrelated Party is not in this scoped context.
+    if(!contact||initialPartyId&&contact.partyId!==initialPartyId)
+      throw Error("Контакт не принадлежит выбранному участнику");
+    return contact;
+  },[focusedContactPointId,initialPartyId]));
+  const refresh=async()=>{await Promise.all([query.reload(),focused.reload()]);};
+  const visible=focusedContactPointId?(focused.data?[focused.data]:[]):query.data?.contactPoints??[];
   const mutation=useMutation({
     storageKey:"crm.contact.pending.v1",
     lookup:async({resourceId,key},signal)=>(await api.contactPoints.getContactPoint({
       contactPointId:resourceId,receiptIdempotencyKey:key
     },{signal})).confirmedMutation,
-    refresh:query.reload
+    refresh
   });
   return <>
-    <PageHeader title="Контакты" description="Email, телефоны и другие способы связи. Email подтверждает владелец через Access или тестовый администратор в dev." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать контакт</Button>}/>
+    <PageHeader title={focusedContactPointId?"Карточка контакта":"Контакты"}
+      description="Email, телефоны и другие способы связи. Email подтверждает владелец через Access или тестовый администратор в dev."
+      actions={focusedContactPointId
+        ?<a href={scopeHref("contacts",initialPartyId||focused.data?.partyId||"")}>К контактам участника</a>
+        :<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать контакт</Button>}/>
+    {!focusedContactPointId&&<>
     <PartyPicker label="Фильтр по участнику" value={partyId} required={false}
       onSelect={id=>{setPartyId(id);setCursor("");}}/>
     <SelectField label="Способ связи" value={kind} onChange={event=>{setKind(event.target.value);setCursor("");}}>
@@ -47,8 +70,9 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
       <option value={ContactPointStatus.ACTIVE}>Активные</option>
       <option value={ContactPointStatus.INACTIVE}>Неактивные</option>
     </SelectField>
-    <QueryNotice query={query}/>
-    {query.data?.contactPoints.map(p=><Card key={p.contactPointId} title={p.displayValue}>
+    </>}
+    <QueryNotice query={focusedContactPointId?focused:query}/>
+    {visible.map(p=><Card key={p.contactPointId} title={p.displayValue}>
       <p>{contactKindLabel(p.kind)} · Участник: <PartyName partyId={p.partyId}/> · {p.status===ContactPointStatus.ACTIVE?"Активен":p.status===ContactPointStatus.INACTIVE?"Неактивен":"Неизвестный статус"}{p.preferred?" · предпочтительный":""}</p>
       <p>{p.verified?"Подтверждён доверенными данными":"Не подтверждён"} · {p.normalizedValue}</p>
       <p>ID контакта: {p.contactPointId}</p>
@@ -56,15 +80,17 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
         onClick={()=>void mutation.runIntent(()=>prepareMutation(api.contactPoints.verifyOwnEmailContactPoint,{
           contactPointId:p.contactPointId,
           precondition:{idempotencyKey:mutation.key,expectedVersion:p.version}
-        },p.contactPointId),query.reload)}>Подтвердить email (Access / тестовый администратор)</Button>}{" "}
+        },p.contactPointId),refresh)}>Подтвердить email (Access / тестовый администратор)</Button>}{" "}
       <p>С {dateText(p.validFrom)} до {dateText(p.validUntil)}</p>
+      {!focusedContactPointId&&<p><a href={contactHref(p.contactPointId,p.partyId)}>Открыть карточку контакта</a></p>}
       <Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={async()=>{
         try {setSelected((await api.contactPoints.getContactPoint({contactPointId:p.contactPointId})).contactPoint);setEditorOpen(true);mutation.changed();}
         catch(error){await mutation.reportError(error);}
       }}>Редактировать контакт</Button>
     </Card>)}
-    {!query.busy&&query.data?.contactPoints.length===0&&<p>Контактов пока нет.</p>}
-    <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
+    {!focusedContactPointId&&!query.busy&&visible.length===0&&<p>Контактов пока нет.</p>}
+    {!focusedContactPointId&&<Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
+      onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??""}/>}
     <RecordPanel open={editorOpen} title={selected?"Изменить контакт":"Новый контакт"} onClose={()=>{if(mutation.busy||mutation.pending)return;setEditorOpen(false);setSelected(undefined);}}><form key={selected?selected.contactPointId+selected.version:draftId}
       onChange={mutation.changed} onSubmit={e=>{
         e.preventDefault();const data=new FormData(e.currentTarget);
@@ -80,7 +106,7 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
           return prepareMutation(api.contactPoints.createContactPoint,{contactPointId:draftId,partyId:field(data,"partyId"),
             kind:enumValue(field(data,"kind"),[ContactPointKind.EMAIL,ContactPointKind.PHONE,ContactPointKind.POSTAL,ContactPointKind.WEB,ContactPointKind.MESSAGING],"Тип контакта"),...common,...(validFrom?{validFrom}:{}),...(validUntil?{validUntil}:{}),
             precondition:{idempotencyKey:mutation.key}},draftId);
-        },async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await query.reload();});
+        },async()=>{setEditorOpen(false);setSelected(undefined);setDraftId(newId());await refresh();});
       }}><FormGrid>
         {!selected&&<><PartyPicker initialPartyId={partyId}/><SelectField label="Тип контакта" name="kind" defaultValue="1">
           <option value={ContactPointKind.EMAIL}>Email</option><option value={ContactPointKind.PHONE}>Телефон</option><option value={ContactPointKind.POSTAL}>Почтовый адрес</option><option value={ContactPointKind.WEB}>Сайт</option><option value={ContactPointKind.MESSAGING}>Мессенджер</option>
