@@ -268,7 +268,10 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
             .contributions
             .iter()
             .flat_map(|owner| {
-                owner.resources().iter().map(move |resource| (owner, resource))
+                owner
+                    .resources()
+                    .iter()
+                    .map(move |resource| (owner, resource))
             })
             .map(|(owner, resource)| {
                 Ok(privacy_wire::PrivacyScopePreviewResource {

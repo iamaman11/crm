@@ -2,8 +2,8 @@
 //! Verification and privacy execution remain outside this intake capability.
 use super::{access, bind, contact_points, now_nanos, parties};
 use crm_contact_points::{
-    ContactPointKind, ContactPointStatus, VerificationState,
-    CONTACT_POINT_STATE_RETENTION_POLICY_ID,
+    CONTACT_POINT_STATE_RETENTION_POLICY_ID, ContactPointKind, ContactPointStatus,
+    VerificationState,
 };
 use crm_customer_privacy::{
     ContributionCompletenessProof, EvidenceClass, OwnerScopeContribution, OwnerScopeRegistry,
@@ -11,7 +11,7 @@ use crm_customer_privacy::{
     decode_privacy_case_state, encode_privacy_case_state,
 };
 use crm_module_sdk::{ActorId, DataClass, RecordId, RetentionPolicyId, SchemaVersion, TenantId};
-use crm_parties::{PartyKind, PARTY_STATE_RETENTION_POLICY_ID};
+use crm_parties::{PARTY_STATE_RETENTION_POLICY_ID, PartyKind};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -367,7 +367,10 @@ pub(super) async fn preview_own_scope(
     if subject.identity_resolution_generation != 1
         || subject.canonical_party_id != subject.submitted_party_id
     {
-        return Ok(Err(fail("PRIVACY_SCOPE_CANONICAL_GENERATION_REQUIRED", 412)));
+        return Ok(Err(fail(
+            "PRIVACY_SCOPE_CANONICAL_GENERATION_REQUIRED",
+            412,
+        )));
     }
     let id = subject.canonical_party_id.as_str();
     let Some(party) = parties::stored(db, tenant, id).await? else {
@@ -457,14 +460,8 @@ pub(super) async fn preview_own_scope(
             continue;
         };
         let count = resources.len() as u64;
-        let proof = ContributionCompletenessProof::new(
-            true,
-            1,
-            count,
-            count,
-            cursor_digest,
-        )
-        .map_err(as_scope_error)?;
+        let proof = ContributionCompletenessProof::new(true, 1, count, count, cursor_digest)
+            .map_err(as_scope_error)?;
         contributions.push(
             OwnerScopeContribution::new(
                 contract.clone(),
