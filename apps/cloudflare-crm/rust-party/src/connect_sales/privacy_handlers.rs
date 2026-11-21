@@ -292,7 +292,7 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
                     owner_module_id: owner.contract().owner_module_id().as_str().to_owned(),
                     resource_count: u32::try_from(owner.resources().len())
                         .map_err(|_| ConnectError::internal("Privacy scope owner size overflow"))?,
-                    contribution_digest: owner.digest().to_vec().into(),
+                    contribution_digest: owner.digest().to_vec(),
                     ..Default::default()
                 })
             })
@@ -308,7 +308,7 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
                 .canonical_party_id
                 .as_str()
                 .to_owned(),
-            registry_digest: preview.registry_digest.to_vec().into(),
+            registry_digest: preview.registry_digest.to_vec(),
             resources,
             owners,
             missing_owner_module_ids: preview.missing_owner_module_ids,
