@@ -519,10 +519,19 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(relationship.version,2);assert.equal(relationship.status,"inactive");
    checkpoint("Relationship create/edit through original owner with D1 version/status");
    const relationFilterAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   // Other Parties can have active relationships in this tenant.
+   // Filter the *specific* updated record; do not demand an empty global list.
+   const relationHeading=page.getByRole("heading",{name:"browser_relation_"+runId,exact:true});
+   const activeRelationRead=page.waitForResponse(r=>responsePathEndsWith(r,"/ListPartyRelationships")&&
+     r.request().method()==="POST");
    await page.getByLabel("Статус связей",{exact:true}).selectOption("1");
-   await page.getByText("Связей пока нет.",{exact:true}).waitFor();
+   assert.equal((await activeRelationRead).status(),200);
+   await relationHeading.waitFor({state:"hidden"});
+   const inactiveRelationRead=page.waitForResponse(r=>responsePathEndsWith(r,"/ListPartyRelationships")&&
+     r.request().method()==="POST");
    await page.getByLabel("Статус связей",{exact:true}).selectOption("2");
-   await page.getByRole("heading",{name:"browser_relation_"+runId,exact:true}).waitFor();
+   assert.equal((await inactiveRelationRead).status(),200);
+   await relationHeading.waitFor();
    await page.getByLabel("Статус связей",{exact:true}).selectOption("");
    await page.getByRole("heading",{name:"browser_relation_"+runId,exact:true}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
