@@ -1452,6 +1452,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const afterScopeReads=(await sql("SELECT COUNT(*) AS n FROM crm_audit "+
      "WHERE tenant_id=? AND subject_id=?",tenantA,r4CaseId))[0].n;
    assert.equal(afterScopeReads,beforeScopeReads,"Privacy preview must be read-only in real Chromium");
+   await page.getByRole("button",{name:"Закрыть панель",exact:true}).click();
    checkpoint("R4a own-scope preview: original 2/9 owner contributions, seven explicitly missing, D1 read-only");
 
    }else{
