@@ -1144,6 +1144,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const movedDealCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Deal "+runId,exact:true})}).last();
    await movedDealCard.getByRole("button",{name:"Завершить сделку",exact:true}).click();
    await page.getByRole("heading",{name:"Завершить сделку: Browser Deal "+runId,exact:true}).waitFor();
+   await expect(page.getByText(/^Код причины без пробелов:/)).toBeVisible();
    await page.getByLabel("Причина закрытия",{exact:true}).fill("contract-signed");
    // A different real write loses its response and the page is reloaded.
    // Only opaque identifiers survive; lookup must not issue CloseDeal again.
@@ -1279,6 +1280,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
 
    await page.getByRole("button",{name:"Открыть повторно",exact:true}).last().click();
    await page.getByRole("heading",{name:"Повторно открыть сделку: Browser Deal "+runId,exact:true}).waitFor();
+   await expect(page.getByText(/^Код причины без пробелов:/)).toBeVisible();
    await page.getByLabel("Причина повторного открытия",{exact:true}).fill("reconsidered");
    await mutation(page.getByRole("button",{name:"Открыть повторно",exact:true}).last(),"ReopenDeal");
    await page.getByText("Сделка повторно открыта",{exact:true}).waitFor();
@@ -1853,6 +1855,26 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        const all=page.locator('section[aria-label="Сделки клиента во всех воронках"]');
        await all.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
        await all.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
+     }
+     // S-M1-B: reopening a create dialog must restore the Account scope
+     // from Customer360. Neither picker should retain a cancelled choice.
+     if(salesBoard||screen==="tasks"){
+       const action=page.getByRole("button",{
+         name:salesBoard?"Новая сделка":"Новая задача",exact:true
+       });
+       if(salesBoard)await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
+       await action.click();
+       const draftAccount=page.getByRole("dialog").getByLabel("Клиент",{exact:true});
+       await expect(draftAccount).toHaveValue(accountId);
+       if(salesBoard)await page.getByLabel("Основной контакт сделки",{exact:true})
+         .locator('option[value="'+browserSalesContactId+'"]').waitFor({state:"attached"});
+       await draftAccount.selectOption("");
+       await page.getByRole("dialog").getByRole("button",{name:"Закрыть панель"}).click();
+       await action.click();
+       await expect(page.getByRole("dialog").getByLabel("Клиент",{exact:true})).toHaveValue(accountId);
+       await page.getByRole("dialog").getByRole("button",{name:"Закрыть панель"}).click();
+       assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+         navigationAuditBefore,"Cancelled scoped create must not commit an operation");
      }
      if(screen==="tasks")await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor();
    }

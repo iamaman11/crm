@@ -293,7 +293,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       {activePipeline&&<Button variant="secondary" disabled={pipelineMutation.busy||pipelineMutation.pending}
         onClick={()=>void editPipeline(activePipeline)}>Настроить воронку</Button>}{" "}
       <Button disabled={mutation.busy||mutation.pending||editorRead.busy||!activePipeline||!readyStage} onClick={()=>{
-        setSelected(undefined);setAdvance(undefined);setFormAccountId("");
+        setSelected(undefined);setAdvance(undefined);setFormAccountId(accountId);
         setProbabilityChoice(String(ProbabilitySource.STAGE_DEFAULT));
         setEditorMode("create");mutation.changed();
       }}>Новая сделка</Button>
@@ -714,7 +714,9 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
             targetStatus:DealStatus.OPEN,precondition
           },advance.dealId);
         },async()=>{setEditorMode(null);setAdvance(undefined);setDetailRevision(v=>v+1);await refreshSales();});
-      }}><fieldset className={styles.intentFields} disabled={mutation.busy||mutation.pending}><FormGrid>{editorMode==="close"?<>
+      }}><fieldset className={styles.intentFields} disabled={mutation.busy||mutation.pending}><FormGrid>
+      {(editorMode==="close"||editorMode==="reopen")&&<p>Код причины без пробелов: латинские буквы, цифры, точка, подчёркивание, дефис или двоеточие (до 180 байт). Например, customer.accepted.</p>}
+      {editorMode==="close"?<>
         <p>Текущий этап сохраняется: {advancePipeline?.stages.find(s=>s.stageId===advance.stage?.stageId)?.name??advance.stage?.stageId??"неизвестен"}.</p>
         <SelectField label="Результат сделки" name="targetStatus" defaultValue={DealStatus.WON}>
           <option value={DealStatus.WON}>Выиграна</option>
@@ -797,7 +799,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       }}><fieldset className={styles.intentFields} disabled={mutation.busy||mutation.pending}><FormGrid>
         <TextField label="Название сделки" name="name" defaultValue={selected?.name??""} required/>
         {!selected&&<>
-          <AccountPicker onSelect={setFormAccountId}/>
+          <AccountPicker value={formAccountId} onSelect={setFormAccountId}/>
           <SelectField label="Этап" name="stageId" defaultValue={readyStage?.stageId??""} required>
             {activePipeline?.stages.filter(stage=>!stage.archived).map(stage=>
               <option value={stage.stageId} key={stage.stageId}>{stage.name}</option>)}

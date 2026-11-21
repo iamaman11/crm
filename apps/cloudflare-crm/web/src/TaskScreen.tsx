@@ -17,6 +17,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
   const [status,setStatus]=useState("");
   const [priority,setPriority]=useState("");
   const [accountId,setAccountId]=useState(initialAccountId);
+  const [formAccountId,setFormAccountId]=useState(initialAccountId);
   const [draftId,setDraftId]=useState(newId);
   const [selected,setSelected]=useState<Task>();
   const [editorMode,setEditorMode]=useState<"create"|"edit"|null>(null);
@@ -48,7 +49,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
       description="Работа по клиентам и задачи, созданные из сделок."
       actions={focusedTaskId
         ?<a href={scopeHref("tasks",initialAccountId||focused.data?.accountId||"")}>К задачам клиента</a>
-        :<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorMode("create");mutation.changed();}}>Новая задача</Button>}/>
+        :<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setFormAccountId(accountId);setEditorMode("create");mutation.changed();}}>Новая задача</Button>}/>
     {!focusedTaskId&&<>
     <AccountPicker label="Фильтр по клиенту" value={accountId} required={false}
       onSelect={id=>{setAccountId(id);setCursor("");}}/>
@@ -124,7 +125,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
           ...(dueAt?{dueAt}:{}),...(reminderAt?{reminderAt}:{}),precondition:{idempotencyKey:mutation.key}},draftId);
       },async()=>{setEditorMode(null);setDraftId(newId());await query.reload();});
     }}><FormGrid>
-      <TextField label="Тема задачи" name="subject" required/><AccountPicker initialAccountId={accountId}/>
+      <TextField label="Тема задачи" name="subject" required/><AccountPicker value={formAccountId} onSelect={setFormAccountId}/>
       <TextField label="Описание" name="description"/>
       <SelectField label="Приоритет" name="priority" defaultValue="2">
         <option value={TaskPriority.LOW}>Низкий</option><option value={TaskPriority.NORMAL}>Обычный</option><option value={TaskPriority.HIGH}>Высокий</option><option value={TaskPriority.URGENT}>Срочный</option>
