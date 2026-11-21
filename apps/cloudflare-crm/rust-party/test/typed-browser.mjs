@@ -678,6 +678,31 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      value:"Browser Task "+runId});
    const taskId=await firstId("crm_activity_task_records","subject","Browser Task "+runId);
    const taskCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Task "+runId,exact:true})});
+   // M1-08: signed React uses the existing original Task owner to set,
+   // reschedule and no-op an existing Task reminder (not a second scheduler).
+   await taskCard.getByRole("button",{name:"Назначить напоминание",exact:true}).click();
+   await page.getByRole("heading",{name:"Напоминание задачи",exact:true}).waitFor();
+   await page.getByLabel("Время напоминания",{exact:true}).fill("2030-06-01T12:00");
+   await mutation(page.getByRole("button",{name:"Сохранить напоминание",exact:true}),"ScheduleReminder");
+   assert.equal((await sql("SELECT version FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0].version,2);
+   const scheduledAudits=async()=>(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+
+     "' AND subject_id='"+taskId+"' AND action='activity_tasks.reminder_scheduled'"))[0].n;
+   assert.equal(await scheduledAudits(),1,"one real schedule receipt and audit");
+   await taskCard.getByRole("button",{name:"Изменить напоминание",exact:true}).click();
+   await page.getByLabel("Время напоминания",{exact:true}).fill("2030-06-02T12:00");
+   await mutation(page.getByRole("button",{name:"Сохранить напоминание",exact:true}),"ScheduleReminder");
+   assert.equal((await sql("SELECT version FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0].version,3);
+   assert.equal(await scheduledAudits(),2,"rescheduling writes exactly one new audit");
+   await taskCard.getByRole("button",{name:"Изменить напоминание",exact:true}).click();
+   await page.getByLabel("Время напоминания",{exact:true}).fill("2030-06-02T12:00");
+   await page.getByRole("button",{name:"Сохранить напоминание",exact:true}).click();
+   await page.getByRole("heading",{name:/Изменений не было/}).waitFor();
+   assert.equal((await sql("SELECT version FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0].version,3);
+   assert.equal(await scheduledAudits(),2,"same-time no-op has no D1 audit or receipt");
+   await reloadDocument();
+   await page.getByRole("heading",{name:"Browser Task "+runId,exact:true}).waitFor();
+   await taskCard.getByText(/Напоминание:.*2030/).waitFor();
+   checkpoint("M1-08 original Task ScheduleReminder set/reschedule/no-op/reload and D1 audit");
    await mutation(taskCard.getByRole("button",{name:"Выполнить задачу",exact:true}),"CompleteTask");
    assert.equal((await sql("SELECT json_extract(state,'$.status') AS status FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+taskId+"'"))[0].status,"completed");
    await search("Поиск: Фильтр по клиенту","Browser Account "+runId,"ListAccounts");

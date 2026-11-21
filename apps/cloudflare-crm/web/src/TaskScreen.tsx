@@ -20,7 +20,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
   const [formAccountId,setFormAccountId]=useState(initialAccountId);
   const [draftId,setDraftId]=useState(newId);
   const [selected,setSelected]=useState<Task>();
-  const [editorMode,setEditorMode]=useState<"create"|"edit"|null>(null);
+  const [editorMode,setEditorMode]=useState<"create"|"edit"|"reminder"|null>(null);
   const query=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(focusedTaskId)return undefined; // Direct-link view never loads a full task list.
     return api.tasks.listTasks({page:{pageSize:25,pageToken:cursor},
@@ -73,6 +73,14 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
           await mutation.reportError(error);
         }
       }}>Редактировать задачу</Button>{" "}
+      {t.status===TaskStatus.OPEN&&<Button variant="secondary" disabled={mutation.busy||mutation.pending}
+        onClick={async()=>{
+          try {
+            const task=(await api.tasks.getTask({taskId:t.taskId})).task;
+            if(!task||task.status!==TaskStatus.OPEN)throw Error("Задача уже завершена");
+            setSelected(task);setEditorMode("reminder");mutation.changed();
+          }catch(error){await mutation.reportError(error);}
+        }}>{t.reminderAt?"Изменить напоминание":"Назначить напоминание"}</Button>}{" "}
       {t.status===TaskStatus.OPEN&&<Button disabled={mutation.busy||mutation.pending}
         onClick={()=>void mutation.runIntent(()=>prepareMutation(api.tasks.completeTask,{
           taskId:t.taskId,
@@ -84,6 +92,31 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
       <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
         onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
     </>}
+    <RecordPanel open={editorMode==="reminder"&&!!selected} title="Напоминание задачи"
+      onClose={()=>{if(mutation.busy||mutation.pending)return;setEditorMode(null);setSelected(undefined);}}>
+      {selected&&<form key={selected.taskId+":"+selected.version.toString()} onChange={mutation.changed}
+        onSubmit={e=>{
+          e.preventDefault();const data=new FormData(e.currentTarget);
+          void mutation.runIntent(()=>{
+            const reminderAt=timestamp(field(data,"scheduleReminderAt"));
+            if(!reminderAt)throw Error("Укажите время напоминания");
+            return prepareMutation(api.tasks.scheduleReminder,{
+              taskId:selected.taskId,reminderAt,
+              precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
+            },selected.taskId);
+          },async()=>{setSelected(undefined);setEditorMode(null);
+            await query.reload();await focused.reload();});
+        }}>
+        <p>Напоминание задачи: {dateText(selected.reminderAt)} · срок: {dateText(selected.dueAt)}.</p>
+        <p>Выберите будущую дату. Напоминание не должно быть позднее срока задачи.
+          Для уже назначенного времени его можно перенести; завершение задачи сбрасывает напоминание.</p>
+        <TextField label="Время напоминания" name="scheduleReminderAt" type="datetime-local" step="1" required/>
+        <Button type="submit" disabled={mutation.busy||mutation.pending}>Сохранить напоминание</Button>{" "}
+        <Button type="button" variant="secondary" disabled={mutation.busy||mutation.pending}
+          onClick={()=>{setEditorMode(null);setSelected(undefined);mutation.changed();}}>Отмена</Button>
+      </form>}
+      <MutationNotice state={mutation}/>
+    </RecordPanel>
     <RecordPanel open={editorMode==="edit"&&!!selected} title="Изменить задачу" onClose={()=>{if(mutation.busy||mutation.pending)return;setEditorMode(null);setSelected(undefined);}}>{selected&&<>
       <p>Текущий срок: {dateText(selected.dueAt)} · Напоминание: {dateText(selected.reminderAt)}</p>
       <form key={selected.taskId+selected.version.toString()} onChange={mutation.changed} onSubmit={e=>{

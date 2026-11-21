@@ -3,8 +3,8 @@
 //! Owner comes from a cryptographically verified Cloudflare Access principal.
 use super::{bind, now_nanos};
 use crm_activities::{
-    CompleteTask, CreateTask, Task, TaskMutation, TaskOwner, TaskPriority, TaskStatus, UpdateTask,
-    decode_task_state, encode_task_state,
+    CompleteTask, CreateTask, ScheduleReminder, Task, TaskMutation, TaskOwner, TaskPriority,
+    TaskStatus, UpdateTask, decode_task_state, encode_task_state,
 };
 use crm_core_contracts::Patch;
 use crm_module_sdk::{ActorId, RecordId, ResourceRef};
@@ -47,6 +47,11 @@ pub(super) struct CreateInput {
 #[serde(deny_unknown_fields)]
 pub(super) struct CompleteInput {
     pub(super) expected_version: i64,
+}
+#[derive(Serialize)]
+pub(super) struct ReminderInput {
+    pub(super) expected_version: i64,
+    pub(super) reminder_at_unix_nanos: i64,
 }
 // Wire intent is serialized only for the existing D1 idempotency digest.
 #[derive(Serialize)]
@@ -293,6 +298,95 @@ pub(super) async fn update_typed(
         return Ok(Err(fail("ACTIVITIES_TASK_UPDATE_CONFLICT", 409)));
     };
     if result.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
+        return Ok(Err(fail("ACTIVITIES_TASK_VERSION_CONFLICT", 409)));
+    }
+    Ok(Ok(MutationOutcome {
+        task,
+        replayed: false,
+        changed: true,
+    }))
+}
+// The existing Task domain owns all schedule invariants. The SAME D1 UPDATE
+// trigger as UpdateTask atomically writes the original receipt and audit.
+// A same-time no-op has no receipt, version bump or fabricated audit.
+pub(super) async fn schedule_reminder_typed(
+    input: ReminderInput,
+    key: &str,
+    db: &D1Database,
+    tenant: &str,
+    id: &str,
+    actor: &str,
+    trace: &str,
+) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    if !(8..=120).contains(&key.len()) {
+        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+    }
+    let digest = hash("schedule_reminder", id, &input)?;
+    if let Some(previous) = prior(db, tenant, key).await? {
+        if previous.digest != digest {
+            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+        }
+        let task = decode(&previous.state)?;
+        if task.task_id().as_str() != id {
+            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+        }
+        return Ok(Ok(MutationOutcome {
+            task,
+            replayed: true,
+            changed: true,
+        }));
+    }
+    let Some(mut task) = stored(db, tenant, id).await? else {
+        return Ok(Err(fail("NOT_FOUND", 404)));
+    };
+    let changed = match task.schedule_reminder(ScheduleReminder {
+        expected_version: input.expected_version,
+        reminder_at_unix_nanos: input.reminder_at_unix_nanos,
+        occurred_at_unix_nanos: now_nanos(),
+    }) {
+        Ok(value) => value,
+        Err(error) => {
+            return Ok(Err(fail(
+                error.code.clone(),
+                if error.code == "ACTIVITIES_TASK_VERSION_CONFLICT"
+                    || error.code == "ACTIVITIES_TASK_ALREADY_COMPLETED"
+                {
+                    409
+                } else {
+                    422
+                },
+            )));
+        }
+    };
+    if changed == TaskMutation::Unchanged {
+        return Ok(Ok(MutationOutcome {
+            task,
+            replayed: false,
+            changed: false,
+        }));
+    }
+    let saved = state(&task)?;
+    let result = bind(
+        db,
+        "UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?",
+        &[
+            JsValue::from_str(&saved),
+            JsValue::from_f64(task.version() as f64),
+            JsValue::from_str(key),
+            JsValue::from_str(&digest),
+            JsValue::from_str(trace),
+            JsValue::from_str(actor),
+            JsValue::from_str(tenant),
+            JsValue::from_str(id),
+            JsValue::from_f64(input.expected_version as f64),
+        ],
+    )?
+    .run()
+    .await;
+    let Ok(result) = result else {
+        return Ok(Err(fail("ACTIVITIES_TASK_REMINDER_CONFLICT", 409)));
+    };
+    if result.meta()?.and_then(|meta| meta.changes).unwrap_or(0) == 0 {
         return Ok(Err(fail("ACTIVITIES_TASK_VERSION_CONFLICT", 409)));
     }
     Ok(Ok(MutationOutcome {

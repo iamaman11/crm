@@ -1142,13 +1142,97 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
   console.log(JSON.stringify({event:"crm.native-r2a-task-actor-audit",result:"PASS",
     update_complete_actor:true,no_op:true,failed_audit_rollback:true}));
 console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
-   result:"PASS",rpc_methods:["CreateTask","UpdateTask","CompleteTask","GetTask","ListTasks"],
+   result:"PASS",rpc_methods:["CreateTask","UpdateTask","ScheduleReminder","CompleteTask","GetTask","ListTasks"],
    generated_binary:true,original_owner:"crm.activities",signed_access:true,
    tenant_ab:true,viewer_write_denied:true,
    filtered_pagination:true,account_fk:true,d1_cas:true,
    no_op_without_write:true,replay:true,d1_receipts:true,d1_audit:true,
    published_active:true}));
 
+
+ // M1-08: restore the ORIGINAL crm-activities Task::schedule_reminder through
+ // the existing generated TaskService, one Task table and atomic D1 trigger.
+ const scheduleTask={taskId:taskOther,reminderAt:{seconds:1860000000n,nanos:123456789},
+  precondition:{expectedVersion:3n,idempotencyKey:"candidate-task-reminder-first"}};
+ const beforeReminder=await taskActorSnapshot();
+ assert.equal((await taskV2("ScheduleReminder",null,scheduleTask)).status,401);
+ assert.equal((await taskV2("ScheduleReminder",viewer,scheduleTask)).status,403);
+ assert.equal((await taskV2("ScheduleReminder",tenantB,scheduleTask)).status,404);
+ assert.equal((await taskV2("ScheduleReminder",admin,{
+  taskId:taskOther,precondition:{expectedVersion:3n,idempotencyKey:"candidate-reminder-missing"}
+ })).status,400);
+ assert.equal((await taskV2("ScheduleReminder",admin,{
+  ...scheduleTask,reminderAt:{seconds:1700000000n,nanos:0},
+  precondition:{expectedVersion:3n,idempotencyKey:"candidate-reminder-past"}
+ })).status,400);
+ assert.equal((await taskV2("ScheduleReminder",admin,{
+  ...scheduleTask,reminderAt:{seconds:1880000000n,nanos:0},
+  precondition:{expectedVersion:3n,idempotencyKey:"candidate-reminder-after-due"}
+ })).status,400);
+ assert.equal((await taskV2("ScheduleReminder",admin,{
+  ...scheduleTask,precondition:{expectedVersion:2n,idempotencyKey:"candidate-reminder-stale"}
+ })).status,409);
+ assert.equal((await taskV2("ScheduleReminder",admin,{
+  taskId:taskMid,reminderAt:scheduleTask.reminderAt,
+  precondition:{expectedVersion:2n,idempotencyKey:"candidate-reminder-completed"}
+ })).status,409);
+ assert.deepEqual(await taskActorSnapshot(),beforeReminder,
+  "Invalid/denied/stale/completed reminder must not modify D1, audit or receipts");
+ const scheduled=await taskV2("ScheduleReminder",admin,scheduleTask);
+ assert.equal(scheduled.status,200,describeProtobuf(scheduled.body));
+ assert.equal(scheduled.body.changed,true);
+ assert.equal(scheduled.body.task?.version,4n);
+ assert.equal(scheduled.body.task?.reminderAt?.seconds,1860000000n);
+ assert.equal(scheduled.body.task?.reminderAt?.nanos,123456789);
+ assert.equal(scheduled.body.receipt?.resourceVersion,4n);
+ assert.equal(scheduled.body.receipt?.requestId,scheduled.headers.get("x-request-id"));
+ assert.equal((await taskAudits()).at(-1).action,"activity_tasks.reminder_scheduled");
+ assert.equal((await taskAudits()).at(-1).request_id,scheduled.headers.get("x-request-id"));
+ const reminderReplayed=await taskV2("ScheduleReminder",knownService,scheduleTask);
+ assert.equal(reminderReplayed.status,200,describeProtobuf(reminderReplayed.body));
+ assert.equal(reminderReplayed.body.receipt?.replayed,true);
+ assert.equal(reminderReplayed.body.receipt?.resourceVersion,4n);
+ assert.equal((await taskAudits()).filter(x=>x.action==="activity_tasks.reminder_scheduled").length,1);
+ assert.equal((await taskV2("ScheduleReminder",admin,{
+  ...scheduleTask,reminderAt:{seconds:1860000001n,nanos:0}
+ })).status,409,"same key with different reminder intent must reject");
+ const beforeNoChange=await taskActorSnapshot();
+ const unchangedReminder=await taskV2("ScheduleReminder",admin,{
+  ...scheduleTask,precondition:{expectedVersion:4n,idempotencyKey:"candidate-reminder-same"}
+ });
+ assert.equal(unchangedReminder.status,200,describeProtobuf(unchangedReminder.body));
+ assert.equal(unchangedReminder.body.changed,false);
+ assert.equal(unchangedReminder.body.receipt,undefined);
+ assert.equal(unchangedReminder.body.task?.version,4n);
+ assert.deepEqual(await taskActorSnapshot(),beforeNoChange,
+  "same reminder time must not create a version, receipt or audit");
+ const movedReminder=await taskV2("ScheduleReminder",knownService,{
+  ...scheduleTask,reminderAt:{seconds:1861000000n,nanos:222333444},
+  precondition:{expectedVersion:4n,idempotencyKey:"candidate-reminder-reschedule"}
+ });
+ assert.equal(movedReminder.status,200,describeProtobuf(movedReminder.body));
+ assert.equal(movedReminder.body.task?.version,5n);
+ assert.equal(movedReminder.body.task?.reminderAt?.seconds,1861000000n);
+ assert.equal((await taskAudits()).filter(x=>x.action==="activity_tasks.reminder_scheduled").length,2);
+ assert.equal((await taskV2("GetTask",viewer,{taskId:taskOther})).body.task?.version,5n);
+ assert.equal((await sql("SELECT version FROM crm_activity_task_records WHERE tenant='tenant-a' AND id='"+taskOther+"'"))[0].version,5);
+ const beforeReminderFault=await taskActorSnapshot();
+ await sql("CREATE TRIGGER fixture_fail_reminder_audit BEFORE INSERT ON crm_audit "+
+  "WHEN NEW.subject_id='"+taskOther+"' AND NEW.action='activity_tasks.reminder_scheduled' "+
+  "BEGIN SELECT RAISE(ABORT,'fixture reminder audit'); END;");
+ try{
+  const denied=await taskV2("ScheduleReminder",admin,{
+    ...scheduleTask,reminderAt:{seconds:1862000000n,nanos:0},
+    precondition:{expectedVersion:5n,idempotencyKey:"candidate-reminder-audit-rollback"}
+  });
+  assert.equal(denied.status,409,describeProtobuf(denied.body));
+  assert.deepEqual(await taskActorSnapshot(),beforeReminderFault,
+    "Late reminder audit failure must roll back Task state and original receipt");
+ }finally{await sql("DROP TRIGGER fixture_fail_reminder_audit");}
+ console.log(JSON.stringify({event:"crm.native-m1-08-reminder",result:"PASS",
+  domain:"crm.activities.Task::schedule_reminder",post_create:true,reschedule:true,
+  no_op_without_write:true,completed_denied:true,after_due_denied:true,
+  stale_cas:true,replay:true,tenant_ab:true,receipt_audit_atomic:true}));
 
  // Original read-only DataQuality and Identity Resolution, signed binary
  // Connect from the exact generated descriptor, with tenant A/B and viewer.

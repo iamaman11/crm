@@ -142,6 +142,53 @@ impl task_wire::TaskService for TaskV2Service {
             ..Default::default()
         })
     }
+    // Existing signed Task owner, original domain CAS and receipt/audit trigger.
+    #[worker::send]
+    async fn schedule_reminder(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, task_wire::ScheduleReminderRequest>,
+    ) -> ServiceResult<task_wire::ScheduleReminderResponse> {
+        let input = req.to_owned_message();
+        let id = Self::valid_id(&input.task_id)?;
+        let (key, version) = wire_precondition(input.precondition.as_option(), false)?;
+        let reminder_at = input
+            .reminder_at
+            .as_option()
+            .ok_or_else(|| ConnectError::invalid_argument("reminder_at required"))?;
+        let reminder_at_unix_nanos = ContactPointV2Service::nanos(reminder_at)?;
+        let saved = activity_tasks::schedule_reminder_typed(
+            activity_tasks::ReminderInput {
+                expected_version: version.unwrap_or_default(),
+                reminder_at_unix_nanos,
+            },
+            &key,
+            &self.d1()?,
+            &self.tenant,
+            &id,
+            &self.actor,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Task D1 reminder failed"))?
+        .map_err(Self::failed)?;
+        RpcResponse::ok(task_wire::ScheduleReminderResponse {
+            task: Some(Self::convert(
+                &saved.task,
+                &self
+                    .persisted_account(saved.task.task_id().as_str())
+                    .await?,
+            )?)
+            .into(),
+            changed: saved.changed,
+            receipt: if saved.changed || saved.replayed {
+                Some(self.receipt(&saved)).into()
+            } else {
+                None.into()
+            },
+            ..Default::default()
+        })
+    }
     #[worker::send]
     async fn complete_task(
         &self,
