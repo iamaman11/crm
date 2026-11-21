@@ -3,7 +3,8 @@ import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from 
 import type {ContactPoint} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId,timestamp,dateText} from "./api";
 import {ContactPointKind,ContactPointStatus} from "@ultimate-crm/client/cloudflare";
-import {enumValue,contactKindLabel} from "./enumFields";
+import {enumValue} from "./enumFields";
+import {contactKindLabel} from "./contactLabels";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker,PartyName} from "./Pickers";
 import {TimeFields} from "./TimeFields";

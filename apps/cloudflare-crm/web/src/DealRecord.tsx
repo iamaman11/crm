@@ -4,7 +4,7 @@ import type {ContactPoint,Deal} from "@ultimate-crm/client/cloudflare";
 import {DealEventKind} from "@ultimate-crm/client/cloudflare";
 import {ContactPointStatus,DealStatus,ForecastCategory,ProbabilitySource} from "@ultimate-crm/client/cloudflare";
 import {api,dateText} from "./api";
-import {contactKindLabel} from "./enumFields";
+import {contactKindLabel} from "./contactLabels";
 import {AccountName} from "./Pickers";
 import {useQuery,QueryNotice} from "./hooks";
 import {moneyText,percent} from "./money";
