@@ -1826,7 +1826,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value);
      await expect(page.getByLabel(filter,{exact:true}).locator("option:checked"))
        .toHaveText((screen==="sales"||screen==="tasks"?
-         "Browser Account ":"Browser Updated ")+runId);
+         "Browser Account ":"Browser Winner ")+runId);
      assert.equal(new URL(await page.url()).hash,"#"+screen+"?"+(screen==="sales"||screen==="tasks"?"accountId":"partyId")+"="+encodeURIComponent(value));
      if(salesBoard){
        assert.equal(await page.getByLabel("Воронка продаж",{exact:true}).inputValue(),"",
@@ -1846,7 +1846,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      assert.equal(await page.getByLabel(filter,{exact:true}).inputValue(),value,"Reload must retain the linked scope");
      await expect(page.getByLabel(filter,{exact:true}).locator("option:checked"))
        .toHaveText((screen==="sales"||screen==="tasks"?
-         "Browser Account ":"Browser Updated ")+runId);
+         "Browser Account ":"Browser Winner ")+runId);
      if(salesBoard){
        assert.equal(await page.getByLabel("Воронка продаж",{exact:true}).inputValue(),"",
          "Reload must keep the global all-pipelines default");
