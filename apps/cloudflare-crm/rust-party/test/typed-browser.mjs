@@ -1920,15 +1920,17 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByText("Browser Deal "+runId,{exact:true}).waitFor();
    assert.equal(new URL(page.url()).hash,"#tasks?accountId="+encodeURIComponent(accountId)+
      "&dealId="+encodeURIComponent(dealId));
-   assert.equal(await page.getByRole("link",{name:"Открыть карточку задачи",exact:true}).count(),1,
-     "The Deal shows only its own linked Task, not all Account Tasks");
    const scopedTaskLink=page.getByRole("link",{name:"Открыть карточку задачи",exact:true});
+   await scopedTaskLink.waitFor({state:"visible"});
+   assert.equal(await scopedTaskLink.count(),1,
+     "The Deal shows only its own linked Task, not all Account Tasks");
    assert.equal(new URL(await scopedTaskLink.getAttribute("href"),base).hash,
      "#tasks?accountId="+encodeURIComponent(accountId)+"&taskId="+encodeURIComponent(dealTaskId));
    await reloadDocument();
    await page.getByRole("heading",{name:"Задачи сделки",exact:true}).waitFor();
-   assert.equal(await page.getByRole("link",{name:"Открыть карточку задачи",exact:true}).count(),1);
-   await page.getByRole("link",{name:"Открыть карточку задачи",exact:true}).click();
+   await scopedTaskLink.waitFor({state:"visible"});
+   assert.equal(await scopedTaskLink.count(),1);
+   await scopedTaskLink.click();
    await page.getByRole("heading",{name:"Карточка задачи",exact:true}).waitFor();
    await page.getByRole("link",{name:"Открыть сделку",exact:true}).click();
    await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
