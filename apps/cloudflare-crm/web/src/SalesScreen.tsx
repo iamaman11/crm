@@ -69,6 +69,9 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   const [status,setStatus]=useState("");
   // Deal lookup is independent of saved views, Kanban metrics and stage totals.
   const [dealSearch,setDealSearch]=useState(initialSearch);
+  // Hash navigation/Back may change search without leaving SalesScreen.
+  // Preserve the selected Kanban, its filters, metrics and mutation state.
+  useEffect(()=>setDealSearch(initialSearch),[initialSearch]);
   const [accountId,setAccountId]=useState(initialAccountId);
   const [pipelineId,setPipelineId]=useState("");
   const [analysisStart,setAnalysisStart]=useState("");
