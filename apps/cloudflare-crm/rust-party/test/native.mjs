@@ -3713,6 +3713,77 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  console.log(JSON.stringify({event:"crm.native-party-csv-v2",result:"PASS",admin_read:true,
    original_owner:"crm.customer-data-operations",party_owner:"crm.parties",
    tenant_ab:true,atomic:true,replay:true,audit:true,verified_actor:true,sql_failure_rollback:true,csv_bytes_sha256:true,bounded:true}));
+ // M1-10: signed workerd + generated Protobuf prove the actual open-field
+ // decision for each primary customer owner. Read the WHOLE returned business
+ // object, not a hand-maintained list of fields that could miss future additions.
+ // This is the same native suite/policy/D1 fixture, not an extra auth runner.
+ const m1AuditBeforeReads=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
+ const m1FullReads=[
+   ["Party",v3,"GetParty",{partyId:id},"party"],
+   ["Account",accountV2,"GetAccount",{accountId},"account"],
+   ["ContactPoint",contactV2,"GetContactPoint",{contactPointId:contactId},"contactPoint"],
+   ["Relationship",relationV2,"GetPartyRelationship",{relationshipId:rMid},"relationship"],
+   ["Deal",salesV2,"GetDeal",{dealId},"deal"],
+   ["Task",taskV2,"GetTask",{taskId:linkedTaskId},"task"],
+   ["Customer360",overviewCall,"GetAccountOverview",{accountId},"overview"]
+ ];
+ const m1ReadValues=new Map();
+ for(const [label,call,method,payload,field] of m1FullReads){
+   const fromAdmin=await call(method,admin,payload);
+   const fromViewer=await call(method,viewer,payload);
+   assert.equal(fromAdmin.status,200,label+" admin Get");
+   assert.equal(fromViewer.status,200,label+" viewer Get");
+   assert.ok(fromAdmin.body[field],label+" must contain an authorized business record");
+   assert.deepEqual(fromViewer.body[field],fromAdmin.body[field],
+     label+" must reveal every existing Protobuf business field to viewer, not just IDs");
+   m1ReadValues.set(label,fromViewer.body[field]);
+   assert.equal((await call(method,tenantB,payload)).status,404,
+     label+" must not reveal a cross-tenant record");
+ }
+ const m1ListReads=[
+   ["Party",v3,"ListParties",{page:{pageSize:5}},"parties"],
+   ["Account",accountV2,"ListAccounts",{page:{pageSize:5}},"accounts"],
+   ["ContactPoint",contactV2,"ListContactPoints",
+     {partyId:id,page:{pageSize:5}},"contactPoints"],
+   ["Relationship",relationV2,"ListPartyRelationships",
+     {partyId:id,page:{pageSize:5}},"relationships"],
+   ["Deal",salesV2,"ListDeals",{accountId,page:{pageSize:5}},"deals"],
+   ["Task",taskV2,"ListTasks",{accountId,page:{pageSize:5}},"tasks"]
+ ];
+ for(const [label,call,method,payload,field] of m1ListReads){
+   const fromAdmin=await call(method,admin,payload);
+   const fromViewer=await call(method,viewer,payload);
+   assert.equal(fromAdmin.status,200,label+" admin List");
+   assert.equal(fromViewer.status,200,label+" viewer List");
+   assert.ok(fromAdmin.body[field].length>0,label+" fixture must exercise populated list");
+   assert.deepEqual(fromViewer.body,fromAdmin.body,
+     label+" List must preserve all business fields, pagination and filters for viewer");
+ }
+ // The same related records must form one coherent Party -> Account -> Deal ->
+ // Sales event -> original linked Task -> Customer360 chain, not isolated RPC 200s.
+ const m1Party=m1ReadValues.get("Party"),m1Account=m1ReadValues.get("Account");
+ const m1Deal=m1ReadValues.get("Deal"),m1Task=m1ReadValues.get("Task");
+ const m1Overview=m1ReadValues.get("Customer360");
+ assert.equal(m1Party.partyId,id);
+ assert.ok(m1Account.parties.some(row=>row.partyId===id&&row.role===1));
+ assert.equal(m1Deal.accountId,m1Account.accountId);
+ assert.equal(m1Deal.amount?.minorUnits,98765n);
+ assert.equal(m1Deal.amount?.currencyCode,"PLN");
+ assert.equal(m1Task.accountId,m1Account.accountId);
+ const m1Events=await salesV2("ListDealEvents",viewer,{dealId,page:{pageSize:25}});
+ assert.equal(m1Events.status,200);
+ assert.ok(m1Events.body.events.some(event=>event.linkedTaskId===linkedTaskId),
+   "Original Sales stage event must carry the linked Activities Task ID");
+ assert.equal(m1Overview.account.accountId,m1Account.accountId);
+ assert.equal(m1Overview.primaryParty.partyId,m1Party.partyId);
+ assert.ok(m1Overview.deals.some(row=>row.dealId===m1Deal.dealId));
+ assert.ok(m1Overview.tasks.some(row=>row.taskId===linkedTaskId));
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
+   m1AuditBeforeReads,"M1 complete business reads and denied tenant lookups must not write audit");
+ console.log(JSON.stringify({event:"crm.native-m1-read-parity-linked-flow",result:"PASS",
+   signed_admin_and_viewer:true,full_wire_fields_equal:true,tenant_b_not_found:true,
+   get_owners:m1FullReads.length,list_owners:m1ListReads.length,
+   party_account_deal_sales_event_task_customer360:true,read_only:true}));
  await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
  const salesAuditBeforeFilter=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  assert.deepEqual((await collectPages(salesV2,"ListDeals","deals",{accountId})).map(d=>d.dealId),
