@@ -59,6 +59,11 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v2.TaskService.UpdateTask
+    - id: activities.task.schedule_reminder
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.TaskService.ScheduleReminder
     - id: activities.task.complete
       version: 2.0.0
       binding:
