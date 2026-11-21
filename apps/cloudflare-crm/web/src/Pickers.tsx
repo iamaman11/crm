@@ -36,7 +36,7 @@ export function PartyPicker({name="partyId",label="Участник",initialPart
       {!query.busy&&!query.error&&query.data?.parties.map(p=>
         <option value={p.partyId} key={p.partyId}>{p.displayName}</option>)}
     </SelectField>
-    <QueryNotice query={query}/>{value&&<QueryNotice query={selected}/>}
+    <QueryNotice query={query}/>{value&&selected.error&&<QueryNotice query={selected}/>}
     {!query.busy&&!query.error&&query.data?.parties.length===0&&<p>Участники не найдены.</p>}
     {query.data?.pageInfo?.nextPageToken&&<Button variant="secondary"
       disabled={query.busy||!!query.error} onClick={()=>{setCursor(query.data?.pageInfo?.nextPageToken??"");select("");}}>
@@ -73,7 +73,7 @@ export function AccountPicker({onSelect,initialAccountId="",value:controlled,req
       {!query.busy&&!query.error&&query.data?.accounts.map(a=>
         <option value={a.accountId} key={a.accountId}>{a.name}</option>)}
     </SelectField>
-    <QueryNotice query={query}/>{value&&<QueryNotice query={selected}/>}
+    <QueryNotice query={query}/>{value&&selected.error&&<QueryNotice query={selected}/>}
     {!query.busy&&!query.error&&query.data?.accounts.length===0&&<p>Клиенты не найдены.</p>}
     {query.data?.pageInfo?.nextPageToken&&<Button variant="secondary"
       disabled={query.busy||!!query.error} onClick={()=>{setCursor(query.data?.pageInfo?.nextPageToken??"");select("");}}>
