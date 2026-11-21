@@ -282,7 +282,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
     <QueryNotice query={editorRead}/>
     {focusedDealId?<section>
       <PageHeader title="Карточка сделки" actions={<a href="#sales">К списку сделок</a>}/>
-      <DealDetails currencies={currencyDefinitions} key={focusedDealId+":"+detailRevision} dealId={focusedDealId}
+      <DealDetails currencies={currencyDefinitions} pipelines={pipelines} key={focusedDealId+":"+detailRevision} dealId={focusedDealId}
         onEdit={()=>void open(focusedDealId,"edit")}
         onClose={()=>void open(focusedDealId,"close")}
         onReopen={()=>void open(focusedDealId,"reopen")}/>
@@ -512,7 +512,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           </>:(deal.status===DealStatus.WON||deal.status===DealStatus.LOST)?
             <Button variant="secondary" onClick={()=>void open(deal.dealId,"reopen")}>Открыть повторно</Button>:
             <p role="status">Неизвестный статус: изменение недоступно</p>}
-          {expandedDeal===deal.dealId&&<DealDetails currencies={currencyDefinitions} key={deal.dealId+":"+detailRevision}
+          {expandedDeal===deal.dealId&&<DealDetails currencies={currencyDefinitions} pipelines={pipelines} key={deal.dealId+":"+detailRevision}
             dealId={deal.dealId} onEdit={()=>void open(deal.dealId,"edit")}
             onClose={()=>void open(deal.dealId,"close")}
              onReopen={()=>void open(deal.dealId,"reopen")}/>}
@@ -593,7 +593,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
             </>:(d.status===DealStatus.WON||d.status===DealStatus.LOST)?
               <Button variant="secondary" onClick={()=>void open(d.dealId,"reopen")}>Открыть повторно</Button>:
               <p role="status">Неизвестный статус: изменение недоступно</p>}
-            {expandedDeal===d.dealId&&<DealDetails currencies={currencyDefinitions} key={d.dealId+":"+detailRevision}
+            {expandedDeal===d.dealId&&<DealDetails currencies={currencyDefinitions} pipelines={pipelines} key={d.dealId+":"+detailRevision}
               dealId={d.dealId} onEdit={()=>void open(d.dealId,"edit")}
               onClose={()=>void open(d.dealId,"close")}
                onReopen={()=>void open(d.dealId,"reopen")}/>}

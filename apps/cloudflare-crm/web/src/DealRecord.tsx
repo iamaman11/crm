@@ -1,6 +1,6 @@
 import {useCallback,useState} from "react";
 import {Button,SelectField} from "@ultimate-crm/ui";
-import type {ContactPoint,Deal} from "@ultimate-crm/client/cloudflare";
+import type {ContactPoint,Deal,SalesPipeline} from "@ultimate-crm/client/cloudflare";
 import {DealEventKind} from "@ultimate-crm/client/cloudflare";
 import {ContactPointStatus,DealStatus,ForecastCategory,ProbabilitySource} from "@ultimate-crm/client/cloudflare";
 import {api,dateText} from "./api";
@@ -91,9 +91,17 @@ function eventLabel(kind:DealEventKind):string {
     default:return "Неизвестное событие";
   }
 }
+// Only a user-facing label. Immutable events still come from the original
+// Sales owner with stable IDs; an archived/removed catalog stage falls back
+// to that exact stored ID, never an invented historical name.
+function stageLabel(pipeline:SalesPipeline|undefined,stageId:string):string {
+  return pipeline?.stages.find(stage=>stage.stageId===stageId)?.name??stageId;
+}
 // One original, owner-authorized event projection for inline/full Deal pages.
 // No reconstruction of history from mutable client-side snapshots.
-export function DealHistory({dealId,accountId}:{dealId:string;accountId:string}){
+export function DealHistory({dealId,accountId,pipeline}:{
+  dealId:string;accountId:string;pipeline?:SalesPipeline;
+}){
   const [cursor,setCursor]=useState("");
   const history=useQuery(useCallback(
     (signal:AbortSignal)=>api.deals.listDealEvents({dealId,page:{pageSize:25,pageToken:cursor}},{signal}),
@@ -102,13 +110,14 @@ export function DealHistory({dealId,accountId}:{dealId:string;accountId:string})
   const next=history.data?.pageInfo?.nextPageToken??"";
   return <section aria-label={"История сделки "+dealId}>
     <h4>История сделки</h4>
+    {pipeline&&<p>Названия этапов показаны по текущему справочнику воронки; история хранит исходные коды.</p>}
     <QueryNotice query={history}/>
     <ol>
       {history.data?.events.map(event=><li key={event.dealVersion.toString()}>
         <strong>{eventLabel(event.kind)}</strong>
         {" · версия "}{event.dealVersion.toString()}
         {" · "}{dateText(event.occurredAt)}
-        <p>Этап: {event.previousStageId?event.previousStageId+" → ":""}{event.stageId}</p>
+        <p>Этап: {event.previousStageId?stageLabel(pipeline,event.previousStageId)+" → ":""}{stageLabel(pipeline,event.stageId)}</p>
         {event.reasonCode&&<p>Причина: {event.reasonCode}</p>}
         <p>Исполнитель: {event.actor} · запрос: {event.requestId}</p>
         {event.linkedTaskId&&<p>Связанная задача: <a href={taskHref(event.linkedTaskId,accountId)}>
@@ -122,8 +131,10 @@ export function DealHistory({dealId,accountId}:{dealId:string;accountId:string})
 }
 
 // One canonical GetDeal/ContactPoint read projection for inline/full page.
-export function DealDetails({dealId,currencies,onEdit,onClose,onReopen}:{dealId:string;currencies:CurrencyCatalog;
- onEdit?:()=>void;onClose?:()=>void;onReopen?:()=>void}) {
+export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen}:{
+ dealId:string;currencies:CurrencyCatalog;pipelines:readonly SalesPipeline[];
+ onEdit?:()=>void;onClose?:()=>void;onReopen?:()=>void;
+}) {
   const details=useQuery(useCallback(async(signal:AbortSignal)=>{
     const deal=(await api.deals.getDeal({dealId},{signal})).deal;
     if(!deal)throw Error("Сделка не найдена");
@@ -133,6 +144,9 @@ export function DealDetails({dealId,currencies,onEdit,onClose,onReopen}:{dealId:
     return {deal,contact};
   },[dealId]));
   const deal:Deal|undefined=details.data?.deal;
+  // The parent SalesScreen already owns the paginated ListPipelines read.
+  // Use that catalog for all three Deal projections, no extra RPC.
+  const pipeline=pipelines.find(p=>p.pipelineId===deal?.stage?.pipelineId);
   return <section aria-label={"Подробности сделки "+dealId}>
     <QueryNotice query={details}/>
     {deal&&<>
@@ -142,7 +156,7 @@ export function DealDetails({dealId,currencies,onEdit,onClose,onReopen}:{dealId:
       <p>Основной контакт: {details.data?.contact?
         <a href={scopeHref("contacts",details.data.contact.partyId)}>
           {details.data.contact.displayValue}</a>:"Не выбран"}</p>
-      <p>Воронка: {deal.stage?.pipelineId??"—"} · этап: {deal.stage?.stageId??"—"}</p>
+      <p>Воронка: {pipeline?.name??deal.stage?.pipelineId??"—"} · этап: {deal.stage?.stageId?stageLabel(pipeline,deal.stage.stageId):"—"}</p>
       <p>Сумма: {moneyText(deal.amount,currencies)} · вероятность: {percent(deal.probabilityBasisPoints)}%</p>
       {deal.status===DealStatus.OPEN&&<p>{probabilitySourceText(deal.probabilitySource)} · {forecastCategoryText(deal.forecastCategory)}</p>}
       <p>Ожидаемое закрытие: {inputDate(deal.expectedCloseDate) || "Не назначено"}</p>
@@ -158,7 +172,7 @@ export function DealDetails({dealId,currencies,onEdit,onClose,onReopen}:{dealId:
       </div>:onReopen?<Button variant="secondary" onClick={onReopen}>
         Открыть повторно
       </Button>:null}
-      <DealHistory key={deal.dealId} dealId={deal.dealId} accountId={deal.accountId}/>
+      <DealHistory key={deal.dealId} dealId={deal.dealId} accountId={deal.accountId} pipeline={pipeline}/>
     </>}
   </section>;
 }

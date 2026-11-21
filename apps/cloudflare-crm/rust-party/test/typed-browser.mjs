@@ -1323,6 +1323,18 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.goto(base+"/#sales/"+encodeURIComponent(dealId));
    await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
    await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+   const namedDetails=page.getByRole("region",{name:"Подробности сделки "+dealId});
+   const namedHistory=page.getByRole("region",{name:"История сделки "+dealId});
+   await namedDetails.getByText("Воронка: Browser Pipeline "+runId+" · этап: Квалификация",{exact:true}).waitFor();
+   await namedHistory.getByText("Этап: Первичный контакт → Квалификация",{exact:true}).waitFor();
+   await namedHistory.getByText(/Названия этапов показаны по текущему справочнику/).waitFor();
+   const auditBeforeNamedRead=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await reloadDocument();
+   await namedDetails.getByText("Воронка: Browser Pipeline "+runId+" · этап: Квалификация",{exact:true}).waitFor();
+   await namedHistory.getByText("Этап: Первичный контакт → Квалификация",{exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     auditBeforeNamedRead,"Named stage catalog/history rendering must never create audit writes");
+   checkpoint("M2-01 original immutable stage IDs shown as named pipeline/stage in full Deal and history after reload");
    await page.getByText("Сделка завершена",{exact:true}).waitFor();
    await page.getByText("contract-signed",{exact:false}).first().waitFor();
    await page.getByText("Связанная задача:",{exact:false}).first().waitFor();
@@ -1375,6 +1387,14 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Сумма",{exact:true}).fill("100.00");
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
    await page.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
+   const alternateDealCard=page.locator("section").filter({
+     has:page.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true})
+   }).last();
+   await alternateDealCard.getByRole("button",{name:"Раскрыть карточку",exact:true}).click();
+   await alternateDealCard.getByText(
+     "Воронка: Browser Alternate Pipeline "+runId+" · этап: Первичный контакт",
+     {exact:true}).last().waitFor();
+   checkpoint("M2-01 inline Deal name matches stage catalog, no second pipeline or event read owner");
    checkpoint("Second pipeline Deal under same Account persisted in D1");
    // Full-page Deal URL and inline expansion share the same original GetDeal
    // read component. This is a real route, not a second Deal editor/store.
