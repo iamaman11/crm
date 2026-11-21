@@ -1376,6 +1376,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Отменить запрос",exact:true}),"CancelPrivacyCase");
    const privacyState=(await sql("SELECT version,json_extract(state,'$.status.code') AS status FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"' AND id='"+privacyId+"'"))[0];
    assert.equal(privacyState.version,3);assert.equal(privacyState.status,"cancelled");
+   // A service token is deliberately not a human identity. Run the positive
+   // signed-human E2E only in the native workerd session; live service-token
+   // deployment still checks its unchanged published release and fails closed.
+   if(!adminIdentity.startsWith("service:")){
    // #352 R4a: one real Chromium flow, not just a new RPC:
    // signed human email -> original ContactPoint verification -> submitted
    // PrivacyCase -> original Rust subject binding -> D1 audit/readback.
@@ -1433,6 +1437,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? "+
      "AND subject_id=? AND action='customer_privacy.subject.verify_own'",tenantA,r4CaseId))[0].n,1);
    checkpoint("R4a signed human ContactPoint -> original PrivacyCase subject verification, D1 receipt and audit");
+   }else{
+     checkpoint("R4a human-only positive verification reserved for signed human browser; service principal cannot verify");
+   }
 
    // #471 S5b Privacy: a committed intake write loses its browser acknowledgment.
    // Reload must use original signed GetPrivacyCase receipt provenance, never
