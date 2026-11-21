@@ -52,6 +52,12 @@
 - **Gate A=PASS** [#44950874461](https://github.com/iamaman11/crm/actions/runs/44950874461), точный code source [`c7eddfb5`](https://github.com/iamaman11/crm/commit/c7eddfb577e7ed349ed9d8fad32227467c449ab3) (45 основного job + 14 deploy), **Gate B=PASS** через независимый LIVE Browser MCP на том же SHA: полная и встроенная Deal, `Согласование → Входящие`, reload/back, D1 original stage IDs/events v1/v2 без новых записей audit 182→182. [Фактическая приёмка с legacy source и HAR #7069532306](https://github.com/iamaman11/crm/issues/352#issuecomment-7069532306).
 - **M2-01 целиком и M2-02…M2-05 остаются пооперационно OPEN** до отдельной сверки существующих owners/артефактов; не записывать false MVP-completion. Следующая задача выбирается по реальному product gap, а не по названию старого crate. Предыдущий M1 human-only verify и visibility также остаются OPEN.
 
+## M2 continuation decision (22.11.2026): не дублировать работающий Sales runtime
+
+- [Пооперационный product-first review #7069547465](https://github.com/iamaman11/crm/issues/352#issuecomment-7069547465): **M2-02 (Deal primary Contact), M2-03 (saved Sales views), M2-04 (exact metrics/forecast/conversion) — A-кандидаты**, существующие typed protobuf/owners/D1/UI/native tests есть, но целый ID не объявлять ACCEPTED без проверки соответствующей исторической семантики и independent Gate B по полному user flow. Дублирующие API/калькулятор/генератор запрещены.
+- **M2-05 = DECIDED C для MVP**: отдельную Lead сущность **не** создавать; квалификация запроса сейчас выражается через original Deal, Party/Account, pipeline stages `lead→qualified`, immutable events, linked Task. Исторические просмотренные `crm-sales-capability-adapter::plan_create/update/advance` относятся к Deal и не доказывают обязательный `Lead` CRUD. Если когда-либо появится конкретный user-flow и потребность в независимом Lead lifecycle — решение пересмотреть как B с исходной source проверкой. C не удаляет legacy code и не означает автоматический Gate B PASS для несуществующей операции.
+- Следующим новым кодовым срезом выбирать **только доказанный B-пробел**, не продолжать ради заполнения чисел очереди. Остальная per-operation parity и M1 human-only/visibility остаётся OPEN.
+
 ## Упорядоченная матрица бизнес-функций
 
 | ID | Очередь | Функция | Уже имеется | Историческая реализация (вскрыть до работы) |
@@ -310,7 +316,7 @@
 
 ### M2-05
 
-**Бизнес-функция:** Lead qualification как отдельная сущность?. **Очередь:** M2. **Что уже есть:** NOT PROVEN/DECIDE. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Lead qualification как отдельная сущность?. **Очередь:** M2. **Что уже есть:** NOT PROVEN/DECIDE. **Статус пользовательской приёмки:** **DECIDED C для MVP: отдельная Lead entity не нужна**, использовать исходную Deal и stage history; не путать с реальным реализованным Lead CRUD (см. M2 continuation decision #7069547465).
 
 **Legacy — прочитать перед разработкой:** [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-capability-adapter/src/planner.rs); [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-capability-adapter/src/planner.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
