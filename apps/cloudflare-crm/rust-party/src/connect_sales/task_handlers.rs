@@ -321,10 +321,12 @@ impl task_wire::TaskService for TaskV2Service {
             &self.tenant,
             after,
             size as usize,
-            status,
-            account,
-            priority,
-            deal,
+            activity_tasks::TaskListFilters {
+                status,
+                account_id: account,
+                priority,
+                deal_id: deal,
+            },
         )
         .await
         .map_err(|_| ConnectError::internal("Task D1 list failed"))?;

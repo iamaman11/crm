@@ -468,16 +468,27 @@ pub(super) async fn complete_typed(
         changed: true,
     }))
 }
+// A single typed, owner-local filter value instead of growing positional
+// parameters. This is not a generic registry or a second query owner.
+pub(super) struct TaskListFilters<'a> {
+    pub(super) status: Option<TaskStatus>,
+    pub(super) account_id: Option<&'a str>,
+    pub(super) priority: Option<TaskPriority>,
+    pub(super) deal_id: Option<&'a str>,
+}
 pub(super) async fn list_page_typed(
     db: &D1Database,
     tenant: &str,
     after: &str,
     size: usize,
-    status: Option<TaskStatus>,
-    account_id: Option<&str>,
-    priority: Option<TaskPriority>,
-    deal_id: Option<&str>,
+    filters: TaskListFilters<'_>,
 ) -> Result<(Vec<(Task, String)>, Option<String>)> {
+    let TaskListFilters {
+        status,
+        account_id,
+        priority,
+        deal_id,
+    } = filters;
     let mut query = String::from(
         "SELECT id,state,account_id FROM crm_activity_task_records WHERE tenant=? AND id>?",
     );
