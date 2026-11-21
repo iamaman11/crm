@@ -1396,6 +1396,35 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      {exact:true}).last().waitFor();
    checkpoint("M2-01 inline Deal name matches stage catalog, no second pipeline or event read owner");
    checkpoint("Second pipeline Deal under same Account persisted in D1");
+   // M2 sales lookup: find a Deal across pipelines even when a Kanban board
+   // is selected. The name search must not change the board or metrics.
+   const metricsBeforeSearch=await page.getByRole("region",{name:"Аналитика воронки"})
+     .innerText();
+   await page.getByLabel("Найти сделку",{exact:true}).fill("Browser Deal "+runId);
+   await page.getByRole("button",{name:"Найти",exact:true}).click();
+   const searchResults=page.getByRole("region",{name:"Результаты поиска сделок"});
+   await searchResults.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+   await expect(searchResults.getByRole("heading",{name:"Browser Alternate Deal "+runId,
+     exact:true})).toHaveCount(0);
+   assert.equal(await page.getByRole("region",{name:"Аналитика воронки"}).innerText(),
+     metricsBeforeSearch,"search must not mutate the selected Kanban metrics");
+   await searchResults.getByRole("link",{name:"Полная страница",exact:true}).click();
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+   await page.goBack();
+   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+   await expect(page.getByLabel("Найти сделку",{exact:true})).toHaveValue("Browser Deal "+runId);
+   await searchResults.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+   await reloadDocument();
+   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+   await expect(page.getByLabel("Найти сделку",{exact:true})).toHaveValue("Browser Deal "+runId);
+   await searchResults.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+   await page.getByLabel("Найти сделку",{exact:true}).fill("No matching Deal "+runId);
+   await page.getByRole("button",{name:"Найти",exact:true}).click();
+   await searchResults.getByText("Сделки по запросу не найдены.",{exact:true}).waitFor();
+   await page.getByRole("button",{name:"Сбросить поиск",exact:true}).click();
+   await expect(searchResults).toHaveCount(0);
+   checkpoint("M2 Deal search across pipelines, typed name filter, result→full page→Back, no-results and reset");
    // Full-page Deal URL and inline expansion share the same original GetDeal
    // read component. This is a real route, not a second Deal editor/store.
    await page.getByRole("link",{name:"Полная страница",exact:true}).last().click();

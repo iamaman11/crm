@@ -2168,6 +2168,36 @@ const filteredSales=await collectPages(salesV2,"ListDeals","deals",{
 assert.deepEqual(filteredSales.map(x=>x.dealId),[dealId,dealLast]);
 assert.equal((await collectPages(salesV2,"ListDeals","deals",{
   pipelineId:"pipeline.other"})).length,1);
+// M2: Name or ID lookup must be tenant-bound and executed BEFORE LIMIT/cursor.
+// It is not a separate read engine and never mutates audit/receipts.
+const beforeDealLookupAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
+const searchSales=await collectPages(salesV2,"ListDeals","deals",{
+  search:"Sales page",page:{pageSize:1}});
+assert.deepEqual(searchSales.map(x=>x.dealId),[dealOther,dealLast],
+  "both matching Deals across pipelines must survive pageSize=1 and keyset cursor");
+assert.deepEqual((await collectPages(salesV2,"ListDeals","deals",{
+  search:"  Sales page 1  ",pipelineId:"pipeline.enterprise",page:{pageSize:1}}))
+  .map(x=>x.dealId),[dealLast],
+  "server trims search and composes pipeline before LIMIT");
+assert.deepEqual((await collectPages(salesV2,"ListDeals","deals",{
+  search:"Updated Connect Deal",status:2,accountId,page:{pageSize:1}}))
+  .map(x=>x.dealId),[dealId],
+  "search intersects exact status and Account filters");
+assert.deepEqual((await collectPages(salesV2,"ListDeals","deals",{
+  search:dealOther,page:{pageSize:1}})).map(x=>x.dealId),[dealOther],
+  "exact ID fragments also find the owner-authorized Deal");
+for(const literal of ["%","_","'","Несуществующая сделка"]){
+  assert.equal((await salesV2("ListDeals",viewer,{search:literal,page:{pageSize:1}}))
+    .body.deals.length,0,"special search characters must be literal, not SQL wildcards");
+}
+assert.equal((await salesV2("ListDeals",viewer,{search:"X".repeat(201)})).status,400);
+assert.equal((await salesV2("ListDeals",viewer,{search:"X".repeat(200)})).status,200);
+assert.equal((await salesV2("ListDeals",tenantB,{search:"Sales page"})).body.deals.length,0);
+assert.equal((await salesV2("ListDeals",null,{search:"Sales page"})).status,401);
+assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
+  beforeDealLookupAudit,"Deal search and its negative cases are read-only");
+console.log(JSON.stringify({event:"crm.native-m2-deal-name-search",result:"PASS",
+  typed:true,server_before_limit:true,literal:true,tenant:true,readonly:true}));
 // A non-UI test pipeline has more than one board page. The server count must
 // be 27, not the 25 records rendered in a stage column.
 for(let index=0;index<26;index++){

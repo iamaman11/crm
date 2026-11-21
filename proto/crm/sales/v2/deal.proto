@@ -176,6 +176,9 @@ message ListDealsRequest {
   optional string pipeline_id = 2;
   optional DealStatus status = 3;
   optional string account_id = 4;
+  // Literal, case-sensitive name/ID fragment; user search is separate from
+  // saved views, Kanban inventory and pipeline-wide forecasting.
+  string search = 5;
 }
 
 message ListDealsResponse {

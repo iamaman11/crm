@@ -6,9 +6,11 @@ import {api,field,newId} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useReadAction,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
 import {AccountPicker,AccountName} from "./Pickers";
+import {SearchField} from "./SearchField";
 import {DealContactPicker,DealDetails,dealStatusText,forecastCategoryText,probabilitySourceText} from "./DealRecord";
 import {inputDate,parseDate} from "./calendarInput";
-import {dealHref} from "./routes";
+import {dealHref,salesSearchHref} from "./routes";
+import {navigateTo} from "./navigation";
 import {currencyCatalog,minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText} from "./money";
 import type {CurrencyCatalog} from "./money";
 import styles from "./App.module.css";
@@ -53,8 +55,8 @@ async function allSalesViews(signal:AbortSignal):Promise<SalesDealView[]> {
   } while(cursor);
   return all;
 }
-export function SalesScreen({initialAccountId="",focusedDealId=""}:{
-  initialAccountId?:string;focusedDealId?:string;
+export function SalesScreen({initialAccountId="",initialSearch="",focusedDealId=""}:{
+  initialAccountId?:string;initialSearch?:string;focusedDealId?:string;
 }) {
   const [stageCursors,setStageCursors]=useState<Record<string,string>>({});
   // Native DnD is presentation only: the existing confirmed advance form
@@ -65,6 +67,8 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const [droppedStageId,setDroppedStageId]=useState("");
   const [allDealsCursor,setAllDealsCursor]=useState("");
   const [status,setStatus]=useState("");
+  // Deal lookup is independent of saved views, Kanban metrics and stage totals.
+  const [dealSearch,setDealSearch]=useState(initialSearch);
   const [accountId,setAccountId]=useState(initialAccountId);
   const [pipelineId,setPipelineId]=useState("");
   const [analysisStart,setAnalysisStart]=useState("");
@@ -210,11 +214,11 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
   const allDealsQuery=useQuery(useCallback(async(signal:AbortSignal)=>{
     const selectedStatus=status?enumValue(status,[DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"):undefined;
     return api.deals.listDeals({
-      page:{pageSize:25,pageToken:allDealsCursor},
+      page:{pageSize:25,pageToken:allDealsCursor},search:dealSearch,
       ...(accountId?{accountId}:{}),
       ...(selectedStatus!==undefined?{status:selectedStatus}:{})
     },{signal});
-  },[accountId,allDealsCursor,status]));
+  },[accountId,allDealsCursor,status,dealSearch]));
   const refreshSales=async()=>{
     await Promise.all([query.reload(),allDealsQuery.reload(),metricsQuery.reload()]);
   };
@@ -348,6 +352,17 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
       <option value="">Все</option><option value={DealStatus.OPEN}>Открытые</option>
       <option value={DealStatus.WON}>Выигранные</option><option value={DealStatus.LOST}>Проигранные</option>
     </SelectField>
+    <SearchField label="Найти сделку" submitted={dealSearch}
+      onSearch={value=>{
+        const search=value.trim();
+        // Existing native hash route owns search state across full Deal/Back
+        // and document reload, not sessionStorage or a parallel router.
+        if(navigateTo(salesSearchHref(initialAccountId,search))){
+          setDealSearch(search);setAllDealsCursor("");
+        }
+      }}/>
+    {dealSearch&&<p>Поиск только в общем списке сделок по названию или ID. Фильтры клиента и статуса
+      сохраняются; Kanban, его итоги и прогноз не меняются.</p>}
     <QueryNotice query={query}/>
     {activePipeline&&<section aria-label="Аналитика воронки">
       <h2>Показатели всей воронки · {activePipeline.name}</h2>
@@ -489,9 +504,10 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
           {" "}{metricsQuery.data.closedOutcomes.unknownCloseCount.toString()}</p>
       </>:<p>Для расчёта конверсии выберите все статусы сделок.</p>}
     </section>}
-    {(!pipelineId||accountId)&&<section aria-label={accountId?"Сделки клиента во всех воронках":"Сделки во всех воронках"}>
-      <h2>{accountId?"Все сделки клиента во всех воронках":"Все сделки во всех воронках"}</h2>
-      <p>Показано {allDealsQuery.data?.deals.length??0} сделок на текущей странице. Это общий список, независимо от выбранной доски; полный итог не подменяется размером страницы.</p>
+    {(!pipelineId||accountId||dealSearch)&&<section aria-label={dealSearch?"Результаты поиска сделок":accountId?"Сделки клиента во всех воронках":"Сделки во всех воронках"}>
+      <h2>{dealSearch?"Результаты поиска сделок":accountId?"Все сделки клиента во всех воронках":"Все сделки во всех воронках"}</h2>
+      <p>Показано {allDealsQuery.data?.deals.length??0} сделок на текущей странице.
+        {dealSearch?" Совпадения ищутся во всех воронках; действуют выбранные фильтры клиента и статуса.":" Это общий список, независимо от выбранной доски; полный итог не подменяется размером страницы."}</p>
       <QueryNotice query={allDealsQuery}/>
       {allDealsQuery.data?.deals.map(deal=>{
         const pipeline=pipelines.find(p=>p.pipelineId===deal.stage?.pipelineId);
@@ -519,7 +535,7 @@ export function SalesScreen({initialAccountId="",focusedDealId=""}:{
         </Card>;
       })}
       {!allDealsQuery.busy&&allDealsQuery.data?.deals.length===0&&
-        <p>{accountId?"У клиента нет сделок для выбранного статуса.":"Сделок для выбранного статуса пока нет."}</p>}
+        <p>{dealSearch?"Сделки по запросу не найдены.":accountId?"У клиента нет сделок для выбранного статуса.":"Сделок для выбранного статуса пока нет."}</p>}
       {allDealsQuery.data?.pageInfo?.nextPageToken&&
         <Button variant="secondary" disabled={allDealsQuery.busy}
           onClick={()=>setAllDealsCursor(allDealsQuery.data?.pageInfo?.nextPageToken??"")}>

@@ -1117,6 +1117,7 @@ impl sale_wire::DealService for SalesV2Service {
             pipeline,
             status,
             account,
+            wire_search(req.search)?,
         )
         .await
         .map_err(|_| {

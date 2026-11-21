@@ -44,7 +44,8 @@ function App() {
     route.screen==="tasks"?<TaskScreen key={route.accountId+"/"+(route.taskId??"")+"/"+(route.dealId??"")}
       initialAccountId={route.accountId} focusedTaskId={route.taskId??""}
       initialDealId={route.dealId??""}/>:
-    route.screen==="sales"?<SalesScreen key={route.accountId} initialAccountId={route.accountId}/>:
+    route.screen==="sales"?<SalesScreen key={route.accountId} initialAccountId={route.accountId}
+      initialSearch={route.search??""}/>:
     route.screen==="consents"?<ConsentScreen/>:
     route.screen==="review"?<ReviewScreen/>:
     route.screen==="privacy"?<PrivacyScreen/>:

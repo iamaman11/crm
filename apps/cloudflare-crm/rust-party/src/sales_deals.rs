@@ -1614,6 +1614,7 @@ pub(super) async fn list_page_typed(
     pipeline: Option<&str>,
     status: Option<DealStatus>,
     account: Option<&str>,
+    search: &str,
 ) -> Result<(Vec<Deal>, Option<String>)> {
     let mut args = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
     let mut sql =
@@ -1633,6 +1634,14 @@ pub(super) async fn list_page_typed(
     if let Some(account) = account {
         sql.push_str(" AND account_id=?");
         args.push(JsValue::from_str(account));
+    }
+    // Literal substring matching (including %, _, and quotes) is performed
+    // BEFORE keyset pagination. SQL params protect both name and ID search.
+    // The original Deal state remains the sole owner of the name.
+    if !search.is_empty() {
+        sql.push_str(" AND (instr(json_extract(state,'$.name'),?)>0 OR instr(id,?)>0)");
+        args.push(JsValue::from_str(search));
+        args.push(JsValue::from_str(search));
     }
     sql.push_str(" ORDER BY id LIMIT ?");
     args.push(JsValue::from_f64((size + 1) as f64));

@@ -8,7 +8,7 @@ export type Route =
   | {kind:"account";accountId:string}
   | {kind:"account-create";partyId:string}
   | {kind:"deal";dealId:string}
-  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string}
+  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;search?:string}
   | {kind:"not-found";path:string};
 
 const sections:readonly Section[]=["parties","contacts","relationships","sales","tasks","consents","review","privacy","enrichment","data"];
@@ -56,13 +56,16 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
   if(isSection(path)){
     const ids=path==="tasks"?params.getAll("taskId"):[];
     const deals=path==="tasks"?params.getAll("dealId"):[];
+    const searches=path==="sales"?params.getAll("search"):[];
     const taskId=ids[0]??"",dealId=deals[0]??"";
-    if(ids.length>1||deals.length>1||(taskId&&dealId)||
+    if(ids.length>1||deals.length>1||searches.length>1||
+       searches.some(search=>[...search].length>200)||(taskId&&dealId)||
        [taskId,dealId].some(id=>id.length>128||id.includes("/")||
          id.includes("\\")||id==="."||id===".."||id.includes("%")))
       return {kind:"not-found",path:source};
     return {kind:"section",screen:path,partyId:params.get("partyId")??"",
-      accountId:params.get("accountId")??"",...(taskId?{taskId}:{}),...(dealId?{dealId}:{})};
+      accountId:params.get("accountId")??"",...(taskId?{taskId}:{}),...(dealId?{dealId}:{}),
+      ...(searches[0]?{search:searches[0]}:{})};
   }
   return {kind:"not-found",path:source};
 }
@@ -92,6 +95,14 @@ export function taskHref(taskId:string,accountId:string):string {
 
 export function dealTasksHref(dealId:string,accountId:string):string {
   return "#tasks?"+new URLSearchParams({accountId,dealId}).toString();
+}
+
+export function salesSearchHref(initialAccountId:string,search:string):string {
+  const params=new URLSearchParams();
+  if(initialAccountId)params.set("accountId",initialAccountId);
+  if(search)params.set("search",search);
+  const query=params.toString();
+  return "#sales"+(query?"?"+query:"");
 }
 
 export function dealHref(dealId:string):string {
