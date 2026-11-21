@@ -1401,7 +1401,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const metricsBeforeSearch=await page.getByRole("region",{name:"Аналитика воронки"})
      .innerText();
    await page.getByLabel("Найти сделку",{exact:true}).fill("Browser Deal "+runId);
-   await page.getByRole("button",{name:"Найти",exact:true}).click();
+   await page.getByRole("button",{name:"Найти сделку по названию",exact:true}).click();
    const searchResults=page.getByRole("region",{name:"Результаты поиска сделок"});
    await searchResults.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
    await expect(searchResults.getByRole("heading",{name:"Browser Alternate Deal "+runId,
@@ -1420,9 +1420,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByLabel("Найти сделку",{exact:true})).toHaveValue("Browser Deal "+runId);
    await searchResults.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
    await page.getByLabel("Найти сделку",{exact:true}).fill("No matching Deal "+runId);
-   await page.getByRole("button",{name:"Найти",exact:true}).click();
+   await page.getByRole("button",{name:"Найти сделку по названию",exact:true}).click();
    await searchResults.getByText("Сделки по запросу не найдены.",{exact:true}).waitFor();
-   await page.getByRole("button",{name:"Сбросить поиск",exact:true}).click();
+   await page.getByRole("button",{name:"Сбросить поиск сделок",exact:true}).click();
    await expect(searchResults).toHaveCount(0);
    checkpoint("M2 Deal search across pipelines, typed name filter, result→full page→Back, no-results and reset");
    // Full-page Deal URL and inline expansion share the same original GetDeal

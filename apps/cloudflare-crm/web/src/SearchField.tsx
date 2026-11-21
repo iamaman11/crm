@@ -1,7 +1,10 @@
 import {useEffect,useState} from "react";
 import {Button,TextField} from "@ultimate-crm/ui";
 
-export function SearchField({label,onSearch,submitted=""}:{label:string;onSearch:(value:string)=>void;submitted?:string}) {
+export function SearchField({label,onSearch,submitted="",searchLabel="Найти",resetLabel="Сбросить поиск"}:{
+  label:string;onSearch:(value:string)=>void;submitted?:string;
+  searchLabel?:string;resetLabel?:string;
+}) {
   const [value,setValue]=useState(submitted);
   useEffect(()=>setValue(submitted),[submitted]);
   return <div>
@@ -12,7 +15,7 @@ export function SearchField({label,onSearch,submitted=""}:{label:string;onSearch
         event.preventDefault();event.stopPropagation();onSearch(value);
       }}}/>
     <small>Поиск учитывает регистр букв.</small>{" "}
-    <Button variant="secondary" onClick={()=>onSearch(value)}>Найти</Button>{" "}
-    <Button variant="secondary" onClick={()=>{setValue("");onSearch("");}}>Сбросить поиск</Button>
+    <Button variant="secondary" onClick={()=>onSearch(value)}>{searchLabel}</Button>{" "}
+    <Button variant="secondary" onClick={()=>{setValue("");onSearch("");}}>{resetLabel}</Button>
   </div>;
 }

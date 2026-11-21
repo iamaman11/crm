@@ -353,6 +353,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",focusedDealId=
       <option value={DealStatus.WON}>Выигранные</option><option value={DealStatus.LOST}>Проигранные</option>
     </SelectField>
     <SearchField label="Найти сделку" submitted={dealSearch}
+      searchLabel="Найти сделку по названию" resetLabel="Сбросить поиск сделок"
       onSearch={value=>{
         const search=value.trim();
         // Existing native hash route owns search state across full Deal/Back
