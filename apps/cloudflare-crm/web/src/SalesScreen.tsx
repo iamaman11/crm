@@ -1,4 +1,4 @@
-import {useCallback,useState} from "react";
+import {useCallback,useEffect,useState} from "react";
 import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import type {Deal,SalesPipeline,SalesDealView} from "@ultimate-crm/client/cloudflare";
 import {DealStatus,ProbabilitySource,ForecastCategory} from "@ultimate-crm/client/cloudflare";
@@ -9,7 +9,7 @@ import {AccountPicker,AccountName} from "./Pickers";
 import {SearchField} from "./SearchField";
 import {DealContactPicker,DealDetails,dealStatusText,forecastCategoryText,probabilitySourceText} from "./DealRecord";
 import {inputDate,parseDate} from "./calendarInput";
-import {dealHref,salesSearchHref} from "./routes";
+import {dealHref,salesSearchHref,salesViewHref} from "./routes";
 import {navigateTo} from "./navigation";
 import {currencyCatalog,minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText} from "./money";
 import type {CurrencyCatalog} from "./money";
@@ -55,8 +55,8 @@ async function allSalesViews(signal:AbortSignal):Promise<SalesDealView[]> {
   } while(cursor);
   return all;
 }
-export function SalesScreen({initialAccountId="",initialSearch="",focusedDealId=""}:{
-  initialAccountId?:string;initialSearch?:string;focusedDealId?:string;
+export function SalesScreen({initialAccountId="",initialSearch="",initialViewId="",focusedDealId=""}:{
+  initialAccountId?:string;initialSearch?:string;initialViewId?:string;focusedDealId?:string;
 }) {
   const [stageCursors,setStageCursors]=useState<Record<string,string>>({});
   // Native DnD is presentation only: the existing confirmed advance form
@@ -78,7 +78,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",focusedDealId=
     endDate:NonNullable<ReturnType<typeof parseDate>>;
   }>();
   const [analysisError,setAnalysisError]=useState("");
-  const [selectedViewId,setSelectedViewId]=useState("");
+  const [selectedViewId,setSelectedViewId]=useState(initialViewId);
   const [viewName,setViewName]=useState("");
   const [viewDraftId,setViewDraftId]=useState(newId);
   const [createViewOpen,setCreateViewOpen]=useState(false);
@@ -132,10 +132,24 @@ export function SalesScreen({initialAccountId="",initialSearch="",focusedDealId=
         setStatus(current.status===undefined?"":String(current.status));
         setAccountId(current.accountId??"");
       }
+      // Address only a confirmed view, never a pending draft mutation.
+      navigateTo(salesViewHref(initialAccountId,current&&!current.archived?current.viewId:"",dealSearch));
     }
   });
   const savedViewsQuery=useQuery(useCallback(allSalesViews,[]));
   const savedViews=savedViewsQuery.data??[];
+  // The URL is the sole route snapshot. The original owner controls which
+  // tenant-scoped views are available; reapply only a returned active view.
+  useEffect(()=>{
+    if(!savedViewsQuery.data)return;
+    const view=savedViewsQuery.data.find(entry=>entry.viewId===initialViewId);
+    if(!view){setSelectedViewId("");setViewName("");return;}
+    setSelectedViewId(view.viewId);setViewName(view.name);
+    setPipelineId(view.pipelineId??"");
+    setStatus(view.status===undefined?"":String(view.status));
+    setAccountId(view.accountId??"");
+    setStageCursors({});setAllDealsCursor("");
+  },[initialViewId,savedViewsQuery.data]);
   const selectedView=savedViews.find(view=>view.viewId===selectedViewId);
   const viewStatus=()=>status?enumValue(status,
     [DealStatus.OPEN,DealStatus.WON,DealStatus.LOST],"Статус сделки"):undefined;
@@ -148,6 +162,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",focusedDealId=
     };
   };
   const applySavedView=(id:string)=>{
+    if(!navigateTo(salesViewHref(initialAccountId,id,dealSearch)))return;
     const view=savedViews.find(entry=>entry.viewId===id);
     if(!view){setSelectedViewId("");return;}
     setSelectedViewId(view.viewId);
@@ -313,6 +328,8 @@ export function SalesScreen({initialAccountId="",initialSearch="",focusedDealId=
         <option value="">Ручные фильтры</option>
         {savedViews.map(view=><option value={view.viewId} key={view.viewId}>{view.name}</option>)}
       </SelectField>
+      {initialViewId&&savedViewsQuery.data&&!savedViews.some(view=>view.viewId===initialViewId)&&
+        <p role="status">Сохранённое представление недоступно. Выберите другое или ручные фильтры.</p>}
       {" "}
       <Button variant="secondary" disabled={viewMutation.busy||viewMutation.pending} onClick={()=>{
         if(!selectedView)setViewName("");
@@ -358,7 +375,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",focusedDealId=
         const search=value.trim();
         // Existing native hash route owns search state across full Deal/Back
         // and document reload, not sessionStorage or a parallel router.
-        if(navigateTo(salesSearchHref(initialAccountId,search))){
+        if(navigateTo(salesSearchHref(initialAccountId,search,selectedViewId))){
           setDealSearch(search);setAllDealsCursor("");
         }
       }}/>

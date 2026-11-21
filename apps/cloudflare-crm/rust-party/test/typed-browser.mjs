@@ -1014,6 +1014,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      original_request_id:originalViewCreateRequestId,subsequent_request_id:viewLookupRequestId});
    await page.unroute(createViewRoute);
    await expect(page.getByLabel("Сохранённое представление",{exact:true})).toHaveValue(viewId);
+   assert.ok(new URL(page.url()).hash.includes("viewId="+viewId),
+     "Committed saved view must become a typed native deep link");
    await expect(page.getByLabel("Статус сделки",{exact:true})).toHaveValue("1");
    checkpoint("S5 saved-view lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
    const createdView=JSON.parse((await sql("SELECT state FROM crm_sales_saved_view_records "+
@@ -1025,7 +1027,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
    const viewPicker=page.getByLabel("Сохранённое представление",{exact:true});
    await viewPicker.locator('option[value="'+viewId+'"]').waitFor({state:"attached"});
-   await viewPicker.selectOption(viewId);
+   // No manual reselect after reload: restore from the native URL.
+   await expect(viewPicker).toHaveValue(viewId);
+   assert.ok(new URL(page.url()).hash.includes("viewId="+viewId));
    // Views and pipelines are independent asynchronous reads on reload.
    // Wait for the controlled React selection AND its catalog option, not a
    // same-tick inputValue before the ListPipelines response is rendered.
@@ -1034,6 +1038,20 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(selectedPipeline.locator('option[value="'+newPipelineId+'"]').first()).toBeAttached();
    await expect(selectedPipeline).toHaveValue(newPipelineId);
    await expect(page.getByLabel("Статус сделки",{exact:true})).toHaveValue("1");
+   // Native Deal → Back and search preserve the named view, not just its D1 row.
+   await page.locator('a[href="#sales/'+dealId+'"]').first().click();
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   await page.goBack();
+   await expect(page.getByLabel("Сохранённое представление",{exact:true})).toHaveValue(viewId);
+   await expect(page.getByLabel("Статус сделки",{exact:true})).toHaveValue("1");
+   await page.getByLabel("Найти сделку",{exact:true}).fill("Browser Deal "+runId);
+   await page.getByRole("button",{name:"Найти сделку по названию",exact:true}).click();
+   assert.ok(new URL(page.url()).hash.includes("viewId="+viewId));
+   assert.ok(new URL(page.url()).hash.includes("search="));
+   await expect(page.getByLabel("Сохранённое представление",{exact:true})).toHaveValue(viewId);
+   await page.getByRole("button",{name:"Сбросить поиск сделок",exact:true}).click();
+   await expect(page.getByLabel("Сохранённое представление",{exact:true})).toHaveValue(viewId);
+   assert.ok(!new URL(page.url()).hash.includes("search="));
    await page.getByRole("region",{name:"Аналитика воронки"})
      .getByText(/^Всего сделок: 1 · срез по UTC:/).waitFor();
    // Hold an obsolete read to prove no previous-key data is displayed.
@@ -1119,6 +1137,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(viewsSection.getByLabel("Сохранённое представление",{exact:true})
      .locator('option[value="'+viewId+'"]'),
      "Archived view must remain audited but not appear as selectable").toHaveCount(0);
+   assert.ok(!new URL(page.url()).hash.includes("viewId="),
+     "Archiving a view must drop its native route selection");
+   await page.goto(base+"/#sales?viewId="+viewId+"&viewId="+viewId);
+   await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
+   await page.goto(base+"/#sales?viewId="+encodeURIComponent("wrong/id"));
+   await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
+   await page.goto(base+"/#sales?viewId="+viewId);
+   await page.getByText("Сохранённое представление недоступно.",{exact:false}).waitFor();
+   await page.goto(base+"/#sales");
    assert.deepEqual((await sql("SELECT action FROM crm_audit WHERE tenant_id='"+tenantSql+
      "' AND subject_id='"+viewId+"' ORDER BY rowid")).map(x=>x.action),
      ["sales_view.create","sales_view.update","sales_view.update"]);
