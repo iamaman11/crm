@@ -12,11 +12,14 @@ import {timePatch} from "./timePatch";
 export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string}) {
   const [cursor,setCursor]=useState("");
   const [partyId,setPartyId]=useState(initialPartyId);
+  const [status,setStatus]=useState("");
   const [selected,setSelected]=useState<PartyRelationship>();
   const [editorOpen,setEditorOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
   const query=useQuery(useCallback((signal:AbortSignal)=>api.relationships.listPartyRelationships({page:{pageSize:25,pageToken:cursor},
-    ...(partyId?{partyId}:{})},{signal}),[cursor,partyId]));
+    ...(partyId?{partyId}:{}),
+    ...(status?{status:enumValue(status,[RelationshipStatus.ACTIVE,RelationshipStatus.INACTIVE],"Статус связи")}:{})
+  },{signal}),[cursor,partyId,status]));
   const mutation=useMutation({
     storageKey:"crm.relationship.pending.v1",
     lookup:async({resourceId,key},signal)=>(await api.relationships.getPartyRelationship({
@@ -28,6 +31,11 @@ export function RelationshipScreen({initialPartyId=""}:{initialPartyId?:string})
     <PageHeader title="Связи" description="Отношения между людьми и организациями." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать связь</Button>}/>
     <PartyPicker label="Фильтр по участнику" value={partyId} required={false}
       onSelect={id=>{setPartyId(id);setCursor("");}}/>
+    <SelectField label="Статус связей" value={status} onChange={event=>{setStatus(event.target.value);setCursor("");}}>
+      <option value="">Все статусы</option>
+      <option value={RelationshipStatus.ACTIVE}>Активные</option>
+      <option value={RelationshipStatus.INACTIVE}>Неактивные</option>
+    </SelectField>
     <QueryNotice query={query}/>
     {query.data?.relationships.map(r=><Card key={r.relationshipId} title={r.type?.code??"Связь"}>
       <p>{r.type?.fromRole}: <PartyName partyId={r.fromPartyId}/> → {r.type?.toRole}: <PartyName partyId={r.toPartyId}/></p>

@@ -4,6 +4,7 @@ import type {ContactPoint,Deal} from "@ultimate-crm/client/cloudflare";
 import {DealEventKind} from "@ultimate-crm/client/cloudflare";
 import {ContactPointStatus,DealStatus,ForecastCategory,ProbabilitySource} from "@ultimate-crm/client/cloudflare";
 import {api,dateText} from "./api";
+import {contactKindLabel} from "./enumFields";
 import {AccountName} from "./Pickers";
 import {useQuery,QueryNotice} from "./hooks";
 import {moneyText,percent} from "./money";
@@ -59,7 +60,10 @@ export function DealContactPicker({accountId,initialContactId=""}:{
         if(token)seen.add(token);
       }while(token);
     }
-    return result;
+    // Presentation ordering, never a substitute for original Sales owner validation.
+    // Prefer the customer's selected channel, then a verified value.
+    return result.sort((a,b)=>Number(b.preferred)-Number(a.preferred)||
+      Number(b.verified)-Number(a.verified)||a.displayValue.localeCompare(b.displayValue));
   },[accountId]));
   return <div>
     <SelectField label="Основной контакт сделки" name="primaryContactId"
@@ -67,7 +71,7 @@ export function DealContactPicker({accountId,initialContactId=""}:{
       onChange={event=>setValue(event.target.value)}>
       <option value="">Без основного контакта</option>
       {contacts.data?.map(p=><option key={p.contactPointId} value={p.contactPointId}>
-        {p.displayValue} · {p.contactPointId}
+        {p.displayValue} · {contactKindLabel(p.kind)}{p.preferred?" · предпочтительный":""}{p.verified?" · подтверждён":""}
       </option>)}
       {value&&!contacts.busy&&!contacts.data?.some(p=>p.contactPointId===value)&&
         <option value={value}>Ранее выбранный контакт (недоступен) · {value}</option>}

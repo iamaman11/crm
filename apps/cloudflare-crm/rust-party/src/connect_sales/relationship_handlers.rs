@@ -162,12 +162,23 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
             crm_party_relationships::PartyReference::try_new(id.to_owned())
                 .map_err(|_| ConnectError::invalid_argument("invalid Party filter"))?;
         }
+        let status = match req.status {
+            None => None,
+            Some(x) if x == rel_wire::RelationshipStatus::RELATIONSHIP_STATUS_ACTIVE => {
+                Some(party_relationships::StatusInput::Active)
+            }
+            Some(x) if x == rel_wire::RelationshipStatus::RELATIONSHIP_STATUS_INACTIVE => {
+                Some(party_relationships::StatusInput::Inactive)
+            }
+            _ => return Err(ConnectError::invalid_argument("invalid RelationshipStatus filter")),
+        };
         let (list, next) = party_relationships::list_page_typed(
             &self.d1()?,
             &self.tenant,
             after,
             size as usize,
             party,
+            status,
         )
         .await
         .map_err(|_| ConnectError::internal("Relationship D1 list failed"))?;

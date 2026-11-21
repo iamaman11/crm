@@ -321,21 +321,29 @@ pub(super) async fn list_page_typed(
     after: &str,
     size: usize,
     party: Option<&str>,
+    status: Option<StatusInput>,
 ) -> Result<(Vec<PartyRelationship>, Option<String>)> {
-    // Both directions are tenant-local native D1 columns. Filtering must
-    // happen BEFORE LIMIT to make page tokens cover only matching records.
-    let query = if party.is_some() {
-        "SELECT id,state FROM crm_party_relationship_records WHERE tenant=? AND id>? AND (from_party=? OR to_party=?) ORDER BY id LIMIT ?"
-    } else {
-        "SELECT id,state FROM crm_party_relationship_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?"
-    };
+    // Tenant, either-party and status predicates run before LIMIT/page token.
+    // The exact status value is the original owner's canonical persisted enum.
+    let mut query = String::from(
+        "SELECT id,state FROM crm_party_relationship_records WHERE tenant=? AND id>?",
+    );
     let mut params = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
     if let Some(id) = party {
+        query.push_str(" AND (from_party=? OR to_party=?)");
         params.push(JsValue::from_str(id));
         params.push(JsValue::from_str(id));
     }
+    if let Some(status) = status {
+        query.push_str(" AND json_extract(state,'$.status')=?");
+        params.push(JsValue::from_str(match status {
+            StatusInput::Active => "active",
+            StatusInput::Inactive => "inactive",
+        }));
+    }
+    query.push_str(" ORDER BY id LIMIT ?");
     params.push(JsValue::from_f64((size + 1) as f64));
-    let rows = bind(db, query, &params)?
+    let rows = bind(db, &query, &params)?
         .all()
         .await?
         .results::<PagedRow>()?;

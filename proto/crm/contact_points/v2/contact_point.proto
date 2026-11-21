@@ -94,6 +94,9 @@ message GetContactPointResponse {
 message ListContactPointsRequest {
   crm.core.v2.PageRequest page = 1;
   optional string party_id = 2;
+  // Exact owner-backed filters, applied before page size/cursor.
+  optional ContactPointKind kind = 3;
+  optional ContactPointStatus status = 4;
 }
 
 message ListContactPointsResponse {

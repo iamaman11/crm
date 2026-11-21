@@ -3,7 +3,7 @@ import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from 
 import type {ContactPoint} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId,timestamp,dateText} from "./api";
 import {ContactPointKind,ContactPointStatus} from "@ultimate-crm/client/cloudflare";
-import {enumValue} from "./enumFields";
+import {enumValue,contactKindLabel} from "./enumFields";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {PartyPicker,PartyName} from "./Pickers";
 import {TimeFields} from "./TimeFields";
@@ -12,11 +12,16 @@ import {timePatch} from "./timePatch";
 export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
   const [cursor,setCursor]=useState("");
   const [partyId,setPartyId]=useState(initialPartyId);
+  const [kind,setKind]=useState("");
+  const [status,setStatus]=useState("");
   const [selected,setSelected]=useState<ContactPoint>();
   const [editorOpen,setEditorOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
   const query=useQuery(useCallback((signal:AbortSignal)=>api.contactPoints.listContactPoints({page:{pageSize:25,pageToken:cursor},
-    ...(partyId?{partyId}:{})},{signal}),[cursor,partyId]));
+    ...(partyId?{partyId}:{}),
+    ...(kind?{kind:enumValue(kind,[ContactPointKind.EMAIL,ContactPointKind.PHONE,ContactPointKind.POSTAL,ContactPointKind.WEB,ContactPointKind.MESSAGING],"Способ связи")}:{}),
+    ...(status?{status:enumValue(status,[ContactPointStatus.ACTIVE,ContactPointStatus.INACTIVE],"Статус контакта")}:{})
+  },{signal}),[cursor,partyId,kind,status]));
   const mutation=useMutation({
     storageKey:"crm.contact.pending.v1",
     lookup:async({resourceId,key},signal)=>(await api.contactPoints.getContactPoint({
@@ -28,9 +33,22 @@ export function ContactScreen({initialPartyId=""}:{initialPartyId?:string}) {
     <PageHeader title="Контакты" description="Email, телефоны и другие способы связи. Email подтверждает владелец через Access или тестовый администратор в dev." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать контакт</Button>}/>
     <PartyPicker label="Фильтр по участнику" value={partyId} required={false}
       onSelect={id=>{setPartyId(id);setCursor("");}}/>
+    <SelectField label="Способ связи" value={kind} onChange={event=>{setKind(event.target.value);setCursor("");}}>
+      <option value="">Все способы</option>
+      <option value={ContactPointKind.EMAIL}>Email</option>
+      <option value={ContactPointKind.PHONE}>Телефон</option>
+      <option value={ContactPointKind.POSTAL}>Почтовый адрес</option>
+      <option value={ContactPointKind.WEB}>Сайт</option>
+      <option value={ContactPointKind.MESSAGING}>Мессенджер</option>
+    </SelectField>
+    <SelectField label="Статус контактов" value={status} onChange={event=>{setStatus(event.target.value);setCursor("");}}>
+      <option value="">Все статусы</option>
+      <option value={ContactPointStatus.ACTIVE}>Активные</option>
+      <option value={ContactPointStatus.INACTIVE}>Неактивные</option>
+    </SelectField>
     <QueryNotice query={query}/>
     {query.data?.contactPoints.map(p=><Card key={p.contactPointId} title={p.displayValue}>
-      <p>Участник: <PartyName partyId={p.partyId}/> · {p.status===ContactPointStatus.ACTIVE?"Активен":p.status===ContactPointStatus.INACTIVE?"Неактивен":"Неизвестный статус"}{p.preferred?" · предпочтительный":""}</p>
+      <p>{contactKindLabel(p.kind)} · Участник: <PartyName partyId={p.partyId}/> · {p.status===ContactPointStatus.ACTIVE?"Активен":p.status===ContactPointStatus.INACTIVE?"Неактивен":"Неизвестный статус"}{p.preferred?" · предпочтительный":""}</p>
       <p>{p.verified?"Подтверждён доверенными данными":"Не подтверждён"} · {p.normalizedValue}</p>
       <p>ID контакта: {p.contactPointId}</p>
       {p.kind===ContactPointKind.EMAIL&&!p.verified&&<Button variant="secondary" disabled={mutation.busy||mutation.pending}

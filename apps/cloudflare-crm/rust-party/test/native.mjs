@@ -756,6 +756,41 @@ try{
  console.log(JSON.stringify({event:"crm.native-g3-contact-pagination-interleaved-replay",
    result:"PASS",same_original_receipt:true,no_extra_write:true,tenant_isolated:true}));
 
+ // Product-first M1-04: narrow by a specific channel AND lifecycle status,
+ // not post-LIMIT filtering that loses items on later pages.
+ const contactLastInactive=await contactV2("UpdateContactPoint",admin,{
+   contactPointId:contactLastId,value:"page-2@example.org",preferred:false,status:2,
+   precondition:{expectedVersion:1n,idempotencyKey:"contact-filter-inactive-last"}});
+ assert.equal(contactLastInactive.status,200,describeProtobuf(contactLastInactive.body));
+ const contactFiltersAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
+ assert.deepEqual((await collectPages(contactV2,"ListContactPoints","contactPoints",{
+   partyId:id,kind:1,status:1
+ })).map(p=>p.contactPointId),[contactId]);
+ assert.deepEqual((await collectPages(contactV2,"ListContactPoints","contactPoints",{
+   partyId:id,kind:1,status:2
+ })).map(p=>p.contactPointId),[contactLastId]);
+ assert.deepEqual((await collectPages(contactV2,"ListContactPoints","contactPoints",{
+   partyId:id,kind:1
+ })).map(p=>p.contactPointId),[contactId,contactLastId]);
+ assert.equal((await collectPages(contactV2,"ListContactPoints","contactPoints",{
+   partyId:id,kind:2,status:1
+ })).length,0);
+ const otherPhone=await collectPages(contactV2,"ListContactPoints","contactPoints",{
+   partyId:pagingPersonId,kind:2,status:1
+ });
+ assert.equal(otherPhone.length,1);
+ assert.equal(otherPhone[0].normalizedValue,"+12025550102");
+ for(const filter of [{kind:0},{kind:99},{status:0},{status:99}]){
+   const denied=await contactV2("ListContactPoints",viewer,filter);
+   assert.equal(denied.status,400,describeProtobuf(denied.body));
+ }
+ assert.equal((await contactV2("ListContactPoints",tenantB,{partyId:id,kind:1,status:1}))
+   .body.contactPoints.length,0);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
+   contactFiltersAudit,"Filtering ContactPoints must not write audit");
+ console.log(JSON.stringify({event:"crm.native-m1-contact-kind-status",result:"PASS",
+   exact_kind:true,exact_status:true,composed_before_cursor:true,tenant:true,
+   invalid_enum_rejected:true,read_only:true}));
  console.log(JSON.stringify({event:"crm.native-g3-contact-points-v2",result:"PASS",
    generated_binary:true,owner:"crm.contact-points",
    rpc_methods:["CreateContactPoint","UpdateContactPoint","GetContactPoint","ListContactPoints"],
@@ -845,6 +880,28 @@ try{
  assert.equal(updatedRel.body.relationship?.status,2);
  assert.equal(updatedRel.body.relationship?.validFrom?.seconds,1710000000n);
  assert.equal(updatedRel.body.relationship?.validUntil,undefined);
+ // After the update this relationship is INACTIVE; the other one is ACTIVE.
+ const relationFilterAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
+ assert.deepEqual((await collectPages(relationV2,"ListPartyRelationships","relationships",{
+   partyId:id,status:1
+ })).map(r=>r.relationshipId),[rLast]);
+ assert.deepEqual((await collectPages(relationV2,"ListPartyRelationships","relationships",{
+   partyId:id,status:2
+ })).map(r=>r.relationshipId),[rMid]);
+ assert.equal((await collectPages(relationV2,"ListPartyRelationships","relationships",{
+   partyId:"missing-party",status:2
+ })).length,0);
+ for(const invalidStatus of [0,99]){
+   const denied=await relationV2("ListPartyRelationships",viewer,{status:invalidStatus});
+   assert.equal(denied.status,400,describeProtobuf(denied.body));
+ }
+ assert.equal((await relationV2("ListPartyRelationships",tenantB,{partyId:id,status:2}))
+   .body.relationships.length,0);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
+   relationFilterAudit,"Relationship status reads never write audit");
+ console.log(JSON.stringify({event:"crm.native-m1-relationship-status",result:"PASS",
+   active_inactive_exact:true,before_cursor:true,tenant:true,
+   invalid_enum_rejected:true,read_only:true}));
  const relFirstReplay=await relationV2("UpdatePartyRelationship",admin,relUpdate);
  assert.equal(relFirstReplay.status,200);
  assert.equal(relFirstReplay.body.receipt?.replayed,true);

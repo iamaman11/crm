@@ -418,35 +418,61 @@ pub(super) async fn verify_own_email_typed(
     }))
 }
 
+// One typed list input for the original ContactPoint owner. Keep all
+// predicates in D1 BEFORE LIMIT to prevent cursor omissions.
+#[derive(Clone, Copy)]
+pub(super) struct ContactListFilters<'a> {
+    pub(super) party: Option<&'a str>,
+    pub(super) kind: Option<KindInput>,
+    pub(super) status: Option<StatusInput>,
+}
 pub(super) async fn list_page_typed(
     db: &D1Database,
     tenant: &str,
     after: &str,
     size: usize,
-    party: Option<&str>,
+    filters: ContactListFilters<'_>,
 ) -> Result<(Vec<ContactPoint>, Option<String>)> {
-    // party_id is already a native indexed D1 column: no JSON scan needed.
-    let query = if party.is_some() {
-        "SELECT id,state FROM crm_contact_point_records WHERE tenant=? AND id>? AND party_id=? ORDER BY id LIMIT ?"
-    } else {
-        "SELECT id,state FROM crm_contact_point_records WHERE tenant=? AND id>? ORDER BY id LIMIT ?"
-    };
+    let mut query = String::from(
+        "SELECT id,state FROM crm_contact_point_records WHERE tenant=? AND id>?",
+    );
     let mut params = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
-    if let Some(id) = party {
+    if let Some(id) = filters.party {
+        // Already a native indexed column, not parsed from JSON.
+        query.push_str(" AND party_id=?");
         params.push(JsValue::from_str(id));
     }
+    if let Some(kind) = filters.kind {
+        let value = match kind {
+            KindInput::Email => "email",
+            KindInput::Phone => "phone",
+            KindInput::Postal => "postal",
+            KindInput::Web => "web",
+            KindInput::Messaging => "messaging",
+        };
+        query.push_str(" AND json_extract(state,'$.kind')=?");
+        params.push(JsValue::from_str(value));
+    }
+    if let Some(status) = filters.status {
+        let value = match status {
+            StatusInput::Active => "active",
+            StatusInput::Inactive => "inactive",
+        };
+        query.push_str(" AND json_extract(state,'$.status')=?");
+        params.push(JsValue::from_str(value));
+    }
+    query.push_str(" ORDER BY id LIMIT ?");
     params.push(JsValue::from_f64((size + 1) as f64));
-    let rows = bind(db, query, &params)?.all().await?.results::<Row>()?;
+    let rows = bind(db, &query, &params)?.all().await?.results::<Row>()?;
     let more = rows.len() > size;
     let next = if more {
         rows.get(size - 1).map(|row| row.id.clone())
     } else {
         None
     };
-    let mut contacts = Vec::new();
+    let mut contacts = Vec::with_capacity(rows.len().min(size));
     for row in rows.iter().take(size) {
-        let point = decode(&row.state)?;
-        contacts.push(point);
+        contacts.push(decode(&row.state)?);
     }
     Ok((contacts, next))
 }

@@ -78,6 +78,8 @@ message GetPartyRelationshipResponse {
 message ListPartyRelationshipsRequest {
   crm.core.v2.PageRequest page = 1;
   optional string party_id = 2;
+  // Historical relationships may be inactive; filter before pagination.
+  optional RelationshipStatus status = 3;
 }
 
 message ListPartyRelationshipsResponse {

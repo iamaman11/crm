@@ -184,12 +184,45 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
             crm_contact_points::PartyReference::try_new(party)
                 .map_err(|_| ConnectError::invalid_argument("invalid party_id filter"))?;
         }
+        let kind = match req.kind {
+            None => None,
+            Some(x) if x == contact_wire::ContactPointKind::CONTACT_POINT_KIND_EMAIL => {
+                Some(contact_points::KindInput::Email)
+            }
+            Some(x) if x == contact_wire::ContactPointKind::CONTACT_POINT_KIND_PHONE => {
+                Some(contact_points::KindInput::Phone)
+            }
+            Some(x) if x == contact_wire::ContactPointKind::CONTACT_POINT_KIND_POSTAL => {
+                Some(contact_points::KindInput::Postal)
+            }
+            Some(x) if x == contact_wire::ContactPointKind::CONTACT_POINT_KIND_WEB => {
+                Some(contact_points::KindInput::Web)
+            }
+            Some(x) if x == contact_wire::ContactPointKind::CONTACT_POINT_KIND_MESSAGING => {
+                Some(contact_points::KindInput::Messaging)
+            }
+            _ => return Err(ConnectError::invalid_argument("invalid ContactPointKind filter")),
+        };
+        let status = match req.status {
+            None => None,
+            Some(x) if x == contact_wire::ContactPointStatus::CONTACT_POINT_STATUS_ACTIVE => {
+                Some(contact_points::StatusInput::Active)
+            }
+            Some(x) if x == contact_wire::ContactPointStatus::CONTACT_POINT_STATUS_INACTIVE => {
+                Some(contact_points::StatusInput::Inactive)
+            }
+            _ => return Err(ConnectError::invalid_argument("invalid ContactPointStatus filter")),
+        };
         let (list, next) = contact_points::list_page_typed(
             &self.d1()?,
             &self.actor.tenant,
             after,
             size as usize,
-            filter,
+            contact_points::ContactListFilters {
+                party: filter,
+                kind,
+                status,
+            },
         )
         .await
         .map_err(|_| ConnectError::internal("ContactPoint D1 list failed"))?;

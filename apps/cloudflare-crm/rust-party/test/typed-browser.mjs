@@ -518,6 +518,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const relationship=(await sql("SELECT version,json_extract(state,'$.status') AS status FROM crm_party_relationship_records WHERE tenant='"+tenantSql+"' AND from_party='"+partyId+"' AND to_party='"+otherPartyId+"'"))[0];
    assert.equal(relationship.version,2);assert.equal(relationship.status,"inactive");
    checkpoint("Relationship create/edit through original owner with D1 version/status");
+   const relationFilterAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await page.getByLabel("Статус связей",{exact:true}).selectOption("1");
+   await page.getByText("Связей пока нет.",{exact:true}).waitFor();
+   await page.getByLabel("Статус связей",{exact:true}).selectOption("2");
+   await page.getByRole("heading",{name:"browser_relation_"+runId,exact:true}).waitFor();
+   await page.getByLabel("Статус связей",{exact:true}).selectOption("");
+   await page.getByRole("heading",{name:"browser_relation_"+runId,exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     relationFilterAuditBefore,"Relationship list filtering never writes audit");
+   checkpoint("M1-05 real status-filtered Relationship list preserves Party and D1 audit");
    // S-M1-A: the relationship must show authorized names, and its Party
    // permalink must load GetParty directly, not search the text index by ID.
    const namedRelationship=page.locator("section").filter({has:page.getByRole("heading",
@@ -664,6 +674,20 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    syntheticPrivateProbes.push({kind:"contact-phone",request_id:writes.at(-1)?.request_id,value:privatePhone});
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_contact_point_records WHERE tenant='"+tenantSql+
      "' AND party_id='"+partyId+"' AND json_extract(state,'$.normalized_value')='"+privatePhone+"'"))[0].n,1);
+   const contactFilterAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await page.getByLabel("Способ связи",{exact:true}).selectOption("2");
+   await page.getByRole("heading",{name:privatePhone,exact:true}).waitFor();
+   await page.getByRole("heading",{name:"browser-"+runId+"@example.org",exact:true})
+     .waitFor({state:"hidden"});
+   await page.getByLabel("Статус контактов",{exact:true}).selectOption("2");
+   await page.getByText("Контактов пока нет.",{exact:true}).waitFor();
+   await page.getByLabel("Статус контактов",{exact:true}).selectOption("1");
+   await page.getByRole("heading",{name:privatePhone,exact:true}).waitFor();
+   await page.getByLabel("Способ связи",{exact:true}).selectOption("");
+   await page.getByRole("heading",{name:"browser-"+runId+"@example.org",exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     contactFilterAuditBefore,"Contact filter requests must not write audit");
+   checkpoint("M1-04 typed Contact kind+status filters before page limit, Party scope unchanged");
    await navigate("tasks","Задачи");
    await page.getByRole("button",{name:"Новая задача",exact:true}).click();
    await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Task "+runId);
@@ -816,7 +840,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Название сделки",{exact:true}).fill("Browser Deal "+runId);
    await selectPagedPicker(page,"Клиент",accountId,"account");
    const dealContact=page.getByLabel("Основной контакт сделки",{exact:true});
-   await dealContact.locator('option[value="'+browserSalesContactId+'"]').waitFor({state:"attached"});
+   const preferredEmailOption=dealContact.locator('option[value="'+browserSalesContactId+'"]');
+   await preferredEmailOption.waitFor({state:"attached"});
+   await expect(preferredEmailOption).toContainText("Email · предпочтительный");
+   await expect(preferredEmailOption).not.toContainText(browserSalesContactId);
    await dealContact.selectOption(browserSalesContactId);
    await page.getByLabel("Ожидаемая дата закрытия",{exact:true}).fill("2030-05-21");
    await page.getByLabel("Сумма",{exact:true}).fill("90071992547409.93");

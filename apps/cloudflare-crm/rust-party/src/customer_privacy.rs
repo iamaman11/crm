@@ -381,7 +381,17 @@ pub(super) async fn preview_own_scope(
     }
     // Indexed, owner-owned D1 list filters by tenant+party BEFORE LIMIT.
     // Never silently truncate an incomplete subject inventory.
-    let (contacts, next) = contact_points::list_page_typed(db, tenant, "", 100, Some(id)).await?;
+    let (contacts, next) = contact_points::list_page_typed(
+        db,
+        tenant,
+        "",
+        100,
+        contact_points::ContactListFilters {
+            party: Some(id),
+            kind: None,
+            status: None,
+        },
+    ).await?;
     if next.is_some() {
         return Ok(Err(fail("PRIVACY_SCOPE_CONTACT_BOUND_EXCEEDED", 412)));
     }
