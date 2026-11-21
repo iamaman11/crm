@@ -199,6 +199,20 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await assertMutation(response,method,options);
    await page.getByRole("heading",{name:/^Сохранено/}).last().waitFor();
  };
+ // One tenant-scoped D1 read proves the original audit and the absence
+ // of any follow-up audit. Keep both exact-count checks for every owner.
+ const assertAuditRecovery=async(originalId,readId,action,owner)=>{
+   for(const id of [originalId,readId])
+     assert.match(id??"",/^[a-f0-9-]{36}$/i,owner+" must have a signed request ID");
+   assert.notEqual(originalId,readId,owner+" recovery must be a distinct request");
+   assert.match(action,/^[a-z_]+\.[a-z_]+$/,owner+" must use a known audit action");
+   const rows=await sql("SELECT request_id,action FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"' AND request_id IN ('"+originalId+"','"+readId+"')");
+   assert.equal(rows.filter(row=>row.request_id===originalId&&row.action===action).length,
+     1,owner+" original commit must have one matching audit action");
+   assert.equal(rows.filter(row=>row.request_id===readId).length,
+     0,owner+" recovery request must not append audit");
+ };
  const reloadAfterPending=async()=>{
    const accept=dialog=>void dialog.accept();
    page.on("dialog",accept);
@@ -235,11 +249,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.ok(originalRequestId,owner+" original request id");
    assert.equal(calls,1,owner+" recovery must not re-execute the original write");
    await expect.poll(()=>page.evaluate(key=>sessionStorage.getItem(key),storageKey)).toBe(null);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
-     originalRequestId+"' AND action='"+auditAction+"'"))[0].n,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
-     readRequestId+"'"))[0].n,0,owner+" receipt lookup must be read-only");
-   ownerRecovery.push({owner,kind:"lookup",original_request_id:originalRequestId,
+   await assertAuditRecovery(originalRequestId,readRequestId,auditAction,owner);
+ownerRecovery.push({owner,kind:"lookup",original_request_id:originalRequestId,
      subsequent_request_id:readRequestId});
    await page.unroute(writeRoute,loseAcknowledgement);
    checkpoint("S5 "+owner+" lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
@@ -430,10 +441,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5aOriginalRequestId);
    assert.equal(s5aCreateCalls,1,"Recovery must not retry the original Party mutation after reload");
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5aOriginalRequestId+
-     "' AND action='parties.create'"))[0].n,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5aReadRequestId+"'"))[0].n,0);
-   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.party.pending.v1")),null);
+   await assertAuditRecovery(s5aOriginalRequestId,s5aReadRequestId,"parties.create","party");
+assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.party.pending.v1")),null);
    ownerRecovery.push({owner:"party",kind:"lookup",original_request_id:s5aOriginalRequestId,
      subsequent_request_id:s5aReadRequestId});
    await page.unroute(s5aRoute,loseS5aAcknowledgement);
@@ -726,11 +735,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.ok(originalPipelineCreateRequestId);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(originalPipelineCreateRequestId);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
-     originalPipelineCreateRequestId+"' AND action='sales_pipeline.create'"))[0].n,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
-     pipelineLookupRequestId+"'"))[0].n,0);
-   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.pipeline.pending.v1")),null);
+   await assertAuditRecovery(originalPipelineCreateRequestId,pipelineLookupRequestId,"sales_pipeline.create","sales-pipeline");
+assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.pipeline.pending.v1")),null);
    ownerRecovery.push({owner:"sales-pipeline",kind:"lookup",
      original_request_id:originalPipelineCreateRequestId,subsequent_request_id:pipelineLookupRequestId});
    await page.unroute(pipelineCreateRoute);
@@ -841,11 +847,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.ok(originalViewCreateRequestId);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(originalViewCreateRequestId);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
-     originalViewCreateRequestId+"' AND action='sales_view.create'"))[0].n,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
-     viewLookupRequestId+"'"))[0].n,0);
-   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.view.pending.v1")),null);
+   await assertAuditRecovery(originalViewCreateRequestId,viewLookupRequestId,"sales_view.create","sales-view");
+assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.view.pending.v1")),null);
    ownerRecovery.push({owner:"sales-view",kind:"lookup",
      original_request_id:originalViewCreateRequestId,subsequent_request_id:viewLookupRequestId});
    await page.unroute(createViewRoute);
@@ -932,11 +935,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.ok(originalViewUpdateRequestId);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(originalViewUpdateRequestId);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
-     originalViewUpdateRequestId+"' AND action='sales_view.update'"))[0].n,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
-     viewUpdateLookupRequestId+"'"))[0].n,0);
-   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.view.pending.v1")),null);
+   await assertAuditRecovery(originalViewUpdateRequestId,viewUpdateLookupRequestId,"sales_view.update","sales-view-update");
+assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.view.pending.v1")),null);
    await page.unroute(updateViewRoute);
    await expect(page.getByLabel("Сохранённое представление",{exact:true})).toHaveValue(viewId);
    await expect(page.getByLabel("Статус сделки",{exact:true})).toHaveValue("2");
@@ -1153,10 +1153,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(originalCloseRequestId);
    assert.equal(closeCalls,1,"Reload recovery must not re-execute a write");
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+checkId+"'"))[0].n,0);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+originalCloseRequestId+
-     "' AND action='sales_deals.close'"))[0].n,1);
-   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.deal.pending.v1")),null);
+   await assertAuditRecovery(originalCloseRequestId,checkId,"sales_deals.close","deal-close");
+assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.deal.pending.v1")),null);
    recovery.push({kind:"lookup",original_request_id:originalCloseRequestId,
      subsequent_request_id:checkId});
    await page.unroute(closeRoute);
@@ -1196,11 +1194,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.ok(originalPipelineUpdateRequestId);
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(originalPipelineUpdateRequestId);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
-     originalPipelineUpdateRequestId+"' AND action='sales_pipeline.update'"))[0].n,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+
-     pipelineUpdateLookupRequestId+"'"))[0].n,0);
-   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.pipeline.pending.v1")),null);
+   await assertAuditRecovery(originalPipelineUpdateRequestId,pipelineUpdateLookupRequestId,"sales_pipeline.update","sales-pipeline-update");
+assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.sales.pipeline.pending.v1")),null);
    await page.unroute(updatePipelineRoute);
    const newCatalog=JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+
      tenantSql+"' AND id='"+newPipelineId+"'"))[0].state);
@@ -1361,10 +1356,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5bConsentRequestId);
    assert.equal(s5bConsentCalls,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bConsentRequestId+
-     "' AND action='consents.operator_suppress'"))[0].n,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bConsentReadId+"'"))[0].n,0);
-   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.consents.pending.v1")),null);
+   await assertAuditRecovery(s5bConsentRequestId,s5bConsentReadId,"consents.operator_suppress","consent");
+assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.consents.pending.v1")),null);
    ownerRecovery.push({owner:"consent",kind:"lookup",original_request_id:s5bConsentRequestId,
      subsequent_request_id:s5bConsentReadId});
    await page.unroute(s5bConsentPath,loseConsentAck);
@@ -1421,10 +1414,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5bPrivacyRequestId);
    assert.equal(s5bPrivacyCalls,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bPrivacyRequestId+
-     "' AND action='customer_privacy.create'"))[0].n,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bPrivacyReadId+"'"))[0].n,0);
-   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.privacy.pending.v1")),null);
+   await assertAuditRecovery(s5bPrivacyRequestId,s5bPrivacyReadId,"customer_privacy.create","privacy");
+assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.privacy.pending.v1")),null);
    ownerRecovery.push({owner:"privacy",kind:"lookup",original_request_id:s5bPrivacyRequestId,
      subsequent_request_id:s5bPrivacyReadId});
    await page.unroute("**/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase",losePrivacyAck);
@@ -1479,10 +1470,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5bProfileRequestId);
    assert.equal(s5bProfileCalls,1,"Enrichment profile recovery must not publish twice");
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bProfileRequestId+
-     "' AND action='customer_enrichment.profile_publish'"))[0].n,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bProfileReadId+"'"))[0].n,0);
-   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.enrichment.profile.pending.v1")),null);
+   await assertAuditRecovery(s5bProfileRequestId,s5bProfileReadId,"customer_enrichment.profile_publish","enrichment-profile");
+assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.enrichment.profile.pending.v1")),null);
    ownerRecovery.push({owner:"enrichment-profile",kind:"lookup",original_request_id:s5bProfileRequestId,
      subsequent_request_id:s5bProfileReadId});
    await page.unroute(s5bProfilePath,loseProfileAck);
@@ -1533,10 +1522,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5bMappingRequestId);
    assert.equal(s5bMappingCalls,1,"Enrichment mapping recovery must not publish twice");
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bMappingRequestId+
-     "' AND action='customer_enrichment.mapping_publish'"))[0].n,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bMappingReadId+"'"))[0].n,0);
-   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.enrichment.mapping.pending.v1")),null);
+   await assertAuditRecovery(s5bMappingRequestId,s5bMappingReadId,"customer_enrichment.mapping_publish","enrichment-mapping");
+assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.enrichment.mapping.pending.v1")),null);
    ownerRecovery.push({owner:"enrichment-mapping",kind:"lookup",original_request_id:s5bMappingRequestId,
      subsequent_request_id:s5bMappingReadId});
    await page.unroute(s5bMappingPath,loseMappingAck);
@@ -1604,10 +1591,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByRole("heading",{name:/Сохранено ранее. Подтверждение найдено/}))
      .toContainText(s5bCsvRequestId);
    assert.equal(s5bCsvCalls,1,"CSV recovery must not apply the import twice");
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bCsvRequestId+
-     "' AND action='parties.create'"))[0].n,1);
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+s5bCsvReadId+"'"))[0].n,0);
-   assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.data.csv-import.pending.v1")),null);
+   await assertAuditRecovery(s5bCsvRequestId,s5bCsvReadId,"parties.create","party-csv-import");
+assert.equal(await page.evaluate(()=>sessionStorage.getItem("crm.data.csv-import.pending.v1")),null);
    ownerRecovery.push({owner:"party-csv-import",kind:"lookup",original_request_id:s5bCsvRequestId,
      subsequent_request_id:s5bCsvReadId});
    await page.unroute(s5bCsvPath,loseCsvAck);
