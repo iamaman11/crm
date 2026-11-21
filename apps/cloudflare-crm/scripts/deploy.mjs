@@ -444,20 +444,46 @@ async function verifyData(){
     if(prior)assert.deepEqual(prior,request);
     requests.set(request.request_id,request);
   }
+  // One consistent Cloudflare D1 read snapshot for every committed mutation
+  // and every recovery receipt. The old release gate queried these exact
+  // request IDs serially (~40 network round trips) after the browser finished.
+  // No audit semantics are skipped: assertions below still check each owner,
+  // exact actions/subjects/actors, and the absence of follow-up commits.
+  const auditIds=[...new Set([
+    ...evidence.writes.map(item=>item.request_id),
+    ...(evidence.recovery??[]).map(item=>item.subsequent_request_id),
+    ...(evidence.owner_recovery??[]).flatMap(item=>[
+      item.original_request_id,item.subsequent_request_id
+    ])
+  ])];
+  assert.ok(auditIds.length>0&&auditIds.every(id=>requests.has(id)),
+    "Audit snapshot must cover only observed signed browser requests");
+  const result=await cfReadback("/d1/database/"+database+"/query",{
+    sql:"SELECT request_id,action,subject_id,actor FROM crm_audit WHERE tenant_id=? AND request_id IN ("+
+      auditIds.map(()=>"?").join(",")+") ORDER BY request_id,action,subject_id",
+    params:[evidence.tenant,...auditIds]});
+  assert.equal(result?.[0]?.success,true);
+  assert.ok(Array.isArray(result[0].results),"CRM_D1_AUDIT_SNAPSHOT_INVALID");
+  const auditByRequest=new Map();
+  for(const row of result[0].results){
+    assert.ok(auditIds.includes(row.request_id),"CRM_D1_AUDIT_UNEXPECTED_REQUEST");
+    const rows=auditByRequest.get(row.request_id)??[];
+    rows.push(row);
+    auditByRequest.set(row.request_id,rows);
+  }
+  console.log(JSON.stringify({event:"crm.d1-audit-snapshot",result:"PASS",
+    requested_ids:auditIds.length,committed_rows:result[0].results.length}));
   const mutationIds=new Set();
   for(const write of evidence.writes){
     assert.ok(!mutationIds.has(write.request_id),"Duplicate mutation evidence");
     mutationIds.add(write.request_id);
     assert.equal(requests.get(write.request_id)?.path,write.path);
     assert.equal(requests.get(write.request_id)?.status,200);
-    const result=await cfReadback("/d1/database/"+database+"/query",{
-      sql:"SELECT action,subject_id,actor FROM crm_audit WHERE tenant_id=? AND request_id=? ORDER BY action,subject_id",
-      params:[evidence.tenant,write.request_id]});
-    assert.equal(result?.[0]?.success,true);
+    const committed=auditByRequest.get(write.request_id)??[];
     const sort=rows=>rows.map(r=>[r.action,r.subject_id,r.actor]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
     assert.ok(write.audit.length>0);
-    assert.deepEqual(sort(result[0].results),sort(write.audit),"D1 changed since browser assertion");
-    for(const row of result[0].results){
+    assert.deepEqual(sort(committed),sort(write.audit),"D1 changed since browser assertion");
+    for(const row of committed){
       if(row.action.startsWith("parties."))assert.equal(row.actor,setup.actor_a,"Party audit must attribute the enrolled Access actor");
     }
   }
@@ -482,11 +508,7 @@ async function verifyData(){
       "Same-key replay must target the original RPC");
     else assert.ok(subsequent.path.endsWith("/GetDeal"),
       "Receipt reconciliation must use read-only GetDeal");
-    const result=await cfReadback("/d1/database/"+database+"/query",{
-      sql:"SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND request_id=?",
-      params:[evidence.tenant,item.subsequent_request_id]});
-    assert.equal(result?.[0]?.success,true);
-    assert.equal(Number(result[0].results?.[0]?.n),0,
+    assert.equal((auditByRequest.get(item.subsequent_request_id)??[]).length,0,
       "Recovery request must not commit a second audit row");
     recoveryKinds.set(item.kind,item);
   }
@@ -523,17 +545,11 @@ async function verifyData(){
     assert.ok(mutationIds.has(proof.original_request_id),"Owner recovery has no original commit: "+proof.owner);
     assert.ok(!mutationIds.has(proof.subsequent_request_id),"Read-only recovery must not be a mutation: "+proof.owner);
     assert.notEqual(proof.original_request_id,proof.subsequent_request_id);
-    const committed=await cfReadback("/d1/database/"+database+"/query",{
-      sql:"SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND request_id=? AND action=?",
-      params:[evidence.tenant,proof.original_request_id,contract.audit]});
-    assert.equal(committed?.[0]?.success,true);
-    assert.equal(Number(committed[0].results?.[0]?.n),1,
+    const committed=(auditByRequest.get(proof.original_request_id)??[])
+      .filter(row=>row.action===contract.audit);
+    assert.equal(committed.length,1,
       "Original owner write must have exactly one matching audit row: "+proof.owner);
-    const checked=await cfReadback("/d1/database/"+database+"/query",{
-      sql:"SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? AND request_id=?",
-      params:[evidence.tenant,proof.subsequent_request_id]});
-    assert.equal(checked?.[0]?.success,true);
-    assert.equal(Number(checked[0].results?.[0]?.n),0,
+    assert.equal((auditByRequest.get(proof.subsequent_request_id)??[]).length,0,
       "Read-only owner recovery must never append audit: "+proof.owner);
   }
   // Synthetic-only business values actually sent by the browser must not
