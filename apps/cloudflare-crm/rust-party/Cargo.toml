@@ -8,6 +8,11 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
+# Native wasm-pack release profile: keep Binaryen optimization, but use
+# its inexpensive -O1 level in place of the default -O (~77-87s in CI).
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O1"]
+
 [features]
 default = []
 # Sole deployed runtime: one native workers-rs fetch; no JS tenant delegation.

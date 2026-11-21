@@ -148,8 +148,8 @@ jobs:
       - name: Build React CRM
         run: pnpm run build
         working-directory: apps/cloudflare-crm
-      # Cargo still validates freshness and runs for this exact source. Changing
-      # toolchain/config/lock/codegen inputs starts a new cache family.
+      # Cargo fingerprints own source/manifest/Protobuf freshness. Keep this
+      # cache stable across code edits; locked deps and Rust toolchain select it.
       - name: Restore Cargo compilation cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -158,9 +158,10 @@ jobs:
             ~/.cargo/git
             target
             apps/cloudflare-crm/rust-party/target
-          key: ${{ runner.os }}-crm-rust1100-wasm-v1-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/build.rs', '**/.cargo/config*', 'rust-toolchain*', 'proto/**') }}-${{ github.sha }}
+          key: ${{ runner.os }}-crm-rust1100-wasm-v2-${{ hashFiles('**/Cargo.lock', 'rust-toolchain*') }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-crm-rust1100-wasm-v1-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/build.rs', '**/.cargo/config*', 'rust-toolchain*', 'proto/**') }}-
+            ${{ runner.os }}-crm-rust1100-wasm-v2-${{ hashFiles('**/Cargo.lock', 'rust-toolchain*') }}-
+            ${{ runner.os }}-crm-rust1100-wasm-v1-
       # Clippy checks WASM compilation, so a separate cargo check repeats the work.
       - name: Run Clippy on the actual Worker for WebAssembly
         run: cargo clippy --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations

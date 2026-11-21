@@ -18,6 +18,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  assert.ok(adminIdentity,"Expected signed actor is required for browser audit assertions");
  const startedAt=Date.now();
  const requests=[],writes=[],recovery=[],ownerRecovery=[],syntheticPrivateProbes=[],pageErrors=[],steps=[];
+ const checkpoint=label=>{
+   steps.push(label);
+   // Timing-only release evidence: no identifiers, secrets, payloads or D1 values.
+   if(features.includes("native"))
+     console.log(JSON.stringify({event:"crm.browser-checkpoint",label,elapsed_ms:Date.now()-startedAt}));
+ };
  const headerReads=[];
  let restoreViewer=async()=>{};
  const recordResponse=response=>{
@@ -86,7 +92,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const limit=first?6:1;
    for(let attempt=0;attempt<limit;attempt++){
      const offset=shellResponses.length;
-     const response=await page.goto(base+"/#"+hash);
+     // Mount the document once, then navigate through the real SPA hash router.
+     // Repeated page.goto() re-downloaded the shell and assets for every module.
+     const response=first?await page.goto(base+"/#"+hash):
+       await page.evaluate(next=>{window.location.hash="#"+next;return null;},hash);
      try {
        await page.getByRole("heading",{name:title,exact:true})
          .waitFor({timeout:first?8000:30000});
@@ -152,7 +161,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
            shell,documentState,pageErrors:pageErrors.slice(-3)
          }),{cause:error});
        }
-       if(attempt>1)steps.push("Read-only SPA edge 404 recovered after "+attempt+" document requests");
+       if(attempt>1)checkpoint("Read-only SPA edge 404 recovered after "+attempt+" document requests");
        return response;
      }
      if(attempt===5)
@@ -233,7 +242,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    ownerRecovery.push({owner,kind:"lookup",original_request_id:originalRequestId,
      subsequent_request_id:readRequestId});
    await page.unroute(writeRoute,loseAcknowledgement);
-   steps.push("S5 "+owner+" lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
+   checkpoint("S5 "+owner+" lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
    return marker.resourceId;
  };
  // Pickers show one bounded page of options; randomly generated IDs
@@ -355,7 +364,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      }
    }
    await partyHeading.waitFor({timeout:10000});
-   if(edgeReadRecoveries)steps.push("Cloudflare edge-only read 404 recovered through typed UI Retry");
+   if(edgeReadRecoveries)checkpoint("Cloudflare edge-only read 404 recovered through typed UI Retry");
    const partyCard=page.locator("section").filter({has:partyHeading});
    const partyEdit=partyCard.getByRole("button",{name:"Редактировать",exact:true});
    await partyEdit.click();
@@ -375,7 +384,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Updated "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"UpdateParty");
    assert.equal((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0].version,2);
-   steps.push("Party create/edit/reload and D1 version/audit");
+   checkpoint("Party create/edit/reload and D1 version/audit");
    // S5a: original Party commit happens, its HTTP acknowledgement is lost,
    // and a fresh React instance MUST use GetParty + typed D1 receipt, not
    // blindly POST another CreateParty with a newly generated key.
@@ -428,7 +437,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    ownerRecovery.push({owner:"party",kind:"lookup",original_request_id:s5aOriginalRequestId,
      subsequent_request_id:s5aReadRequestId});
    await page.unroute(s5aRoute,loseS5aAcknowledgement);
-   steps.push("S5a lost Party acknowledgment: opaque reload marker, signed GetParty receipt, no second commit");
+   checkpoint("S5a lost Party acknowledgment: opaque reload marker, signed GetParty receipt, no second commit");
 
    await page.getByRole("button",{name:"Создать участника",exact:true}).click();
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Other "+runId);
@@ -480,7 +489,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(new URL(await page.url()).hash,"#accounts/"+linkedAccountId,
      "accepted CreateAccount must replace draft URL with a permalink");
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_account_records WHERE tenant='"+tenantSql+"' AND id='"+linkedAccountId+"'"))[0].n,1);
-   steps.push("Party -> shared CreateAccount: selected Party, dirty Cancel/Back and permalink");
+   checkpoint("Party -> shared CreateAccount: selected Party, dirty Cancel/Back and permalink");
    await navigate("relationships","Связи");
    await page.getByRole("button",{name:"Создать связь",exact:true}).click();
    await selectPagedPicker(page,"Первый участник",partyId);
@@ -499,7 +508,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Сохранить связь",exact:true}),"UpdatePartyRelationship");
    const relationship=(await sql("SELECT version,json_extract(state,'$.status') AS status FROM crm_party_relationship_records WHERE tenant='"+tenantSql+"' AND from_party='"+partyId+"' AND to_party='"+otherPartyId+"'"))[0];
    assert.equal(relationship.version,2);assert.equal(relationship.status,"inactive");
-   steps.push("Relationship create/edit through original owner with D1 version/status");
+   checkpoint("Relationship create/edit through original owner with D1 version/status");
    await navigate("accounts","Клиенты");
    await page.getByRole("button",{name:"Создать клиента",exact:true}).click();
    await page.getByLabel("Название клиента",{exact:true}).fill("Browser Account "+runId);
@@ -581,12 +590,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByLabel("Поиск клиентов",{exact:true})).toHaveValue(accountId,{timeout:10000});
    await page.getByLabel("Статус клиента",{exact:true}).selectOption("1");
    await page.getByRole("heading",{name:"Browser Account "+runId,exact:true}).waitFor();
-   steps.push("Account one editor: inline, full-page, reload, mutation, Back and filter restoration");
+   checkpoint("Account one editor: inline, full-page, reload, mutation, Back and filter restoration");
    await page.goto(base+"/#accounts?status=999");
    await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
-   steps.push("Account URL filter rejects unknown generated enum values");
-   steps.push("Account create and Customer360 read");
-   steps.push("Party/Account literal search by name and ID, empty result and read-only D1");
+   checkpoint("Account URL filter rejects unknown generated enum values");
+   checkpoint("Account create and Customer360 read");
+   checkpoint("Party/Account literal search by name and ID, empty result and read-only D1");
    await navigate("contacts","Контакты");
    await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
    await selectPagedPicker(page,"Участник",partyId);
@@ -682,8 +691,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await filterTasks("Приоритет задач","3");
    await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor();
    await filterTasks("Приоритет задач","");
-   steps.push("Task UpdateTask via React, D1 audit action, priority filter and reload");
-   steps.push("Contact and Task create/complete; priority/status filters preserve records and audit");
+   checkpoint("Task UpdateTask via React, D1 audit action, priority filter and reload");
+   checkpoint("Contact and Task create/complete; priority/status filters preserve records and audit");
    await navigate("sales","Сделки");
    await page.getByRole("button",{name:"Создать воронку",exact:true}).click();
    await page.getByLabel("Название воронки",{exact:true}).fill("Browser Pipeline "+runId);
@@ -726,7 +735,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      original_request_id:originalPipelineCreateRequestId,subsequent_request_id:pipelineLookupRequestId});
    await page.unroute(pipelineCreateRoute);
    await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
-   steps.push("S5 pipeline lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
+   checkpoint("S5 pipeline lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
    assert.equal((await sql("SELECT version FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].version,1);
    const recordedPipelines=await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+newPipelineId+"' AND action='sales_pipeline.create'");
    assert.equal(recordedPipelines[0].n,1);
@@ -795,7 +804,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Без ограничения по сроку",exact:true}).click();
    await page.getByRole("region",{name:"Прогноз продаж",exact:true}).getByText(/без ограничения по сроку/).waitFor();
    await forecast.getByText("Сделок: 1 · по этапу: 0 · вручную: 1",{exact:true}).waitFor();
-   steps.push("R7.3 full-pipeline exact weighted multi-currency read model, React, D1");
+   checkpoint("R7.3 full-pipeline exact weighted multi-currency read model, React, D1");
    // R7.3 saved views through REAL React -> generated Connect -> Rust domain
    // -> D1 audit/receipt. Reload must not lose a named shared filter.
    const savedViewName="Browser Saved View "+runId;
@@ -842,7 +851,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.unroute(createViewRoute);
    await expect(page.getByLabel("Сохранённое представление",{exact:true})).toHaveValue(viewId);
    await expect(page.getByLabel("Статус сделки",{exact:true})).toHaveValue("1");
-   steps.push("S5 saved-view lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
+   checkpoint("S5 saved-view lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
    const createdView=JSON.parse((await sql("SELECT state FROM crm_sales_saved_view_records "+
      "WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0].state);
    assert.equal(createdView.pipeline_id,newPipelineId);
@@ -892,7 +901,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      releaseOldMetrics();
      await page.unroute(metricsRoute,blockOldMetrics);
    }
-   steps.push("S1 read: old key hidden, obsolete request cancelled, latest key rendered");
+   checkpoint("S1 read: old key hidden, obsolete request cancelled, latest key rendered");
    // Save the changed selected filters under the same stable view ID.
    await statusFilter.selectOption("2");
    await page.getByLabel("Название представления",{exact:true})
@@ -955,7 +964,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Воронка продаж",{exact:true}).selectOption(newPipelineId);
    await page.getByLabel("Статус сделки",{exact:true}).selectOption("");
    await page.getByText("90071992547409.93 USD · 37.45%",{exact:true}).waitFor();
-   steps.push("R7.3 saved view create, reload/apply, update, archive and D1 audit");
+   checkpoint("R7.3 saved view create, reload/apply, update, archive and D1 audit");
    const dealCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Deal "+runId,exact:true})}).last();
    await dealCard.getByRole("button",{name:"Раскрыть карточку",exact:true}).click();
    await page.getByRole("region",{name:"Подробности сделки "+dealId}).getByText(
@@ -1003,7 +1012,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(expectedAfterUpdate.day,1);
    assert.equal(expectedAfterUpdate.contact_id,browserSalesContactId,
      "async Account/Contact lookup must not erase unchanged Deal primary contact");
-   steps.push("R7.2 contact/date via real React, GetDeal/detail and original D1");
+   checkpoint("R7.2 contact/date via real React, GetDeal/detail and original D1");
    await page.getByText("90071992547409.93 USD · 38.50%",{exact:true}).waitFor();
    // Keyboard/select fallback remains the original mutation form; verify
    // it opens and can be cancelled without a write before testing native DnD.
@@ -1086,7 +1095,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.ok(originalAdvanceRequestId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE request_id='"+originalAdvanceRequestId+"' AND action='sales_deals.advance'"))[0].n,1);
    await page.unroute(advanceRoute);
-   steps.push("S1 lost Deal acknowledgement: locked editor, exact binary retry, original audit");
+   checkpoint("S1 lost Deal acknowledgement: locked editor, exact binary retry, original audit");
    await page.getByRole("group",{name:"Итоги этапа Квалификация"})
      .getByText("90071992547409.93 USD · сделок с суммой: 1",
        {exact:true}).waitFor();
@@ -1151,13 +1160,13 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    recovery.push({kind:"lookup",original_request_id:originalCloseRequestId,
      subsequent_request_id:checkId});
    await page.unroute(closeRoute);
-   steps.push("S1 reload: opaque marker, read original receipt, no second CloseDeal");
+   checkpoint("S1 reload: opaque marker, read original receipt, no second CloseDeal");
    const terminal=(await sql("SELECT version,json_extract(state,'$.status') AS status,json_extract(state,'$.stage.stage_id') AS stage FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
    assert.deepEqual(terminal,{version:4,status:"won",stage:actualStage});
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,2);
    await movedDealCard.getByText("Выиграна · версия 4",{exact:true}).waitFor();
    assert.equal(await movedDealCard.getByRole("button",{name:"Изменить сделку",exact:true}).count(),0);
-   steps.push("CloseDeal: Won at unchanged stage, terminal read-only, D1 linked receipt");
+   checkpoint("CloseDeal: Won at unchanged stage, terminal read-only, D1 linked receipt");
    // The same visible editor may reorder stages already used by closed Deals.
    await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
    await page.getByRole("button",{name:"Выше",exact:true}).last().click();
@@ -1201,7 +1210,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.deepEqual(rebased,{version:4,rank:1},
      "Occupied reorder must not increment Deal versions");
    await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
-   steps.push("Occupied stage reorder in real React keeps Deal version and stable ID");
+   checkpoint("Occupied stage reorder in real React keeps Deal version and stable ID");
    const currentCatalog=page.waitForResponse(r=>responsePathEndsWith(r,"/GetPipeline")&&r.request().method()==="POST");
    await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
    assert.equal((await currentCatalog).status(),200,
@@ -1214,7 +1223,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Архивировать воронку",{exact:true}).uncheck();
    await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
    assert.equal(JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].state).archived,false);
-   steps.push("Pipeline archive and restore using real React, Connect and D1");
+   checkpoint("Pipeline archive and restore using real React, Connect and D1");
    // Actual full Deal route: typed append-only history, linked Task and
    // explicit ReopenDeal. No second editor or client-side history inference.
    await page.goto(base+"/#sales/"+encodeURIComponent(dealId));
@@ -1234,7 +1243,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Follow up deal after stage change",exact:true}).waitFor();
    await page.goBack();
    await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
-   steps.push("R7.2 linked Task opens exact original GetTask through typed route, then Back");
+   checkpoint("R7.2 linked Task opens exact original GetTask through typed route, then Back");
 
    await page.getByRole("button",{name:"Открыть повторно",exact:true}).last().click();
    await page.getByRole("heading",{name:"Повторно открыть сделку: Browser Deal "+runId,exact:true}).waitFor();
@@ -1252,7 +1261,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      .map(r=>r.action),["reopened","closed"]);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_link_delivery_records "+
      "WHERE tenant='"+tenantSql+"' AND deal_id='"+dealId+"'"))[0].n,2);
-   steps.push("R7.2 CloseDeal→immutable history→ReopenDeal→D1 and linked Task");
+   checkpoint("R7.2 CloseDeal→immutable history→ReopenDeal→D1 and linked Task");
    await page.goto(base+"/#sales");
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
 
@@ -1271,7 +1280,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Сумма",{exact:true}).fill("100.00");
    await mutation(page.getByRole("button",{name:"Сохранить сделку",exact:true}),"CreateDeal");
    await page.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
-   steps.push("Second pipeline Deal under same Account persisted in D1");
+   checkpoint("Second pipeline Deal under same Account persisted in D1");
    // Full-page Deal URL and inline expansion share the same original GetDeal
    // read component. This is a real route, not a second Deal editor/store.
    await page.getByRole("link",{name:"Полная страница",exact:true}).last().click();
@@ -1280,12 +1289,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
    await page.goBack();
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
-   steps.push("R7.2 addressable full Deal card via shared GetDeal and Back");
+   checkpoint("R7.2 addressable full Deal card via shared GetDeal and Back");
    await navigate("accounts","Клиенты");
    await page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,level:2,exact:true})})
      .getByRole("button",{name:"Открыть карточку",exact:true}).click();
    await page.getByText("Основной участник: Browser Updated "+runId,{exact:true}).waitFor();
-   steps.push("Exact bigint Deal and atomic Sales–Activities flow visible in Account");
+   checkpoint("Exact bigint Deal and atomic Sales–Activities flow visible in Account");
    await navigate("review","Качество и совпадения");
    const quality=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить имя",exact:true})});
    await selectPagedPicker(quality,"Участник",partyId);
@@ -1309,7 +1318,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await selectPagedPicker(evaluate,"Участник",partyId);
    await evaluate.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
    await page.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
-   steps.push("Quality and consent evaluation/suppression");
+   checkpoint("Quality and consent evaluation/suppression");
    // #471 S5b Consent DENY: verify immutable original commit after HTTP ack loss.
    // The recovery must never issue a second suppression or create a GRANT.
    await page.getByRole("button",{name:"Запретить коммуникацию",exact:true}).click();
@@ -1359,7 +1368,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    ownerRecovery.push({owner:"consent",kind:"lookup",original_request_id:s5bConsentRequestId,
      subsequent_request_id:s5bConsentReadId});
    await page.unroute(s5bConsentPath,loseConsentAck);
-   steps.push("S5b consent DENY lost acknowledgment: read-only receipt after reload, no duplicate write");
+   checkpoint("S5b consent DENY lost acknowledgment: read-only receipt after reload, no duplicate write");
    await navigate("privacy","Запросы о данных");
    await page.getByRole("button",{name:"Новое обращение",exact:true}).click();
    const privacyBefore=new Set((await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
@@ -1419,7 +1428,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    ownerRecovery.push({owner:"privacy",kind:"lookup",original_request_id:s5bPrivacyRequestId,
      subsequent_request_id:s5bPrivacyReadId});
    await page.unroute("**/crm.customer_privacy.v2.PrivacyCaseService/CreatePrivacyCase",losePrivacyAck);
-   steps.push("S5b Privacy lost acknowledgement: reload + immutable GetPrivacyCase provenance without duplicate create");
+   checkpoint("S5b Privacy lost acknowledgement: reload + immutable GetPrivacyCase provenance without duplicate create");
    await navigate("enrichment","Обогащение данных");
    const providerKey="browser_registry_"+runId;
    const profileBefore=new Set((await sql("SELECT id FROM crm_enrichment_profiles WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
@@ -1614,7 +1623,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const exported=await readFile(await download.path(),"utf8");
    assert.ok(exported.includes("Browser Import "+runId));
    assert.ok(exported.includes("Browser Updated "+runId));
-   steps.push("S5b Enrichment profile/mapping and CSV import: lost acknowledgments, reload, read-only receipt lookup, no duplicate writes or payload storage");
+   checkpoint("S5b Enrichment profile/mapping and CSV import: lost acknowledgments, reload, read-only receipt lookup, no duplicate writes or payload storage");
    // Two actual browser forms hold the same version. Only one may commit.
    await navigate("parties","Люди и организации");
    const stalePage=await context.newPage();
@@ -1643,7 +1652,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0].version,3);
    await Promise.all(headerReads);
    await stalePage.close();
-   steps.push("Two browser forms enforce CAS and show generated-client conflict");
+   checkpoint("Two browser forms enforce CAS and show generated-client conflict");
 
    // Lose the response AFTER the server commits; retry the unchanged form.
    await navigate("parties","Люди и организации");
@@ -1670,7 +1679,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(await firstId("crm_party_records","display_name","Browser Retry "+runId),retryId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+retryId+"'"))[0].n,1);
    await page.unroute("**/crm.parties.v3.PartyService/CreateParty");
-   steps.push("Committed response loss and explicit same-key recovery replay without duplicate audit");
+   checkpoint("Committed response loss and explicit same-key recovery replay without duplicate audit");
 
    // Commit succeeds but only the following list refresh fails.
    await navigate("parties","Люди и организации");
@@ -1683,7 +1692,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:/Сохранено.*Список устарел/}).waitFor();
    assert.ok(await firstId("crm_party_records","display_name","Browser Saved Stale "+runId));
    await page.unroute("**/crm.parties.v3.PartyService/ListParties");
-   steps.push("Committed write remains successful when refresh fails");
+   checkpoint("Committed write remains successful when refresh fails");
 
    const navigationAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
    for(const [link,screen,title,filter,value,method] of [
@@ -1737,7 +1746,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      if(screen==="tasks")await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor();
    }
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,navigationAuditBefore);
-   steps.push("Customer360 links to server-filtered full lists, reload retains scope, no writes");
+   checkpoint("Customer360 links to server-filtered full lists, reload retains scope, no writes");
    await page.getByLabel("Тема",{exact:true}).selectOption("dark");
    assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
    await reloadDocument();
@@ -1765,7 +1774,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      .toBeGreaterThan(0);
    await page.screenshot({path:resolve(directory,"crm-mobile-dark.png"),fullPage:true});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),"mobile horizontal overflow");
-   steps.push("Mobile Kanban: named keyboard-focusable horizontal scroll region without viewport overflow");
+   checkpoint("Mobile Kanban: named keyboard-focusable horizontal scroll region without viewport overflow");
    await navigate("accounts","Клиенты");
    await page.getByRole("button",{name:"Создать клиента",exact:true}).click();
    const mobilePanel=page.getByRole("dialog");
@@ -1776,7 +1785,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.ok(bounds.width<=bounds.viewport+1 && bounds.width>=bounds.viewport-2,"record panel fills mobile viewport");
    await page.keyboard.press("Escape");
    await mobilePanel.waitFor({state:"hidden"});
-   steps.push("Theme persistence and mobile layout");
+   checkpoint("Theme persistence and mobile layout");
 
    restoreViewer=await beforeViewer();
    const denied=await browser.newContext({extraHTTPHeaders:viewerHeaders});
@@ -1813,7 +1822,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      assert.match(new URL(response.headers().location).hostname,/\.cloudflareaccess\.com$/);
    }
    await anonymous.close();
-   steps.push("Generated-client unauthenticated/permission errors and tenant B isolation");
+   checkpoint("Generated-client unauthenticated/permission errors and tenant B isolation");
    assert.deepEqual(pageErrors,[]);
    assert.ok(writes.length>0);
    await Promise.all(headerReads);
