@@ -4,8 +4,9 @@ package crm.customer_privacy.v2;
 
 import "crm/core/v2/operation.proto";
 
-// Existing CRM connects only draft, submit, cancel, get and list.
-// Subject verification, restriction/erasure execution stay NOT_CONNECTED.
+// CRM connects intake and signed-human own-subject verification.
+// Staff/document verification, discovery, exports and erasure execution
+// remain NOT_CONNECTED until their original owner evidence is live.
 enum PrivacyCaseKind {
   PRIVACY_CASE_KIND_UNSPECIFIED = 0;
   PRIVACY_CASE_KIND_ACCESS = 1;
@@ -63,6 +64,20 @@ message SubmitPrivacyCaseResponse {
   crm.core.v2.MutationReceipt receipt = 2;
 }
 
+// Human self-service only: the Worker binds this case to an already
+// Access-verified email ContactPoint owned by the indicated Person.
+message VerifyOwnPrivacyCaseSubjectRequest {
+  string case_id = 1;
+  string party_id = 2;
+  string contact_point_id = 3;
+  crm.core.v2.MutationPrecondition precondition = 4;
+}
+
+message VerifyOwnPrivacyCaseSubjectResponse {
+  PrivacyCase privacy_case = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
 message CancelPrivacyCaseRequest {
   string case_id = 1;
   crm.core.v2.MutationPrecondition precondition = 2;
@@ -98,6 +113,9 @@ service PrivacyCaseService {
     option idempotency_level = IDEMPOTENT;
   }
   rpc SubmitPrivacyCase(SubmitPrivacyCaseRequest) returns (SubmitPrivacyCaseResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc VerifyOwnPrivacyCaseSubject(VerifyOwnPrivacyCaseSubjectRequest) returns (VerifyOwnPrivacyCaseSubjectResponse) {
     option idempotency_level = IDEMPOTENT;
   }
   rpc CancelPrivacyCase(CancelPrivacyCaseRequest) returns (CancelPrivacyCaseResponse) {

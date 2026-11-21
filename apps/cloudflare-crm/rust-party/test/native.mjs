@@ -2869,6 +2869,113 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    original_owner:"crm.customer-privacy",tenant_ab:true,cas:true,replay:true,
    page_bounds:true,d1_audit:true,subject_verification:"NOT_CONNECTED"}));
 
+ // R4a human self-verification: signed Access email + independently verified
+ // original ContactPoint + Person owner; never trust service or dev-agent proof.
+ const r4Contact="privacy-own-contact-"+randomUUID();
+ const r4Created=await contactV2("CreateContactPoint",admin,{
+   contactPointId:r4Contact,partyId:pagingPersonId,kind:1,
+   value:"native-a@example.test",preferred:false,
+   precondition:{idempotencyKey:"r4-privacy-contact-create-"+r4Contact}});
+ assert.equal(r4Created.status,200,describeProtobuf(r4Created.body));
+ assert.equal((await contactV2("VerifyOwnEmailContactPoint",admin,{
+   contactPointId:r4Contact,
+   precondition:{expectedVersion:1n,idempotencyKey:"r4-privacy-contact-verify-"+r4Contact}
+ })).status,200);
+ const ownCaseId="privacy-own-"+randomUUID();
+ const ownCreate=await privacy("CreatePrivacyCase",admin,{
+   caseId:ownCaseId,kind:2,
+   precondition:{idempotencyKey:"r4-privacy-create-"+ownCaseId}});
+ assert.equal(ownCreate.status,200,describeProtobuf(ownCreate.body));
+ const ownSubmit=await privacy("SubmitPrivacyCase",admin,{
+   caseId:ownCaseId,
+   precondition:{expectedVersion:1n,idempotencyKey:"r4-privacy-submit-"+ownCaseId}});
+ assert.equal(ownSubmit.status,200,describeProtobuf(ownSubmit.body));
+ const ownProof={
+   caseId:ownCaseId,partyId:pagingPersonId,contactPointId:r4Contact,
+   precondition:{expectedVersion:2n,idempotencyKey:"r4-privacy-verify-"+ownCaseId}
+ };
+ assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",knownService,ownProof))
+   .body.code,"permission_denied","Service cannot impersonate human");
+ assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",viewer,ownProof))
+   .body.code,"permission_denied","Another signed email cannot verify a subject");
+ assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",tenantB,ownProof))
+   .body.code,"permission_denied","Tenant B cannot verify tenant A's ContactPoint");
+ assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",admin,{
+   ...ownProof,partyId:id,
+   precondition:{expectedVersion:2n,idempotencyKey:"r4-privacy-wrong-party"}
+ })).body.code,"permission_denied","An Organization cannot be a verified Person");
+ assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",admin,{
+   ...ownProof,contactPointId:r3Contact,
+   precondition:{expectedVersion:2n,idempotencyKey:"r4-privacy-wrong-contact"}
+ })).body.code,"permission_denied","A verified email on another Party is not ownership");
+ assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",admin,{
+   ...ownProof,contactPointId:"bad/id"
+ })).body.code,"invalid_argument");
+ assert.equal((await privacy("GetPrivacyCase",viewer,{caseId:ownCaseId}))
+   .body.privacyCase?.subjectVerified,false);
+ const ownVerified=await privacy("VerifyOwnPrivacyCaseSubject",admin,ownProof,{
+   "x-crm-tenant":"tenant-b","x-crm-actor":"forged@example.test",
+   "cf-access-authenticated-user-email":"forged@example.test"});
+ assert.equal(ownVerified.status,200,describeProtobuf(ownVerified.body));
+ assert.equal(ownVerified.body.privacyCase?.status,3);
+ assert.equal(ownVerified.body.privacyCase?.subjectVerified,true);
+ assert.equal(ownVerified.body.privacyCase?.version,3n);
+ assert.equal(ownVerified.body.receipt?.resourceVersion,3n);
+ assert.equal(ownVerified.body.receipt?.replayed,false);
+ assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",admin,ownProof))
+   .body.receipt?.replayed,true,"Exact intent replay uses original snapshot");
+ assert.equal((await privacy("GetPrivacyCase",viewer,{caseId:ownCaseId}))
+   .body.privacyCase?.subjectVerified,true);
+ assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",admin,{
+   ...ownProof,precondition:{expectedVersion:2n,idempotencyKey:"r4-privacy-verify-stale"}
+ })).body.code,"failed_precondition");
+ const r4Cancelled=await privacy("CancelPrivacyCase",admin,{
+   caseId:ownCaseId,
+   precondition:{expectedVersion:3n,idempotencyKey:"r4-privacy-cancel-after-verify"}
+ });
+ assert.equal(r4Cancelled.status,200,describeProtobuf(r4Cancelled.body));
+ assert.equal(r4Cancelled.body.privacyCase?.status,15);
+ assert.equal(r4Cancelled.body.privacyCase?.subjectVerified,true,
+   "Cancelling an authenticated case retains its original verified binding");
+ assert.deepEqual((await sql("SELECT action,actor,request_id FROM crm_audit "+
+   "WHERE tenant_id='tenant-a' AND subject_id='"+ownCaseId+"' ORDER BY rowid")).map(row=>row.action),
+   ["customer_privacy.create","customer_privacy.submit",
+     "customer_privacy.subject.verify_own","customer_privacy.cancel"]);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_privacy_case_receipts "+
+   "WHERE tenant='tenant-a' AND key='r4-privacy-verify-"+ownCaseId+"'"))[0].n,1);
+
+ // Audit insertion failure must roll back the new state, receipt and actor
+ // together, through the SAME D1 trigger as all other Privacy transitions.
+ const failProofId="privacy-own-failure-"+randomUUID();
+ assert.equal((await privacy("CreatePrivacyCase",admin,{
+   caseId:failProofId,kind:1,
+   precondition:{idempotencyKey:"r4-privacy-fail-create-"+failProofId}})).status,200);
+ assert.equal((await privacy("SubmitPrivacyCase",admin,{
+   caseId:failProofId,
+   precondition:{expectedVersion:1n,idempotencyKey:"r4-privacy-fail-submit-"+failProofId}
+ })).status,200);
+ const failVerification={
+   caseId:failProofId,partyId:pagingPersonId,contactPointId:r4Contact,
+   precondition:{expectedVersion:2n,idempotencyKey:"r4-privacy-fail-verify-"+failProofId}};
+ await sql("CREATE TRIGGER fixture_r4_privacy_audit_fail BEFORE INSERT ON crm_audit "+
+   "WHEN NEW.subject_id='"+failProofId+"' AND NEW.action='customer_privacy.subject.verify_own' "+
+   "BEGIN SELECT RAISE(ABORT,'test audit failure'); END");
+ try {
+   assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",admin,failVerification))
+     .body.code,"aborted");
+   assert.equal((await privacy("GetPrivacyCase",admin,{caseId:failProofId}))
+     .body.privacyCase?.subjectVerified,false);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_privacy_case_receipts "+
+     "WHERE tenant='tenant-a' AND key='r4-privacy-fail-verify-"+failProofId+"'"))[0].n,0);
+ }finally{await sql("DROP TRIGGER fixture_r4_privacy_audit_fail");}
+ assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",admin,failVerification)).status,200,
+   "Retry after atomic rollback must commit exactly once");
+ console.log(JSON.stringify({event:"crm.native-r4a-privacy-signed-subject",result:"PASS",
+   owner:"crm.customer-privacy",trusted_contact:"access-email",human_self_only:true,
+   subject_verified:true,service_denied:true,tenant_isolation:true,
+   forged_headers_ignored:true,d1_cas:true,receipt_replay:true,
+   old_legacy_runtime:false,audit_failure_atomic:true}));
+
  // Immutable configuration only: no provider I/O or Party mutation.
  const enrichment=signedReadOnly(enrichmentV2Path,binaryEnrichmentV2,decodeEnrichmentV2);
  const profileInput={

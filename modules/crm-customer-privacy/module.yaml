@@ -122,6 +122,11 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v2.PrivacyCaseService.SubmitPrivacyCase
+    - id: customer_privacy.case.subject.verify_own
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v2.PrivacyCaseService.VerifyOwnPrivacyCaseSubject
     - id: customer_privacy.case.cancel
       version: 2.0.0
       binding:

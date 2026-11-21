@@ -1,5 +1,6 @@
 import {useCallback,useState} from "react";
-import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField} from "@ultimate-crm/ui";
+import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
+import {PartyPicker} from "./Pickers";
 import type {PrivacyCase} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
 import {PrivacyCaseKind,PrivacyCaseStatus} from "@ultimate-crm/client/cloudflare";
@@ -45,7 +46,7 @@ export function PrivacyScreen() {
     refresh:query.reload
   });
   return <>
-    <PageHeader title="Запросы о данных" description="Создание, подача и отмена обращений. Проверка личности и исполнение запросов пока недоступны." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setCreateOpen(true);mutation.changed();}}>Новое обращение</Button>}/>
+    <PageHeader title="Запросы о данных" description="Создание, подача и подтверждение собственного обращения по проверенному email. Экспорт и исполнение пока недоступны." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setCreateOpen(true);mutation.changed();}}>Новое обращение</Button>}/>
     <QueryNotice query={query}/>
     {query.data?.cases.map(c=><Card key={c.caseId} title={kinds[c.kind]??"Запрос"}>
       <p>{statuses[c.status]??"Неизвестный статус"} · версия {c.version.toString()}</p>
@@ -57,12 +58,32 @@ export function PrivacyScreen() {
     <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy} onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
     <RecordPanel open={!!selected} title={selected?"Обращение "+selected.caseId:"Обращение"} onClose={()=>{if(!mutation.busy&&!mutation.pending)setSelected(undefined);}}>{selected&&<>
       <p>{statuses[selected.status]??"Неизвестный статус"} · {selected.subjectVerified?"Личность подтверждена":"Личность не подтверждена"}</p>
+      {selected.status===PrivacyCaseStatus.SUBMITTED&&<form
+        onChange={mutation.changed}
+        onSubmit={e=>{
+          e.preventDefault();
+          const form=new FormData(e.currentTarget);
+          void mutation.runIntent(()=>prepareMutation(api.privacy.verifyOwnPrivacyCaseSubject,{
+            caseId:selected.caseId,
+            partyId:String(form.get("partyId")??""),
+            contactPointId:String(form.get("contactPointId")??""),
+            precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
+          },selected.caseId),async()=>{setSelected(undefined);await query.reload();});
+        }}>
+        <p>Подтверждение доступно только создателю обращения для собственного Person с активным email,
+          уже проверенным по подписанной Cloudflare Access identity.</p>
+        <FormGrid>
+          <PartyPicker label="Мой участник (Person)" name="partyId"/>
+          <TextField label="ID проверенного email ContactPoint" name="contactPointId" required/>
+        </FormGrid>
+        <Button type="submit" disabled={mutation.busy||mutation.pending}>Подтвердить свою личность</Button>
+      </form>}
       {selected.status===PrivacyCaseStatus.DRAFT&&<Button disabled={mutation.busy||mutation.pending} onClick={()=>void mutation.runIntent(
         ()=>prepareMutation(api.privacy.submitPrivacyCase,{
           caseId:selected.caseId,precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
         },selected.caseId),async()=>{setSelected(undefined);await query.reload();}
       )}>Подать запрос</Button>}{" "}
-      {[PrivacyCaseStatus.DRAFT,PrivacyCaseStatus.SUBMITTED].includes(selected.status)&&<Button variant="danger" disabled={mutation.busy||mutation.pending} onClick={()=>void mutation.runIntent(
+      {[PrivacyCaseStatus.DRAFT,PrivacyCaseStatus.SUBMITTED,PrivacyCaseStatus.SUBJECT_VERIFIED].includes(selected.status)&&<Button variant="danger" disabled={mutation.busy||mutation.pending} onClick={()=>void mutation.runIntent(
         ()=>prepareMutation(api.privacy.cancelPrivacyCase,{
           caseId:selected.caseId,precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
         },selected.caseId),async()=>{setSelected(undefined);await query.reload();}

@@ -433,6 +433,12 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
         },
     ),
     (
+        "/crm.customer_privacy.v2.PrivacyCaseService/VerifyOwnPrivacyCaseSubject",
+        RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
+    ),
+    (
         "/crm.customer_privacy.v2.PrivacyCaseService/CancelPrivacyCase",
         RpcPolicy {
             permission: RpcPermission::Write,

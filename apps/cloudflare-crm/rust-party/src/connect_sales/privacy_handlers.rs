@@ -104,6 +104,7 @@ impl PrivacyV2Service {
     }
     fn failed(error: customer_privacy::Failure) -> ConnectError {
         match error.status {
+            403 => ConnectError::permission_denied(error.code),
             404 => ConnectError::not_found(error.code),
             409 => ConnectError::aborted(error.code),
             412 => ConnectError::failed_precondition(error.code),
@@ -192,6 +193,40 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
             )
             .await?;
         RpcResponse::ok(privacy_wire::SubmitPrivacyCaseResponse {
+            privacy_case: Some(Self::convert(&saved.case)?).into(),
+            receipt: Some(self.receipt(&saved)?).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
+    async fn verify_own_privacy_case_subject(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, privacy_wire::VerifyOwnPrivacyCaseSubjectRequest>,
+    ) -> ServiceResult<privacy_wire::VerifyOwnPrivacyCaseSubjectResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.case_id)?;
+        let submitted_party_id = Self::id(&input.party_id)?;
+        let contact_point_id = Self::id(&input.contact_point_id)?;
+        let (key, version) = wire_precondition(input.precondition.as_option(), false)?;
+        let version = u64::try_from(version.unwrap_or_default())
+            .map_err(|_| ConnectError::invalid_argument("invalid expected version"))?;
+        let saved = customer_privacy::transition_typed(
+            id.as_str(),
+            customer_privacy::Transition::VerifyOwnSubject {
+                submitted_party_id,
+                contact_point_id,
+            },
+            version,
+            &key,
+            &self.d1()?,
+            &self.actor,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::internal("PrivacyCase D1 verification failed"))?
+        .map_err(Self::failed)?;
+        RpcResponse::ok(privacy_wire::VerifyOwnPrivacyCaseSubjectResponse {
             privacy_case: Some(Self::convert(&saved.case)?).into(),
             receipt: Some(self.receipt(&saved)?).into(),
             ..Default::default()

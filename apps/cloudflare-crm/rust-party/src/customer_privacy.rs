@@ -1,16 +1,22 @@
 //! D1 operations for the original PrivacyCase domain. No HTTP/JSON business API.
 //! Verification and privacy execution remain outside this intake capability.
-use super::{access, bind, now_nanos};
+use super::{access, bind, contact_points, now_nanos, parties};
 use crm_customer_privacy::{
     PrivacyCase, PrivacyCaseKind, PrivacyDomainError, decode_privacy_case_state,
     encode_privacy_case_state,
 };
-use crm_module_sdk::{RecordId, SchemaVersion, TenantId};
+use crm_contact_points::{ContactPointKind, ContactPointStatus, VerificationState};
+use crm_module_sdk::{ActorId, RecordId, SchemaVersion, TenantId};
+use crm_parties::PartyKind;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use wasm_bindgen::JsValue;
 use worker::{D1Database, Result};
+#[derive(Deserialize)]
+struct CreatorRow {
+    created_by: String,
+}
 #[derive(Deserialize)]
 struct StateRow {
     state: String,
@@ -36,6 +42,10 @@ pub(super) struct Failure {
 pub(super) enum Transition {
     Submit,
     Cancel,
+    VerifyOwnSubject {
+        submitted_party_id: RecordId,
+        contact_point_id: RecordId,
+    },
 }
 fn fail(code: impl Into<String>, status: u16) -> Failure {
     Failure {
@@ -153,25 +163,108 @@ pub(super) async fn transition_typed(
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
     }
-    let operation = match action {
-        Transition::Submit => "submit",
-        Transition::Cancel => "cancel",
+    let (operation, payload) = match &action {
+        Transition::Submit => ("submit", json!([expected_version])),
+        Transition::Cancel => ("cancel", json!([expected_version])),
+        Transition::VerifyOwnSubject {
+            submitted_party_id,
+            contact_point_id,
+        } => (
+            "verify-own-subject",
+            json!([expected_version, submitted_party_id.as_str(), contact_point_id.as_str()]),
+        ),
     };
-    let hash = digest(operation, id, &json!([expected_version]));
+    let hash = digest(operation, id, &payload);
+    // This is a human self-verification, not a staff claim: never accept a
+    // signed service token, dev-agent evidence, or a merely listed email.
+    // Revalidate even on receipt replay so withdrawn ownership cannot be used.
+    let contact_guard = if let Transition::VerifyOwnSubject {
+        submitted_party_id,
+        contact_point_id,
+    } = &action
+    {
+        let Some(email) = contact_points::signed_human_email(&actor.identity) else {
+            return Ok(Err(fail("PRIVACY_SIGNED_HUMAN_EMAIL_REQUIRED", 403)));
+        };
+        let Some(point) = contact_points::load(db, tenant, contact_point_id.as_str()).await?
+        else {
+            return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+        };
+        let trusted = matches!(
+            point.verification(),
+            VerificationState::Verified(evidence)
+                if evidence.evidence_ref().starts_with("access-email:")
+        );
+        if !trusted
+            || point.kind() != ContactPointKind::Email
+            || point.status() != ContactPointStatus::Active
+            || point.normalized_value() != email
+            || point.party_ref().as_str() != submitted_party_id.as_str()
+            || !point.is_valid_at(now_nanos())
+        {
+            return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+        }
+        // A submitted case must belong to this exact signed human, not
+        // merely be an unrelated admin-created case that happens to be visible.
+        let creator = bind(
+            db,
+            "SELECT created_by FROM crm_privacy_case_records WHERE tenant=? AND id=?",
+            &[JsValue::from_str(tenant), JsValue::from_str(id)],
+        )?
+        .first::<CreatorRow>(None)
+        .await?;
+        if creator.is_none_or(|row| row.created_by != actor.identity) {
+            return Ok(Err(fail("PRIVACY_CASE_OWNERSHIP_REQUIRED", 403)));
+        }
+        let Some(party) = parties::stored(db, tenant, submitted_party_id.as_str()).await?
+        else {
+            return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+        };
+        if party.kind() != PartyKind::Person {
+            return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+        }
+        Some((
+            submitted_party_id.as_str().to_owned(),
+            contact_point_id.as_str().to_owned(),
+            point.version(),
+        ))
+    } else {
+        None
+    };
     if let Some(saved) = replay(db, tenant, key, &hash).await? {
         return Ok(saved);
     }
     let Some(mut case) = stored(db, tenant, id).await? else {
         return Ok(Err(fail("NOT_FOUND", 404)));
     };
+    let now = now_nanos();
     let result = match action {
-        Transition::Submit => case.submit(expected_version, now_nanos()),
-        Transition::Cancel => case.cancel(expected_version, now_nanos()),
+        Transition::Submit => case.submit(expected_version, now),
+        Transition::Cancel => case.cancel(expected_version, now),
+        Transition::VerifyOwnSubject {
+            submitted_party_id,
+            ..
+        } => {
+            let verified_by = ActorId::try_new(actor.identity.clone())
+                .map_err(|_| worker::Error::RustError("PRIVACY_ACTOR_INVALID".into()))?;
+            // The active CRM has no merge topology; generation 1 names the
+            // current unmerged canonical Party. R5b must explicitly re-check
+            // canonical identity generations before any export or erasure.
+            case.verify_subject(
+                expected_version,
+                submitted_party_id.clone(),
+                submitted_party_id,
+                1,
+                crm_customer_privacy::SubjectVerificationMethod::AuthenticatedPortal,
+                verified_by,
+                now,
+            )
+        }
     };
-    if let Err(e) = result {
+    if let Err(error) = result {
         return Ok(Err(fail(
-            e.code(),
-            match e {
+            error.code(),
+            match error {
                 PrivacyDomainError::InvalidArgument { .. } => 422,
                 PrivacyDomainError::InvalidTransition { .. } => 412,
                 PrivacyDomainError::VersionConflict { .. } => 409,
@@ -179,12 +272,32 @@ pub(super) async fn transition_typed(
         )));
     }
     let state = encode(&case)?;
-    let result=bind(db,
-        "UPDATE crm_privacy_case_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?",
-        &[JsValue::from_str(&state),JsValue::from_str(&case.version().to_string()),
-          JsValue::from_str(key),JsValue::from_str(&hash),JsValue::from_str(trace),
-          JsValue::from_str(&actor.identity),JsValue::from_str(tenant),JsValue::from_str(id),
-          JsValue::from_str(&expected_version.to_string())])?.run().await;
+    let mut values = vec![
+        JsValue::from_str(&state),
+        JsValue::from_str(&case.version().to_string()),
+        JsValue::from_str(key),
+        JsValue::from_str(&hash),
+        JsValue::from_str(trace),
+        JsValue::from_str(&actor.identity),
+        JsValue::from_str(tenant),
+        JsValue::from_str(id),
+        JsValue::from_str(&expected_version.to_string()),
+    ];
+    // Same D1 statement atomically checks that the already validated contact
+    // was not changed between read and case commit (no second persistence path).
+    let sql = if let Some((party_id, contact_id, point_version)) = contact_guard {
+        values.extend([
+            JsValue::from_str(&actor.identity),
+            JsValue::from_str(tenant),
+            JsValue::from_str(&contact_id),
+            JsValue::from_str(&party_id),
+            JsValue::from_f64(point_version as f64),
+        ]);
+        "UPDATE crm_privacy_case_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=? AND created_by=? AND EXISTS (SELECT 1 FROM crm_contact_point_records WHERE tenant=? AND id=? AND party_id=? AND version=?)"
+    } else {
+        "UPDATE crm_privacy_case_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?"
+    };
+    let result = bind(db, sql, &values)?.run().await;
     let changed = match result {
         Ok(result) => result.meta()?.and_then(|m| m.changes).unwrap_or(0) > 0,
         Err(_) => false,

@@ -1376,6 +1376,64 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await mutation(page.getByRole("button",{name:"Отменить запрос",exact:true}),"CancelPrivacyCase");
    const privacyState=(await sql("SELECT version,json_extract(state,'$.status.code') AS status FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"' AND id='"+privacyId+"'"))[0];
    assert.equal(privacyState.version,3);assert.equal(privacyState.status,"cancelled");
+   // #352 R4a: one real Chromium flow, not just a new RPC:
+   // signed human email -> original ContactPoint verification -> submitted
+   // PrivacyCase -> original Rust subject binding -> D1 audit/readback.
+   // The earlier Account scenario uses an Organization. Privacy subjects must
+   // be a *Person*, so create one through the real generated-client UI.
+   const privacyPersonName="Browser Privacy Person "+runId;
+   await navigate("parties","Люди и организации");
+   await page.getByRole("button",{name:"Создать участника",exact:true}).click();
+   await page.getByLabel("Тип",{exact:true}).selectOption("1");
+   await page.getByLabel("Имя или название",{exact:true}).fill(privacyPersonName);
+   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"CreateParty");
+   const [privacyPerson]=await sql("SELECT id FROM crm_party_records "+
+     "WHERE tenant=? AND json_extract(state,'$.display_name')=?",tenantA,privacyPersonName);
+   assert.ok(privacyPerson?.id);
+   const privacyPartyId=privacyPerson.id;
+   await navigate("contacts","Контакты");
+   await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
+   await selectPagedPicker(page,"Участник",privacyPartyId);
+   await page.getByLabel("Значение контакта",{exact:true}).fill(adminIdentity);
+   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
+   await page.getByLabel("Фильтр по ID участника",{exact:true}).fill(privacyPartyId);
+   await page.getByRole("heading",{name:adminIdentity,exact:true}).waitFor();
+   const ownContactSection=page.locator("section").filter({
+     has:page.getByRole("heading",{name:adminIdentity,exact:true})
+   });
+   await mutation(ownContactSection.getByRole("button",{
+     name:"Подтвердить email (Access / тестовый администратор)",exact:true
+   }),"VerifyOwnEmailContactPoint");
+   const ownContactRows=await sql(
+     "SELECT id FROM crm_contact_point_records WHERE tenant=? AND party_id=? "+
+     "AND json_extract(state,'$.normalized_value')=?",tenantA,privacyPartyId,adminIdentity);
+   assert.equal(ownContactRows.length,1);
+   const ownContactId=ownContactRows[0].id;
+   await navigate("privacy","Запросы о данных");
+   const r4CaseBefore=new Set((await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'")).map(x=>x.id));
+   await page.getByRole("button",{name:"Новое обращение",exact:true}).click();
+   await mutation(page.getByRole("button",{name:"Создать обращение",exact:true}),"CreatePrivacyCase");
+   const r4Cases=(await sql("SELECT id FROM crm_privacy_case_records WHERE tenant='"+tenantSql+"'"))
+     .filter(x=>!r4CaseBefore.has(x.id));
+   assert.equal(r4Cases.length,1);
+   const r4CaseId=r4Cases[0].id;
+   const r4Card=page.locator("section").filter({has:page.getByText("ID: "+r4CaseId,{exact:true})});
+   await r4Card.getByRole("button",{name:"Открыть запрос",exact:true}).click();
+   await mutation(page.getByRole("button",{name:"Подать запрос",exact:true}),"SubmitPrivacyCase");
+   await r4Card.getByRole("button",{name:"Открыть запрос",exact:true}).click();
+   await selectPagedPicker(page,"Мой участник (Person)",privacyPartyId);
+   await page.getByLabel("ID проверенного email ContactPoint",{exact:true}).fill(ownContactId);
+   await mutation(page.getByRole("button",{name:"Подтвердить свою личность",exact:true}),
+     "VerifyOwnPrivacyCaseSubject");
+   const [r4State]=await sql("SELECT version,json_extract(state,'$.status.code') AS status, "+
+     "json_extract(state,'$.subject_binding.canonical_party_id') AS party_id "+
+     "FROM crm_privacy_case_records WHERE tenant=? AND id=?",tenantA,r4CaseId);
+   assert.equal(r4State.version,3);assert.equal(r4State.status,"subject_verified");
+   assert.equal(r4State.party_id,privacyPartyId);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? "+
+     "AND subject_id=? AND action='customer_privacy.subject.verify_own'",tenantA,r4CaseId))[0].n,1);
+   checkpoint("R4a signed human ContactPoint -> original PrivacyCase subject verification, D1 receipt and audit");
+
    // #471 S5b Privacy: a committed intake write loses its browser acknowledgment.
    // Reload must use original signed GetPrivacyCase receipt provenance, never
    // repeat CreatePrivacyCase or store the subject's payload in sessionStorage.
