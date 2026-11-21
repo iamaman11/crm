@@ -7,7 +7,7 @@ const source=process.env.CRM_MODULE_COVERAGE_REPORT;
 if(!descriptor||!source)throw Error("compiled Buf descriptor and module report required");
 const available=descriptorMethods(readFileSync(descriptor));
 const actual=JSON.parse(readFileSync(source,"utf8"));
-test("canonical manifest signatures match compiled Buf descriptors",()=>{
+test("canonical RPC owner bindings derive wire types from Buf descriptors",()=>{
  assert.ok(validateBindings(actual,available).size>0);
 });
 const path="/crm.parties.v3.PartyService/GetParty";
@@ -49,9 +49,9 @@ reject("unregistered policy fails",r=>{
  r.runtime.rpc.policies.push(["/crm.missing.v1.Service/Method",{permission:"Read"}]);
 },/policy without registered RPC/);
 reject("missing successful call fails",r=>{r.runtime.successful_rpc_calls=[];},/missing successful executed call/);
-reject("wrong request type fails",r=>{
+reject("manual request type cannot override Buf",r=>{
  r.modules.find(m=>m.module_id==="crm.parties").rpc_bindings.find(b=>b.path===path).request="wrong";
-},/request\/response type mismatch/);
+},/input\/output types must come from Buf descriptors/);
 reject("missing exact owner binding fails",r=>{
  const m=r.modules.find(m=>m.module_id==="crm.parties");
  m.rpc_bindings=m.rpc_bindings.filter(b=>b.path!==path);

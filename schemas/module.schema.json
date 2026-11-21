@@ -374,21 +374,13 @@
       "additionalProperties": false,
       "required": [
         "kind",
-        "rpc",
-        "request",
-        "response"
+        "rpc"
       ],
       "properties": {
         "kind": {
           "const": "protobuf_rpc"
         },
         "rpc": {
-          "$ref": "#/$defs/protobufQualifiedName"
-        },
-        "request": {
-          "$ref": "#/$defs/protobufQualifiedName"
-        },
-        "response": {
           "$ref": "#/$defs/protobufQualifiedName"
         }
       }

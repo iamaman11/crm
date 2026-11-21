@@ -1,5 +1,13 @@
 # Ultimate CRM — Agent and Contributor Operating Guide
 
+> **Текущий путь разработки CRM:** только `apps/cloudflare-crm` в канонической
+> удалённой ветке `dev`. Действуют `apps/cloudflare-crm/AGENTS.md`,
+> `apps/cloudflare-crm/ARCHITECTURE.md` и задача #352. Нижеследующие старые
+> инструкции по PostgreSQL, RLS, packet/PR и дополнительным runtime
+> относятся только к историческому product-plane, не к активной CRM.
+> Не восстанавливать старые генераторы, CI или инфраструктуру.
+
+
 This file is the default operating guide for humans and coding agents working in this repository.
 
 For the Cloudflare application and its CI, follow `apps/cloudflare-crm/AGENTS.md` and

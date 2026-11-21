@@ -29,9 +29,10 @@ export function validateBindings(report,available){
   if(bound.has(binding.path))fail("duplicate canonical RPC ownership "+binding.path);
   const descriptor=available.get(binding.path);
   if(!descriptor)fail("canonical RPC absent from Buf descriptor "+binding.path);
-  if(descriptor.request!==binding.request||descriptor.response!==binding.response)
-   fail("request/response type mismatch "+binding.path);
-  bound.set(binding.path,{...binding,module_id:module.module_id,linked:module.linked});
+  if("request" in binding||"response" in binding)
+   fail("RPC input/output types must come from Buf descriptors "+binding.path);
+  bound.set(binding.path,{...binding,request:descriptor.request,response:descriptor.response,
+   module_id:module.module_id,linked:module.linked});
  }
  return bound;
 }

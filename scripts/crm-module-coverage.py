@@ -128,12 +128,10 @@ def build_report(root: Path = ROOT, *, runtime: dict | None = None) -> dict:
                 continue
             if route in providers:
                 raise ValueError(f"duplicate RPC owner {route}: {providers[route]} and {module_id}")
-            if not isinstance(binding.get("request"), str) or not isinstance(binding.get("response"), str):
-                raise ValueError(f"missing typed Protobuf request/response: {route}")
             providers[route] = module_id
             declared_rpc.append(route)
             binding_specs.append({
-                "path": route, "request": binding["request"], "response": binding["response"],
+                "path": route,
                 "capability_id": capability["id"], "capability_version": capability["version"],
             })
         modules.append({

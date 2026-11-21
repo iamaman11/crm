@@ -24,78 +24,56 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.CreateTask
-        request: crm.activities.v1.CreateTaskRequest
-        response: crm.activities.v1.CreateTaskResponse
     - id: activities.task.update
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.UpdateTask
-        request: crm.activities.v1.UpdateTaskRequest
-        response: crm.activities.v1.UpdateTaskResponse
     - id: activities.task.complete
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.CompleteTask
-        request: crm.activities.v1.CompleteTaskRequest
-        response: crm.activities.v1.CompleteTaskResponse
     - id: activities.task.schedule_reminder
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.ScheduleReminder
-        request: crm.activities.v1.ScheduleReminderRequest
-        response: crm.activities.v1.ScheduleReminderResponse
     - id: activities.task.get
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.GetTask
-        request: crm.activities.v1.GetTaskRequest
-        response: crm.activities.v1.GetTaskResponse
     - id: activities.task.list
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v1.TaskService.ListTasks
-        request: crm.activities.v1.ListTasksRequest
-        response: crm.activities.v1.ListTasksResponse
     - id: activities.task.create
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v2.TaskService.CreateTask
-        request: crm.activities.v2.CreateTaskRequest
-        response: crm.activities.v2.CreateTaskResponse
     - id: activities.task.update
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v2.TaskService.UpdateTask
-        request: crm.activities.v2.UpdateTaskRequest
-        response: crm.activities.v2.UpdateTaskResponse
     - id: activities.task.complete
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v2.TaskService.CompleteTask
-        request: crm.activities.v2.CompleteTaskRequest
-        response: crm.activities.v2.CompleteTaskResponse
     - id: activities.task.get
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v2.TaskService.GetTask
-        request: crm.activities.v2.GetTaskRequest
-        response: crm.activities.v2.GetTaskResponse
     - id: activities.task.list
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v2.TaskService.ListTasks
-        request: crm.activities.v2.ListTasksRequest
-        response: crm.activities.v2.ListTasksResponse
   events:
     - id: activities.task.created
       version: 1.0.0

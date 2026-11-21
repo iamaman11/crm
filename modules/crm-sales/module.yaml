@@ -24,162 +24,116 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v1.DealService.CreateDeal
-        request: crm.sales.v1.CreateDealRequest
-        response: crm.sales.v1.CreateDealResponse
     - id: sales.deal.update
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v1.DealService.UpdateDeal
-        request: crm.sales.v1.UpdateDealRequest
-        response: crm.sales.v1.UpdateDealResponse
     - id: sales.deal.advance_stage
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v1.DealService.AdvanceStage
-        request: crm.sales.v1.AdvanceStageRequest
-        response: crm.sales.v1.AdvanceStageResponse
     - id: sales.deal.get
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v1.DealService.GetDeal
-        request: crm.sales.v1.GetDealRequest
-        response: crm.sales.v1.GetDealResponse
     - id: sales.deal.list
       version: 1.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v1.DealService.ListDeals
-        request: crm.sales.v1.ListDealsRequest
-        response: crm.sales.v1.ListDealsResponse
     - id: sales.deal.create
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.CreateDeal
-        request: crm.sales.v2.CreateDealRequest
-        response: crm.sales.v2.CreateDealResponse
     - id: sales.deal.update
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.UpdateDeal
-        request: crm.sales.v2.UpdateDealRequest
-        response: crm.sales.v2.UpdateDealResponse
     - id: sales.deal.advance_stage
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.AdvanceStage
-        request: crm.sales.v2.AdvanceStageRequest
-        response: crm.sales.v2.AdvanceStageResponse
     - id: sales.deal.close
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.CloseDeal
-        request: crm.sales.v2.CloseDealRequest
-        response: crm.sales.v2.CloseDealResponse
     - id: sales.deal.reopen
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.ReopenDeal
-        request: crm.sales.v2.ReopenDealRequest
-        response: crm.sales.v2.ReopenDealResponse
     - id: sales.deal.history
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.ListDealEvents
-        request: crm.sales.v2.ListDealEventsRequest
-        response: crm.sales.v2.ListDealEventsResponse
     - id: sales.deal.get
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.GetDeal
-        request: crm.sales.v2.GetDealRequest
-        response: crm.sales.v2.GetDealResponse
     - id: sales.deal.list
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.ListDeals
-        request: crm.sales.v2.ListDealsRequest
-        response: crm.sales.v2.ListDealsResponse
     - id: sales.pipeline.create
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.CreatePipeline
-        request: crm.sales.v2.CreatePipelineRequest
-        response: crm.sales.v2.CreatePipelineResponse
     - id: sales.pipeline.update
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.UpdatePipeline
-        request: crm.sales.v2.UpdatePipelineRequest
-        response: crm.sales.v2.UpdatePipelineResponse
     - id: sales.pipeline.get
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.GetPipeline
-        request: crm.sales.v2.GetPipelineRequest
-        response: crm.sales.v2.GetPipelineResponse
     - id: sales.pipeline.list
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.ListPipelines
-        request: crm.sales.v2.ListPipelinesRequest
-        response: crm.sales.v2.ListPipelinesResponse
     - id: sales.deal.list_by_stage
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.ListStageDeals
-        request: crm.sales.v2.ListStageDealsRequest
-        response: crm.sales.v2.ListStageDealsResponse
     - id: sales.pipeline.metrics
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.GetPipelineMetrics
-        request: crm.sales.v2.GetPipelineMetricsRequest
-        response: crm.sales.v2.GetPipelineMetricsResponse
     - id: sales.view.create
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.CreateSalesView
-        request: crm.sales.v2.CreateSalesViewRequest
-        response: crm.sales.v2.CreateSalesViewResponse
     - id: sales.view.update
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.UpdateSalesView
-        request: crm.sales.v2.UpdateSalesViewRequest
-        response: crm.sales.v2.UpdateSalesViewResponse
     - id: sales.view.get
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.GetSalesView
-        request: crm.sales.v2.GetSalesViewRequest
-        response: crm.sales.v2.GetSalesViewResponse
     - id: sales.view.list
       version: 2.0.0
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.ListSalesViews
-        request: crm.sales.v2.ListSalesViewsRequest
-        response: crm.sales.v2.ListSalesViewsResponse
   events:
     - id: sales.deal.created
       version: 1.0.0

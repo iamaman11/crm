@@ -35,6 +35,11 @@ D1 SQL, CAS, receipts и audit и вызывать domain crates. Typed wire/dom
 | Данные | канонические SQL migrations | создание с нуля, CAS/replay/atomicity/audit |
 | Release | проверенный artifact | SHA/checksum и live readback |
 
+В `module.yaml` вручную задаются владелец и точное имя RPC. Типы
+`request`/`response` приходят исключительно из compiled Protobuf descriptors:
+их повторное объявление в manifest запрещено. Уже существующая проверка
+сопоставляет метод с реальным Rust router/policy и исполненными сценариями.
+
 Активные RPC из descriptors совпадают с registered RPC, policy RPC и исполненными обязательными
 сценариями. Новый метод расширяет эту область. Отсутствующие owner, handler, policy или evidence —
 FAIL. Исторические proto других потребителей не становятся Cloudflare API автоматически.
