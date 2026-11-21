@@ -213,16 +213,26 @@ async function subprocessEntry(){
        return wrap([{success:true,results}]);
      }
      const {sql,params=[]}=JSON.parse(options.body);
-     if(sql.startsWith("SELECT COUNT(*) AS n FROM crm_audit")){
-       const sourceWrite=fixtureWrites.find(write=>write.request_id===params[1]);
-       const action=params[2];
-       const n=params.length>=3
-         ?Number(variant!=="missing-audit"&&!!sourceWrite?.audit?.some(row=>row.action===action))
-         :Number(variant==="recovery-audited");
-       return wrap([{success:true,results:[{n}]}]);
+     // One tenant-scoped D1 readback for exact mutations and recovery receipts.
+     // Fail on legacy per-request queries.
+     assert.ok(sql.startsWith(
+       "SELECT request_id,action,subject_id,actor FROM crm_audit WHERE tenant_id=? AND request_id IN ("),
+       "Unexpected serial or unscoped audit readback");
+     assert.equal(params[0],"fixture-a");
+     assert.equal((sql.match(/\?/g)??[]).length,params.length,
+       "Every request ID must use a SQL placeholder");
+     const ids=params.slice(1);
+     assert.equal(new Set(ids).size,ids.length,"Duplicate audit ID");
+     const auditRows=variant==="missing-audit"?[]:fixtureWrites
+       .filter(write=>ids.includes(write.request_id))
+       .flatMap(write=>write.audit.map(row=>({request_id:write.request_id,...row})));
+     if(variant==="recovery-audited"){
+       const readId=ids.find(id=>!fixtureWrites.some(write=>write.request_id===id));
+       assert.ok(readId,"Recovery request must be in the snapshot");
+       auditRows.push({request_id:readId,action:"unexpected.recovery",
+         subject_id:"duplicate",actor:"service:synthetic.access"});
      }
-     const sourceWrite=fixtureWrites.find(write=>write.request_id===params[1]);
-     return wrap([{success:true,results:variant==="missing-audit"?[]:sourceWrite?.audit??[]}]);
+     return wrap([{success:true,results:auditRows}]);
    }
    throw Error("Unexpected Cloudflare endpoint "+path);
  };
@@ -239,7 +249,7 @@ async function subprocessEntry(){
  process.argv[2]=mode;
  try{await import("./deploy.mjs");}finally{
    writeFileSync("posts.json",JSON.stringify(posts));
-   writeFileSync("state.json",JSON.stringify({enabled,migrated,published,edgeAttempts,anonymousAttempts,telemetryAttempts,maxTelemetryInFlight,commands,role}));
+   writeFileSync("state.json",JSON.stringify({enabled,migrated,published,edgeAttempts,anonymousAttempts,auditAttempts,telemetryAttempts,maxTelemetryInFlight,commands,role}));
    db?.close();
  }
 }
@@ -479,6 +489,8 @@ for(const variant of ["unrelated","wrong-database"])test("failure cannot stop "+
 test("matching browser, D1 and version-specific Logs evidence passes the release validator",()=>{
  const result=run("verify-data");
  assert.equal(result.status,0,result.error);assert.equal(result.accepted,true);
+ assert.equal(result.state.auditAttempts,1,
+   "All write and recovery proofs must share one D1 snapshot");
  assert.equal(result.state.maxTelemetryInFlight,1,
    "Cloudflare Telemetry must use one native cursor reader");
 });
