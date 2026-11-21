@@ -1426,8 +1426,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(searchResults).toHaveCount(0);
    checkpoint("M2 Deal search across pipelines, typed name filter, result→full page→Back, no-results and reset");
    // Full-page Deal URL and inline expansion share the same original GetDeal
-   // read component. This is a real route, not a second Deal editor/store.
-   await page.getByRole("link",{name:"Полная страница",exact:true}).last().click();
+   // read component. The preceding search/back route can reset the selected
+   // pipeline, so target the actual Deal card, not whichever link is last.
+   const alternateCardAfterSearch=page.locator("section").filter({
+     has:page.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true})
+   }).last();
+   await alternateCardAfterSearch.getByRole("link",{name:"Полная страница",exact:true}).click();
    await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
    assert.equal((await page.evaluate(()=>location.hash)).startsWith("#sales/"),true);
    await page.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
