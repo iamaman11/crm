@@ -91,7 +91,8 @@ validateWorkerConfig(production,local);
    integration.direct_sqlite===false&&integration.production_worker_count===1&&integration.local_d1_count===1,
    "one canonical integration runtime policy required");
  // Real workerd/Chromium CI executes Wrangler createTestHarness and its D1
- // migrations; source spelling is not a substitute for executed proof.}
+ // migrations; source spelling is not a substitute for executed proof.
+}
 const reportPath=process.env.CRM_MODULE_COVERAGE_REPORT;
 check(!!reportPath,"canonical manifest/Cargo report required");
 const report=JSON.parse(readFileSync(reportPath,"utf8"));
