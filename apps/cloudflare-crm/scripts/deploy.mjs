@@ -49,9 +49,6 @@ async function cf(path,method="GET",body,timeoutMs=0){
 // Only read-only D1 SELECT and Cloudflare telemetry may be retried.
 // Telemetry readback uses at most two concurrent calls, never the old
 // four-call burst. Shared 429 cooldown applies across both read lanes.
-// The same one-second provider pacing governs both pages and next-snapshot polling.
-// Poll sooner when logs are pending, but never issue telemetry reads in a burst.
-const TELEMETRY_PACE_MS=1000;
 let telemetryNextAt=0;
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function cfReadback(path,body,phaseDeadline=Infinity){
@@ -79,7 +76,7 @@ async function cfReadback(path,body,phaseDeadline=Infinity){
       const result=await cf(path,"POST",body,
         Math.max(1,Math.min(30000,deadline-Date.now())));
       // Pace consecutive read batches; preserve any longer 429 cooldown.
-      if(traces)telemetryNextAt=Math.max(telemetryNextAt,Date.now()+TELEMETRY_PACE_MS);
+      if(traces)telemetryNextAt=Math.max(telemetryNextAt,Date.now()+1000);
       return result;
     }catch(error){
       const status=error?.cfHttpStatus;
@@ -614,7 +611,7 @@ async function verifyData(){
       observed_events:observedEvents.length,accepted:requestTraces.size,
       still_missing:pending.size,elapsed_ms:Date.now()-traceStarted}));
     if(pending.size&&attempt<29&&Date.now()<traceDeadline)
-      await pause(Math.min(TELEMETRY_PACE_MS,Math.max(0,traceDeadline-Date.now())));
+      await pause(Math.min(2000,Math.max(0,traceDeadline-Date.now())));
   }
   assert.equal(pending.size,0,"Missing Cloudflare request traces: "+
     [...pending.values()].map(x=>x.path).join(","));
@@ -686,7 +683,7 @@ async function verifyData(){
     }
     outstanding=missing;
     if(outstanding.length&&attempt<29&&Date.now()<traceDeadline)
-      await pause(Math.min(TELEMETRY_PACE_MS,Math.max(0,traceDeadline-Date.now())));
+      await pause(Math.min(2000,Math.max(0,traceDeadline-Date.now())));
   }
   assert.equal(outstanding.length,0,
     "CRM native Cloudflare spans missing for: "+outstanding.map(x=>x.entry.path).join(","));
