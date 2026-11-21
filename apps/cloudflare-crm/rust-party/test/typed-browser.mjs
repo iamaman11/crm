@@ -1437,6 +1437,23 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id=? "+
      "AND subject_id=? AND action='customer_privacy.subject.verify_own'",tenantA,r4CaseId))[0].n,1);
    checkpoint("R4a signed human ContactPoint -> original PrivacyCase subject verification, D1 receipt and audit");
+   // Only the verified human can inspect the current two-owner preview.
+   // It must remain incomplete (seven other canonical owner contributions)
+   // and must not create a D1 case receipt or audit write.
+   await r4Card.getByRole("button",{name:"Открыть запрос",exact:true}).click();
+   const beforeScopeReads=(await sql("SELECT COUNT(*) AS n FROM crm_audit "+
+     "WHERE tenant_id=? AND subject_id=?",tenantA,r4CaseId))[0].n;
+   await page.getByRole("button",{
+     name:"Посмотреть предварительный состав моих данных",exact:true
+   }).click();
+   await page.getByText("Неполный предварительный состав",{exact:true}).waitFor();
+   await page.getByText(/Проверено владельцев: 2 из 9/).waitFor();
+   await expect(page.getByText(/Ещё не охвачены: crm\./)).toBeVisible();
+   const afterScopeReads=(await sql("SELECT COUNT(*) AS n FROM crm_audit "+
+     "WHERE tenant_id=? AND subject_id=?",tenantA,r4CaseId))[0].n;
+   assert.equal(afterScopeReads,beforeScopeReads,"Privacy preview must be read-only in real Chromium");
+   checkpoint("R4a own-scope preview: original 2/9 owner contributions, seven explicitly missing, D1 read-only");
+
    }else{
      checkpoint("R4a human-only positive verification reserved for signed human browser; service principal cannot verify");
    }

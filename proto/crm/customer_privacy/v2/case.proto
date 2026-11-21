@@ -5,8 +5,8 @@ package crm.customer_privacy.v2;
 import "crm/core/v2/operation.proto";
 
 // CRM connects intake and signed-human own-subject verification.
-// Staff/document verification, discovery, exports and erasure execution
-// remain NOT_CONNECTED until their original owner evidence is live.
+// Staff/document verification, complete nine-owner discovery, exports and
+// erasure execution remain NOT_CONNECTED until original owner evidence is live.
 enum PrivacyCaseKind {
   PRIVACY_CASE_KIND_UNSPECIFIED = 0;
   PRIVACY_CASE_KIND_ACCESS = 1;
@@ -88,6 +88,35 @@ message CancelPrivacyCaseResponse {
   crm.core.v2.MutationReceipt receipt = 2;
 }
 
+// Read-only current-state preview for the subject verified by signed Access.
+// NOT a frozen/complete discovery snapshot: only Parties and ContactPoints
+// have live owner contributions. Do not authorize export/erasure from this.
+message PreviewOwnPrivacyScopeRequest {
+  string case_id = 1;
+}
+message PrivacyScopePreviewResource {
+  string owner_module_id = 1;
+  string resource_type = 2;
+  string resource_id = 3;
+  int64 resource_version = 4;
+}
+message PrivacyScopePreviewOwner {
+  string owner_module_id = 1;
+  uint32 resource_count = 2;
+  bytes contribution_digest = 3;
+}
+message PreviewOwnPrivacyScopeResponse {
+  string case_id = 1;
+  int64 case_version = 2;
+  string canonical_party_id = 3;
+  bytes registry_digest = 4;
+  repeated PrivacyScopePreviewResource resources = 5;
+  repeated PrivacyScopePreviewOwner owners = 6;
+  repeated string missing_owner_module_ids = 7;
+  // FALSE until the original OwnerScopeRegistry has all nine contributions.
+  bool complete = 8;
+}
+
 message GetPrivacyCaseRequest {
   string case_id = 1;
   // Optional original mutation key for tenant-bound, read-only reconciliation.
@@ -120,6 +149,9 @@ service PrivacyCaseService {
   }
   rpc CancelPrivacyCase(CancelPrivacyCaseRequest) returns (CancelPrivacyCaseResponse) {
     option idempotency_level = IDEMPOTENT;
+  }
+  rpc PreviewOwnPrivacyScope(PreviewOwnPrivacyScopeRequest) returns (PreviewOwnPrivacyScopeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc GetPrivacyCase(GetPrivacyCaseRequest) returns (GetPrivacyCaseResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;

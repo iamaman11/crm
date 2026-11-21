@@ -1,13 +1,17 @@
 //! D1 operations for the original PrivacyCase domain. No HTTP/JSON business API.
 //! Verification and privacy execution remain outside this intake capability.
 use super::{access, bind, contact_points, now_nanos, parties};
-use crm_contact_points::{ContactPointKind, ContactPointStatus, VerificationState};
-use crm_customer_privacy::{
-    PrivacyCase, PrivacyCaseKind, PrivacyDomainError, decode_privacy_case_state,
-    encode_privacy_case_state,
+use crm_contact_points::{
+    ContactPointKind, ContactPointStatus, VerificationState,
+    CONTACT_POINT_STATE_RETENTION_POLICY_ID,
 };
-use crm_module_sdk::{ActorId, RecordId, SchemaVersion, TenantId};
-use crm_parties::PartyKind;
+use crm_customer_privacy::{
+    ContributionCompletenessProof, EvidenceClass, OwnerScopeContribution, OwnerScopeRegistry,
+    PrivacyCase, PrivacyCaseKind, PrivacyCaseStatus, PrivacyDomainError, ScopeResource,
+    decode_privacy_case_state, encode_privacy_case_state,
+};
+use crm_module_sdk::{ActorId, DataClass, RecordId, RetentionPolicyId, SchemaVersion, TenantId};
+use crm_parties::{PartyKind, PARTY_STATE_RETENTION_POLICY_ID};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -314,6 +318,173 @@ pub(super) async fn transition_typed(
         replayed: false,
     }))
 }
+// Read-only, **current** scope preview. The original privacy registry has NINE
+// owners. These two linked owners are genuine, terminally scanned contributors;
+// the seven others remain explicitly missing. Do not finalize ScopeSnapshot,
+// mutate a case or authorize an export from this preview.
+pub(super) struct ScopePreview {
+    pub(super) case: PrivacyCase,
+    pub(super) registry_digest: [u8; 32],
+    pub(super) contributions: Vec<OwnerScopeContribution>,
+    pub(super) missing_owner_module_ids: Vec<String>,
+}
+
+pub(super) async fn preview_own_scope(
+    db: &D1Database,
+    actor: &access::Actor,
+    case_id: &str,
+) -> Result<std::result::Result<ScopePreview, Failure>> {
+    let tenant = actor.tenant.as_str();
+    let Some(email) = contact_points::signed_human_email(&actor.identity) else {
+        return Ok(Err(fail("PRIVACY_SIGNED_HUMAN_EMAIL_REQUIRED", 403)));
+    };
+    let Some(case) = stored(db, tenant, case_id).await? else {
+        return Ok(Err(fail("NOT_FOUND", 404)));
+    };
+    if case.status() != PrivacyCaseStatus::SubjectVerified {
+        return Ok(Err(fail("PRIVACY_SUBJECT_NOT_READY_FOR_SCOPE", 412)));
+    }
+    let Some(subject) = case.subject_binding() else {
+        return Ok(Err(fail("PRIVACY_SUBJECT_UNVERIFIED", 412)));
+    };
+    // Only signed-human own-case reads, never shared-tenant admin reads. A
+    // previous verified email is not permission to inspect a different case.
+    let creator = bind(
+        db,
+        "SELECT created_by FROM crm_privacy_case_records WHERE tenant=? AND id=?",
+        &[JsValue::from_str(tenant), JsValue::from_str(case_id)],
+    )?
+    .first::<CreatorRow>(None)
+    .await?;
+    if creator.is_none_or(|row| row.created_by != actor.identity)
+        || subject.verified_by.as_str() != actor.identity
+    {
+        return Ok(Err(fail("PRIVACY_CASE_OWNERSHIP_REQUIRED", 403)));
+    }
+    // The active Worker has no canonical merge topology. Generation 1 is an
+    // unmerged Person; any future topology change must block this preview
+    // until the R5b generation can be checked via its original owner.
+    if subject.identity_resolution_generation != 1
+        || subject.canonical_party_id != subject.submitted_party_id
+    {
+        return Ok(Err(fail("PRIVACY_SCOPE_CANONICAL_GENERATION_REQUIRED", 412)));
+    }
+    let id = subject.canonical_party_id.as_str();
+    let Some(party) = parties::stored(db, tenant, id).await? else {
+        return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+    };
+    if party.kind() != PartyKind::Person {
+        return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+    }
+    // Indexed, owner-owned D1 list filters by tenant+party BEFORE LIMIT.
+    // Never silently truncate an incomplete subject inventory.
+    let (contacts, next) = contact_points::list_page_typed(db, tenant, "", 100, Some(id)).await?;
+    if next.is_some() {
+        return Ok(Err(fail("PRIVACY_SCOPE_CONTACT_BOUND_EXCEEDED", 412)));
+    }
+    let now = now_nanos();
+    let currently_owned = contacts.iter().any(|point| {
+        point.kind() == ContactPointKind::Email
+            && point.status() == ContactPointStatus::Active
+            && point.normalized_value() == email
+            && point.is_valid_at(now)
+            && matches!(
+                point.verification(),
+                VerificationState::Verified(evidence)
+                    if evidence.evidence_ref().starts_with("access-email:")
+            )
+    });
+    if !currently_owned {
+        return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+    }
+    let as_scope_error = |error: crm_customer_privacy::PrivacyScopeError| {
+        worker::Error::RustError(error.code().into())
+    };
+    let id_as_record = |raw: &str| {
+        RecordId::try_new(raw.to_owned())
+            .map_err(|_| worker::Error::RustError("PRIVACY_SCOPE_RECORD_INVALID".into()))
+    };
+    let retention = |raw: &str| {
+        RetentionPolicyId::try_new(raw.to_owned())
+            .map_err(|_| worker::Error::RustError("PRIVACY_SCOPE_RETENTION_INVALID".into()))
+    };
+    let version = |raw: i64| {
+        u64::try_from(raw)
+            .ok()
+            .filter(|value| *value > 0)
+            .ok_or_else(|| worker::Error::RustError("PRIVACY_SCOPE_VERSION_INVALID".into()))
+    };
+    let party_resources = vec![
+        ScopeResource::new(
+            "crm.parties.party",
+            id_as_record(id)?,
+            version(party.version())?,
+            DataClass::Personal,
+            EvidenceClass::RetainMinimizedEvidence,
+            retention(PARTY_STATE_RETENTION_POLICY_ID)?,
+        )
+        .map_err(as_scope_error)?,
+    ];
+    let mut contact_resources = Vec::with_capacity(contacts.len());
+    for point in &contacts {
+        contact_resources.push(
+            ScopeResource::new(
+                "crm.contact-points.contact-point",
+                id_as_record(point.contact_point_id().as_str())?,
+                version(point.version())?,
+                DataClass::Personal,
+                EvidenceClass::DestroyableSubjectData,
+                retention(CONTACT_POINT_STATE_RETENTION_POLICY_ID)?,
+            )
+            .map_err(as_scope_error)?,
+        );
+    }
+    let registry = OwnerScopeRegistry::canonical_v1().map_err(as_scope_error)?;
+    let tenant_id = TenantId::try_new(tenant.to_owned())
+        .map_err(|_| worker::Error::RustError("PRIVACY_SCOPE_TENANT_INVALID".into()))?;
+    let cursor_digest: [u8; 32] = Sha256::digest(b"").into();
+    let mut contributions = Vec::with_capacity(2);
+    let mut missing_owner_module_ids = Vec::new();
+    for contract in registry.contracts() {
+        let owner = contract.owner_module_id().as_str();
+        let resources = match owner {
+            "crm.parties" => Some(party_resources.clone()),
+            "crm.contact-points" => Some(contact_resources.clone()),
+            _ => None,
+        };
+        let Some(resources) = resources else {
+            missing_owner_module_ids.push(owner.to_owned());
+            continue;
+        };
+        let count = resources.len() as u64;
+        let proof = ContributionCompletenessProof::new(
+            true,
+            1,
+            count,
+            count,
+            cursor_digest,
+        )
+        .map_err(as_scope_error)?;
+        contributions.push(
+            OwnerScopeContribution::new(
+                contract.clone(),
+                tenant_id.clone(),
+                subject.canonical_party_id.clone(),
+                subject.identity_resolution_generation,
+                resources,
+                proof,
+            )
+            .map_err(as_scope_error)?,
+        );
+    }
+    Ok(Ok(ScopePreview {
+        case,
+        registry_digest: *registry.digest(),
+        contributions,
+        missing_owner_module_ids,
+    }))
+}
+
 pub(super) async fn list_page_typed(
     db: &D1Database,
     tenant: &str,

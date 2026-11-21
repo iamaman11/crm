@@ -445,6 +445,12 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
         },
     ),
     (
+        "/crm.customer_privacy.v2.PrivacyCaseService/PreviewOwnPrivacyScope",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
         "/crm.customer_privacy.v2.PrivacyCaseService/GetPrivacyCase",
         RpcPolicy {
             permission: RpcPermission::Read,

@@ -2913,6 +2913,11 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  })).body.code,"invalid_argument");
  assert.equal((await privacy("GetPrivacyCase",viewer,{caseId:ownCaseId}))
    .body.privacyCase?.subjectVerified,false);
+ // A current-state scope read is unavailable before verification.
+ assert.equal((await privacy("PreviewOwnPrivacyScope",admin,{caseId:ownCaseId}))
+   .body.code,"failed_precondition");
+ assert.equal((await privacy("PreviewOwnPrivacyScope",admin,{caseId:"bad/id"}))
+   .body.code,"invalid_argument");
  const ownVerified=await privacy("VerifyOwnPrivacyCaseSubject",admin,ownProof,{
    "x-crm-tenant":"tenant-b","x-crm-actor":"forged@example.test",
    "cf-access-authenticated-user-email":"forged@example.test"});
@@ -2929,12 +2934,52 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",admin,{
    ...ownProof,precondition:{expectedVersion:2n,idempotencyKey:"r4-privacy-verify-stale"}
  })).body.code,"failed_precondition");
+ // R4a phase 2: the exact original canonical registry contains nine owners.
+ // Only Parties and ContactPoints have current read-through contributions.
+ // No durable ScopeSnapshot can be finalized from these two.
+ const previewAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit "+
+   "WHERE tenant_id='tenant-a' AND subject_id='"+ownCaseId+"'"))[0].n;
+ assert.equal((await privacy("PreviewOwnPrivacyScope",viewer,{caseId:ownCaseId}))
+   .body.code,"permission_denied","Another human has no access to own-scope preview");
+ assert.equal((await privacy("PreviewOwnPrivacyScope",knownService,{caseId:ownCaseId}))
+   .body.code,"permission_denied","Service identity cannot impersonate the human");
+ assert.equal((await privacy("PreviewOwnPrivacyScope",tenantB,{caseId:ownCaseId}))
+   .body.code,"not_found","Tenant B must not see tenant A's scope");
+ const preview=await privacy("PreviewOwnPrivacyScope",admin,{caseId:ownCaseId},{
+   "x-crm-actor":"forged@example.test","x-crm-tenant":"tenant-b",
+   "cf-access-authenticated-user-email":"forged@example.test"});
+ assert.equal(preview.status,200,describeProtobuf(preview.body));
+ assert.equal(preview.body.complete,false,"Never claim a nine-owner discovery snapshot");
+ assert.equal(preview.body.caseId,ownCaseId);
+ assert.equal(preview.body.caseVersion,3n);
+ assert.equal(preview.body.canonicalPartyId,pagingPersonId);
+ assert.equal(preview.body.registryDigest?.length,32);
+ assert.deepEqual(preview.body.owners.map(o=>o.ownerModuleId),
+   ["crm.contact-points","crm.parties"],"Use the canonical owner registry order");
+ assert.equal(preview.body.owners.length,2);
+ assert.equal(preview.body.missingOwnerModuleIds.length,7);
+ assert.ok(preview.body.missingOwnerModuleIds.includes("crm.consents"));
+ assert.ok(preview.body.missingOwnerModuleIds.includes("crm.identity-resolution"));
+ assert.ok(preview.body.owners.every(o=>o.contributionDigest?.length===32));
+ assert.ok(preview.body.resources.some(x=>x.resourceId===pagingPersonId
+   && x.ownerModuleId==="crm.parties"&&x.resourceVersion===1n));
+ assert.ok(preview.body.resources.some(x=>x.resourceId===r4Contact
+   && x.ownerModuleId==="crm.contact-points"&&x.resourceVersion===2n));
+ assert.equal(preview.body.resources.length,
+   preview.body.owners.reduce((sum,owner)=>sum+owner.resourceCount,0));
+ assert.deepEqual((await privacy("PreviewOwnPrivacyScope",admin,{caseId:ownCaseId})).body,
+   preview.body,"Deterministic owner contributions when D1 state is unchanged");
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit "+
+   "WHERE tenant_id='tenant-a' AND subject_id='"+ownCaseId+"'"))[0].n,
+   previewAuditBefore,"Read-only preview must never create an audit write");
  const r4Cancelled=await privacy("CancelPrivacyCase",admin,{
    caseId:ownCaseId,
    precondition:{expectedVersion:3n,idempotencyKey:"r4-privacy-cancel-after-verify"}
  });
  assert.equal(r4Cancelled.status,200,describeProtobuf(r4Cancelled.body));
  assert.equal(r4Cancelled.body.privacyCase?.status,15);
+ assert.equal((await privacy("PreviewOwnPrivacyScope",admin,{caseId:ownCaseId}))
+   .body.code,"failed_precondition","Cancelled case cannot drive export preview");
  assert.equal(r4Cancelled.body.privacyCase?.subjectVerified,true,
    "Cancelling an authenticated case retains its original verified binding");
  assert.deepEqual((await sql("SELECT action,actor,request_id FROM crm_audit "+
@@ -2970,6 +3015,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  }finally{await sql("DROP TRIGGER fixture_r4_privacy_audit_fail");}
  assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",admin,failVerification)).status,200,
    "Retry after atomic rollback must commit exactly once");
+ console.log(JSON.stringify({event:"crm.native-r4a-privacy-scope-preview",result:"PASS",
+   scope_complete:false,covered_owners:2,missing_owners:7,
+   original_owner_registry:true,owner_digests:true,tenant_isolation:true,
+   unauthorized_denied:true,read_only_no_audit:true,not_export_eligible:true}));
  console.log(JSON.stringify({event:"crm.native-r4a-privacy-signed-subject",result:"PASS",
    owner:"crm.customer-privacy",trusted_contact:"access-email",human_self_only:true,
    subject_verified:true,service_denied:true,tenant_isolation:true,

@@ -5,7 +5,7 @@ import type {PrivacyCase} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
 import {PrivacyCaseKind,PrivacyCaseStatus} from "@ultimate-crm/client/cloudflare";
 import {enumValue} from "./enumFields";
-import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
+import {useQuery,useMutation,useReadAction,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 const kinds:Partial<Record<PrivacyCaseKind,string>>={
   [PrivacyCaseKind.UNSPECIFIED]:"Не указан",
   [PrivacyCaseKind.ACCESS]:"Доступ к данным",
@@ -38,6 +38,7 @@ export function PrivacyScreen() {
   const [createOpen,setCreateOpen]=useState(false);
   const [draftId,setDraftId]=useState(newId);
   const query=useQuery(useCallback((signal:AbortSignal)=>api.privacy.listPrivacyCases({page:{pageSize:25,pageToken:cursor}},{signal}),[cursor]));
+  const scope=useReadAction<Awaited<ReturnType<typeof api.privacy.previewOwnPrivacyScope>>>();
   const mutation=useMutation({
     storageKey:"crm.privacy.pending.v1",
     lookup:async({resourceId,key},signal)=>(await api.privacy.getPrivacyCase({
@@ -46,7 +47,7 @@ export function PrivacyScreen() {
     refresh:query.reload
   });
   return <>
-    <PageHeader title="Запросы о данных" description="Создание, подача и подтверждение собственного обращения по проверенному email. Экспорт и исполнение пока недоступны." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setCreateOpen(true);mutation.changed();}}>Новое обращение</Button>}/>
+    <PageHeader title="Запросы о данных" description="Создание и подтверждение собственного обращения. Доступен неполный предварительный состав данных; экспорт и исполнение пока недоступны." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setCreateOpen(true);mutation.changed();}}>Новое обращение</Button>}/>
     <QueryNotice query={query}/>
     {query.data?.cases.map(c=><Card key={c.caseId} title={kinds[c.kind]??"Запрос"}>
       <p>{statuses[c.status]??"Неизвестный статус"} · версия {c.version.toString()}</p>
@@ -78,6 +79,24 @@ export function PrivacyScreen() {
         </FormGrid>
         <Button type="submit" disabled={mutation.busy||mutation.pending}>Подтвердить свою личность</Button>
       </form>}
+      {selected.status===PrivacyCaseStatus.SUBJECT_VERIFIED&&<>
+        <Button variant="secondary" disabled={scope.busy} onClick={()=>void scope.run(
+          signal=>api.privacy.previewOwnPrivacyScope({caseId:selected.caseId},{signal})
+        )}>Посмотреть предварительный состав моих данных</Button>
+        {scope.error&&<p role="alert">{scope.error}</p>}
+        {scope.data?.caseId===selected.caseId&&scope.data.caseVersion===selected.version&&
+          <Card title="Неполный предварительный состав">
+            <p>Данные читаются из действующей CRM, но не сохраняются как окончательный Privacy scope.
+              До охвата всех владельцев экспорт и исполнение запрещены.</p>
+            <p>Проверено владельцев: {scope.data.owners.length} из {scope.data.owners.length+scope.data.missingOwnerModuleIds.length}.
+              Данных: {scope.data.resources.length}.</p>
+            <ul>{scope.data.resources.map(r=>
+              <li key={r.ownerModuleId+":"+r.resourceId}>
+                {r.resourceType}: {r.resourceId} · версия {r.resourceVersion.toString()}
+              </li>)}</ul>
+            <p>Ещё не охвачены: {scope.data.missingOwnerModuleIds.join(", ")}.</p>
+          </Card>}
+      </>}
       {selected.status===PrivacyCaseStatus.DRAFT&&<Button disabled={mutation.busy||mutation.pending} onClick={()=>void mutation.runIntent(
         ()=>prepareMutation(api.privacy.submitPrivacyCase,{
           caseId:selected.caseId,precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}

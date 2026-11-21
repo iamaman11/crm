@@ -132,6 +132,11 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.customer_privacy.v2.PrivacyCaseService.CancelPrivacyCase
+    - id: customer_privacy.scope.preview_own
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.customer_privacy.v2.PrivacyCaseService.PreviewOwnPrivacyScope
     - id: customer_privacy.case.get
       version: 2.0.0
       binding:

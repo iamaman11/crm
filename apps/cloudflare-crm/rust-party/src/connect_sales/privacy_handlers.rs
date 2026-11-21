@@ -253,6 +253,67 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
         })
     }
     #[worker::send]
+    async fn preview_own_privacy_scope(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, privacy_wire::PreviewOwnPrivacyScopeRequest>,
+    ) -> ServiceResult<privacy_wire::PreviewOwnPrivacyScopeResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.case_id)?;
+        let preview = customer_privacy::preview_own_scope(&self.d1()?, &self.actor, id.as_str())
+            .await
+            .map_err(|_| ConnectError::internal("Privacy scope D1 read failed"))?
+            .map_err(Self::failed)?;
+        let resources = preview
+            .contributions
+            .iter()
+            .flat_map(|owner| {
+                owner.resources().iter().map(move |resource| (owner, resource))
+            })
+            .map(|(owner, resource)| {
+                Ok(privacy_wire::PrivacyScopePreviewResource {
+                    owner_module_id: owner.contract().owner_module_id().as_str().to_owned(),
+                    resource_type: resource.resource_type().to_owned(),
+                    resource_id: resource.resource_id().as_str().to_owned(),
+                    resource_version: i64::try_from(resource.resource_version())
+                        .map_err(|_| ConnectError::internal("Privacy scope version overflow"))?,
+                    ..Default::default()
+                })
+            })
+            .collect::<std::result::Result<Vec<_>, ConnectError>>()?;
+        let owners = preview
+            .contributions
+            .iter()
+            .map(|owner| {
+                Ok(privacy_wire::PrivacyScopePreviewOwner {
+                    owner_module_id: owner.contract().owner_module_id().as_str().to_owned(),
+                    resource_count: u32::try_from(owner.resources().len())
+                        .map_err(|_| ConnectError::internal("Privacy scope owner size overflow"))?,
+                    contribution_digest: owner.digest().to_vec().into(),
+                    ..Default::default()
+                })
+            })
+            .collect::<std::result::Result<Vec<_>, ConnectError>>()?;
+        RpcResponse::ok(privacy_wire::PreviewOwnPrivacyScopeResponse {
+            case_id: preview.case.case_id().as_str().to_owned(),
+            case_version: i64::try_from(preview.case.version())
+                .map_err(|_| ConnectError::internal("Privacy scope case version overflow"))?,
+            canonical_party_id: preview
+                .case
+                .subject_binding()
+                .ok_or_else(|| ConnectError::internal("Privacy scope subject missing"))?
+                .canonical_party_id
+                .as_str()
+                .to_owned(),
+            registry_digest: preview.registry_digest.to_vec().into(),
+            resources,
+            owners,
+            missing_owner_module_ids: preview.missing_owner_module_ids,
+            complete: false,
+            ..Default::default()
+        })
+    }
+    #[worker::send]
     async fn get_privacy_case(
         &self,
         _ctx: RequestContext,
