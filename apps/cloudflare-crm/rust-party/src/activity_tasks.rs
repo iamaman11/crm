@@ -39,6 +39,8 @@ pub(super) struct CreateInput {
     pub(super) subject: String,
     pub(super) description: Option<String>,
     pub(super) account_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) deal_id: Option<String>,
     pub(super) priority: Priority,
     pub(super) due_at_unix_nanos: Option<i64>,
     pub(super) reminder_at_unix_nanos: Option<i64>,
@@ -188,6 +190,35 @@ pub(super) async fn create_typed(
     if !account_exists(db, tenant, account_id.as_str()).await? {
         return Ok(Err(fail("ACTIVITIES_ACCOUNT_NOT_FOUND", 422)));
     }
+    // A manual Deal task must refer to an authorized, existing Deal owned by
+    // the same Account. Use the original Sales owner read, not another SQL
+    // join or a client-supplied resource type. Keep the exact Deal link in
+    // the original Task domain's related_resources.
+    let mut related_resources = vec![ResourceRef {
+        resource_type: "crm.customer-accounts".into(),
+        resource_id: account_id.as_str().to_owned(),
+        version: None,
+    }];
+    if let Some(deal_id) = input.deal_id.as_deref() {
+        let deal_id = match RecordId::try_new(deal_id) {
+            Ok(value) => value,
+            Err(_) => return Ok(Err(fail("ACTIVITIES_DEAL_ID_INVALID", 422))),
+        };
+        let Some(deal) = super::sales_deals::load(db, tenant, deal_id.as_str()).await? else {
+            return Ok(Err(fail("ACTIVITIES_DEAL_NOT_FOUND", 422)));
+        };
+        if !deal.account().is_some_and(|reference| {
+            reference.resource_type == "crm.customer-accounts"
+                && reference.resource_id == account_id.as_str()
+        }) {
+            return Ok(Err(fail("ACTIVITIES_DEAL_ACCOUNT_MISMATCH", 422)));
+        }
+        related_resources.push(ResourceRef {
+            resource_type: "sales.deal".into(),
+            resource_id: deal_id.as_str().to_owned(),
+            version: None,
+        });
+    }
     let owner = match ActorId::try_new(actor) {
         Ok(x) => TaskOwner::Actor(x),
         Err(_) => return Ok(Err(fail("ACTIVITIES_OWNER_INVALID", 422))),
@@ -197,11 +228,7 @@ pub(super) async fn create_typed(
         subject: input.subject,
         description: input.description,
         owner,
-        related_resources: vec![ResourceRef {
-            resource_type: "crm.customer-accounts".into(),
-            resource_id: account_id.as_str().to_string(),
-            version: None,
-        }],
+        related_resources,
         priority: input.priority.into(),
         due_at_unix_nanos: input.due_at_unix_nanos,
         reminder_at_unix_nanos: input.reminder_at_unix_nanos,

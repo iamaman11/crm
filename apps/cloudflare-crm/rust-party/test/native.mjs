@@ -2644,6 +2644,56 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
     deal_link_from_original_task:true,scope_before_cursor:true,
     manual_account_task_excluded:true,other_deal_excluded:true,
     signed_tenant_filter:true,no_read_audit:true}));
+  // M1-08 B: a salesperson can add an ordinary manual Task to a specific
+  // existing Deal. The original Task owner validates the Sales owner and
+  // commits the normal receipt/audit atomically, never using a second writer.
+  const manualDealTaskId="task-manual-deal-"+randomUUID();
+  const manualDealInput={taskId:manualDealTaskId,accountId,dealId,
+    subject:"Manual deal follow up",priority:2,
+    precondition:{idempotencyKey:"task-manual-deal-create-001"}};
+  const manualBefore=await sql("SELECT "+
+    "(SELECT COUNT(*) FROM crm_activity_task_records) AS tasks,"+
+    "(SELECT COUNT(*) FROM crm_activity_task_receipts) AS receipts,"+
+    "(SELECT COUNT(*) FROM crm_audit) AS audits");
+  assert.equal((await taskV2("CreateTask",viewer,manualDealInput)).status,403);
+  assert.equal((await taskV2("CreateTask",tenantB,manualDealInput)).status,400);
+  assert.equal((await taskV2("CreateTask",admin,{...manualDealInput,dealId:"invalid/deal",
+    precondition:{idempotencyKey:"manual-deal-invalid-id"}})).status,400);
+  assert.equal((await taskV2("CreateTask",admin,{...manualDealInput,dealId:"missing-deal",
+    precondition:{idempotencyKey:"manual-deal-missing"}})).status,400);
+  assert.equal((await taskV2("CreateTask",admin,{...manualDealInput,accountId:accountNextId,
+    precondition:{idempotencyKey:"manual-deal-wrong-account"}})).status,400);
+  assert.deepEqual(await sql("SELECT "+
+    "(SELECT COUNT(*) FROM crm_activity_task_records) AS tasks,"+
+    "(SELECT COUNT(*) FROM crm_activity_task_receipts) AS receipts,"+
+    "(SELECT COUNT(*) FROM crm_audit) AS audits"),manualBefore,
+    "Rejected Deal links must never write task, receipt or audit");
+  const manualCreated=await taskV2("CreateTask",admin,manualDealInput);
+  assert.equal(manualCreated.status,200,describeProtobuf(manualCreated.body));
+  assert.equal(manualCreated.body.task?.relatedDealId,dealId);
+  assert.equal(manualCreated.body.task?.accountId,accountId);
+  assert.equal(manualCreated.body.receipt?.replayed,false);
+  const manualReplay=await taskV2("CreateTask",knownService,manualDealInput);
+  assert.equal(manualReplay.status,200,describeProtobuf(manualReplay.body));
+  assert.equal(manualReplay.body.receipt?.replayed,true);
+  assert.equal((await taskV2("CreateTask",admin,{...manualDealInput,dealId:dealLast})).status,409);
+  assert.equal((await taskV2("GetTask",viewer,{taskId:manualDealTaskId})).body.task?.relatedDealId,dealId);
+  const manualScoped=await collectPages(taskV2,"ListTasks","tasks",{dealId,accountId,page:{pageSize:1}});
+  assert.deepEqual(manualScoped.map(task=>task.taskId).sort(),[appliedTask,manualDealTaskId].sort());
+  assert.ok(!manualScoped.some(task=>task.taskId===taskMid),
+    "A general Account Task is not a Task of the Deal");
+  const manualAfter=await sql("SELECT "+
+    "(SELECT COUNT(*) FROM crm_activity_task_records) AS tasks,"+
+    "(SELECT COUNT(*) FROM crm_activity_task_receipts) AS receipts,"+
+    "(SELECT COUNT(*) FROM crm_audit) AS audits");
+  assert.equal(manualAfter[0].tasks,manualBefore[0].tasks+1);
+  assert.equal(manualAfter[0].receipts,manualBefore[0].receipts+1);
+  assert.equal(manualAfter[0].audits,manualBefore[0].audits+1);
+  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' "+
+    "AND subject_id='"+manualDealTaskId+"' AND action='activity_tasks.create'"))[0].n,1);
+  console.log(JSON.stringify({event:"crm.native-m1-manual-deal-task",result:"PASS",
+    original_task_owner:true,deal_and_account_crosscheck:true,negative_no_write:true,
+    idempotent_replay:true,exact_scoped_list:true}));
   const salesActorSnapshot=async()=>(await sql("SELECT "+
     "(SELECT state FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id='"+dealLast+"') AS deal,"+
     "(SELECT COUNT(*) FROM crm_activity_task_records) AS tasks,"+

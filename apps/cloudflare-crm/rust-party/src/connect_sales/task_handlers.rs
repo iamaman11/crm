@@ -39,6 +39,7 @@ impl task_wire::TaskService for TaskV2Service {
                 subject: input.subject,
                 description: input.description,
                 account_id: input.account_id,
+                deal_id: input.deal_id,
                 priority,
                 due_at_unix_nanos: due,
                 reminder_at_unix_nanos: reminder,

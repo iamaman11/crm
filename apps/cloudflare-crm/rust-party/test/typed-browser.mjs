@@ -1938,6 +1938,33 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      tenantSql+"'"))[0].n,beforeDealTaskNavigation,
      "Deal→Task→Deal browsing must never create an audit write");
    checkpoint("Deal→original linked Task→Deal uses exact typed owner filter and reload without audit");
+
+   // M1-08: a real, manually created Task belongs to this Deal rather than
+   // merely to its Account. The form fixes the tenant-bound Account context.
+   await page.getByRole("link",{name:"Задачи этой сделки",exact:true}).click();
+   await page.getByRole("heading",{name:"Задачи сделки",exact:true}).waitFor();
+   await page.getByRole("button",{name:"Новая задача сделки",exact:true}).click();
+   const dealTaskForm=page.getByRole("dialog");
+   await expect(dealTaskForm.getByLabel("Клиент",{exact:true})).toHaveCount(0);
+   await dealTaskForm.getByLabel("Тема задачи",{exact:true}).fill("Browser Manual Deal Task "+runId);
+   await mutation(dealTaskForm.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
+   const manualTaskId=await firstId("crm_activity_task_records","subject","Browser Manual Deal Task "+runId);
+   const manualState=(await sql("SELECT account_id,json_extract(state,'$.related_resources') AS refs FROM crm_activity_task_records WHERE tenant='"+
+     tenantSql+"' AND id='"+manualTaskId+"'"))[0];
+   assert.equal(manualState.account_id,accountId);
+   assert.ok(JSON.parse(manualState.refs).some(ref=>ref.resource_type==="sales.deal"&&ref.resource_id===dealId));
+   const manualTaskCard=page.getByRole("heading",{name:"Browser Manual Deal Task "+runId,exact:true});
+   await manualTaskCard.waitFor();
+   await reloadDocument();
+   await page.getByRole("heading",{name:"Задачи сделки",exact:true}).waitFor();
+   await manualTaskCard.waitFor();
+   assert.equal(await page.getByRole("link",{name:"Открыть карточку задачи",exact:true}).count(),2);
+   await page.locator('a[href="#tasks?accountId='+encodeURIComponent(accountId)+'&taskId='+encodeURIComponent(manualTaskId)+'"]').click();
+   await page.getByRole("heading",{name:"Карточка задачи",exact:true}).waitFor();
+   await page.getByRole("link",{name:"Открыть сделку",exact:true}).click();
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   checkpoint("Manual Deal Task→original Task owner→Deal survives reload, exactly one receipt and audit");
+
    await page.getByLabel("Тема",{exact:true}).selectOption("dark");
    assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
    await reloadDocument();

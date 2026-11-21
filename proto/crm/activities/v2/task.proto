@@ -32,7 +32,7 @@ message Task {
   google.protobuf.Timestamp completed_at = 9;
   int64 version = 10;
   // Only the existing Task owner projects a real sales.deal relationship.
-  // Empty for ordinary Account tasks; not writable by the browser.
+  // Empty for ordinary Account tasks. Only a validated Deal link at creation can set it.
   string related_deal_id = 11;
 }
 
@@ -45,6 +45,8 @@ message CreateTaskRequest {
   google.protobuf.Timestamp due_at = 6;
   google.protobuf.Timestamp reminder_at = 7;
   crm.core.v2.MutationPrecondition precondition = 8;
+  // Optional concrete Deal link, checked against the tenant and Account by the Task owner.
+  optional string deal_id = 9;
 }
 
 message CreateTaskResponse {

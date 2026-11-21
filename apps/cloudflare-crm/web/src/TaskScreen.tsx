@@ -57,17 +57,22 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
   const visibleTasks=focusedTaskId?(focused.data?[focused.data]:[]):query.data?.tasks??[];
   return <>
     <PageHeader title={focusedTaskId?"Карточка задачи":initialDealId?"Задачи сделки":"Задачи"}
-      description={initialDealId?"Задачи, созданные именно в ходе работы по этой сделке.":"Работа по клиентам и задачи, созданные из сделок."}
+      description={initialDealId?"Все задачи, связанные с конкретной сделкой.":"Работа по клиентам и задачи, созданные из сделок."}
       actions={focusedTaskId
         ?<a href={scopeHref("tasks",initialAccountId||focused.data?.accountId||"")}>К задачам клиента</a>
-        :initialDealId?<a href={dealHref(initialDealId)}>К сделке</a>
+        :initialDealId?<><a href={dealHref(initialDealId)}>К сделке</a>{" "}
+          <Button disabled={mutation.busy||mutation.pending||!dealContext.data} onClick={()=>{
+            const deal=dealContext.data;
+            if(!deal)return;
+            setSelected(undefined);setFormAccountId(deal.accountId);setEditorMode("create");mutation.changed();
+          }}>Новая задача сделки</Button></>
         :<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setFormAccountId(accountId);setEditorMode("create");mutation.changed();}}>Новая задача</Button>}/>
     {initialDealId&&!focusedTaskId&&<>
       <QueryNotice query={dealContext}/>
       {dealContext.data&&<p>Сделка: <strong>{dealContext.data.name}</strong> ·
         Клиент: <AccountName accountId={dealContext.data.accountId}/></p>}
-      <p>Связанные задачи возникают при переходах этапов. Для отдельной задачи клиента
-        перейдите к <a href={scopeHref("tasks",initialAccountId||dealContext.data?.accountId||"")}>задачам клиента</a>.</p>
+      <p>Задачи этой сделки могут быть созданы вручную или автоматически при смене этапа.
+        Общие задачи клиента — в <a href={scopeHref("tasks",initialAccountId||dealContext.data?.accountId||"")}>списке задач клиента</a>.</p>
     </>}
     {!focusedTaskId&&<>
     {!initialDealId&&<AccountPicker label="Фильтр по клиенту" value={accountId} required={false}
@@ -175,12 +180,17 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
       void mutation.runIntent(()=>{
         const dueAt=timestamp(field(data,"due")),reminderAt=timestamp(field(data,"reminder"));
         const description=field(data,"description");
-        return prepareMutation(api.tasks.createTask,{taskId:draftId,subject:field(data,"subject"),accountId:field(data,"accountId"),
+        const targetAccount=initialDealId?dealContext.data?.accountId:field(data,"accountId");
+        if(!targetAccount)throw Error("Выберите клиента задачи");
+        return prepareMutation(api.tasks.createTask,{taskId:draftId,subject:field(data,"subject"),accountId:targetAccount,
+          ...(initialDealId?{dealId:initialDealId}:{}),
           priority:enumValue(field(data,"priority"),[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи"),...(description?{description}:{}),
           ...(dueAt?{dueAt}:{}),...(reminderAt?{reminderAt}:{}),precondition:{idempotencyKey:mutation.key}},draftId);
       },async()=>{setEditorMode(null);setDraftId(newId());await query.reload();});
     }}><FormGrid>
-      <TextField label="Тема задачи" name="subject" required/><AccountPicker value={formAccountId} onSelect={setFormAccountId}/>
+      <TextField label="Тема задачи" name="subject" required/>{initialDealId
+        ?<p>Клиент сделки: <AccountName accountId={dealContext.data?.accountId||""}/></p>
+        :<AccountPicker value={formAccountId} onSelect={setFormAccountId}/>}
       <TextField label="Описание" name="description"/>
       <SelectField label="Приоритет" name="priority" defaultValue="2">
         <option value={TaskPriority.LOW}>Низкий</option><option value={TaskPriority.NORMAL}>Обычный</option><option value={TaskPriority.HIGH}>Высокий</option><option value={TaskPriority.URGENT}>Срочный</option>
