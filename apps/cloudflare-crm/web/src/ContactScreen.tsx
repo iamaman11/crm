@@ -90,7 +90,7 @@ export function ContactScreen({initialPartyId="",focusedContactPointId=""}:{
     </Card>)}
     {!focusedContactPointId&&!query.busy&&visible.length===0&&<p>Контактов пока нет.</p>}
     {!focusedContactPointId&&<Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
-      onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??""}/>}
+      onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>}
     <RecordPanel open={editorOpen} title={selected?"Изменить контакт":"Новый контакт"} onClose={()=>{if(mutation.busy||mutation.pending)return;setEditorOpen(false);setSelected(undefined);}}><form key={selected?selected.contactPointId+selected.version:draftId}
       onChange={mutation.changed} onSubmit={e=>{
         e.preventDefault();const data=new FormData(e.currentTarget);
