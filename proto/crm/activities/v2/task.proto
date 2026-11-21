@@ -31,6 +31,9 @@ message Task {
   google.protobuf.Timestamp reminder_at = 8;
   google.protobuf.Timestamp completed_at = 9;
   int64 version = 10;
+  // Only the existing Task owner projects a real sales.deal relationship.
+  // Empty for ordinary Account tasks; not writable by the browser.
+  string related_deal_id = 11;
 }
 
 message CreateTaskRequest {
@@ -110,6 +113,9 @@ message ListTasksRequest {
   optional string account_id = 3;
   // Absent means all priorities. UNSPECIFIED and unknown values are invalid.
   optional TaskPriority priority = 4;
+  // A concrete user journey: only Tasks linked to this Deal, NOT an
+  // arbitrary resource-type filtering surface from legacy query runtime.
+  optional string deal_id = 5;
 }
 
 message ListTasksResponse {

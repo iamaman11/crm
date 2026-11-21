@@ -8,10 +8,10 @@ import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} 
 import {AccountPicker,AccountName} from "./Pickers";
 import {TimeFields} from "./TimeFields";
 import {timePatch} from "./timePatch";
-import {scopeHref} from "./routes";
+import {scopeHref,taskHref,dealHref} from "./routes";
 
-export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
-  initialAccountId?:string;focusedTaskId?:string;
+export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId=""}:{
+  initialAccountId?:string;focusedTaskId?:string;initialDealId?:string;
 }) {
   const [cursor,setCursor]=useState("");
   const [status,setStatus]=useState("");
@@ -24,10 +24,11 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
   const query=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(focusedTaskId)return undefined; // Direct-link view never loads a full task list.
     return api.tasks.listTasks({page:{pageSize:25,pageToken:cursor},
+      ...(initialDealId?{dealId:initialDealId}:{}),
       ...(accountId?{accountId}:{}),
       ...(status?{status:enumValue(status,[TaskStatus.OPEN,TaskStatus.COMPLETED],"Статус задачи")}:{}),
       ...(priority?{priority:enumValue(priority,[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи")}:{})},{signal});
-  },[cursor,status,priority,accountId,focusedTaskId]));
+  },[cursor,status,priority,accountId,focusedTaskId,initialDealId]));
   const focused=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!focusedTaskId)return undefined;
     const task=(await api.tasks.getTask({taskId:focusedTaskId},{signal})).task;
@@ -36,6 +37,16 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
       throw Error("Задача не принадлежит выбранному клиенту");
     return task;
   },[focusedTaskId,initialAccountId]));
+  // A Deal-scoped view verifies the real tenant-bound Deal and its Account
+  // before giving the user a named relationship context.
+  const dealContext=useQuery(useCallback(async(signal:AbortSignal)=>{
+    if(!initialDealId)return undefined;
+    const deal=(await api.deals.getDeal({dealId:initialDealId},{signal})).deal;
+    if(!deal)throw Error("Сделка не найдена");
+    if(initialAccountId&&deal.accountId!==initialAccountId)
+      throw Error("Сделка не принадлежит выбранному клиенту");
+    return deal;
+  },[initialDealId,initialAccountId]));
   const mutation=useMutation({
     storageKey:"crm.task.pending.v1",
     lookup:async({resourceId,key},signal)=>(await api.tasks.getTask({
@@ -45,14 +56,22 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
   });
   const visibleTasks=focusedTaskId?(focused.data?[focused.data]:[]):query.data?.tasks??[];
   return <>
-    <PageHeader title={focusedTaskId?"Карточка задачи":"Задачи"}
-      description="Работа по клиентам и задачи, созданные из сделок."
+    <PageHeader title={focusedTaskId?"Карточка задачи":initialDealId?"Задачи сделки":"Задачи"}
+      description={initialDealId?"Задачи, созданные именно в ходе работы по этой сделке.":"Работа по клиентам и задачи, созданные из сделок."}
       actions={focusedTaskId
         ?<a href={scopeHref("tasks",initialAccountId||focused.data?.accountId||"")}>К задачам клиента</a>
+        :initialDealId?<a href={dealHref(initialDealId)}>К сделке</a>
         :<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setFormAccountId(accountId);setEditorMode("create");mutation.changed();}}>Новая задача</Button>}/>
+    {initialDealId&&!focusedTaskId&&<>
+      <QueryNotice query={dealContext}/>
+      {dealContext.data&&<p>Сделка: <strong>{dealContext.data.name}</strong> ·
+        Клиент: <AccountName accountId={dealContext.data.accountId}/></p>}
+      <p>Связанные задачи возникают при переходах этапов. Для отдельной задачи клиента
+        перейдите к <a href={scopeHref("tasks",initialAccountId||dealContext.data?.accountId||"")}>задачам клиента</a>.</p>
+    </>}
     {!focusedTaskId&&<>
-    <AccountPicker label="Фильтр по клиенту" value={accountId} required={false}
-      onSelect={id=>{setAccountId(id);setCursor("");}}/>
+    {!initialDealId&&<AccountPicker label="Фильтр по клиенту" value={accountId} required={false}
+      onSelect={id=>{setAccountId(id);setCursor("");}}/>}
     <SelectField label="Статус задачи" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>
       <option value="">Все</option><option value={TaskStatus.OPEN}>Открытые</option><option value={TaskStatus.COMPLETED}>Выполненные</option>
     </SelectField>
@@ -65,6 +84,8 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
       <p>{t.description}</p><p>Клиент: <AccountName accountId={t.accountId}/></p>
       <p>Срок: {dateText(t.dueAt)} · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?"Открыта":"Неизвестный статус"}</p>
       <p>Напоминание: {dateText(t.reminderAt)}</p>
+      {t.relatedDealId&&<p>Связанная сделка: <a href={dealHref(t.relatedDealId)}>Открыть сделку</a></p>}
+      {!focusedTaskId&&<p><a href={taskHref(t.taskId,t.accountId)}>Открыть карточку задачи</a></p>}
       <Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={async()=>{
         try {
           setSelected((await api.tasks.getTask({taskId:t.taskId})).task);
@@ -88,7 +109,8 @@ export function TaskScreen({initialAccountId="",focusedTaskId=""}:{
         },t.taskId),async()=>{await query.reload();await focused.reload();})}>Выполнить задачу</Button>}
     </Card>)}
     {!focusedTaskId&&<>
-      {!query.busy&&query.data?.tasks.length===0&&<p>Задач пока нет.</p>}
+      {!query.busy&&query.data?.tasks.length===0&&<p>{initialDealId
+        ?"По этой сделке пока нет связанных задач.":"Задач пока нет."}</p>}
       <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
         onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
     </>}

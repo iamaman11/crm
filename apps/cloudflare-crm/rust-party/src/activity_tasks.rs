@@ -476,6 +476,7 @@ pub(super) async fn list_page_typed(
     status: Option<TaskStatus>,
     account_id: Option<&str>,
     priority: Option<TaskPriority>,
+    deal_id: Option<&str>,
 ) -> Result<(Vec<(Task, String)>, Option<String>)> {
     let mut query = String::from(
         "SELECT id,state,account_id FROM crm_activity_task_records WHERE tenant=? AND id>?",
@@ -501,6 +502,15 @@ pub(super) async fn list_page_typed(
             TaskPriority::High => "high",
             TaskPriority::Urgent => "urgent",
         }));
+    }
+    if let Some(deal_id) = deal_id {
+        // The original typed Task aggregate owns its related_resources.
+        // Filter BEFORE LIMIT/page-token, matching only actual sales.deal IDs
+        // in the same tenant. No generic resource syntax, no new registry.
+        query.push_str(
+            " AND EXISTS (SELECT 1 FROM json_each(crm_activity_task_records.state,'$.related_resources') AS related WHERE json_extract(related.value,'$.resource_type')='sales.deal' AND json_extract(related.value,'$.resource_id')=?)",
+        );
+        params.push(JsValue::from_str(deal_id));
     }
     query.push_str(" ORDER BY id LIMIT ?");
     params.push(JsValue::from_f64((size + 1) as f64));

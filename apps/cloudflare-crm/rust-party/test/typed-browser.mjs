@@ -1905,6 +1905,37 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    }
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,navigationAuditBefore);
    checkpoint("Customer360 links to server-filtered full lists, reload retains scope, no writes");
+   // Product-first M1-08: a Deal can share an Account with several other
+   // Deals and manual Tasks. Its page must expose its OWN linked Tasks,
+   // not silently show all Account tasks or a generic resource-type picker.
+   const dealTaskId=(await sql("SELECT task_id FROM crm_sales_link_delivery_records WHERE tenant='"+
+     tenantSql+"' AND deal_id='"+dealId+"' AND disposition='applied' LIMIT 1"))[0]?.task_id;
+   assert.ok(dealTaskId,"one original stage-linked Task must exist");
+   const beforeDealTaskNavigation=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"'"))[0].n;
+   await page.goto(base+"/#sales/"+encodeURIComponent(dealId));
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   await page.getByRole("link",{name:"Задачи этой сделки",exact:true}).click();
+   await page.getByRole("heading",{name:"Задачи сделки",exact:true}).waitFor();
+   await page.getByText("Browser Deal "+runId,{exact:true}).waitFor();
+   assert.equal(new URL(page.url()).hash,"#tasks?accountId="+encodeURIComponent(accountId)+
+     "&dealId="+encodeURIComponent(dealId));
+   assert.equal(await page.getByRole("link",{name:"Открыть карточку задачи",exact:true}).count(),1,
+     "The Deal shows only its own linked Task, not all Account Tasks");
+   const scopedTaskLink=page.getByRole("link",{name:"Открыть карточку задачи",exact:true});
+   assert.equal(new URL(await scopedTaskLink.getAttribute("href"),base).hash,
+     "#tasks?accountId="+encodeURIComponent(accountId)+"&taskId="+encodeURIComponent(dealTaskId));
+   await reloadDocument();
+   await page.getByRole("heading",{name:"Задачи сделки",exact:true}).waitFor();
+   assert.equal(await page.getByRole("link",{name:"Открыть карточку задачи",exact:true}).count(),1);
+   await page.getByRole("link",{name:"Открыть карточку задачи",exact:true}).click();
+   await page.getByRole("heading",{name:"Карточка задачи",exact:true}).waitFor();
+   await page.getByRole("link",{name:"Открыть сделку",exact:true}).click();
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"'"))[0].n,beforeDealTaskNavigation,
+     "Deal→Task→Deal browsing must never create an audit write");
+   checkpoint("Deal→original linked Task→Deal uses exact typed owner filter and reload without audit");
    await page.getByLabel("Тема",{exact:true}).selectOption("dark");
    assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
    await reloadDocument();

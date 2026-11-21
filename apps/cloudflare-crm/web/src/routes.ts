@@ -8,7 +8,7 @@ export type Route =
   | {kind:"account";accountId:string}
   | {kind:"account-create";partyId:string}
   | {kind:"deal";dealId:string}
-  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string}
+  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string}
   | {kind:"not-found";path:string};
 
 const sections:readonly Section[]=["parties","contacts","relationships","sales","tasks","consents","review","privacy","enrichment","data"];
@@ -55,12 +55,14 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
   }
   if(isSection(path)){
     const ids=path==="tasks"?params.getAll("taskId"):[];
-    const taskId=ids[0]??"";
-    if(ids.length>1||taskId.length>128||taskId.includes("/")||
-       taskId.includes("\\")||taskId==="."||taskId==="..")
+    const deals=path==="tasks"?params.getAll("dealId"):[];
+    const taskId=ids[0]??"",dealId=deals[0]??"";
+    if(ids.length>1||deals.length>1||(taskId&&dealId)||
+       [taskId,dealId].some(id=>id.length>128||id.includes("/")||
+         id.includes("\\")||id==="."||id===".."||id.includes("%")))
       return {kind:"not-found",path:source};
     return {kind:"section",screen:path,partyId:params.get("partyId")??"",
-      accountId:params.get("accountId")??"",...(taskId?{taskId}:{})};
+      accountId:params.get("accountId")??"",...(taskId?{taskId}:{}),...(dealId?{dealId}:{})};
   }
   return {kind:"not-found",path:source};
 }
@@ -86,6 +88,10 @@ export function scopeHref(screen:"contacts"|"relationships"|"sales"|"tasks",id:s
 
 export function taskHref(taskId:string,accountId:string):string {
   return "#tasks?"+new URLSearchParams({accountId,taskId}).toString();
+}
+
+export function dealTasksHref(dealId:string,accountId:string):string {
+  return "#tasks?"+new URLSearchParams({accountId,dealId}).toString();
 }
 
 export function dealHref(dealId:string):string {

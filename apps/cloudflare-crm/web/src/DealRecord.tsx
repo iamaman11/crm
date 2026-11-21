@@ -9,7 +9,7 @@ import {useQuery,QueryNotice} from "./hooks";
 import {moneyText,percent} from "./money";
 import type {CurrencyCatalog} from "./money";
 import {inputDate} from "./calendarInput";
-import {accountHref,scopeHref,taskHref} from "./routes";
+import {accountHref,scopeHref,taskHref,dealTasksHref} from "./routes";
 
 export function dealStatusText(status:DealStatus):string {
   switch(status){
@@ -146,7 +146,8 @@ export function DealDetails({dealId,currencies,onEdit,onClose,onReopen}:{dealId:
       {deal.closeReasonCode&&<p>Причина закрытия: {deal.closeReasonCode}</p>}
       <p>Создана: {dateText(deal.createdAt)} · обновлена: {dateText(deal.updatedAt)}</p>
       {deal.closedAt&&<p>Закрыта: {dateText(deal.closedAt)}</p>}
-      <p><a href={scopeHref("tasks",deal.accountId)}>Задачи клиента</a></p>
+      <p><a href={dealTasksHref(deal.dealId,deal.accountId)}>Задачи этой сделки</a>
+        {" · "}<a href={scopeHref("tasks",deal.accountId)}>Все задачи клиента</a></p>
       {deal.status===DealStatus.OPEN?<div>
         {onEdit&&<Button variant="secondary" onClick={onEdit}>Редактировать сделку</Button>}
         {" "}{onClose&&<Button variant="secondary" onClick={onClose}>Завершить сделку</Button>}

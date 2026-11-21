@@ -312,6 +312,10 @@ impl task_wire::TaskService for TaskV2Service {
             crm_module_sdk::RecordId::try_new(id.to_owned())
                 .map_err(|_| ConnectError::invalid_argument("invalid Account filter"))?;
         }
+        let deal = req.deal_id;
+        if let Some(id) = deal {
+            Self::valid_id(id)?;
+        }
         let (list, next) = activity_tasks::list_page_typed(
             &self.d1()?,
             &self.tenant,
@@ -320,6 +324,7 @@ impl task_wire::TaskService for TaskV2Service {
             status,
             account,
             priority,
+            deal,
         )
         .await
         .map_err(|_| ConnectError::internal("Task D1 list failed"))?;

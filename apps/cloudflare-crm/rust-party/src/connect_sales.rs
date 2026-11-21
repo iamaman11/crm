@@ -633,6 +633,12 @@ impl TaskV2Service {
                 .map(ContactPointV2Service::timestamp)
                 .into(),
             version: task.version(),
+            related_deal_id: task
+                .related_resources()
+                .iter()
+                .find(|relation| relation.resource_type == "sales.deal")
+                .map(|relation| relation.resource_id.clone())
+                .unwrap_or_default(),
             ..Default::default()
         })
     }

@@ -2609,6 +2609,41 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
     assert.deepEqual(actual,expected,
       "One AdvanceStage request must commit attributed Deal + Task + delivery audit together");
   }
+  // M1-08 product check: not a legacy generic typed-resource filter.
+  // Customers can have multiple Deals and manual Account tasks. The concrete
+  // Deal page should show ONLY Tasks whose original domain state refers to
+  // this specific sales.deal, with exact tenant+Account/page filtering.
+  const appliedTask=linked.find(row=>row.disposition==="applied")?.task_id;
+  assert.ok(appliedTask,"linked Sales→Task must retain the Task ID");
+  const linkedTaskRead=await taskV2("GetTask",viewer,{taskId:appliedTask});
+  assert.equal(linkedTaskRead.status,200,describeProtobuf(linkedTaskRead.body));
+  assert.equal(linkedTaskRead.body.task?.relatedDealId,dealId);
+  assert.equal(linkedTaskRead.body.task?.accountId,accountId);
+  assert.equal((await taskV2("GetTask",viewer,{taskId:taskMid})).body.task?.relatedDealId,"",
+    "ordinary Account task must not claim a Deal relation");
+  const scopedDeals=await collectPages(taskV2,"ListTasks","tasks",{dealId,accountId,page:{pageSize:1}});
+  assert.deepEqual(scopedDeals.map(task=>task.taskId),[appliedTask],
+    "Deal task view must not mix in manual Account tasks or another Deal");
+  assert.equal(scopedDeals[0].relatedDealId,dealId);
+  assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{dealId,accountId,status:2}))
+    .map(task=>task.taskId),[],"status filter applies before pagination");
+  assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{dealId,accountId:accountNextId}))
+    .map(task=>task.taskId),[],"Account/Deal cross-scope is an empty intersection");
+  assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{dealId:dealLast}))
+    .map(task=>task.taskId),[],"unlinked Deal cannot see another Deal's Tasks");
+  assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{dealId:"nonexistent-valid-deal"}))
+    .map(task=>task.taskId),[],"unknown Deal does not broaden the result");
+  assert.equal((await taskV2("ListTasks",tenantB,{dealId,page:{pageSize:1}})).body.tasks.length,0);
+  assert.equal((await taskV2("ListTasks",admin,{dealId:"invalid/deal"})).status,400);
+  assert.equal((await taskV2("ListTasks",null,{dealId})).status,401);
+  const scopedAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
+  await taskV2("ListTasks",viewer,{dealId});
+  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,scopedAudit,
+    "Deal task navigation must be read-only");
+  console.log(JSON.stringify({event:"crm.native-m1-deal-task-navigation",result:"PASS",
+    deal_link_from_original_task:true,scope_before_cursor:true,
+    manual_account_task_excluded:true,other_deal_excluded:true,
+    signed_tenant_filter:true,no_read_audit:true}));
   const salesActorSnapshot=async()=>(await sql("SELECT "+
     "(SELECT state FROM crm_sales_deal_records WHERE tenant='tenant-a' AND id='"+dealLast+"') AS deal,"+
     "(SELECT COUNT(*) FROM crm_activity_task_records) AS tasks,"+
