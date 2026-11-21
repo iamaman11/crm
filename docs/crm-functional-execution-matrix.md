@@ -58,6 +58,12 @@
 - **M2-05 = DECIDED C для MVP**: отдельную Lead сущность **не** создавать; квалификация запроса сейчас выражается через original Deal, Party/Account, pipeline stages `lead→qualified`, immutable events, linked Task. Исторические просмотренные `crm-sales-capability-adapter::plan_create/update/advance` относятся к Deal и не доказывают обязательный `Lead` CRUD. Если когда-либо появится конкретный user-flow и потребность в независимом Lead lifecycle — решение пересмотреть как B с исходной source проверкой. C не удаляет legacy code и не означает автоматический Gate B PASS для несуществующей операции.
 - Следующим новым кодовым срезом выбирать **только доказанный B-пробел**, не продолжать ради заполнения чисел очереди. Остальная per-operation parity и M1 human-only/visibility остаётся OPEN.
 
+## M2 Deal name-search checkpoint (22.11.2026): один принятый product-first B-срез
+
+- **M2-01 / M2-03 — B→ACCEPTED только «найти сделку по названию/ID»**, не полный M2: исторический `crm-sales-activities-query-adapter/src/executor.rs::execute_list_deals/collect_deals` имел tenant+pipeline/status/owner и cursor, **не поиск по названию**. Единственный typed `crm.sales.v2.ListDeals` теперь принимает `search` (generated Protobuf → existing Rust `wire_search`/owner parameterized D1 `instr(name,?) OR instr(id,?)` before limit/cursor → existing React SearchField). Account/Status применяются вместе с поиском; results across pipelines отдельны от Kanban/forecast; `#sales?search=` выдерживает Back/reload. Нет второго query runtime, RPC, Worker, D1 migration, генератора, индекса или SQLx.
+- **Точный опубликованный код** [`d94248fd145ea15c04d8ba6db5f15dc02a5c3450`](https://github.com/iamaman11/crm/commit/d94248fd145ea15c04d8ba6db5f15dc02a5c3450), [штатный Gate A #44954180291](https://github.com/iamaman11/crm/actions/runs/44954180291) **PASS** (45+14 steps, signed native workerd, real Chromium, exact artifact deploy/live E2E+traces). **Отдельный Gate B PASS**: native LIVE Browser MCP on same SHA + read-only D1: 2 matching deals for `SM1B`, 1 exact; status intersects, Back/reload and empty/reset, total Kanban unaffected. D1 14 Deal / 56 receipts / 182 audit rows unchanged. [Полный исходный A/B/C, отказавшие проверки и Gate B evidence #7069992607](https://github.com/iamaman11/crm/issues/352#issuecomment-7069992607). **Admin service session ≠ human-only proof**.
+- **Что дальше:** не перечёркивать принятый B-срез и не дублировать серверный поиск; M2-02/03/04 целиком остаются пооперационными A-кандидатами/OPEN, M2-05 уже C для MVP. M1 human-only verify/field-record visibility и вся семантическая 93-crate parity не приняты по этому Gate.
+
 ## Упорядоченная матрица бизнес-функций
 
 | ID | Очередь | Функция | Уже имеется | Историческая реализация (вскрыть до работы) |
@@ -260,7 +266,7 @@
 
 ### M2-01
 
-**Бизнес-функция:** Sales pipeline, стадии, Kanban. **Очередь:** M2. **Что уже есть:** ACTIVE/VERIFY. **Статус пользовательской приёмки:** **B-срез имён стадий в полной/встроенной Deal ACCEPTED Gate A+B на `c7eddfb5`; M2-01 whole OPEN** (см. M2 checkpoint и #7069532306).
+**Бизнес-функция:** Sales pipeline, стадии, Kanban. **Очередь:** M2. **Что уже есть:** ACTIVE/VERIFY. **Статус пользовательской приёмки:** **B-срез имён стадий в Deal ACCEPTED `c7eddfb5`; B-срез поиска по имени/ID ACCEPTED `d94248fd` Gate A+B; M2-01 whole OPEN** (см. #7069532306, #7069992607).
 
 **Legacy — прочитать перед разработкой:** [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/lib.rs); [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-capability-adapter/src/planner.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -288,7 +294,7 @@
 
 ### M2-03
 
-**Бизнес-функция:** Сохраненные views и фильтры Sales. **Очередь:** M2. **Что уже есть:** ACTIVE/VERIFY. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Сохраненные views и фильтры Sales. **Очередь:** M2. **Что уже есть:** ACTIVE/VERIFY. **Статус пользовательской приёмки:** **B-срез поиска Deal по названию/ID ACCEPTED Gate A+B `d94248fd`; весь M2-03 OPEN**, сохранённые views не объявлены полностью принятыми (см. #7069992607).
 
 **Legacy — прочитать перед разработкой:** [src/query_catalog.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/query_catalog.rs); [src/definitions.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-query-adapter/src/definitions.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
