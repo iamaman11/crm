@@ -6,6 +6,11 @@
 > инструкции по PostgreSQL, RLS, packet/PR и дополнительным runtime
 > относятся только к историческому product-plane, не к активной CRM.
 > Не восстанавливать старые генераторы, CI или инфраструктуру.
+> **Обязательное функциональное начало каждого следующего чата:**
+> [docs/crm-functional-execution-matrix.md](docs/crm-functional-execution-matrix.md)
+> — 39 упорядоченных функций, исторический Rust source/test → действующий owner/UI → acceptance.
+> **До написания любой функции открыть её исторический код и отрицательные тесты**, сверить
+> с текущей реализацией, записать A/B/C/D и proof в #352. Не повторять уже действующие RPC.
 
 
 This file is the default operating guide for humans and coding agents working in this repository.
