@@ -1112,12 +1112,14 @@ impl sale_wire::DealService for SalesV2Service {
         let (list, next) = sales_deals::list_page_typed(
             &self.d1()?,
             &self.tenant,
-            after,
-            size as usize,
-            pipeline,
-            status,
-            account,
-            wire_search(req.search)?,
+            sales_deals::DealListQuery {
+                after,
+                limit: size as usize,
+                pipeline,
+                status,
+                account,
+                search: wire_search(req.search)?,
+            },
         )
         .await
         .map_err(|_| {

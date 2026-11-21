@@ -1606,16 +1606,29 @@ pub(super) async fn list_stage_page(
     Ok((deals, next, total, currency_totals))
 }
 
+// One typed owner-local list query, parallel to StageListQuery above.
+// Grouping the filters keeps the Rust API readable as Sales grows.
+pub(super) struct DealListQuery<'a> {
+    pub after: &'a str,
+    pub limit: usize,
+    pub pipeline: Option<&'a str>,
+    pub status: Option<DealStatus>,
+    pub account: Option<&'a str>,
+    pub search: &'a str,
+}
 pub(super) async fn list_page_typed(
     db: &D1Database,
     tenant: &str,
-    after: &str,
-    size: usize,
-    pipeline: Option<&str>,
-    status: Option<DealStatus>,
-    account: Option<&str>,
-    search: &str,
+    query: DealListQuery<'_>,
 ) -> Result<(Vec<Deal>, Option<String>)> {
+    let DealListQuery {
+        after,
+        limit,
+        pipeline,
+        status,
+        account,
+        search,
+    } = query;
     let mut args = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
     let mut sql =
         String::from("SELECT id,state FROM crm_sales_deal_records WHERE tenant=? AND id>?");
@@ -1644,10 +1657,10 @@ pub(super) async fn list_page_typed(
         args.push(JsValue::from_str(search));
     }
     sql.push_str(" ORDER BY id LIMIT ?");
-    args.push(JsValue::from_f64((size + 1) as f64));
+    args.push(JsValue::from_f64((limit + 1) as f64));
     let mut rows = bind(db, &sql, &args)?.all().await?.results::<PagedRow>()?;
-    let more = rows.len() > size;
-    rows.truncate(size);
+    let more = rows.len() > limit;
+    rows.truncate(limit);
     let next = if more {
         rows.last().map(|x| x.id.clone())
     } else {
