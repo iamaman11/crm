@@ -100,7 +100,7 @@ function stageLabel(pipeline:SalesPipeline|undefined,stageId:string):string {
 // One original, owner-authorized event projection for inline/full Deal pages.
 // No reconstruction of history from mutable client-side snapshots.
 export function DealHistory({dealId,accountId,pipeline}:{
-  dealId:string;accountId:string;pipeline?:SalesPipeline;
+  dealId:string;accountId:string;pipeline:SalesPipeline|undefined;
 }){
   const [cursor,setCursor]=useState("");
   const history=useQuery(useCallback(
