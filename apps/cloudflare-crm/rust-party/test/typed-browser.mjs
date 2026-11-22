@@ -18,11 +18,15 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  assert.ok(adminIdentity,"Expected signed actor is required for browser audit assertions");
  const startedAt=Date.now();
  const requests=[],writes=[],recovery=[],ownerRecovery=[],syntheticPrivateProbes=[],pageErrors=[],steps=[];
+ let lastCheckpointAt=startedAt;
  const checkpoint=label=>{
+   const now=Date.now();
    steps.push(label);
-   // Timing-only release evidence: no identifiers, secrets, payloads or D1 values.
-   if(features.includes("native"))
-     console.log(JSON.stringify({event:"crm.browser-checkpoint",label,elapsed_ms:Date.now()-startedAt}));
+   // Same evidence for local workerd and live Chromium: timings and scenario
+   // labels only, never credentials, fixture payloads, tenant IDs or D1 data.
+   console.log(JSON.stringify({event:"crm.browser-checkpoint",label,
+     span_ms:now-lastCheckpointAt,elapsed_ms:now-startedAt}));
+   lastCheckpointAt=now;
  };
  const headerReads=[];
  let restoreViewer=async()=>{};

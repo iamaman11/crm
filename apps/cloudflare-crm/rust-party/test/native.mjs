@@ -4068,16 +4068,49 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.deepEqual((await salesV2("ListDeals",viewer,{accountId:"missing-account"})).body.deals,[]);
  assert.equal((await salesV2("ListDeals",viewer,{accountId:"bad/id"})).status,400);
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,salesAuditBeforeFilter);
- // Search is part of the existing List RPCs. Put matching rows after an entire
- // unfiltered page; literal punctuation and Unicode must not become SQL patterns.
- for(let index=0;index<101;index++){
-   const suffix=String(index).padStart(3,"0");
-   assert.equal((await v3("CreateParty",admin,{partyId:"zz-search-padding-"+suffix,kind:1,
-     displayName:"Search padding "+suffix,precondition:{idempotencyKey:"search-party-padding-"+suffix}})).status,200);
-   assert.equal((await accountV2("CreateAccount",admin,{accountId:"zz-search-padding-"+suffix,
-     name:"Search padding "+suffix,primaryPartyId:id,
-     precondition:{idempotencyKey:"search-account-padding-"+suffix}})).status,200);
+ // Search/pagination needs >100 nonmatching rows, not 202 repeated RPC
+ // creation tests. Create one canonical Party+Account through the original
+ // typed Rust owners, then copy only their persisted state in isolated D1.
+ // No parallel business codec, schema or extra test framework is introduced.
+ const searchFixtureStarted=Date.now();
+ const paddingParty="zz-search-padding-000",paddingAccount=paddingParty;
+ assert.equal((await v3("CreateParty",admin,{partyId:paddingParty,kind:1,
+   displayName:"Search padding 000",
+   precondition:{idempotencyKey:"search-party-padding-000"}})).status,200);
+ assert.equal((await accountV2("CreateAccount",admin,{accountId:paddingAccount,
+   name:"Search padding 000",primaryPartyId:id,
+   precondition:{idempotencyKey:"search-account-padding-000"}})).status,200);
+ // D1 triggers retain their normal receipt/audit ownership. Only the synthetic
+ // search fixture uses cloning; all tested business mutations still use typed RPC.
+ for(const [table,idField,labelField,receiptPrefix,requestPrefix] of [
+   ["crm_party_records","party_id","display_name","search-party-padding","8001"],
+   ["crm_account_records","account_id","name","search-account-padding","8002"]
+ ]){
+   const account=table==="crm_account_records";
+   const source=account?"source.primary_party,":"";
+   const columns=account?"tenant,id,primary_party,state,version,idem_key,idem_digest,request_id,actor,search_name":
+     "tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name";
+   await sql("WITH RECURSIVE pad(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM pad WHERE n<100) "+
+     "INSERT INTO "+table+"("+columns+") "+
+     "SELECT source.tenant,'zz-search-padding-'||printf('%03d',pad.n),"+source+
+     "json_set(source.state,'$."+idField+"','zz-search-padding-'||printf('%03d',pad.n),"+
+       "'$."+labelField+"','Search padding '||printf('%03d',pad.n)),source.version,"+
+     "'"+receiptPrefix+"-'||printf('%03d',pad.n),'fixture-only',"+
+     "printf('00000000-0000-4000-"+requestPrefix+"-%012d',pad.n),source.actor,"+
+     "'Search padding '||printf('%03d',pad.n) "+
+     "FROM pad CROSS JOIN "+table+" AS source "+
+     "WHERE source.tenant='tenant-a' AND source.id=?",
+     account?paddingAccount:paddingParty);
+   const [proof]=await sql("SELECT COUNT(*) AS total,COUNT(DISTINCT id) AS distinct_ids,"+
+     "SUM(CASE WHEN json_valid(state)=1 AND "+
+     "json_extract(state,'$."+idField+"')=id AND search_name=json_extract(state,'$."+labelField+"') "+
+     "THEN 0 ELSE 1 END) AS bad "+
+     "FROM "+table+" WHERE tenant='tenant-a' AND id LIKE 'zz-search-padding-%'");
+   assert.deepEqual(proof,{total:101,distinct_ids:101,bad:0},
+     "Search padding must preserve owner-produced typed state in "+table);
  }
+ console.log(JSON.stringify({event:"crm.native-search-padding-fixture",result:"PASS",
+   typed_owner_creates:2,cloned_fixture_rows:200,elapsed_ms:Date.now()-searchFixtureStarted}));
  const searchIds=["zzz-search-first","zzz-search-gap","zzz-search-last"];
  for(const [index,target] of searchIds.entries()){
    const name=index===1?"Nonmatching gap":"Поиск 100%_ O'Neil "+index;

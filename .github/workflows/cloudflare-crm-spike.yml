@@ -309,7 +309,8 @@ jobs:
       - name: Compile native Rust Access gate using isolated RSA test keys
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --dev --locked --features native-ci
-      - name: Install and launch Chromium after native compilation
+      # Playwright's official headless shell is the only browser needed here.
+      - name: Install and launch headless Chromium after native compilation
         working-directory: apps/cloudflare-crm
         shell: bash
         run: |
@@ -318,7 +319,7 @@ jobs:
           # unconditionally call apt and depend on an external Ubuntu mirror.
           # Verify by launching the SAME pinned Playwright Chromium headlessly.
           for attempt in 1 2; do
-            if npx playwright install chromium; then
+            if npx playwright install chromium --only-shell; then
               break
             fi
             if [ "$attempt" -eq 2 ]; then
@@ -516,7 +517,8 @@ jobs:
         run: |
           npm install --global pnpm@12.21.0
           pnpm install --frozen-lockfile
-      - name: Install Chromium for browser test
+      # The deploy smoke also uses chromium.launch({headless:true}).
+      - name: Install headless Chromium for browser smoke
         working-directory: apps/cloudflare-crm
         shell: bash
         run: |
@@ -525,7 +527,7 @@ jobs:
           # unconditionally call apt and depend on an external Ubuntu mirror.
           # Verify by launching the SAME pinned Playwright Chromium headlessly.
           for attempt in 1 2; do
-            if npx playwright install chromium; then
+            if npx playwright install chromium --only-shell; then
               break
             fi
             if [ "$attempt" -eq 2 ]; then

@@ -170,6 +170,9 @@ jobs:
         self.assertIn("node apps/cloudflare-crm/e2e/live.mjs", workflow)
         self.assertIn("node --check apps/cloudflare-crm/e2e/published-smoke.mjs", workflow)
         self.assertIn("node apps/cloudflare-crm/scripts/deploy.mjs verify-data", workflow)
+        self.assertEqual(workflow.count("npx playwright install chromium --only-shell"), 2,
+                         "Both jobs must use the official headless-only Chromium install")
+
 
     def test_release_smoke_does_not_repeat_full_browser_regression(self) -> None:
         root = Path(__file__).resolve().parents[1] / "apps/cloudflare-crm"
