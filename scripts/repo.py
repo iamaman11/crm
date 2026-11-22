@@ -160,7 +160,7 @@ def command_packet_check(args: argparse.Namespace) -> None:
             changed = write_generated_documents(ROOT)
             for path in changed:
                 print(f"WROTE {path}", flush=True)
-        report = packet_check(ROOT, args.base)
+        report = packet_check(ROOT, args.base, before=args.before)
     except (NavigationError, RuntimeError) as error:
         raise CommandError(str(error)) from error
     if args.json:
@@ -362,6 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="validate the active packet, changed paths, affected closure and navigation freshness",
     )
     packet_check_parser.add_argument("--base", default="origin/main")
+    packet_check_parser.add_argument("--before", help="Previous commit of this push")
     packet_check_parser.add_argument("--json", action="store_true")
     packet_check_parser.add_argument(
         "--write-generated",

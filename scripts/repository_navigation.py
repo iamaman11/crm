@@ -534,12 +534,20 @@ def _changed_categories(paths: Iterable[str]) -> dict[str, list[str]]:
     return dict(sorted(result.items()))
 
 
-def packet_check(root: Path, base_ref: str) -> dict[str, Any]:
+def packet_check(root: Path, base_ref: str, *, before: str | None = None) -> dict[str, Any]:
     root = root.resolve()
     packet = load_packet(root)
     base_ref = _text(base_ref, "base_ref")
     base_sha = _git(root, "rev-parse", base_ref)
-    affected = build_report(root, base_ref)
+    if before:
+        if before == "0" * 40:
+            paths = _git(root, "ls-tree", "-r", "--name-only", "HEAD").splitlines()
+        else:
+            paths = _git(root, "diff", "--no-renames", "--name-only", before, "HEAD").splitlines()
+        base_sha = before
+        affected = build_report(root, base_ref, paths=paths)
+    else:
+        affected = build_report(root, base_ref)
     # Markdown is non-normative and maintained in Issues. Even mixed code/docs
     # pushes must be checked exclusively against machine-readable inputs.
     paths = [path for path in (affected.get("changed_paths") or [])

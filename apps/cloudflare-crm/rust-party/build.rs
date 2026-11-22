@@ -29,7 +29,10 @@ fn active_protos(proto_root: &Path) -> Vec<PathBuf> {
                     .extension()
                     .is_some_and(|extension| extension == "proto")
                 {
-                    files.push(path);
+                    // Descriptor names use Protobuf's forward-slash namespace on every host.
+                    files.push(PathBuf::from(
+                        path.to_str().expect("UTF-8 proto path").replace('\\', "/"),
+                    ));
                 }
             }
         }

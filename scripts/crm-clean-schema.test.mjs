@@ -29,7 +29,7 @@ function db(withPartyActor=true){
  if(withPartyActor)db.exec(partyAudit);
  return db;
 }
-test("new D1 starts with only original Rust owner tables and no pilot records",()=>{
+test("historical 0004 cutover snapshot preserves owner tables and clears pilot records",()=>{
  const database=db();
  try{
   const names=database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'crm_%' ORDER BY name").all().map(x=>x.name);

@@ -7,6 +7,10 @@ pub(super) struct Customer360V2Service {
     pub(super) env: Arc<Env>,
     pub(super) tenant: String,
 }
+
+impl OwnedService for Customer360V2Service {
+    const OWNER: &'static str = crm_customer_360_query_adapter::MODULE_ID;
+}
 impl overview_wire::Customer360Service for Customer360V2Service {
     #[worker::send]
     async fn get_account_overview(

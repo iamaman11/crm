@@ -836,7 +836,8 @@ async fn dispatch(
     if path == "/api/_ci/original-domain-check" && method == Method::Get {
         let code = original_domain_probe::check();
         let receipt_read = sales_deals::probe_receipt_read(&db, tenant, request_id).await;
-        let router = connect_sales::router(env, actor, request_id);
+        let mut owners = connect_sales::MethodOwners::new();
+        let router = connect_sales::router(env, actor, request_id, Some(&mut owners));
         let mut methods: Vec<String> = router
             .methods()
             .map(|path| format!("/{}", path.trim_start_matches('/')))
@@ -854,7 +855,7 @@ async fn dispatch(
             json!({
                 "result": if checked { "PASS" } else { "FAIL" },
                 "code": code,
-                "rpc": {"registered_methods": methods, "policies": RPC_POLICIES,
+                "rpc": {"registered_methods": methods, "method_owners": owners, "policies": RPC_POLICIES,
                     "compiled_policy_check": policy_ok},
                 "scope": "in-memory original owner domain contracts",
                 "owners_executed": ["crm.customer-accounts", "crm.contact-points",

@@ -49,7 +49,8 @@
       "id": "d1_migrations",
       "owner": "data-platform",
       "path_patterns": [
-        "apps/cloudflare-crm/migrations/**"
+        "apps/cloudflare-crm/migrations/**",
+        "scripts/crm-clean-schema.test.mjs"
       ],
       "required_workflows": [
         "Cloudflare CRM Spike CI"

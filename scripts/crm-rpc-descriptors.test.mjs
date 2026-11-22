@@ -13,12 +13,14 @@ test("canonical RPC owner bindings derive wire types from Buf descriptors",()=>{
 const path="/crm.parties.v3.PartyService/GetParty";
 function fixture(){
  const report=structuredClone(actual);
+ const bindings=validateBindings(report,available);
  report.runtime_evidence="EXECUTED";
  report.active_rpc_paths=targetMethods(available);
  report.runtime={source_sha:report.source_sha,result:"PASS",features:["native-ci"],
   unauthenticated_denials:[...report.active_rpc_paths],
   viewer_denials:report.active_rpc_paths.filter(p=>available.get(p).idempotency===MethodOptions_IdempotencyLevel.IDEMPOTENT),
   successful_rpc_calls:[...report.active_rpc_paths],rpc:{compiled_policy_check:true,
+   method_owners:Object.fromEntries(report.active_rpc_paths.map(p=>[p,bindings.get(p).module_id])),
    registered_methods:[...report.active_rpc_paths],
    policies:report.active_rpc_paths.map(p=>[p,{permission:available.get(p).idempotency===MethodOptions_IdempotencyLevel.IDEMPOTENT?"Write":"Read"}])}};
  return report;
@@ -56,6 +58,11 @@ reject("missing exact owner binding fails",r=>{
  const m=r.modules.find(m=>m.module_id==="crm.parties");
  m.rpc_bindings=m.rpc_bindings.filter(b=>b.path!==path);
 },/absent from canonical module.yaml binding/);
+reject("swapping Party and Account bindings between linked modules fails",r=>{
+ const party=r.modules.find(m=>m.module_id==="crm.parties").rpc_bindings.find(b=>b.path===path);
+ const account=r.modules.find(m=>m.module_id==="crm.customer-accounts").rpc_bindings.find(b=>b.path.endsWith("/GetAccount")&&b.path.includes(".v2."));
+ [party.path,account.path]=[account.path,party.path];
+},/registered by crm\..+, declared by crm\./);
 reject("unlinked owner fails",r=>{
  r.modules.find(m=>m.module_id==="crm.parties").linked=false;
 },/owner is not linked/);

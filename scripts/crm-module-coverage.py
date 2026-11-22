@@ -55,6 +55,10 @@ def build_report(root: Path = ROOT, *, runtime: dict | None = None) -> dict:
     if not entries:
         raise ValueError("no canonical module manifests")
     errors.extend(validate_manifest_set(entries))
+    module_dirs = {path.parent for path, _ in entries}
+    for manifest in (ROOT / "modules").glob("*/Cargo.toml"):
+        if manifest.parent not in module_dirs:
+            errors.append(f"{manifest}: missing sibling module.yaml")
     known = {x["module_id"] for _, x in entries}
     for path, manifest in entries:
         for dep in manifest["dependencies"]["required"]:
@@ -109,6 +113,8 @@ def build_report(root: Path = ROOT, *, runtime: dict | None = None) -> dict:
         if manifest["runtime"]["kind"] != "in_process" or not isinstance(entry, str):
             raise ValueError(f"Cloudflare module must have in-process entrypoint: {module_id}")
         crate = in_repo(ROOT / entry)
+        if crate.is_relative_to(ROOT / "modules") and crate != path.parent:
+            raise ValueError(f"{module_id}: domain entrypoint must be its own module directory")
         crate_file = crate / "Cargo.toml"
         if not crate_file.is_file():
             raise ValueError(f"module {module_id} has missing in-process crate: {entry}")

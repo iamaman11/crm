@@ -228,6 +228,10 @@ struct PartyV3Service {
     actor: access::Actor,
     request_id: String,
 }
+
+impl OwnedService for PartyV3Service {
+    const OWNER: &'static str = crm_parties::MODULE_ID;
+}
 impl PartyV3Service {
     fn d1(&self) -> std::result::Result<D1Database, ConnectError> {
         self.env
@@ -282,6 +286,10 @@ struct AccountV2Service {
     env: Arc<Env>,
     actor: access::Actor,
     request_id: String,
+}
+
+impl OwnedService for AccountV2Service {
+    const OWNER: &'static str = crm_customer_accounts::MODULE_ID;
 }
 impl AccountV2Service {
     fn d1(&self) -> std::result::Result<D1Database, ConnectError> {
@@ -360,6 +368,10 @@ struct ContactPointV2Service {
     env: Arc<Env>,
     actor: access::Actor,
     request_id: String,
+}
+
+impl OwnedService for ContactPointV2Service {
+    const OWNER: &'static str = crm_contact_points::MODULE_ID;
 }
 impl ContactPointV2Service {
     fn d1(&self) -> std::result::Result<D1Database, ConnectError> {
@@ -475,6 +487,10 @@ struct RelationshipV2Service {
     actor: String,
     request_id: String,
 }
+
+impl OwnedService for RelationshipV2Service {
+    const OWNER: &'static str = crm_party_relationships::MODULE_ID;
+}
 impl RelationshipV2Service {
     fn d1(&self) -> std::result::Result<D1Database, ConnectError> {
         self.env
@@ -579,6 +595,10 @@ struct TaskV2Service {
     actor: String,
     request_id: String,
 }
+
+impl OwnedService for TaskV2Service {
+    const OWNER: &'static str = crm_activities::MODULE_ID;
+}
 impl TaskV2Service {
     async fn persisted_account(&self, id: &str) -> std::result::Result<String, ConnectError> {
         activity_tasks::account_id(&self.d1()?, &self.tenant, id)
@@ -667,6 +687,10 @@ struct DataQualityV2Service {
     tenant: String,
 }
 
+impl OwnedService for DataQualityV2Service {
+    const OWNER: &'static str = crm_data_quality::MODULE_ID;
+}
+
 // Original crm-identity-resolution: candidate reads and reversible canonical
 // merge lineage. Only this domain owner validates topology and persisted state.
 struct IdentityV2Service {
@@ -675,12 +699,20 @@ struct IdentityV2Service {
     request_id: String,
 }
 
+impl OwnedService for IdentityV2Service {
+    const OWNER: &'static str = crm_identity_resolution::MODULE_ID;
+}
+
 // The original crm-consents domain owns communication decisions and operator
 // suppression. This generated Connect boundary never accepts evidence/GRANT.
 struct ConsentV2Service {
     env: Arc<Env>,
     actor: access::Actor,
     request_id: String,
+}
+
+impl OwnedService for ConsentV2Service {
+    const OWNER: &'static str = crm_consents::MODULE_ID;
 }
 impl ConsentV2Service {
     fn d1(&self) -> std::result::Result<D1Database, ConnectError> {
@@ -776,6 +808,10 @@ struct SalesV2Service {
     tenant: String,
     actor: String,
     request_id: String,
+}
+
+impl OwnedService for SalesV2Service {
+    const OWNER: &'static str = crm_sales::MODULE_ID;
 }
 impl SalesV2Service {
     fn d1(&self) -> std::result::Result<D1Database, ConnectError> {
@@ -1028,77 +1064,113 @@ impl SalesV2Service {
 
 // One constructor serves dispatch and the existing signed workerd diagnostic.
 // Router::methods() inspects the registered compiled handlers.
-pub(super) fn router(env: Env, verified: &access::Actor, request_id: &str) -> ConnectRouter {
+trait OwnedService {
+    const OWNER: &'static str;
+}
+
+pub(super) type MethodOwners = std::collections::BTreeMap<String, &'static str>;
+
+struct ServiceRegistry<'a> {
+    router: ConnectRouter,
+    owners: Option<&'a mut MethodOwners>,
+}
+
+impl ServiceRegistry<'_> {
+    fn add_service<S: OwnedService, Marker>(mut self, service: Arc<S>) -> Self
+    where
+        Arc<S>: connectrpc::ServiceRegister<Marker>,
+    {
+        let routes = ConnectRouter::new().add_service(service);
+        if let Some(owners) = self.owners.as_mut() {
+            for path in routes.methods() {
+                owners.insert(format!("/{}", path.trim_start_matches('/')), S::OWNER);
+            }
+        }
+        self.router = self.router.merge(routes);
+        self
+    }
+}
+
+pub(super) fn router(
+    env: Env,
+    verified: &access::Actor,
+    request_id: &str,
+    owners: Option<&mut MethodOwners>,
+) -> ConnectRouter {
     let env = Arc::new(env);
     let tenant = &verified.tenant;
     let actor = &verified.identity;
-    ConnectRouter::new()
-        .add_service(Arc::new(PartyV3Service {
-            env: Arc::clone(&env),
-            actor: verified.clone(),
-            request_id: request_id.to_owned(),
-        }))
-        .add_service(Arc::new(AccountV2Service {
-            env: Arc::clone(&env),
-            actor: verified.clone(),
-            request_id: request_id.to_owned(),
-        }))
-        .add_service(Arc::new(ContactPointV2Service {
-            env: Arc::clone(&env),
-            actor: verified.clone(),
-            request_id: request_id.to_owned(),
-        }))
-        .add_service(Arc::new(RelationshipV2Service {
-            env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
-            actor: actor.to_owned(),
-            request_id: request_id.to_owned(),
-        }))
-        .add_service(Arc::new(TaskV2Service {
-            env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
-            actor: actor.to_owned(),
-            request_id: request_id.to_owned(),
-        }))
-        .add_service(Arc::new(DataQualityV2Service {
-            env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
-        }))
-        .add_service(Arc::new(IdentityV2Service {
-            env: Arc::clone(&env),
-            actor: verified.clone(),
-            request_id: request_id.to_owned(),
-        }))
-        .add_service(Arc::new(ConsentV2Service {
-            env: Arc::clone(&env),
-            actor: verified.clone(),
-            request_id: request_id.to_owned(),
-        }))
-        .add_service(Arc::new(Customer360V2Service {
-            env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
-        }))
-        .add_service(Arc::new(PartyCsvV2Service {
-            env: Arc::clone(&env),
-            actor: verified.clone(),
-            request_id: request_id.to_owned(),
-        }))
-        .add_service(Arc::new(EnrichmentV2Service {
-            env: Arc::clone(&env),
-            actor: verified.clone(),
-            request_id: request_id.to_owned(),
-        }))
-        .add_service(Arc::new(PrivacyV2Service {
-            env: Arc::clone(&env),
-            actor: verified.clone(),
-            request_id: request_id.to_owned(),
-        }))
-        .add_service(Arc::new(SalesV2Service {
-            env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
-            actor: actor.to_owned(),
-            request_id: request_id.to_owned(),
-        }))
+    ServiceRegistry {
+        router: ConnectRouter::new(),
+        owners,
+    }
+    .add_service(Arc::new(PartyV3Service {
+        env: Arc::clone(&env),
+        actor: verified.clone(),
+        request_id: request_id.to_owned(),
+    }))
+    .add_service(Arc::new(AccountV2Service {
+        env: Arc::clone(&env),
+        actor: verified.clone(),
+        request_id: request_id.to_owned(),
+    }))
+    .add_service(Arc::new(ContactPointV2Service {
+        env: Arc::clone(&env),
+        actor: verified.clone(),
+        request_id: request_id.to_owned(),
+    }))
+    .add_service(Arc::new(RelationshipV2Service {
+        env: Arc::clone(&env),
+        tenant: tenant.to_owned(),
+        actor: actor.to_owned(),
+        request_id: request_id.to_owned(),
+    }))
+    .add_service(Arc::new(TaskV2Service {
+        env: Arc::clone(&env),
+        tenant: tenant.to_owned(),
+        actor: actor.to_owned(),
+        request_id: request_id.to_owned(),
+    }))
+    .add_service(Arc::new(DataQualityV2Service {
+        env: Arc::clone(&env),
+        tenant: tenant.to_owned(),
+    }))
+    .add_service(Arc::new(IdentityV2Service {
+        env: Arc::clone(&env),
+        actor: verified.clone(),
+        request_id: request_id.to_owned(),
+    }))
+    .add_service(Arc::new(ConsentV2Service {
+        env: Arc::clone(&env),
+        actor: verified.clone(),
+        request_id: request_id.to_owned(),
+    }))
+    .add_service(Arc::new(Customer360V2Service {
+        env: Arc::clone(&env),
+        tenant: tenant.to_owned(),
+    }))
+    .add_service(Arc::new(PartyCsvV2Service {
+        env: Arc::clone(&env),
+        actor: verified.clone(),
+        request_id: request_id.to_owned(),
+    }))
+    .add_service(Arc::new(EnrichmentV2Service {
+        env: Arc::clone(&env),
+        actor: verified.clone(),
+        request_id: request_id.to_owned(),
+    }))
+    .add_service(Arc::new(PrivacyV2Service {
+        env: Arc::clone(&env),
+        actor: verified.clone(),
+        request_id: request_id.to_owned(),
+    }))
+    .add_service(Arc::new(SalesV2Service {
+        env: Arc::clone(&env),
+        tenant: tenant.to_owned(),
+        actor: actor.to_owned(),
+        request_id: request_id.to_owned(),
+    }))
+    .router
 }
 
 pub(super) async fn route(
@@ -1108,7 +1180,7 @@ pub(super) async fn route(
     request_id: &str,
 ) -> Result<Response> {
     // Preserve the typed Connect code for the existing request log; never log payloads.
-    let service = router(env, actor, request_id)
+    let service = router(env, actor, request_id, None)
         .into_axum_service()
         .with_interceptor(connectrpc::unary_interceptor(|req, next| {
             Box::pin(async move {

@@ -8,6 +8,10 @@ pub(super) struct EnrichmentV2Service {
     pub(super) actor: access::Actor,
     pub(super) request_id: String,
 }
+
+impl OwnedService for EnrichmentV2Service {
+    const OWNER: &'static str = crm_customer_enrichment::MODULE_ID;
+}
 impl EnrichmentV2Service {
     fn d1(&self) -> std::result::Result<D1Database, ConnectError> {
         self.env

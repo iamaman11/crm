@@ -70,6 +70,10 @@ export function validateRuntime(report,available,bound){
   if(!available.has(path))fail("registered RPC absent from Buf descriptor "+path);
   if(!bound.has(path))fail("registered RPC absent from canonical module.yaml binding "+path);
   if(!bound.get(path).linked)fail("RPC owner is not linked into Worker "+path);
+  const declaredOwner=bound.get(path).module_id;
+  const compiledOwner=rpc.method_owners?.[path];
+  if(compiledOwner!==declaredOwner)
+   fail(path+" registered by "+compiledOwner+", declared by "+declaredOwner);
   const rule=policies.get(path);
   if(!rule||!["Read","AdminRead","Write","SelfWrite"].includes(rule.permission))fail("missing or invalid compiled policy "+path);
   const definition=available.get(path);
