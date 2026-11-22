@@ -3626,16 +3626,34 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const changedBytes=new TextEncoder().encode(new TextDecoder().decode(csvBytes).replace("CSV One","CSV Changed"));
  assert.equal((await csv("ApplyPartyImport",admin,{...applyInput,csv:changedBytes,
    expectedSha256Hex:createHash("sha256").update(changedBytes).digest("hex")})).body.code,"aborted");
+ // Structural file failures remain fail-closed Connect errors.
  for(const invalid of [
    new Uint8Array(),new Uint8Array(16385),new TextEncoder().encode("invalid,csv"),
    new TextEncoder().encode("party_id,kind,display_name,resource_version\r\n"),
-   new TextEncoder().encode("party_id,kind,display_name,resource_version\r\nx,invalid,Name,1\r\n"),
-   new TextEncoder().encode("party_id,kind,display_name,resource_version\r\nx,person,Name,0\r\n"),
-   new TextEncoder().encode("party_id,kind,display_name,resource_version\r\nx,person,One,1\r\nx,person,Two,1\r\n"),
    new TextEncoder().encode("party_id,kind,display_name,resource_version\r\n"+
      Array.from({length:21},(_,i)=>"source-"+i+",person,Name "+i+",1\r\n").join(""))
  ]){
-   assert.equal((await csv("PreviewPartyImport",admin,{csv:invalid})).body.code,"invalid_argument");
+   assert.equal((await csv("PreviewPartyImport",admin,{csv:invalid})).body.code,
+     "invalid_argument","Malformed header/size/count must never return a commit-ready preview");
+ }
+ // Row semantic errors become typed, NON-COMMITTABLE previews, not generic 400s.
+ const semanticCases=[
+   ["x,invalid,Name,1",[[1,"kind","IMPORT_KIND_INVALID"]]],
+   ["x,person,Name,0",[[1,"resource_version","IMPORT_SOURCE_VERSION_INVALID"]]],
+   ["x,person,One,1\r\nx,person,Two,1",[[2,"party_id","IMPORT_DUPLICATE_OR_EMPTY_SOURCE_ID"]]]
+ ];
+ for(const [rows,expectedIssues] of semanticCases){
+   const invalid=new TextEncoder().encode(
+     "party_id,kind,display_name,resource_version\r\n"+rows+"\r\n");
+   const response=await csv("PreviewPartyImport",admin,{csv:invalid});
+   assert.equal(response.status,200,describeProtobuf(response.body));
+   assert.deepEqual(response.body.targetPartyIds,[]);
+   assert.deepEqual(response.body.rowIssues.map(x=>[x.rowPosition,x.field,x.code]),
+     expectedIssues);
+   assert.equal((await csv("ApplyPartyImport",admin,{
+     csv:invalid,expectedSha256Hex:response.body.csvSha256Hex,
+     precondition:{idempotencyKey:"csv-reject-semantic-"+createHash("sha256").update(invalid).digest("hex").slice(0,16)}
+   })).status,400,"A typed invalid preview must still be rejected by the owner");
  }
  // The same original CSV parser reports ALL row/field diagnostics, not the
  // first unrelated error code. No target or audit can be created by preview.
