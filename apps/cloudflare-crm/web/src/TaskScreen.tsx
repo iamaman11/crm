@@ -12,8 +12,8 @@ import {scopeHref,taskHref,dealHref,taskSearchHref} from "./routes";
 import {SearchField} from "./SearchField";
 import {navigateTo} from "./navigation";
 
-export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="",initialSearch=""}:{
-  initialAccountId?:string;focusedTaskId?:string;initialDealId?:string;initialSearch?:string;
+export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="",initialSearch="",initialOverdue=false}:{
+  initialAccountId?:string;focusedTaskId?:string;initialDealId?:string;initialSearch?:string;initialOverdue?:boolean;
 }) {
   const [cursor,setCursor]=useState("");
   const [status,setStatus]=useState("");
@@ -26,11 +26,12 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
   const query=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(focusedTaskId)return undefined; // Direct-link view never loads a full task list.
     return api.tasks.listTasks({page:{pageSize:25,pageToken:cursor},search:initialSearch.trim(),
+      overdueOnly:initialOverdue,
       ...(initialDealId?{dealId:initialDealId}:{}),
       ...(accountId?{accountId}:{}),
-      ...(status?{status:enumValue(status,[TaskStatus.OPEN,TaskStatus.COMPLETED],"Статус задачи")}:{}),
+      ...(status&&!initialOverdue?{status:enumValue(status,[TaskStatus.OPEN,TaskStatus.COMPLETED],"Статус задачи")}:{}),
       ...(priority?{priority:enumValue(priority,[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи")}:{})},{signal});
-  },[cursor,status,priority,accountId,focusedTaskId,initialDealId,initialSearch]));
+  },[cursor,status,priority,accountId,focusedTaskId,initialDealId,initialSearch,initialOverdue]));
   const focused=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!focusedTaskId)return undefined;
     const task=(await api.tasks.getTask({taskId:focusedTaskId},{signal})).task;
@@ -79,12 +80,16 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
     {!focusedTaskId&&<>
     <SearchField label="Поиск задач" submitted={initialSearch}
       searchLabel="Найти задачу по названию" resetLabel="Сбросить поиск задач"
-      onSearch={value=>{if(navigateTo(taskSearchHref(accountId,value,initialDealId)))setCursor("");}}/>
+      onSearch={value=>{if(navigateTo(taskSearchHref(accountId,value,initialDealId,initialOverdue)))setCursor("");}}/>
+    <p><label><input type="checkbox" aria-label="Только просроченные задачи" checked={initialOverdue}
+      onChange={event=>{if(navigateTo(taskSearchHref(accountId,initialSearch,initialDealId,event.target.checked)))setCursor("");}}/>
+      {" "}Только просроченные задачи</label></p>
+    {initialOverdue&&<p>Показаны только открытые задачи с истёкшим сроком.</p>}
     {!initialDealId&&<AccountPicker label="Фильтр по клиенту" value={accountId} required={false}
       onSelect={id=>{setAccountId(id);setCursor("");}}/>}
-    <SelectField label="Статус задачи" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>
+    {!initialOverdue&&<SelectField label="Статус задачи" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>
       <option value="">Все</option><option value={TaskStatus.OPEN}>Открытые</option><option value={TaskStatus.COMPLETED}>Выполненные</option>
-    </SelectField>
+    </SelectField>}
     <SelectField label="Приоритет задач" value={priority} onChange={e=>{setPriority(e.target.value);setCursor("");}}>
       <option value="">Все приоритеты</option><option value={TaskPriority.LOW}>Низкий</option><option value={TaskPriority.NORMAL}>Обычный</option><option value={TaskPriority.HIGH}>Высокий</option><option value={TaskPriority.URGENT}>Срочный</option>
     </SelectField></>}
@@ -92,7 +97,10 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
     {visibleTasks.map(t=><Card title={t.subject} key={t.taskId}>
       {focusedTaskId&&<p>ID: {t.taskId} · версия {t.version.toString()}</p>}
       <p>{t.description}</p><p>Клиент: <AccountName accountId={t.accountId}/></p>
-      <p>Срок: {dateText(t.dueAt)} · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?"Открыта":"Неизвестный статус"}</p>
+      <p>Срок: {dateText(t.dueAt)} · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?"Открыта":"Неизвестный статус"}
+        {t.status===TaskStatus.OPEN&&t.dueAt&&
+          Number(t.dueAt.seconds)*1000+Math.floor(t.dueAt.nanos/1000000)<Date.now()&&
+          <> · <strong>Просрочена</strong></>}</p>
       <p>Напоминание: {dateText(t.reminderAt)}</p>
       {t.relatedDealId&&<p>Связанная сделка: <a href={dealHref(t.relatedDealId)}>Открыть сделку</a></p>}
       {!focusedTaskId&&<p><a href={taskHref(t.taskId,t.accountId)}>Открыть карточку задачи</a></p>}
@@ -119,7 +127,8 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
         },t.taskId),async()=>{await query.reload();await focused.reload();})}>Выполнить задачу</Button>}
     </Card>)}
     {!focusedTaskId&&<>
-      {!query.busy&&query.data?.tasks.length===0&&<p>{initialDealId
+      {!query.busy&&query.data?.tasks.length===0&&<p>{initialOverdue
+        ?"Просроченных задач нет.":initialDealId
         ?"По этой сделке пока нет связанных задач.":"Задач пока нет."}</p>}
       <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
         onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>

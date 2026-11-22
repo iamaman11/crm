@@ -869,6 +869,45 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor();
    await filterTasks("Приоритет задач","");
    checkpoint("Task UpdateTask via React, D1 audit action, priority filter and reload");
+   // An actual salesperson must find and resolve overdue work without paging
+   // across technical Task IDs; all reads use the existing signed owner.
+   await page.getByRole("button",{name:"Новая задача",exact:true}).click();
+   await page.getByLabel("Тема задачи",{exact:true}).fill("Browser Overdue "+runId);
+   await selectPagedPicker(page,"Клиент",accountId,"account");
+   await page.getByLabel("Срок",{exact:true}).fill("2020-01-01T12:00");
+   await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
+   const overdueId=await firstId("crm_activity_task_records","subject","Browser Overdue "+runId);
+   const overdueCard=page.locator("section").filter({has:page.getByRole("heading",{
+     name:"Browser Overdue "+runId,exact:true})});
+   await overdueCard.getByText("Просрочена",{exact:true}).waitFor();
+   const overdueReadAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await page.getByLabel("Только просроченные задачи",{exact:true}).check();
+   assert.equal(new URL(page.url()).hash,"#tasks?overdue=1");
+   await page.getByRole("heading",{name:"Browser Overdue "+runId,exact:true}).waitFor();
+   await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor({state:"hidden"});
+   await reloadDocument();
+   await expect(page.getByLabel("Только просроченные задачи",{exact:true})).toBeChecked();
+   await overdueCard.getByRole("link",{name:"Открыть карточку задачи",exact:true}).click();
+   await page.getByRole("heading",{name:"Карточка задачи",exact:true}).waitFor();
+   await page.getByRole("heading",{name:"Browser Overdue "+runId,exact:true}).waitFor();
+   await page.goBack();
+   await page.getByRole("heading",{name:"Browser Overdue "+runId,exact:true}).waitFor();
+   assert.equal(new URL(page.url()).hash,"#tasks?overdue=1");
+   await navigate("tasks?accountId=missing-account&overdue=1","Задачи");
+   await page.getByText("Просроченных задач нет.",{exact:true}).waitFor();
+   await navigate("tasks?accountId="+accountId+"&overdue=1","Задачи");
+   await page.getByRole("heading",{name:"Browser Overdue "+runId,exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     overdueReadAudit,"Overdue filtering, card navigation and reload are read-only");
+   await navigate("tasks?overdue=1&overdue=1","Страница не найдена");
+   await navigate("tasks?overdue=invalid","Страница не найдена");
+   await navigate("tasks?overdue=1","Задачи");
+   await mutation(overdueCard.getByRole("button",{name:"Выполнить задачу",exact:true}),"CompleteTask");
+   await page.getByText("Просроченных задач нет.",{exact:true}).waitFor();
+   assert.equal((await sql("SELECT json_extract(state,'$.status') AS status FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+overdueId+"'"))[0].status,"completed");
+   await page.getByLabel("Только просроченные задачи",{exact:true}).uncheck();
+   await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor();
+   checkpoint("Task due-date triage: overdue-only owner filter/URL/reload/back/complete, no read audit");
    checkpoint("Contact and Task create/complete; priority/status filters preserve records and audit");
    await navigate("sales","Сделки");
    await page.getByRole("button",{name:"Создать воронку",exact:true}).click();

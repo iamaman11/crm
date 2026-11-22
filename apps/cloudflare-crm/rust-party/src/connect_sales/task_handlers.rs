@@ -329,6 +329,7 @@ impl task_wire::TaskService for TaskV2Service {
                 priority,
                 deal_id: deal,
                 search,
+                overdue_only: req.overdue_only,
             },
         )
         .await

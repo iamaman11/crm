@@ -503,6 +503,7 @@ pub(super) struct TaskListFilters<'a> {
     pub(super) priority: Option<TaskPriority>,
     pub(super) deal_id: Option<&'a str>,
     pub(super) search: &'a str,
+    pub(super) overdue_only: bool,
 }
 pub(super) async fn list_page_typed(
     db: &D1Database,
@@ -517,6 +518,7 @@ pub(super) async fn list_page_typed(
         priority,
         deal_id,
         search,
+        overdue_only,
     } = filters;
     let mut query = String::from(
         "SELECT id,state,account_id FROM crm_activity_task_records WHERE tenant=? AND id>?",
@@ -558,6 +560,15 @@ pub(super) async fn list_page_typed(
         query.push_str(" AND (instr(json_extract(state,'$.subject'),?)>0 OR instr(id,?)>0)");
         params.push(JsValue::from_str(search));
         params.push(JsValue::from_str(search));
+    }
+    // The original signed owner knows the authoritative task status/due time.
+    // Use an integer nanosecond comparison against the server clock BEFORE
+    // the existing ID-keyset cursor/LIMIT, never page-filter in the browser.
+    if overdue_only {
+        query.push_str(
+            " AND json_extract(state,'$.status')='open' AND json_extract(state,'$.due_at_unix_nanos') IS NOT NULL AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER) < CAST(? AS INTEGER)",
+        );
+        params.push(JsValue::from_str(&now_nanos().to_string()));
     }
     query.push_str(" ORDER BY id LIMIT ?");
     params.push(JsValue::from_f64((size + 1) as f64));

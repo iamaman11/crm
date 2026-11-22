@@ -46,9 +46,10 @@ function App() {
       initialPartyId={route.partyId} focusedContactPointId={route.contactPointId??""}/>:
     route.screen==="relationships"?<RelationshipScreen key={route.partyId+"/"+(route.relationshipId??"")}
       initialPartyId={route.partyId} focusedRelationshipId={route.relationshipId??""}/>:
-    route.screen==="tasks"?<TaskScreen key={route.accountId+"/"+(route.taskId??"")+"/"+(route.dealId??"")}
+    route.screen==="tasks"?<TaskScreen key={route.accountId+"/"+(route.taskId??"")+"/"+(route.dealId??"")+"/"+(route.overdue?"overdue":"all")}
       initialAccountId={route.accountId} focusedTaskId={route.taskId??""}
-      initialDealId={route.dealId??""} initialSearch={route.search??""}/>:
+      initialDealId={route.dealId??""} initialSearch={route.search??""}
+      initialOverdue={route.overdue??false}/>:
     route.screen==="sales"?<SalesScreen key={route.accountId}
       initialAccountId={route.accountId} initialSearch={route.search??""}
       initialViewId={route.viewId??""} initialPipelineId={route.pipelineId??""}/>:

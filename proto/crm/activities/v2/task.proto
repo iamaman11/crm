@@ -121,6 +121,9 @@ message ListTasksRequest {
   // Bounded case-sensitive subject/ID lookup in the original tenant Task owner.
   // Applied before paging; no projection or separate search service.
   string search = 6;
+  // Select only open Tasks with a non-null due instant strictly before
+  // the server clock. Executed in the signed original owner before paging.
+  bool overdue_only = 7;
 }
 
 message ListTasksResponse {

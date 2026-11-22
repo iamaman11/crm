@@ -9,7 +9,7 @@ export type Route =
   | {kind:"account-create";partyId:string}
   | {kind:"deal";dealId:string}
   | {kind:"search";query:string}
-  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;viewId?:string;pipelineId?:string}
+  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;overdue?:boolean;viewId?:string;pipelineId?:string}
   | {kind:"not-found";path:string};
 
 const sections:readonly Section[]=["parties","contacts","relationships","sales","tasks","consents","review","privacy","enrichment","data"];
@@ -67,6 +67,7 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     const ids=path==="tasks"?params.getAll("taskId"):[];
     const deals=path==="tasks"?params.getAll("dealId"):[];
     const searches=path==="sales"||path==="tasks"?params.getAll("search"):[];
+    const overdueValues=path==="tasks"?params.getAll("overdue"):[];
     const viewIds=path==="sales"?params.getAll("viewId"):[];
     const pipelineIds=path==="sales"?params.getAll("pipelineId"):[];
     const contacts=path==="contacts"?params.getAll("contactPointId"):[];
@@ -76,7 +77,9 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     const partyIds=params.getAll("partyId");
     const partyId=partyIds[0]??"";
     const focusedPartyRecord=contacts.length>0||relations.length>0;
-    if(ids.length>1||deals.length>1||searches.length>1||viewIds.length>1||
+    if(ids.length>1||deals.length>1||searches.length>1||
+       overdueValues.length>1||overdueValues.some(value=>value!=="1")||
+       (taskId&&overdueValues.length>0)||viewIds.length>1||
        pipelineIds.length>1||(viewIds.length>0&&pipelineIds.length>0)||
        pipelineIds.some(id=>!id)||
        contacts.length>1||relations.length>1||
@@ -89,6 +92,7 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
       accountId:params.get("accountId")??"",...(taskId?{taskId}:{}),...(dealId?{dealId}:{}),
       ...(contactPointId?{contactPointId}:{}),...(relationshipId?{relationshipId}:{}),
       ...(searches[0]?{search:searches[0]}:{}),
+      ...(overdueValues.length?{overdue:true}:{}),
       ...(viewIds[0]?{viewId:viewIds[0]}:{}),
       ...(pipelineIds[0]?{pipelineId:pipelineIds[0]}:{})};
   }
@@ -131,11 +135,12 @@ export function taskHref(taskId:string,accountId:string):string {
 }
 
 /** One URL-owned Task lookup, preserving an Account or concrete Deal scope. */
-export function taskSearchHref(accountId:string,search:string,dealId=""):string {
+export function taskSearchHref(accountId:string,search:string,dealId="",overdue=false):string {
   const params=new URLSearchParams();
   if(accountId)params.set("accountId",accountId);
   if(dealId)params.set("dealId",dealId);
   if(search.trim())params.set("search",search.trim());
+  if(overdue)params.set("overdue","1");
   const query=params.toString();
   return "#tasks"+(query?"?"+query:"");
 }

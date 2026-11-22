@@ -1302,6 +1302,55 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
   no_op_without_write:true,completed_denied:true,after_due_denied:true,
   stale_cas:true,replay:true,tenant_ab:true,receipt_audit_atomic:true}));
 
+ // The same original Task owner filters overdue instants BEFORE the keyset
+ // LIMIT, preserving the typed status/priority/account/search/Deal filters.
+ const dueSeeds=[
+   ["task-overdue-a-"+randomUUID(),"Native overdue A",2,1600000000n],
+   ["task-overdue-z-"+randomUUID(),"Native overdue Z",4,1640995200n],
+   ["task-due-future-"+randomUUID(),"Native due future",4,1900000000n],
+   ["task-no-due-"+randomUUID(),"Native unscheduled",2,null],
+   ["task-overdue-completed-"+randomUUID(),"Native already completed",2,1600000000n]
+ ];
+ for(const [taskId,subject,priority,due] of dueSeeds){
+   const created=await taskV2("CreateTask",admin,{taskId,accountId:accountNextId,subject,priority,
+     ...(due===null?{}:{dueAt:{seconds:due,nanos:0}}),
+     precondition:{idempotencyKey:"candidate-overdue-create-"+taskId}});
+   assert.equal(created.status,200,describeProtobuf(created.body));
+ }
+ const [dueA,dueZ,dueFuture,dueNone,dueComplete]=dueSeeds.map(x=>x[0]);
+ const completeSeed=await taskV2("CompleteTask",admin,{taskId:dueComplete,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-overdue-complete"}});
+ assert.equal(completeSeed.status,200,describeProtobuf(completeSeed.body));
+ const overdueAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
+ const overdueList=async(input={})=>(await collectPages(taskV2,"ListTasks","tasks",
+   {overdueOnly:true,page:{pageSize:1},...input})).map(x=>x.taskId);
+ assert.deepEqual((await overdueList()).sort(),[dueA,dueZ].sort());
+ assert.deepEqual(await overdueList({accountId:accountNextId}),[dueA,dueZ].sort());
+ assert.deepEqual(await overdueList({accountId}),[]);
+ assert.deepEqual(await overdueList({priority:4}),[dueZ]);
+ assert.deepEqual(await overdueList({status:2}),[]);
+ assert.deepEqual(await overdueList({search:"Native overdue A"}),[dueA]);
+ assert.deepEqual(await overdueList({dealId:"missing-deal"}),[]);
+ assert.equal((await taskV2("ListTasks",tenantB,{overdueOnly:true})).body.tasks.length,0);
+ assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",
+   {overdueOnly:true,accountId:accountNextId,page:{pageSize:1}})).map(x=>x.taskId),
+   (await collectPages(taskV2,"ListTasks","tasks",
+   {overdueOnly:true,accountId:accountNextId,page:{pageSize:1}})).map(x=>x.taskId));
+ const viewerOverdue=await taskV2("ListTasks",viewer,{overdueOnly:true,accountId:accountNextId});
+ const adminOverdue=await taskV2("ListTasks",admin,{overdueOnly:true,accountId:accountNextId});
+ assert.deepEqual(viewerOverdue.body,adminOverdue.body);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
+   overdueAuditBefore,"Overdue owner reads never mutate audit");
+ assert.equal((await taskV2("GetTask",viewer,{taskId:dueFuture})).status,200);
+ assert.equal((await taskV2("GetTask",viewer,{taskId:dueNone})).status,200);
+ const resolvedOverdue=await taskV2("CompleteTask",admin,{taskId:dueA,
+   precondition:{expectedVersion:1n,idempotencyKey:"candidate-overdue-resolved"}});
+ assert.equal(resolvedOverdue.status,200);
+ assert.deepEqual(await overdueList(),[dueZ],"Completion removes overdue Task from server results");
+ console.log(JSON.stringify({event:"crm.native-task-overdue-original-owner",result:"PASS",
+   owner:"crm.activities",server_time:true,original_cursor:true,tenant:true,viewer:true,
+   status:true,priority:true,account:true,search:true,deal:true,no_read_audit:true}));
+
  // Original read-only DataQuality and Identity Resolution, signed binary
  // Connect from the exact generated descriptor, with tenant A/B and viewer.
  const signedReadOnly=(path,encode,decode)=>async(method,token,payload,extraHeaders={})=>{
