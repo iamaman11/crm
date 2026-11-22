@@ -1556,7 +1556,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(alternatePipelineId);
    await page.goto(base+"/#sales?pipelineId="+alternatePipelineId+"&pipelineId="+alternatePipelineId);
    await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
-   await page.goto(base+"/#sales?pipelineId="+alternatePipelineId+"&viewId="+newId());
+   await page.goto(base+"/#sales?pipelineId="+alternatePipelineId+"&viewId=ambiguous-view");
    await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
    await page.goto(base+"/#sales?pipelineId=bad%2Fid");
    await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
