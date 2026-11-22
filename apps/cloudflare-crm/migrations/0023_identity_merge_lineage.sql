@@ -32,7 +32,23 @@ CREATE TABLE crm_identity_merge_receipts (
  original_request_id TEXT NOT NULL,
  PRIMARY KEY(tenant,key)
 );
--- The original Rust domain encodes the strict canonical JSON and lifecycle;
+-- The original Rust domain encodes strict canonical JSON and lifecycle.
+-- Concurrency-proof CAS happens INSIDE SQLite's native BEFORE INSERT trigger,
+-- in the SAME D1 statement as the state+receipt+audit write. The application
+-- cannot race an intervening Party update or canonical redirect.
+CREATE TRIGGER crm_identity_merge_preflight BEFORE INSERT ON crm_identity_merge_records BEGIN
+ SELECT CASE WHEN
+   NOT EXISTS(SELECT 1 FROM crm_party_records
+     WHERE tenant=NEW.tenant AND id=NEW.source_party
+       AND version=json_extract(NEW.state,'$.source_party_version'))
+   OR NOT EXISTS(SELECT 1 FROM crm_party_records
+     WHERE tenant=NEW.tenant AND id=NEW.survivor_party
+       AND version=json_extract(NEW.state,'$.survivor_party_version'))
+   OR EXISTS(SELECT 1 FROM crm_identity_merge_records
+     WHERE tenant=NEW.tenant AND status='active'
+       AND source_party IN (NEW.source_party, NEW.survivor_party))
+ THEN RAISE(ABORT,'IDENTITY_MERGE_STALE_OR_REDIRECTED') END;
+END;
 -- SQLite guarantees atomic receipt + audit + unique source even on races.
 CREATE TRIGGER crm_identity_merge_created AFTER INSERT ON crm_identity_merge_records BEGIN
  INSERT INTO crm_identity_merge_receipts(tenant,key,digest,state,original_request_id)

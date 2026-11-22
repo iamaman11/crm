@@ -307,25 +307,29 @@ pub(super) async fn create_merge_typed(
         return Ok(Err(merge_fail(e.code, 409)));
     }
     let state = merge_encode(&operation)?;
-    // CAS and both-root constraints execute within this single D1 INSERT.
-    // A concurrent winner changes the WHERE predicate; no audit/receipt is written.
-    let write=bind(db,
-        "INSERT INTO crm_identity_merge_records(tenant,id,source_party,survivor_party,state,version,status,idem_key,idem_digest,request_id,actor)
-         SELECT ?,?,?,?,?,1,'active',?,?,?,?
-         WHERE EXISTS(SELECT 1 FROM crm_party_records WHERE tenant=? AND id=? AND version=?)
-           AND EXISTS(SELECT 1 FROM crm_party_records WHERE tenant=? AND id=? AND version=?)
-           AND NOT EXISTS(SELECT 1 FROM crm_identity_merge_records
-             WHERE tenant=? AND status='active' AND source_party IN (?,?))",
-        &[JsValue::from_str(tenant),JsValue::from_str(&operation_id),
-          JsValue::from_str(&source_party_id),JsValue::from_str(&survivor_party_id),
-          JsValue::from_str(&state),JsValue::from_str(key),JsValue::from_str(&hash),
-          JsValue::from_str(request_id),JsValue::from_str(&actor.identity),
-          JsValue::from_str(tenant),JsValue::from_str(&source_party_id),
-          JsValue::from_f64(source_version as f64),
-          JsValue::from_str(tenant),JsValue::from_str(&survivor_party_id),
-          JsValue::from_f64(survivor_version as f64),
-          JsValue::from_str(tenant),JsValue::from_str(&source_party_id),
-          JsValue::from_str(&survivor_party_id)])?.run().await;
+    // The native BEFORE INSERT trigger guards both Party versions and roots
+    // atomically. Use an ordinary D1 INSERT, not a conditional SELECT whose
+    // changes metadata may be zero with an otherwise successful statement.
+    let write = bind(
+        db,
+        "INSERT INTO crm_identity_merge_records(
+            tenant,id,source_party,survivor_party,state,version,status,
+            idem_key,idem_digest,request_id,actor)
+         VALUES(?,?,?,?,?,1,'active',?,?,?,?)",
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(&operation_id),
+            JsValue::from_str(&source_party_id),
+            JsValue::from_str(&survivor_party_id),
+            JsValue::from_str(&state),
+            JsValue::from_str(key),
+            JsValue::from_str(&hash),
+            JsValue::from_str(request_id),
+            JsValue::from_str(&actor.identity),
+        ],
+    )?
+    .run()
+    .await;
     let Ok(committed) = write else {
         return Ok(Err(merge_fail("IDENTITY_MERGE_COMMIT_CONFLICT", 409)));
     };
