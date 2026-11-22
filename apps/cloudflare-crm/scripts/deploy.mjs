@@ -515,6 +515,8 @@ async function verifyData(){
   const pending=new Map(requests),requestTraces=new Map();
   const from=evidence.started_at-1000,traceStarted=Date.now(),traceDeadline=traceStarted+120000;
   let observedEvents=[];
+  console.log(JSON.stringify({event:"crm.telemetry-readback-scope",
+    requests:pending.size,page_limit:2000,deadline_ms:120000}));
   for(let attempt=0;attempt<30&&pending.size&&Date.now()<traceDeadline;attempt++){
     observedEvents=await readTelemetrySnapshot(from,Date.now()+1000,traceDeadline);
     for(const event of observedEvents){
