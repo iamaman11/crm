@@ -12,7 +12,7 @@
 
 ## Единица разработки: крупный логический срез, а не микропатч
 
-**Обязательные логические срезы (S-M1-A/S-M1-B приняты для dev/MVP; сейчас S-M2):**
+**Обязательные логические срезы (S-M1-A/S-M1-B/S-M2 и N-01 приняты для dev/MVP; сейчас NEXT N-02):**
 
 | Срез | Связанный пользовательский результат | Реестр ID | Граница приёмки |
 |---|---|---|---|
@@ -21,7 +21,7 @@
 | **S-M2** | Удобная воронка, этапы, контакт, views и точные метрики; lead решён как B/C | `M2-01…M2-05` | Полный Sales user journey, stage/currency/permission регрессии |
 | **S-NEXT** | Один **только востребованный** ограниченный поток CSV или Customer360/quality | Один связанный subset `N-01…N-06` | Каждая самостоятельная история имеет полный user outcome; не объединять несвязанные ради размера |
 
-**Порядок:** S-M1-A и S-M1-B уже ACCEPTED для dev/MVP по #7070842108; продолжать с первого непринятого результата S-M2 → NEXT по спросу; NEXT по требованию, LATER/END только по новому продуктовому решению. Связанные protobuf/owner/policy/D1/React/browser тесты готовить **одним рабочим срезом** до обращения к полному CI. Поскольку существующий `.github/workflows/cloudflare-crm-spike.yml` запускается **на каждом code push в `dev`** и concurrency стоит `cancel-in-progress: false`, **не делать промежуточных code push в `dev` по отдельным файлам**: подготовить полный связанный diff (рабочие commits/подготовленные blobs/tree без обновления `dev` допустимы), затем **ОДИН атомарный push готового кандидата в `dev`** → один обычный CI. После реального FAIL исправлять и повторять только необходимый полный code gate; docs-only не запускают CI. **Не начинать новый полный CI на каждый отдельный файл, RPC, форматирование или частичное изменение.** Если в срезе обнаружен дополнительный необходимый guard/UX/contract, включить его в тот же срез; отдельную независимую функцию не присоединять ради размера.
+**Порядок:** S-M1-A/S-M1-B ACCEPTED #7070842108, S-M2 ACCEPTED #7071938677/#7072122525/#7071303504/#7072127526, N-01 ACCEPTED #7079664966; продолжать с N-02 → NEXT по спросу; NEXT по требованию, LATER/END только по новому продуктовому решению. Связанные protobuf/owner/policy/D1/React/browser тесты готовить **одним рабочим срезом** до обращения к полному CI. Поскольку существующий `.github/workflows/cloudflare-crm-spike.yml` запускается **на каждом code push в `dev`** и concurrency стоит `cancel-in-progress: false`, **не делать промежуточных code push в `dev` по отдельным файлам**: подготовить полный связанный diff (рабочие commits/подготовленные blobs/tree без обновления `dev` допустимы), затем **ОДИН атомарный push готового кандидата в `dev`** → один обычный CI. После реального FAIL исправлять и повторять только необходимый полный code gate; docs-only не запускают CI. **Не начинать новый полный CI на каждый отдельный файл, RPC, форматирование или частичное изменение.** Если в срезе обнаружен дополнительный необходимый guard/UX/contract, включить его в тот же срез; отдельную независимую функцию не присоединять ради размера.
 
 **ОБА обязательных gate на ОДНОМ code/source SHA для КАЖДОГО принятого среза:**
 
@@ -48,7 +48,7 @@
 
 **Граница приёмки:** admin service-browser разрешён для обычных UI-сценариев M1; **положительный интерактивный human Cloudflare Access login/verification остаётся отдельным pre-real-user release check** и не притворяется доказанным service session. Глобальная поведенческая эквивалентность **93 crates НЕ принята**: сохранённые ниже 93 legacy crosswalk строки / «все операции OPEN» относятся именно к индивидуальным historical operations за пределами доказанного M1 dev/MVP, не открывают M1 заново. Privacy scope 2/9 остаётся fail-closed.
 
-**M2-02 и M2-04 ACCEPTED позднейшими #7072122525/#7072127526; следующая исполнимая очередь — N-01 по реальному пользовательскому gap** (M2-05 = C). Не запускать новые M1 QA-срезы, новый CI или ACL engine ради формальной галочки. Проверять существующий owner и историческую операцию *до* выбора B; уже принятые M2 stage labels и Deal name search не дублировать. #352 остаётся открытой до остальной функциональной очереди.
+**M2-02/M2-04 ACCEPTED #7072122525/#7072127526; N-01 ACCEPTED позднейшим #7079664966, следующая исполнимая очередь N-02 по реальному пользовательскому gap** (M2-05 = C). Не запускать новые M1 QA-срезы, новый CI или ACL engine ради формальной галочки. Проверять существующий owner и историческую операцию *до* выбора B; уже принятые M2 stage labels и Deal name search не дублировать. #352 остаётся открытой до остальной функциональной очереди.
 
 ## M2-01 FINAL dev/MVP ACCEPTED — Sales Pipeline, этапы, Kanban и адресуемая ручная доска (22.11.2026)
 
@@ -100,7 +100,19 @@
 - **M2-04**: **A ACCEPTED без нового кода**. Один original `GetPipelineMetrics` Rust/D1 owner, точные `i128` и целочисленное weighted money, независимые валюты, no-date, manual 0%, UTC cohorts, closed-only conversion, нулевой знаменатель=null. Native scale/concurrency/strict-persistence и independent Browser UI↔D1 точно совпали: 12 Deals/9 open/3 won, 100%, EUR/PLN/USD и exclusions. [#7072127526](https://github.com/iamaman11/crm/issues/352#issuecomment-7072127526), Gate A #44969797203 + independent B PASS, код не менялся в M2-04.
 - **M2-05 = C:** квалификация через Deal+Stage+immutable events; отдельный Lead CRUD не подтверждён и не нужен MVP. [#7069547465](https://github.com/iamaman11/crm/issues/352#issuecomment-7069547465).
 
-**Следующий N-01** — bounded CSV import и построчные ошибки. Сначала читать frozen `crm-customer-data-operations-execution-composition/src/import_execution_coordinator.rs` и текущий Data import Rust/D1/React, проверять реальный user gap, A/B/C до кода, крупный срез, два Gate. Не дублировать CI/Protobuf generator, Postgres runtime или old Phase6 projection.
+**N-01 принят позднейшим #7079664966; следующий N-02** — bounded CSV export. Сначала читать frozen `crm-customer-data-operations-execution-composition/src/import_execution_coordinator.rs` и текущий Data import Rust/D1/React, проверять реальный user gap, A/B/C до кода, крупный срез, два Gate. Не дублировать CI/Protobuf generator, Postgres runtime или old Phase6 projection.
+
+## N-01 FINAL dev/MVP ACCEPTED — bounded CSV import с построчными ошибками (22.11.2026)
+
+**N-01 A+B ACCEPTED dev/MVP.** Исходная проблема: пользователь не знал номер строки/поле по первому глобальному `IMPORT_*_INVALID`. Historical `crm-customer-data-operations-capability-adapter/src/planner.rs` и `crm-customer-data-operations-execution-composition/src/import_execution_coordinator.rs` дают нужную семантику `RowDiagnostic(field,code)` + 1-based `row_position`; долговременные jobs/partial skip/Postgres не переносим. [Продуктовое решение до кода #7079229443](https://github.com/iamaman11/crm/issues/352#issuecomment-7079229443).
+
+**A:** оригинальные `crm-customer-data-operations` parser/ImportRow/PartyImportMapping/PreparedPartyRow/RowDiagnostic, единственный `PartyCsvService::PreviewPartyImport/ApplyPartyImport`, исходный `crm-parties` D1 owner, React DataScreen, 16 КиБ/20 записей, sha256/receipts, signed role/tenant, atomic write and rollback. **B:** одно typed поле `PreviewPartyImportResponse.row_issues=6`; Rust собирает все semantic row/field/reason diagnostics, Preview без actionable target IDs и без записей, Apply заново валидирует и отклоняет весь пакет, UI показывает ошибки по-русски и скрывает подтверждение до исправления; structural errors остаются fail-closed. Никаких новых RPC, второй схемы, клиента-парсера, таблиц, job runner или CI. Проверки legacy не ослаблены.
+
+**Gate A PASS:** source SHA [`9e59833864c03d5fd92252d1aac06a6dc181cc7c`](https://github.com/iamaman11/crm/commit/9e59833864c03d5fd92252d1aac06a6dc181cc7c), штатный [CI #45024832811](https://github.com/iamaman11/crm/actions/runs/45024832811) оба job SUCCESS, native `crm.native-n01-csv-row-issues=PASS` (multiple row/field errors, digest, Apply denied, zero partial writes), весь original workerd/Rust/Chromium, exact artifact deploy, published E2E/D1/traces. Отдельно устранён `RUSTSEC-2026-0592`: `url 2.5.9` + `form_urlencoded 1.2.3`, проверенные crates.io hashes, оба Cargo.lock, `CRM_ROOT_AND_WORKER_DEPENDENCY_SECURITY=PASS`; без whitelist/skip.
+
+**Independent Gate B PASS**: Browser MCP `fc3aaaa9-b09c-4cdd-9eff-0e0c006ba1df`, deployed `/api/version.source` совпал с code SHA. Невалидный четырёхстрочный CSV: четыре конкретные ошибки (row1 kind+source version, row2 duplicate source_id, row3 empty name), нет Confirm; D1 audit `200→200`, Party `12→12`, import receipts `2→2`. Исправленный CSV: 4 Party (3 Person/1 Organization), D1 Party `12→16`, audit `200→204`, import receipts `2→3`, Party receipts `16→20`. Повторный Preview `previouslyImported=4` и повторный Apply без создания Party, audit `204`, Party receipts `20`, только новый operation receipt `3→4`. 9 HTTP 200, 0 HTTP/console errors; sanitized HAR 1.2 11 entries, SHA256 `14b012e98c5a654473a03bafb07d2966f3c7fd0eebdc83c761885d3d5ea91bf5`, Browser Run закрыт. [Финальная приёмка #7079664966](https://github.com/iamaman11/crm/issues/352#issuecomment-7079664966).
+
+**Следующая очередь N-02 — bounded CSV export**, исторический `crm-customer-data-operations-execution-composition/src/export_execution_worker.rs` + текущие original bounded Rust/D1/React/CSV tests, product-first A/B/C до нового кода. **N-01 ≠ L-01 durable import**, глобальная parity 93 crates и human Cloudflare Access positive login отдельно, #352 остаётся OPEN.
 
 ## Упорядоченная матрица бизнес-функций
 
@@ -122,7 +134,7 @@
 | [M2-03](#m2-03) | M2 | Сохраненные views и фильтры Sales | A+B ACCEPTED dev/MVP · #7071303504 | [src/query_catalog.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/query_catalog.rs) |
 | [M2-04](#m2-04) | M2 | Sales: прогноз, точная математика и конверсия | A ACCEPTED dev/MVP · Gate A+B · #7072127526 | [src/phase6_projections.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/phase6_projections.rs) |
 | [M2-05](#m2-05) | M2 | Lead qualification как отдельная сущность? | DECIDED C MVP · #7069547465 | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-capability-adapter/src/planner.rs) |
-| [N-01](#n-01) | NEXT | Bounded CSV import и ошибки строк | PARTIAL/ACTIVE | [src/import_execution_coordinator.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-data-operations-execution-composition/src/import_execution_coordinator.rs) |
+| [N-01](#n-01) | NEXT | Bounded CSV import и ошибки строк | A+B ACCEPTED dev/MVP · #7079664966 | [src/import_execution_coordinator.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-data-operations-execution-composition/src/import_execution_coordinator.rs) |
 | [N-02](#n-02) | NEXT | Bounded CSV export | PARTIAL/ACTIVE | [src/export_execution_worker.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-data-operations-execution-composition/src/export_execution_worker.rs) |
 | [N-03](#n-03) | NEXT | Customer360 — недостающие связи карточки | PARTIAL/ACTIVE | [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-360-composition/src/lib.rs) |
 | [N-04](#n-04) | NEXT | Data Quality проверка и ручное исправление | PARTIAL/ACTIVE | [src/remediation_planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-data-quality-capability-adapter/src/remediation_planner.rs) |
@@ -374,7 +386,7 @@
 
 ### N-01
 
-**Бизнес-функция:** Bounded CSV import и ошибки строк. **Очередь:** NEXT. **Что уже есть:** PARTIAL/ACTIVE. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Bounded CSV import и ошибки строк. **Очередь:** NEXT. **Что уже есть:** original typed Rust parser/ImportRow/RowDiagnostic + Party/D1 atomic owner, единственные Protobuf/Connect Preview/Apply и React, per-row errors. **Статус пользовательской приёмки: N-01 A+B ACCEPTED dev/MVP**, [#7079664966](https://github.com/iamaman11/crm/issues/352#issuecomment-7079664966).
 
 **Legacy — прочитать перед разработкой:** [src/import_execution_coordinator.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-data-operations-execution-composition/src/import_execution_coordinator.rs); [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-data-operations-capability-adapter/src/planner.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -384,7 +396,7 @@
 
 **DONE только при:** Невалидные строки имеют причину, нет частичной записи, digest и idempotency корректны.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `N-01 A+B ACCEPTED dev/MVP · historic RowDiagnostic/row_position vs existing original Rust/Party owner verified · code SHA 9e59833864c03d5fd92252d1aac06a6dc181cc7c · Gate A #45024832811 both jobs PASS; native-n01-csv-row-issues PASS · Gate B independent Browser MCP exact deployed SHA PASS · D1 preview no writes, 4 Party create/4 audit, replay no duplicate Party writes · cargo-deny RUSTSEC-2026-0592 patched url 2.5.9 · global 93-crate parity OPEN`. [Финальная приёмка #7079664966](https://github.com/iamaman11/crm/issues/352#issuecomment-7079664966).
 
 ### N-02
 
