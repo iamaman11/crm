@@ -502,6 +502,7 @@ pub(super) struct TaskListFilters<'a> {
     pub(super) account_id: Option<&'a str>,
     pub(super) priority: Option<TaskPriority>,
     pub(super) deal_id: Option<&'a str>,
+    pub(super) search: &'a str,
 }
 pub(super) async fn list_page_typed(
     db: &D1Database,
@@ -515,6 +516,7 @@ pub(super) async fn list_page_typed(
         account_id,
         priority,
         deal_id,
+        search,
     } = filters;
     let mut query = String::from(
         "SELECT id,state,account_id FROM crm_activity_task_records WHERE tenant=? AND id>?",
@@ -549,6 +551,13 @@ pub(super) async fn list_page_typed(
             " AND EXISTS (SELECT 1 FROM json_each(crm_activity_task_records.state,'$.related_resources') AS related WHERE json_extract(related.value,'$.resource_type')='sales.deal' AND json_extract(related.value,'$.resource_id')=?)",
         );
         params.push(JsValue::from_str(deal_id));
+    }
+    // The signed original Task owner filters before LIMIT and the ID cursor.
+    // SQLite instr is case-sensitive and all input remains parameterized.
+    if !search.is_empty() {
+        query.push_str(" AND (instr(json_extract(state,'$.subject'),?)>0 OR instr(id,?)>0)");
+        params.push(JsValue::from_str(search));
+        params.push(JsValue::from_str(search));
     }
     query.push_str(" ORDER BY id LIMIT ?");
     params.push(JsValue::from_f64((size + 1) as f64));

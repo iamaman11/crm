@@ -4,7 +4,7 @@ import {api} from "./api";
 import {useQuery,QueryNotice} from "./hooks";
 import {SearchField} from "./SearchField";
 import {navigateTo} from "./navigation";
-import {accountHref,dealHref,partyHref,searchHref} from "./routes";
+import {accountHref,dealHref,partyHref,searchHref,taskHref,taskSearchHref} from "./routes";
 
 /** Bounded cross-domain discovery, not a second query engine or index.
  * Each original owner authorizes its own signed tenant and viewer reads. */
@@ -12,19 +12,20 @@ export function SearchScreen({query}:{query:string}) {
   const term=query.trim();
   const found=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!term)return undefined;
-    const [parties,accounts,deals]=await Promise.all([
+    const [parties,accounts,deals,tasks]=await Promise.all([
       api.partyRecords.listParties({page:{pageSize:15},search:term},{signal}),
       api.accounts.listAccounts({page:{pageSize:15},search:term},{signal}),
-      api.deals.listDeals({page:{pageSize:15},search:term},{signal})
+      api.deals.listDeals({page:{pageSize:15},search:term},{signal}),
+      api.tasks.listTasks({page:{pageSize:15},search:term},{signal})
     ]);
-    return {parties,accounts,deals};
+    return {parties,accounts,deals,tasks};
   },[term]));
   return <>
     <PageHeader title="Поиск по CRM"
-      description="Найдите человека, организацию, клиента или сделку по части названия либо ID."/>
+      description="Найдите участника, клиента, сделку или задачу по части названия либо ID."/>
     <SearchField label="Поиск по CRM" submitted={query}
       onSearch={value=>navigateTo(searchHref(value))}/>
-    <p><small>Результаты читаются напрямую из трёх разделов CRM с текущими правами доступа.
+    <p><small>Результаты читаются напрямую из четырёх разделов CRM с текущими правами доступа.
       Поиск учитывает регистр букв; показана только первая страница каждого раздела.</small></p>
     {!term?<p>Введите название, имя или ID для поиска.</p>:<>
       <QueryNotice query={found}/>
@@ -52,6 +53,14 @@ export function SearchScreen({query}:{query:string}) {
               <li key={deal.dealId}><a href={dealHref(deal.dealId)}>{deal.name}</a></li>
             )}</ul>}
           {found.data.deals.pageInfo?.nextPageToken&&<p>Есть другие результаты. <a href="#sales">Открыть раздел сделок</a>.</p>}
+        </section>
+        <section aria-label="Найденные задачи">
+          <h2>Задачи</h2>
+          {found.data.tasks.tasks.length===0?<p>Задачи не найдены.</p>:
+            <ul>{found.data.tasks.tasks.map(task=>
+              <li key={task.taskId}><a href={taskHref(task.taskId,task.accountId)}>{task.subject}</a></li>
+            )}</ul>}
+          {found.data.tasks.pageInfo?.nextPageToken&&<p>Есть другие результаты. <a href={taskSearchHref("",term)}>Открыть все найденные задачи</a>.</p>}
         </section>
       </>}
     </>}

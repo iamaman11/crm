@@ -66,7 +66,7 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
   if(isSection(path)){
     const ids=path==="tasks"?params.getAll("taskId"):[];
     const deals=path==="tasks"?params.getAll("dealId"):[];
-    const searches=path==="sales"?params.getAll("search"):[];
+    const searches=path==="sales"||path==="tasks"?params.getAll("search"):[];
     const viewIds=path==="sales"?params.getAll("viewId"):[];
     const pipelineIds=path==="sales"?params.getAll("pipelineId"):[];
     const contacts=path==="contacts"?params.getAll("contactPointId"):[];
@@ -128,6 +128,16 @@ export function relationshipHref(relationshipId:string,partyId:string):string {
 
 export function taskHref(taskId:string,accountId:string):string {
   return "#tasks?"+new URLSearchParams({accountId,taskId}).toString();
+}
+
+/** One URL-owned Task lookup, preserving an Account or concrete Deal scope. */
+export function taskSearchHref(accountId:string,search:string,dealId=""):string {
+  const params=new URLSearchParams();
+  if(accountId)params.set("accountId",accountId);
+  if(dealId)params.set("dealId",dealId);
+  if(search.trim())params.set("search",search.trim());
+  const query=params.toString();
+  return "#tasks"+(query?"?"+query:"");
 }
 
 export function dealTasksHref(dealId:string,accountId:string):string {

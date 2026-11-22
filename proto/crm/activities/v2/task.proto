@@ -118,6 +118,9 @@ message ListTasksRequest {
   // A concrete user journey: only Tasks linked to this Deal, NOT an
   // arbitrary resource-type filtering surface from legacy query runtime.
   optional string deal_id = 5;
+  // Bounded case-sensitive subject/ID lookup in the original tenant Task owner.
+  // Applied before paging; no projection or separate search service.
+  string search = 6;
 }
 
 message ListTasksResponse {

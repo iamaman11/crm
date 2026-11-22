@@ -317,6 +317,7 @@ impl task_wire::TaskService for TaskV2Service {
         if let Some(id) = deal {
             Self::valid_id(id)?;
         }
+        let search = wire_search(req.search)?;
         let (list, next) = activity_tasks::list_page_typed(
             &self.d1()?,
             &self.tenant,
@@ -327,6 +328,7 @@ impl task_wire::TaskService for TaskV2Service {
                 account_id: account,
                 priority,
                 deal_id: deal,
+                search,
             },
         )
         .await

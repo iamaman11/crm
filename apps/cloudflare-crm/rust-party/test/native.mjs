@@ -1040,6 +1040,17 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
    "optional CreateTask.description absent is canonical empty Task.description");
  assert.equal((await taskV2("CreateTask",admin,taskLastInput)).status,200);
  const taskAuditBeforeFilters=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
+ // Original Task subject search: signed, before paging, composed with existing filters.
+ assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{search:"Check original Account mid"})).map(t=>t.taskId),[taskMid]);
+ assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{search:"Check original Account",page:{pageSize:1}})).map(t=>t.taskId),[taskOther,taskMid,taskLast].sort());
+ assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{search:"Check original Account",priority:2,accountId})).map(t=>t.taskId),[taskMid,taskLast]);
+ assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{search:"task-mid-ours"})).map(t=>t.taskId),[taskMid]);
+ assert.equal((await collectPages(taskV2,"ListTasks","tasks",{search:"Signed actor task mid"})).length,0,"description must not broaden Task subject search");
+ assert.equal((await collectPages(taskV2,"ListTasks","tasks",{search:"check original account"})).length,0,"search follows case-sensitive UI contract");
+ assert.equal((await collectPages(taskV2,"ListTasks","tasks",{search:"' OR 1=1 --"})).length,0,"search never interpolates SQL");
+ assert.equal((await taskV2("ListTasks",tenantB,{search:"Check original Account"})).body.tasks.length,0);
+ assert.equal((await taskV2("ListTasks",viewer,{search:"Check original Account mid"})).body.tasks[0].taskId,taskMid);
+ assert.equal((await taskV2("ListTasks",viewer,{search:"x".repeat(201)})).status,400);
  assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{priority:2})).map(t=>t.taskId),[taskMid,taskLast]);
  assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{priority:4})).map(t=>t.taskId),[taskOther]);
  assert.equal((await collectPages(taskV2,"ListTasks","tasks",{priority:4,accountId})).length,0);

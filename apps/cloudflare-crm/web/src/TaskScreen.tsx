@@ -8,10 +8,12 @@ import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} 
 import {AccountPicker,AccountName} from "./Pickers";
 import {TimeFields} from "./TimeFields";
 import {timePatch} from "./timePatch";
-import {scopeHref,taskHref,dealHref} from "./routes";
+import {scopeHref,taskHref,dealHref,taskSearchHref} from "./routes";
+import {SearchField} from "./SearchField";
+import {navigateTo} from "./navigation";
 
-export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId=""}:{
-  initialAccountId?:string;focusedTaskId?:string;initialDealId?:string;
+export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="",initialSearch=""}:{
+  initialAccountId?:string;focusedTaskId?:string;initialDealId?:string;initialSearch?:string;
 }) {
   const [cursor,setCursor]=useState("");
   const [status,setStatus]=useState("");
@@ -23,12 +25,12 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
   const [editorMode,setEditorMode]=useState<"create"|"edit"|"reminder"|null>(null);
   const query=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(focusedTaskId)return undefined; // Direct-link view never loads a full task list.
-    return api.tasks.listTasks({page:{pageSize:25,pageToken:cursor},
+    return api.tasks.listTasks({page:{pageSize:25,pageToken:cursor},search:initialSearch.trim(),
       ...(initialDealId?{dealId:initialDealId}:{}),
       ...(accountId?{accountId}:{}),
       ...(status?{status:enumValue(status,[TaskStatus.OPEN,TaskStatus.COMPLETED],"Статус задачи")}:{}),
       ...(priority?{priority:enumValue(priority,[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи")}:{})},{signal});
-  },[cursor,status,priority,accountId,focusedTaskId,initialDealId]));
+  },[cursor,status,priority,accountId,focusedTaskId,initialDealId,initialSearch]));
   const focused=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!focusedTaskId)return undefined;
     const task=(await api.tasks.getTask({taskId:focusedTaskId},{signal})).task;
@@ -75,6 +77,9 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
         Общие задачи клиента — в <a href={scopeHref("tasks",initialAccountId||dealContext.data?.accountId||"")}>списке задач клиента</a>.</p>
     </>}
     {!focusedTaskId&&<>
+    <SearchField label="Поиск задач" submitted={initialSearch}
+      searchLabel="Найти задачу по названию" resetLabel="Сбросить поиск задач"
+      onSearch={value=>{if(navigateTo(taskSearchHref(accountId,value,initialDealId)))setCursor("");}}/>
     {!initialDealId&&<AccountPicker label="Фильтр по клиенту" value={accountId} required={false}
       onSelect={id=>{setAccountId(id);setCursor("");}}/>}
     <SelectField label="Статус задачи" value={status} onChange={e=>{setStatus(e.target.value);setCursor("");}}>

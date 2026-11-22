@@ -818,6 +818,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const urgentId=await firstId("crm_activity_task_records","subject","Browser Urgent "+runId);
    assert.equal((await sql("SELECT json_extract(state,'$.priority') AS priority FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+urgentId+"'"))[0].priority,"urgent");
    const beforeTaskFilters=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   // Find a real Task by subject without manually paging through opaque IDs.
+   await page.getByLabel("Поиск задач",{exact:true}).fill("Browser Urgent "+runId);
+   await page.getByRole("button",{name:"Найти задачу по названию",exact:true}).click();
+   assert.ok(new URL(page.url()).hash.includes("search="),"Task search owns the native URL");
+   await page.getByRole("heading",{name:"Browser Urgent "+runId,exact:true}).waitFor();
+   await page.getByRole("heading",{name:"Browser Task "+runId,exact:true}).waitFor({state:"hidden"});
+   await reloadDocument();
+   await page.getByRole("heading",{name:"Browser Urgent "+runId,exact:true}).waitFor();
+   await page.getByRole("button",{name:"Сбросить поиск задач",exact:true}).click();
+   await page.getByRole("heading",{name:"Browser Task "+runId,exact:true}).waitFor();
    const filterTasks=async(label,value)=>{
      const response=page.waitForResponse(r=>responsePathEndsWith(r,"/ListTasks")&&r.request().method()==="POST");
      await page.getByLabel(label,{exact:true}).selectOption(value);
@@ -1568,9 +1578,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const foundParties=page.getByRole("region",{name:"Найденные участники"});
    const foundAccounts=page.getByRole("region",{name:"Найденные клиенты"});
    const foundDeals=page.getByRole("region",{name:"Найденные сделки"});
+   const foundTasks=page.getByRole("region",{name:"Найденные задачи"});
    await foundParties.getByRole("link",{name:"Browser Updated "+runId,exact:true}).waitFor();
    await foundAccounts.getByRole("link",{name:"Browser Account "+runId,exact:true}).waitFor();
    await foundDeals.getByRole("link",{name:"Browser Deal "+runId,exact:true}).waitFor();
+   await foundTasks.getByRole("link",{name:"Browser Task "+runId,exact:true}).waitFor();
+   await foundTasks.getByRole("link",{name:"Browser Task "+runId,exact:true}).click();
+   await page.getByRole("heading",{name:"Карточка задачи",exact:true}).waitFor();
+   await page.getByRole("heading",{name:"Browser Task "+runId,exact:true}).waitFor();
+   await page.goBack();
+   await page.getByRole("heading",{name:"Поиск по CRM",exact:true}).waitFor();
    await foundDeals.getByRole("link",{name:"Browser Deal "+runId,exact:true}).click();
    await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
    await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
@@ -1586,6 +1603,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await foundParties.getByText("Участники не найдены.",{exact:true}).waitFor();
    await foundAccounts.getByText("Клиенты не найдены.",{exact:true}).waitFor();
    await foundDeals.getByText("Сделки не найдены.",{exact:true}).waitFor();
+   await foundTasks.getByText("Задачи не найдены.",{exact:true}).waitFor();
    await page.goto(base+"/#search?query=a&query=b");
    await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
    await page.goto(base+"/#search?query="+("x".repeat(201)));
@@ -1594,7 +1612,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      unifiedAuditBefore,"L-08 search, reload, links and malformed URLs must not write audit");
    await page.goto(base+"/#sales");
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
-   checkpoint("L-08 unified Party/Account/Deal owner search, native URL/Back/reload, empty/malformed, zero read audit");
+   checkpoint("L-08 bounded four-owner Party/Account/Deal/Task discovery, native URL/Back/reload, empty/malformed, zero read audit");
    // Full-page Deal URL and inline expansion share the same original GetDeal
    // read component. The preceding search/back route can reset the selected
    // pipeline, so target the actual Deal card, not whichever link is last.

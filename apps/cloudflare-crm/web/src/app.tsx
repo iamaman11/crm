@@ -48,7 +48,7 @@ function App() {
       initialPartyId={route.partyId} focusedRelationshipId={route.relationshipId??""}/>:
     route.screen==="tasks"?<TaskScreen key={route.accountId+"/"+(route.taskId??"")+"/"+(route.dealId??"")}
       initialAccountId={route.accountId} focusedTaskId={route.taskId??""}
-      initialDealId={route.dealId??""}/>:
+      initialDealId={route.dealId??""} initialSearch={route.search??""}/>:
     route.screen==="sales"?<SalesScreen key={route.accountId}
       initialAccountId={route.accountId} initialSearch={route.search??""}
       initialViewId={route.viewId??""} initialPipelineId={route.pipelineId??""}/>:
