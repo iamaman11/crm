@@ -620,23 +620,33 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     ),
     (
         "/crm.identity_resolution.v2.IdentityResolutionService/MergeParty",
-        RpcPolicy { permission: RpcPermission::Write },
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
     ),
     (
         "/crm.identity_resolution.v2.IdentityResolutionService/UnmergeParty",
-        RpcPolicy { permission: RpcPermission::Write },
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
     ),
     (
         "/crm.identity_resolution.v2.IdentityResolutionService/GetMergeOperation",
-        RpcPolicy { permission: RpcPermission::Read },
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
     ),
     (
         "/crm.identity_resolution.v2.IdentityResolutionService/ListMergeOperationsByParty",
-        RpcPolicy { permission: RpcPermission::Read },
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
     ),
     (
         "/crm.identity_resolution.v2.IdentityResolutionService/ResolveCanonicalParty",
-        RpcPolicy { permission: RpcPermission::Read },
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
     ),
     (
         "/crm.consents.v2.ConsentAuthorizationService/EvaluateConsent",

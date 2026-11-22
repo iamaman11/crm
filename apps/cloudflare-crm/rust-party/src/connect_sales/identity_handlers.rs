@@ -3,38 +3,44 @@
 use super::*;
 
 impl IdentityV2Service {
-    fn d1(&self)->std::result::Result<D1Database,ConnectError>{
-        self.env.d1("DB").map_err(|_|ConnectError::internal("D1 unavailable"))
+    fn d1(&self) -> std::result::Result<D1Database, ConnectError> {
+        self.env
+            .d1("DB")
+            .map_err(|_| ConnectError::internal("D1 unavailable"))
     }
-    fn merge_failure(f: identity_resolution::MergeFault)->ConnectError{
+    fn merge_failure(f: identity_resolution::MergeFault) -> ConnectError {
         match f.status {
-            404=>ConnectError::not_found(f.code),
-            409=>ConnectError::aborted(f.code),
-            422=>ConnectError::invalid_argument(f.code),
-            _=>ConnectError::unavailable(f.code)
+            404 => ConnectError::not_found(f.code),
+            409 => ConnectError::aborted(f.code),
+            422 => ConnectError::invalid_argument(f.code),
+            _ => ConnectError::unavailable(f.code),
         }
     }
-    fn merge_wire(operation:&crm_identity_resolution::MergeOperation)->identity_wire::MergeOperation{
-        identity_wire::MergeOperation{
-            operation_id:operation.operation_id().as_str().to_owned(),
-            source_party_id:operation.source_party_ref().as_str().to_owned(),
-            survivor_party_id:operation.survivor_party_ref().as_str().to_owned(),
-            source_party_version:operation.source_party_version(),
-            survivor_party_version:operation.survivor_party_version(),
-            reason:operation.reason().as_str().to_owned(),
-            active:operation.status()==crm_identity_resolution::MergeOperationStatus::Active,
-            version:operation.version(),
-            unmerge_reason:operation.unmerge_decision().map(|d|d.reason().as_str().to_owned()),
-            decided_by:operation.decided_by().as_str().to_owned(),
+    fn merge_wire(
+        operation: &crm_identity_resolution::MergeOperation,
+    ) -> identity_wire::MergeOperation {
+        identity_wire::MergeOperation {
+            operation_id: operation.operation_id().as_str().to_owned(),
+            source_party_id: operation.source_party_ref().as_str().to_owned(),
+            survivor_party_id: operation.survivor_party_ref().as_str().to_owned(),
+            source_party_version: operation.source_party_version(),
+            survivor_party_version: operation.survivor_party_version(),
+            reason: operation.reason().as_str().to_owned(),
+            active: operation.status() == crm_identity_resolution::MergeOperationStatus::Active,
+            version: operation.version(),
+            unmerge_reason: operation
+                .unmerge_decision()
+                .map(|d| d.reason().as_str().to_owned()),
+            decided_by: operation.decided_by().as_str().to_owned(),
             ..Default::default()
         }
     }
-    fn merge_receipt(&self,commit:&identity_resolution::MergeCommit)->core_v2::MutationReceipt{
-        core_v2::MutationReceipt{
-            request_id:self.request_id.clone(),
-            resource_version:commit.operation.version(),
-            replayed:commit.replayed,
-            original_request_id:Some(commit.original_request_id.clone()),
+    fn merge_receipt(&self, commit: &identity_resolution::MergeCommit) -> core_v2::MutationReceipt {
+        core_v2::MutationReceipt {
+            request_id: self.request_id.clone(),
+            resource_version: commit.operation.version(),
+            replayed: commit.replayed,
+            original_request_id: Some(commit.original_request_id.clone()),
             ..Default::default()
         }
     }
@@ -148,74 +154,104 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
 
     #[worker::send]
     async fn merge_party(
-        &self,_ctx:RequestContext,
-        req:ServiceRequest<'_,identity_wire::MergePartyRequest>,
-    )->ServiceResult<identity_wire::MergePartyResponse>{
-        let input=req.to_owned_message();
-        let id=PartyV3Service::valid_id(&input.operation_id)?;
-        let source=PartyV3Service::valid_id(&input.source_party_id)?;
-        let survivor=PartyV3Service::valid_id(&input.survivor_party_id)?;
-        let pre=input.precondition.as_option().ok_or_else(||
-            ConnectError::invalid_argument("mutation precondition required"))?;
-        if pre.expected_version.is_some(){
-            return Err(ConnectError::invalid_argument("merge create must not include expected_version"));
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, identity_wire::MergePartyRequest>,
+    ) -> ServiceResult<identity_wire::MergePartyResponse> {
+        let input = req.to_owned_message();
+        let id = PartyV3Service::valid_id(&input.operation_id)?;
+        let source = PartyV3Service::valid_id(&input.source_party_id)?;
+        let survivor = PartyV3Service::valid_id(&input.survivor_party_id)?;
+        let pre = input
+            .precondition
+            .as_option()
+            .ok_or_else(|| ConnectError::invalid_argument("mutation precondition required"))?;
+        if pre.expected_version.is_some() {
+            return Err(ConnectError::invalid_argument(
+                "merge create must not include expected_version",
+            ));
         }
-        let db=self.d1()?;
-        let committed=identity_resolution::create_merge_typed(
-            &db,&self.actor,id.as_str().to_owned(),source.as_str().to_owned(),
-            input.source_party_version,survivor.as_str().to_owned(),
-            input.survivor_party_version,input.reason,&pre.idempotency_key,
+        let db = self.d1()?;
+        let committed = identity_resolution::create_merge_typed(
+            &db,
+            &self.actor,
+            id.as_str().to_owned(),
+            source.as_str().to_owned(),
+            input.source_party_version,
+            survivor.as_str().to_owned(),
+            input.survivor_party_version,
+            input.reason,
+            &pre.idempotency_key,
             &self.request_id,
-        ).await.map_err(|_|ConnectError::unavailable("IDENTITY_MERGE_WRITE_UNAVAILABLE"))?
-         .map_err(Self::merge_failure)?;
-        RpcResponse::ok(identity_wire::MergePartyResponse{
-            operation:Some(Self::merge_wire(&committed.operation)).into(),
-            receipt:Some(self.merge_receipt(&committed)).into(),
+        )
+        .await
+        .map_err(|_| ConnectError::unavailable("IDENTITY_MERGE_WRITE_UNAVAILABLE"))?
+        .map_err(Self::merge_failure)?;
+        RpcResponse::ok(identity_wire::MergePartyResponse {
+            operation: Some(Self::merge_wire(&committed.operation)).into(),
+            receipt: Some(self.merge_receipt(&committed)).into(),
             ..Default::default()
         })
     }
     #[worker::send]
     async fn unmerge_party(
-        &self,_ctx:RequestContext,
-        req:ServiceRequest<'_,identity_wire::UnmergePartyRequest>,
-    )->ServiceResult<identity_wire::UnmergePartyResponse>{
-        let input=req.to_owned_message();
-        let id=PartyV3Service::valid_id(&input.operation_id)?;
-        let pre=input.precondition.as_option().ok_or_else(||
-            ConnectError::invalid_argument("mutation precondition required"))?;
-        let expected=pre.expected_version.ok_or_else(||
-            ConnectError::invalid_argument("unmerge expected_version required"))?;
-        if expected<1{
-            return Err(ConnectError::invalid_argument("unmerge expected_version invalid"));
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, identity_wire::UnmergePartyRequest>,
+    ) -> ServiceResult<identity_wire::UnmergePartyResponse> {
+        let input = req.to_owned_message();
+        let id = PartyV3Service::valid_id(&input.operation_id)?;
+        let pre = input
+            .precondition
+            .as_option()
+            .ok_or_else(|| ConnectError::invalid_argument("mutation precondition required"))?;
+        let expected = pre
+            .expected_version
+            .ok_or_else(|| ConnectError::invalid_argument("unmerge expected_version required"))?;
+        if expected < 1 {
+            return Err(ConnectError::invalid_argument(
+                "unmerge expected_version invalid",
+            ));
         }
-        let db=self.d1()?;
-        let committed=identity_resolution::unmerge_typed(
-            &db,&self.actor,id.as_str(),expected,
-            input.source_party_version,input.survivor_party_version,
-            input.reason,&pre.idempotency_key,&self.request_id,
-        ).await.map_err(|_|ConnectError::unavailable("IDENTITY_UNMERGE_WRITE_UNAVAILABLE"))?
-         .map_err(Self::merge_failure)?;
-        RpcResponse::ok(identity_wire::UnmergePartyResponse{
-            operation:Some(Self::merge_wire(&committed.operation)).into(),
-            receipt:Some(self.merge_receipt(&committed)).into(),
+        let db = self.d1()?;
+        let committed = identity_resolution::unmerge_typed(
+            &db,
+            &self.actor,
+            id.as_str(),
+            expected,
+            input.source_party_version,
+            input.survivor_party_version,
+            input.reason,
+            &pre.idempotency_key,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::unavailable("IDENTITY_UNMERGE_WRITE_UNAVAILABLE"))?
+        .map_err(Self::merge_failure)?;
+        RpcResponse::ok(identity_wire::UnmergePartyResponse {
+            operation: Some(Self::merge_wire(&committed.operation)).into(),
+            receipt: Some(self.merge_receipt(&committed)).into(),
             ..Default::default()
         })
     }
     #[worker::send]
     async fn get_merge_operation(
-        &self,_ctx:RequestContext,
-        req:ServiceRequest<'_,identity_wire::GetMergeOperationRequest>,
-    )->ServiceResult<identity_wire::GetMergeOperationResponse>{
-        let id=PartyV3Service::valid_id(&req.operation_id)?;
-        let db=self.d1()?;
-        let operation=identity_resolution::stored_merge(&db,&self.actor.tenant,id.as_str())
-            .await.map_err(|_|ConnectError::unavailable("IDENTITY_MERGE_READ_UNAVAILABLE"))?
-            .ok_or_else(||ConnectError::not_found("IDENTITY_MERGE_NOT_FOUND"))?;
-        let confirmed_mutation=match receipt_key(req.receipt_idempotency_key.as_deref())?{
-            None=>None,
-            Some(key)=>{
-                let prior=identity_resolution::merge_receipt(&db,&self.actor.tenant,key)
-                    .await.map_err(|_|ConnectError::unavailable("IDENTITY_MERGE_RECEIPT_UNAVAILABLE"))?;
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, identity_wire::GetMergeOperationRequest>,
+    ) -> ServiceResult<identity_wire::GetMergeOperationResponse> {
+        let id = PartyV3Service::valid_id(&req.operation_id)?;
+        let db = self.d1()?;
+        let operation = identity_resolution::stored_merge(&db, &self.actor.tenant, id.as_str())
+            .await
+            .map_err(|_| ConnectError::unavailable("IDENTITY_MERGE_READ_UNAVAILABLE"))?
+            .ok_or_else(|| ConnectError::not_found("IDENTITY_MERGE_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(req.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let prior = identity_resolution::merge_receipt(&db, &self.actor.tenant, key)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("IDENTITY_MERGE_RECEIPT_UNAVAILABLE"))?;
                 prior.map(|proof|->std::result::Result<core_v2::MutationCommitEvidence,ConnectError>{
                     let stored=crm_identity_resolution::decode_merge_operation_state(proof.state.as_bytes())
                         .map_err(|_|ConnectError::unavailable("IDENTITY_MERGE_RECEIPT_INVALID"))?;
@@ -231,55 +267,84 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
                 }).transpose()?
             }
         };
-        RpcResponse::ok(identity_wire::GetMergeOperationResponse{
-            operation:Some(Self::merge_wire(&operation)).into(),
-            confirmed_mutation:confirmed_mutation.into(),
+        RpcResponse::ok(identity_wire::GetMergeOperationResponse {
+            operation: Some(Self::merge_wire(&operation)).into(),
+            confirmed_mutation: confirmed_mutation.into(),
             ..Default::default()
         })
     }
     #[worker::send]
     async fn list_merge_operations_by_party(
-        &self,_ctx:RequestContext,
-        req:ServiceRequest<'_,identity_wire::ListMergeOperationsByPartyRequest>,
-    )->ServiceResult<identity_wire::ListMergeOperationsByPartyResponse>{
-        let party=PartyV3Service::valid_id(&req.party_id)?;
-        let size=if req.page.page_size==0{25}else{req.page.page_size};
-        if size>100{return Err(ConnectError::invalid_argument("page_size exceeds 100"));}
-        let after=&req.page.page_token;
-        if !after.is_empty(){PartyV3Service::valid_id(after)?;}
-        let db=self.d1()?;
-        if parties::stored(&db,&self.actor.tenant,party.as_str())
-            .await.map_err(|_|ConnectError::unavailable("IDENTITY_PARTY_READ_UNAVAILABLE"))?.is_none(){
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, identity_wire::ListMergeOperationsByPartyRequest>,
+    ) -> ServiceResult<identity_wire::ListMergeOperationsByPartyResponse> {
+        let party = PartyV3Service::valid_id(&req.party_id)?;
+        let size = if req.page.page_size == 0 {
+            25
+        } else {
+            req.page.page_size
+        };
+        if size > 100 {
+            return Err(ConnectError::invalid_argument("page_size exceeds 100"));
+        }
+        let after = &req.page.page_token;
+        if !after.is_empty() {
+            PartyV3Service::valid_id(after)?;
+        }
+        let db = self.d1()?;
+        if parties::stored(&db, &self.actor.tenant, party.as_str())
+            .await
+            .map_err(|_| ConnectError::unavailable("IDENTITY_PARTY_READ_UNAVAILABLE"))?
+            .is_none()
+        {
             return Err(ConnectError::not_found("IDENTITY_PARTY_NOT_FOUND"));
         }
-        let (operations,next)=identity_resolution::list_merges(
-            &db,&self.actor.tenant,party.as_str(),after,size as usize,
-        ).await.map_err(|_|ConnectError::unavailable("IDENTITY_MERGE_LIST_UNAVAILABLE"))?;
-        RpcResponse::ok(identity_wire::ListMergeOperationsByPartyResponse{
-            operations:operations.iter().map(Self::merge_wire).collect(),
-            page_info:Some(core_v2::PageInfo{
-                next_page_token:next.unwrap_or_default(),..Default::default()
-            }).into(),
+        let (operations, next) = identity_resolution::list_merges(
+            &db,
+            &self.actor.tenant,
+            party.as_str(),
+            after,
+            size as usize,
+        )
+        .await
+        .map_err(|_| ConnectError::unavailable("IDENTITY_MERGE_LIST_UNAVAILABLE"))?;
+        RpcResponse::ok(identity_wire::ListMergeOperationsByPartyResponse {
+            operations: operations.iter().map(Self::merge_wire).collect(),
+            page_info: Some(core_v2::PageInfo {
+                next_page_token: next.unwrap_or_default(),
+                ..Default::default()
+            })
+            .into(),
             ..Default::default()
         })
     }
     #[worker::send]
     async fn resolve_canonical_party(
-        &self,_ctx:RequestContext,
-        req:ServiceRequest<'_,identity_wire::ResolveCanonicalPartyRequest>,
-    )->ServiceResult<identity_wire::ResolveCanonicalPartyResponse>{
-        let party=PartyV3Service::valid_id(&req.party_id)?;
-        let db=self.d1()?;
-        let resolution=identity_resolution::resolve_canonical(
-            &db,&self.actor.tenant,party.as_str()
-        ).await.map_err(|_|ConnectError::unavailable("IDENTITY_MERGE_TOPOLOGY_UNAVAILABLE"))?
-         .ok_or_else(||ConnectError::not_found("IDENTITY_PARTY_NOT_FOUND"))?;
-        RpcResponse::ok(identity_wire::ResolveCanonicalPartyResponse{
-            requested_party_id:resolution.requested_party_ref().as_str().to_owned(),
-            canonical_party_id:resolution.canonical_party_ref().as_str().to_owned(),
-            party_path:resolution.party_path().iter().map(|p|p.as_str().to_owned()).collect(),
-            merge_operation_path:resolution.merge_operation_path().iter()
-                .map(|o|o.as_str().to_owned()).collect(),
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, identity_wire::ResolveCanonicalPartyRequest>,
+    ) -> ServiceResult<identity_wire::ResolveCanonicalPartyResponse> {
+        let party = PartyV3Service::valid_id(&req.party_id)?;
+        let db = self.d1()?;
+        let resolution =
+            identity_resolution::resolve_canonical(&db, &self.actor.tenant, party.as_str())
+                .await
+                .map_err(|_| ConnectError::unavailable("IDENTITY_MERGE_TOPOLOGY_UNAVAILABLE"))?
+                .ok_or_else(|| ConnectError::not_found("IDENTITY_PARTY_NOT_FOUND"))?;
+        RpcResponse::ok(identity_wire::ResolveCanonicalPartyResponse {
+            requested_party_id: resolution.requested_party_ref().as_str().to_owned(),
+            canonical_party_id: resolution.canonical_party_ref().as_str().to_owned(),
+            party_path: resolution
+                .party_path()
+                .iter()
+                .map(|p| p.as_str().to_owned())
+                .collect(),
+            merge_operation_path: resolution
+                .merge_operation_path()
+                .iter()
+                .map(|o| o.as_str().to_owned())
+                .collect(),
             ..Default::default()
         })
     }
