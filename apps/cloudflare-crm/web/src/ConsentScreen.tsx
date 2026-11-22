@@ -4,7 +4,7 @@ import {api,field,newId} from "./api";
 import {CommunicationChannel,ConsentEffect,ConsentStatus,EvaluationReason} from "@ultimate-crm/client/cloudflare";
 import {enumValue} from "./enumFields";
 import {useQuery,useReadAction,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
-import {PartyPicker} from "./Pickers";
+import {PartyPicker,PartyName,ContactPointPicker} from "./Pickers";
 const reasonLabels:Partial<Record<EvaluationReason,string>>={
   [EvaluationReason.UNSPECIFIED]:"Не указано",
   [EvaluationReason.ACTIVE_GRANT]:"Действующее согласие",
@@ -13,7 +13,8 @@ const reasonLabels:Partial<Record<EvaluationReason,string>>={
   [EvaluationReason.NO_APPLICABLE_GRANT]:"Подходящего согласия нет"
 };
 function ScopeFields() {
-  return <><PartyPicker/><TextField label="ID контакта (необязательно)" name="contact"/>
+  const [selectedPartyId,setSelectedPartyId]=useState("");
+  return <><PartyPicker onSelect={setSelectedPartyId}/><ContactPointPicker key={selectedPartyId} partyId={selectedPartyId} label="Контакт (необязательно)"/>
     <TextField label="Цель" name="purpose" defaultValue="marketing" required/>
     <SelectField label="Канал" name="channel" defaultValue="1">
       <option value={CommunicationChannel.EMAIL}>Email</option><option value={CommunicationChannel.PHONE}>Телефон</option><option value={CommunicationChannel.SMS}>SMS</option>
@@ -21,13 +22,21 @@ function ScopeFields() {
     </SelectField></>;
 }
 function scope(data:FormData) {
-  const contact=field(data,"contact");
+  const contact=data.get("contact");
   return {partyId:field(data,"partyId"),purpose:field(data,"purpose"),channel:enumValue(field(data,"channel"),[CommunicationChannel.EMAIL,CommunicationChannel.PHONE,CommunicationChannel.SMS,CommunicationChannel.POSTAL,CommunicationChannel.MESSAGING,CommunicationChannel.PUSH],"Канал"),
-    ...(contact?{contactPointId:contact}:{})};
+    ...(typeof contact==="string"&&contact?{contactPointId:contact}:{})};
+}
+function ConsentDecision({data}:{data:Awaited<ReturnType<typeof api.consents.evaluateConsent>>}) {
+  return <FeedbackPanel tone={data.allowed?"success":"warning"}
+    title={data.allowed?"Контакт разрешён":"Контакт не разрешён"}>
+    {reasonLabels[data.reason]??"Неизвестная причина"}
+  </FeedbackPanel>;
 }
 export function ConsentScreen() {
   const [cursor,setCursor]=useState("");
   const [partyId,setPartyId]=useState("");
+  const [grantPartyId,setGrantPartyId]=useState("");
+  const [evaluatedAuthorizationId,setEvaluatedAuthorizationId]=useState("");
   const [draftId,setDraftId]=useState(newId);
   const [composer,setComposer]=useState<"grant"|"suppress"|null>(null);
   const evaluation=useReadAction<Awaited<ReturnType<typeof api.consents.evaluateConsent>>>();
@@ -44,17 +53,26 @@ export function ConsentScreen() {
     <PageHeader title="Коммуникации" description="Проверка разрешений, отзыв и запрет. Подписанный Access-владелец выдаёт личное согласие; сервисный администратор dev может проводить отдельный тестовый сценарий." actions={<RecordActions><Button disabled={mutation.busy||mutation.pending} onClick={()=>{setComposer("grant");mutation.changed();}}>Выдать согласие</Button><Button disabled={mutation.busy||mutation.pending} variant="secondary" onClick={()=>{setComposer("suppress");mutation.changed();}}>Запретить коммуникацию</Button></RecordActions>}/>
     <Card title="Проверить возможность контакта"><form onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
+      setEvaluatedAuthorizationId("");
       void evaluation.run(signal=>api.consents.evaluateConsent(scope(data),{signal}));
     }}><FormGrid><ScopeFields/></FormGrid><Button type="submit" disabled={evaluation.busy}>Проверить разрешение</Button></form>
-      {evaluation.error&&<FeedbackPanel tone="danger" title={evaluation.error}/>}
-      {evaluation.data&&<FeedbackPanel tone={evaluation.data.allowed?"success":"warning"} title={evaluation.data.allowed?"Контакт разрешён":"Контакт не разрешён"}>
-        {reasonLabels[evaluation.data.reason]??"Неизвестная причина"}
-      </FeedbackPanel>}
+      {!evaluatedAuthorizationId&&evaluation.error&&<FeedbackPanel tone="danger" title={evaluation.error}/>}
+      {!evaluatedAuthorizationId&&evaluation.data&&<ConsentDecision data={evaluation.data}/>}
     </Card>
-    <TextField label="Фильтр по ID участника" value={partyId} onChange={e=>{setPartyId(e.target.value);setCursor("");}}/>
+    <PartyPicker label="Фильтр по участнику" required={false} value={partyId} onSelect={id=>{setPartyId(id);setCursor("");}}/>
     <QueryNotice query={query}/>
     {query.data?.authorizations.map(a=><Card key={a.authorizationId} title={a.effect===ConsentEffect.DENY?"Запрет":a.effect===ConsentEffect.GRANT?"Согласие":"Неизвестный тип"}>
-      <p>{a.partyId} · {a.purpose} · {a.jurisdiction}</p><p>{a.status===ConsentStatus.ACTIVE?"Действует":a.status===ConsentStatus.WITHDRAWN?"Отозвано":"Неизвестный статус"} · версия {a.version.toString()}</p>
+      <p><PartyName partyId={a.partyId}/> · {a.purpose} · {a.jurisdiction}</p><p>{a.status===ConsentStatus.ACTIVE?"Действует":a.status===ConsentStatus.WITHDRAWN?"Отозвано":"Неизвестный статус"} · версия {a.version.toString()}</p>
+      <Button variant="secondary" disabled={evaluation.busy} onClick={()=>{
+        setEvaluatedAuthorizationId(a.authorizationId);
+        void evaluation.run(signal=>api.consents.evaluateConsent({partyId:a.partyId,
+          ...(a.contactPointId?{contactPointId:a.contactPointId}:{}),
+          purpose:a.purpose,channel:a.channel},{signal}));
+      }}>Проверить разрешение</Button>
+      {evaluatedAuthorizationId===a.authorizationId&&!evaluation.busy&&evaluation.error&&
+        <FeedbackPanel tone="danger" title={evaluation.error}/>}
+      {evaluatedAuthorizationId===a.authorizationId&&!evaluation.busy&&evaluation.data&&
+        <ConsentDecision data={evaluation.data}/>}
       {a.effect===ConsentEffect.GRANT&&a.status===ConsentStatus.ACTIVE&&<Button variant="danger" disabled={mutation.busy||mutation.pending}
         onClick={()=>void mutation.runIntent(
           ()=>prepareMutation(api.consents.withdrawConsentAuthorization,{
@@ -76,8 +94,9 @@ export function ConsentScreen() {
         },draftId),async()=>{setComposer(null);setDraftId(newId());await query.reload();});
       }}>
         <FormGrid>
-          <PartyPicker/>
-          <TextField label="ID подтверждённого email-контакта" name="verifiedContactId" required/>
+          <PartyPicker onSelect={setGrantPartyId}/>
+          <ContactPointPicker key={grantPartyId} partyId={grantPartyId} name="verifiedContactId"
+            label="Подтверждённый email" emailOnly verifiedOnly required/>
           <TextField label="Цель согласия" name="grantPurpose" defaultValue="marketing" required/>
           <TextField label="Юрисдикция согласия" name="grantJurisdiction" defaultValue="EU" required/>
         </FormGrid>

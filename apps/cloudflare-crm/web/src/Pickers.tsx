@@ -2,9 +2,11 @@ import {useCallback,useState} from "react";
 import {Button,SelectField} from "@ultimate-crm/ui";
 import {api} from "./api";
 import type {Party} from "@ultimate-crm/client/cloudflare";
+import {ContactPointKind,ContactPointStatus} from "@ultimate-crm/client/cloudflare";
 import {useQuery,QueryNotice} from "./hooks";
 import {SearchField} from "./SearchField";
 import {accountHref,partyHref} from "./routes";
+import {contactKindLabel} from "./contactLabels";
 
 /** A picker retains opaque typed IDs for the RPC, but presents only authorized names. */
 export function PartyPicker({name="partyId",label="Участник",initialParty,initialPartyId="",value:controlled,onSelect,required=true}:{
@@ -80,6 +82,45 @@ export function AccountPicker({onSelect,initialAccountId="",value:controlled,req
       Другие клиенты
     </Button>}
     {cursor&&<Button variant="secondary" onClick={reset}>В начало списка</Button>}
+  </div>;
+}
+
+/** ContactPoint selection is scoped to an authorized Party owner read.
+ * Verified-only choices improve UX, but the Rust Consent owner verifies proof. */
+export function ContactPointPicker({partyId,name="contact",label="Контакт",emailOnly=false,
+  verifiedOnly=false,required=false}:{
+  partyId:string;name?:string;label?:string;emailOnly?:boolean;verifiedOnly?:boolean;
+  required?:boolean;
+}) {
+  const [cursor,setCursor]=useState("");
+  const [value,setValue]=useState("");
+  const query=useQuery(useCallback((signal:AbortSignal)=>partyId
+    ?api.contactPoints.listContactPoints({partyId,
+      page:{pageSize:100,pageToken:cursor},status:ContactPointStatus.ACTIVE,
+      ...(emailOnly?{kind:ContactPointKind.EMAIL}:{})
+    },{signal})
+    :Promise.resolve(undefined),[partyId,cursor,emailOnly]));
+  return <div>
+    <SelectField label={label} name={name} value={value} required={required}
+      disabled={!partyId||query.busy||!!query.error}
+      onChange={e=>setValue(e.target.value)}>
+      <option value="">{required?"Выберите контакт":"Все контакты участника"}</option>
+      {query.data?.contactPoints.map(p=><option key={p.contactPointId} value={p.contactPointId}
+        disabled={verifiedOnly&&!p.verified}>
+        {contactKindLabel(p.kind)} · {p.displayValue} · {p.verified?"подтверждён":"не подтверждён"}
+      </option>)}
+    </SelectField>
+    {partyId&&<QueryNotice query={query}/>}
+    {!partyId&&<p>Сначала выберите участника.</p>}
+    {partyId&&!query.busy&&!query.error&&query.data?.contactPoints.length===0&&
+      <p>Активных контактов нет.</p>}
+    {query.data?.pageInfo?.nextPageToken&&<Button variant="secondary"
+      disabled={query.busy||!!query.error} onClick={()=>{
+        setCursor(query.data?.pageInfo?.nextPageToken??"");setValue("");
+      }}>Другие контакты</Button>}
+    {cursor&&<Button variant="secondary" onClick={()=>{
+      setCursor("");setValue("");
+    }}>В начало контактов</Button>}
   </div>;
 }
 

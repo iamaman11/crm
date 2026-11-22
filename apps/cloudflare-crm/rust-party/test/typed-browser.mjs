@@ -1702,12 +1702,39 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      repairedAudit,"Repeated evaluation and reload must remain read-only");
    checkpoint("N-04 existing DataQuality + typed Party repair + exact review URL/reload, no read audit");
    await navigate("consents","Коммуникации");
+   // N-06: consume only original Party/ContactPoint owner reads instead of opaque IDs.
+   await selectPagedPicker(page,"Фильтр по участнику",partyId);
+   await page.getByRole("button",{name:"Выдать согласие",exact:true}).click();
+   const grantPickerPanel=page.getByRole("dialog");
+   await selectPagedPicker(grantPickerPanel,"Участник",partyId);
+   const unverifiedEmail=grantPickerPanel.getByLabel("Подтверждённый email",{exact:true});
+   const unverifiedOption=unverifiedEmail.locator('option[value="'+browserSalesContactId+'"]');
+   await unverifiedOption.waitFor({state:"attached"});
+   await expect(unverifiedOption).toBeDisabled();
+   await expect(unverifiedOption).toContainText("не подтверждён");
+   await grantPickerPanel.getByRole("button",{name:"Закрыть панель",exact:true}).click();
+   // The original signed Email grant guard is independently tested in R3a.
+   // This browser session may use a non-human service principal: never self-grant.
    await page.getByRole("button",{name:"Запретить коммуникацию",exact:true}).click();
    const suppress=page.getByRole("dialog");
    await selectPagedPicker(suppress,"Участник",partyId);
    await mutation(suppress.getByRole("button",{name:"Запретить контакт",exact:true}),"SuppressCommunication");
+   const authCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Запрет",exact:true})});
+   await authCard.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
+   await authCard.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
+   const consentReadAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await reloadDocument();
+   const authCardAfterReload=page.locator("section").filter({has:page.getByRole("heading",{name:"Запрет",exact:true})});
+   await authCardAfterReload.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
+   await authCardAfterReload.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     consentReadAudit,"Consent card Evaluate must remain read-only after reload");
+   checkpoint("N-06 named Party filter and original ContactPoint chooser, unverified Email disabled; exact consent card Evaluate after reload with no read audit");
    const evaluate=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить возможность контакта",exact:true})});
    await selectPagedPicker(evaluate,"Участник",partyId);
+   const scopeContact=evaluate.getByLabel("Контакт (необязательно)",{exact:true});
+   await scopeContact.locator('option[value="'+browserSalesContactId+'"]').waitFor({state:"attached"});
+   await scopeContact.selectOption(browserSalesContactId);
    await evaluate.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
    await page.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
    checkpoint("Quality and consent evaluation/suppression");
