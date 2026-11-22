@@ -11,6 +11,7 @@ import {moneyText,percent} from "./money";
 import type {CurrencyCatalog} from "./money";
 import {inputDate} from "./calendarInput";
 import {accountHref,scopeHref,contactHref,taskHref,dealTasksHref} from "./routes";
+import {stageName as stageLabel} from "./salesPipelineCatalog";
 
 export function dealStatusText(status:DealStatus):string {
   switch(status){
@@ -94,9 +95,6 @@ function eventLabel(kind:DealEventKind):string {
 // Only a user-facing label. Immutable events still come from the original
 // Sales owner with stable IDs; an archived/removed catalog stage falls back
 // to that exact stored ID, never an invented historical name.
-function stageLabel(pipeline:SalesPipeline|undefined,stageId:string):string {
-  return pipeline?.stages.find(stage=>stage.stageId===stageId)?.name??stageId;
-}
 // One original, owner-authorized event projection for inline/full Deal pages.
 // No reconstruction of history from mutable client-side snapshots.
 export function DealHistory({dealId,accountId,pipeline}:{

@@ -1,12 +1,13 @@
 import {useCallback,useState} from "react";
 import {Button,FormGrid,SelectField,TextField} from "@ultimate-crm/ui";
 import {AccountStatus,TaskStatus} from "@ultimate-crm/client/cloudflare";
-import type {Account,AccountOverview,Party} from "@ultimate-crm/client/cloudflare";
+import type {Account,AccountOverview,Deal,Party} from "@ultimate-crm/client/cloudflare";
 import {api,field,dateText,newId} from "./api";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
 import {scopeHref,partyHref,dealHref,taskHref,contactHref,relationshipHref} from "./routes";
 import {PartyPicker,PartyName} from "./Pickers";
+import {allPipelines,stageName} from "./salesPipelineCatalog";
 
 export function accountStatusLabel(status:AccountStatus):string {
   switch(status) {
@@ -14,6 +15,27 @@ export function accountStatusLabel(status:AccountStatus):string {
     case AccountStatus.INACTIVE:return "Неактивен";
     default:return "Неизвестный статус";
   }
+}
+// One owner-authorized stage catalog read per rendered Account Deal list, not
+// a request per Deal and not another Client360 projection. Original typed Deal
+// refs and Account ID remain unchanged; if the catalog is missing we preserve
+// the stored immutable stage ID rather than claiming a fabricated stage name.
+function AccountDeals({deals}:{deals:readonly Deal[]}) {
+  const catalog=useQuery(useCallback(allPipelines,[]));
+  const pipelines=catalog.data?.pipelines??[];
+  return <>
+    <QueryNotice query={catalog}/>
+    <ul>{deals.map(deal=>{
+      const pipeline=pipelines.find(item=>item.pipelineId===deal.stage?.pipelineId);
+      const stage=deal.stage?.stageId?stageName(pipeline,deal.stage.stageId):"неизвестен";
+      return <li key={deal.dealId}>
+        <a href={dealHref(deal.dealId)}>{deal.name}</a>
+        {" · "}{catalog.busy&&!catalog.data?"Этапы загружаются…":
+          "Воронка: "+(pipeline?.name??deal.stage?.pipelineId??"неизвестна")+
+          " · этап: "+stage}
+      </li>;
+    })}</ul>
+  </>;
 }
 /** Both inline and full-page views use precisely the same read-only Customer360 projection. */
 export function AccountDetails({accountId}:{accountId:string}) {
@@ -33,10 +55,10 @@ export function AccountDetails({accountId}:{accountId:string}) {
         {r.type?.code??"Связь"}</a>: <PartyName partyId={r.fromPartyId}/> → <PartyName partyId={r.toPartyId}/></li>)}</ul>
     {card.truncated?.relationships&&<p>Показаны первые {card.perCollectionLimit} связей.</p>}
     {card.primaryParty&&<a href={scopeHref("relationships",card.primaryParty.partyId)}>Все связи участника</a>}
-    <h3>Сделки</h3><ul>{card.deals.map(d=><li key={d.dealId}><a href={dealHref(d.dealId)}>{d.name}</a> · {d.stage?.stageId}</li>)}</ul>
+    <h3>Сделки</h3>{card.deals.length>0&&<AccountDeals deals={card.deals}/>} 
     {card.truncated?.deals&&<p>Показаны первые {card.perCollectionLimit} сделок.</p>}
     <a href={scopeHref("sales",accountId)}>Все сделки клиента</a>
-    <h3>Задачи</h3><ul>{card.tasks.map(t=><li key={t.taskId}><a href={taskHref(t.taskId,accountId)}>{t.subject}</a> · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?dateText(t.dueAt):"Неизвестный статус"}</li>)}</ul>
+    <h3>Задачи</h3><ul>{card.tasks.map(t=><li key={t.taskId}><a href={taskHref(t.taskId,accountId)}>{t.subject}</a> · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?"Открыта"+(t.dueAt?" · срок: "+dateText(t.dueAt):""):"Неизвестный статус"}</li>)}</ul>
     {card.truncated?.tasks&&<p>Показаны первые {card.perCollectionLimit} задач.</p>}
     <a href={scopeHref("tasks",accountId)}>Все задачи клиента</a>
   </>}</div>;

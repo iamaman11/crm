@@ -11,7 +11,8 @@ import {DealContactPicker,DealDetails,dealStatusText,forecastCategoryText,probab
 import {inputDate,parseDate} from "./calendarInput";
 import {dealHref,salesViewHref,salesPipelineHref} from "./routes";
 import {navigateTo} from "./navigation";
-import {currencyCatalog,minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText} from "./money";
+import {minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText} from "./money";
+import {allPipelines} from "./salesPipelineCatalog";
 import type {CurrencyCatalog} from "./money";
 import styles from "./App.module.css";
 
@@ -25,22 +26,6 @@ function stageDrafts(pipeline?:SalesPipeline):StageDraft[] {
     {stageId:newId(),name:"Первичный контакт",probability:"10",archived:false},
     {stageId:newId(),name:"Квалификация",probability:"40",archived:false}
   ];
-}
-async function allPipelines(signal:AbortSignal):Promise<{pipelines:SalesPipeline[];currencies:CurrencyCatalog}> {
-  const all:SalesPipeline[]=[];
-  let currencies:CurrencyCatalog|undefined;
-  let cursor="";
-  const seen=new Set<string>();
-  do {
-    const page=await api.deals.listPipelines({page:{pageSize:100,pageToken:cursor},includeArchived:true},{signal});
-    if(!cursor)currencies=currencyCatalog(page.currencies);
-    all.push(...page.pipelines);
-    cursor=page.pageInfo?.nextPageToken??"";
-    if(cursor&&seen.has(cursor))throw Error("Повторный курсор воронок");
-    if(cursor)seen.add(cursor);
-  } while(cursor);
-  if(!currencies)throw Error("Справочник валют не получен");
-  return {pipelines:all,currencies};
 }
 async function allSalesViews(signal:AbortSignal):Promise<SalesDealView[]> {
   const all:SalesDealView[]=[];

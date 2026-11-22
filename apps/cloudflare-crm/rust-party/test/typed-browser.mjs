@@ -1590,6 +1590,25 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,level:2,exact:true})})
      .getByRole("button",{name:"Открыть карточку",exact:true}).click();
    await page.getByText("Основной участник: Browser Updated "+runId,{exact:true}).waitFor();
+   const customer360Deal=page.getByRole("listitem").filter({
+     has:page.getByRole("link",{name:"Browser Deal "+runId,exact:true})
+   });
+   await customer360Deal.getByText(
+     "Воронка: Browser Pipeline "+runId+" · этап: Квалификация",{exact:false}
+   ).waitFor();
+   const customer360Task=page.getByRole("listitem").filter({
+     has:page.getByRole("link",{name:"Browser Edited Urgent "+runId,exact:true})
+   });
+   await customer360Task.getByText(/Открыта/).waitFor();
+   const customer360Audit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await navigate("accounts/"+accountId,"Карточка клиента");
+   await customer360Deal.getByText("Воронка: Browser Pipeline "+runId+" · этап: Квалификация",{exact:false}).waitFor();
+   await reloadDocument();
+   await customer360Deal.getByText("Воронка: Browser Pipeline "+runId+" · этап: Квалификация",{exact:false}).waitFor();
+   await customer360Task.getByText(/Открыта/).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     customer360Audit,"Customer360 stage names and Task status reads must not write audit");
+   checkpoint("N-03 Customer360 Deal names from original archived-capable Sales catalog, open Task status, reload and no read audit");
    checkpoint("Exact bigint Deal and atomic Sales–Activities flow visible in Account");
    await navigate("review","Качество и совпадения");
    const quality=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить имя",exact:true})});
