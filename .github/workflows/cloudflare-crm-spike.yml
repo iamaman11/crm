@@ -135,7 +135,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pnpm exec buf generate --template buf.gen.web.yaml
+          pnpm gen
           pnpm exec buf build proto --as-file-descriptor-set -o /tmp/crm-proto-descriptors.binpb
           node scripts/crm-rpc-descriptors.mjs /tmp/crm-proto-descriptors.binpb
           CRM_PROTO_DESCRIPTOR_FILE=/tmp/crm-proto-descriptors.binpb \
@@ -213,6 +213,8 @@ jobs:
           subprocess.run(["cargo", "test", "--locked", "--workspace", "--all-targets"], check=True)
           native_graphs = {}
           for owner, flags in sorted(owner_features.items()):
+              if flags:
+                  subprocess.run(["cargo", "test", "--locked", "-p", owner, "--all-targets", *flags], check=True)
               native_graphs[owner] = {
                   "feature_flags": flags,
                   "normal_build_dev": subprocess.check_output([
@@ -359,7 +361,7 @@ jobs:
       - name: Verify compiled router, executed policy and RPC calls against Buf
         run: |
           set -euo pipefail
-          python scripts/crm-module-coverage.py --output /tmp/crm-module-coverage.json --runtime-proof /tmp/crm-rpc-runtime.json
+          export CRM_RPC_RUNTIME_PROOF=/tmp/crm-rpc-runtime.json
           node scripts/crm-rpc-descriptors.mjs /tmp/crm-proto-descriptors.binpb --require-runtime
       - name: Preserve executed RPC evidence
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

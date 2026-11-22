@@ -1,7 +1,7 @@
 // Full generated binary Connect contract and actual React against signed workerd/D1.
 import {execFileSync} from "node:child_process";
 import {generateKeyPairSync,createSign,randomUUID,createHash} from "node:crypto";
-import {writeFileSync,readFileSync} from "node:fs";
+import {writeFileSync,readFileSync,readdirSync} from "node:fs";
 import {createTestHarness} from "wrangler";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -158,7 +158,10 @@ try{
    "reapplying Wrangler migrations must preserve tenant fixtures");
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE id='binary-rpc-proof-01'"))[0].n,1,
    "reapplying Wrangler migrations must preserve business data");
- assert.equal((await sql("SELECT COUNT(*) AS n FROM d1_migrations WHERE name='0002_hard_cutover.sql'"))[0].n,1);
+ const migrationDir=join(cwd,config.d1_databases[0].migrations_dir);
+ const migrations=readdirSync(migrationDir).filter(name=>name.endsWith(".sql")).sort();
+ assert.deepEqual((await sql("SELECT name FROM d1_migrations ORDER BY name")).map(row=>row.name),migrations,
+   "local D1 must have applied the entire configured migration history once");
  console.log(JSON.stringify({event:"crm.native-ci.d1-runtime",source_sha:sourceSha,
    runtime:"Wrangler createTestHarness/workerd",fixture_access:"D1 binding",
    worker_count:1,d1_count:1}));
@@ -318,7 +321,6 @@ try{
    "tenant-a","Explicit service enrollment must retain the owner's tenant");
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE id='binary-rpc-proof-01'"))[0].n,1,
    "Repeated migrations apply must preserve existing business data");
- assert.equal((await sql("SELECT COUNT(*) AS n FROM d1_migrations WHERE name='0002_hard_cutover.sql'"))[0].n,1);
  assert.equal((await sql("SELECT version FROM crm_party_records WHERE id='"+id+"'"))[0].version,2);
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_receipts WHERE tenant='tenant-a' "+
    "AND key IN ('candidate-v3-create-001','candidate-v3-update-001')"))[0].n,2);

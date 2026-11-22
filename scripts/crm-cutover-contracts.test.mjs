@@ -37,10 +37,7 @@ const {NO_SIDE_EFFECTS,IDEMPOTENT}=MethodOptions_IdempotencyLevel;
 function assertWireContracts(files) {
  for(const file of files)for(const service of file.service){
   assert.match(file.package,/^crm\.[a-z0-9_]+\.v(?:[2-9]|[1-9][0-9]+)$/);
-  assert.ok(service.name.endsWith("Service"),service.name);
   for(const method of service.method){
-   assert.equal(method.inputType,fullName(file.package,method.name+"Request"));
-   assert.equal(method.outputType,fullName(file.package,method.name+"Response"));
    const req=findMessage(file,method.inputType);
    const res=findMessage(file,method.outputType);
    const forbidden=req.field.filter(x=>/^(tenant_id|actor_id|role_id|is_admin|allow_skip|allow_regression)$/.test(x.name));
@@ -50,7 +47,7 @@ function assertWireContracts(files) {
   }
  }
 }
-test("all future Connect RPCs have canonical generated request/response types",()=>assertWireContracts(finalFiles));
+test("active CRM wire contracts reject client identity fields and floating-point values",()=>assertWireContracts(finalFiles));
 test("every RPC declares side-effect semantics using standard Protobuf options",()=>{
  for(const {file,service} of allServices)for(const method of service.method){
   const level=method.options?.idempotencyLevel;

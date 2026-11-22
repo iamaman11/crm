@@ -41,7 +41,7 @@ def rpc_path(binding: dict) -> str | None:
     return f"/{service}/{method}"
 
 
-def build_report(root: Path = ROOT, *, runtime: dict | None = None) -> dict:
+def build_report(root: Path = ROOT) -> dict:
     if root != ROOT:
         raise ValueError("module inventory always uses canonical repository root")
     schema = load_schema()
@@ -79,32 +79,6 @@ def build_report(root: Path = ROOT, *, runtime: dict | None = None) -> dict:
                 raise ValueError(f"duplicate linked crate path: {alias}, {linked_crates[target]}")
             linked_crates[target] = alias
 
-    # Manifest/Cargo discovery is static. Runtime activation is supplied only
-    # after the signed workerd suite has executed the compiled router and policy.
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    runtime_policy = {}
-    if runtime is not None:
-        if runtime.get("source_sha") != head or runtime.get("result") != "PASS":
-            raise ValueError("stale or unsuccessful executed RPC evidence")
-        if runtime.get("features") != ["native-ci"]:
-            raise ValueError("signed native-ci feature evidence required")
-        rpc = runtime["rpc"]
-        if rpc.get("compiled_policy_check") is not True:
-            raise ValueError("compiled policy check failed")
-        registered = rpc["registered_methods"]
-        if len(set(registered)) != len(registered) or not registered:
-            raise ValueError("duplicate or empty compiled router")
-        for route, rule in rpc["policies"]:
-            if route in runtime_policy:
-                raise ValueError(f"duplicate compiled RPC policy: {route}")
-            if rule["permission"] not in ("Read", "AdminRead", "Write", "SelfWrite"):
-                raise ValueError(f"invalid compiled RPC policy: {route}")
-            runtime_policy[route] = rule
-        if set(registered) != set(runtime_policy):
-            raise ValueError("registered methods differ from compiled policy")
-        if set(runtime["successful_rpc_calls"]) != set(registered):
-            raise ValueError("registered RPC missing successful executed call")
-    active = sorted(runtime_policy)
     providers: dict[str, str] = {}
     modules = []
     for path, manifest in entries:
@@ -149,41 +123,24 @@ def build_report(root: Path = ROOT, *, runtime: dict | None = None) -> dict:
             "linked": link_name is not None,
             "declared_rpc_paths": sorted(declared_rpc),
             "rpc_bindings": sorted(binding_specs, key=lambda item: item["path"]),
-            "active_rpc_paths": sorted(route for route in active if providers.get(route) == module_id),
+            "active_rpc_paths": [],
         })
 
-    # Resolve after every provider is known; identical active RPC ownership
-    # cannot be fabricated by adding a status field to the report.
-    for mod in modules:
-        mod["active_rpc_paths"] = sorted(
-            route for route in active if providers.get(route) == mod["module_id"]
-        )
-    unclaimed = sorted(set(active) - set(providers))
-    # An active method is never valid without a linked Rust owner. A manifest
-    # alone does not activate a module or authorize publishing a route.
-    for mod in modules:
-        if mod["active_rpc_paths"] and not mod["linked"]:
-            errors.append(f"active RPC belongs to unlinked Rust module: {mod['module_id']}")
-    if runtime is not None:
-        if unclaimed:
-            errors.append("active RPC is not declared in module.yaml: " + ", ".join(unclaimed))
-    if errors:
-        raise ValueError("cutover module acceptance failed:\n" + "\n".join(errors))
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     return {
         "schema_version": 1,
-        "source": "modules/*/module.yaml + Worker Cargo.toml; optional executed workerd proof",
-        "runtime_evidence": "EXECUTED" if runtime is not None else "NOT_EXECUTED",
-        "runtime": runtime,
-        "rpc_policy": dict(sorted(runtime_policy.items())),
+        "source": "modules/*/module.yaml + Worker Cargo.toml",
+        "runtime_evidence": "NOT_EXECUTED",
+        "runtime": None,
+        "rpc_policy": {},
         "source_sha": head,
         "modules": sorted(modules, key=lambda x: x["module_id"]),
-        "active_rpc_paths": sorted(active),
-        "unclaimed_active_rpc_paths": unclaimed,
+        "active_rpc_paths": [],
+        "unclaimed_active_rpc_paths": [],
         "counts": {
             "discovered_modules": len(modules),
             "linked_modules": sum(m["linked"] for m in modules),
-            "active_rpc_methods": len(active),
+            "active_rpc_methods": 0,
             "declared_rpc_bindings": len(providers),
         },
     }
@@ -192,11 +149,9 @@ def build_report(root: Path = ROOT, *, runtime: dict | None = None) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--runtime-proof", type=Path)
     args = parser.parse_args()
     try:
-        runtime = json.loads(args.runtime_proof.read_text(encoding="utf-8")) if args.runtime_proof else None
-        report = build_report(runtime=runtime)
+        report = build_report()
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(json.dumps({"result": "PASS", "report": str(args.output),

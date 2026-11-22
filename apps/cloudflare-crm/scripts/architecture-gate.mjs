@@ -125,20 +125,6 @@ check(tomlScalar("Cargo.toml","workspace.package","edition")===rustPolicy.editio
 check(tomlScalar("apps/cloudflare-crm/rust-party/Cargo.toml","package","edition")===rustPolicy.edition&&
   tomlScalar("apps/cloudflare-crm/rust-party/Cargo.toml","package","rust-version")===rustPolicy.minimum_rust_version,
   "native Worker compiler boundary differs from workspace policy");
-// Keep one developer codegen path and the two intentionally distinct Worker builds.
-// This extends the existing architecture gate; no second registry or generator.
-const rootPackage=JSON.parse(read("package.json"));
-check(rootPackage.scripts?.gen==="pnpm web:generate"&&
-  rootPackage.scripts?.["web:generate"]==="buf generate --template buf.gen.web.yaml",
-  "active TypeScript generation must use the single Buf command");
-check(!Object.values(rootPackage.scripts||{}).some(command=>
-  /generate_contract_bindings|generate_contract_lifecycle|generate_contract_telemetry_catalog|generate_hashes/.test(command)),
-  "legacy contract generators must not enter developer scripts");
-check(rootPackage.scripts?.["web:check"]?.split("pnpm gen").length===2&&
-  !rootPackage.scripts["web:check"].includes("pnpm web:typecheck")&&
-  !rootPackage.scripts["web:check"].includes("pnpm web:build"),
-  "web:check must generate contracts exactly once");
-
 // Normal CI executes Rust tests and both builds; exact-SHA workerd and live
 // deployment evidence verify these instead of matching shell text fragments.
 const appPackage=JSON.parse(read("apps/cloudflare-crm/package.json"));

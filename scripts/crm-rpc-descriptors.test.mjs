@@ -44,7 +44,7 @@ test("SelfWrite requires idempotent Protobuf and authenticated coverage without 
  report.runtime.viewer_denials=report.runtime.viewer_denials.filter(path=>path!==method);
  assert.doesNotThrow(()=>validateRuntime(report,available,validateBindings(report,available)));
 });
-reject("missing executed evidence fails",r=>{r.runtime_evidence="NOT_EXECUTED";},/executed workerd evidence required/);
+reject("missing executed evidence fails",r=>{r.runtime=null;},/executed workerd evidence required/);
 reject("stale evidence fails",r=>{r.runtime.source_sha="0".repeat(40);},/stale runtime evidence/);
 reject("missing policy fails",r=>{r.runtime.rpc.policies=[];},/permission denial coverage|missing or invalid compiled policy/);
 reject("unregistered policy fails",r=>{

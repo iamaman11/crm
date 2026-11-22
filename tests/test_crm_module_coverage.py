@@ -37,6 +37,8 @@ class ModuleDiscoveryTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (directory / "src/lib.rs").write_text("pub fn example() {}\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "missing sibling module.yaml"):
+                coverage.build_report()
             (directory / "module.yaml").write_text(
                 """schema_version: crm.module/v1
 module_id: crm.ci-expansion-probe
@@ -81,36 +83,6 @@ lifecycle:
         party = next(row for row in report["modules"] if row["module_id"] == "crm.parties")
         self.assertTrue(party["linked"])
         self.assertIn("/crm.parties.v3.PartyService/GetParty", party["declared_rpc_paths"])
-
-    def test_runtime_evidence_is_required_to_claim_active_methods(self) -> None:
-        current = coverage.build_report()
-        path = "/crm.parties.v3.PartyService/GetParty"
-        proof = {"source_sha": current["source_sha"], "result": "PASS", "features": ["native-ci"],
-                 "successful_rpc_calls": [path],
-                 "rpc": {"compiled_policy_check": True, "registered_methods": [path],
-                         "policies": [[path, {"permission": "Read"}]]}}
-        self.assertEqual(coverage.build_report(runtime=proof)["active_rpc_paths"], [path])
-        proof["successful_rpc_calls"] = []
-        with self.assertRaisesRegex(ValueError, "missing successful executed call"):
-            coverage.build_report(runtime=proof)
-        proof["successful_rpc_calls"] = [path]
-        proof["source_sha"] = "0" * 40
-        with self.assertRaisesRegex(ValueError, "stale or unsuccessful"):
-            coverage.build_report(runtime=proof)
-
-    def test_signed_self_write_is_a_compiled_policy_not_an_unknown_permission(self) -> None:
-        current = coverage.build_report()
-        path = "/crm.contact_points.v2.ContactPointService/VerifyOwnEmailContactPoint"
-        proof = {"source_sha": current["source_sha"], "result": "PASS",
-                 "features": ["native-ci"], "successful_rpc_calls": [path],
-                 "rpc": {"compiled_policy_check": True,
-                         "registered_methods": [path],
-                         "policies": [[path, {"permission": "SelfWrite"}]]}}
-        report = coverage.build_report(runtime=proof)
-        self.assertEqual(report["rpc_policy"][path]["permission"], "SelfWrite")
-        proof["rpc"]["policies"][0][1]["permission"] = "UnknownWrite"
-        with self.assertRaisesRegex(ValueError, "invalid compiled RPC policy"):
-            coverage.build_report(runtime=proof)
 
     def test_active_rpc_without_manifest_binding_is_not_accepted(self) -> None:
         self.assertEqual(

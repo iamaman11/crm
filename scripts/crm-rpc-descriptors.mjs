@@ -1,6 +1,6 @@
 // Protobuf and ownership are parsed by their standard decoders.
 // Runtime evidence is produced only by the completed signed workerd suite.
-import {readFileSync} from "node:fs";
+import {readFileSync,writeFileSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {resolve,dirname} from "node:path";
 import {createRequire} from "node:module";
@@ -46,9 +46,8 @@ export function targetMethods(available){
  })
   .map(([path])=>path).sort();
 }
-export function validateRuntime(report,available,bound){
- const evidence=report.runtime;
- if(report.runtime_evidence!=="EXECUTED"||evidence?.result!=="PASS")
+export function validateRuntime(report,available,bound,evidence=report.runtime){
+ if(evidence?.result!=="PASS")
   fail("executed workerd evidence required");
  if(evidence.source_sha!==report.source_sha)fail("stale runtime evidence");
  if(JSON.stringify(evidence.features)!==JSON.stringify(["native-ci"]))
@@ -92,9 +91,7 @@ export function validateRuntime(report,available,bound){
  equalPaths(evidence.unauthenticated_denials,registered,"authentication denial coverage");
  equalPaths(evidence.viewer_denials,[...policies].filter(([,rule])=>
    rule.permission==="Write"||rule.permission==="AdminRead").map(([path])=>path),"permission denial coverage");
- if(JSON.stringify([...registered].sort())!==JSON.stringify([...report.active_rpc_paths].sort()))
-  fail("active methods differ from executed policy");
-
+ equalPaths(Object.keys(rpc.method_owners),registered,"compiled ownership");
  return {registered:[...registered].sort()};
 }
 export function run(){
@@ -106,8 +103,20 @@ export function run(){
  if(report.source_sha!==sha)fail("stale module inventory");
  const bound=validateBindings(report,available);
  const required=process.argv.includes("--require-runtime");
- const runtime=required||report.runtime_evidence==="EXECUTED"
-   ?validateRuntime(report,available,bound):null;
+ let runtime=null;
+ if(required){
+  const evidence=JSON.parse(readFileSync(process.env.CRM_RPC_RUNTIME_PROOF,"utf8"));
+  runtime=validateRuntime(report,available,bound,evidence);
+  report.runtime=evidence;
+  report.runtime_evidence="EXECUTED";
+  report.rpc_policy=Object.fromEntries(evidence.rpc.policies);
+  report.active_rpc_paths=runtime.registered;
+  report.counts.active_rpc_methods=runtime.registered.length;
+  for(const module of report.modules){
+   module.active_rpc_paths=runtime.registered.filter(path=>bound.get(path).module_id===module.module_id);
+  }
+  writeFileSync(reportFile,JSON.stringify(report,null,2)+"\n");
+ }
  console.log(JSON.stringify({event:"crm.protobuf-descriptor-coverage",result:"PASS",
   scope:runtime?"compiled router/policy and successful workerd calls":"manifest/descriptor signatures only",
   runtime_evidence:runtime?"EXECUTED":"NOT_EXECUTED",
