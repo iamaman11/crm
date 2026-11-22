@@ -29,6 +29,8 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.15.2'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
       # Code changes execute this pipeline once on dev; PRs are optional discussion.
       # Pure source checks must fail before npm, Cargo builds or Chromium.
       - name: Fast repository CI topology, architecture, and source syntax
@@ -80,6 +82,20 @@ jobs:
           set -euo pipefail
           cargo fmt --all -- --check
           cargo fmt --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml -- --check
+      # The Mozilla compiler cache reuses Rust object results across source SHA changes.
+      # Cargo still checks fingerprints and compiles changed sources and native feature graphs.
+      - name: Install pinned sccache for Rust compilation
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.19.0
+      - name: Enable cross-commit compiler cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$SCCACHE_PATH"
+          echo 'SCCACHE_GHA_ENABLED=true' >> "$GITHUB_ENV"
+          echo "RUSTC_WRAPPER=$SCCACHE_PATH" >> "$GITHUB_ENV"
+          "$SCCACHE_PATH" --version
       # The scanner is pinned independently of application dependencies.
       # Cache only its executable, not a security result: every run still
       # evaluates both the root and Worker Cargo.lock files from this SHA.
@@ -148,8 +164,9 @@ jobs:
       - name: Build React CRM
         run: pnpm run build
         working-directory: apps/cloudflare-crm
-      # Cargo fingerprints own source/manifest/Protobuf freshness. Keep this
-      # cache stable across code edits; locked deps and Rust toolchain select it.
+      # One stable Cargo fingerprint cache per locked dependency graph. Cargo itself
+      # invalidates changed source/feature artifacts; sccache caches compiled crates.
+      # Do not include github.sha: it forces a new 1.1 GB upload on every push.
       - name: Restore Cargo compilation cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -158,10 +175,12 @@ jobs:
             ~/.cargo/git
             target
             apps/cloudflare-crm/rust-party/target
-          key: ${{ runner.os }}-crm-rust1100-wasm-v2-${{ hashFiles('**/Cargo.lock', 'rust-toolchain*') }}-${{ github.sha }}
+          key: ${{ runner.os }}-crm-rust1100-wasm-v3-${{ hashFiles('**/Cargo.lock', 'rust-toolchain*') }}
           restore-keys: |
             ${{ runner.os }}-crm-rust1100-wasm-v2-${{ hashFiles('**/Cargo.lock', 'rust-toolchain*') }}-
             ${{ runner.os }}-crm-rust1100-wasm-v1-
+      # Report actual compiler-cache hits/misses, rather than assuming cache speedup.
+      # The Mozilla action also emits end-of-job statistics for the complete job.
       # Clippy checks WASM compilation, so a separate cargo check repeats the work.
       - name: Run Clippy on the actual Worker for WebAssembly
         run: cargo clippy --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations

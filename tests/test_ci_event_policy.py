@@ -154,6 +154,22 @@ jobs:
                 path.write_text(contents, encoding="utf-8")
                 self.assertIn(expected_error, check_workflow(path).errors)
 
+    def test_crm_uses_cross_commit_compiler_cache_without_splitting_acceptance(self) -> None:
+        workflow = (Path(__file__).resolve().parents[1]
+                    / ".github/workflows/cloudflare-crm-spike.yml").read_text(encoding="utf-8")
+        self.assertIn("sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba", workflow)
+        self.assertIn("RUSTC_WRAPPER=$SCCACHE_PATH", workflow)
+        self.assertIn("SCCACHE_GHA_ENABLED=true", workflow)
+        self.assertIn("crm-rust1100-wasm-v3-", workflow)
+        key = next(line for line in workflow.splitlines() if "key:" in line and "crm-rust1100-wasm-v3-" in line)
+        self.assertNotIn("github.sha", key, "Cargo target cache must be reusable across pushes")
+        self.assertIn("needs: cloudflare-crm-spike", workflow)
+        self.assertIn("worker-build --release --locked --features native", workflow)
+        self.assertIn("worker-build --dev --locked --features native-ci", workflow)
+        self.assertIn("node rust-party/test/native.mjs", workflow)
+        self.assertIn("node apps/cloudflare-crm/e2e/live.mjs", workflow)
+        self.assertIn("node apps/cloudflare-crm/scripts/deploy.mjs verify-data", workflow)
+
     def test_rejects_legacy_pr_into_dev_even_for_pr_only_workflows(self) -> None:
         path = self.write_workflow("""name: Legacy
 on:
