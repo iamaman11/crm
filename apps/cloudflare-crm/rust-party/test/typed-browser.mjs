@@ -882,7 +882,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await overdueCard.getByText("Просрочена",{exact:true}).waitFor();
    const overdueReadAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
    await page.getByLabel("Только просроченные задачи",{exact:true}).check();
-   assert.equal(new URL(page.url()).hash,"#tasks?overdue=1");
+   assert.equal(new URL(page.url()).hash,"#tasks?accountId="+accountId+"&overdue=1");
    await page.getByRole("heading",{name:"Browser Overdue "+runId,exact:true}).waitFor();
    await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor({state:"hidden"});
    await reloadDocument();
@@ -892,7 +892,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Browser Overdue "+runId,exact:true}).waitFor();
    await page.goBack();
    await page.getByRole("heading",{name:"Browser Overdue "+runId,exact:true}).waitFor();
-   assert.equal(new URL(page.url()).hash,"#tasks?overdue=1");
+   assert.equal(new URL(page.url()).hash,"#tasks?accountId="+accountId+"&overdue=1");
    await navigate("tasks?accountId=missing-account&overdue=1","Задачи");
    await page.getByText("Просроченных задач нет.",{exact:true}).waitFor();
    await navigate("tasks?accountId="+accountId+"&overdue=1","Задачи");
