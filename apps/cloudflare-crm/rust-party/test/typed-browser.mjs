@@ -1636,6 +1636,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await reloadDocument();
    const badQuality=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить имя",exact:true})});
    await expect(badQuality.getByLabel("Участник",{exact:true})).toHaveValue(otherPartyId);
+   await expect(badQuality.getByLabel("Участник",{exact:true})).toBeEnabled();
    const badQualityRead=page.waitForResponse(r=>responsePathEndsWith(r,"/EvaluatePartyName"));
    await badQuality.getByRole("button",{name:"Проверить качество",exact:true}).click();
    assert.equal((await badQualityRead).status(),200);
@@ -1653,11 +1654,13 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(new URL(await page.url()).hash,"#review?partyId="+encodeURIComponent(otherPartyId));
    const goodQuality=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить имя",exact:true})});
    await expect(goodQuality.getByLabel("Участник",{exact:true})).toHaveValue(otherPartyId);
+   await expect(goodQuality.getByLabel("Участник",{exact:true})).toBeEnabled();
    await goodQuality.getByRole("button",{name:"Проверить качество",exact:true}).click();
    await goodQuality.getByText("Не пройдено: 0",{exact:true}).waitFor();
    await expect(goodQuality.getByRole("link",{name:"Открыть карточку и исправить",exact:true})).toHaveCount(0);
    await reloadDocument();
    await expect(goodQuality.getByLabel("Участник",{exact:true})).toHaveValue(otherPartyId);
+   await expect(goodQuality.getByLabel("Участник",{exact:true})).toBeEnabled();
    await goodQuality.getByRole("button",{name:"Проверить качество",exact:true}).click();
    await goodQuality.getByText("Не пройдено: 0",{exact:true}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,

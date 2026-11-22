@@ -28,7 +28,7 @@ export function PartyPicker({name="partyId",label="Участник",initialPart
   return <div>
     <SearchField label={"Поиск: "+label} onSearch={text=>{setSearch(text);reset();}}/>
     <SelectField label={label} name={name} value={value} required={required}
-      disabled={!initialParty&&(query.busy||!!query.error)} onChange={e=>select(e.target.value)}>
+      disabled={!initialParty&&!value&&(query.busy||!!query.error)} onChange={e=>select(e.target.value)}>
       <option value="">{required?"Выберите участника":"Все участники"}</option>
       {value&&!displayed&&<option value={value}>
         {initialParty?.partyId===value?initialParty.displayName:selected.data?.displayName??"Выбранный участник"}
