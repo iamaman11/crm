@@ -1558,6 +1558,43 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("button",{name:"Сбросить поиск сделок",exact:true}).click();
    await expect(searchResults).toHaveCount(0);
    checkpoint("M2 Deal search across pipelines, typed name filter, result→full page→Back, no-results and reset");
+
+   // L-08: original typed Party/Account/Deal tenant reads, not a search index.
+   const unifiedAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await navigate("search","Поиск по CRM");
+   await page.getByLabel("Поиск по CRM",{exact:true}).fill(runId);
+   await page.getByRole("button",{name:"Найти",exact:true}).click();
+   assert.equal(new URL(page.url()).hash,"#search?query="+encodeURIComponent(runId));
+   const foundParties=page.getByRole("region",{name:"Найденные участники"});
+   const foundAccounts=page.getByRole("region",{name:"Найденные клиенты"});
+   const foundDeals=page.getByRole("region",{name:"Найденные сделки"});
+   await foundParties.getByRole("link",{name:"Browser Updated "+runId,exact:true}).waitFor();
+   await foundAccounts.getByRole("link",{name:"Browser Account "+runId,exact:true}).waitFor();
+   await foundDeals.getByRole("link",{name:"Browser Deal "+runId,exact:true}).waitFor();
+   await foundDeals.getByRole("link",{name:"Browser Deal "+runId,exact:true}).click();
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   await page.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
+   await page.goBack();
+   await page.getByRole("heading",{name:"Поиск по CRM",exact:true}).waitFor();
+   await expect(page.getByLabel("Поиск по CRM",{exact:true})).toHaveValue(runId);
+   await foundAccounts.getByRole("link",{name:"Browser Account "+runId,exact:true}).waitFor();
+   await reloadDocument();
+   await page.getByRole("heading",{name:"Поиск по CRM",exact:true}).waitFor();
+   await foundParties.getByRole("link",{name:"Browser Updated "+runId,exact:true}).waitFor();
+   await page.getByLabel("Поиск по CRM",{exact:true}).fill("missing-unified-"+runId);
+   await page.getByRole("button",{name:"Найти",exact:true}).click();
+   await foundParties.getByText("Участники не найдены.",{exact:true}).waitFor();
+   await foundAccounts.getByText("Клиенты не найдены.",{exact:true}).waitFor();
+   await foundDeals.getByText("Сделки не найдены.",{exact:true}).waitFor();
+   await page.goto(base+"/#search?query=a&query=b");
+   await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
+   await page.goto(base+"/#search?query="+("x".repeat(201)));
+   await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     unifiedAuditBefore,"L-08 search, reload, links and malformed URLs must not write audit");
+   await page.goto(base+"/#sales");
+   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+   checkpoint("L-08 unified Party/Account/Deal owner search, native URL/Back/reload, empty/malformed, zero read audit");
    // Full-page Deal URL and inline expansion share the same original GetDeal
    // read component. The preceding search/back route can reset the selected
    // pipeline, so target the actual Deal card, not whichever link is last.

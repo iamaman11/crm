@@ -8,6 +8,7 @@ export type Route =
   | {kind:"account";accountId:string}
   | {kind:"account-create";partyId:string}
   | {kind:"deal";dealId:string}
+  | {kind:"search";query:string}
   | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;viewId?:string;pipelineId?:string}
   | {kind:"not-found";path:string};
 
@@ -26,6 +27,15 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
   const question=source.indexOf("?");
   const path=question<0?source:source.slice(0,question);
   const params=new URLSearchParams(question<0?"":source.slice(question+1));
+  if(path==="search"){
+    const queries=params.getAll("query");
+    const query=queries[0]??"";
+    let unknownParameter=false;
+    params.forEach((_,key)=>{if(key!=="query")unknownParameter=true;});
+    if(queries.length>1||unknownParameter||[...query].length>200)
+      return {kind:"not-found",path:source};
+    return {kind:"search",query};
+  }
   if(path==="accounts"){
     try {
       const status=accountFilterStatus(params.get("status"),allowedStatuses);
@@ -146,4 +156,10 @@ export function salesPipelineHref(initialAccountId:string,pipelineId:string,sear
 
 export function dealHref(dealId:string):string {
   return "#sales/"+encodeURIComponent(dealId);
+}
+
+/** The one URL-owned query survives Back and reload; no browser-side result cache. */
+export function searchHref(query:string):string {
+  const term=query.trim();
+  return "#search"+(term?"?"+new URLSearchParams({query:term}).toString():"");
 }
