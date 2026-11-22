@@ -7,7 +7,7 @@ import {enumValue} from "./enumFields";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {SearchField} from "./SearchField";
 import {openAccountFromParty,savedPartyListScroll} from "./navigation";
-import {reviewHref} from "./routes";
+import {partyHref,reviewHref} from "./routes";
 
 export function PartyScreen({initialPartyId=""}:{initialPartyId?:string}) {
   const [cursor,setCursor]=useState("");
@@ -22,6 +22,11 @@ export function PartyScreen({initialPartyId=""}:{initialPartyId?:string}) {
   // A Party permalink is an owner GetParty read, NOT an ID passed to the text search.
   const focused=useQuery(useCallback(async(signal:AbortSignal)=>initialPartyId?
     (await api.partyRecords.getParty({partyId:initialPartyId},{signal})).party:undefined,[initialPartyId]));
+  // A canonical merge never hides or rewrites this original Party card.
+  // Keep the real record addressable and show the exact canonical link.
+  const canonical=useQuery(useCallback(async(signal:AbortSignal)=>initialPartyId?
+    api.identityResolution.resolveCanonicalParty({partyId:initialPartyId},{signal}):
+    undefined,[initialPartyId]));
   const mutation=useMutation({
     storageKey:"crm.party.pending.v1",
     lookup:async({resourceId,key},signal)=>(await api.partyRecords.getParty({
@@ -46,6 +51,12 @@ export function PartyScreen({initialPartyId=""}:{initialPartyId?:string}) {
       <option value="">Все</option><option value={PartyKind.PERSON}>Человек</option><option value={PartyKind.ORGANIZATION}>Организация</option>
     </SelectField></>}
     <QueryNotice query={initialPartyId?focused:query}/>
+    {initialPartyId&&<QueryNotice query={canonical}/>}
+    {initialPartyId&&canonical.data&&canonical.data.canonicalPartyId!==initialPartyId&&
+      <p role="status">Эта запись отмечена как дубликат, но её данные и связи сохранены.
+        <a href={partyHref(canonical.data.canonicalPartyId)}>Открыть каноническую запись</a>.
+        {" "}<a href={reviewHref(initialPartyId)}>История объединений и отмена</a>.
+      </p>}
     <div>{(initialPartyId?(focused.data?[focused.data]:[]):query.data?.parties??[]).map(p=><Card key={p.partyId} title={p.displayName}>
       <p>{p.kind===PartyKind.PERSON?"Человек":p.kind===PartyKind.ORGANIZATION?"Организация":"Неизвестный тип"} · версия {p.version.toString()}</p>
       <p><small>ID: {p.partyId}</small></p>

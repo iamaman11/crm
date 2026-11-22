@@ -1696,6 +1696,49 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
      candidateReadAudit,"Navigating candidate Party and returning/reloading must remain read-only");
    checkpoint("N-05 original shared-email candidate -> direct typed CompareParties -> unconfirmed verdict, Party links/reload, zero read audit");
+
+   // L-03: user-visible explicit identity confirmation, original Rust
+   // merge/unmerge lineage, and no destructive owner reference changes.
+   const l03Tables=["crm_account_records","crm_contact_point_records",
+     "crm_party_relationship_records","crm_sales_deal_records",
+     "crm_activity_task_records","crm_consent_records"];
+   const l03Before=await Promise.all(l03Tables.map(async table=>
+     (await sql("SELECT COUNT(*) AS n FROM "+table+" WHERE tenant='"+tenantSql+"'"))[0].n));
+   const l03AuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await candidateRow.getByRole("button",{name:"Сравнить пару",exact:true}).click();
+   const canonicalCard=page.locator("section").filter({
+     has:page.getByRole("heading",{name:"Каноническая запись и история объединений",exact:true})
+   });
+   await canonicalCard.getByLabel("Запись-дубликат (неосновная)",{exact:true}).selectOption(otherPartyId);
+   await expect(canonicalCard.getByRole("button",{name:"Подтвердить объединение",exact:true})).toBeDisabled();
+   await canonicalCard.getByLabel(/Я вручную проверил личность/).check();
+   await mutation(canonicalCard.getByRole("button",{name:"Подтвердить объединение",exact:true}),"MergeParty");
+   const l03Merge=(await sql("SELECT id,source_party,survivor_party,version,status "+
+     "FROM crm_identity_merge_records WHERE tenant='"+tenantSql+"' AND source_party='"+otherPartyId+"' "+
+     "AND survivor_party='"+partyId+"' ORDER BY rowid DESC LIMIT 1"))[0];
+   assert.ok(l03Merge);
+   assert.equal(l03Merge.version,1);
+   assert.equal(l03Merge.status,"active");
+   await navigate("parties?partyId="+encodeURIComponent(otherPartyId),"Люди и организации");
+   await page.getByRole("link",{name:"Открыть каноническую запись",exact:true}).waitFor();
+   await page.getByRole("heading",{name:"Browser Other "+runId,exact:true}).waitFor();
+   await navigate("review?partyId="+encodeURIComponent(otherPartyId),"Качество и совпадения");
+   await canonicalCard.getByRole("button",{name:"Отменить объединение",exact:true}).waitFor();
+   await mutation(canonicalCard.getByRole("button",{name:"Отменить объединение",exact:true}),"UnmergeParty");
+   const l03Unmerged=(await sql("SELECT version,status FROM crm_identity_merge_records "+
+     "WHERE tenant='"+tenantSql+"' AND id='"+l03Merge.id+"'"))[0];
+   assert.deepEqual(l03Unmerged,{version:2,status:"unmerged"});
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     l03AuditBefore+2,"Merge+Unmerge must write exactly 2 audits");
+   const l03After=await Promise.all(l03Tables.map(async table=>
+     (await sql("SELECT COUNT(*) AS n FROM "+table+" WHERE tenant='"+tenantSql+"'"))[0].n));
+   assert.deepEqual(l03After,l03Before,"Lineage cannot lose downstream references");
+   await reloadDocument();
+   await canonicalCard.getByText(/Отменено:/).waitFor();
+   await navigate("parties?partyId="+encodeURIComponent(otherPartyId),"Люди и организации");
+   await page.getByRole("heading",{name:"Browser Other "+runId,exact:true}).waitFor();
+   await expect(page.getByRole("link",{name:"Открыть каноническую запись",exact:true})).toHaveCount(0);
+   checkpoint("L-03 original typed domain reversible canonical Merge/Unmerge, explicit identity decision, exact D1 audit/refs/reload");
    // N-04: the original quality read and Party update are already present.
    // Exercise only the missing user journey: exact Party -> edit -> exact review.
    await navigate("parties?partyId="+encodeURIComponent(otherPartyId),"Люди и организации");

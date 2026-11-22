@@ -91,6 +91,31 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.identity_resolution.v2.IdentityResolutionService.FindSharedEmailCandidates
+    - id: identity_resolution.party.merge_v2
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v2.IdentityResolutionService.MergeParty
+    - id: identity_resolution.party.unmerge_v2
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v2.IdentityResolutionService.UnmergeParty
+    - id: identity_resolution.party.merge_get_v2
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v2.IdentityResolutionService.GetMergeOperation
+    - id: identity_resolution.party.merge_list_v2
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v2.IdentityResolutionService.ListMergeOperationsByParty
+    - id: identity_resolution.party.resolve_canonical_v2
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.identity_resolution.v2.IdentityResolutionService.ResolveCanonicalParty
   events:
     - id: identity_resolution.candidate.registered
       version: 1.0.0

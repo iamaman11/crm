@@ -1378,6 +1378,107 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
    tenant_ab:true,viewer_read:true,pagination:true,no_identity_verdict:true,
    no_writes:true,published_active:true}));
 
+ // L-03: a governed canonical merge is reversible lineage, not data reparenting.
+ // The unchanged downstream D1 owner tables prove no Account/Contact/Deal/Task loss.
+ const mergeSourceId="native-merge-source-"+randomUUID();
+ const mergeSurvivorId="native-merge-survivor-"+randomUUID();
+ for(const [p,name] of [[mergeSourceId,"Merge source"],[mergeSurvivorId,"Merge survivor"]]){
+   const created=await v3("CreateParty",admin,{
+     partyId:p,kind:1,displayName:name,
+     precondition:{idempotencyKey:"identity-l03-party-"+randomUUID()}});
+   assert.equal(created.status,200,describeProtobuf(created.body));
+ }
+ const mergeOpId="native-merge-"+randomUUID();
+ const mergeKey="identity-l03-merge-"+randomUUID();
+ const intent={
+   operationId:mergeOpId,sourcePartyId:mergeSourceId,sourcePartyVersion:1n,
+   survivorPartyId:mergeSurvivorId,survivorPartyVersion:1n,
+   reason:"manual_identity_review",precondition:{idempotencyKey:mergeKey}
+ };
+ const downstreamTables=["crm_account_records","crm_contact_point_records",
+   "crm_party_relationship_records","crm_sales_deal_records",
+   "crm_activity_task_records","crm_consent_records"];
+ const beforeDownstream=await Promise.all(downstreamTables.map(async table=>
+   (await sql("SELECT COUNT(*) AS n FROM "+table))[0].n));
+ const beforeLineageAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
+ assert.equal((await identityV2("MergeParty",viewer,intent)).status,403);
+ assert.equal((await identityV2("MergeParty",tenantB,intent)).status,404);
+ assert.equal((await identityV2("MergeParty",admin,{
+   ...intent,sourcePartyVersion:2n,
+   precondition:{idempotencyKey:"l03-stale-"+randomUUID()}
+ })).status,409);
+ const merged=await identityV2("MergeParty",admin,intent);
+ assert.equal(merged.status,200,describeProtobuf(merged.body));
+ assert.equal(merged.body.operation?.active,true);
+ assert.equal(merged.body.operation?.version,1n);
+ assert.equal(merged.body.receipt?.replayed,false);
+ assert.equal(merged.body.receipt?.resourceVersion,1n);
+ assert.equal((await identityV2("MergeParty",admin,intent)).body.receipt?.replayed,true);
+ assert.equal((await identityV2("MergeParty",admin,{...intent,
+   reason:"different_reason"})).status,409);
+ assert.equal((await identityV2("MergeParty",admin,{...intent,
+   operationId:"l03-double-"+randomUUID(),
+   precondition:{idempotencyKey:"identity-l03-duplicate-"+randomUUID()}
+ })).status,409,"active source cannot be merged twice");
+ assert.equal((await identityV2("MergeParty",admin,{
+   ...intent,operationId:"l03-reverse-"+randomUUID(),
+   sourcePartyId:mergeSurvivorId,survivorPartyId:mergeSourceId,
+   precondition:{idempotencyKey:"identity-l03-reverse-"+randomUUID()}
+ })).status,409,"cycle or redirected survivor must fail");
+ const got=await identityV2("GetMergeOperation",viewer,{
+   operationId:mergeOpId,receiptIdempotencyKey:mergeKey
+ });
+ assert.equal(got.status,200,describeProtobuf(got.body));
+ assert.equal(got.body.operation?.operationId,mergeOpId);
+ assert.equal(got.body.confirmedMutation?.resourceVersion,1n);
+ assert.ok(got.body.confirmedMutation?.originalRequestId);
+ assert.equal((await identityV2("GetMergeOperation",tenantB,{operationId:mergeOpId})).status,404);
+ const history=await identityV2("ListMergeOperationsByParty",viewer,{
+   partyId:mergeSourceId,page:{pageSize:10}
+ });
+ assert.equal(history.status,200,describeProtobuf(history.body));
+ assert.equal(history.body.operations.length,1);
+ assert.equal(history.body.operations[0].operationId,mergeOpId);
+ assert.equal((await identityV2("ListMergeOperationsByParty",tenantB,{
+   partyId:mergeSourceId,page:{pageSize:10}
+ })).status,404);
+ const resolved=await identityV2("ResolveCanonicalParty",viewer,{partyId:mergeSourceId});
+ assert.equal(resolved.status,200,describeProtobuf(resolved.body));
+ assert.equal(resolved.body.canonicalPartyId,mergeSurvivorId);
+ assert.deepEqual(resolved.body.partyPath,[mergeSourceId,mergeSurvivorId]);
+ assert.deepEqual(resolved.body.mergeOperationPath,[mergeOpId]);
+ assert.equal((await identityV2("ResolveCanonicalParty",tenantB,{
+   partyId:mergeSourceId
+ })).status,404);
+ const unmergeKey="identity-l03-unmerge-"+randomUUID();
+ const undo={operationId:mergeOpId,sourcePartyVersion:1n,survivorPartyVersion:1n,
+   reason:"incorrect_merge",precondition:{expectedVersion:1n,idempotencyKey:unmergeKey}};
+ assert.equal((await identityV2("UnmergeParty",viewer,undo)).status,403);
+ assert.equal((await identityV2("UnmergeParty",admin,{
+   ...undo,precondition:{expectedVersion:2n,idempotencyKey:"l03-undo-stale-"+randomUUID()}
+ })).status,409);
+ const undone=await identityV2("UnmergeParty",admin,undo);
+ assert.equal(undone.status,200,describeProtobuf(undone.body));
+ assert.equal(undone.body.operation?.active,false);
+ assert.equal(undone.body.operation?.version,2n);
+ assert.equal((await identityV2("UnmergeParty",admin,undo)).body.receipt?.replayed,true);
+ const reverted=await identityV2("ResolveCanonicalParty",viewer,{partyId:mergeSourceId});
+ assert.equal(reverted.status,200,describeProtobuf(reverted.body));
+ assert.equal(reverted.body.canonicalPartyId,mergeSourceId);
+ assert.deepEqual(reverted.body.partyPath,[mergeSourceId]);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_identity_merge_records "+
+   "WHERE tenant='tenant-a' AND id='"+mergeOpId+"' AND status='unmerged' AND version=2"))[0].n,1);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_identity_merge_receipts "+
+   "WHERE tenant='tenant-a'"))[0].n,2,"one immutable receipt per original mutation");
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
+   beforeLineageAudit+2,"one merge and one unmerge audit, reads and replays do not write");
+ const afterDownstream=await Promise.all(downstreamTables.map(async table=>
+   (await sql("SELECT COUNT(*) AS n FROM "+table))[0].n));
+ assert.deepEqual(afterDownstream,beforeDownstream,"canonical lineage never rewires other owners");
+ console.log(JSON.stringify({event:"crm.native-l03-merge-lineage",result:"PASS",
+   generated_binary:true,role_policy:true,tenant_isolation:true,stale_party_guard:true,
+   replay_receipt:true,immutable_history:true,canonical_resolve:true,
+   reversible:true,downstream_unchanged:true,audit_atomic:true}));
 
 // Original crm-consents v2: operator may DENY, never self-attest GRANT.
 // Every RPC is generated binary Protobuf through signed native workerd/D1.

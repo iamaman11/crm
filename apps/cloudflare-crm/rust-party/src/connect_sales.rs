@@ -667,11 +667,12 @@ struct DataQualityV2Service {
     tenant: String,
 }
 
-// Read-only crm-identity-resolution. Same original discovered observations,
-// same tenant-bound D1. Identical email does NOT confirm identity.
+// Original crm-identity-resolution: candidate reads and reversible canonical
+// merge lineage. Only this domain owner validates topology and persisted state.
 struct IdentityV2Service {
     env: Arc<Env>,
-    tenant: String,
+    actor: access::Actor,
+    request_id: String,
 }
 
 // The original crm-consents domain owns communication decisions and operator
@@ -1065,7 +1066,8 @@ pub(super) fn router(env: Env, verified: &access::Actor, request_id: &str) -> Co
         }))
         .add_service(Arc::new(IdentityV2Service {
             env: Arc::clone(&env),
-            tenant: tenant.to_owned(),
+            actor: verified.clone(),
+            request_id: request_id.to_owned(),
         }))
         .add_service(Arc::new(ConsentV2Service {
             env: Arc::clone(&env),
