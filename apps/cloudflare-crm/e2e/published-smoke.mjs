@@ -56,7 +56,10 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
   // Retry only demonstrably edge-owned asset/doc 404 on read-only navigation.
   const open=async(path,heading)=>{
     for(let attempt=1;attempt<=4;attempt++){
-      const response=await page.goto(base+path);
+      // A same-hash page.goto() returns null in Playwright; use a real document
+      // reload to prove the persisted Party remains visible after reopening.
+      const response=page.url()===base+path?
+        await page.reload():await page.goto(base+path);
       if(response?.status()===404&&!response.headers()["x-crm-runtime"]){
         if(attempt===4)throw Error("CRM_PUBLISHED_EDGE_404_EXHAUSTED");
         continue;
