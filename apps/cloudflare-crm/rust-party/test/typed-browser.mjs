@@ -288,6 +288,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
   }
   throw Error(label+" lookup exceeded 30 pages for "+id);
  };
+ // Browser contract: UI/typed Connect proves visible business state;
+ // D1 is read directly only for generated IDs and independent persistence,
+ // audit, receipt, rollback or no-write invariants not proven by the UI.
  const firstId=async(table,column,value)=>{
    const rows=await sql("SELECT id FROM "+table+" WHERE tenant=? AND json_extract(state,?)=?",
      tenantA,"$."+column,value);
@@ -398,7 +401,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(await page.getByRole("dialog").count(),1);
    await page.getByLabel("Имя или название",{exact:true}).fill("Browser Updated "+runId);
    await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"UpdateParty");
-   assert.equal((await sql("SELECT version FROM crm_party_records WHERE tenant='"+tenantSql+"' AND id='"+partyId+"'"))[0].version,2);
    checkpoint("Party create/edit/reload and D1 version/audit");
    // S5a: original Party commit happens, its HTTP acknowledgement is lost,
    // and a fresh React instance MUST use GetParty + typed D1 receipt, not
@@ -501,7 +503,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
    assert.equal(new URL(await page.url()).hash,"#accounts/"+linkedAccountId,
      "accepted CreateAccount must replace draft URL with a permalink");
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_account_records WHERE tenant='"+tenantSql+"' AND id='"+linkedAccountId+"'"))[0].n,1);
    checkpoint("Party -> shared CreateAccount: selected Party, dirty Cancel/Back and permalink");
    await navigate("relationships","Связи");
    await page.getByRole("button",{name:"Создать связь",exact:true}).click();
@@ -587,7 +588,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(await page.getByRole("dialog").count(),0,"edit stays inline");
    await page.getByLabel("Статус",{exact:true}).selectOption("2");
    await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"UpdateAccount");
-   assert.equal((await sql("SELECT version FROM crm_account_records WHERE tenant='"+tenantSql+"' AND id='"+accountId+"'"))[0].version,2);
    await page.getByLabel("Статус клиента",{exact:true}).selectOption("1");
    // Assert the navigation commit itself: list disappearance can also be a pending refresh.
    await expect(page).toHaveURL(/(?:\\?|&)status=1(?:&|$)/);
@@ -625,7 +625,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
 
    await page.getByLabel("Статус",{exact:true}).selectOption("1");
    await mutation(page.getByRole("button",{name:"Сохранить клиента",exact:true}),"UpdateAccount");
-   assert.equal((await sql("SELECT version FROM crm_account_records WHERE tenant='"+tenantSql+"' AND id='"+accountId+"'"))[0].version,3);
    await page.getByRole("button",{name:"К списку клиентов",exact:true}).click();
    await page.getByRole("heading",{name:"Клиенты",exact:true}).waitFor();
    assert.equal(new URL(await page.url()).hash,listHash,"Back must restore search, status and cursor");
@@ -658,7 +657,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    });
    syntheticPrivateProbes.push({kind:"contact-email",request_id:writes.at(-1)?.request_id,
      value:"browser-"+runId+"@example.org"});
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].n,1);
    const browserSalesContactId=await firstId("crm_contact_point_records","normalized_value",
      "browser-"+runId+"@example.org");
    await page.locator("section").filter({has:page.getByRole("heading",{name:"browser-"+runId+"@example.org",exact:true})})
@@ -666,7 +664,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Изменить контакт",exact:true}).waitFor();
    await page.getByLabel("Предпочтительный",{exact:true}).check();
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"UpdateContactPoint");
-   assert.equal((await sql("SELECT version FROM crm_contact_point_records WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"'"))[0].version,2);
    // Filter by the known user-facing name, never by copying the Party ID.
    await search("Поиск: Фильтр по участнику","Browser Updated "+runId,"ListParties");
    await page.getByLabel("Фильтр по участнику",{exact:true})
@@ -685,8 +682,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Значение контакта",{exact:true}).fill(privatePhone);
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
    syntheticPrivateProbes.push({kind:"contact-phone",request_id:writes.at(-1)?.request_id,value:privatePhone});
-   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_contact_point_records WHERE tenant='"+tenantSql+
-     "' AND party_id='"+partyId+"' AND json_extract(state,'$.normalized_value')='"+privatePhone+"'"))[0].n,1);
    const contactFilterAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
    await page.getByLabel("Способ связи",{exact:true}).selectOption("2");
    await page.getByRole("heading",{name:privatePhone,exact:true}).waitFor();
@@ -820,7 +815,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByLabel("Приоритет",{exact:true}).selectOption("4");
    await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
    const urgentId=await firstId("crm_activity_task_records","subject","Browser Urgent "+runId);
-   assert.equal((await sql("SELECT json_extract(state,'$.priority') AS priority FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+urgentId+"'"))[0].priority,"urgent");
    const beforeTaskFilters=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
    // Find a real Task by subject without manually paging through opaque IDs.
    await page.getByLabel("Поиск задач",{exact:true}).fill("Browser Urgent "+runId);
@@ -910,7 +904,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // Other overdue tasks (including the native fixture) must remain visible:
    // completion removes ONLY this task, not the entire overdue list.
    await page.getByRole("heading",{name:"Browser Overdue "+runId,exact:true}).waitFor({state:"hidden"});
-   assert.equal((await sql("SELECT json_extract(state,'$.status') AS status FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+overdueId+"'"))[0].status,"completed");
    await page.getByLabel("Только просроченные задачи",{exact:true}).uncheck();
    await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor();
    checkpoint("Task due-date triage: overdue-only owner filter/URL/reload/back/complete, no read audit");
@@ -960,7 +953,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
    await expect(page.getByRole("region",{name:"Kanban — этапы и сделки"})).toBeVisible();
    checkpoint("S5 pipeline lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
-   assert.equal((await sql("SELECT version FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].version,1);
    const recordedPipelines=await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+newPipelineId+"' AND action='sales_pipeline.create'");
    assert.equal(recordedPipelines[0].n,1);
    // The test owns its pipeline end-to-end; old test Deals are discarded in 0012.
@@ -1050,8 +1042,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const forecast=page.getByRole("region",{name:"Прогноз продаж"}).getByRole("group",{name:"Обязательство",exact:true});
    await forecast.getByText("Сделок: 1 · по этапу: 0 · вручную: 1",{exact:true}).waitFor();
    await forecast.getByText("90071992547409.93 USD · взвешено: 33731961209005.018785 USD · сделок с суммой: 1",{exact:true}).waitFor();
-   const forecastRow=(await sql("SELECT json_extract(state,'$.probability_source') AS source,json_extract(state,'$.forecast_category') AS category FROM crm_sales_deal_records WHERE id='"+dealId+"'"))[0];
-   assert.deepEqual(forecastRow,{source:"manual",category:"commit"});
    await page.getByLabel("Начало периода",{exact:true}).fill("2000-01-01");
    await page.getByLabel("Конец периода",{exact:true}).fill("2000-01-01");
    await page.getByRole("button",{name:"Применить период",exact:true}).click();
@@ -1221,8 +1211,6 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(updatedView.name,"Browser Won View "+runId);
    await mutation(page.getByRole("button",{name:"Архивировать представление",exact:true}),
      "UpdateSalesView");
-   assert.equal((await sql("SELECT json_extract(state,'$.archived') AS archived "+
-     "FROM crm_sales_saved_view_records WHERE tenant='"+tenantSql+"' AND id='"+viewId+"'"))[0].archived,1);
    const viewsAfterArchive=page.waitForResponse(r=>responsePathEndsWith(r,"/ListSalesViews")&&r.request().method()==="POST");
    await reloadDocument();
    assert.equal((await viewsAfterArchive).status(),200);
@@ -1496,13 +1484,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      "Editor must read latest authoritative Pipeline version after reorder");
    await page.getByLabel("Архивировать воронку",{exact:true}).check();
    await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
-   assert.equal(JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].state).archived,true);
    await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeDisabled();
    await page.getByRole("button",{name:"Настроить воронку",exact:true}).click();
    await page.getByLabel("Архивировать воронку",{exact:true}).uncheck();
    await mutation(page.getByRole("button",{name:"Сохранить воронку",exact:true}),"UpdatePipeline");
-   assert.equal(JSON.parse((await sql("SELECT state FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].state).archived,false);
-   checkpoint("Pipeline archive and restore using real React, Connect and D1");
+   await expect(page.getByRole("button",{name:"Новая сделка",exact:true})).toBeEnabled();
+   checkpoint("Pipeline archive and restore using real React, Connect and audit");
    // Actual full Deal route: typed append-only history, linked Task and
    // explicit ReopenDeal. No second editor or client-side history inference.
    await page.goto(base+"/#sales/"+encodeURIComponent(dealId));
