@@ -53,6 +53,7 @@ jobs:
           node --check apps/cloudflare-crm/rust-party/test/typed-browser.mjs
           node --check apps/cloudflare-crm/rust-party/test/ui-diagnostics.mjs
           node --check apps/cloudflare-crm/e2e/live.mjs
+          node --check apps/cloudflare-crm/e2e/published-smoke.mjs
           node --check apps/cloudflare-crm/scripts/deploy.mjs
           # release-readback.test.mjs is executed by the application suite below.
           node --check apps/cloudflare-crm/test/native-runtime.test.mjs
@@ -592,7 +593,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d
           CRM_D1_DATABASE_ID: 35fc7ee9-9710-485f-8fb3-f5a398b229b4
         run: node apps/cloudflare-crm/scripts/deploy.mjs prepare-e2e
-      - name: Browser E2E on published CRM
+      # Small production smoke; independent Gate B follows dev merge outside CI.
+      - name: Published Chromium smoke of real Access, typed RPC, D1 and roles
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 5bd5e1e1e813f061afc259e91334262d

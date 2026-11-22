@@ -168,7 +168,27 @@ jobs:
         self.assertIn("worker-build --dev --locked --features native-ci", workflow)
         self.assertIn("node rust-party/test/native.mjs", workflow)
         self.assertIn("node apps/cloudflare-crm/e2e/live.mjs", workflow)
+        self.assertIn("node --check apps/cloudflare-crm/e2e/published-smoke.mjs", workflow)
         self.assertIn("node apps/cloudflare-crm/scripts/deploy.mjs verify-data", workflow)
+
+    def test_release_smoke_does_not_repeat_full_browser_regression(self) -> None:
+        root = Path(__file__).resolve().parents[1] / "apps/cloudflare-crm"
+        live = (root / "e2e/live.mjs").read_text(encoding="utf-8")
+        native = (root / "rust-party/test/native.mjs").read_text(encoding="utf-8")
+        smoke = (root / "e2e/published-smoke.mjs").read_text(encoding="utf-8")
+        deploy = (root / "scripts/deploy.mjs").read_text(encoding="utf-8")
+        self.assertIn("await typedBrowser(", native, "Full regression stays mandatory in workerd")
+        self.assertIn("await publishedSmoke(", live)
+        self.assertNotIn("await typedBrowser(", live, "Do not run all UI regressions twice")
+        self.assertIn("crm.parties.v3.PartyService/CreateParty", smoke)
+        self.assertIn("CreateAccount", smoke)
+        self.assertIn("beforeViewer()", smoke)
+        self.assertIn("tenantBHeaders", smoke)
+        self.assertIn("anonymous.request.get", smoke)
+        self.assertIn("published-smoke.json", deploy)
+        self.assertIn("event.$workers?.scriptVersion?.id!==liveVersion", deploy)
+        self.assertIn("event.source?.db", deploy)
+        self.assertIn("independent_gate_b:\"REQUIRES_SEPARATE_POST_MERGE_BROWSER_EVIDENCE\"", deploy)
 
     def test_rejects_legacy_pr_into_dev_even_for_pr_only_workflows(self) -> None:
         path = self.write_workflow("""name: Legacy

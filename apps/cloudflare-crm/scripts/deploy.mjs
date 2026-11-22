@@ -428,282 +428,152 @@ async function verifyData(){
   assert.deepEqual(liveBindings,{sha,db:database});
   const traceSettings=verifyTracePrivacySettings((await cf(worker+"/settings")).observability);
   assert.deepEqual(deployed.trace_settings,traceSettings);
-  const evidence=JSON.parse(readFileSync("apps/cloudflare-crm/e2e-evidence/typed-browser.json","utf8"));
-  assert.equal(evidence.result,"PASS");assert.equal(evidence.source_sha,sha);
-  assert.deepEqual(evidence.features,["native"]);
+  // Release smoke is NOT Gate B. Detailed 68-checkpoint browser/owner regressions
+  // run in workerd in the upstream job; independent live Gate B is post-merge.
+  const evidence=JSON.parse(readFileSync("apps/cloudflare-crm/e2e-evidence/published-smoke.json","utf8"));
+  assert.equal(evidence.result,"PASS");
+  assert.equal(evidence.source_sha,sha);
+  assert.deepEqual(evidence.features,["native","published-smoke"]);
   assert.ok(evidence.started_at>=deployed.started_at);
   const setup=load("e2e-tenants.json");
   assert.equal(evidence.tenant,setup.tenant_a);
-  assert.ok(setup.actor_a,"Release must identify its enrolled Access actor");
-  assert.ok(evidence.writes.length>0&&evidence.requests.length>0);
+  assert.ok(setup.actor_a,"Release must identify the enrolled Cloudflare Access actor");
+  assert.deepEqual(evidence.steps,[
+    "signed-access","party-create","party-reload","account-create",
+    "viewer-denial","tenant-isolation","anonymous-denial"
+  ],"Published Chromium must execute all mandatory release smoke properties");
   const requests=new Map();
   for(const request of evidence.requests){
-    assert.equal(request.source_sha,sha);assert.equal(request.runtime,"native-workers-rs");
-    assert.match(request.request_id,/^[a-f0-9-]{36}$/i);
+    assert.equal(request.source_sha,sha);
+    assert.equal(request.runtime,"native-workers-rs");
+    assert.match(request.request_id??"",/^[a-f0-9-]{36}$/i);
     const prior=requests.get(request.request_id);
     if(prior)assert.deepEqual(prior,request);
     requests.set(request.request_id,request);
   }
-  // One consistent Cloudflare D1 read snapshot for every committed mutation
-  // and every recovery receipt. The old release gate queried these exact
-  // request IDs serially (~40 network round trips) after the browser finished.
-  // No audit semantics are skipped: assertions below still check each owner,
-  // exact actions/subjects/actors, and the absence of follow-up commits.
-  const auditIds=[...new Set([
-    ...evidence.writes.map(item=>item.request_id),
-    ...(evidence.recovery??[]).map(item=>item.subsequent_request_id),
-    ...(evidence.owner_recovery??[]).flatMap(item=>[
-      item.original_request_id,item.subsequent_request_id
-    ])
-  ])];
-  assert.ok(auditIds.length>0&&auditIds.every(id=>requests.has(id)),
-    "Audit snapshot must cover only observed signed browser requests");
-  const result=await cfReadback("/d1/database/"+database+"/query",{
-    sql:"SELECT request_id,action,subject_id,actor FROM crm_audit WHERE tenant_id=? AND request_id IN ("+
-      auditIds.map(()=>"?").join(",")+") ORDER BY request_id,action,subject_id",
-    params:[evidence.tenant,...auditIds]});
-  assert.equal(result?.[0]?.success,true);
-  assert.ok(Array.isArray(result[0].results),"CRM_D1_AUDIT_SNAPSHOT_INVALID");
-  const auditByRequest=new Map();
-  for(const row of result[0].results){
-    assert.ok(auditIds.includes(row.request_id),"CRM_D1_AUDIT_UNEXPECTED_REQUEST");
-    const rows=auditByRequest.get(row.request_id)??[];
-    rows.push(row);
-    auditByRequest.set(row.request_id,rows);
-  }
-  console.log(JSON.stringify({event:"crm.d1-audit-snapshot",result:"PASS",
-    requested_ids:auditIds.length,committed_rows:result[0].results.length}));
+  assert.ok(requests.size>=4,"Published UI must use signed typed Connect RPCs");
+  assert.ok([...requests.values()].some(item=>item.status===403&&
+    item.path.endsWith("/CreateParty")),
+    "Real viewer forbidden mutation must be traced");
+  assert.ok([...requests.values()].some(item=>item.status===200&&
+    item.path.endsWith("/ListAccounts")),
+    "Cross-tenant list must run through the published Worker");
+  assert.equal(evidence.writes.length,2,"Smoke must commit precisely Party and Account");
+  const writeContracts=[
+    {method:"/CreateParty",action:"parties.create"},
+    {method:"/CreateAccount",action:"accounts.create"}
+  ];
   const mutationIds=new Set();
-  for(const write of evidence.writes){
-    assert.ok(!mutationIds.has(write.request_id),"Duplicate mutation evidence");
+  for(const [index,write] of evidence.writes.entries()){
+    const expected=writeContracts[index];
+    assert.ok(write.path.endsWith(expected.method));
+    assert.ok(!mutationIds.has(write.request_id));
     mutationIds.add(write.request_id);
     assert.equal(requests.get(write.request_id)?.path,write.path);
     assert.equal(requests.get(write.request_id)?.status,200);
-    const committed=auditByRequest.get(write.request_id)??[];
-    const sort=rows=>rows.map(r=>[r.action,r.subject_id,r.actor]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
-    assert.ok(write.audit.length>0);
-    assert.deepEqual(sort(committed),sort(write.audit),"D1 changed since browser assertion");
-    for(const row of committed){
-      if(row.action.startsWith("parties."))assert.equal(row.actor,setup.actor_a,"Party audit must attribute the enrolled Access actor");
-    }
+    assert.equal(write.audit.filter(row=>row.action===expected.action).length,1);
+    for(const row of write.audit)assert.equal(row.actor,setup.actor_a);
   }
-  // The browser executed two distinct recovery semantics: same-key replay
-  // without a second commit, and receipt lookup after response-loss/reload.
-  // Check the independently persisted audit again; never equate HTTP 200
-  // or a Cloudflare D1 span with a committed mutation.
-  const recoveryKinds=new Map();
-  for(const item of evidence.recovery??[]){
-    assert.ok(["replay","lookup"].includes(item.kind),"Unknown recovery evidence");
-    assert.ok(!recoveryKinds.has(item.kind),"Duplicate recovery proof");
-    const original=requests.get(item.original_request_id);
-    const subsequent=requests.get(item.subsequent_request_id);
-    assert.ok(original&&subsequent,"Recovery request not observed in signed browser");
-    assert.notEqual(item.original_request_id,item.subsequent_request_id,
-      "Recovery must be a separate signed request");
-    assert.equal(original.status,200);
-    assert.equal(subsequent.status,200);
-    assert.ok(mutationIds.has(item.original_request_id),"Recovery has no original commit");
-    assert.ok(!mutationIds.has(item.subsequent_request_id),"Recovery must not create a new commit");
-    if(item.kind==="replay")assert.equal(subsequent.path,original.path,
-      "Same-key replay must target the original RPC");
-    else assert.ok(subsequent.path.endsWith("/GetDeal"),
-      "Receipt reconciliation must use read-only GetDeal");
-    assert.equal((auditByRequest.get(item.subsequent_request_id)??[]).length,0,
-      "Recovery request must not commit a second audit row");
-    recoveryKinds.set(item.kind,item);
+  // One actual Cloudflare D1 snapshot proves both published writes and that
+  // read-only RPCs, forbidden viewer writes and tenant-B reads created no audit.
+  const ids=[...requests.keys()];
+  const result=await cfReadback("/d1/database/"+database+"/query",{
+    sql:"SELECT request_id,action,subject_id,actor FROM crm_audit WHERE tenant_id=? "+
+      "AND request_id IN ("+ids.map(()=>"?").join(",")+") ORDER BY request_id,action,subject_id",
+    params:[evidence.tenant,...ids]});
+  assert.equal(result?.[0]?.success,true);
+  const auditByRequest=new Map();
+  for(const row of result[0].results){
+    assert.ok(requests.has(row.request_id),"No unrelated audit may enter release evidence");
+    const rows=auditByRequest.get(row.request_id)??[];
+    rows.push(row);auditByRequest.set(row.request_id,rows);
   }
-  assert.deepEqual([...recoveryKinds.keys()].sort(),["lookup","replay"],
-    "Both response-loss recovery paths are mandatory release evidence");
-  // Every active S5 owner proves a committed write and its own read-only
-  // receipt lookup. These are original owners, not fabricated Deal writes.
-  const ownerProofs=evidence.owner_recovery??[];
-  const ownerContracts={
-    party:{write:"/CreateParty",read:"/GetParty",audit:"parties.create"},
-    account:{write:"/CreateAccount",read:"/GetAccount",audit:"accounts.create"},
-    "contact-point":{write:"/CreateContactPoint",read:"/GetContactPoint",audit:"contact_points.create"},
-    relationship:{write:"/CreatePartyRelationship",read:"/GetPartyRelationship",audit:"party_relationships.create"},
-    task:{write:"/CreateTask",read:"/GetTask",audit:"activity_tasks.create"},
-    "sales-pipeline":{write:"/CreatePipeline",read:"/GetPipeline",audit:"sales_pipeline.create"},
-    "sales-view":{write:"/CreateSalesView",read:"/GetSalesView",audit:"sales_view.create"},
-    consent:{write:"/SuppressCommunication",read:"/GetConsentAuthorization",audit:"consents.operator_suppress"},
-    privacy:{write:"/CreatePrivacyCase",read:"/GetPrivacyCase",audit:"customer_privacy.create"},
-    "enrichment-profile":{write:"/PublishProviderProfile",read:"/GetProviderProfile",audit:"customer_enrichment.profile_publish"},
-    "enrichment-mapping":{write:"/PublishMapping",read:"/GetMapping",audit:"customer_enrichment.mapping_publish"},
-    "party-csv-import":{write:"/ApplyPartyImport",read:"/PreviewPartyImport",audit:"parties.create"}
-  };
-  assert.deepEqual(ownerProofs.map(proof=>proof.owner).sort(),Object.keys(ownerContracts).sort(),
-    "Every active S5 owner must provide one lost-ack/reload receipt proof");
-  for(const proof of ownerProofs){
-    const contract=ownerContracts[proof.owner];
-    assert.equal(proof.kind,"lookup");
-    const original=requests.get(proof.original_request_id);
-    const read=requests.get(proof.subsequent_request_id);
-    assert.ok(original&&read,"Signed owner recovery requests missing: "+proof.owner);
-    assert.ok(original.path.endsWith(contract.write)&&read.path.endsWith(contract.read),
-      "Owner recovery must use its existing write and read RPC: "+proof.owner);
-    assert.equal(original.status,200);assert.equal(read.status,200);
-    assert.ok(mutationIds.has(proof.original_request_id),"Owner recovery has no original commit: "+proof.owner);
-    assert.ok(!mutationIds.has(proof.subsequent_request_id),"Read-only recovery must not be a mutation: "+proof.owner);
-    assert.notEqual(proof.original_request_id,proof.subsequent_request_id);
-    const committed=(auditByRequest.get(proof.original_request_id)??[])
-      .filter(row=>row.action===contract.audit);
-    assert.equal(committed.length,1,
-      "Original owner write must have exactly one matching audit row: "+proof.owner);
-    assert.equal((auditByRequest.get(proof.subsequent_request_id)??[]).length,0,
-      "Read-only owner recovery must never append audit: "+proof.owner);
-  }
-  // Synthetic-only business values actually sent by the browser must not
-  // appear in the native Cloudflare events of their committed requests.
-  // Validate known fixture formats and never log the values in diagnostics.
-  const syntheticFormats={
+  const sort=rows=>rows.map(row=>[row.action,row.subject_id,row.actor]).sort(
+    (a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  for(const write of evidence.writes)
+    assert.deepEqual(sort(auditByRequest.get(write.request_id)??[]),sort(write.audit),
+      "Live D1 audit must equal independently observed browser commit");
+  for(const id of ids)
+    if(!mutationIds.has(id))
+      assert.equal((auditByRequest.get(id)??[]).length,0,
+        "Browser reads/denials must not append audit: "+requests.get(id).path);
+  const allowedPrivate={
     "party-name":/^Browser Party [0-9]{10,}$/,
-    "contact-email":/^browser-[0-9]{10,}@example\.org$/,
-    "contact-phone":/^\+12025550102$/,
-    "task-subject":/^Browser Task [0-9]{10,}$/,
     "cookie":/^crm-s3-cookie-[0-9]{10,}$/,
     "header":/^crm-s3-header-[0-9]{10,}$/,
     "authorization":/^Bearer crm-s3-authorization-[0-9]{10,}$/,
     "jwt":/^eyJhbGciOiJub25lIn0\.eyJzdWIiOiJjcm0tc3ludGhldGljIn0\.signature-[0-9]{10,}$/,
-    "query-string":/^crm-s3-query-[0-9]{10,}$/,
-    "enrichment-provider-key":/^browser_registry_[0-9]{10,}$/,
-    "enrichment-license":/^Browser test license$/,
-    "enrichment-credential-handle":/^browser-credential-handle-[0-9]{10,}$/,
-    "enrichment-mapping-key":/^browser_mapping_[0-9]{10,}$/,
-    "csv-party-name":/^Browser Import [0-9]{10,}$/,
-    "csv-payload":/^party_id,kind,display_name,resource_version\r\nbrowser-import,person,Browser Import [0-9]{10,},1\r\n$/
+    "query-string":/^crm-s3-query-[0-9]{10,}$/
   };
-  const probeValuesByRequest=new Map(),probeKinds=[];
-  for(const probe of evidence.synthetic_private_probes??[]){
-    assert.ok(syntheticFormats[probe.kind]?.test(probe.value),
-      "Only approved synthetic privacy probes may be released: "+probe.kind);
-    assert.ok(mutationIds.has(probe.request_id),
-      "Synthetic privacy probe must refer to a committed browser request");
-    assert.ok(!probeKinds.includes(probe.kind),"Duplicate privacy probe kind");
-    probeKinds.push(probe.kind);
-    const values=probeValuesByRequest.get(probe.request_id)??[];
-    values.push(probe.value);
-    probeValuesByRequest.set(probe.request_id,values);
+  const probes=evidence.synthetic_private_probes??[];
+  assert.deepEqual(probes.map(item=>item.kind).sort(),Object.keys(allowedPrivate).sort(),
+    "Production trace privacy must include six signed synthetic probes");
+  for(const probe of probes){
+    assert.ok(allowedPrivate[probe.kind]?.test(probe.value));
+    assert.equal(probe.request_id,evidence.writes[0].request_id);
   }
-  assert.deepEqual(probeKinds.sort(),Object.keys(syntheticFormats).sort(),
-    "Party, email/phone, Task, cookies, Authorization/JWT, query, Enrichment and CSV probes are mandatory");
-  // Observe every exact browser request, including rejected requests and read-only RPCs.
-  // Every browser RPC requires an exact native version, path, status and trace.
-  const pending=new Map([...requests.values()].map(x=>[x.request_id,x]));
-  const requestTraces=new Map(),from=evidence.started_at-1000;
-  const traceStarted=Date.now(),traceDeadline=traceStarted+120000;
+  const pending=new Map(requests),requestTraces=new Map();
+  const from=evidence.started_at-1000,traceStarted=Date.now(),traceDeadline=traceStarted+120000;
   let observedEvents=[];
-  console.log(JSON.stringify({event:"crm.telemetry-readback-scope",
-    requests:pending.size,page_limit:2000,deadline_ms:120000}));
   for(let attempt=0;attempt<30&&pending.size&&Date.now()<traceDeadline;attempt++){
     observedEvents=await readTelemetrySnapshot(from,Date.now()+1000,traceDeadline);
     for(const event of observedEvents){
       const entry=pending.get(event.source?.request_id);
       if(!entry||event.source?.event!=="crm.native.request"||
-         event.source?.operation!==entry.path||event.source?.status!==entry.status||
-         (event.source?.error_code??null)!==(entry.error_code??null)||
-         event.$workers?.scriptVersion?.id!==liveVersion)continue;
+        event.source?.operation!==entry.path||event.source?.status!==entry.status||
+        (event.source?.error_code??null)!==(entry.error_code??null)||
+        event.$workers?.scriptVersion?.id!==liveVersion)continue;
       const traceId=event.$metadata?.traceId;
-      assert.match(traceId??"",/^[a-f0-9]{32}$/i,
-        "CRM native request log must carry a valid Cloudflare trace ID");
+      assert.match(traceId??"",/^[a-f0-9]{32}$/i);
       requestTraces.set(entry.request_id,traceId);pending.delete(entry.request_id);
     }
-    console.log(JSON.stringify({event:"crm.telemetry-readback-progress",round:attempt+1,
-      observed_events:observedEvents.length,accepted:requestTraces.size,
-      still_missing:pending.size,elapsed_ms:Date.now()-traceStarted}));
+    console.log(JSON.stringify({event:"crm.telemetry-readback-progress",
+      round:attempt+1,accepted:requestTraces.size,still_missing:pending.size,
+      elapsed_ms:Date.now()-traceStarted}));
     if(pending.size&&attempt<29&&Date.now()<traceDeadline)
       await pause(Math.min(2000,Math.max(0,traceDeadline-Date.now())));
   }
-  assert.equal(pending.size,0,"Missing Cloudflare request traces: "+
-    [...pending.values()].map(x=>x.path).join(","));
-  // Validate the actual trace graph, not only the existence of our console
-  // request logs. Representative accepted writes must have D1 spans (their
-  // commit fact was already verified against the audit table above). Reads
-  // and rejected requests may legitimately have no D1 call.
-  const representative=[
-    {entry:requests.get(evidence.writes[0].request_id),needsD1:true},
-    ...[...recoveryKinds.values()].flatMap(item=>[
-      {entry:requests.get(item.original_request_id),needsD1:true},
-      {entry:requests.get(item.subsequent_request_id),needsD1:true}
-    ]),
-    ...[...probeValuesByRequest.keys()].map(id=>({entry:requests.get(id),needsD1:true})),
-    ...ownerProofs.flatMap(item=>[
-      {entry:requests.get(item.original_request_id),needsD1:true},
-      {entry:requests.get(item.subsequent_request_id),needsD1:true}
-    ]),
-    ...[
-      [...requests.values()].find(e=>!mutationIds.has(e.request_id)&&e.status===200),
-      [...requests.values()].find(e=>e.status===400),
-      [...requests.values()].find(e=>e.status===403),
-      [...requests.values()].find(e=>e.status===409)
-    ].map((entry,index)=>{
-      assert.ok(entry,["read-only","validation rejection","authorization denial","CAS conflict"][index]+
-        " request must be observed in signed browser evidence");
-      return {entry,needsD1:false};
-    })
-  ];
-  // A recovery scenario is proved only by distinct Cloudflare traces for
-  // its original and follow-up requests. Do not pass on the same trace twice.
-  for(const item of [...recoveryKinds.values(),...ownerProofs])
-    assert.notEqual(requestTraces.get(item.original_request_id),
-      requestTraces.get(item.subsequent_request_id),
-      "Recovery reused the original Cloudflare trace ID");
-  const required=new Map();
-  for(const candidate of representative){
-    const prior=required.get(candidate.entry.request_id);
-    required.set(candidate.entry.request_id,{
-      entry:candidate.entry,needsD1:candidate.needsD1||(prior?.needsD1??false)
-    });
-  }
-  let spanVerified=0,d1SpanVerified=0;
-  let outstanding=[...required.values()];
-  for(let attempt=0;attempt<30&&outstanding.length&&Date.now()<traceDeadline;attempt++){
+  assert.equal(pending.size,0,"Missing native Cloudflare traces: "+
+    [...pending.values()].map(item=>item.path).join(","));
+  // Inspect all returned events for synthetic values, never print those values.
+  const leaked=JSON.stringify(observedEvents);
+  for(const probe of probes)
+    assert.ok(!leaked.includes(probe.value),"Synthetic value leaked to native Cloudflare telemetry");
+  assert.ok(!observedEvents.some(event=>event.$metadata?.type==="cf-worker-event"),
+    "Unsafe automatic invocation log in CRM telemetry");
+  // D1 span must belong to the exact signed committed request, not an
+  // unrelated Worker operation or a matching payload in application logs.
+  let verifiedD1=0,missing=[...mutationIds];
+  for(let attempt=0;attempt<30&&missing.length&&Date.now()<traceDeadline;attempt++){
     if(attempt>0)observedEvents=await readTelemetrySnapshot(from,Date.now()+1000,traceDeadline);
     const byTrace=new Map();
     for(const event of observedEvents){
       const traceId=event.source?.traceId??event.$metadata?.traceId;
       if(typeof traceId!=="string")continue;
-      if(!byTrace.has(traceId))byTrace.set(traceId,[]);
-      byTrace.get(traceId).push(event);
+      const list=byTrace.get(traceId)??[];
+      list.push(event);byTrace.set(traceId,list);
     }
-    const missing=[];
-    for(const {entry,needsD1} of outstanding){
-      const traceId=requestTraces.get(entry.request_id);
-      assert.match(traceId??"",/^[a-f0-9]{32}$/i,
-        "Accepted browser request missing its Cloudflare trace ID");
-      const linked=byTrace.get(traceId)??[],eventsText=JSON.stringify(linked);
-      for(const marker of probeValuesByRequest.get(entry.request_id)??[])
-        assert.ok(!eventsText.includes(marker),
-          "A synthetic private value appeared in a Cloudflare trace");
-      assert.ok(!linked.some(event=>event.$metadata?.type==="cf-worker-event"),
-        "Unsafe automatic invocation log in an accepted CRM trace");
-      const spans=linked.filter(event=>event.$metadata?.type==="span");
-      if(spans.length&&(!needsD1||spans.some(event=>event.source?.db))){
-        spanVerified++;if(needsD1)d1SpanVerified++;
-      }else missing.push({entry,needsD1});
-    }
-    outstanding=missing;
-    if(outstanding.length&&attempt<29&&Date.now()<traceDeadline)
+    missing=missing.filter(id=>{
+      const trace=requestTraces.get(id);
+      const found=(byTrace.get(trace)??[]).some(event=>
+        event.$metadata?.type==="span"&&event.source?.db);
+      if(found)verifiedD1++;
+      return !found;
+    });
+    if(missing.length&&attempt<29&&Date.now()<traceDeadline)
       await pause(Math.min(2000,Math.max(0,traceDeadline-Date.now())));
   }
-  assert.equal(outstanding.length,0,
-    "CRM native Cloudflare spans missing for: "+outstanding.map(x=>x.entry.path).join(","));
-  assert.ok(d1SpanVerified>=1,"D1 trace proof must cover a committed mutation");
-  console.log(JSON.stringify({event:"crm.native-s3-trace-to-d1",
-    result:"PASS",traces:spanVerified,committed_d1_traces:d1SpanVerified,
-    recovery_paths:[...recoveryKinds.keys()].sort(),owner_recovery_proofs:ownerProofs.length,
-    synthetic_private_probes:probeKinds.length,
-    automatic_invocation_logs:false}));
-  assert.equal(await version(),liveVersion,"Deployment changed during acceptance");
+  assert.equal(missing.length,0,"Published mutations missing exact Cloudflare D1 spans");
+  assert.equal(verifiedD1,2,"Both published mutations require native D1 spans");
+  assert.equal(await version(),liveVersion,"Deployment changed during release smoke");
   assert.deepEqual(await bindings(liveVersion),{sha,db:database});
   await waitForPublicSha(sha,"final");
   record("accepted.json",{result:"PASS",git_sha:sha,worker_version:liveVersion,
-    d1_database:database,features:["native"],traffic_percentage:100,
+    d1_database:database,features:["native","published-smoke"],traffic_percentage:100,
     mutations:mutationIds.size,logs_correlated:requests.size,
-    spans_correlated:spanVerified,d1_mutation_spans:d1SpanVerified,
-    recovery_paths:[...recoveryKinds.keys()].sort(),owner_recovery_proofs:ownerProofs.length,
-    synthetic_private_probes:probeKinds.length,
-    trace_settings:traceSettings,steps:evidence.steps,
-    request_ids:[...requests.keys()]});
+    d1_mutation_spans:verifiedD1,synthetic_private_probes:probes.length,
+    trace_settings:traceSettings,steps:evidence.steps,request_ids:ids,
+    independent_gate_b:"REQUIRES_SEPARATE_POST_MERGE_BROWSER_EVIDENCE"});
 }
 async function failClosed(){
   // Never switch an old Worker onto a new D1 schema.

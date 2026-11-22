@@ -1,7 +1,7 @@
-// Same Chromium scenarios against workerd and the existing live Worker.
+// Independent post-merge Gate B is separate; this runs only a compact CI release smoke.
 import assert from "node:assert/strict";
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from "node:fs";
-import {typedBrowser} from "../rust-party/test/typed-browser.mjs";
+import {publishedSmoke} from "./published-smoke.mjs";
 import {waitForExactSourceSha} from "../scripts/release-readback.mjs";
 const required=name=>{const value=process.env[name];if(!value)throw Error("Missing "+name);return value;};
 const sha=required("GITHUB_SHA");
@@ -42,9 +42,9 @@ try{
  await waitForExactSourceSha(base+"/api/version?browser-preflight="+Date.now(),sha,{
    headers:{...access("A"),"cache-control":"no-cache",connection:"close"}
  });
- await typedBrowser({base,sourceSha:sha,adminHeaders:access("A"),viewerHeaders:access("A"),
+ await publishedSmoke({base,sourceSha:sha,adminHeaders:access("A"),
    tenantBHeaders:access("B"),tenantA:setup.tenant_a,adminIdentity:principal,features:["native"],directory,
-   sql:async sql=>(await query(sql)).results,
+   sql:async (statement,params=[])=>(await query(statement,params)).results,
    beforeViewer:async()=>{
      // Signed/enrolled test actor, real persisted role; no JWT fabrication or role header.
      // Register cleanup before UPDATE: its response can be lost after commit.
