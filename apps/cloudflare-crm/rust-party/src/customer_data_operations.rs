@@ -5,7 +5,8 @@
 use super::{access, bind, error, parties};
 use crm_customer_data_operations::{
     CreateImportRow, ImportJobId, ImportParserProfile, ImportRow, PartyImportKind,
-    PartyImportMapping, PreparedPartyRow, RowDiagnostic, parse_import_source, party_export_hash_parts,
+    PartyImportMapping, PreparedPartyRow, RowDiagnostic, parse_import_source,
+    party_export_hash_parts,
 };
 use crm_customer_data_operations::{
     PARTY_EXPORT_CSV_MEDIA_TYPE, PartyExportField, PartyExportKindFilter, PartyExportProfile,
@@ -153,9 +154,12 @@ pub(super) struct ImportRowIssue {
 }
 fn row_issue(issues: &mut Vec<ImportRowIssue>, position: u32, field: &str, code: &str) {
     // All source column names and error codes here are static, bounded identifiers.
-    let diagnostic = RowDiagnostic::try_new(code, field)
-        .expect("static CSV row diagnostic field and code");
-    issues.push(ImportRowIssue { row_position: position, diagnostic });
+    let diagnostic =
+        RowDiagnostic::try_new(code, field).expect("static CSV row diagnostic field and code");
+    issues.push(ImportRowIssue {
+        row_position: position,
+        diagnostic,
+    });
 }
 struct ImportPlan {
     commands: Vec<ImportCommand>,
@@ -171,17 +175,31 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
     let profile =
         ImportParserProfile::csv_v1(b',', b'"').map_err(|_| "IMPORT_PARSER_PROFILE_INVALID")?;
     let parsed = parse_import_source(bytes, &profile).map_err(|_| "IMPORT_CSV_INVALID")?;
-    if parsed.headers().iter().map(String::as_str).collect::<Vec<_>>() != IMPORT_FIELDS {
+    if parsed
+        .headers()
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        != IMPORT_FIELDS
+    {
         return Err("IMPORT_HEADER_INVALID");
     }
     if parsed.rows().is_empty() || parsed.rows().len() > IMPORT_MAX_ROWS {
         return Err("IMPORT_ROW_LIMIT_REACHED");
     }
     let mapping = PartyImportMapping::try_new(
-        None, "kind", "display_name", Some("party_id".to_owned()), None,
-    ).map_err(|_| "IMPORT_MAPPING_INVALID")?;
-    let mapping_version = mapping.version_id().map_err(|_| "IMPORT_MAPPING_INVALID")?
-        .as_str().to_owned();
+        None,
+        "kind",
+        "display_name",
+        Some("party_id".to_owned()),
+        None,
+    )
+    .map_err(|_| "IMPORT_MAPPING_INVALID")?;
+    let mapping_version = mapping
+        .version_id()
+        .map_err(|_| "IMPORT_MAPPING_INVALID")?
+        .as_str()
+        .to_owned();
     let hash = party_export_hex(&party_export_sha256(bytes));
     let identity = party_export_hash_parts(
         b"crm.cloudflare.csv-import-create-only/v1",
@@ -200,19 +218,37 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
         let kind = get("kind");
         let name = get("display_name");
         let version = get("resource_version");
-        if version.parse::<u64>().ok().filter(|value| *value > 0).is_none() {
-            row_issue(&mut row_issues, source.row_position, "resource_version",
-                "IMPORT_SOURCE_VERSION_INVALID");
+        if version
+            .parse::<u64>()
+            .ok()
+            .filter(|value| *value > 0)
+            .is_none()
+        {
+            row_issue(
+                &mut row_issues,
+                source.row_position,
+                "resource_version",
+                "IMPORT_SOURCE_VERSION_INVALID",
+            );
         }
         if source_id.is_empty() || !seen.insert(source_id.to_owned()) {
-            row_issue(&mut row_issues, source.row_position, "party_id",
-                "IMPORT_DUPLICATE_OR_EMPTY_SOURCE_ID");
+            row_issue(
+                &mut row_issues,
+                source.row_position,
+                "party_id",
+                "IMPORT_DUPLICATE_OR_EMPTY_SOURCE_ID",
+            );
         }
         let import_kind = match kind {
             "person" => Some(PartyImportKind::Person),
             "organization" => Some(PartyImportKind::Organization),
             _ => {
-                row_issue(&mut row_issues, source.row_position, "kind", "IMPORT_KIND_INVALID");
+                row_issue(
+                    &mut row_issues,
+                    source.row_position,
+                    "kind",
+                    "IMPORT_KIND_INVALID",
+                );
                 None
             }
         };
@@ -220,12 +256,18 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
         // all earlier required fields have passed their own checks.
         if row_issues.len() != start_issues {
             if name.is_empty() {
-                row_issue(&mut row_issues, source.row_position, "display_name",
-                    "IMPORT_PARTY_INVALID");
+                row_issue(
+                    &mut row_issues,
+                    source.row_position,
+                    "display_name",
+                    "IMPORT_PARTY_INVALID",
+                );
             }
             continue;
         }
-        let Some(import_kind) = import_kind else { continue; };
+        let Some(import_kind) = import_kind else {
+            continue;
+        };
         let row = match ImportRow::create(CreateImportRow {
             job_id: job_id.clone(),
             row_position: source.row_position,
@@ -235,23 +277,36 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
         }) {
             Ok(row) => row,
             Err(_) => {
-                row_issue(&mut row_issues, source.row_position, "party_id", "IMPORT_ROW_ID_INVALID");
+                row_issue(
+                    &mut row_issues,
+                    source.row_position,
+                    "party_id",
+                    "IMPORT_ROW_ID_INVALID",
+                );
                 continue;
             }
         };
         let target = match row.derived_target_party_id() {
             Ok(target) => target,
             Err(_) => {
-                row_issue(&mut row_issues, source.row_position, "party_id",
-                    "IMPORT_TARGET_ID_INVALID");
+                row_issue(
+                    &mut row_issues,
+                    source.row_position,
+                    "party_id",
+                    "IMPORT_TARGET_ID_INVALID",
+                );
                 continue;
             }
         };
         let prepared = match PreparedPartyRow::try_new(target, import_kind, name.to_owned()) {
             Ok(prepared) => prepared,
             Err(_) => {
-                row_issue(&mut row_issues, source.row_position, "display_name",
-                    "IMPORT_PARTY_INVALID");
+                row_issue(
+                    &mut row_issues,
+                    source.row_position,
+                    "display_name",
+                    "IMPORT_PARTY_INVALID",
+                );
                 continue;
             }
         };
@@ -262,35 +317,55 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
         let party_id = match PartyId::try_new(prepared.party_id().as_str().to_owned()) {
             Ok(id) => id,
             Err(_) => {
-                row_issue(&mut row_issues, source.row_position, "party_id",
-                    "IMPORT_TARGET_ID_INVALID");
+                row_issue(
+                    &mut row_issues,
+                    source.row_position,
+                    "party_id",
+                    "IMPORT_TARGET_ID_INVALID",
+                );
                 continue;
             }
         };
         let checked = match Party::create(CreateParty {
-            party_id, kind, display_name: prepared.display_name().to_owned(),
+            party_id,
+            kind,
+            display_name: prepared.display_name().to_owned(),
             occurred_at_unix_nanos: 1,
         }) {
             Ok(checked) => checked,
             Err(_) => {
-                row_issue(&mut row_issues, source.row_position, "display_name",
-                    "IMPORT_PARTY_INVALID");
+                row_issue(
+                    &mut row_issues,
+                    source.row_position,
+                    "display_name",
+                    "IMPORT_PARTY_INVALID",
+                );
                 continue;
             }
         };
         if checked.display_name() != name {
-            row_issue(&mut row_issues, source.row_position, "display_name",
-                "IMPORT_NAME_NONCANONICAL");
+            row_issue(
+                &mut row_issues,
+                source.row_position,
+                "display_name",
+                "IMPORT_NAME_NONCANONICAL",
+            );
             continue;
         }
         commands.push((
             checked.party_id().as_str().to_owned(),
-            kind, checked.display_name().to_owned(), row.target_idempotency_key(),
+            kind,
+            checked.display_name().to_owned(),
+            row.target_idempotency_key(),
         ));
         positions.push(source.row_position);
     }
     Ok(ImportPlan {
-        commands, positions, row_issues, count: parsed.rows().len(), hash,
+        commands,
+        positions,
+        row_issues,
+        count: parsed.rows().len(),
+        hash,
     })
 }
 pub(super) struct ImportPreview {
@@ -311,13 +386,21 @@ pub(super) async fn preview_import(
 ) -> Result<std::result::Result<ImportPreview, parties::MutationFailure>> {
     let plan = match parse_import(bytes, tenant) {
         Ok(plan) => plan,
-        Err(code) => return Ok(Err(parties::MutationFailure { code: code.into(), status: 422 })),
+        Err(code) => {
+            return Ok(Err(parties::MutationFailure {
+                code: code.into(),
+                status: 422,
+            }));
+        }
     };
     // A preview with ANY invalid row is informational, NEVER a write permit.
     if !plan.row_issues.is_empty() {
         return Ok(Ok(ImportPreview {
-            count: plan.count, hash: plan.hash, already: 0,
-            target_ids: Vec::new(), row_issues: plan.row_issues,
+            count: plan.count,
+            hash: plan.hash,
+            already: 0,
+            target_ids: Vec::new(),
+            row_issues: plan.row_issues,
         }));
     }
     let mut already = 0;
@@ -326,13 +409,21 @@ pub(super) async fn preview_import(
         if parties::import_receipt_matches(db, tenant, key, id, *kind, name).await? {
             already += 1;
         } else if parties::stored(db, tenant, id).await?.is_some() {
-            row_issue(&mut issues, *position, "party_id", "IMPORT_TARGET_PARTY_CONFLICT");
+            row_issue(
+                &mut issues,
+                *position,
+                "party_id",
+                "IMPORT_TARGET_PARTY_CONFLICT",
+            );
         }
     }
     if !issues.is_empty() {
         return Ok(Ok(ImportPreview {
-            count: plan.count, hash: plan.hash, already: 0,
-            target_ids: Vec::new(), row_issues: issues,
+            count: plan.count,
+            hash: plan.hash,
+            already: 0,
+            target_ids: Vec::new(),
+            row_issues: issues,
         }));
     }
     Ok(Ok(ImportPreview {
@@ -377,7 +468,8 @@ pub(super) async fn apply_import(
     // preview can NEVER create a partial batch or reserve its receipt key.
     if let Some(issue) = plan.row_issues.first() {
         return Ok(Err(parties::MutationFailure {
-            code: issue.diagnostic.code().to_owned(), status: 422,
+            code: issue.diagnostic.code().to_owned(),
+            status: 422,
         }));
     }
     Ok(
