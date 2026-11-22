@@ -1701,21 +1701,24 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
      repairedAudit,"Repeated evaluation and reload must remain read-only");
    checkpoint("N-04 existing DataQuality + typed Party repair + exact review URL/reload, no read audit");
-   // N-06 positive signed-human proof: original ContactPoint owner, real React.
-   // Published service-admin remains a separate test-agent, never a human.
+   // N-06 human and service-agent proofs are separate original Rust paths.
+   // An enrolled service: identity is NOT an email and must not be self-attested
+   // as a human. The dev test agent verifies a distinct valid test Email.
+   const consentEmail=adminIdentity.startsWith("service:")
+     ?"browser-consent-"+runId+"@example.org":adminIdentity;
    await navigate("contacts","Контакты");
    await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
    await selectPagedPicker(page,"Участник",partyId);
-   await page.getByLabel("Значение контакта",{exact:true}).fill(adminIdentity);
+   await page.getByLabel("Значение контакта",{exact:true}).fill(consentEmail);
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
    const verifiedContactRows=await sql("SELECT id FROM crm_contact_point_records "+
      "WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"' AND json_extract(state,'$.normalized_value')='"+
-     adminIdentity.replaceAll("'","''")+"'");
+     consentEmail.replaceAll("'","''")+"'");
    assert.equal(verifiedContactRows.length,1,"verified owner email is scoped to the selected Party");
    const consentVerifiedContactId=verifiedContactRows[0].id;
    await selectPagedPicker(page,"Фильтр по участнику",partyId);
    const consentContactCard=page.locator("section").filter({
-     has:page.getByRole("heading",{name:adminIdentity,exact:true})
+     has:page.getByRole("heading",{name:consentEmail,exact:true})
    });
    await mutation(consentContactCard.getByRole("button",{
      name:"Подтвердить email (Access / тестовый администратор)",exact:true
