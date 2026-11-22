@@ -1708,7 +1708,12 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await selectPagedPicker(page,"Участник",partyId);
    await page.getByLabel("Значение контакта",{exact:true}).fill(adminIdentity);
    await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
-   const consentVerifiedContactId=await firstId("crm_contact_point_records","normalized_value",adminIdentity);
+   const verifiedContactRows=await sql("SELECT id FROM crm_contact_point_records "+
+     "WHERE tenant='"+tenantSql+"' AND party_id='"+partyId+"' AND json_extract(state,'$.normalized_value')='"+
+     adminIdentity.replaceAll("'","''")+"'");
+   assert.equal(verifiedContactRows.length,1,"verified owner email is scoped to the selected Party");
+   const consentVerifiedContactId=verifiedContactRows[0].id;
+   await selectPagedPicker(page,"Фильтр по участнику",partyId);
    const consentContactCard=page.locator("section").filter({
      has:page.getByRole("heading",{name:adminIdentity,exact:true})
    });
