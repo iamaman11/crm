@@ -101,8 +101,12 @@ message ResolveCanonicalPartyResponse {
 }
 
 service IdentityResolutionService {
-  rpc MergeParty(MergePartyRequest) returns (MergePartyResponse);
-  rpc UnmergeParty(UnmergePartyRequest) returns (UnmergePartyResponse);
+  rpc MergeParty(MergePartyRequest) returns (MergePartyResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UnmergeParty(UnmergePartyRequest) returns (UnmergePartyResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   rpc GetMergeOperation(GetMergeOperationRequest) returns (GetMergeOperationResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
