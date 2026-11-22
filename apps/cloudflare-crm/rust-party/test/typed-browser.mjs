@@ -187,7 +187,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const headers=typeof response.allHeaders==="function"?await response.headers():response.headers();
    const requestId=headers["x-request-id"];
    assert.match(requestId??"",/^[a-f0-9-]{36}$/i);
-   const audit=await sql("SELECT action,subject_id,actor FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND request_id='"+requestId+"'");
+   const audit=await sql("SELECT action,subject_id,actor FROM crm_audit WHERE tenant_id=? AND request_id=?",tenantA,requestId);
    if(replay)assert.equal(audit.length,0,"Replay must not append audit");
    else {
      assert.ok(audit.length>0,method+" must commit audit for the browser request");
@@ -210,8 +210,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      assert.match(id??"",/^[a-f0-9-]{36}$/i,owner+" must have a signed request ID");
    assert.notEqual(originalId,readId,owner+" recovery must be a distinct request");
    assert.match(action,/^[a-z_]+\.[a-z_]+$/,owner+" must use a known audit action");
-   const rows=await sql("SELECT request_id,action FROM crm_audit WHERE tenant_id='"+
-     tenantSql+"' AND request_id IN ('"+originalId+"','"+readId+"')");
+   const rows=await sql("SELECT request_id,action FROM crm_audit WHERE tenant_id=? AND request_id IN (?,?)",
+     tenantA,originalId,readId);
    assert.equal(rows.filter(row=>row.request_id===originalId&&row.action===action).length,
      1,owner+" original commit must have one matching audit action");
    assert.equal(rows.filter(row=>row.request_id===readId).length,
@@ -289,8 +289,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
   throw Error(label+" lookup exceeded 30 pages for "+id);
  };
  const firstId=async(table,column,value)=>{
-   const escaped=value.replaceAll("'","''");
-   const rows=await sql("SELECT id FROM "+table+" WHERE tenant='"+tenantSql+"' AND json_extract(state,'$."+column+"')='"+escaped+"'");
+   const rows=await sql("SELECT id FROM "+table+" WHERE tenant=? AND json_extract(state,?)=?",
+     tenantA,"$."+column,value);
    assert.equal(rows.length,1);return rows[0].id;
  };
  const runId=Date.now().toString();
