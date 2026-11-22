@@ -2090,8 +2090,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
        .toHaveText((screen==="sales"||screen==="tasks"?
          "Browser Account ":"Browser Winner ")+runId);
      if(salesBoard){
-       assert.equal(await page.getByLabel("Воронка продаж",{exact:true}).inputValue(),"",
-         "Reload must keep the global all-pipelines default");
+       assert.equal(await page.getByLabel("Воронка продаж",{exact:true}).inputValue(),newPipelineId,
+         "Reload must restore the board explicitly selected from Customer360");
+       assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("pipelineId"),
+         newPipelineId,"Customer360 scope and the explicit Kanban must share the native route");
        const all=page.locator('section[aria-label="Сделки клиента во всех воронках"]');
        await all.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
        await all.getByRole("heading",{name:"Browser Alternate Deal "+runId,exact:true}).waitFor();
