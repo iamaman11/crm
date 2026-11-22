@@ -50,7 +50,7 @@ function App() {
       initialAccountId={route.accountId} initialSearch={route.search??""}
       initialViewId={route.viewId??""} initialPipelineId={route.pipelineId??""}/>:
     route.screen==="consents"?<ConsentScreen/>:
-    route.screen==="review"?<ReviewScreen/>:
+    route.screen==="review"?<ReviewScreen key={route.partyId} initialPartyId={route.partyId}/>:
     route.screen==="privacy"?<PrivacyScreen/>:
     route.screen==="enrichment"?<EnrichmentScreen/>:<DataScreen/>;
   return <AppShell productName="CRM" accountSlot={<ThemePicker/>}

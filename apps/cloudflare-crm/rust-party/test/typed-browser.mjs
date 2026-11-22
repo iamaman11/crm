@@ -1624,6 +1624,45 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await compare.getByRole("button",{name:"Сравнить",exact:true}).click();
    assert.equal((await compared).status(),200);
    await compare.getByText(/разные записи; личность не подтверждена/).waitFor();
+   // N-04: the original quality read and Party update are already present.
+   // Exercise only the missing user journey: exact Party -> edit -> exact review.
+   await navigate("parties?partyId="+encodeURIComponent(otherPartyId),"Люди и организации");
+   await page.getByRole("button",{name:"Редактировать",exact:true}).click();
+   await page.getByLabel("Имя или название",{exact:true}).fill("A");
+   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"UpdateParty");
+   const qualityAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await page.getByRole("link",{name:"Повторно проверить качество",exact:true}).click();
+   assert.equal(new URL(await page.url()).hash,"#review?partyId="+encodeURIComponent(otherPartyId));
+   await reloadDocument();
+   const badQuality=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить имя",exact:true})});
+   await expect(badQuality.getByLabel("Участник",{exact:true})).toHaveValue(otherPartyId);
+   const badQualityRead=page.waitForResponse(r=>responsePathEndsWith(r,"/EvaluatePartyName"));
+   await badQuality.getByRole("button",{name:"Проверить качество",exact:true}).click();
+   assert.equal((await badQualityRead).status(),200);
+   await badQuality.getByText("Не пройдено: 1",{exact:true}).waitFor();
+   await badQuality.getByRole("link",{name:"Открыть карточку и исправить",exact:true}).click();
+   assert.equal(new URL(await page.url()).hash,"#parties?partyId="+encodeURIComponent(otherPartyId));
+   await page.getByRole("heading",{name:"A",exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     qualityAuditBefore,"Data Quality reads and deep links must not write audit");
+   await page.getByRole("button",{name:"Редактировать",exact:true}).click();
+   await page.getByLabel("Имя или название",{exact:true}).fill("Browser Other "+runId);
+   await mutation(page.getByRole("button",{name:"Сохранить участника",exact:true}),"UpdateParty");
+   const repairedAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await page.getByRole("link",{name:"Повторно проверить качество",exact:true}).click();
+   assert.equal(new URL(await page.url()).hash,"#review?partyId="+encodeURIComponent(otherPartyId));
+   const goodQuality=page.locator("section").filter({has:page.getByRole("heading",{name:"Проверить имя",exact:true})});
+   await expect(goodQuality.getByLabel("Участник",{exact:true})).toHaveValue(otherPartyId);
+   await goodQuality.getByRole("button",{name:"Проверить качество",exact:true}).click();
+   await goodQuality.getByText("Не пройдено: 0",{exact:true}).waitFor();
+   await expect(goodQuality.getByRole("link",{name:"Открыть карточку и исправить",exact:true})).toHaveCount(0);
+   await reloadDocument();
+   await expect(goodQuality.getByLabel("Участник",{exact:true})).toHaveValue(otherPartyId);
+   await goodQuality.getByRole("button",{name:"Проверить качество",exact:true}).click();
+   await goodQuality.getByText("Не пройдено: 0",{exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     repairedAudit,"Repeated evaluation and reload must remain read-only");
+   checkpoint("N-04 existing DataQuality + typed Party repair + exact review URL/reload, no read audit");
    await navigate("consents","Коммуникации");
    await page.getByRole("button",{name:"Запретить коммуникацию",exact:true}).click();
    const suppress=page.getByRole("dialog");

@@ -7,6 +7,7 @@ import {enumValue} from "./enumFields";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {SearchField} from "./SearchField";
 import {openAccountFromParty,savedPartyListScroll} from "./navigation";
+import {reviewHref} from "./routes";
 
 export function PartyScreen({initialPartyId=""}:{initialPartyId?:string}) {
   const [cursor,setCursor]=useState("");
@@ -39,7 +40,7 @@ export function PartyScreen({initialPartyId=""}:{initialPartyId?:string}) {
   };
   return <>
     <PageHeader title="Люди и организации" description="Исходные участники клиентских отношений." actions={<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorOpen(true);mutation.changed();}}>Создать участника</Button>}/>
-    {initialPartyId?<a href="#parties">К списку участников</a>:<>
+    {initialPartyId?<><a href="#parties">К списку участников</a>{" · "}<a href={reviewHref(initialPartyId)}>Повторно проверить качество</a></>:<>
     <SearchField label="Поиск участников" submitted={search} onSearch={value=>{setSearch(value);setCursor("");}}/>
     <SelectField label="Тип участника" value={kind} onChange={e=>{setKind(e.target.value);setCursor("");}}>
       <option value="">Все</option><option value={PartyKind.PERSON}>Человек</option><option value={PartyKind.ORGANIZATION}>Организация</option>

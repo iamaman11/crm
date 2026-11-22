@@ -3,8 +3,9 @@ import {Button,Card,FeedbackPanel,FormGrid,PageHeader} from "@ultimate-crm/ui";
 import {api,field} from "./api";
 import {useQuery,useReadAction,QueryNotice,Paging} from "./hooks";
 import {PartyPicker} from "./Pickers";
+import {partyHref} from "./routes";
 
-export function ReviewScreen() {
+export function ReviewScreen({initialPartyId=""}:{initialPartyId?:string}) {
   const [cursor,setCursor]=useState("");
   const quality=useReadAction<Awaited<ReturnType<typeof api.dataQuality.evaluatePartyName>>>();
   const comparison=useReadAction<Awaited<ReturnType<typeof api.identityResolution.compareParties>>>();
@@ -14,10 +15,11 @@ export function ReviewScreen() {
     <Card title="Проверить имя"><form onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
       void quality.run(signal=>api.dataQuality.evaluatePartyName({partyId:field(data,"partyId")},{signal}));
-    }}><FormGrid><PartyPicker/></FormGrid><Button type="submit" disabled={quality.busy}>Проверить качество</Button></form>
+    }}><FormGrid><PartyPicker initialPartyId={initialPartyId}/></FormGrid><Button type="submit" disabled={quality.busy}>Проверить качество</Button></form>
       {quality.error&&<FeedbackPanel tone="danger" title={quality.error}/>}
       {quality.data&&<><h3>{quality.data.party?.displayName}</h3><p>Не пройдено: {quality.data.failedCount}</p>
-        <ul>{quality.data.checks.map(c=><li key={c.ruleKey}>{c.passed?"✓":"!"} {c.title}{!c.passed&&" — "+c.remediation}</li>)}</ul></>}
+        <ul>{quality.data.checks.map(c=><li key={c.ruleKey}>{c.passed?"✓":"!"} {c.title}{!c.passed&&" — "+c.remediation}</li>)}</ul>
+        {quality.data.failedCount>0&&quality.data.party&&<p><a href={partyHref(quality.data.party.partyId)}>Открыть карточку и исправить</a></p>}</>}
     </Card>
     <Card title="Сравнить участников"><form onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);

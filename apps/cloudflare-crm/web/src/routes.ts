@@ -99,6 +99,10 @@ export function accountCreateHref(partyId:string):string {
 export function partyHref(partyId:string):string {
   return "#parties?"+new URLSearchParams({partyId}).toString();
 }
+/** Recheck Data Quality for this exact Party, including after a full reload. */
+export function reviewHref(partyId:string):string {
+  return "#review?"+new URLSearchParams({partyId}).toString();
+}
 export function scopeHref(screen:"contacts"|"relationships"|"sales"|"tasks",id:string):string {
   const parameter=screen==="sales"||screen==="tasks"?"accountId":"partyId";
   return "#"+screen+"?"+new URLSearchParams({[parameter]:id}).toString();
