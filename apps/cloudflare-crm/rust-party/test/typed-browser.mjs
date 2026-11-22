@@ -1635,7 +1635,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await navigate("review","Качество и совпадения");
    const candidateCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Совпадающие email",exact:true})});
    const candidateRow=candidateCard.getByRole("listitem").filter({
-     has:candidateCard.getByRole("link",{name:"Browser Other "+runId,exact:true})
+     has:page.getByRole("link",{name:"Browser Other "+runId,exact:true})
    });
    await candidateRow.getByRole("link",{name:"Browser Updated "+runId,exact:true}).waitFor();
    await candidateRow.getByText(/есть неподтверждённые контакты/).waitFor();
@@ -1649,11 +1649,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal(new URL(await page.url()).hash,"#parties?partyId="+encodeURIComponent(otherPartyId));
    await page.getByRole("heading",{name:"Browser Other "+runId,exact:true}).waitFor();
    await page.goBack();
-   await candidateCard.getByRole("listitem").filter({has:candidateCard.getByRole("link",{
+   await candidateCard.getByRole("listitem").filter({has:page.getByRole("link",{
      name:"Browser Other "+runId,exact:true
    })}).getByRole("button",{name:"Сравнить пару",exact:true}).waitFor();
    await reloadDocument();
-   await candidateCard.getByRole("listitem").filter({has:candidateCard.getByRole("link",{
+   await candidateCard.getByRole("listitem").filter({has:page.getByRole("link",{
      name:"Browser Other "+runId,exact:true
    })}).getByRole("button",{name:"Сравнить пару",exact:true}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
