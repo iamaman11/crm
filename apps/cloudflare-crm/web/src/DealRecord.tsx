@@ -10,7 +10,7 @@ import {useQuery,QueryNotice} from "./hooks";
 import {moneyText,percent} from "./money";
 import type {CurrencyCatalog} from "./money";
 import {inputDate} from "./calendarInput";
-import {accountHref,scopeHref,taskHref,dealTasksHref} from "./routes";
+import {accountHref,scopeHref,contactHref,taskHref,dealTasksHref} from "./routes";
 
 export function dealStatusText(status:DealStatus):string {
   switch(status){
@@ -154,7 +154,7 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen
       <p>ID: {deal.dealId} · версия {deal.version.toString()}</p>
       <p>Клиент: <AccountName accountId={deal.accountId}/></p>
       <p>Основной контакт: {details.data?.contact?
-        <a href={scopeHref("contacts",details.data.contact.partyId)}>
+        <a href={contactHref(details.data.contact.contactPointId,details.data.contact.partyId)}>
           {details.data.contact.displayValue}</a>:"Не выбран"}</p>
       <p>Воронка: {pipeline?.name??deal.stage?.pipelineId??"—"} · этап: {deal.stage?.stageId?stageLabel(pipeline,deal.stage.stageId):"—"}</p>
       <p>Сумма: {moneyText(deal.amount,currencies)} · вероятность: {percent(deal.probabilityBasisPoints)}%</p>

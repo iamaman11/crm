@@ -947,6 +947,28 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const boardAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
    await page.locator('a[href="#sales/'+dealId+'"]').first().click();
    await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   const detailsFromBoard=page.getByRole("region",{name:"Подробности сделки "+dealId});
+   await expect(detailsFromBoard.getByRole("link",{name:"Browser Account "+runId,exact:true}))
+     .toHaveAttribute("href","#accounts/"+accountId);
+   const dealContactLink=detailsFromBoard.getByRole("link",{
+     name:"browser-"+runId+"@example.org",exact:true
+   });
+   await expect(dealContactLink).toHaveAttribute("href",
+     "#contacts?partyId="+partyId+"&contactPointId="+browserSalesContactId);
+   const exactContactRead=page.waitForResponse(r=>responsePathEndsWith(r,"/GetContactPoint")&&
+     r.request().method()==="POST");
+   await dealContactLink.click();
+   assert.equal((await exactContactRead).status(),200);
+   await page.getByRole("heading",{name:"Карточка контакта",exact:true}).waitFor();
+   await page.getByText("ID контакта: "+browserSalesContactId,{exact:true}).waitFor();
+   await reloadDocument();
+   await page.getByRole("heading",{name:"Карточка контакта",exact:true}).waitFor();
+   await page.getByText("ID контакта: "+browserSalesContactId,{exact:true}).waitFor();
+   await page.goBack();
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   await detailsFromBoard.getByRole("link",{
+     name:"browser-"+runId+"@example.org",exact:true
+   }).waitFor();
    await page.goBack();
    await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
    await page.getByRole("region",{name:"Kanban — этапы и сделки"}).getByRole(
@@ -955,7 +977,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
      boardAuditBefore,"manual board navigation must not write D1 audit");
-   checkpoint("M2-01 native board URL survives full Deal → Back and reload, no audit");
+   checkpoint("M2-01 native board and M2-02 exact Deal Contact direct Get survive reload/Back without read-audit");
    const leadTotals=page.getByRole("group",{name:"Итоги этапа Первичный контакт"});
    await leadTotals.getByText("90071992547409.93 USD · сделок с суммой: 1",
      {exact:true}).waitFor();
