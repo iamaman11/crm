@@ -1624,6 +1624,41 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await compare.getByRole("button",{name:"Сравнить",exact:true}).click();
    assert.equal((await compared).status(),200);
    await compare.getByText(/разные записи; личность не подтверждена/).waitFor();
+   // N-05: exercise the already typed original candidate read -> same-pair
+   // comparison, without registration, identity confirmation or any merge.
+   await navigate("contacts","Контакты");
+   await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
+   await selectPagedPicker(page,"Участник",otherPartyId);
+   await page.getByLabel("Значение контакта",{exact:true}).fill("browser-"+runId+"@example.org");
+   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
+   const candidateReadAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await navigate("review","Качество и совпадения");
+   const candidateCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Совпадающие email",exact:true})});
+   const candidateRow=candidateCard.getByRole("listitem").filter({
+     has:candidateCard.getByRole("link",{name:"Browser Other "+runId,exact:true})
+   });
+   await candidateRow.getByRole("link",{name:"Browser Updated "+runId,exact:true}).waitFor();
+   await candidateRow.getByText(/есть неподтверждённые контакты/).waitFor();
+   const candidateCompare=page.waitForResponse(r=>responsePathEndsWith(r,"/CompareParties"));
+   await candidateRow.getByRole("button",{name:"Сравнить пару",exact:true}).click();
+   assert.equal((await candidateCompare).status(),200);
+   await candidateRow.getByText(/разные записи; личность не подтверждена/).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     candidateReadAudit,"Candidate discovery and comparison must never write audit");
+   await candidateRow.getByRole("link",{name:"Browser Other "+runId,exact:true}).first().click();
+   assert.equal(new URL(await page.url()).hash,"#parties?partyId="+encodeURIComponent(otherPartyId));
+   await page.getByRole("heading",{name:"Browser Other "+runId,exact:true}).waitFor();
+   await page.goBack();
+   await candidateCard.getByRole("listitem").filter({has:candidateCard.getByRole("link",{
+     name:"Browser Other "+runId,exact:true
+   })}).getByRole("button",{name:"Сравнить пару",exact:true}).waitFor();
+   await reloadDocument();
+   await candidateCard.getByRole("listitem").filter({has:candidateCard.getByRole("link",{
+     name:"Browser Other "+runId,exact:true
+   })}).getByRole("button",{name:"Сравнить пару",exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     candidateReadAudit,"Navigating candidate Party and returning/reloading must remain read-only");
+   checkpoint("N-05 original shared-email candidate -> direct typed CompareParties -> unconfirmed verdict, Party links/reload, zero read audit");
    // N-04: the original quality read and Party update are already present.
    // Exercise only the missing user journey: exact Party -> edit -> exact review.
    await navigate("parties?partyId="+encodeURIComponent(otherPartyId),"Люди и организации");
