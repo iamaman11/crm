@@ -55,7 +55,7 @@ export function ReviewScreen({initialPartyId=""}:{initialPartyId?:string}) {
           {selectedCandidate===key&&!comparison.busy&&comparisonResult}
         </li>;
       })}</ul>
-      {candidates.data?.candidates.length===0&&<p>Совпадений не найдено.</p>
+      {candidates.data?.candidates.length===0&&<p>Совпадений не найдено.</p>}
       <Paging next={candidates.data?.pageInfo?.nextPageToken??""} busy={candidates.busy} onFirst={()=>setCursor("")}
         onNext={()=>setCursor(candidates.data?.pageInfo?.nextPageToken??"")}/>
     </Card>
