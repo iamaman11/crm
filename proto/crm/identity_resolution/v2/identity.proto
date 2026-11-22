@@ -36,7 +36,6 @@ message ComparePartiesResponse {
   bool identity_confirmed = 4;
 }
 
-
 /** A merge records canonical identity, NEVER deletes/reparents original owners. */
 message MergeOperation {
   string operation_id = 1;
