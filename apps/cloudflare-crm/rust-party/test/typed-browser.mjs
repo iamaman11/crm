@@ -1701,6 +1701,20 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
      repairedAudit,"Repeated evaluation and reload must remain read-only");
    checkpoint("N-04 existing DataQuality + typed Party repair + exact review URL/reload, no read audit");
+   // N-06 positive signed-human proof: original ContactPoint owner, real React.
+   // Published service-admin remains a separate test-agent, never a human.
+   await navigate("contacts","Контакты");
+   await page.getByRole("button",{name:"Создать контакт",exact:true}).click();
+   await selectPagedPicker(page,"Участник",partyId);
+   await page.getByLabel("Значение контакта",{exact:true}).fill(adminIdentity);
+   await mutation(page.getByRole("button",{name:"Сохранить контакт",exact:true}),"CreateContactPoint");
+   const consentVerifiedContactId=await firstId("crm_contact_point_records","normalized_value",adminIdentity);
+   const consentContactCard=page.locator("section").filter({
+     has:page.getByRole("heading",{name:adminIdentity,exact:true})
+   });
+   await mutation(consentContactCard.getByRole("button",{
+     name:"Подтвердить email (Access / тестовый администратор)",exact:true
+   }),"VerifyOwnEmailContactPoint");
    await navigate("consents","Коммуникации");
    // N-06: consume only original Party/ContactPoint owner reads instead of opaque IDs.
    await selectPagedPicker(page,"Фильтр по участнику",partyId);
@@ -1712,19 +1726,38 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await unverifiedOption.waitFor({state:"attached"});
    await expect(unverifiedOption).toBeDisabled();
    await expect(unverifiedOption).toContainText("не подтверждён");
-   await grantPickerPanel.getByRole("button",{name:"Закрыть панель",exact:true}).click();
+   const verifiedOption=unverifiedEmail.locator('option[value="'+consentVerifiedContactId+'"]');
+   await verifiedOption.waitFor({state:"attached"});
+   await expect(verifiedOption).toBeEnabled();
+   await unverifiedEmail.selectOption(consentVerifiedContactId);
+   const n06GrantPurpose="n06.newsletter."+runId;
+   await grantPickerPanel.getByLabel("Цель согласия",{exact:true}).fill(n06GrantPurpose);
+   await mutation(grantPickerPanel.getByRole("button",{
+     name:"Выдать согласие на email-коммуникацию",exact:true
+   }),"GrantVerifiedEmailConsent");
+   const grantCard=page.locator("section").filter({hasText:n06GrantPurpose});
+   await grantCard.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
+   await grantCard.getByRole("heading",{name:"Контакт разрешён",exact:true}).waitFor();
+   await mutation(grantCard.getByRole("button",{name:"Отозвать согласие",exact:true}),"WithdrawConsentAuthorization");
+   await grantCard.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
+   await grantCard.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
+   await grantCard.getByText("Согласие отозвано",{exact:true}).waitFor();
+   checkpoint("N-06 original signed-human verified Email -> typed Grant -> allowed -> CAS Withdraw -> denied");
    // The original signed Email grant guard is independently tested in R3a.
    // This browser session may use a non-human service principal: never self-grant.
    await page.getByRole("button",{name:"Запретить коммуникацию",exact:true}).click();
    const suppress=page.getByRole("dialog");
    await selectPagedPicker(suppress,"Участник",partyId);
+   const n06DenyPurpose="n06.deny."+runId;
+   await suppress.getByLabel("Цель",{exact:true}).fill(n06DenyPurpose);
    await mutation(suppress.getByRole("button",{name:"Запретить контакт",exact:true}),"SuppressCommunication");
-   const authCard=page.locator("section").filter({has:page.getByRole("heading",{name:"Запрет",exact:true})});
+   const authCard=page.locator("section").filter({hasText:n06DenyPurpose});
    await authCard.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
    await authCard.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
+   await authCard.getByText("Действующий запрет",{exact:true}).waitFor();
    const consentReadAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
    await reloadDocument();
-   const authCardAfterReload=page.locator("section").filter({has:page.getByRole("heading",{name:"Запрет",exact:true})});
+   const authCardAfterReload=page.locator("section").filter({hasText:n06DenyPurpose});
    await authCardAfterReload.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
    await authCardAfterReload.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
@@ -1735,6 +1768,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const scopeContact=evaluate.getByLabel("Контакт (необязательно)",{exact:true});
    await scopeContact.locator('option[value="'+browserSalesContactId+'"]').waitFor({state:"attached"});
    await scopeContact.selectOption(browserSalesContactId);
+   await evaluate.getByLabel("Цель",{exact:true}).fill(n06DenyPurpose);
    await evaluate.getByRole("button",{name:"Проверить разрешение",exact:true}).click();
    await page.getByRole("heading",{name:"Контакт не разрешён",exact:true}).waitFor();
    checkpoint("Quality and consent evaluation/suppression");

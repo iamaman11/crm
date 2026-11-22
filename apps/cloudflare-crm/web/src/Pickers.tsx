@@ -88,9 +88,9 @@ export function AccountPicker({onSelect,initialAccountId="",value:controlled,req
 /** ContactPoint selection is scoped to an authorized Party owner read.
  * Verified-only choices improve UX, but the Rust Consent owner verifies proof. */
 export function ContactPointPicker({partyId,name="contact",label="Контакт",emailOnly=false,
-  verifiedOnly=false,required=false}:{
+  verifiedOnly=false,required=false,onSelect}:{
   partyId:string;name?:string;label?:string;emailOnly?:boolean;verifiedOnly?:boolean;
-  required?:boolean;
+  required?:boolean;onSelect?:(id:string)=>void;
 }) {
   const [cursor,setCursor]=useState("");
   const [value,setValue]=useState("");
@@ -103,7 +103,7 @@ export function ContactPointPicker({partyId,name="contact",label="Контакт
   return <div>
     <SelectField label={label} name={name} value={value} required={required}
       disabled={!partyId||query.busy||!!query.error}
-      onChange={e=>setValue(e.target.value)}>
+      onChange={e=>{setValue(e.target.value);onSelect?.(e.target.value);}}>
       <option value="">{required?"Выберите контакт":"Все контакты участника"}</option>
       {query.data?.contactPoints.map(p=><option key={p.contactPointId} value={p.contactPointId}
         disabled={verifiedOnly&&!p.verified}>
@@ -116,10 +116,10 @@ export function ContactPointPicker({partyId,name="contact",label="Контакт
       <p>Активных контактов нет.</p>}
     {query.data?.pageInfo?.nextPageToken&&<Button variant="secondary"
       disabled={query.busy||!!query.error} onClick={()=>{
-        setCursor(query.data?.pageInfo?.nextPageToken??"");setValue("");
+        setCursor(query.data?.pageInfo?.nextPageToken??"");setValue("");onSelect?.("");
       }}>Другие контакты</Button>}
     {cursor&&<Button variant="secondary" onClick={()=>{
-      setCursor("");setValue("");
+      setCursor("");setValue("");onSelect?.("");
     }}>В начало контактов</Button>}
   </div>;
 }

@@ -36,6 +36,7 @@ export function ConsentScreen() {
   const [cursor,setCursor]=useState("");
   const [partyId,setPartyId]=useState("");
   const [grantPartyId,setGrantPartyId]=useState("");
+  const [grantContactId,setGrantContactId]=useState("");
   const [evaluatedAuthorizationId,setEvaluatedAuthorizationId]=useState("");
   const [draftId,setDraftId]=useState(newId);
   const [composer,setComposer]=useState<"grant"|"suppress"|null>(null);
@@ -56,8 +57,8 @@ export function ConsentScreen() {
       setEvaluatedAuthorizationId("");
       void evaluation.run(signal=>api.consents.evaluateConsent(scope(data),{signal}));
     }}><FormGrid><ScopeFields/></FormGrid><Button type="submit" disabled={evaluation.busy}>Проверить разрешение</Button></form>
-      {!evaluatedAuthorizationId&&evaluation.error&&<FeedbackPanel tone="danger" title={evaluation.error}/>}
-      {!evaluatedAuthorizationId&&evaluation.data&&<ConsentDecision data={evaluation.data}/>}
+      {!evaluatedAuthorizationId&&!evaluation.busy&&evaluation.error&&<FeedbackPanel tone="danger" title={evaluation.error}/>}
+      {!evaluatedAuthorizationId&&!evaluation.busy&&evaluation.data&&<ConsentDecision data={evaluation.data}/>}
     </Card>
     <PartyPicker label="Фильтр по участнику" required={false} value={partyId} onSelect={id=>{setPartyId(id);setCursor("");}}/>
     <QueryNotice query={query}/>
@@ -91,16 +92,16 @@ export function ConsentScreen() {
           contactPointId:field(data,"verifiedContactId"),purpose:field(data,"grantPurpose"),
           jurisdiction:field(data,"grantJurisdiction"),
           precondition:{idempotencyKey:mutation.key}
-        },draftId),async()=>{setComposer(null);setDraftId(newId());await query.reload();});
+        },draftId),async()=>{setComposer(null);setGrantPartyId("");setGrantContactId("");setDraftId(newId());await query.reload();});
       }}>
         <FormGrid>
-          <PartyPicker onSelect={setGrantPartyId}/>
+          <PartyPicker onSelect={id=>{setGrantPartyId(id);setGrantContactId("");}}/>
           <ContactPointPicker key={grantPartyId} partyId={grantPartyId} name="verifiedContactId"
-            label="Подтверждённый email" emailOnly verifiedOnly required/>
+            label="Подтверждённый email" onSelect={setGrantContactId} emailOnly verifiedOnly required/>
           <TextField label="Цель согласия" name="grantPurpose" defaultValue="marketing" required/>
           <TextField label="Юрисдикция согласия" name="grantJurisdiction" defaultValue="EU" required/>
         </FormGrid>
-        <Button type="submit" disabled={mutation.busy||mutation.pending}>Выдать согласие на email-коммуникацию</Button>
+        <Button type="submit" disabled={!grantPartyId||!grantContactId||mutation.busy||mutation.pending}>Выдать согласие на email-коммуникацию</Button>
       </form>
       <MutationNotice state={mutation}/>
     </RecordPanel>
