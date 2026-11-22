@@ -50,7 +50,10 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
       method+" must commit one matching D1 audit row");
     for(const item of audit)assert.equal(item.actor,adminIdentity);
     writes.push({path:new URL(response.url()).pathname,request_id:requestId,audit});
-    await page.getByRole("heading",{name:/^Сохранено/}).last().waitFor();
+    // Party shows a saved notice. CreateAccount from Party directly replaces
+    // the draft URL with the canonical Account card; that is asserted below.
+    if(method==="CreateParty")
+      await page.getByRole("heading",{name:/^Сохранено/}).last().waitFor();
     return requestId;
   };
   // Retry only demonstrably edge-owned asset/doc 404 on read-only navigation.
