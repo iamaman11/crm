@@ -1408,6 +1408,13 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
    precondition:{idempotencyKey:"l03-stale-"+randomUUID()}
  })).status,409);
  const merged=await identityV2("MergeParty",admin,intent);
+ if(merged.status!==200){
+   const rowProof=await sql("SELECT status,version FROM crm_identity_merge_records WHERE tenant='tenant-a' AND id='"+mergeOpId+"'");
+   const receiptProof=await sql("SELECT original_request_id FROM crm_identity_merge_receipts WHERE tenant='tenant-a' AND key='"+mergeKey+"'");
+   const partyProof=await sql("SELECT id,version FROM crm_party_records WHERE tenant='tenant-a' AND id IN ('"+mergeSourceId+"','"+mergeSurvivorId+"')");
+   console.error(JSON.stringify({event:"crm.l03.commit-proof-failure",status:merged.status,
+     domain_error:merged.body?.message,rows:rowProof,receipts:receiptProof.length,parties:partyProof}));
+ }
  assert.equal(merged.status,200,describeProtobuf(merged.body));
  assert.equal(merged.body.operation?.active,true);
  assert.equal(merged.body.operation?.version,1n);

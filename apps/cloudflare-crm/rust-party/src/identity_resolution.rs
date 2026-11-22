@@ -330,16 +330,27 @@ pub(super) async fn create_merge_typed(
     )?
     .run()
     .await;
-    let Ok(committed) = write else {
+    if write.is_err() {
         return Ok(Err(merge_fail("IDENTITY_MERGE_COMMIT_CONFLICT", 409)));
+    }
+    // D1 may report zero changes despite a successful triggered write. The
+    // original immutable receipt, not a driver metadata counter, is proof.
+    // No inferred success when receipt lookup is absent or mismatched.
+    let receipt = merge_receipt(db, tenant, key).await?;
+    let Some(receipt) = receipt else {
+        return Ok(Err(merge_fail("IDENTITY_MERGE_COMMIT_UNCONFIRMED", 503)));
     };
-    if committed.meta()?.and_then(|m| m.changes).unwrap_or(0) != 1 {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_STALE_OR_REDIRECTED", 409)));
+    if receipt.digest != hash || receipt.original_request_id != request_id {
+        return Ok(Err(merge_fail("IDENTITY_MERGE_RECEIPT_MISMATCH", 503)));
+    }
+    let saved = merge_decode(&receipt.state)?;
+    if saved.operation_id().as_str() != operation_id || saved.version() != 1 {
+        return Ok(Err(merge_fail("IDENTITY_MERGE_RECEIPT_MISMATCH", 503)));
     }
     Ok(Ok(MergeCommit {
-        operation,
+        operation: saved,
         replayed: false,
-        original_request_id: request_id.to_owned(),
+        original_request_id: receipt.original_request_id,
     }))
 }
 
@@ -455,16 +466,24 @@ pub(super) async fn unmerge_typed(
     )?
     .run()
     .await;
-    let Ok(committed) = write else {
+    if write.is_err() {
         return Ok(Err(merge_fail("IDENTITY_UNMERGE_COMMIT_CONFLICT", 409)));
+    }
+    let receipt = merge_receipt(db, tenant, key).await?;
+    let Some(receipt) = receipt else {
+        return Ok(Err(merge_fail("IDENTITY_UNMERGE_COMMIT_UNCONFIRMED", 503)));
     };
-    if committed.meta()?.and_then(|m| m.changes).unwrap_or(0) != 1 {
-        return Ok(Err(merge_fail("IDENTITY_UNMERGE_STALE", 409)));
+    if receipt.digest != hash || receipt.original_request_id != request_id {
+        return Ok(Err(merge_fail("IDENTITY_UNMERGE_RECEIPT_MISMATCH", 503)));
+    }
+    let saved = merge_decode(&receipt.state)?;
+    if saved.operation_id().as_str() != operation_id || saved.version() != 2 {
+        return Ok(Err(merge_fail("IDENTITY_UNMERGE_RECEIPT_MISMATCH", 503)));
     }
     Ok(Ok(MergeCommit {
-        operation,
+        operation: saved,
         replayed: false,
-        original_request_id: request_id.to_owned(),
+        original_request_id: receipt.original_request_id,
     }))
 }
 
