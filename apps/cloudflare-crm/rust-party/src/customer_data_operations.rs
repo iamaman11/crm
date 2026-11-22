@@ -143,6 +143,9 @@ pub(super) async fn assemble(
 // provenance and stable target identity. External IDs NEVER become CRM Party IDs.
 const IMPORT_MAX_ROWS: usize = 20;
 const IMPORT_MAX_BYTES: usize = 16 * 1024;
+// A normal list needs only a type and a name. The four-column export-shaped
+// import remains supported with unchanged provenance and version validation.
+const IMPORT_SIMPLE_FIELDS: [&str; 2] = ["kind", "display_name"];
 const IMPORT_FIELDS: [&str; 4] = ["party_id", "kind", "display_name", "resource_version"];
 type ImportCommand = (String, PartyKind, String, String); // target ID,kind,name,receipt key
 
@@ -175,15 +178,14 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
     let profile =
         ImportParserProfile::csv_v1(b',', b'"').map_err(|_| "IMPORT_PARSER_PROFILE_INVALID")?;
     let parsed = parse_import_source(bytes, &profile).map_err(|_| "IMPORT_CSV_INVALID")?;
-    if parsed
-        .headers()
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>()
-        != IMPORT_FIELDS
-    {
+    let headers = parsed.headers().iter().map(String::as_str).collect::<Vec<_>>();
+    let simple = if headers.as_slice() == &IMPORT_SIMPLE_FIELDS[..] {
+        true
+    } else if headers.as_slice() == &IMPORT_FIELDS[..] {
+        false
+    } else {
         return Err("IMPORT_HEADER_INVALID");
-    }
+    };
     if parsed.rows().is_empty() || parsed.rows().len() > IMPORT_MAX_ROWS {
         return Err("IMPORT_ROW_LIMIT_REACHED");
     }
@@ -191,7 +193,7 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
         None,
         "kind",
         "display_name",
-        Some("party_id".to_owned()),
+        (!simple).then(|| "party_id".to_owned()),
         None,
     )
     .map_err(|_| "IMPORT_MAPPING_INVALID")?;
@@ -218,11 +220,12 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
         let kind = get("kind");
         let name = get("display_name");
         let version = get("resource_version");
-        if version
-            .parse::<u64>()
-            .ok()
-            .filter(|value| *value > 0)
-            .is_none()
+        if !simple
+            && version
+                .parse::<u64>()
+                .ok()
+                .filter(|value| *value > 0)
+                .is_none()
         {
             row_issue(
                 &mut row_issues,
@@ -231,7 +234,7 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
                 "IMPORT_SOURCE_VERSION_INVALID",
             );
         }
-        if source_id.is_empty() || !seen.insert(source_id.to_owned()) {
+        if !simple && (source_id.is_empty() || !seen.insert(source_id.to_owned())) {
             row_issue(
                 &mut row_issues,
                 source.row_position,
@@ -272,7 +275,9 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
             job_id: job_id.clone(),
             row_position: source.row_position,
             external_row_key: None,
-            source_external_id: Some(source_id.to_owned()),
+            // For simple CSV, the ORIGINAL ImportRow uses a deterministic
+            // job-scoped row_position; never invent an external source ID.
+            source_external_id: (!simple).then(|| source_id.to_owned()),
             occurred_at_unix_nanos: 1,
         }) {
             Ok(row) => row,

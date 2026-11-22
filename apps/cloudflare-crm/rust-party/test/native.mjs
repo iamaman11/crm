@@ -3855,6 +3855,54 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      {actor:"service:ci-fixture.access",request_id:retryImport.headers.get("x-request-id")},
    ]);
  }
+ // Product-first simple source: the ORIGINAL CSV ReaderBuilder, optional
+ // source identity and position-derived ImportRow, not a second parser/owner.
+ const simpleCsv=new TextEncoder().encode(
+   'kind,display_name\r\nperson,"Simple, CSV Person"\r\norganization,"Simple ""Quoted"" Org"\r\n');
+ const simplePreview=await csv("PreviewPartyImport",admin,{csv:simpleCsv});
+ assert.equal(simplePreview.status,200,describeProtobuf(simplePreview.body));
+ assert.equal(simplePreview.body.count,2);
+ assert.equal(simplePreview.body.previouslyImported,0);
+ assert.equal(simplePreview.body.rowIssues.length,0);
+ assert.equal(new Set(simplePreview.body.targetPartyIds).size,2);
+ assert.ok(simplePreview.body.targetPartyIds.every(id=>!id.includes("external-one")));
+ const simpleTenantB=await csv("PreviewPartyImport",tenantB,{csv:simpleCsv});
+ assert.equal(simpleTenantB.status,200);
+ assert.ok(simpleTenantB.body.targetPartyIds.every(id=>!simplePreview.body.targetPartyIds.includes(id)));
+ assert.equal((await csv("PreviewPartyImport",viewer,{csv:simpleCsv})).status,403);
+ const brokenSimple=new TextEncoder().encode(
+   "kind,display_name\r\nperson,Valid Name\r\norganization,\r\n");
+ const invalidSimple=await csv("PreviewPartyImport",admin,{csv:brokenSimple});
+ assert.equal(invalidSimple.status,200,describeProtobuf(invalidSimple.body));
+ assert.deepEqual(invalidSimple.body.targetPartyIds,[]);
+ assert.deepEqual(invalidSimple.body.rowIssues.map(x=>[x.rowPosition,x.field,x.code]),[
+   [2,"display_name","IMPORT_PARTY_INVALID"]]);
+ const simpleBeforeAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
+ const simpleBeforeParties=(await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'"))[0].n;
+ assert.equal((await csv("ApplyPartyImport",admin,{
+   csv:brokenSimple,expectedSha256Hex:invalidSimple.body.csvSha256Hex,
+   precondition:{idempotencyKey:"csv-simple-invalid-denied"}
+ })).status,400);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,simpleBeforeAudit);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'"))[0].n,simpleBeforeParties);
+ const simpleApply={csv:simpleCsv,expectedSha256Hex:simplePreview.body.csvSha256Hex,
+   precondition:{idempotencyKey:"csv-simple-import-original-owner"}};
+ const simpleSaved=await csv("ApplyPartyImport",admin,simpleApply);
+ assert.equal(simpleSaved.status,200,describeProtobuf(simpleSaved.body));
+ assert.equal(simpleSaved.body.createdCount,2);
+ assert.equal((await csv("ApplyPartyImport",knownService,simpleApply)).body.replayedCount,2);
+ assert.equal((await csv("PreviewPartyImport",admin,{csv:simpleCsv})).body.previouslyImported,2);
+ for(const target of simplePreview.body.targetPartyIds){
+   const found=await v3("GetParty",viewer,{partyId:target});
+   assert.equal(found.status,200);
+   assert.ok(["Simple, CSV Person",'Simple "Quoted" Org'].includes(found.body.party.displayName));
+   assert.equal((await v3("GetParty",tenantB,{partyId:target})).status,404);
+ }
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='tenant-a'"))[0].n,simpleBeforeParties+2);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,simpleBeforeAudit+2);
+ console.log(JSON.stringify({event:"crm.native-simple-csv-original-owner",result:"PASS",
+   native_csv:true,headers_two_or_four:true,tenant:true,original_position_id:true,
+   row_errors:true,atomic:true,replay:true,quoted_values:true,audit:true}));
  assert.equal((await csv("PreviewPartyExport",admin,{kind:0})).body.code,"invalid_argument");
  assert.equal((await csv("PreviewPartyExport",admin,{kind:999})).body.code,"invalid_argument");
  const exportBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;

@@ -74,7 +74,9 @@ export function DataScreen() {
           if(revision===fileRevision.current)setFileError(api.describeError(error));
         }
       }}/>
-      <p>До 20 строк за операцию. Сначала проверьте файл, затем подтвердите создание.</p>
+      <p>Простой CSV: две колонки <code>kind,display_name</code>. Тип: <code>person</code> для человека или <code>organization</code> для организации. Существующий формат с четырьмя колонками <code>party_id,kind,display_name,resource_version</code> тоже поддерживается.</p>
+      <p><a download="crm-parties-template.csv" href={"data:text/csv;charset=utf-8,"+encodeURIComponent("kind,display_name\r\nperson,Пример человека\r\norganization,Пример организации\r\n")}>Скачать простой шаблон CSV</a></p>
+      <p>Файл UTF-8, до 20 строк и 16 КиБ. Импорт создаёт новые записи; повторная отправка того же файла не создаёт их заново. Перед записью проверьте результаты и подтвердите импорт.</p>
       <Button disabled={!bytes||previewBusy||mutation.busy||mutation.pending} onClick={async()=>{
         if(!bytes)return;
         const revision=fileRevision.current,selectedBytes=bytes;

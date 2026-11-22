@@ -2265,6 +2265,30 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.unroute(s5bCsvPath,loseCsvAck);
    assert.ok(await firstId("crm_party_records","display_name","Browser Import "+runId));
 
+   // New-user flow: download the two-column template and apply it using the
+   // existing typed N-01 owner, not manually invented source IDs or versions.
+   const templatePromise=page.waitForEvent("download");
+   await page.getByRole("link",{name:"Скачать простой шаблон CSV",exact:true}).click();
+   const template=await templatePromise;
+   assert.equal(await template.failure(),null);
+   assert.ok((await readFile(await template.path(),"utf8")).startsWith("kind,display_name\r\n"));
+   const simpleCsv="kind,display_name\r\nperson,Browser Simple Person "+runId+
+     '\r\norganization,"Browser, Simple Organization '+runId+'"\r\n';
+   const simpleAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const simplePartyBefore=(await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"'"))[0].n;
+   await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
+     name:"simple-people.csv",mimeType:"text/csv",buffer:Buffer.from(simpleCsv)});
+   await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
+   await page.getByText(/записей 2, ранее импортировано 0/).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,simpleAuditBefore,
+     "Simple CSV preview must not write");
+   await mutation(page.getByRole("button",{name:"Подтвердить импорт",exact:true}),"ApplyPartyImport");
+   assert.ok(await firstId("crm_party_records","display_name","Browser Simple Person "+runId));
+   assert.ok(await firstId("crm_party_records","display_name","Browser, Simple Organization "+runId));
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"'"))[0].n,simplePartyBefore+2);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,simpleAuditBefore+2);
+   checkpoint("Simple two-column CSV template -> original Rust preview -> atomic Party apply / D1 audit");
+
    const exportReply=page.waitForResponse(r=>responsePathEndsWith(r,"/PreviewPartyExport"));
    await page.getByRole("button",{name:"Проверить экспорт",exact:true}).click();
    assert.equal((await exportReply).status(),200);
