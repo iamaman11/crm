@@ -8,7 +8,7 @@ export type Route =
   | {kind:"account";accountId:string}
   | {kind:"account-create";partyId:string}
   | {kind:"deal";dealId:string}
-  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;viewId?:string}
+  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;viewId?:string;pipelineId?:string}
   | {kind:"not-found";path:string};
 
 const sections:readonly Section[]=["parties","contacts","relationships","sales","tasks","consents","review","privacy","enrichment","data"];
@@ -58,6 +58,7 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     const deals=path==="tasks"?params.getAll("dealId"):[];
     const searches=path==="sales"?params.getAll("search"):[];
     const viewIds=path==="sales"?params.getAll("viewId"):[];
+    const pipelineIds=path==="sales"?params.getAll("pipelineId"):[];
     const contacts=path==="contacts"?params.getAll("contactPointId"):[];
     const relations=path==="relationships"?params.getAll("relationshipId"):[];
     const taskId=ids[0]??"",dealId=deals[0]??"";
@@ -66,17 +67,20 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     const partyId=partyIds[0]??"";
     const focusedPartyRecord=contacts.length>0||relations.length>0;
     if(ids.length>1||deals.length>1||searches.length>1||viewIds.length>1||
+       pipelineIds.length>1||(viewIds.length>0&&pipelineIds.length>0)||
+       pipelineIds.some(id=>!id)||
        contacts.length>1||relations.length>1||
        (focusedPartyRecord&&(partyIds.length!==1||!partyId||!contactPointId&&!relationshipId))||
        searches.some(search=>[...search].length>200)||(taskId&&dealId)||
-       [taskId,dealId,contactPointId,relationshipId,...viewIds,...(focusedPartyRecord?[partyId]:[])].some(id=>
+       [taskId,dealId,contactPointId,relationshipId,...viewIds,...pipelineIds,...(focusedPartyRecord?[partyId]:[])].some(id=>
          id.length>128||id.includes("/")||id.includes("\\")||id==="."||id===".."||id.includes("%")))
       return {kind:"not-found",path:source};
     return {kind:"section",screen:path,partyId,
       accountId:params.get("accountId")??"",...(taskId?{taskId}:{}),...(dealId?{dealId}:{}),
       ...(contactPointId?{contactPointId}:{}),...(relationshipId?{relationshipId}:{}),
       ...(searches[0]?{search:searches[0]}:{}),
-      ...(viewIds[0]?{viewId:viewIds[0]}:{})};
+      ...(viewIds[0]?{viewId:viewIds[0]}:{}),
+      ...(pipelineIds[0]?{pipelineId:pipelineIds[0]}:{})};
   }
   return {kind:"not-found",path:source};
 }
@@ -116,11 +120,12 @@ export function dealTasksHref(dealId:string,accountId:string):string {
   return "#tasks?"+new URLSearchParams({accountId,dealId}).toString();
 }
 
-export function salesSearchHref(initialAccountId:string,search:string,viewId=""):string {
+export function salesSearchHref(initialAccountId:string,search:string,viewId="",pipelineId=""):string {
   const params=new URLSearchParams();
   if(initialAccountId)params.set("accountId",initialAccountId);
   if(search)params.set("search",search);
   if(viewId)params.set("viewId",viewId);
+  if(pipelineId&&!viewId)params.set("pipelineId",pipelineId);
   const query=params.toString();
   return "#sales"+(query?"?"+query:"");
 }
@@ -128,6 +133,11 @@ export function salesSearchHref(initialAccountId:string,search:string,viewId="")
 /** Reuse the one typed Sales route for saved-view selection and Deal search. */
 export function salesViewHref(initialAccountId:string,viewId:string,search=""):string {
   return salesSearchHref(initialAccountId,search,viewId);
+}
+
+/** A manually selected Kanban uses the same URL owner, never storage. */
+export function salesPipelineHref(initialAccountId:string,pipelineId:string,search=""):string {
+  return salesSearchHref(initialAccountId,search,"",pipelineId);
 }
 
 export function dealHref(dealId:string):string {

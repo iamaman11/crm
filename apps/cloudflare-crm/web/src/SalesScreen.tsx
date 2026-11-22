@@ -9,7 +9,7 @@ import {AccountPicker,AccountName} from "./Pickers";
 import {SearchField} from "./SearchField";
 import {DealContactPicker,DealDetails,dealStatusText,forecastCategoryText,probabilitySourceText} from "./DealRecord";
 import {inputDate,parseDate} from "./calendarInput";
-import {dealHref,salesSearchHref,salesViewHref} from "./routes";
+import {dealHref,salesViewHref,salesPipelineHref} from "./routes";
 import {navigateTo} from "./navigation";
 import {currencyCatalog,minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText} from "./money";
 import type {CurrencyCatalog} from "./money";
@@ -55,8 +55,9 @@ async function allSalesViews(signal:AbortSignal):Promise<SalesDealView[]> {
   } while(cursor);
   return all;
 }
-export function SalesScreen({initialAccountId="",initialSearch="",initialViewId="",focusedDealId=""}:{
-  initialAccountId?:string;initialSearch?:string;initialViewId?:string;focusedDealId?:string;
+export function SalesScreen({initialAccountId="",initialSearch="",initialViewId="",initialPipelineId="",focusedDealId=""}:{
+  initialAccountId?:string;initialSearch?:string;initialViewId?:string;
+  initialPipelineId?:string;focusedDealId?:string;
 }) {
   const [stageCursors,setStageCursors]=useState<Record<string,string>>({});
   // Native DnD is presentation only: the existing confirmed advance form
@@ -73,7 +74,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   // Preserve the selected Kanban, its filters, metrics and mutation state.
   useEffect(()=>setDealSearch(initialSearch),[initialSearch]);
   const [accountId,setAccountId]=useState(initialAccountId);
-  const [pipelineId,setPipelineId]=useState("");
+  const [pipelineId,setPipelineId]=useState(initialPipelineId);
   const [analysisStart,setAnalysisStart]=useState("");
   const [analysisEnd,setAnalysisEnd]=useState("");
   const [analysisPeriod,setAnalysisPeriod]=useState<{
@@ -114,6 +115,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
       await pipelinesQuery.reload();
       setPipelineId(marker.resourceId);
       setPipelineEditor(null);setPipelineDirty(false);setStageCursors({});
+      if(!selectedViewId)navigateTo(salesPipelineHref(initialAccountId,marker.resourceId,dealSearch));
     }
   });
   const viewMutation=useMutation({
@@ -165,7 +167,9 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
     };
   };
   const applySavedView=(id:string)=>{
-    if(!navigateTo(salesViewHref(initialAccountId,id,dealSearch)))return;
+    const route=id?salesViewHref(initialAccountId,id,dealSearch):
+      salesPipelineHref(initialAccountId,pipelineId,dealSearch);
+    if(!navigateTo(route))return;
     const view=savedViews.find(entry=>entry.viewId===id);
     if(!view){setSelectedViewId("");return;}
     setSelectedViewId(view.viewId);
@@ -177,6 +181,12 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
     setAllDealsCursor("");
     viewMutation.changed();
     setCreateViewOpen(false);
+  };
+  const selectPipeline=(id:string)=>{
+    // Manual selection is URL-backed. Draft changes to an existing saved
+    // view remain unsaved until its explicit UpdateSalesView confirmation.
+    if(!selectedViewId&&!navigateTo(salesPipelineHref(initialAccountId,id,dealSearch)))return;
+    setPipelineId(id);setStageCursors({});viewMutation.changed();
   };
   const saveView=(archive=false,asNew=false)=>{
     const old=selectedView;
@@ -212,6 +222,15 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   };
   const pipelinesQuery=useQuery(useCallback(allPipelines,[]));
   const pipelines=pipelinesQuery.data?.pipelines??[];
+  useEffect(()=>{
+    if(initialViewId||!pipelinesQuery.data)return;
+    // ListPipelines is tenant-scoped; a fabricated URL is not an authority.
+    const id=initialPipelineId;
+    setPipelineId(id&&pipelinesQuery.data.pipelines.some(p=>p.pipelineId===id)?id:"");
+    setStageCursors({});
+  },[initialPipelineId,initialViewId,pipelinesQuery.data]);
+  const missingPipeline=!!initialPipelineId&&!initialViewId&&!!pipelinesQuery.data&&
+    !pipelines.some(p=>p.pipelineId===initialPipelineId);
   const activePipeline=pipelines.find(p=>p.pipelineId===pipelineId);
   const query=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!activePipeline)return [];
@@ -368,8 +387,9 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
     </section>
     {!pipelinesQuery.busy&&pipelines.length===0&&
       <p>Сначала создайте воронку с этапами. Сделки нельзя создавать с произвольными кодами этапов.</p>}
+    {missingPipeline&&<p role="status">Воронка по ссылке недоступна. Выберите существующую воронку.</p>}
     <SelectField label="Воронка продаж" value={pipelineId} onChange={e=>{
-      setPipelineId(e.target.value);setStageCursors({});viewMutation.changed();
+      selectPipeline(e.target.value);
     }}>
       <option value="">Все воронки — обзор</option>
       {pipelines.map(p=><option value={p.pipelineId} key={p.pipelineId}>
@@ -388,7 +408,9 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
         const search=value.trim();
         // Existing native hash route owns search state across full Deal/Back
         // and document reload, not sessionStorage or a parallel router.
-        if(navigateTo(salesSearchHref(initialAccountId,search,selectedViewId))){
+        const route=selectedViewId?salesViewHref(initialAccountId,selectedViewId,search):
+          salesPipelineHref(initialAccountId,pipelineId,search);
+        if(navigateTo(route)){
           setDealSearch(search);setAllDealsCursor("");
         }
       }}/>
@@ -549,7 +571,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
           </Button>{" "}
           <a href={dealHref(deal.dealId)}>Полная страница</a>
           <p>Воронка: {pipeline?.name??deal.stage?.pipelineId??"неизвестна"} · Этап: {stage?.name??deal.stage?.stageId??"неизвестен"}</p>
-          {pipeline&&<Button variant="secondary" onClick={()=>{setPipelineId(pipeline.pipelineId);setStageCursors({});}}>Открыть воронку</Button>}
+          {pipeline&&<Button variant="secondary" onClick={()=>selectPipeline(pipeline.pipelineId)}>Открыть воронку</Button>}
           <p>{moneyText(deal.amount,currencyDefinitions)} · {percent(deal.probabilityBasisPoints)}%</p>
           {deal.status===DealStatus.OPEN&&<p>{probabilitySourceText(deal.probabilitySource)} · {forecastCategoryText(deal.forecastCategory)}</p>}
           <p>{dealStatusText(deal.status)} · версия {deal.version.toString()}</p>
@@ -690,7 +712,10 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
           const destination=pipelineEditor==="new"?pipelineDraftId:pipelineEditor?.pipelineId;
           setPipelineDirty(false);setPipelineEditor(null);
           await pipelinesQuery.reload();
-          if(destination)setPipelineId(destination);
+          if(destination){
+            setPipelineId(destination);
+            if(!selectedViewId)navigateTo(salesPipelineHref(initialAccountId,destination,dealSearch));
+          }
           setStageCursors({});await refreshSales();
         });
       }}>

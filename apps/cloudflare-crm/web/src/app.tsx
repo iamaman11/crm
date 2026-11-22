@@ -48,7 +48,7 @@ function App() {
       initialDealId={route.dealId??""}/>:
     route.screen==="sales"?<SalesScreen key={route.accountId}
       initialAccountId={route.accountId} initialSearch={route.search??""}
-      initialViewId={route.viewId??""}/>:
+      initialViewId={route.viewId??""} initialPipelineId={route.pipelineId??""}/>:
     route.screen==="consents"?<ConsentScreen/>:
     route.screen==="review"?<ReviewScreen/>:
     route.screen==="privacy"?<PrivacyScreen/>:

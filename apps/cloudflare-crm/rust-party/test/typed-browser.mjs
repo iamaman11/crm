@@ -899,6 +899,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      original_request_id:originalPipelineCreateRequestId,subsequent_request_id:pipelineLookupRequestId});
    await page.unroute(pipelineCreateRoute);
    await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
+   assert.ok(new URL(page.url()).hash.includes("pipelineId="+newPipelineId),
+     "confirmed pipeline selection must have a native URL");
+   await reloadDocument();
+   await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
+   await expect(page.getByRole("region",{name:"Kanban — этапы и сделки"})).toBeVisible();
    checkpoint("S5 pipeline lost acknowledgement: opaque marker, immutable receipt lookup, one D1 audit");
    assert.equal((await sql("SELECT version FROM crm_sales_pipeline_records WHERE tenant='"+tenantSql+"' AND id='"+newPipelineId+"'"))[0].version,1);
    const recordedPipelines=await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"' AND subject_id='"+newPipelineId+"' AND action='sales_pipeline.create'");
@@ -938,6 +943,19 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      "FROM crm_sales_deal_records WHERE tenant='"+tenantSql+"' AND id='"+dealId+"'"))[0];
    assert.deepEqual(saleCreatedR72,{contact_id:browserSalesContactId,year:2030,month:5,day:21});
    await page.getByText("90071992547409.93 USD · 37.45%",{exact:true}).waitFor();
+   // Manual board selection survives the real full Deal route and Back.
+   const boardAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await page.locator('a[href="#sales/'+dealId+'"]').first().click();
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   await page.goBack();
+   await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
+   await page.getByRole("region",{name:"Kanban — этапы и сделки"}).getByRole(
+     "heading",{name:/Первичный контакт · 1/}).waitFor();
+   await reloadDocument();
+   await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     boardAuditBefore,"manual board navigation must not write D1 audit");
+   checkpoint("M2-01 native board URL survives full Deal → Back and reload, no audit");
    const leadTotals=page.getByRole("group",{name:"Итоги этапа Первичный контакт"});
    await leadTotals.getByText("90071992547409.93 USD · сделок с суммой: 1",
      {exact:true}).waitFor();
@@ -1490,8 +1508,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    // is selected. The name search must not change the board or metrics.
    const metricsBeforeSearch=await page.getByRole("region",{name:"Аналитика воронки"})
      .innerText();
+   assert.ok(new URL(page.url()).hash.includes("pipelineId="+alternatePipelineId));
    await page.getByLabel("Найти сделку",{exact:true}).fill("Browser Deal "+runId);
    await page.getByRole("button",{name:"Найти сделку по названию",exact:true}).click();
+   assert.ok(new URL(page.url()).hash.includes("pipelineId="+alternatePipelineId),
+     "Deal search must not drop the manual Kanban selection");
    const searchResults=page.getByRole("region",{name:"Результаты поиска сделок"});
    await searchResults.getByRole("heading",{name:"Browser Deal "+runId,exact:true}).waitFor();
    await expect(searchResults.getByRole("heading",{name:"Browser Alternate Deal "+runId,
@@ -1528,6 +1549,21 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.goBack();
    await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
    checkpoint("R7.2 addressable full Deal card via shared GetDeal and Back");
+   await page.getByLabel("Воронка продаж",{exact:true}).selectOption("");
+   assert.ok(!new URL(page.url()).hash.includes("pipelineId="),
+     "All-pipelines overview must clear the manual URL selection");
+   await page.goto(base+"/#sales?pipelineId="+alternatePipelineId);
+   await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(alternatePipelineId);
+   await page.goto(base+"/#sales?pipelineId="+alternatePipelineId+"&pipelineId="+alternatePipelineId);
+   await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
+   await page.goto(base+"/#sales?pipelineId="+alternatePipelineId+"&viewId="+newId());
+   await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
+   await page.goto(base+"/#sales?pipelineId=bad%2Fid");
+   await page.getByRole("heading",{name:"Страница не найдена",exact:true}).waitFor();
+   await page.goto(base+"/#sales?pipelineId=nonexistent-manual-board");
+   await page.getByText("Воронка по ссылке недоступна.",{exact:false}).waitFor();
+   await page.goto(base+"/#sales");
+   checkpoint("M2-01 manual board deep link, clear selection, fail-closed URLs");
    await navigate("accounts","Клиенты");
    await page.locator("section").filter({has:page.getByRole("heading",{name:"Browser Account "+runId,level:2,exact:true})})
      .getByRole("button",{name:"Открыть карточку",exact:true}).click();
