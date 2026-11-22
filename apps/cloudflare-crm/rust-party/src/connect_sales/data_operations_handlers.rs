@@ -97,6 +97,14 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
             csv_sha256_hex: preview.hash,
             previously_imported: preview.already as u32,
             target_party_ids: preview.target_ids,
+            row_issues: preview.row_issues.into_iter().map(|issue|
+                csv_wire::PartyCsvRowIssue {
+                    row_position: issue.row_position,
+                    field: issue.diagnostic.field().to_owned(),
+                    code: issue.diagnostic.code().to_owned(),
+                    ..Default::default()
+                }
+            ).collect(),
             ..Default::default()
         })
     }

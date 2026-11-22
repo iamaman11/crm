@@ -1916,6 +1916,26 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByText("ID: "+mappingId+"; поле: organization.legal_name; профиль: "+profileId,{exact:true}).waitFor();
 
    await navigate("data","Импорт и экспорт");
+   const brokenCsv="party_id,kind,display_name,resource_version\r\n"+
+     "same-key,invalid,Wrong,0\r\n"+
+     "same-key,person,Second,1\r\n"+
+     "empty-name,organization,,1\r\n";
+   const n01AuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   const n01PartiesBefore=(await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"'"))[0].n;
+   await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({
+     name:"invalid.csv",mimeType:"text/csv",buffer:Buffer.from(brokenCsv)});
+   await page.getByRole("button",{name:"Проверить импорт",exact:true}).click();
+   const csvErrors=page.getByRole("region",{name:"Ошибки CSV"});
+   await csvErrors.getByText(/Найдено ошибок: 4/).waitFor();
+   await csvErrors.getByText(/Строка данных 1 · Версия исходной записи: Укажите положительное целое число/).waitFor();
+   await csvErrors.getByText(/Строка данных 1 · Тип участника: Допустимы только person и organization/).waitFor();
+   await csvErrors.getByText(/Строка данных 2 · ID исходной системы: ID пустой или повторяется/).waitFor();
+   await csvErrors.getByText(/Строка данных 3 · Имя или название: Недопустимое или пустое/).waitFor();
+   assert.equal(await page.getByRole("button",{name:"Подтвердить импорт",exact:true}).count(),0,
+     "Invalid CSV preview must never offer an Apply action");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,n01AuditBefore);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"'"))[0].n,n01PartiesBefore);
+   checkpoint("N-01 invalid CSV shows all original row+field reasons, never enables Apply or writes");
    const csv="party_id,kind,display_name,resource_version\r\nbrowser-import,person,Browser Import "+runId+",1\r\n";
    const obsoleteCsv=csv.replace("Browser Import ","Browser Obsolete ");
    await page.getByLabel("CSV-файл",{exact:true}).setInputFiles({

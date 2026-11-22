@@ -5,6 +5,22 @@ import {PartyKind} from "@ultimate-crm/client/cloudflare";
 import {enumValue} from "./enumFields";
 import {useReadAction,useMutation,prepareMutation,MutationNotice} from "./hooks";
 
+// Presentation only. Validation and error codes originate from the one Rust owner.
+const csvColumnLabels:Record<string,string>={
+  party_id:"ID исходной системы",kind:"Тип участника",
+  display_name:"Имя или название",resource_version:"Версия исходной записи"
+};
+const csvErrorLabels:Record<string,string>={
+  IMPORT_SOURCE_VERSION_INVALID:"Укажите положительное целое число.",
+  IMPORT_DUPLICATE_OR_EMPTY_SOURCE_ID:"ID пустой или повторяется в этом файле.",
+  IMPORT_KIND_INVALID:"Допустимы только person и organization.",
+  IMPORT_ROW_ID_INVALID:"Недопустимый ID исходной записи.",
+  IMPORT_TARGET_ID_INVALID:"Не удалось сформировать ID участника CRM.",
+  IMPORT_PARTY_INVALID:"Недопустимое или пустое имя/название.",
+  IMPORT_NAME_NONCANONICAL:"Уберите лишние пробелы и используйте нормализованное имя.",
+  IMPORT_TARGET_PARTY_CONFLICT:"Участник с этим целевым ID уже существует и не совпадает с импортом."
+};
+
 export function DataScreen() {
   // New file selection supersedes all prior asynchronous file and preview results.
   const fileRevision=useRef(0);
@@ -73,13 +89,21 @@ export function DataScreen() {
         }
       }}>Проверить импорт</Button>
       {fileError&&<FeedbackPanel tone="danger" title={fileError}/>}
-      {preview&&<><p>{fileName}: строк {preview.count}, уже импортировано {preview.previouslyImported}.</p>
-        <details><summary>Создаваемые ID</summary><ul>{preview.targetPartyIds.map(id=><li key={id}>{id}</li>)}</ul></details>
-        <p><Button disabled={mutation.busy||mutation.pending||!bytes} onClick={()=>void mutation.runIntent(()=>{
-          if(!bytes)throw Error("Выберите файл");
-          return prepareMutation(api.csv.applyPartyImport,{csv:bytes,expectedSha256Hex:preview.csvSha256Hex,
-            precondition:{idempotencyKey:mutation.key}},preview.csvSha256Hex);
-        },clearSelection)}>Подтвердить импорт</Button></p>
+      {preview&&<>
+        <p>{fileName}: записей {preview.count}, ранее импортировано {preview.previouslyImported}.</p>
+        {preview.rowIssues.length>0?<section aria-label="Ошибки CSV">
+          <p role="status">Найдено ошибок: {preview.rowIssues.length}. Импорт всего файла запрещён. Исправьте CSV и проверьте повторно; участники не созданы.</p>
+          <ol>{preview.rowIssues.map((issue,index)=><li key={issue.rowPosition+"-"+issue.field+"-"+index}>
+            Строка данных {issue.rowPosition} · {csvColumnLabels[issue.field]??issue.field}: {csvErrorLabels[issue.code]??"Некорректное значение ("+issue.code+")"}
+          </li>)}</ol>
+        </section>:<>
+          <details><summary>Создаваемые ID</summary><ul>{preview.targetPartyIds.map(id=><li key={id}>{id}</li>)}</ul></details>
+          <p><Button disabled={mutation.busy||mutation.pending||!bytes} onClick={()=>void mutation.runIntent(()=>{
+            if(!bytes)throw Error("Выберите файл");
+            return prepareMutation(api.csv.applyPartyImport,{csv:bytes,expectedSha256Hex:preview.csvSha256Hex,
+              precondition:{idempotencyKey:mutation.key}},preview.csvSha256Hex);
+          },clearSelection)}>Подтвердить импорт</Button></p>
+        </>}
       </>}<MutationNotice state={mutation}/>
     </Card>
   </>;

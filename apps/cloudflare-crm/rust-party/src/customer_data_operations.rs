@@ -5,7 +5,7 @@
 use super::{access, bind, error, parties};
 use crm_customer_data_operations::{
     CreateImportRow, ImportJobId, ImportParserProfile, ImportRow, PartyImportKind,
-    PartyImportMapping, PreparedPartyRow, parse_import_source, party_export_hash_parts,
+    PartyImportMapping, PreparedPartyRow, RowDiagnostic, parse_import_source, party_export_hash_parts,
 };
 use crm_customer_data_operations::{
     PARTY_EXPORT_CSV_MEDIA_TYPE, PartyExportField, PartyExportKindFilter, PartyExportProfile,
@@ -144,8 +144,24 @@ const IMPORT_MAX_ROWS: usize = 20;
 const IMPORT_MAX_BYTES: usize = 16 * 1024;
 const IMPORT_FIELDS: [&str; 4] = ["party_id", "kind", "display_name", "resource_version"];
 type ImportCommand = (String, PartyKind, String, String); // target ID,kind,name,receipt key
+
+// Reuse the ORIGINAL validated RowDiagnostic (field + stable reason) and the
+// original parser's 1-based data-record position, not a second CSV grammar.
+pub(super) struct ImportRowIssue {
+    pub(super) row_position: u32,
+    pub(super) diagnostic: RowDiagnostic,
+}
+fn row_issue(issues: &mut Vec<ImportRowIssue>, position: u32, field: &str, code: &str) {
+    // All source column names and error codes here are static, bounded identifiers.
+    let diagnostic = RowDiagnostic::try_new(code, field)
+        .expect("static CSV row diagnostic field and code");
+    issues.push(ImportRowIssue { row_position: position, diagnostic });
+}
 struct ImportPlan {
     commands: Vec<ImportCommand>,
+    positions: Vec<u32>,
+    row_issues: Vec<ImportRowIssue>,
+    count: usize,
     hash: String,
 }
 fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &'static str> {
@@ -155,31 +171,17 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
     let profile =
         ImportParserProfile::csv_v1(b',', b'"').map_err(|_| "IMPORT_PARSER_PROFILE_INVALID")?;
     let parsed = parse_import_source(bytes, &profile).map_err(|_| "IMPORT_CSV_INVALID")?;
-    if parsed
-        .headers()
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>()
-        != IMPORT_FIELDS
-    {
+    if parsed.headers().iter().map(String::as_str).collect::<Vec<_>>() != IMPORT_FIELDS {
         return Err("IMPORT_HEADER_INVALID");
     }
     if parsed.rows().is_empty() || parsed.rows().len() > IMPORT_MAX_ROWS {
         return Err("IMPORT_ROW_LIMIT_REACHED");
     }
     let mapping = PartyImportMapping::try_new(
-        None,
-        "kind",
-        "display_name",
-        Some("party_id".to_owned()),
-        None,
-    )
-    .map_err(|_| "IMPORT_MAPPING_INVALID")?;
-    let mapping_version = mapping
-        .version_id()
-        .map_err(|_| "IMPORT_MAPPING_INVALID")?
-        .as_str()
-        .to_owned();
+        None, "kind", "display_name", Some("party_id".to_owned()), None,
+    ).map_err(|_| "IMPORT_MAPPING_INVALID")?;
+    let mapping_version = mapping.version_id().map_err(|_| "IMPORT_MAPPING_INVALID")?
+        .as_str().to_owned();
     let hash = party_export_hex(&party_export_sha256(bytes));
     let identity = party_export_hash_parts(
         b"crm.cloudflare.csv-import-create-only/v1",
@@ -189,72 +191,114 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
         .map_err(|_| "IMPORT_JOB_ID_INVALID")?;
     let mut seen = BTreeSet::new();
     let mut commands = Vec::new();
+    let mut positions = Vec::new();
+    let mut row_issues = Vec::new();
     for source in parsed.rows() {
-        let source_id = source.columns.get("party_id").ok_or("IMPORT_ROW_INVALID")?;
-        let kind = source.columns.get("kind").ok_or("IMPORT_ROW_INVALID")?;
-        let name = source
-            .columns
-            .get("display_name")
-            .ok_or("IMPORT_ROW_INVALID")?;
-        let version = source
-            .columns
-            .get("resource_version")
-            .ok_or("IMPORT_ROW_INVALID")?;
-        // Source version is provenance, not permission to mutate the target.
-        if version.parse::<u64>().ok().filter(|v| *v > 0).is_none() {
-            return Err("IMPORT_SOURCE_VERSION_INVALID");
+        let start_issues = row_issues.len();
+        let get = |column: &str| source.columns.get(column).map(String::as_str).unwrap_or("");
+        let source_id = get("party_id");
+        let kind = get("kind");
+        let name = get("display_name");
+        let version = get("resource_version");
+        if version.parse::<u64>().ok().filter(|value| *value > 0).is_none() {
+            row_issue(&mut row_issues, source.row_position, "resource_version",
+                "IMPORT_SOURCE_VERSION_INVALID");
         }
         if source_id.is_empty() || !seen.insert(source_id.to_owned()) {
-            return Err("IMPORT_DUPLICATE_OR_EMPTY_SOURCE_ID");
+            row_issue(&mut row_issues, source.row_position, "party_id",
+                "IMPORT_DUPLICATE_OR_EMPTY_SOURCE_ID");
         }
-        let import_kind = match kind.as_str() {
-            "person" => PartyImportKind::Person,
-            "organization" => PartyImportKind::Organization,
-            _ => return Err("IMPORT_KIND_INVALID"),
+        let import_kind = match kind {
+            "person" => Some(PartyImportKind::Person),
+            "organization" => Some(PartyImportKind::Organization),
+            _ => {
+                row_issue(&mut row_issues, source.row_position, "kind", "IMPORT_KIND_INVALID");
+                None
+            }
         };
-        let row = ImportRow::create(CreateImportRow {
+        // The original Party domain validates names, but can only be used after
+        // all earlier required fields have passed their own checks.
+        if row_issues.len() != start_issues {
+            if name.is_empty() {
+                row_issue(&mut row_issues, source.row_position, "display_name",
+                    "IMPORT_PARTY_INVALID");
+            }
+            continue;
+        }
+        let Some(import_kind) = import_kind else { continue; };
+        let row = match ImportRow::create(CreateImportRow {
             job_id: job_id.clone(),
             row_position: source.row_position,
             external_row_key: None,
-            source_external_id: Some(source_id.clone()),
+            source_external_id: Some(source_id.to_owned()),
             occurred_at_unix_nanos: 1,
-        })
-        .map_err(|_| "IMPORT_ROW_ID_INVALID")?;
-        let target = row
-            .derived_target_party_id()
-            .map_err(|_| "IMPORT_TARGET_ID_INVALID")?;
-        let prepared = PreparedPartyRow::try_new(target, import_kind, name.clone())
-            .map_err(|_| "IMPORT_PARTY_INVALID")?;
+        }) {
+            Ok(row) => row,
+            Err(_) => {
+                row_issue(&mut row_issues, source.row_position, "party_id", "IMPORT_ROW_ID_INVALID");
+                continue;
+            }
+        };
+        let target = match row.derived_target_party_id() {
+            Ok(target) => target,
+            Err(_) => {
+                row_issue(&mut row_issues, source.row_position, "party_id",
+                    "IMPORT_TARGET_ID_INVALID");
+                continue;
+            }
+        };
+        let prepared = match PreparedPartyRow::try_new(target, import_kind, name.to_owned()) {
+            Ok(prepared) => prepared,
+            Err(_) => {
+                row_issue(&mut row_issues, source.row_position, "display_name",
+                    "IMPORT_PARTY_INVALID");
+                continue;
+            }
+        };
         let kind = match prepared.kind() {
             PartyImportKind::Person => PartyKind::Person,
             PartyImportKind::Organization => PartyKind::Organization,
         };
-        let checked = Party::create(CreateParty {
-            party_id: PartyId::try_new(prepared.party_id().as_str().to_owned())
-                .map_err(|_| "IMPORT_TARGET_ID_INVALID")?,
-            kind,
-            display_name: prepared.display_name().to_owned(),
+        let party_id = match PartyId::try_new(prepared.party_id().as_str().to_owned()) {
+            Ok(id) => id,
+            Err(_) => {
+                row_issue(&mut row_issues, source.row_position, "party_id",
+                    "IMPORT_TARGET_ID_INVALID");
+                continue;
+            }
+        };
+        let checked = match Party::create(CreateParty {
+            party_id, kind, display_name: prepared.display_name().to_owned(),
             occurred_at_unix_nanos: 1,
-        })
-        .map_err(|_| "IMPORT_PARTY_INVALID")?;
+        }) {
+            Ok(checked) => checked,
+            Err(_) => {
+                row_issue(&mut row_issues, source.row_position, "display_name",
+                    "IMPORT_PARTY_INVALID");
+                continue;
+            }
+        };
         if checked.display_name() != name {
-            return Err("IMPORT_NAME_NONCANONICAL");
+            row_issue(&mut row_issues, source.row_position, "display_name",
+                "IMPORT_NAME_NONCANONICAL");
+            continue;
         }
         commands.push((
             checked.party_id().as_str().to_owned(),
-            kind,
-            checked.display_name().to_owned(),
-            row.target_idempotency_key(),
+            kind, checked.display_name().to_owned(), row.target_idempotency_key(),
         ));
+        positions.push(source.row_position);
     }
-    Ok(ImportPlan { commands, hash })
+    Ok(ImportPlan {
+        commands, positions, row_issues, count: parsed.rows().len(), hash,
+    })
 }
-
 pub(super) struct ImportPreview {
     pub(super) count: usize,
     pub(super) hash: String,
     pub(super) already: usize,
     pub(super) target_ids: Vec<String>,
+    pub(super) row_issues: Vec<ImportRowIssue>,
 }
 pub(super) struct ImportApplied {
     pub(super) saved: parties::ImportSaved,
@@ -267,29 +311,36 @@ pub(super) async fn preview_import(
 ) -> Result<std::result::Result<ImportPreview, parties::MutationFailure>> {
     let plan = match parse_import(bytes, tenant) {
         Ok(plan) => plan,
-        Err(code) => {
-            return Ok(Err(parties::MutationFailure {
-                code: code.into(),
-                status: 422,
-            }));
-        }
+        Err(code) => return Ok(Err(parties::MutationFailure { code: code.into(), status: 422 })),
     };
+    // A preview with ANY invalid row is informational, NEVER a write permit.
+    if !plan.row_issues.is_empty() {
+        return Ok(Ok(ImportPreview {
+            count: plan.count, hash: plan.hash, already: 0,
+            target_ids: Vec::new(), row_issues: plan.row_issues,
+        }));
+    }
     let mut already = 0;
-    for (id, kind, name, key) in &plan.commands {
+    let mut issues = Vec::new();
+    for ((id, kind, name, key), position) in plan.commands.iter().zip(plan.positions.iter()) {
         if parties::import_receipt_matches(db, tenant, key, id, *kind, name).await? {
             already += 1;
         } else if parties::stored(db, tenant, id).await?.is_some() {
-            return Ok(Err(parties::MutationFailure {
-                code: "IMPORT_TARGET_PARTY_CONFLICT".into(),
-                status: 409,
-            }));
+            row_issue(&mut issues, *position, "party_id", "IMPORT_TARGET_PARTY_CONFLICT");
         }
     }
+    if !issues.is_empty() {
+        return Ok(Ok(ImportPreview {
+            count: plan.count, hash: plan.hash, already: 0,
+            target_ids: Vec::new(), row_issues: issues,
+        }));
+    }
     Ok(Ok(ImportPreview {
-        count: plan.commands.len(),
+        count: plan.count,
         hash: plan.hash,
         already,
         target_ids: plan.commands.into_iter().map(|r| r.0).collect(),
+        row_issues: Vec::new(),
     }))
 }
 pub(super) async fn import_receipt(
@@ -320,6 +371,13 @@ pub(super) async fn apply_import(
         return Ok(Err(parties::MutationFailure {
             code: "IMPORT_SOURCE_CHANGED".into(),
             status: 409,
+        }));
+    }
+    // Apply independently revalidates the same original rows: a partial
+    // preview can NEVER create a partial batch or reserve its receipt key.
+    if let Some(issue) = plan.row_issues.first() {
+        return Ok(Err(parties::MutationFailure {
+            code: issue.diagnostic.code().to_owned(), status: 422,
         }));
     }
     Ok(

@@ -3637,6 +3637,42 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  ]){
    assert.equal((await csv("PreviewPartyImport",admin,{csv:invalid})).body.code,"invalid_argument");
  }
+ // The same original CSV parser reports ALL row/field diagnostics, not the
+ // first unrelated error code. No target or audit can be created by preview.
+ const invalidRowsCsv=new TextEncoder().encode(
+   "party_id,kind,display_name,resource_version\r\n"+
+   "duplicate-one,invalid,First,0\r\n"+
+   "duplicate-one,person,Second,1\r\n"+
+   "empty-name,person,,1\r\n"+
+   "valid-last,organization,Valid,1\r\n");
+ const invalidAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
+ const invalidPartyBefore=(await sql("SELECT COUNT(*) AS n FROM crm_party_records"))[0].n;
+ const invalidReceiptBefore=(await sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts"))[0].n;
+ const invalidPreview=await csv("PreviewPartyImport",admin,{csv:invalidRowsCsv});
+ assert.equal(invalidPreview.status,200,describeProtobuf(invalidPreview.body));
+ assert.equal(invalidPreview.body.count,4);
+ assert.equal(invalidPreview.body.csvSha256Hex,createHash("sha256").update(invalidRowsCsv).digest("hex"));
+ assert.deepEqual(invalidPreview.body.targetPartyIds,[],"No ID from invalid preview is actionable");
+ assert.deepEqual(invalidPreview.body.rowIssues.map(issue=>[
+   issue.rowPosition,issue.field,issue.code
+ ]),[
+   [1,"resource_version","IMPORT_SOURCE_VERSION_INVALID"],
+   [1,"kind","IMPORT_KIND_INVALID"],
+   [2,"party_id","IMPORT_DUPLICATE_OR_EMPTY_SOURCE_ID"],
+   [3,"display_name","IMPORT_PARTY_INVALID"]
+ ]);
+ const invalidApply=await csv("ApplyPartyImport",admin,{
+   csv:invalidRowsCsv,expectedSha256Hex:invalidPreview.body.csvSha256Hex,
+   precondition:{idempotencyKey:"csv-import-invalid-rows-denied"}
+ });
+ assert.equal(invalidApply.status,400,"Apply must revalidate even an advertised digest");
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,invalidAuditBefore);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records"))[0].n,invalidPartyBefore);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_import_receipts"))[0].n,invalidReceiptBefore);
+ console.log(JSON.stringify({event:"crm.native-n01-csv-row-issues",result:"PASS",
+   per_row:true,multiple_errors:true,field_codes:true,sha256:true,apply_denied:true,
+   no_partial_write:true}));
+
  // A conflict on the second target must leave the first target absent.
  const conflictBytes=new TextEncoder().encode(
    "party_id,kind,display_name,resource_version\r\nconflict-one,person,First,1\r\nconflict-two,person,Second,1\r\n");
@@ -3645,6 +3681,12 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const [firstTarget,secondTarget]=conflictPreview.body.targetPartyIds;
  assert.equal((await v3("CreateParty",admin,{partyId:secondTarget,kind:1,displayName:"Existing target",
    precondition:{idempotencyKey:"csv-target-conflict-create"}})).status,200);
+ const conflictRepreview=await csv("PreviewPartyImport",admin,{csv:conflictBytes});
+ assert.equal(conflictRepreview.status,200);
+ assert.deepEqual(conflictRepreview.body.targetPartyIds,[]);
+ assert.deepEqual(conflictRepreview.body.rowIssues.map(issue=>[
+   issue.rowPosition,issue.field,issue.code
+ ]),[[2,"party_id","IMPORT_TARGET_PARTY_CONFLICT"]]);
  const failedImport=await csv("ApplyPartyImport",admin,{csv:conflictBytes,
    expectedSha256Hex:conflictPreview.body.csvSha256Hex,precondition:{idempotencyKey:"csv-conflict-operation"}});
  assert.equal(failedImport.body.code,"aborted");
