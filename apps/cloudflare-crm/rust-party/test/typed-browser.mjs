@@ -903,7 +903,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await navigate("tasks?overdue=invalid","Страница не найдена");
    await navigate("tasks?overdue=1","Задачи");
    await mutation(overdueCard.getByRole("button",{name:"Выполнить задачу",exact:true}),"CompleteTask");
-   await page.getByText("Просроченных задач нет.",{exact:true}).waitFor();
+   // Other overdue tasks (including the native fixture) must remain visible:
+   // completion removes ONLY this task, not the entire overdue list.
+   await page.getByRole("heading",{name:"Browser Overdue "+runId,exact:true}).waitFor({state:"hidden"});
    assert.equal((await sql("SELECT json_extract(state,'$.status') AS status FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+overdueId+"'"))[0].status,"completed");
    await page.getByLabel("Только просроченные задачи",{exact:true}).uncheck();
    await page.getByRole("heading",{name:"Browser Edited Urgent "+runId,exact:true}).waitFor();
