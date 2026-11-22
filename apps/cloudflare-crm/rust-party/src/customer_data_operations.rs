@@ -178,7 +178,11 @@ fn parse_import(bytes: &[u8], tenant: &str) -> std::result::Result<ImportPlan, &
     let profile =
         ImportParserProfile::csv_v1(b',', b'"').map_err(|_| "IMPORT_PARSER_PROFILE_INVALID")?;
     let parsed = parse_import_source(bytes, &profile).map_err(|_| "IMPORT_CSV_INVALID")?;
-    let headers = parsed.headers().iter().map(String::as_str).collect::<Vec<_>>();
+    let headers = parsed
+        .headers()
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     let simple = if headers.as_slice() == &IMPORT_SIMPLE_FIELDS[..] {
         true
     } else if headers.as_slice() == &IMPORT_FIELDS[..] {
