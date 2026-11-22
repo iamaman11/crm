@@ -48,7 +48,7 @@
 
 **Граница приёмки:** admin service-browser разрешён для обычных UI-сценариев M1; **положительный интерактивный human Cloudflare Access login/verification остаётся отдельным pre-real-user release check** и не притворяется доказанным service session. Глобальная поведенческая эквивалентность **93 crates НЕ принята**: сохранённые ниже 93 legacy crosswalk строки / «все операции OPEN» относятся именно к индивидуальным historical operations за пределами доказанного M1 dev/MVP, не открывают M1 заново. Privacy scope 2/9 остаётся fail-closed.
 
-**Следующая исполнимая очередь — M2-02 и M2-04 по реальному пользовательскому gap** (M2-05 = C). Не запускать новые M1 QA-срезы, новый CI или ACL engine ради формальной галочки. Проверять существующий owner и историческую операцию *до* выбора B; уже принятые M2 stage labels и Deal name search не дублировать. #352 остаётся открытой до остальной функциональной очереди.
+**M2-02 и M2-04 ACCEPTED позднейшими #7072122525/#7072127526; следующая исполнимая очередь — N-01 по реальному пользовательскому gap** (M2-05 = C). Не запускать новые M1 QA-срезы, новый CI или ACL engine ради формальной галочки. Проверять существующий owner и историческую операцию *до* выбора B; уже принятые M2 stage labels и Deal name search не дублировать. #352 остаётся открытой до остальной функциональной очереди.
 
 ## M2-01 FINAL dev/MVP ACCEPTED — Sales Pipeline, этапы, Kanban и адресуемая ручная доска (22.11.2026)
 
@@ -60,13 +60,13 @@
 
 **Независимый Gate B PASS** на опубликованном том же SHA: Browser MCP `27ee381c-15cb-4fd1-9c74-27410c0320ed`, точный `/api/version`; ручной выбор `pipeline.enterprise` пережил Deal→Back/reload, поиск/reload и reset; отказ для duplicate/conflicting/malformed URLs, unknown = unavailable. Полный отдельный QA user flow: 3 стадии, Deal 250.50 USD, advance, occupied reorder (StageId неизменен, Deal version 2), archive-open **ожидаемый 409**, won→reopen→won, archive after close. D1 QA Pipeline v3 archived=1, QA Deal v5 won, пять immutable events. Independent D1 before/after audit `188→200`, Pipeline rows `2→3`, Deal rows `14→15`, Pipeline receipts `5→8`, Deal receipts `56→61`; 12 audit actions разбиты точно на 3 каталога + 5 Deal + 4 original Sales–Activities/Task. Read-only navigation не создаёт write. Official sanitized HAR 1.2 = 199 entries / 151305 bytes / SHA256 `c3baf97e74cc5d54985e15d18097b8ee648094478d301e881539506cb6bbc7de`, Browser Run закрыт. Ошибка консоли одна, от намеренного HTTP 409, не необъяснённая регрессия.
 
-**Следующая очередь: M2-02 → M2-04 по доказанному пользовательскому gap**, M2-03 ранее ACCEPTED, M2-05 C. Не возобновлять M2-01 QA без регрессии; независимый positive human Cloudflare Access login остаётся pre-real-user check, а глобальная behavioral parity 93 crates **не** принята. #352 остаётся открытой для всей очереди.
+**M2-02/M2-04 позднее ACCEPTED, следующая очередь N-01 по доказанному пользовательскому gap**, M2-03 ранее ACCEPTED, M2-05 C. Не возобновлять M2-01 QA без регрессии; независимый positive human Cloudflare Access login остаётся pre-real-user check, а глобальная behavioral parity 93 crates **не** принята. #352 остаётся открытой для всей очереди.
 
 ## M2-01 accepted scope (22.11.2026): пользовательские названия стадий в Deal
 
 - **B→ACCEPTED только конкретный UX-срез**: общий `DealDetails/DealHistory` показывает текущие имена Pipeline и Stage вместо внутренних кодов, как исходная Kanban; immutable `DealEvent` продолжает хранить original IDs, отсутствующий stage отображается по ID, поясняется происхождение текущего имени. Вынесен каталог из уже загруженного `ListPipelines`, **без дополнительного RPC/таблиц/генератора**.
 - **Gate A=PASS** [#44950874461](https://github.com/iamaman11/crm/actions/runs/44950874461), точный code source [`c7eddfb5`](https://github.com/iamaman11/crm/commit/c7eddfb577e7ed349ed9d8fad32227467c449ab3) (45 основного job + 14 deploy), **Gate B=PASS** через независимый LIVE Browser MCP на том же SHA: полная и встроенная Deal, `Согласование → Входящие`, reload/back, D1 original stage IDs/events v1/v2 без новых записей audit 182→182. [Фактическая приёмка с legacy source и HAR #7069532306](https://github.com/iamaman11/crm/issues/352#issuecomment-7069532306).
-- **M2-01 впоследствии полностью ACCEPTED dev/MVP по #7071938677; M2-02 и M2-04 остаются OPEN, M2-03 ACCEPTED, M2-05 C** до отдельной сверки существующих owners/артефактов; не записывать false MVP-completion. Следующая задача выбирается по реальному product gap, а не по названию старого crate. Human-only Cloudflare Access positive login остаётся pre-real-user check; viewer business-field parity M1 уже ACCEPTED по #7070842108.
+- **M2-01 впоследствии полностью ACCEPTED dev/MVP по #7071938677; M2-02/M2-04 позднее ACCEPTED #7072122525/#7072127526, M2-03 ACCEPTED, M2-05 C** до отдельной сверки существующих owners/артефактов; не записывать false MVP-completion. Следующая задача выбирается по реальному product gap, а не по названию старого crate. Human-only Cloudflare Access positive login остаётся pre-real-user check; viewer business-field parity M1 уже ACCEPTED по #7070842108.
 
 ## M2 continuation decision (22.11.2026): не дублировать работающий Sales runtime
 
@@ -78,7 +78,7 @@
 
 - **M2-01 / M2-03 — B→ACCEPTED только «найти сделку по названию/ID»**, не полный M2: исторический `crm-sales-activities-query-adapter/src/executor.rs::execute_list_deals/collect_deals` имел tenant+pipeline/status/owner и cursor, **не поиск по названию**. Единственный typed `crm.sales.v2.ListDeals` теперь принимает `search` (generated Protobuf → existing Rust `wire_search`/owner parameterized D1 `instr(name,?) OR instr(id,?)` before limit/cursor → existing React SearchField). Account/Status применяются вместе с поиском; results across pipelines отдельны от Kanban/forecast; `#sales?search=` выдерживает Back/reload. Нет второго query runtime, RPC, Worker, D1 migration, генератора, индекса или SQLx.
 - **Точный опубликованный код** [`d94248fd145ea15c04d8ba6db5f15dc02a5c3450`](https://github.com/iamaman11/crm/commit/d94248fd145ea15c04d8ba6db5f15dc02a5c3450), [штатный Gate A #44954180291](https://github.com/iamaman11/crm/actions/runs/44954180291) **PASS** (45+14 steps, signed native workerd, real Chromium, exact artifact deploy/live E2E+traces). **Отдельный Gate B PASS**: native LIVE Browser MCP on same SHA + read-only D1: 2 matching deals for `SM1B`, 1 exact; status intersects, Back/reload and empty/reset, total Kanban unaffected. D1 14 Deal / 56 receipts / 182 audit rows unchanged. [Полный исходный A/B/C, отказавшие проверки и Gate B evidence #7069992607](https://github.com/iamaman11/crm/issues/352#issuecomment-7069992607). **Admin service session ≠ human-only proof**.
-- **Что дальше:** не перечёркивать принятый B-срез и не дублировать серверный поиск; M2-02/04 целиком остаются пооперационными A-кандидатами/OPEN; M2-03 полностью принят позднейшим #7071303504, M2-05 уже C для MVP. M1 viewer business-field visibility принята позднейшим #7070842108; human login остаётся отдельной проверкой перед реальными пользователями; 93-crate parity остаётся OPEN.
+- **Что дальше:** не перечёркивать принятый B-срез и не дублировать серверный поиск; M2-02/04 позднее ACCEPTED по #7072122525/#7072127526; M2-03 полностью принят позднейшим #7071303504, M2-05 уже C для MVP. M1 viewer business-field visibility принята позднейшим #7070842108; human login остаётся отдельной проверкой перед реальными пользователями; 93-crate parity остаётся OPEN.
 
 ## M2-03 FINAL dev/MVP ACCEPTED — сохранённые Sales views, фильтры и native URL (22.11.2026)
 
@@ -88,7 +88,19 @@
 
 **Independent LIVE Browser MCP Gate B PASS** на опубликованном том же SHA: create selected view, reload автоприменение полных фильтров, Deal→Back, search + reload, update + reload, archive, stale/duplicate/malformed links; сервисный admin, не human-only. Independent D1 readback: audit 185→188, saved-view receipts 6→9, records 2→3 — ровно три намеренных записи; созданный QA view v3/archived, 3 audit для него, чтение без дополнительных writes. HAR 181 entries / 149 RPC / 154 HTTP 200 / 0 HTTP 4xx-5xx, SHA256 `f770d1f3d02ff7129da9a478d41c1028633fe115126094084c135615e5f4617a`, Browser Run закрыт. Прежние M2 Deal name-search и stage-name B-slices сохраняются.
 
-**Дальнейшая очередь:** M2-01 ACCEPTED позднейшим #7071938677, M2-02/M2-04 OPEN до соответствующего полного user-flow/original-operation proof; M2-05 C (отдельная Lead не нужна). Не переписывать готовые Sales owners/views или добавлять новый backend ради переноса. 93/93 исторических crates остаются источником для индивидуальной сверки, не доказанной глобальной parity; pre-real-user human Cloudflare Access login остаётся отдельно, #352 OPEN.
+**Дальнейшая очередь:** M2-01 ACCEPTED позднейшим #7071938677, M2-02/M2-04 ACCEPTED позднейшими #7072122525/#7072127526; M2-05 C (отдельная Lead не нужна). Не переписывать готовые Sales owners/views или добавлять новый backend ради переноса. 93/93 исторических crates остаются источником для индивидуальной сверки, не доказанной глобальной parity; pre-real-user human Cloudflare Access login остаётся отдельно, #352 OPEN.
+
+## M2 FINAL dev/MVP ACCEPTED (22.11.2026) — следующая очередь N-01
+
+**M2-01, M2-02, M2-03, M2-04 = ACCEPTED для текущей dev/MVP; M2-05 = DECIDED C (отдельная Lead не нужна).** Gate A — штатный подписанный workerd/Chromium/Rust/TS и exact artifact deploy; Gate B — независимый LIVE Browser MCP с D1 SELECT-only на том же опубликованном SHA. Исходная бизнес-семантика сверена по конкретным legacy crates до приёмки, работающие owners не переписывались. **Глобальная эквивалентность 93 исторических crates НЕ доказана; human Cloudflare Access login остаётся отдельным pre-real-user gate; #352 OPEN.**
+
+- **M2-01**: исходный Sales pipeline/Deal owner, stages, stable IDs, advance/reorder/archive/close/reopen, Kanban и native `pipelineId` после reload/Back/search. [#7071938677](https://github.com/iamaman11/crm/issues/352#issuecomment-7071938677), Gate A #44968322133 + independent B PASS, source SHA `f8f1fcea`.
+- **M2-02**: original typed ContactPoint/Account/Sales owner, проверка active/tenant/Party, выбор предпочтительного контакта и clear/CAS/receipt. Закрыт реальный B-пробел: из Deal ссылка на точный `contactHref(contactPointId,partyId)`, а не на список. [#7072122525](https://github.com/iamaman11/crm/issues/352#issuecomment-7072122525), Gate A #44969797203 + independent B PASS, source SHA `54e37933`.
+- **M2-03**: saved Sales views, status/account/pipeline, URL `viewId`, reload/Back/search, cursor/CAS/replay/audit. [#7071303504](https://github.com/iamaman11/crm/issues/352#issuecomment-7071303504), Gate A #44963707652 + independent B PASS, source SHA `0f81fe75`.
+- **M2-04**: **A ACCEPTED без нового кода**. Один original `GetPipelineMetrics` Rust/D1 owner, точные `i128` и целочисленное weighted money, независимые валюты, no-date, manual 0%, UTC cohorts, closed-only conversion, нулевой знаменатель=null. Native scale/concurrency/strict-persistence и independent Browser UI↔D1 точно совпали: 12 Deals/9 open/3 won, 100%, EUR/PLN/USD и exclusions. [#7072127526](https://github.com/iamaman11/crm/issues/352#issuecomment-7072127526), Gate A #44969797203 + independent B PASS, код не менялся в M2-04.
+- **M2-05 = C:** квалификация через Deal+Stage+immutable events; отдельный Lead CRUD не подтверждён и не нужен MVP. [#7069547465](https://github.com/iamaman11/crm/issues/352#issuecomment-7069547465).
+
+**Следующий N-01** — bounded CSV import и построчные ошибки. Сначала читать frozen `crm-customer-data-operations-execution-composition/src/import_execution_coordinator.rs` и текущий Data import Rust/D1/React, проверять реальный user gap, A/B/C до кода, крупный срез, два Gate. Не дублировать CI/Protobuf generator, Postgres runtime или old Phase6 projection.
 
 ## Упорядоченная матрица бизнес-функций
 
@@ -106,10 +118,10 @@
 | [M1-10](#m1-10) | M1 | Единая приемка Party→Account→Deal→Task | A ACCEPTED — единый Party→Account→Deal→Task→Customer360 live-путь | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-capability-adapter/src/planner.rs) |
 | [M1-11](#m1-11) | M1 | Архивирование и чистка тестовых записей | C DECIDED — generic Delete/archive не нужен MVP | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-parties-capability-adapter/src/planner.rs) |
 | [M2-01](#m2-01) | M2 | Sales pipeline, стадии, Kanban | A+B ACCEPTED dev/MVP · #7071938677 | [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/lib.rs) |
-| [M2-02](#m2-02) | M2 | Основной контакт Deal | ACTIVE/VERIFY | [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-contact-points-query-adapter/src/lib.rs) |
+| [M2-02](#m2-02) | M2 | Основной контакт Deal | A+B ACCEPTED dev/MVP · #7072122525 | [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-contact-points-query-adapter/src/lib.rs) |
 | [M2-03](#m2-03) | M2 | Сохраненные views и фильтры Sales | A+B ACCEPTED dev/MVP · #7071303504 | [src/query_catalog.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/query_catalog.rs) |
-| [M2-04](#m2-04) | M2 | Sales: прогноз, точная математика и конверсия | ACTIVE/VERIFY | [src/phase6_projections.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/phase6_projections.rs) |
-| [M2-05](#m2-05) | M2 | Lead qualification как отдельная сущность? | NOT PROVEN/DECIDE | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-capability-adapter/src/planner.rs) |
+| [M2-04](#m2-04) | M2 | Sales: прогноз, точная математика и конверсия | A ACCEPTED dev/MVP · Gate A+B · #7072127526 | [src/phase6_projections.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/phase6_projections.rs) |
+| [M2-05](#m2-05) | M2 | Lead qualification как отдельная сущность? | DECIDED C MVP · #7069547465 | [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-capability-adapter/src/planner.rs) |
 | [N-01](#n-01) | NEXT | Bounded CSV import и ошибки строк | PARTIAL/ACTIVE | [src/import_execution_coordinator.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-data-operations-execution-composition/src/import_execution_coordinator.rs) |
 | [N-02](#n-02) | NEXT | Bounded CSV export | PARTIAL/ACTIVE | [src/export_execution_worker.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-data-operations-execution-composition/src/export_execution_worker.rs) |
 | [N-03](#n-03) | NEXT | Customer360 — недостающие связи карточки | PARTIAL/ACTIVE | [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-customer-360-composition/src/lib.rs) |
@@ -306,7 +318,7 @@
 
 ### M2-02
 
-**Бизнес-функция:** Основной контакт Deal. **Очередь:** M2. **Что уже есть:** ACTIVE/VERIFY. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Основной контакт Deal. **Очередь:** M2. **Что уже есть:** original typed ContactPoint/Account/Sales owner, active/Party/tenant guard, one picker, CAS/replay/audit и адресуемая карточка. **Статус пользовательской приёмки: M2-02 A+B ACCEPTED dev/MVP** после точной Deal→ContactPoint ссылки, reload/Back, D1 no-read-audit; [#7072122525](https://github.com/iamaman11/crm/issues/352#issuecomment-7072122525).
 
 **Legacy — прочитать перед разработкой:** [src/lib.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-contact-points-query-adapter/src/lib.rs); [src/planner.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-capability-adapter/src/planner.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -316,7 +328,7 @@
 
 **DONE только при:** Чужой или inactive контакт не сохраняется; выбранный контакт и Account корректны после reload.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `M2-02 A+B ACCEPTED dev/MVP · historical original Deal ResourceRef and ContactPoint Party query reviewed · canonical Rust validates same tenant active contact Account association · native linked-contact-date PASS with missing/foreign denial/CAS/clear/rollback · code SHA 54e379331b968b7a213438405307d57a965fc79f · Gate A CI #44969797203 both jobs PASS · independent recorded LIVE Browser MCP Gate B PASS exact published SHA · D1 audit 200→200, receipts unchanged, no HTTP/console error · global 93-crate parity OPEN`. [Приёмка #7072122525](https://github.com/iamaman11/crm/issues/352#issuecomment-7072122525).
 
 ### M2-03
 
@@ -334,7 +346,7 @@
 
 ### M2-04
 
-**Бизнес-функция:** Sales: прогноз, точная математика и конверсия. **Очередь:** M2. **Что уже есть:** ACTIVE/VERIFY. **Статус пользовательской приёмки:** OPEN; наличие работающего RPC не означает acceptance целого flow.
+**Бизнес-функция:** Sales: прогноз, точная математика и конверсия. **Очередь:** M2. **Что уже есть:** original typed `GetPipelineMetrics` Rust/D1, i128, weighted/currency/status/UTC cohorts и native scale/concurrency proofs. **Статус пользовательской приёмки: M2-04 A ACCEPTED dev/MVP, без нового кода** — независимый UI↔D1 совпал по итогам, датам, manual 0%, no-date и конверсии; [#7072127526](https://github.com/iamaman11/crm/issues/352#issuecomment-7072127526).
 
 **Legacy — прочитать перед разработкой:** [src/phase6_projections.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-capability-composition/src/phase6_projections.rs); [src/executor.rs](https://github.com/iamaman11/crm/blob/a627e6a9f1966aaac5fcc0179c943811f879eb38/crates/crm-sales-activities-query-adapter/src/executor.rs). [Тесты, методы, инварианты исторических crates](legacy-crate-operation-evidence.md) — использовать для развёрнутой ветки/negative-case проверки; не считать заголовок crate доказательством готового продукта.
 
@@ -344,7 +356,7 @@
 
 **DONE только при:** Суммы и win rate совпадают с D1 owner, 0/100% и no-date не теряются; React не присваивает бизнес-решения.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `M2-04 A ACCEPTED dev/MVP, NO new code · frozen Phase6 Postgres timeline/status projection is not financial forecast and remains C · original Rust/D1 GetPipelineMetrics checked i128, UTC close-only conversion, currency/forecast/undated buckets · native-r73-forecast, metrics-scale, concurrent-metrics, strict-persistence, Chromium PASS · source SHA 54e379331b968b7a213438405307d57a965fc79f · Gate A CI #44969797203 both jobs PASS · independent LIVE Browser MCP Gate B PASS exact published SHA · D1 matched UI 12/9/3, 100%, multiple currency sums/weights, no read audit · global 93-crate parity OPEN`. [Приёмка #7072127526](https://github.com/iamaman11/crm/issues/352#issuecomment-7072127526).
 
 ### M2-05
 
@@ -358,7 +370,7 @@
 
 **DONE только при:** Явно C (stage-based достаточно) либо B с конкретным контрактом/сценарием и proof; не принимать по названию roadmap.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `M2-05 DECIDED C for dev/MVP · historical Deal create/update/advance source reviewed; no independent Lead CRUD business requirement proven · Stage-based qualification sufficient · no duplicate Lead proto/entity/owner/migration`. [Product decision #7069547465](https://github.com/iamaman11/crm/issues/352#issuecomment-7069547465).
 
 ### N-01
 
