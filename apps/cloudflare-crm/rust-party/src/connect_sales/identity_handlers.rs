@@ -175,12 +175,14 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
         let committed = identity_resolution::create_merge_typed(
             &db,
             &self.actor,
-            id.as_str().to_owned(),
-            source.as_str().to_owned(),
-            input.source_party_version,
-            survivor.as_str().to_owned(),
-            input.survivor_party_version,
-            input.reason,
+            identity_resolution::CreateMergeInput {
+                operation_id: id.as_str().to_owned(),
+                source_party_id: source.as_str().to_owned(),
+                source_version: input.source_party_version,
+                survivor_party_id: survivor.as_str().to_owned(),
+                survivor_version: input.survivor_party_version,
+                reason: input.reason,
+            },
             &pre.idempotency_key,
             &self.request_id,
         )
@@ -217,11 +219,13 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
         let committed = identity_resolution::unmerge_typed(
             &db,
             &self.actor,
-            id.as_str(),
-            expected,
-            input.source_party_version,
-            input.survivor_party_version,
-            input.reason,
+            identity_resolution::UnmergeInput {
+                operation_id: id.as_str(),
+                expected_version: expected,
+                source_version: input.source_party_version,
+                survivor_version: input.survivor_party_version,
+                reason: input.reason,
+            },
             &pre.idempotency_key,
             &self.request_id,
         )
@@ -240,13 +244,13 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, identity_wire::GetMergeOperationRequest>,
     ) -> ServiceResult<identity_wire::GetMergeOperationResponse> {
-        let id = PartyV3Service::valid_id(&req.operation_id)?;
+        let id = PartyV3Service::valid_id(req.operation_id)?;
         let db = self.d1()?;
         let operation = identity_resolution::stored_merge(&db, &self.actor.tenant, id.as_str())
             .await
             .map_err(|_| ConnectError::unavailable("IDENTITY_MERGE_READ_UNAVAILABLE"))?
             .ok_or_else(|| ConnectError::not_found("IDENTITY_MERGE_NOT_FOUND"))?;
-        let confirmed_mutation = match receipt_key(req.receipt_idempotency_key.as_deref())? {
+        let confirmed_mutation = match receipt_key(req.receipt_idempotency_key)? {
             None => None,
             Some(key) => {
                 let prior = identity_resolution::merge_receipt(&db, &self.actor.tenant, key)
@@ -279,7 +283,7 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, identity_wire::ListMergeOperationsByPartyRequest>,
     ) -> ServiceResult<identity_wire::ListMergeOperationsByPartyResponse> {
-        let party = PartyV3Service::valid_id(&req.party_id)?;
+        let party = PartyV3Service::valid_id(req.party_id)?;
         let size = if req.page.page_size == 0 {
             25
         } else {
@@ -325,7 +329,7 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
         _ctx: RequestContext,
         req: ServiceRequest<'_, identity_wire::ResolveCanonicalPartyRequest>,
     ) -> ServiceResult<identity_wire::ResolveCanonicalPartyResponse> {
-        let party = PartyV3Service::valid_id(&req.party_id)?;
+        let party = PartyV3Service::valid_id(req.party_id)?;
         let db = self.d1()?;
         let resolution =
             identity_resolution::resolve_canonical(&db, &self.actor.tenant, party.as_str())

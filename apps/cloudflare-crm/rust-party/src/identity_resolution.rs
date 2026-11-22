@@ -206,18 +206,29 @@ pub(super) async fn canonical_graph(db: &D1Database, tenant: &str) -> Result<Can
     CanonicalPartyGraph::try_new(edges).map_err(|e| worker::Error::RustError(e.code))
 }
 
+pub(super) struct CreateMergeInput {
+    pub(super) operation_id: String,
+    pub(super) source_party_id: String,
+    pub(super) source_version: i64,
+    pub(super) survivor_party_id: String,
+    pub(super) survivor_version: i64,
+    pub(super) reason: String,
+}
 pub(super) async fn create_merge_typed(
     db: &D1Database,
     actor: &access::Actor,
-    operation_id: String,
-    source_party_id: String,
-    source_version: i64,
-    survivor_party_id: String,
-    survivor_version: i64,
-    reason: String,
+    input: CreateMergeInput,
     key: &str,
     request_id: &str,
 ) -> Result<std::result::Result<MergeCommit, MergeFault>> {
+    let CreateMergeInput {
+        operation_id,
+        source_party_id,
+        source_version,
+        survivor_party_id,
+        survivor_version,
+        reason,
+    } = input;
     let tenant = &actor.tenant;
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(merge_fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
@@ -328,17 +339,27 @@ pub(super) async fn create_merge_typed(
     }))
 }
 
+pub(super) struct UnmergeInput<'a> {
+    pub(super) operation_id: &'a str,
+    pub(super) expected_version: i64,
+    pub(super) source_version: i64,
+    pub(super) survivor_version: i64,
+    pub(super) reason: String,
+}
 pub(super) async fn unmerge_typed(
     db: &D1Database,
     actor: &access::Actor,
-    operation_id: &str,
-    expected_version: i64,
-    source_version: i64,
-    survivor_version: i64,
-    reason: String,
+    input: UnmergeInput<'_>,
     key: &str,
     request_id: &str,
 ) -> Result<std::result::Result<MergeCommit, MergeFault>> {
+    let UnmergeInput {
+        operation_id,
+        expected_version,
+        source_version,
+        survivor_version,
+        reason,
+    } = input;
     let tenant = &actor.tenant;
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(merge_fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
