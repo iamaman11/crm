@@ -17,6 +17,7 @@ function fixture(){
  report.runtime_evidence="EXECUTED";
  report.active_rpc_paths=targetMethods(available);
  report.runtime={source_sha:report.source_sha,result:"PASS",features:["native-ci"],
+  committed_rpc_calls:report.active_rpc_paths.filter(p=>available.get(p).idempotency===MethodOptions_IdempotencyLevel.IDEMPOTENT),
   unauthenticated_denials:[...report.active_rpc_paths],
   viewer_denials:report.active_rpc_paths.filter(p=>available.get(p).idempotency===MethodOptions_IdempotencyLevel.IDEMPOTENT),
   successful_rpc_calls:[...report.active_rpc_paths],rpc:{compiled_policy_check:true,
@@ -50,6 +51,7 @@ reject("missing policy fails",r=>{r.runtime.rpc.policies=[];},/permission denial
 reject("unregistered policy fails",r=>{
  r.runtime.rpc.policies.push(["/crm.missing.v1.Service/Method",{permission:"Read"}]);
 },/policy without registered RPC/);
+reject("a successful response alone cannot prove a write",r=>{r.runtime.committed_rpc_calls.pop();},/typed write receipt coverage/);
 reject("missing successful call fails",r=>{r.runtime.successful_rpc_calls=[];},/missing successful executed call/);
 reject("manual request type cannot override Buf",r=>{
  r.modules.find(m=>m.module_id==="crm.parties").rpc_bindings.find(b=>b.path===path).request="wrong";

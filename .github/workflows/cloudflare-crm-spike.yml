@@ -120,39 +120,12 @@ jobs:
           npm install --global pnpm@12.21.0
           pnpm --version | grep -Fx '12.21.0'
           pnpm install --frozen-lockfile
-      - name: Validate current Protobuf contracts
-        shell: bash
+      - name: Validate the schema, generated client and React application
+        env:
+          CRM_PROTO_DESCRIPTOR_FILE: /tmp/crm-proto-descriptors.binpb
         run: |
-          set -euo pipefail
-          echo "Checking current CRM source $GITHUB_SHA; development API compatibility is not frozen" >> "$GITHUB_STEP_SUMMARY"
-          # The next step builds the one descriptor set used by all gates.
-          pnpm exec buf format -d --exit-code proto
-          pnpm exec buf lint proto
-      - name: Generate types and check descriptors, architecture and TypeScript
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Buf's image retains generation metadata and is FileDescriptorSet-compatible.
-          pnpm exec buf build proto -o /tmp/crm-proto-descriptors.binpb
-          pnpm web:generate /tmp/crm-proto-descriptors.binpb
-          node scripts/crm-rpc-descriptors.mjs /tmp/crm-proto-descriptors.binpb
-          export CRM_PROTO_DESCRIPTOR_FILE=/tmp/crm-proto-descriptors.binpb
-          node --test scripts/crm-core-v2.test.mjs scripts/crm-cutover-contracts.test.mjs \
-            scripts/crm-rpc-descriptors.test.mjs scripts/crm-clean-schema.test.mjs \
-            scripts/crm-architecture-ast.test.mjs
-          pnpm --filter @ultimate-crm/client typecheck
-          pnpm exec vitest run packages/client/src/cloudflare-v2-contract.test.ts
-          pnpm --filter @ultimate-crm/ui typecheck
-          # A frozen checkout never changes the source lockfile.
+          pnpm web:check
           git diff --exit-code -- pnpm-lock.yaml
-      - name: Typecheck Cloudflare CRM TypeScript sources
-        run: pnpm --filter cloudflare-crm typecheck
-      - name: Check native-only ownership and release diagnostic contracts
-        run: pnpm test
-        working-directory: apps/cloudflare-crm
-      - name: Build React CRM
-        run: pnpm run build
-        working-directory: apps/cloudflare-crm
       # One stable Cargo fingerprint cache per locked dependency graph. Cargo itself
       # invalidates changed source/feature artifacts; sccache caches compiled crates.
       # Do not include github.sha: it forces a new 1.1 GB upload on every push.
@@ -206,47 +179,6 @@ jobs:
             cargo install --locked worker-build --version 0.9.0
           fi
           worker-build --version
-      # One production-feature WASM build; native-ci is a separate test-key build.
-      # Deployment restores this production artifact without compiling it again.
-      - name: Build exact native Rust Worker for review or release
-        working-directory: apps/cloudflare-crm/rust-party
-        run: worker-build --release --locked --features native
-      - name: Enforce committed native Worker dependency lock
-        run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
-      - name: Dry-run exact native entrypoint upload with original CRM Wrangler configuration
-        working-directory: apps/cloudflare-crm
-        shell: bash
-        env:
-          CRM_HEAD_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          # Explicit root config is essential: without it Wrangler walks to
-          # rust-party/wrangler.jsonc and selects the nonexistent test D1.
-          npx wrangler versions upload rust-party/build/index.js \
-            --config wrangler.jsonc --name crm-dev --var "GIT_SHA:$CRM_HEAD_SHA" \
-            --dry-run --outdir /tmp/crm-native-party-version-proof 2>&1 | \
-            tee /tmp/crm-native-party-wrangler-bindings.log
-          grep -F 'env.DB (crm-dev)' /tmp/crm-native-party-wrangler-bindings.log
-          grep -F 'env.ASSETS' /tmp/crm-native-party-wrangler-bindings.log
-          if grep -F 'CRM_CI_LOCAL_ONLY' /tmp/crm-native-party-wrangler-bindings.log; then
-            echo 'FAIL: CI-local auth flag must never be in Cloudflare native version' >&2
-            exit 1
-          fi
-          test -d /tmp/crm-native-party-version-proof
-          test -s rust-party/build/index_bg.wasm
-          test -s rust-party/build/index.js
-      - name: Keep the complete production Worker for review and release
-        run: |
-          set -euo pipefail
-          mkdir -p apps/cloudflare-crm/.release/native-build
-          cp -a apps/cloudflare-crm/rust-party/build/. apps/cloudflare-crm/.release/native-build/
-          test -s apps/cloudflare-crm/.release/native-build/index_bg.wasm
-      # Test-key workerd uses wasm-pack's supported dev profile, which skips
-      # Binaryen. The production Worker is still built once with --release and
-      # restored verbatim after the signed D1/Chromium test. Do not replace
-      # this with --no-opt: worker-build 0.9.0 passes that flag to Cargo.
-      # Accept this speed experiment only if the full normal CI + live Gate
-      # passes, with a measured reduction in overall CI time.
       - name: Compile native Rust Access gate using isolated RSA test keys
         working-directory: apps/cloudflare-crm/rust-party
         run: worker-build --dev --locked --features native-ci
@@ -255,7 +187,7 @@ jobs:
         working-directory: apps/cloudflare-crm
         shell: bash
         run: bash scripts/prepare-chromium.sh
-      - name: Test Rust owners and signed workerd/D1/Chromium scenarios
+      - name: Build the release Worker and test Rust owners and signed workerd/D1/Chromium
         id: crm_native_workerd
         working-directory: apps/cloudflare-crm
         env:
@@ -263,15 +195,19 @@ jobs:
           CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
         shell: bash
         run: |
-          # Host Cargo tests use the root target. Workerd uses the built test Worker and isolated D1.
+          # Workerd reads the completed native-ci build. The release has its own output directory.
+          (cd rust-party && worker-build --release --out-dir ../.release/native-build --locked --features native) &
+          release_pid=$!
           (cd "$GITHUB_WORKSPACE" && python apps/cloudflare-crm/scripts/test-rust-owners.py) &
           owners_pid=$!
           browser_status=0
           node rust-party/test/native.mjs || browser_status=$?
           owners_status=0
           wait "$owners_pid" || owners_status=$?
-          echo "workerd exit=$browser_status; Rust owners exit=$owners_status"
-          (( browser_status == 0 && owners_status == 0 ))
+          release_status=0
+          wait "$release_pid" || release_status=$?
+          echo "workerd exit=$browser_status; Rust owners exit=$owners_status; release exit=$release_status"
+          (( browser_status == 0 && owners_status == 0 && release_status == 0 ))
       - name: Verify compiled router, executed policy and RPC calls against Buf
         run: |
           set -euo pipefail
@@ -297,10 +233,35 @@ jobs:
           path: apps/cloudflare-crm/e2e-evidence-native/
           if-no-files-found: warn
           retention-days: 7
-      - name: Restore compiled production Worker after JWT test
+      - name: Select the production build for Wrangler verification
+        working-directory: apps/cloudflare-crm/rust-party
         run: |
-          cp -a apps/cloudflare-crm/.release/native-build/. apps/cloudflare-crm/rust-party/build/
-          diff --recursive --brief apps/cloudflare-crm/.release/native-build apps/cloudflare-crm/rust-party/build
+          mv build "$RUNNER_TEMP/crm-tested-native-ci"
+          mv ../.release/native-build build
+      - name: Enforce committed native Worker dependency lock
+        run: git diff --exit-code -- apps/cloudflare-crm/rust-party/Cargo.lock
+      - name: Dry-run exact native entrypoint upload with original CRM Wrangler configuration
+        working-directory: apps/cloudflare-crm
+        shell: bash
+        env:
+          CRM_HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # Explicit root config is essential: without it Wrangler walks to
+          # rust-party/wrangler.jsonc and selects the nonexistent test D1.
+          npx wrangler versions upload rust-party/build/index.js \
+            --config wrangler.jsonc --name crm-dev --var "GIT_SHA:$CRM_HEAD_SHA" \
+            --dry-run --outdir /tmp/crm-native-party-version-proof 2>&1 | \
+            tee /tmp/crm-native-party-wrangler-bindings.log
+          grep -F 'env.DB (crm-dev)' /tmp/crm-native-party-wrangler-bindings.log
+          grep -F 'env.ASSETS' /tmp/crm-native-party-wrangler-bindings.log
+          if grep -F 'CRM_CI_LOCAL_ONLY' /tmp/crm-native-party-wrangler-bindings.log; then
+            echo 'FAIL: CI-local auth flag must never be in Cloudflare native version' >&2
+            exit 1
+          fi
+          test -d /tmp/crm-native-party-version-proof
+          test -s rust-party/build/index_bg.wasm
+          test -s rust-party/build/index.js
       - name: Require actual browser acceptance before sealing any artifact
         run: |
           node --input-type=module -e '
@@ -323,8 +284,6 @@ jobs:
           test -s rust-party/build/index_bg.wasm
           mkdir -p .release
           printf '%s\n' "$CRM_BUILD_SHA" > .release/source-sha.txt
-          test -s .release/native-build/index.js
-          test -s .release/native-build/index_bg.wasm
           node --input-type=module -e '
             import {execFileSync} from "node:child_process";
             import {readFileSync,writeFileSync,readdirSync,statSync} from "node:fs";
@@ -355,10 +314,10 @@ jobs:
                 rust:run("rustc",["--version"]),python:run("python",["--version"]),
                 buf:run("pnpm",["exec","buf","--version"])},
               foundation_baseline:{
-                bytes:{production_wasm:size(".release/native-build/index_bg.wasm"),
-                  production_worker:treeBytes(".release/native-build"),react_dist:treeBytes("dist")},
-                gzip9_bytes:{production_wasm:gzip9(".release/native-build/index_bg.wasm"),
-                  production_worker_entry_js:gzip9(".release/native-build/index.js"),
+                bytes:{production_wasm:size("rust-party/build/index_bg.wasm"),
+                  production_worker:treeBytes("rust-party/build"),react_dist:treeBytes("dist")},
+                gzip9_bytes:{production_wasm:gzip9("rust-party/build/index_bg.wasm"),
+                  production_worker_entry_js:gzip9("rust-party/build/index.js"),
                   react_text_assets_sum:textAssetGzip9("dist")},
                 gzip9_method:"Node zlib level 9 per file; React sum html/css/js/json/svg; not CDN transfer, CPU, or memory",
                 lock_sha256:{root_cargo:hash("../../Cargo.lock"),worker_cargo:hash("rust-party/Cargo.lock"),
@@ -371,7 +330,7 @@ jobs:
               independent_byte_reproducibility:"NOT_TESTED"
             },null,2)+"\n");
           '
-          # The restored build was compared with the production backup above.
+          # Seal the same production directory that passed the Wrangler dry-run.
           find dist rust-party/build -type f -print0 | LC_ALL=C sort -z |
             xargs -0 sha256sum > .release/compiled-sha256.txt
           sha256sum .release/provenance.json >> .release/compiled-sha256.txt

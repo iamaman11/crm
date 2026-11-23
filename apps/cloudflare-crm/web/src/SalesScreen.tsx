@@ -13,7 +13,6 @@ import {dealHref,salesViewHref,salesPipelineHref} from "./routes";
 import {navigateTo} from "./navigation";
 import {minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText} from "./money";
 import {allPipelines} from "./salesPipelineCatalog";
-import type {CurrencyCatalog} from "./money";
 import styles from "./App.module.css";
 
 type EditorMode="create"|"edit"|"advance"|"close"|"reopen"|null;

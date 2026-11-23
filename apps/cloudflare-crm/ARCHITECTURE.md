@@ -99,6 +99,11 @@ Owner обеспечивает CAS, idempotent replay и атомарность 
 Штатный workerd-тест сверяет квитанции и ошибки вызванных команд с реальным идентификатором ответа.
 Для нового пути записи нужен сценарий со сбоем внутри транзакции и проверкой результата в D1.
 
+Для локальной разработки и CI действуют одна команда `pnpm web:check` и базовый
+`tsconfig.base.json` для приложения, клиента и UI. Команда собирает Buf-дескрипторы,
+генерирует клиент и сверяет полный набор путей его бинарных вызовов с активными RPC.
+Штатный CI дополнительно сопоставляет команды записи с квитанциями, полученными от workerd.
+
 React использует strict TSX, allowJs=false, noUncheckedIndexedAccess и exactOptionalPropertyTypes.
 Не обходить типы через any/as unknown as или suppressed diagnostics. Общий client — единственный
 business transport. Health/session/doctor/version и bounded CSV download — ограниченные исключения.

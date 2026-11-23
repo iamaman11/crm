@@ -4747,6 +4747,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    "every compiled RPC must have a successful executed binary call");
  writeFileSync(process.env.CRM_RPC_RUNTIME_PROOF,JSON.stringify({
    source_sha:sourceSha,result:"PASS",features:["native-ci"],rpc,
+   committed_rpc_calls:[...writesWithReceipt].sort(),
    successful_rpc_calls:[...successfulCalls].sort(),
    unauthenticated_denials:unauthenticatedDenials.sort(),
    viewer_denials:viewerDenials.sort(),

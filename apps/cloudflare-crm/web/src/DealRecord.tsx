@@ -10,7 +10,7 @@ import {useQuery,QueryNotice} from "./hooks";
 import {moneyText,percent} from "./money";
 import type {CurrencyCatalog} from "./money";
 import {inputDate} from "./calendarInput";
-import {accountHref,scopeHref,contactHref,taskHref,dealTasksHref} from "./routes";
+import {scopeHref,contactHref,taskHref,dealTasksHref} from "./routes";
 import {stageName as stageLabel} from "./salesPipelineCatalog";
 
 export function dealStatusText(status:DealStatus):string {

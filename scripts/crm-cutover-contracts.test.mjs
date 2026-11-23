@@ -46,11 +46,16 @@ function assertWireContracts(files, descriptors) {
    "google.protobuf.ListValue"].includes(message.typeName),"untyped payload "+message.typeName);
   for(const field of message.fields){
    const name=message.typeName+"."+field.name;
-   if(isInput)assert.doesNotMatch(field.name,/^(tenant_id|actor_id|role_id|is_admin|allow_skip|allow_regression)$/,
+   if(isInput)assert.doesNotMatch(field.name,/^(tenant_id|actor_id|request_id|role_id|is_admin|allow_skip|allow_regression)$/,
     "request trusts client identity/policy: "+name);
    assert.ok(field.scalar!==ScalarType.DOUBLE && field.scalar!==ScalarType.FLOAT,
     "floating-point wire field "+name);
    // Protobuf-ES resolves imported types, list elements and map values here.
+   if(field.enum && field.enum.typeName.startsWith("crm.")){
+    const first=field.enum.values[0];
+    assert.ok(first?.number===0 && first.name.endsWith("_UNSPECIFIED"),
+     field.enum.typeName+" default must be UNSPECIFIED");
+   }
    if(field.message)visit(field.message,isInput);
   }
  }
@@ -60,6 +65,7 @@ function assertWireContracts(files, descriptors) {
    const compiledService=registry.getService(file.package+"."+service.name);
    assert.ok(compiledService,"missing compiled service "+service.name);
    for(const method of compiledService.methods){
+    assert.equal(method.methodKind,"unary",method.name+" must be unary");
     visit(method.input,true);
     visit(method.output,false);
    }
@@ -71,6 +77,7 @@ test("active CRM wire contracts reject client identity fields and floating-point
 });
 test("an imported nested message must obey request and response field rules",()=>{
  for(const [message,name,type,expected] of [
+  ["MutationPrecondition","request_id",9,/request trusts client identity.*MutationPrecondition.request_id/],
   ["MutationPrecondition","actor_id",9,/request trusts client identity.*MutationPrecondition.actor_id/],
   ["MutationReceipt","inexact",2,/floating-point wire field .*MutationReceipt.inexact/],
  ]){
@@ -81,6 +88,15 @@ test("an imported nested message must obey request and response field rules",()=
   });
   assert.throws(()=>assertWireContracts(finalFiles,files),expected);
  }
+});
+test("an imported nested domain enum cannot default to a business decision",()=>{
+ const files=structuredClone(compiled.file);
+ const core=files.find(f=>f.package==="crm.core.v2");
+ const precondition=core.messageType.find(m=>m.name==="MutationPrecondition");
+ precondition.enumType.push({name:"Decision",value:[{name:"DECISION_APPROVED",number:0}]});
+ precondition.field.push({name:"decision",number:1000,type:FieldDescriptorProto_Type.ENUM,
+  label:FieldDescriptorProto_Label.OPTIONAL,typeName:".crm.core.v2.MutationPrecondition.Decision"});
+ assert.throws(()=>assertWireContracts(finalFiles,files),/Decision default must be UNSPECIFIED/);
 });
 test("every RPC declares side-effect semantics using standard Protobuf options",()=>{
  for(const {file,service} of allServices)for(const method of service.method){

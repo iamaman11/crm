@@ -1,7 +1,7 @@
 // Mutation-style self-tests: the gate must reject real prohibited code.
 import test from "node:test";
 import assert from "node:assert/strict";
-import {inspect,inspectFrontend,resolveInternal} from "./crm-architecture-ast.mjs";
+import {inspect,inspectFrontend,resolveInternal,assertStrictOptions} from "./crm-architecture-ast.mjs";
 
 const web="apps/cloudflare-crm/web/src/Check.tsx";
 const client="packages/client/src/cloudflare.ts";
@@ -36,6 +36,10 @@ rejects("Connect transport through shared UI", 'export {createConnectTransport} 
 permits("generated Cloudflare client", 'import {createCloudflareCrmClient} from "@ultimate-crm/client/cloudflare";\nimport {useState} from "react";\nconst x = useState(1);');
 permits("generated enum values from the canonical client entrypoint",
   'import {AccountStatus,PartyKind,TaskPriority} from "@ultimate-crm/client/cloudflare";');
+rejects("an exported helper is not a generated enum or client factory",
+  'import {decodeCrmError} from "@ultimate-crm/client/cloudflare";');
+rejects("a generated enum must belong to the public client API",
+  'import {MutationCommitOutcome} from "@ultimate-crm/client/cloudflare";');
 rejects("an unapproved runtime export cannot bypass the client boundary",
   'import {createAlternateClient} from "@ultimate-crm/client/cloudflare";');
 permits("UI presentation only", 'import {Button} from "@ultimate-crm/ui";\nexport function Example(){return <Button>Save</Button>;}');
@@ -55,4 +59,11 @@ test("missing relative import cannot pass by source-name guessing",()=>{
 test("relative paths cannot bypass the public client or UI export",()=>{
  for(const path of ["../../../../packages/client/src/cloudflare.ts","../../../../packages/ui/src/Forms.tsx"])
   assert.throws(()=>resolveInternal(path,web),/relative import bypasses public workspace exports/);
+});
+
+test("individual compiler overrides cannot weaken a strict CRM project",()=>{
+ const base={strict:true,noUncheckedIndexedAccess:true,exactOptionalPropertyTypes:true};
+ for(const override of [{noCheck:true},{allowJs:true},{strictNullChecks:false},{noImplicitAny:false}]){
+  assert.throws(()=>assertStrictOptions("future CRM module",{...base,...override}),/TypeScript option/);
+ }
 });

@@ -59,9 +59,9 @@ function App() {
 // A render exception is not evidence of a rollback. Keep the pending
 // marker and let the original recovery path verify it after reload.
 class AppErrorBoundary extends Component<{children:ReactNode},{failed:boolean}> {
-  state={failed:false};
+  override state={failed:false};
   static getDerivedStateFromError(){return {failed:true};}
-  render(){
+  override render(){
     return this.state.failed?<FeedbackPanel tone="danger" title="Не удалось отобразить CRM."
       action={<Button onClick={()=>window.location.reload()}>Перезагрузить приложение</Button>}>
       Результат незавершённой записи необходимо проверить после перезагрузки.

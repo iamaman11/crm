@@ -131,10 +131,6 @@ check(tomlScalar("apps/cloudflare-crm/rust-party/Cargo.toml","package","edition"
 const appPackage=JSON.parse(read("apps/cloudflare-crm/package.json"));
 check(!!appPackage.dependencies?.["@ultimate-crm/client"]&&!!appPackage.dependencies?.["@ultimate-crm/ui"],
  "existing typed client and UI packages required");
-const tsconfig=JSON.parse(read("apps/cloudflare-crm/tsconfig.json"));
-for(const key of ["strict","noUncheckedIndexedAccess","exactOptionalPropertyTypes"])
- check(tsconfig.compilerOptions?.[key]===true,"missing TS option "+key);
-check(tsconfig.compilerOptions?.allowJs===false,"allowJs must be false");
 {
  const sources=readdirSync(resolve(repo,"apps/cloudflare-crm/web/src"),{recursive:true});
  check(sources.some(path=>path.endsWith(".tsx")),"React TSX missing");

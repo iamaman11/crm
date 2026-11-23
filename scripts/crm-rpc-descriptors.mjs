@@ -45,11 +45,12 @@ export function validateBindings(report,available){
 // Historical v1 and superseded Party v2 remain available to other consumers.
 // Later versions automatically enter the required scope; omission cannot pass.
 const activeVersions=JSON.parse(readFileSync(resolve(root,"apps/cloudflare-crm/active-proto-versions.json"),"utf8"));
+export function isActiveProtoFile(name){
+ const file=/^crm\/([^/]+)\/v([1-9][0-9]*)\/[^/]+\.proto$/.exec(name);
+ return !!file&&Number(file[2])>=(activeVersions.domain_minimums[file[1]]??activeVersions.minimum_version);
+}
 export function targetMethods(available){
- return [...available].filter(([,d])=>{
-  const file=/^crm\/([^/]+)\/v([1-9][0-9]*)\/[^/]+\.proto$/.exec(d.file);
-  return file&&Number(file[2])>=(activeVersions.domain_minimums[file[1]]??activeVersions.minimum_version);
- })
+ return [...available].filter(([,definition])=>isActiveProtoFile(definition.file))
   .map(([path])=>path).sort();
 }
 export function validateRuntime(report,available,bound,evidence=report.runtime){
@@ -94,6 +95,8 @@ export function validateRuntime(report,available,bound,evidence=report.runtime){
  const expected=targetMethods(available);
  if(expected.length!==registered.size||expected.some(path=>!registered.has(path)))
   fail("full contract differs from registered methods");
+ equalPaths(evidence.committed_rpc_calls,expected.filter(path=>
+   available.get(path).idempotency===MethodOptions_IdempotencyLevel.IDEMPOTENT),"typed write receipt coverage");
  equalPaths(evidence.unauthenticated_denials,registered,"authentication denial coverage");
  equalPaths(evidence.viewer_denials,[...policies].filter(([,rule])=>
    rule.permission==="Write"||rule.permission==="AdminRead").map(([path])=>path),"permission denial coverage");

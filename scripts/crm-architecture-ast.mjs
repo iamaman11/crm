@@ -2,6 +2,7 @@
 // No regex-only source matching, no legacy barrel import, no alternative browser transport.
 // Backend Rust and generated code have their own independent compile/runtime gates.
 import ts from "@typescript/typescript6";
+import {isActiveProtoFile} from "./crm-rpc-descriptors.mjs";
 import {readFileSync,existsSync,readdirSync} from "node:fs";
 import {resolve,dirname,extname,relative,sep} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -13,27 +14,60 @@ const forbiddenSource=/(^|\/)(gateway|transport)(\.[cm]?[jt]sx?)?$|\/gen\/crm\/g
 const forbiddenSymbols=new Set(["createGrpcWebTransport","createGrpcTransport","ApplicationGatewayService","GovernedClient","GovernedCrmClient"]);
 const directHttp=new Set(["fetch","XMLHttpRequest","WebSocket","EventSource"]);
 const forbiddenHttpPath=/^\/api\/(?!health(?:$|\/)|doctor(?:$|\/)|session(?:$|\/)|version(?:$|\/)|customer-data-operations\/parties\.csv$)/;
-// Read exactly the configuration used by the app's tsc invocation.
-const configPath=resolve(root,"apps/cloudflare-crm/tsconfig.json");
-const configFile=ts.readConfigFile(configPath,ts.sys.readFile);
-if(configFile.error)throw Error(ts.flattenDiagnosticMessageText(configFile.error.messageText,"\n"));
-const config=ts.parseJsonConfigFileContent(configFile.config,ts.sys,dirname(configPath));
-if(config.errors.length)throw Error(ts.formatDiagnosticsWithColorAndContext(config.errors,{
- getCanonicalFileName:file=>file,getCurrentDirectory:()=>root,getNewLine:()=>"\n",
-}));
+// Resolve tsconfig inheritance with the compiler before inspecting the module graph.
+function compilerConfig(project){
+ const path=resolve(root,project);
+ const config=ts.getParsedCommandLineOfConfigFile(path,{},{
+  ...ts.sys,onUnRecoverableConfigFileDiagnostic: diagnostic=>{
+   throw Error(ts.flattenDiagnosticMessageText(diagnostic.messageText,"\n"));
+  }
+ });
+ if(!config||config.errors.length)fail(project,"invalid TypeScript configuration");
+ return config;
+}
+export function assertStrictOptions(project,options){
+ for(const key of ["strict","noUncheckedIndexedAccess","exactOptionalPropertyTypes"]){
+  if(options[key]!==true)fail(project,"required TypeScript option "+key);
+ }
+ for(const key of ["noCheck","allowJs","checkJs"]){
+  if(options[key])fail(project,"unexpected TypeScript option "+key);
+ }
+ // TypeScript allows individual strict-family flags to override strict:true.
+ for(const key of ["noImplicitAny","noImplicitThis","strictNullChecks","strictFunctionTypes",
+  "strictBindCallApply","strictPropertyInitialization","strictBuiltinIteratorReturn","useUnknownInCatchVariables"]){
+  if(options[key]===false)fail(project,"disabled TypeScript option "+key);
+ }
+}
+const config=compilerConfig("apps/cloudflare-crm/tsconfig.json");
 const allowedBrowserPackages=new Set(["react","react-dom","@ultimate-crm/ui","@ultimate-crm/client"]);
-// The existing Connect entrypoint also exports versioned, generated enum values.
-// Whitelist exact runtime names: no ad-hoc transports, wrappers or DTO factories.
-const allowedClientValues=new Set([
- "createCloudflareCrmClient","AccountStatus","PartyKind","ContactPointKind","ContactPointStatus",
- "RelationshipDirectionality","RelationshipStatus","TaskPriority","TaskStatus","DealStatus","DealEventKind","ProbabilitySource","ForecastCategory",
- "CommunicationChannel","ConsentEffect","ConsentStatus","EvaluationReason",
- "PrivacyCaseKind","PrivacyCaseStatus","RawPayloadPolicy"
-]);
 const insideRepo=path=>{
  const rel=relative(root,path);
  return rel && rel!==".." && !rel.startsWith(".."+sep) && !rel.startsWith("/") ? rel.replaceAll("\\","/") : null;
 };
+// Generated enum re-exports belong to the public client. Resolve their actual
+// declarations so new domain enums need no second permission list in CI.
+function publicClientValues(){
+ const entry=resolve(root,"packages/client/src/cloudflare.ts");
+ const program=ts.createProgram([entry],config.options);
+ const checker=program.getTypeChecker();
+ const client=checker.getSymbolAtLocation(program.getSourceFile(entry));
+ const names=new Set(["createCloudflareCrmClient"]);
+ for(const symbol of checker.getExportsOfModule(client)){
+  if(!(symbol.flags & ts.SymbolFlags.Alias))continue;
+  const target=checker.getAliasedSymbol(symbol);
+  for(const decl of target.declarations??[]){
+   if(!ts.isEnumDeclaration(decl))continue;
+   const source=insideRepo(decl.getSourceFile().fileName);
+   const prefix="packages/client/gen/";
+   if(source?.startsWith(prefix) && source.endsWith("_pb.ts") &&
+      isActiveProtoFile(source.slice(prefix.length,-"_pb.ts".length)+".proto")){
+    names.add(symbol.name);
+   }
+  }
+ }
+ return names;
+}
+const allowedClientValues=publicClientValues();
 const read=path=>readFileSync(resolve(root,path),"utf8");
 function collect(directory){
  const files=[];
@@ -166,6 +200,11 @@ function resolveInternal(spec,parent){
  return rel;
 }
 export function inspectFrontend(){
+ for(const [project,parsed] of [
+  ["apps/cloudflare-crm",config],
+  ["packages/client",compilerConfig("packages/client/tsconfig.json")],
+  ["packages/ui",compilerConfig("packages/ui/tsconfig.json")],
+ ])assertStrictOptions(project,parsed.options);
  const visited=new Set();
  function follow(file){
   if(visited.has(file))return;
