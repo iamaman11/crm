@@ -82,13 +82,12 @@
         "packages/client/**",
         "packages/ui/**",
         "apps/cloudflare-crm/**",
-        "scripts/crm-architecture-ast.mjs",
-        "scripts/crm-architecture-ast.test.mjs",
         "scripts/crm-rpc-descriptors.mjs",
         "scripts/crm-module-coverage.py",
         "scripts/crm-active-rust-surface.py",
         "tests/test_crm_module_coverage.py",
-        "tests/test_crm_active_rust_surface.py"
+        "tests/test_crm_active_rust_surface.py",
+        ".oxlintrc.json"
       ],
       "required_workflows": [
         "Cloudflare CRM Spike CI"
@@ -102,9 +101,8 @@
         "packages/client/**",
         "packages/ui/**",
         "buf.gen.web.yaml",
-        "scripts/crm-architecture-ast.mjs",
-        "scripts/crm-architecture-ast.test.mjs",
-        "scripts/crm-rpc-descriptors.mjs"
+        "scripts/crm-rpc-descriptors.mjs",
+        ".oxlintrc.json"
       ],
       "required_workflows": [
         "Cloudflare CRM Spike CI"
@@ -134,8 +132,6 @@
         "step22-runtime-fanin-decisions.json",
         "tests/test_customer_privacy_operations.py",
         "affected-scope-policy.json",
-        "scripts/crm-architecture-ast.mjs",
-        "scripts/crm-architecture-ast.test.mjs",
         "scripts/crm-rpc-descriptors.mjs",
         "scripts/crm-module-coverage.py",
         "scripts/crm-active-rust-surface.py",
