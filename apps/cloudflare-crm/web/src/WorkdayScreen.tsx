@@ -1,5 +1,5 @@
 import {useCallback,useMemo,useState} from "react";
-import {Button,PageHeader} from "@ultimate-crm/ui";
+import {Button,PageHeader,SelectField} from "@ultimate-crm/ui";
 import {InteractionKind,TaskStatus} from "@ultimate-crm/client/cloudflare";
 import {api,dateText,timestamp} from "./api";
 import {useQuery,QueryNotice} from "./hooks";
@@ -103,9 +103,9 @@ export function WorkdayScreen({day,mine=false,teamId=""}:{day:string;mine?:boole
       <a href={workdayHref(day,true)}>Моя очередь по подписанной сессии</a>{" · "}
       <a href="#team">Команда и нагрузка</a></p>
     <QueryNotice query={teams}/>
-    <p><label>Командная очередь{" "}<select value={teamId} onChange={e=>navigateTo(workdayHref(day,false,e.target.value))}>
+    <SelectField label="Командная очередь" value={teamId} onChange={e=>navigateTo(workdayHref(day,false,e.target.value))}>
       <option value="">Все команды</option>{teams.data?.map(t=><option key={t.teamId} value={t.teamId}>{t.name}{t.active?"":" (архив)"}</option>)}
-    </select></label></p>
+    </SelectField>
     <p><label>Дата рабочего дня{" "}
       <input type="date" value={chosen} min="2000-01-01" max="2100-12-31"
         onChange={event=>{if(event.target.value)navigateTo(workdayHref(event.target.value,mine,teamId));}}/>

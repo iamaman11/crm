@@ -1,6 +1,6 @@
 import {useCallback,useState} from "react";
 import type {FormEvent,ReactNode} from "react";
-import {Button,Card,PageHeader} from "@ultimate-crm/ui";
+import {Button,Card,PageHeader,SelectField} from "@ultimate-crm/ui";
 import type {SalesPipeline} from "@ultimate-crm/client/cloudflare";
 import {DealStatus,ForecastCategory} from "@ultimate-crm/client/cloudflare";
 import {api} from "./api";
@@ -174,9 +174,9 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
     <p><a href="#sales">Сделки и настройка воронок</a>{" · "}
       <a href={workdayHref()}>Рабочий день и действия</a></p>
     <QueryNotice query={owners}/>
-    <p><label>Ответственный за портфель{" "}<select value={owner} onChange={e=>navigateTo(intelligenceHref({start,end,pipelineId,includeArchived,compare,owner:e.target.value}))}>
+    <SelectField label="Ответственный за портфель" value={owner} onChange={e=>navigateTo(intelligenceHref({start,end,pipelineId,includeArchived,compare,owner:e.target.value}))}>
       <option value="">Все ответственные</option>{owners.data?.choices.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}
-    </select></label></p>
+    </SelectField>
     {owner&&<p>По текущему владельцу сделки, не историческая атрибуция выручки.</p>}
     <form onSubmit={apply} aria-label="Фильтры аналитики">
       <label>Начало периода{" "}
