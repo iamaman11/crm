@@ -214,10 +214,16 @@ pub(super) async fn mutate(
         )));
     }
     if !create && original == team {
-        return Ok(Err(reject("ACCESS_TEAM_NO_CHANGES", ErrorCode::InvalidArgument)));
+        return Ok(Err(reject(
+            "ACCESS_TEAM_NO_CHANGES",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let Some(version) = team.version.checked_add(1) else {
-        return Ok(Err(reject("ACCESS_TEAM_VERSION_OVERFLOW", ErrorCode::Aborted)));
+        return Ok(Err(reject(
+            "ACCESS_TEAM_VERSION_OVERFLOW",
+            ErrorCode::Aborted,
+        )));
     };
     team.version = version;
     let state =

@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package crm.sales.v2;
 
-import "crm/core/v1/common.proto";
 import "crm/core/v2/operation.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -52,7 +51,7 @@ message Deal {
   google.protobuf.Timestamp updated_at = 14;
   ProbabilitySource probability_source = 15;
   ForecastCategory forecast_category = 16;
-  crm.core.v1.ActorOrTeamOwner owner = 17;
+  crm.core.v2.ActorOrTeamOwner owner = 17;
 }
 
 message CreateDealRequest {
@@ -67,7 +66,7 @@ message CreateDealRequest {
   optional string primary_contact_id = 8;
   crm.core.v2.CalendarDate expected_close_date = 9;
   optional ForecastCategory forecast_category = 10;
-  crm.core.v1.ActorOrTeamOwner owner = 11;
+  crm.core.v2.ActorOrTeamOwner owner = 11;
 }
 
 message CreateDealResponse {
@@ -86,7 +85,7 @@ message UpdateDealRequest {
   // Mutually exclusive with probability_basis_points. False means Keep.
   bool use_stage_probability = 8;
   optional ForecastCategory forecast_category = 9;
-  crm.core.v1.ActorOrTeamOwner owner = 10;
+  crm.core.v2.ActorOrTeamOwner owner = 10;
 }
 
 message UpdateDealResponse {
@@ -183,7 +182,7 @@ message ListDealsRequest {
   // Literal, case-sensitive name/ID fragment; user search is separate from
   // saved views, Kanban inventory and pipeline-wide forecasting.
   string search = 5;
-  crm.core.v1.ActorOrTeamOwner owner_filter = 6;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 6;
 }
 
 message ListDealsResponse {
@@ -270,7 +269,7 @@ message ListStageDealsRequest {
   crm.core.v2.PageRequest page = 3;
   optional DealStatus status = 4;
   optional string account_id = 5;
-  crm.core.v1.ActorOrTeamOwner owner_filter = 6;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 6;
 }
 
 // Exact unconverted minor-unit sum for the whole filtered stage, never the
@@ -300,7 +299,7 @@ message SalesDealView {
   optional string account_id = 5;
   int64 version = 6;
   bool archived = 7;
-  crm.core.v1.ActorOrTeamOwner owner_filter = 8;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 8;
 }
 message CreateSalesViewRequest {
   string view_id = 1;
@@ -309,7 +308,7 @@ message CreateSalesViewRequest {
   optional DealStatus status = 4;
   optional string account_id = 5;
   crm.core.v2.MutationPrecondition precondition = 6;
-  crm.core.v1.ActorOrTeamOwner owner_filter = 7;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 7;
 }
 message CreateSalesViewResponse {
   SalesDealView view = 1;
@@ -323,7 +322,7 @@ message UpdateSalesViewRequest {
   optional string account_id = 5;
   bool archived = 6;
   crm.core.v2.MutationPrecondition precondition = 7;
-  crm.core.v1.ActorOrTeamOwner owner_filter = 8;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 8;
 }
 message UpdateSalesViewResponse {
   SalesDealView view = 1;
@@ -361,7 +360,7 @@ message GetPipelineMetricsRequest {
   optional DealStatus status = 2;
   optional string account_id = 3;
   SalesAnalysisPeriod analysis_period = 4;
-  crm.core.v1.ActorOrTeamOwner owner_filter = 5;
+  crm.core.v2.ActorOrTeamOwner owner_filter = 5;
 }
 message PipelineStatusMetric {
   string stage_id = 1;

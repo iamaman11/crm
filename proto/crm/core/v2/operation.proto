@@ -34,6 +34,15 @@ message PageInfo {
   string next_page_token = 1;
 }
 
+// Canonical owner selection for active contracts. No nullable or ambiguous
+// dual owner; the original domain validates the selected identifier.
+message ActorOrTeamOwner {
+  oneof owner {
+    string actor_id = 1;
+    string team_id = 2;
+  }
+}
+
 message StringPatch {
   oneof operation {
     string set = 1;

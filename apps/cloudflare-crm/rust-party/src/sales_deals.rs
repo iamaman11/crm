@@ -374,11 +374,7 @@ pub(super) async fn probe_receipt_read(
 
 // Owner selection validates against the single Access authority; the same
 // predicate is checked again in the original Deal write, at commit time.
-async fn eligible_owner(
-    db: &D1Database,
-    tenant: &str,
-    owner: &SalesOwnerScope,
-) -> Result<bool> {
+async fn eligible_owner(db: &D1Database, tenant: &str, owner: &SalesOwnerScope) -> Result<bool> {
     match owner {
         SalesOwnerScope::Actor(email) => {
             if super::access_members::email(email).ok().as_deref() != Some(email.as_str()) {
@@ -472,7 +468,10 @@ pub(super) async fn create_typed(
     }
     let owner = if let Some(selection) = &input.owner {
         if !eligible_owner(db, tenant, selection).await? {
-            return Ok(rejected("SALES_OWNER_NOT_ELIGIBLE", ErrorCategory::InvalidArgument));
+            return Ok(rejected(
+                "SALES_OWNER_NOT_ELIGIBLE",
+                ErrorCategory::InvalidArgument,
+            ));
         }
         match selection.domain_owner() {
             Ok(owner) => owner,
@@ -711,7 +710,10 @@ pub(super) async fn update_typed(
     };
     let owner = if let Some(selection) = &input.owner {
         if !eligible_owner(db, tenant, selection).await? {
-            return Ok(rejected("SALES_OWNER_NOT_ELIGIBLE", ErrorCategory::InvalidArgument));
+            return Ok(rejected(
+                "SALES_OWNER_NOT_ELIGIBLE",
+                ErrorCategory::InvalidArgument,
+            ));
         }
         match selection.domain_owner() {
             Ok(owner) => Patch::Set(owner),

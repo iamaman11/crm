@@ -127,7 +127,9 @@ pub(super) async fn create(
         input.pipeline_id,
         input.status,
         input.account_id,
-    ).and_then(|view| view.with_owner_filter(input.owner_filter)) {
+    )
+    .and_then(|view| view.with_owner_filter(input.owner_filter))
+    {
         Ok(view) => view,
         Err(e) => return Ok(Err(Failure::domain(e.code, ErrorCode::InvalidArgument))),
     };
@@ -204,7 +206,9 @@ pub(super) async fn update(
         input.status,
         input.account_id,
         input.archived,
-    ).and_then(|view| view.with_owner_filter(input.owner_filter)) {
+    )
+    .and_then(|view| view.with_owner_filter(input.owner_filter))
+    {
         Ok(view) => view,
         Err(e) => {
             return Ok(Err(Failure::domain(
