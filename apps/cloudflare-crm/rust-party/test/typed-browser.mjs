@@ -2831,7 +2831,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await reloadDocument();
      await expect(page.getByLabel("Ответственный за портфель",{exact:true})).toHaveValue("team:"+teamId);
      await page.getByRole("region",{name:"Общий портфель"}).getByText(/Сделок: 1 · Открыто: 1/).waitFor();
-     await navigate("sales?dealId="+encodeURIComponent(ownedDealId),"Карточка сделки");
+     await navigate("sales/"+encodeURIComponent(ownedDealId),"Карточка сделки");
      await page.getByText("Ответственный: Команда: "+teamName,{exact:true}).waitFor();
      await page.getByRole("button",{name:"Редактировать сделку",exact:true}).click();
      await page.getByLabel("Ответственный за сделку",{exact:true}).selectOption("actor:native-viewer@example.test");
