@@ -825,7 +825,7 @@ fn rpc_policy(path: &str) -> Option<RpcPolicy> {
 async fn dispatch(
     req: Request,
     env: Env,
-    tenant: &str,
+    _tenant: &str,
     request_id: &str,
     actor: &access::Actor,
 ) -> Result<Response> {
@@ -852,13 +852,13 @@ async fn dispatch(
         }
         return connect_sales::route(req, env, actor, request_id, rule).await;
     }
-    let db = env.d1("DB")?;
     // Explicitly CI-only, signed-Access-gated native workerd proof. This gate
     // performs no D1 writes and makes no claims about module persistence.
     #[cfg(feature = "native-ci")]
     if path == "/api/_ci/original-domain-check" && method == Method::Get {
+        let db = env.d1("DB")?;
         let code = original_domain_probe::check();
-        let receipt_read = sales_deals::probe_receipt_read(&db, tenant, request_id).await;
+        let receipt_read = sales_deals::probe_receipt_read(&db, _tenant, request_id).await;
         let mut owners = connect_sales::MethodOwners::new();
         let router = connect_sales::router(env, actor, request_id, Some(&mut owners));
         let mut methods: Vec<String> = router
