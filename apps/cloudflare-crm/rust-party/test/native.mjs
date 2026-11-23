@@ -4337,7 +4337,15 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      pageToken:sk06Recent.body.pageInfo.nextPageToken}
  });
  assert.deepEqual(sk06NextRecent.body.interactions.map(event=>event.interactionId),
-   [eventNote,eventEarlier]);
+   [eventNote,failedId],"a recovered SK-05 Interaction is a real fact, not a missing event");
+ assert.ok(sk06NextRecent.body.pageInfo?.nextPageToken);
+ const sk06ThirdRecent=await interactionV2("ListInteractions",viewer,{
+   recentAcrossAccounts:true,page:{pageSize:2,
+     pageToken:sk06NextRecent.body.pageInfo.nextPageToken}
+ });
+ assert.deepEqual(sk06ThirdRecent.body.interactions.map(event=>event.interactionId),
+   [eventEarlier],"tenant-wide keyset must return every immutable event");
+ assert.equal(sk06ThirdRecent.body.pageInfo?.nextPageToken??"","");
  assert.deepEqual((await interactionV2("ListInteractions",admin,{
    recentAcrossAccounts:true,page:{pageSize:2}
  })).body,sk06Recent.body);
