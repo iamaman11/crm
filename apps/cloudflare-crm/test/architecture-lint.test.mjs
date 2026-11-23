@@ -50,3 +50,58 @@ test("native Oxlint rejects forbidden CRM UI code and permits the typed client",
   rmSync(directory,{recursive:true,force:true});
  }
 });
+
+test("Oxlint checks the reusable UI and only permits the native Connect transport",()=>{
+ const uiDirectory=mkdtempSync(join(root,"packages/ui/src/crm-architecture-"));
+ const clientDirectory=mkdtempSync(join(root,"packages/client/src/cloudflare-architecture-"));
+ try{
+  const cases=[
+   [join(uiDirectory,"network.ts"),'export const read=()=>fetch("/api/manual-business");',"no-restricted-globals"],
+   [join(uiDirectory,"client.ts"),'import {createCloudflareCrmClient} from "@ultimate-crm/client/cloudflare"; export {createCloudflareCrmClient};',"no-restricted-imports"],
+   [join(clientDirectory,"network.ts"),'export const read=globalThis["fetch"];',"no-restricted-properties"],
+   [join(clientDirectory,"legacy-transport.ts"),'import {createGrpcWebTransport} from "@connectrpc/connect-web"; export {createGrpcWebTransport};',"no-restricted-imports"],
+   [join(clientDirectory,"legacy-gateway.ts"),'import {createApplicationGatewayClient} from "../transport"; export {createApplicationGatewayClient};',"no-restricted-imports"],
+  ];
+  for(const [file,source,rule] of cases){
+   writeFileSync(file,source+"\n");
+   const result=lint(file);
+   assert.notEqual(result.status,0,file+" must FAIL Oxlint: "+result.output);
+   assert.ok(result.output.includes(rule),file+" must fail the targeted rule: "+result.output);
+  }
+  const safe=join(clientDirectory,"native-connect.ts");
+  writeFileSync(safe,'import {createConnectTransport} from "@connectrpc/connect-web";\nexport {createConnectTransport};\n');
+  const result=lint(safe);
+  assert.equal(result.status,0,"generated binary Connect client must PASS: "+result.output);
+ }finally{
+  rmSync(uiDirectory,{recursive:true,force:true});
+  rmSync(clientDirectory,{recursive:true,force:true});
+ }
+});
+
+test("TypeScript itself rejects disabled strict compiler options",()=>{
+ const directory=mkdtempSync(join(root,"apps/cloudflare-crm/crm-tsconfig-"));
+ try{
+  const path=join(directory,"tsconfig.json");
+  function verify(options){
+   writeFileSync(path,JSON.stringify({extends:"../tsconfig.json",compilerOptions:options})+"\n");
+   const result=spawnSync("python",["apps/cloudflare-crm/scripts/check-web.py","--verify-tsconfig",path],{
+    cwd:root,encoding:"utf8",timeout:30000,
+   });
+   if(result.error)throw result.error;
+   return {status:result.status,output:(result.stdout||"")+(result.stderr||"")};
+  }
+  const valid=verify({});
+  assert.equal(valid.status,0,"strict inherited tsconfig must pass: "+valid.output);
+  for(const override of [
+   {noCheck:true}, {strict:false}, {strictNullChecks:false},
+   {noUncheckedIndexedAccess:false}, {exactOptionalPropertyTypes:false},
+   {allowJs:true},
+  ]){
+   const result=verify(override);
+   assert.notEqual(result.status,0,JSON.stringify(override)+" must FAIL");
+   assert.ok(result.output.includes("CRM_TS_CONFIG_VIOLATION"),JSON.stringify(override)+": "+result.output);
+  }
+ }finally{
+  rmSync(directory,{recursive:true,force:true});
+ }
+});

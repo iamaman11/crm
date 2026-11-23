@@ -1,5 +1,6 @@
 """Check the current CRM wire contract and frontend with the same entry point as CI."""
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -19,6 +20,43 @@ with TemporaryDirectory() as temporary:
 
     def run(*args):
         subprocess.run(args, cwd=root, env=env, check=True)
+
+
+    # TypeScript --showConfig resolves all inherited compiler options itself.
+    # A green tsc can be misleading if noCheck=true is enabled.
+    def check_tsconfig(project):
+        output = subprocess.run(
+            [pnpm, "exec", "tsc", "--project", project, "--showConfig"],
+            cwd=root, env=env, text=True, capture_output=True, check=True,
+        ).stdout
+        options = json.loads(output)["compilerOptions"]
+        required = (
+            "strict", "noUncheckedIndexedAccess", "exactOptionalPropertyTypes",
+            "isolatedModules", "verbatimModuleSyntax",
+        )
+        strict_family = (
+            "noImplicitAny", "noImplicitThis", "strictNullChecks", "strictFunctionTypes",
+            "strictBindCallApply", "strictPropertyInitialization",
+            "strictBuiltinIteratorReturn", "useUnknownInCatchVariables", "alwaysStrict",
+        )
+        disabled = [key for key in required if options.get(key) is not True]
+        disabled += [key for key in strict_family if options.get(key) is False]
+        disabled += [key for key in ("noCheck", "allowJs", "checkJs") if options.get(key) is True]
+        if disabled:
+            raise SystemExit(f"CRM_TS_CONFIG_VIOLATION {project}: {', '.join(disabled)}")
+
+    if len(sys.argv) > 1:
+        if len(sys.argv) != 3 or sys.argv[1] != "--verify-tsconfig":
+            raise SystemExit("expected --verify-tsconfig <tsconfig path>")
+        check_tsconfig(sys.argv[2])
+        raise SystemExit(0)
+
+    for project in (
+        "packages/client/tsconfig.json",
+        "packages/ui/tsconfig.json",
+        "apps/cloudflare-crm/tsconfig.json",
+    ):
+        check_tsconfig(project)
 
     if "CRM_MODULE_COVERAGE_REPORT" not in os.environ:
         run(sys.executable, "scripts/crm-module-coverage.py", "--output", report)

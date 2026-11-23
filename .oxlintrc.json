@@ -7,7 +7,11 @@
     {
       "files": [
         "apps/cloudflare-crm/web/src/**/*.ts",
-        "apps/cloudflare-crm/web/src/**/*.tsx"
+        "apps/cloudflare-crm/web/src/**/*.tsx",
+        "packages/ui/src/**/*.ts",
+        "packages/ui/src/**/*.tsx",
+        "packages/client/src/cloudflare*.ts",
+        "packages/client/src/cloudflare*/**/*.ts"
       ],
       "rules": {
         "typescript/no-explicit-any": "error",
@@ -24,7 +28,6 @@
         "no-eval": "error",
         "no-implied-eval": "error",
         "no-new-func": "error",
-        "import/no-relative-parent-imports": "error",
         "no-restricted-globals": [
           "error",
           "fetch",
@@ -58,6 +61,21 @@
             "message": "No alternative browser transport"
           }
         ],
+        "import/no-dynamic-require": [
+          "error",
+          {
+            "esmodule": true
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "apps/cloudflare-crm/web/src/**/*.ts",
+        "apps/cloudflare-crm/web/src/**/*.tsx"
+      ],
+      "rules": {
+        "import/no-relative-parent-imports": "error",
         "no-restricted-imports": [
           "error",
           {
@@ -85,12 +103,6 @@
               }
             ]
           }
-        ],
-        "import/no-dynamic-require": [
-          "error",
-          {
-            "esmodule": true
-          }
         ]
       }
     },
@@ -100,19 +112,74 @@
         "packages/ui/src/**/*.tsx"
       ],
       "rules": {
+        "import/no-relative-parent-imports": "error",
         "no-restricted-imports": [
           "error",
           {
+            "paths": [
+              {
+                "name": "@ultimate-crm/client",
+                "message": "Shared UI cannot import legacy gateway"
+              },
+              {
+                "name": "@ultimate-crm/client/cloudflare",
+                "message": "Shared UI cannot own the CRM client"
+              }
+            ],
             "patterns": [
               {
                 "group": [
+                  "@ultimate-crm/client/*",
                   "@connectrpc/*",
                   "@bufbuild/*",
                   "**/packages/client/**",
                   "**/gateway",
-                  "**/transport"
+                  "**/gateway.*",
+                  "**/transport",
+                  "**/transport.*"
                 ],
-                "message": "UI components cannot own the CRM transport"
+                "message": "Shared UI components must not own CRM networking"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/client/src/cloudflare*.ts",
+        "packages/client/src/cloudflare*/**/*.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@connectrpc/connect-web",
+                "importNames": [
+                  "createGrpcWebTransport"
+                ],
+                "message": "Active CRM client must use only binary createConnectTransport"
+              }
+            ],
+            "patterns": [
+              {
+                "group": [
+                  "./gateway",
+                  "../gateway",
+                  "./transport",
+                  "../transport",
+                  "./crm",
+                  "../crm",
+                  "./index",
+                  "../index",
+                  "**/gateway",
+                  "**/transport",
+                  "**/gen/crm/gateway/**",
+                  "**/gen/crm/**/v1/**"
+                ],
+                "message": "Active CRM client must not import retired gateway or v1 wire"
               }
             ]
           }
