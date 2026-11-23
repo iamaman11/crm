@@ -909,7 +909,7 @@ pub(super) async fn claim_typed(
             ErrorCode::PermissionDenied,
         )));
     }
-    let owner = ActorId::try_new(actor).map_err(|e| worker::Error::RustError(e.code))?;
+    let owner = ActorId::try_new(actor).map_err(|e| worker::Error::RustError(e.to_string()))?;
     if let Err(e) = task.apply_update(UpdateTask {
         expected_version: expected,
         subject: Patch::Keep,
