@@ -123,7 +123,7 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
             startDate:parseDate(prior.start),endDate:parseDate(prior.end)
           }
         },{signal}):undefined;
-        return {pipeline,current,previous};
+        return previous===undefined?{pipeline,current}:{pipeline,current,previous};
       }));
       slices.push(...group);
     }
