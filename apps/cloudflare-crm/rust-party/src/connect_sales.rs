@@ -615,7 +615,7 @@ impl MemberV2Service {
             request_id: self.request_id.clone(),
             resource_version: saved.member.version,
             replayed: saved.replayed,
-            original_request_id: saved.original_request_id.clone(),
+            original_request_id: Some(saved.original_request_id.clone()),
             ..Default::default()
         }
     }

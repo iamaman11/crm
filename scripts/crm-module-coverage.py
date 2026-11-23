@@ -120,7 +120,10 @@ def build_report(root: Path = ROOT) -> dict:
             "crate_path": crate.relative_to(ROOT).as_posix(),
             "crate_name": crate_name,
             "kind": "composition" if entry.startswith("crates/") else "domain",
-            "linked": link_name is not None,
+            # A source module implemented by the Worker entrypoint itself
+            # is linked by definition; other owners must be path dependencies.
+            # The compiled router/owner proof still checks *executed* methods.
+            "linked": link_name is not None or crate == WORKER,
             "declared_rpc_paths": sorted(declared_rpc),
             "rpc_bindings": sorted(binding_specs, key=lambda item: item["path"]),
             "active_rpc_paths": [],
