@@ -5308,6 +5308,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.equal(viewCreated.status,200,describeProtobuf(viewCreated.body));
    const viewRead=await salesV2("GetSalesView",viewer,{viewId});
    assert.equal(viewRead.body.view?.ownerFilter?.owner.value,salesTeam);
+   const noChange={teamId:salesTeam,active:true,precondition:{expectedVersion:1n,idempotencyKey:"noop-"+salesTeam}};
+   assert.equal((await memberV2("UpdateTeam",admin,noChange)).status,400);
    const archive={teamId:salesTeam,active:false,precondition:{expectedVersion:1n,idempotencyKey:"archive-"+salesTeam}};
    assert.equal((await memberV2("UpdateTeam",admin,archive)).status,409);
    for(const id of ids.slice(0,2)){

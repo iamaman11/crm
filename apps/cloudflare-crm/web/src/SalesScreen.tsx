@@ -718,7 +718,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
           await pipelinesQuery.reload();
           if(destination){
             setPipelineId(destination);
-            if(!selectedViewId)navigateTo(salesPipelineHref(initialAccountId,destination,dealSearch));
+            if(!selectedViewId)navigateTo(salesPipelineHref(initialAccountId,destination,dealSearch,owner));
           }
           setStageCursors({});await refreshSales();
         });

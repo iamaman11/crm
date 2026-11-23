@@ -164,7 +164,7 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
         throw Error("Некорректный период");
       setFormError("");
       navigateTo(intelligenceHref({
-        start:draftStart,end:draftEnd,pipelineId,includeArchived,compare:compare&&!!draftStart
+        start:draftStart,end:draftEnd,pipelineId,includeArchived,owner,compare:compare&&!!draftStart
       }));
     }catch(error){setFormError(error instanceof Error?error.message:"Некорректные даты");}
   };
@@ -278,7 +278,7 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
                 <td>{n(dealCount(s,DealStatus.OPEN))}</td>
                 <td>{n(metricTotal(s,"overdueExpectedCloseCount"))}</td>
                 <td>{n(metricTotal(s,"overdueLinkedTaskCount"))}</td>
-                <td><a href={salesPipelineHref("",p.pipelineId)}>Открыть воронку {p.name}</a></td>
+                <td><a href={salesPipelineHref("",p.pipelineId,"",owner)}>Открыть воронку {p.name}</a></td>
               </tr>;
             })}</tbody></table></ScrollTable>
         </section>
@@ -287,7 +287,7 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
           {slices.map(slice=><Card key={slice.pipeline.pipelineId} title={slice.pipeline.name}>
             <p>Время среза: {new Date(Number(slice.current.asOfUnixSeconds)*1000)
               .toISOString().slice(0,19)} UTC.{" "}
-              <a href={salesPipelineHref("",slice.pipeline.pipelineId)}>
+              <a href={salesPipelineHref("",slice.pipeline.pipelineId,"",owner)}>
                 Карточки и конфигурация воронки</a></p>
             <ScrollTable label={"Этапы "+slice.pipeline.name+" — таблица"}><table><thead><tr><th scope="col">Этап</th><th scope="col">Статус</th>
               <th scope="col">Количество</th><th scope="col">Просрочено</th>
