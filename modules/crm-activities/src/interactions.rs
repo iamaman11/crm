@@ -35,7 +35,12 @@ pub struct CreateInteraction {
 }
 
 fn invalid(code: &'static str) -> SdkError {
-    SdkError::new(code, ErrorCategory::InvalidArgument, false, "Invalid interaction")
+    SdkError::new(
+        code,
+        ErrorCategory::InvalidArgument,
+        false,
+        "Invalid interaction",
+    )
 }
 
 pub fn validate_identifier(value: &str) -> Result<(), SdkError> {
@@ -91,8 +96,7 @@ impl Interaction {
             text: self.text.clone(),
             occurred_at_nanos: self.occurred_at_nanos,
         };
-        if *self != Self::create(input, &self.author, self.recorded_at_nanos)?
-            || self.version != 1
+        if *self != Self::create(input, &self.author, self.recorded_at_nanos)? || self.version != 1
         {
             return Err(invalid("ACTIVITIES_INTERACTION_STATE_INVALID"));
         }
