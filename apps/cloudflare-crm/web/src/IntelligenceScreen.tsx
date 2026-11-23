@@ -1,5 +1,5 @@
 import {useCallback,useState} from "react";
-import type {FormEvent} from "react";
+import type {FormEvent,ReactNode} from "react";
 import {Button,Card,PageHeader} from "@ultimate-crm/ui";
 import type {SalesPipeline} from "@ultimate-crm/client/cloudflare";
 import {DealStatus,ForecastCategory} from "@ultimate-crm/client/cloudflare";
@@ -78,11 +78,18 @@ function outcome(slices:Slice[],previous=false) {
 function winRate({won,denominator}:{won:bigint;denominator:bigint}):string {
   return denominator>0n?percent(Number(won*10000n/denominator))+"%":"недостаточно закрытых сделок";
 }
+function ScrollTable({label,children}:{label:string;children:ReactNode}) {
+  // Accessible local scroll surface, not viewport overflow at 390 px.
+  return <div role="region" aria-label={label} tabIndex={0}
+    style={{width:"100%",maxWidth:"100%",overflowX:"auto"}}>
+    {children}
+  </div>;
+}
 function CurrencyTable({title,rows,catalog}:{title:string;rows:CurrencyTotal[];
   catalog:CurrencyCatalog}) {
   return <section aria-label={title}>
     <h3>{title}</h3>
-    {rows.length===0?<p>Указанных сумм нет.</p>:<table>
+    {rows.length===0?<p>Указанных сумм нет.</p>:<ScrollTable label={title+" — таблица"}><table>
       <thead><tr><th scope="col">Валюта</th><th scope="col">Сумма</th>
         <th scope="col">Взвешено по вероятности</th><th scope="col">Сделок с суммой</th></tr></thead>
       <tbody>{rows.map(row=><tr key={row.currency}>
@@ -91,7 +98,7 @@ function CurrencyTable({title,rows,catalog}:{title:string;rows:CurrencyTotal[];
         <td>{weightedMoneyText(row.weighted.toString(),row.currency,catalog)}</td>
         <td>{n(row.deals)}</td>
       </tr>)}</tbody>
-    </table>}
+    </table></ScrollTable>}
   </section>;
 }
 
@@ -220,12 +227,12 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
             Только открытые сделки. Категории не пересекаются; «Исключено»
             не входит в денежный прогноз. Взвешенная сумма = сумма × вероятность,
             это не статистический/AI-прогноз. Валюты не складываются друг с другом.</p>
-          <table><thead><tr><th scope="col">Категория</th>
+          <ScrollTable label="Категории прогноза — таблица"><table><thead><tr><th scope="col">Категория</th>
             <th scope="col">Сделок в периоде</th><th scope="col">Без даты</th></tr></thead>
             <tbody>{perCategory.map(cat=><tr key={cat.category}>
               <th scope="row">{categoryTitle(cat.category)}</th>
               <td>{n(cat.deals)}</td><td>{n(cat.unplanned)}</td>
-            </tr>)}</tbody></table>
+            </tr>)}</tbody></table></ScrollTable>
           <CurrencyTable title="Прогноз по валютам" rows={currencies} catalog={data.currencies}/>
           <CurrencyTable title={start?"Без даты закрытия (вне периода)":
             "Без даты закрытия (часть общего прогноза)"} rows={undated} catalog={data.currencies}/>
@@ -250,7 +257,7 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
           <p>Переход открывает единственный исходный SalesScreen: этапы,
             карточки Deal, сохранённые представления и настройку под контролем
             Rust policy/CAS.</p>
-          <table><thead><tr><th scope="col">Воронка</th>
+          <ScrollTable label="Портфель воронок — таблица"><table><thead><tr><th scope="col">Воронка</th>
             <th scope="col">Всего сделок</th><th scope="col">Открыто</th>
             <th scope="col">Просрочено закрытие</th>
             <th scope="col">Просроченные связанные задачи</th>
@@ -265,7 +272,7 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
                 <td>{n(metricTotal(s,"overdueLinkedTaskCount"))}</td>
                 <td><a href={salesPipelineHref("",p.pipelineId)}>Открыть воронку {p.name}</a></td>
               </tr>;
-            })}</tbody></table>
+            })}</tbody></table></ScrollTable>
         </section>
         <section aria-label="Разрез по этапам">
           <h2>Разрез по этапам и статусам</h2>
@@ -274,7 +281,7 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
               .toISOString().slice(0,19)} UTC.{" "}
               <a href={salesPipelineHref("",slice.pipeline.pipelineId)}>
                 Карточки и конфигурация воронки</a></p>
-            <table><thead><tr><th scope="col">Этап</th><th scope="col">Статус</th>
+            <ScrollTable label={"Этапы "+slice.pipeline.name+" — таблица"}><table><thead><tr><th scope="col">Этап</th><th scope="col">Статус</th>
               <th scope="col">Количество</th><th scope="col">Просрочено</th>
               <th scope="col">До 30 дней</th><th scope="col">Средний возраст этапа</th></tr></thead>
             <tbody>{slice.pipeline.stages.flatMap(stage=>
@@ -292,7 +299,7 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
                     :"нет подтверждённой истории"}</td>
                 </tr>;
               })
-            )}</tbody></table>
+            )}</tbody></table></ScrollTable>
           </Card>)}
         </section>
       </>}

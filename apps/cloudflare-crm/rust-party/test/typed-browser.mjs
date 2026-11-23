@@ -2675,7 +2675,24 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.goBack();
    await page.getByRole("heading",{name:"Аналитика бизнеса",exact:true}).waitFor();
    await page.screenshot({path:resolve(directory,"crm-portfolio-intelligence.png"),fullPage:true});
-   checkpoint("SK-07 full portfolio, exact native metrics, linked settings, period comparison, invalid dates, Back/reload, no read audit");
+   await page.setViewportSize({width:390,height:844});
+   const portfolioTableScroll=page.getByRole("region",{name:"Портфель воронок — таблица"});
+   await portfolioTableScroll.waitFor();
+   const mobilePortfolio=await portfolioTableScroll.evaluate(element=>({
+     viewport:window.innerWidth,document:document.documentElement.scrollWidth,
+     local:element.clientWidth,content:element.scrollWidth
+   }));
+   assert.ok(mobilePortfolio.viewport<=391&&mobilePortfolio.document<=391,
+     "SK-07 cannot overflow the 390px mobile viewport: "+JSON.stringify(mobilePortfolio));
+   assert.ok(mobilePortfolio.content>mobilePortfolio.local,
+     "Enterprise portfolio wide table must scroll INSIDE named region on mobile");
+   await portfolioTableScroll.focus();
+   assert.equal(await portfolioTableScroll.evaluate(element=>element===document.activeElement),true,
+     "Portable table scroll region must be keyboard focusable");
+   await page.keyboard.press("ArrowRight");
+   await expect.poll(()=>portfolioTableScroll.evaluate(element=>element.scrollLeft)).toBeGreaterThan(0);
+   await page.setViewportSize({width:1280,height:720});
+   checkpoint("SK-07 complete portfolio, period comparison, read-only D1, Back/reload and accessible mobile tables");
 
    await page.getByLabel("Тема",{exact:true}).selectOption("dark");
    assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
