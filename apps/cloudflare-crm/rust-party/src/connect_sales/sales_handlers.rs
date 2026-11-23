@@ -125,14 +125,14 @@ impl sale_wire::DealService for SalesV2Service {
             return Err(ConnectError::invalid_argument("page_size exceeds 100"));
         }
         if !req.page.page_token.is_empty() {
-            Self::id(&req.page.page_token)?;
+            Self::id(req.page.page_token)?;
         }
         let (items, next) = sales_territories::list(
             &self.d1()?,
             &self.tenant,
             sales_territories::Kind::Territory,
             sales_territories::Filter {
-                after: &req.page.page_token,
+                after: req.page.page_token,
                 limit: size as usize,
                 include_archived: req.include_archived,
                 territory_id: None,
@@ -282,7 +282,7 @@ impl sale_wire::DealService for SalesV2Service {
             return Err(ConnectError::invalid_argument("page_size exceeds 100"));
         }
         if !req.page.page_token.is_empty() {
-            Self::id(&req.page.page_token)?;
+            Self::id(req.page.page_token)?;
         }
         let after = req.page.page_token.to_owned();
         let include_archived = req.include_archived;
