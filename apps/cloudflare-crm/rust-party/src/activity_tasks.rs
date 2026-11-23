@@ -297,18 +297,26 @@ pub(super) async fn create_typed(
     // Membership is authoritative in the existing signed Access owner. The
     // lookup occurs AFTER the original receipt, so replay succeeds even if the
     // assignee was later deactivated; no new write can target an inactive user.
-    let target=if let Some(requested)=input.assignee_email.as_deref(){
-        let normalized=match super::access_members::email(requested){
-            Ok(value)=>value,
-            Err(_)=>return Ok(Err(MutationFailure::domain(
-                "ACTIVITIES_ASSIGNEE_INVALID",ErrorCode::InvalidArgument))),
+    let target = if let Some(requested) = input.assignee_email.as_deref() {
+        let normalized = match super::access_members::email(requested) {
+            Ok(value) => value,
+            Err(_) => {
+                return Ok(Err(MutationFailure::domain(
+                    "ACTIVITIES_ASSIGNEE_INVALID",
+                    ErrorCode::InvalidArgument,
+                )));
+            }
         };
-        if !super::access_members::valid_assignee(db,tenant,&normalized).await?{
+        if !super::access_members::valid_assignee(db, tenant, &normalized).await? {
             return Ok(Err(MutationFailure::domain(
-                "ACTIVITIES_ASSIGNEE_NOT_ENROLLED",ErrorCode::InvalidArgument)));
+                "ACTIVITIES_ASSIGNEE_NOT_ENROLLED",
+                ErrorCode::InvalidArgument,
+            )));
         }
         normalized
-    }else{actor.to_owned()};
+    } else {
+        actor.to_owned()
+    };
     let owner = match ActorId::try_new(target) {
         Ok(x) => TaskOwner::Actor(x),
         Err(_) => {
@@ -409,24 +417,38 @@ pub(super) async fn update_typed(
         )));
     };
     let expected_version = input.expected_version;
-    let owner=match input.owner {
-        Change::Keep=>Patch::Keep,
-        Change::Clear=>return Ok(Err(MutationFailure::domain(
-            "ACTIVITIES_TASK_OWNER_REQUIRED",ErrorCode::InvalidArgument))),
-        Change::Set(value)=>{
-            let normalized=match super::access_members::email(&value){
-                Ok(value)=>value,
-                Err(_)=>return Ok(Err(MutationFailure::domain(
-                    "ACTIVITIES_ASSIGNEE_INVALID",ErrorCode::InvalidArgument))),
+    let owner = match input.owner {
+        Change::Keep => Patch::Keep,
+        Change::Clear => {
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_TASK_OWNER_REQUIRED",
+                ErrorCode::InvalidArgument,
+            )));
+        }
+        Change::Set(value) => {
+            let normalized = match super::access_members::email(&value) {
+                Ok(value) => value,
+                Err(_) => {
+                    return Ok(Err(MutationFailure::domain(
+                        "ACTIVITIES_ASSIGNEE_INVALID",
+                        ErrorCode::InvalidArgument,
+                    )));
+                }
             };
-            if !super::access_members::valid_assignee(db,tenant,&normalized).await?{
+            if !super::access_members::valid_assignee(db, tenant, &normalized).await? {
                 return Ok(Err(MutationFailure::domain(
-                    "ACTIVITIES_ASSIGNEE_NOT_ENROLLED",ErrorCode::InvalidArgument)));
+                    "ACTIVITIES_ASSIGNEE_NOT_ENROLLED",
+                    ErrorCode::InvalidArgument,
+                )));
             }
-            let actor=match ActorId::try_new(normalized){
-                Ok(value)=>value,
-                Err(_)=>return Ok(Err(MutationFailure::domain(
-                    "ACTIVITIES_ASSIGNEE_INVALID",ErrorCode::InvalidArgument))),
+            let actor = match ActorId::try_new(normalized) {
+                Ok(value) => value,
+                Err(_) => {
+                    return Ok(Err(MutationFailure::domain(
+                        "ACTIVITIES_ASSIGNEE_INVALID",
+                        ErrorCode::InvalidArgument,
+                    )));
+                }
             };
             Patch::Set(TaskOwner::Actor(actor))
         }
@@ -718,7 +740,7 @@ pub(super) async fn list_page_typed(
         query.push_str(" AND account_id=?");
         params.push(JsValue::from_str(id));
     }
-    if let Some(owner)=owner_identity {
+    if let Some(owner) = owner_identity {
         // TaskOwner actor identity is a typed original domain property. Filter
         // before LIMIT and any due cursor, never by a frontend slice.
         query.push_str(" AND json_extract(t.state,'$.owner.actor_id')=?");
@@ -854,16 +876,24 @@ pub(super) struct TaskWorkload {
     pub(super) overdue_open_count: i64,
     pub(super) due_next_7_days_count: i64,
 }
-pub(super) async fn workload(
-    db:&D1Database,tenant:&str
-)->Result<(Vec<TaskWorkload>,i64)>{
-    let now=now_nanos();
-    let week=now.saturating_add(7*24*3600*1_000_000_000);
+pub(super) async fn workload(db: &D1Database, tenant: &str) -> Result<(Vec<TaskWorkload>, i64)> {
+    let now = now_nanos();
+    let week = now.saturating_add(7 * 24 * 3600 * 1_000_000_000);
     // This is the ORIGINAL Task owner, aggregating ALL tenant tasks in D1,
     // independently of pagination, while keeping Actor and Team disjoint.
-    let sql="SELECT COALESCE(json_extract(state,'$.owner.actor_id'),'') AS assignee_identity,COALESCE(json_extract(state,'$.owner.team_id'),'') AS owner_team_id,       SUM(CASE WHEN json_extract(state,'$.status')='open' THEN 1 ELSE 0 END) AS open_count,       SUM(CASE WHEN json_extract(state,'$.status')='completed' THEN 1 ELSE 0 END) AS completed_count,       SUM(CASE WHEN json_extract(state,'$.status')='open' AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)<CAST(? AS INTEGER) THEN 1 ELSE 0 END) AS overdue_open_count,       SUM(CASE WHEN json_extract(state,'$.status')='open' AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)>=CAST(? AS INTEGER) AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)<CAST(? AS INTEGER) THEN 1 ELSE 0 END) AS due_next_7_days_count       FROM crm_activity_task_records WHERE tenant=? GROUP BY assignee_identity,owner_team_id ORDER BY assignee_identity,owner_team_id";
-    let result=bind(db,sql,&[JsValue::from_str(&now.to_string()),
-       JsValue::from_str(&now.to_string()),JsValue::from_str(&week.to_string()),
-       JsValue::from_str(tenant)])?.all().await?.results::<TaskWorkload>()?;
-    Ok((result,now/1_000_000_000))
+    let sql = "SELECT COALESCE(json_extract(state,'$.owner.actor_id'),'') AS assignee_identity,COALESCE(json_extract(state,'$.owner.team_id'),'') AS owner_team_id,       SUM(CASE WHEN json_extract(state,'$.status')='open' THEN 1 ELSE 0 END) AS open_count,       SUM(CASE WHEN json_extract(state,'$.status')='completed' THEN 1 ELSE 0 END) AS completed_count,       SUM(CASE WHEN json_extract(state,'$.status')='open' AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)<CAST(? AS INTEGER) THEN 1 ELSE 0 END) AS overdue_open_count,       SUM(CASE WHEN json_extract(state,'$.status')='open' AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)>=CAST(? AS INTEGER) AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)<CAST(? AS INTEGER) THEN 1 ELSE 0 END) AS due_next_7_days_count       FROM crm_activity_task_records WHERE tenant=? GROUP BY assignee_identity,owner_team_id ORDER BY assignee_identity,owner_team_id";
+    let result = bind(
+        db,
+        sql,
+        &[
+            JsValue::from_str(&now.to_string()),
+            JsValue::from_str(&now.to_string()),
+            JsValue::from_str(&week.to_string()),
+            JsValue::from_str(tenant),
+        ],
+    )?
+    .all()
+    .await?
+    .results::<TaskWorkload>()?;
+    Ok((result, now / 1_000_000_000))
 }

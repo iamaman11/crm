@@ -385,23 +385,33 @@ impl RpcPolicy {
 const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     (
         "/crm.access.v2.MemberService/GetMyMembership",
-        RpcPolicy { permission: RpcPermission::Read },
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
     ),
     (
         "/crm.access.v2.MemberService/ListMembers",
-        RpcPolicy { permission: RpcPermission::Read },
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
     ),
     (
         "/crm.access.v2.MemberService/GetMember",
-        RpcPolicy { permission: RpcPermission::Read },
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
     ),
     (
         "/crm.access.v2.MemberService/ProvisionMember",
-        RpcPolicy { permission: RpcPermission::Write },
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
     ),
     (
         "/crm.access.v2.MemberService/UpdateMember",
-        RpcPolicy { permission: RpcPermission::Write },
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
     ),
     (
         "/crm.activities.v2.InteractionService/CreateInteraction",

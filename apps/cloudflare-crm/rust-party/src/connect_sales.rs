@@ -2,8 +2,8 @@
 //! Cloudflare Access and tenant selection happen BEFORE routing here.
 //! Domain rules and storage belong exclusively to existing crm-sales and D1.
 use super::{
-    access, access_members, accounts, activity_tasks, consents, contact_points, data_quality, identity_resolution,
-    parties, party_relationships, sales_deals, sales_pipelines, sales_views,
+    access, access_members, accounts, activity_tasks, consents, contact_points, data_quality,
+    identity_resolution, parties, party_relationships, sales_deals, sales_pipelines, sales_views,
 };
 use axum::Router;
 use buffa_types::google::protobuf::Timestamp;
@@ -49,8 +49,8 @@ pub mod proto {
     use ::core::fmt;
     include!(concat!(env!("OUT_DIR"), "/_connectrpc.rs"));
 }
-use proto::crm::accounts::v2 as account_wire;
 use proto::crm::access::v2 as member_wire;
+use proto::crm::accounts::v2 as account_wire;
 use proto::crm::activities::v2 as task_wire;
 use proto::crm::activities::v2 as interaction_wire;
 use proto::crm::consents::v2 as consent_wire;
@@ -64,11 +64,11 @@ use proto::crm::sales::v2 as sale_wire;
 
 // Domain Connect traits live in native Rust submodules; one router below.
 mod account_handlers;
-mod member_handlers;
 mod consent_handlers;
 mod contact_handlers;
 mod identity_handlers;
 mod interaction_handlers;
+mod member_handlers;
 mod overview_handlers;
 mod party_handlers;
 mod quality_handlers;
@@ -578,32 +578,45 @@ impl OwnedService for MemberV2Service {
     const OWNER: &'static str = "crm.access";
 }
 impl MemberV2Service {
-    fn d1(&self)->std::result::Result<D1Database,ConnectError>{
-        self.env.d1("DB").map_err(|_|ConnectError::internal("D1 unavailable"))
+    fn d1(&self) -> std::result::Result<D1Database, ConnectError> {
+        self.env
+            .d1("DB")
+            .map_err(|_| ConnectError::internal("D1 unavailable"))
     }
-    fn role(value:buffa::EnumValue<member_wire::MemberRole>)
-       ->std::result::Result<&'static str,ConnectError>{
-        if value==member_wire::MemberRole::MEMBER_ROLE_ADMIN{Ok("admin")}
-        else if value==member_wire::MemberRole::MEMBER_ROLE_VIEWER{Ok("viewer")}
-        else {Err(ConnectError::invalid_argument("ACCESS_MEMBER_ROLE_INVALID"))}
+    fn role(
+        value: buffa::EnumValue<member_wire::MemberRole>,
+    ) -> std::result::Result<&'static str, ConnectError> {
+        if value == member_wire::MemberRole::MEMBER_ROLE_ADMIN {
+            Ok("admin")
+        } else if value == member_wire::MemberRole::MEMBER_ROLE_VIEWER {
+            Ok("viewer")
+        } else {
+            Err(ConnectError::invalid_argument("ACCESS_MEMBER_ROLE_INVALID"))
+        }
     }
-    fn wire(value:&access_members::Member)
-      ->std::result::Result<member_wire::Member,ConnectError>{
-        let role=match value.role.as_str(){
-            "admin"=>member_wire::MemberRole::MEMBER_ROLE_ADMIN,
-            "viewer"=>member_wire::MemberRole::MEMBER_ROLE_VIEWER,
-            _=>return Err(ConnectError::internal("Access member has invalid role"))
+    fn wire(
+        value: &access_members::Member,
+    ) -> std::result::Result<member_wire::Member, ConnectError> {
+        let role = match value.role.as_str() {
+            "admin" => member_wire::MemberRole::MEMBER_ROLE_ADMIN,
+            "viewer" => member_wire::MemberRole::MEMBER_ROLE_VIEWER,
+            _ => return Err(ConnectError::internal("Access member has invalid role")),
         };
-        Ok(member_wire::Member{
-            email:value.email.clone(),role:role.into(),active:value.active==1,
-            version:value.version,..Default::default()
+        Ok(member_wire::Member {
+            email: value.email.clone(),
+            role: role.into(),
+            active: value.active == 1,
+            version: value.version,
+            ..Default::default()
         })
     }
-    fn receipt(&self,saved:&access_members::Saved)->core_v2::MutationReceipt{
-        core_v2::MutationReceipt{
-           request_id:self.request_id.clone(),resource_version:saved.member.version,
-           replayed:saved.replayed,
-           original_request_id:saved.original_request_id.clone(),..Default::default()
+    fn receipt(&self, saved: &access_members::Saved) -> core_v2::MutationReceipt {
+        core_v2::MutationReceipt {
+            request_id: self.request_id.clone(),
+            resource_version: saved.member.version,
+            replayed: saved.replayed,
+            original_request_id: saved.original_request_id.clone(),
+            ..Default::default()
         }
     }
 }
@@ -680,13 +693,13 @@ impl TaskV2Service {
                 .find(|relation| relation.resource_type == "sales.deal")
                 .map(|relation| relation.resource_id.clone())
                 .unwrap_or_default(),
-            assignee_identity: match task.owner(){
-                crm_activities::TaskOwner::Actor(value)=>value.to_string(),
-                crm_activities::TaskOwner::Team(_)=>String::new(),
+            assignee_identity: match task.owner() {
+                crm_activities::TaskOwner::Actor(value) => value.to_string(),
+                crm_activities::TaskOwner::Team(_) => String::new(),
             },
-            owner_team_id: match task.owner(){
-                crm_activities::TaskOwner::Team(value)=>value.as_str().to_owned(),
-                crm_activities::TaskOwner::Actor(_)=>String::new(),
+            owner_team_id: match task.owner() {
+                crm_activities::TaskOwner::Team(value) => value.as_str().to_owned(),
+                crm_activities::TaskOwner::Actor(_) => String::new(),
             },
             ..Default::default()
         })
