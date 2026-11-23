@@ -66,13 +66,13 @@ mod account_handlers;
 mod consent_handlers;
 mod contact_handlers;
 mod identity_handlers;
+mod interaction_handlers;
 mod overview_handlers;
 mod party_handlers;
 mod quality_handlers;
 mod relationship_handlers;
 mod sales_handlers;
 mod task_handlers;
-mod interaction_handlers;
 use overview_handlers::Customer360V2Service;
 use proto::crm::customer_360::v2 as overview_wire;
 mod data_operations_handlers;
@@ -1021,28 +1021,33 @@ impl OwnedService for InteractionV2Service {
     const OWNER: &'static str = crm_activities::MODULE_ID;
 }
 impl InteractionV2Service {
-    fn d1(&self) -> std::result::Result<D1Database,ConnectError> {
-        self.env.d1("DB").map_err(|_|ConnectError::internal("D1 unavailable"))
+    fn d1(&self) -> std::result::Result<D1Database, ConnectError> {
+        self.env
+            .d1("DB")
+            .map_err(|_| ConnectError::internal("D1 unavailable"))
     }
     fn convert(item: &crm_activities::interactions::Interaction) -> interaction_wire::Interaction {
-        let kind=match item.kind {
-            crm_activities::interactions::InteractionKind::Call=>
-                interaction_wire::InteractionKind::INTERACTION_KIND_CALL,
-            crm_activities::interactions::InteractionKind::Meeting=>
-                interaction_wire::InteractionKind::INTERACTION_KIND_MEETING,
-            crm_activities::interactions::InteractionKind::Note=>
-                interaction_wire::InteractionKind::INTERACTION_KIND_NOTE,
+        let kind = match item.kind {
+            crm_activities::interactions::InteractionKind::Call => {
+                interaction_wire::InteractionKind::INTERACTION_KIND_CALL
+            }
+            crm_activities::interactions::InteractionKind::Meeting => {
+                interaction_wire::InteractionKind::INTERACTION_KIND_MEETING
+            }
+            crm_activities::interactions::InteractionKind::Note => {
+                interaction_wire::InteractionKind::INTERACTION_KIND_NOTE
+            }
         };
         interaction_wire::Interaction {
-            interaction_id:item.interaction_id.clone(),
-            account_id:item.account_id.clone(),
-            deal_id:item.deal_id.clone().unwrap_or_default(),
-            kind:kind.into(),
-            text:item.text.clone(),
-            author:item.author.clone(),
-            occurred_at:Some(ContactPointV2Service::timestamp(item.occurred_at_nanos)).into(),
-            recorded_at:Some(ContactPointV2Service::timestamp(item.recorded_at_nanos)).into(),
-            version:item.version,
+            interaction_id: item.interaction_id.clone(),
+            account_id: item.account_id.clone(),
+            deal_id: item.deal_id.clone().unwrap_or_default(),
+            kind: kind.into(),
+            text: item.text.clone(),
+            author: item.author.clone(),
+            occurred_at: Some(ContactPointV2Service::timestamp(item.occurred_at_nanos)).into(),
+            recorded_at: Some(ContactPointV2Service::timestamp(item.recorded_at_nanos)).into(),
+            version: item.version,
             ..Default::default()
         }
     }
