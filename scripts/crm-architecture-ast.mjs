@@ -141,7 +141,6 @@ function inspect(file,source,strict=true){
 }
 const entries=["packages/client/src/cloudflare.ts"];
 entries.push("apps/cloudflare-crm/web/src/app.tsx",...collect("apps/cloudflare-crm/web/src"));
-const visited=new Set();
 function resolveInternal(spec,parent){
  if(/\.(?:css|scss|sass|svg|png|jpe?g|webp|woff2?|ico)(?:\?.*)?$/.test(spec))return null;
  const from=resolve(root,parent);
@@ -166,22 +165,28 @@ function resolveInternal(spec,parent){
  }
  return rel;
 }
-function follow(file){
- if(visited.has(file))return;
- visited.add(file);
- if(!existsSync(resolve(root,file)))fail(file,"required active source missing");
- if(file.startsWith("apps/cloudflare-crm/web/src/")&&
-    !/\.(ts|tsx)$/.test(file))
-   fail(file,"legacy JS/JSX reachable after cutover");
- // Generated protobuf source is fully checked by the pinned generation/typecheck.
- if(file.startsWith("packages/client/gen/"))return;
- const source=read(file);
- for(const imp of inspect(file,source,true)){
-  const next=resolveInternal(imp,file);
-  if(next)follow(next);
+export function inspectFrontend(){
+ const visited=new Set();
+ function follow(file){
+  if(visited.has(file))return;
+  visited.add(file);
+  if(!existsSync(resolve(root,file)))fail(file,"required active source missing");
+  if(file.startsWith("apps/cloudflare-crm/web/src/")&&
+     !/\.(ts|tsx)$/.test(file))
+    fail(file,"legacy JS/JSX reachable after cutover");
+  // Generated protobuf source is fully checked by the pinned generation/typecheck.
+  if(file.startsWith("packages/client/gen/"))return;
+  const source=read(file);
+  for(const imp of inspect(file,source,true)){
+   const next=resolveInternal(imp,file);
+   if(next)follow(next);
+  }
  }
+ entries.forEach(follow);
+ return [...visited].sort();
 }
-entries.forEach(follow);
-console.log(JSON.stringify({event:"crm.ts-ast-architecture",result:"PASS",
- policy_schema:policy.schema_version,inspected:[...visited].sort()}));
+if(import.meta.main){
+ console.log(JSON.stringify({event:"crm.ts-ast-architecture",result:"PASS",
+  policy_schema:policy.schema_version,inspected:inspectFrontend()}));
+}
 export {inspect,resolveInternal};

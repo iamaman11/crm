@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {createRequire} from "node:module";
 const clientRequire=createRequire(new URL("../packages/client/package.json",import.meta.url));
-const {fromBinary,toBinary,create}=clientRequire("@bufbuild/protobuf");
+const {fromBinary,toBinary,create,createFileRegistry,ScalarType}=clientRequire("@bufbuild/protobuf");
 import {descriptorMethods,targetMethods} from "./crm-rpc-descriptors.mjs";
 const {FileDescriptorSetSchema,MethodOptions_IdempotencyLevel}=clientRequire("@bufbuild/protobuf/wkt");
 const descriptor=process.env.CRM_PROTO_DESCRIPTOR_FILE;
@@ -34,20 +34,52 @@ const namedField=(message,name)=>{
  return found;
 };
 const {NO_SIDE_EFFECTS,IDEMPOTENT}=MethodOptions_IdempotencyLevel;
-function assertWireContracts(files) {
- for(const file of files)for(const service of file.service){
+function assertWireContracts(files, descriptors) {
+ const registry=createFileRegistry(create(FileDescriptorSetSchema,{file:descriptors}));
+ // The same message may be both input and output. Only inputs forbid identity fields.
+ const seenInputs=new Set(),seenOutputs=new Set();
+ function visit(message,isInput){
+  const seen=isInput?seenInputs:seenOutputs;
+  if(seen.has(message.typeName))return;
+  seen.add(message.typeName);
+  for(const field of message.fields){
+   const name=message.typeName+"."+field.name;
+   if(isInput)assert.doesNotMatch(field.name,/^(tenant_id|actor_id|role_id|is_admin|allow_skip|allow_regression)$/,
+    "request trusts client identity/policy: "+name);
+   assert.ok(field.scalar!==ScalarType.DOUBLE && field.scalar!==ScalarType.FLOAT,
+    "floating-point wire field "+name);
+   // Protobuf-ES resolves imported types, list elements and map values here.
+   if(field.message)visit(field.message,isInput);
+  }
+ }
+ for(const file of files){
   assert.match(file.package,/^crm\.[a-z0-9_]+\.v(?:[2-9]|[1-9][0-9]+)$/);
-  for(const method of service.method){
-   const req=findMessage(file,method.inputType);
-   const res=findMessage(file,method.outputType);
-   const forbidden=req.field.filter(x=>/^(tenant_id|actor_id|role_id|is_admin|allow_skip|allow_regression)$/.test(x.name));
-   assert.deepEqual(forbidden.map(x=>x.name),[],file.name+" "+method.name+" trusts client identity/policy");
-   for(const field of [...req.field,...res.field])
-    assert.ok(field.type!==1 && field.type!==2,"floating-point wire field "+file.name+" "+field.name);
+  for(const service of file.service){
+   const compiledService=registry.getService(file.package+"."+service.name);
+   assert.ok(compiledService,"missing compiled service "+service.name);
+   for(const method of compiledService.methods){
+    visit(method.input,true);
+    visit(method.output,false);
+   }
   }
  }
 }
-test("active CRM wire contracts reject client identity fields and floating-point values",()=>assertWireContracts(finalFiles));
+test("active CRM wire contracts reject client identity fields and floating-point values",()=>{
+ assertWireContracts(finalFiles,compiled.file);
+});
+test("an imported nested message must obey request and response field rules",()=>{
+ for(const [message,name,type,expected] of [
+  ["MutationPrecondition","actor_id",9,/request trusts client identity.*MutationPrecondition.actor_id/],
+  ["MutationReceipt","inexact",2,/floating-point wire field .*MutationReceipt.inexact/],
+ ]){
+  const files=structuredClone(compiled.file);
+  const core=files.find(file=>file.package==="crm.core.v2");
+  core.messageType.find(item=>item.name===message).field.push({
+   name,number:1000,type,label:1
+  });
+  assert.throws(()=>assertWireContracts(finalFiles,files),expected);
+ }
+});
 test("every RPC declares side-effect semantics using standard Protobuf options",()=>{
  for(const {file,service} of allServices)for(const method of service.method){
   const level=method.options?.idempotencyLevel;
@@ -110,13 +142,17 @@ test("future v4 and v10 use the same active scope and reject invalid contracts",
   const next=structuredClone(task);
   next.name="crm/activities/v"+version+"/task.proto";
   next.package="crm.activities.v"+version;
+  for(const message of next.messageType)for(const field of message.field){
+   if(field.typeName?.startsWith(".crm.activities.v2."))
+    field.typeName=field.typeName.replace(".crm.activities.v2.", "."+next.package+".");
+  }
   for(const service of next.service)for(const method of service.method){
    method.inputType=method.inputType.replace(".crm.activities.v2.",".crm.activities.v"+version+".");
    method.outputType=method.outputType.replace(".crm.activities.v2.",".crm.activities.v"+version+".");
   }
   const selected=activeFiles([...compiled.file,next]);
   assert.ok(selected.some(f=>f.name===next.name),"future version omitted: v"+version);
-  assertWireContracts([next]);
+  assertWireContracts([next],[...compiled.file,next]);
   assertMutationContracts([next]);
   const malformed=structuredClone(next);
   const message=malformed.messageType.find(m=>m.name==="CreateTaskRequest");
@@ -127,6 +163,6 @@ test("future v4 and v10 use the same active scope and reject invalid contracts",
   unsafe.messageType.find(m=>m.name==="CreateTaskRequest").field.push({
    name:"unsafe_float",number:1000,type:1,label:1,jsonName:"unsafeFloat"
   });
-  assert.throws(()=>assertWireContracts([unsafe]),/floating-point wire field/);
+  assert.throws(()=>assertWireContracts([unsafe],[...compiled.file,unsafe]),/floating-point wire field/);
  }
 });

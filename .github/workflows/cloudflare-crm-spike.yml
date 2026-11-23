@@ -132,16 +132,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pnpm gen
-          pnpm exec buf build proto --as-file-descriptor-set -o /tmp/crm-proto-descriptors.binpb
+          # Buf's image retains generation metadata and is FileDescriptorSet-compatible.
+          pnpm exec buf build proto -o /tmp/crm-proto-descriptors.binpb
+          pnpm web:generate /tmp/crm-proto-descriptors.binpb
           node scripts/crm-rpc-descriptors.mjs /tmp/crm-proto-descriptors.binpb
-          CRM_PROTO_DESCRIPTOR_FILE=/tmp/crm-proto-descriptors.binpb \
-            node --test scripts/crm-core-v2.test.mjs scripts/crm-cutover-contracts.test.mjs
-          CRM_PROTO_DESCRIPTOR_FILE=/tmp/crm-proto-descriptors.binpb \
-            node --test scripts/crm-rpc-descriptors.test.mjs
-          node --test scripts/crm-clean-schema.test.mjs
-          node scripts/crm-architecture-ast.mjs
-          node --test scripts/crm-architecture-ast.test.mjs
+          export CRM_PROTO_DESCRIPTOR_FILE=/tmp/crm-proto-descriptors.binpb
+          node --test scripts/crm-core-v2.test.mjs scripts/crm-cutover-contracts.test.mjs \
+            scripts/crm-rpc-descriptors.test.mjs scripts/crm-clean-schema.test.mjs \
+            scripts/crm-architecture-ast.test.mjs
           pnpm --filter @ultimate-crm/client typecheck
           pnpm exec vitest run packages/client/src/cloudflare-v2-contract.test.ts
           pnpm --filter @ultimate-crm/ui typecheck
@@ -410,7 +408,8 @@ jobs:
               independent_byte_reproducibility:"NOT_TESTED"
             },null,2)+"\n");
           '
-          find dist rust-party/build .release/native-build -type f -print0 | LC_ALL=C sort -z |
+          # The restored build was compared with the production backup above.
+          find dist rust-party/build -type f -print0 | LC_ALL=C sort -z |
             xargs -0 sha256sum > .release/compiled-sha256.txt
           sha256sum .release/provenance.json >> .release/compiled-sha256.txt
           sha256sum --check --strict .release/compiled-sha256.txt
@@ -425,7 +424,6 @@ jobs:
             apps/cloudflare-crm/.release/source-sha.txt
             apps/cloudflare-crm/.release/provenance.json
             apps/cloudflare-crm/.release/compiled-sha256.txt
-            apps/cloudflare-crm/.release/native-build/
           if-no-files-found: error
           retention-days: 7
           include-hidden-files: true

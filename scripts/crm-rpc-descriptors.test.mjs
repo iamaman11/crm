@@ -84,6 +84,8 @@ test("future v4 and v10 RPCs must enter the required scope without a registry ed
     package:"crm.parties.v"+version});
   assert.ok(targetMethods(extended).includes(future));
   const report=fixture();
+  assert.throws(()=>validateBindings(report,extended),/active RPC absent from canonical module.yaml binding/);
+  report.modules.find(module=>module.module_id==="crm.parties").rpc_bindings.push({path:future});
   assert.throws(()=>validateRuntime(report,extended,validateBindings(report,extended)),/full contract differs/);
  }
 });

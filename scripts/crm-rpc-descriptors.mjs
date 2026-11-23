@@ -34,6 +34,11 @@ export function validateBindings(report,available){
   bound.set(binding.path,{...binding,request:descriptor.request,response:descriptor.response,
    module_id:module.module_id,linked:module.linked});
  }
+ for(const path of targetMethods(available)){
+  const binding=bound.get(path);
+  if(!binding)fail("active RPC absent from canonical module.yaml binding "+path);
+  if(!binding.linked)fail("RPC owner is not linked into Worker "+path);
+ }
  return bound;
 }
 // Select the Cloudflare generation of contracts from compiled file descriptors.

@@ -1,10 +1,15 @@
 // Mutation-style self-tests: the gate must reject real prohibited code.
 import test from "node:test";
 import assert from "node:assert/strict";
-import {inspect,resolveInternal} from "./crm-architecture-ast.mjs";
+import {inspect,inspectFrontend,resolveInternal} from "./crm-architecture-ast.mjs";
 
 const web="apps/cloudflare-crm/web/src/Check.tsx";
 const client="packages/client/src/cloudflare.ts";
+test("inspect the active CRM frontend and its resolved workspace imports",()=>{
+ const files=inspectFrontend();
+ assert.ok(files.includes("apps/cloudflare-crm/web/src/app.tsx"));
+ assert.ok(files.includes(client));
+});
 const rejects=(name,source,file=web)=>test(name,()=>assert.throws(
   ()=>inspect(file,source),/CRM_AST_VIOLATION/));
 const permits=(name,source,file=web)=>test(name,()=>assert.doesNotThrow(
