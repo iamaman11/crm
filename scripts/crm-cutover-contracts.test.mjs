@@ -6,9 +6,9 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {createRequire} from "node:module";
 const clientRequire=createRequire(new URL("../packages/client/package.json",import.meta.url));
-const {fromBinary,toBinary,create,createFileRegistry,isFieldSet,ScalarType}=clientRequire("@bufbuild/protobuf");
+const {fromBinary,toBinary,create,createFileRegistry,ScalarType}=clientRequire("@bufbuild/protobuf");
 import {descriptorMethods,targetMethods} from "./crm-rpc-descriptors.mjs";
-const {FileDescriptorSetSchema,AnySchema,FieldDescriptorProtoSchema,FieldDescriptorProto_Label,FieldDescriptorProto_Type,MethodOptions_IdempotencyLevel}=clientRequire("@bufbuild/protobuf/wkt");
+const {FileDescriptorSetSchema,AnySchema,FieldDescriptorProto_Label,FieldDescriptorProto_Type,MethodOptions_IdempotencyLevel}=clientRequire("@bufbuild/protobuf/wkt");
 const descriptor=process.env.CRM_PROTO_DESCRIPTOR_FILE;
 if(!descriptor)throw Error("compiled Buf FileDescriptorSet required");
 const compiled=fromBinary(FileDescriptorSetSchema,readFileSync(descriptor));
@@ -21,23 +21,47 @@ function activeFiles(files) {
 }
 const finalFiles=activeFiles(compiled.file);
 if(!finalFiles.length)throw Error("no versioned cutover services discovered");
-const allServices=finalFiles.flatMap(f=>f.service.map(service=>({file:f,service})));
-const fullName=(pkg,name)=>"."+pkg+"."+name;
-const findMessage=(file,name)=>{
- const found=file.messageType.find(message=>fullName(file.package,message.name)===name);
- assert.ok(found,"missing canonical typed "+name);
- return found;
-};
 const namedField=(message,name)=>{
  const found=message.field.find(f=>f.name===name);
  assert.ok(found,"missing "+message.name+"."+name);
  return found;
 };
 const {NO_SIDE_EFFECTS,IDEMPOTENT}=MethodOptions_IdempotencyLevel;
+// Resolve method fields through Protobuf-ES, including messages declared in imported files.
+function canonicalField(message, name, type, required = false) {
+ const typeName = "crm.core.v2." + type;
+ const path = message.typeName + "." + name;
+ const matches = message.fields.filter(field => field.name === name || field.message?.typeName === typeName);
+ if (!matches.length) {
+  assert.ok(!required, "missing " + path);
+  return false;
+ }
+ assert.equal(matches.length, 1, "ambiguous " + path);
+ const [field] = matches;
+ assert.equal(field.name, name, "canonical name required for " + path);
+ assert.equal(field.fieldKind, "message", "singular message required for " + path);
+ assert.equal(field.message.typeName, typeName, "incorrect type for " + path);
+ assert.ok(!field.oneof, "independent field required for " + path);
+ return true;
+}
+function assertMethodContract(method) {
+ const level = method.proto.options?.idempotencyLevel;
+ assert.ok(level === NO_SIDE_EFFECTS || level === IDEMPOTENT, "explicit semantics required: " + method.name);
+ const writes = level === IDEMPOTENT;
+ assert.equal(canonicalField(method.input, "precondition", "MutationPrecondition", writes), writes,
+  "read-only request has a mutation precondition: " + method.name);
+ assert.equal(canonicalField(method.output, "receipt", "MutationReceipt", writes), writes,
+  "read-only response has a mutation receipt: " + method.name);
+ const paginated = canonicalField(method.input, "page", "PageRequest");
+ assert.equal(canonicalField(method.output, "page_info", "PageInfo"), paginated,
+  "page request/continuation must be paired: " + method.name);
+ return {writes, paginated};
+}
 function assertWireContracts(files, descriptors) {
  const registry=createFileRegistry(create(FileDescriptorSetSchema,{file:descriptors}));
  // The same message may be both input and output. Only inputs forbid identity fields.
  const seenInputs=new Set(),seenOutputs=new Set();
+ let mutations=0, paginatedMethods=0;
  function visit(message,isInput){
   const seen=isInput?seenInputs:seenOutputs;
   if(seen.has(message.typeName))return;
@@ -66,14 +90,20 @@ function assertWireContracts(files, descriptors) {
    assert.ok(compiledService,"missing compiled service "+service.name);
    for(const method of compiledService.methods){
     assert.equal(method.methodKind,"unary",method.name+" must be unary");
+    const {writes,paginated}=assertMethodContract(method);
+    if(writes)mutations++;
+    if(paginated)paginatedMethods++;
     visit(method.input,true);
     visit(method.output,false);
    }
   }
  }
+ return {mutations,paginatedMethods};
 }
-test("active CRM wire contracts reject client identity fields and floating-point values",()=>{
- assertWireContracts(finalFiles,compiled.file);
+test("compiled active CRM methods enforce typed reads, mutations, pagination and payloads",()=>{
+ const {mutations,paginatedMethods}=assertWireContracts(finalFiles,compiled.file);
+ assert.ok(mutations>0,"no mutation proof");
+ assert.ok(paginatedMethods>0,"no paginated list proof");
 });
 test("an imported nested message must obey request and response field rules",()=>{
  for(const [message,name,type,expected] of [
@@ -98,51 +128,32 @@ test("an imported nested domain enum cannot default to a business decision",()=>
   label:FieldDescriptorProto_Label.OPTIONAL,typeName:".crm.core.v2.MutationPrecondition.Decision"});
  assert.throws(()=>assertWireContracts(finalFiles,files),/Decision default must be UNSPECIFIED/);
 });
-test("every RPC declares side-effect semantics using standard Protobuf options",()=>{
- for(const {file,service} of allServices)for(const method of service.method){
-  const level=method.options?.idempotencyLevel;
-  assert.ok(level===NO_SIDE_EFFECTS||level===IDEMPOTENT,"explicit semantics required: "+method.name);
-  if(level===NO_SIDE_EFFECTS){
-   assert.ok(!findMessage(file,method.inputType).field.some(f=>f.typeName===".crm.core.v2.MutationPrecondition"),
-     "read-only RPC must not require mutation precondition: "+method.name);
-   assert.ok(!findMessage(file,method.outputType).field.some(f=>f.typeName===".crm.core.v2.MutationReceipt"),
-     "read-only RPC must not return a mutation receipt: "+method.name);
-  }
+test("imported RPC messages obey the same canonical field rules",()=>{
+ const files=structuredClone(compiled.file);
+ const task=files.find(file=>file.name==="crm/activities/v2/task.proto");
+ const messages={...task,name:"crm/activities/v2/task_messages.proto",service:[]};
+ task.dependency=[messages.name];
+ task.messageType=[];
+ task.enumType=[];
+ files.splice(files.indexOf(task),0,messages);
+ const check=()=>assertWireContracts([task],files);
+ check();
+ const request=messages.messageType.find(message=>message.name==="ListTasksRequest");
+ const response=messages.messageType.find(message=>message.name==="ListTasksResponse");
+ const page=namedField(request,"page"), info=namedField(response,"page_info");
+ info.label=FieldDescriptorProto_Label.REPEATED;
+ assert.throws(check,/singular message required.*ListTasksResponse.page_info/);
+ info.label=FieldDescriptorProto_Label.OPTIONAL;
+ response.oneofDecl.push({name:"choice"});
+ info.oneofIndex=0;
+ assert.throws(check,/independent field required.*ListTasksResponse.page_info/);
+ delete info.oneofIndex;
+ response.oneofDecl.pop();
+ for(const field of [page,info]){
+  field.type=FieldDescriptorProto_Type.STRING;
+  delete field.typeName;
  }
-});
-function assertMutationContracts(files) {
- let total=0;
- for(const file of files)for(const service of file.service)for(const method of service.method){
-  if(method.options?.idempotencyLevel!==IDEMPOTENT)continue;
-  total++;
-  const request=findMessage(file,method.inputType);
-  const response=findMessage(file,method.outputType);
-  for(const [message,name,type] of [[request,"precondition","MutationPrecondition"],
-   [response,"receipt","MutationReceipt"]]){
-   const field=namedField(message,name);
-   assert.equal(field.typeName,".crm.core.v2."+type,method.name);
-   assert.equal(field.type,FieldDescriptorProto_Type.MESSAGE,method.name);
-   assert.equal(field.label,FieldDescriptorProto_Label.OPTIONAL,method.name+" requires a singular "+name);
-   assert.ok(!isFieldSet(field,FieldDescriptorProtoSchema.field.oneofIndex)||field.proto3Optional,method.name+" requires independent "+name);
-  }
- }
- assert.ok(total>0,"no mutation proof");
-}
-test("all actual mutating RPC contracts require CAS/idempotency and receipts",()=>assertMutationContracts(finalFiles));
-test("paginated RPCs pair typed bounds with explicit continuation",()=>{
- let total=0;
- for(const {file,service} of allServices)for(const method of service.method){
-  const request=findMessage(file,method.inputType);
-  const response=findMessage(file,method.outputType);
-  const paginated=request.field.some(f=>f.typeName===".crm.core.v2.PageRequest");
-  const continuation=response.field.some(f=>f.typeName===".crm.core.v2.PageInfo");
-  assert.equal(paginated,continuation,"page request/continuation must be paired: "+method.name);
-  if(!paginated)continue;
-  total++;
-  assert.equal(namedField(request,"page").typeName,".crm.core.v2.PageRequest");
-  assert.equal(namedField(response,"page_info").typeName,".crm.core.v2.PageInfo");
- }
- assert.ok(total>0,"no paginated list proof");
+ assert.throws(check,/singular message required.*ListTasksRequest.page/);
 });
 test("future domain enums reject accidental default business values",()=>{
  let total=0;
@@ -175,15 +186,19 @@ test("future v4 and v10 use the same active scope and reject invalid contracts",
   const selected=activeFiles([...compiled.file,next]);
   assert.ok(selected.some(f=>f.name===next.name),"future version omitted: v"+version);
   assertWireContracts([next],[...compiled.file,next]);
-  assertMutationContracts([next]);
+  const check=file=>assertWireContracts([file],[...compiled.file,file]);
   const malformed=structuredClone(next);
   const message=malformed.messageType.find(m=>m.name==="CreateTaskRequest");
   assert.ok(message);
   message.field=message.field.filter(f=>f.name!=="precondition");
-  assert.throws(()=>assertMutationContracts([malformed]),/missing CreateTaskRequest.precondition/);
+  assert.throws(()=>check(malformed),/missing .*CreateTaskRequest.precondition/);
   const repeated=structuredClone(next);
   namedField(repeated.messageType.find(m=>m.name==="CreateTaskResponse"),"receipt").label=FieldDescriptorProto_Label.REPEATED;
-  assert.throws(()=>assertMutationContracts([repeated]),/requires a singular receipt/);
+  assert.throws(()=>check(repeated),/singular message required.*CreateTaskResponse.receipt/);
+  const duplicate=structuredClone(next);
+  const input=duplicate.messageType.find(m=>m.name==="CreateTaskRequest");
+  input.field.push({...namedField(input,"precondition"),name:"other",jsonName:"other",number:1000});
+  assert.throws(()=>check(duplicate),/ambiguous .*CreateTaskRequest.precondition/);
   const opaque=structuredClone(next);
   opaque.dependency.push(AnySchema.file.proto.name);
   opaque.messageType.find(m=>m.name==="CreateTaskRequest").field.push({

@@ -120,12 +120,6 @@ jobs:
           npm install --global pnpm@12.21.0
           pnpm --version | grep -Fx '12.21.0'
           pnpm install --frozen-lockfile
-      - name: Validate the schema, generated client and React application
-        env:
-          CRM_PROTO_DESCRIPTOR_FILE: /tmp/crm-proto-descriptors.binpb
-        run: |
-          pnpm web:check
-          git diff --exit-code -- pnpm-lock.yaml
       # One stable Cargo fingerprint cache per locked dependency graph. Cargo itself
       # invalidates changed source/feature artifacts; sccache caches compiled crates.
       # Do not include github.sha: it forces a new 1.1 GB upload on every push.
@@ -144,8 +138,17 @@ jobs:
       # Report actual compiler-cache hits/misses, rather than assuming cache speedup.
       # The Mozilla action also emits end-of-job statistics for the complete job.
       # Clippy checks WASM compilation, so a separate cargo check repeats the work.
-      - name: Run Clippy on the actual Worker for WebAssembly
-        run: cargo clippy --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations
+      - name: Validate the typed schema and frontend alongside WASM Clippy
+        env:
+          CRM_PROTO_DESCRIPTOR_FILE: /tmp/crm-proto-descriptors.binpb
+        shell: bash
+        run: |
+          cargo clippy --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations &
+          clippy_pid=$!
+          status=0
+          pnpm web:check && git diff --exit-code -- pnpm-lock.yaml || status=$?
+          wait "$clippy_pid" || status=$?
+          exit "$status"
       # Installer binaries are cached separately from Cargo compilation outputs.
       - name: Cache pinned native Rust tool CLIs
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -179,15 +182,20 @@ jobs:
             cargo install --locked worker-build --version 0.9.0
           fi
           worker-build --version
-      - name: Compile native Rust Access gate using isolated RSA test keys
-        working-directory: apps/cloudflare-crm/rust-party
-        run: worker-build --dev --locked --features native-ci
-      # Playwright's official headless shell is the only browser needed here.
-      - name: Install and launch headless Chromium after native compilation
+      - name: Build the test Worker, run Rust owner tests and prepare Chromium
         working-directory: apps/cloudflare-crm
         shell: bash
-        run: bash scripts/prepare-chromium.sh
-      - name: Build the release Worker and test Rust owners and signed workerd/D1/Chromium
+        run: |
+          (cd rust-party && worker-build --dev --locked --features native-ci) &
+          worker_pid=$!
+          (cd "$GITHUB_WORKSPACE" && python apps/cloudflare-crm/scripts/test-rust-owners.py) &
+          owners_pid=$!
+          status=0
+          bash scripts/prepare-chromium.sh || status=$?
+          wait "$owners_pid" || status=$?
+          wait "$worker_pid" || status=$?
+          exit "$status"
+      - name: Build the release Worker and test signed workerd/D1/Chromium
         id: crm_native_workerd
         working-directory: apps/cloudflare-crm
         env:
@@ -198,16 +206,10 @@ jobs:
           # Workerd reads the completed native-ci build. The release has its own output directory.
           (cd rust-party && worker-build --release --out-dir ../.release/native-build --locked --features native) &
           release_pid=$!
-          (cd "$GITHUB_WORKSPACE" && python apps/cloudflare-crm/scripts/test-rust-owners.py) &
-          owners_pid=$!
-          browser_status=0
-          node rust-party/test/native.mjs || browser_status=$?
-          owners_status=0
-          wait "$owners_pid" || owners_status=$?
-          release_status=0
-          wait "$release_pid" || release_status=$?
-          echo "workerd exit=$browser_status; Rust owners exit=$owners_status; release exit=$release_status"
-          (( browser_status == 0 && owners_status == 0 && release_status == 0 ))
+          status=0
+          node rust-party/test/native.mjs || status=$?
+          wait "$release_pid" || status=$?
+          exit "$status"
       - name: Verify compiled router, executed policy and RPC calls against Buf
         run: |
           set -euo pipefail
