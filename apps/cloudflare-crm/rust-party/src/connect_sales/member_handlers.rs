@@ -107,16 +107,10 @@ impl member_wire::MemberService for MemberV2Service {
             tenant: &self.actor.tenant,
             actor: &self.actor.identity,
         };
-        let saved = access_members::provision(
-            &ctx,
-            &input.email,
-            role,
-            &key,
-            &self.request_id,
-        )
-        .await
-        .map_err(|_| ConnectError::unavailable("ACCESS_MEMBER_WRITE_FAILED"))?
-        .map_err(|e| e.connect("ProvisionMember", &self.request_id))?;
+        let saved = access_members::provision(&ctx, &input.email, role, &key, &self.request_id)
+            .await
+            .map_err(|_| ConnectError::unavailable("ACCESS_MEMBER_WRITE_FAILED"))?
+            .map_err(|e| e.connect("ProvisionMember", &self.request_id))?;
         RpcResponse::ok(member_wire::ProvisionMemberResponse {
             member: Some(Self::wire(&saved.member)?).into(),
             receipt: Some(self.receipt(&saved)).into(),
