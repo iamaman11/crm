@@ -1053,6 +1053,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await dealAfterAccountNote.getByText(laterCall,{exact:true}).waitFor();
    assert.equal(await dealAfterAccountNote.getByText(accountNote,{exact:true}).count(),0,
      "Account-only note must not be misattributed to Deal");
+   const navigationAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   assert.equal(navigationAuditBefore,boardAuditBefore+3,
+     "three SK-05 interactions must have exactly three new audit records");
    checkpoint("SK-05 React Account+Deal typed interaction history, authored facts, reload, ordering and D1 receipts");
    const dealContactLink=detailsFromBoard.getByRole("link",{
      name:"browser-"+runId+"@example.org",exact:true
@@ -1073,6 +1076,16 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await detailsFromBoard.getByRole("link",{
      name:"browser-"+runId+"@example.org",exact:true
    }).waitFor();
+   // SK-05 adds Account -> Deal history entries after the original board.
+   // Back must restore each visited card before returning to Kanban.
+   await page.goBack();
+   await page.getByRole("heading",{name:"Карточка клиента",exact:true}).waitFor();
+   assert.equal(new URL(page.url()).hash,"#accounts/"+accountId);
+   await accountReload.getByText(accountNote,{exact:true}).waitFor();
+   await page.goBack();
+   await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
+   assert.equal(new URL(page.url()).hash,"#sales/"+dealId);
+   await dealAfterAccountNote.getByText(laterCall,{exact:true}).waitFor();
    await page.goBack();
    await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
    await page.getByRole("region",{name:"Kanban — этапы и сделки"}).getByRole(
@@ -1080,7 +1093,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await reloadDocument();
    await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
-     boardAuditBefore,"manual board navigation must not write D1 audit");
+     navigationAuditBefore,"manual board navigation must not write D1 audit");
    checkpoint("M2-01 native board and M2-02 exact Deal Contact direct Get survive reload/Back without read-audit");
    const leadTotals=page.getByRole("group",{name:"Итоги этапа Первичный контакт"});
    await leadTotals.getByText("90071992547409.93 USD · сделок с суммой: 1",
