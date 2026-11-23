@@ -65,7 +65,7 @@ export function DataScreen() {
         return result;
       })}>Скачать CSV</Button></p>
       {exported.error&&<FeedbackPanel tone="danger" title={exported.error}/>}
-      {exported.data&&<p>Записей: {exported.data.count}. Предел: {exported.data.maximumTenantParties} участников в организации.</p>
+      {exported.data&&<p>Записей: {exported.data.count}. Предел: {exported.data.maximumTenantParties} участников в организации.</p>}
       <p>Файл содержит party_id, kind, display_name, resource_version.</p>
     </Card>
     <Card title="Импорт участников">

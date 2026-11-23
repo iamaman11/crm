@@ -73,7 +73,7 @@ test("individual compiler overrides cannot weaken a strict CRM project",()=>{
 
 test("native Worker only exposes policy-owned technical HTTP routes",()=>{
  const file="apps/cloudflare-crm/rust-party/src/lib.rs";
- const source=(awaitNativeSource());
+ const source=readFileSync(file,"utf8");
  assert.doesNotThrow(()=>inspectNativeHttpRoutes(source));
  assert.throws(()=>inspectNativeHttpRoutes(source.replace('"/api/version"', '"/api/manual-business"')),
    /CRM_AST_VIOLATION/);
