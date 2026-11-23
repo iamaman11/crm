@@ -18,6 +18,8 @@ jobs:
   cloudflare-crm-spike:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
+    outputs:
+      bundle_name: ${{ steps.seal.outputs.bundle_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -120,21 +122,20 @@ jobs:
           npm install --global pnpm@12.21.0
           pnpm --version | grep -Fx '12.21.0'
           pnpm install --frozen-lockfile
-      # One stable Cargo fingerprint cache per locked dependency graph. Cargo itself
-      # invalidates changed source/feature artifacts; sccache caches compiled crates.
-      # Do not include github.sha: it forces a new 1.1 GB upload on every push.
+      # Cargo unpacks registry/cache and git/db on demand. Keep compiled dependencies
+      # and fingerprints, but avoid transferring a second copy of dependency sources.
       - name: Restore Cargo compilation cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
             target
             apps/cloudflare-crm/rust-party/target
-          key: ${{ runner.os }}-crm-rust1100-wasm-v3-${{ hashFiles('**/Cargo.lock', 'rust-toolchain*') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'apps/cloudflare-crm/rust-party/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-crm-rust1100-wasm-v2-${{ hashFiles('**/Cargo.lock', 'rust-toolchain*') }}-
-            ${{ runner.os }}-crm-rust1100-wasm-v1-
+            ${{ runner.os }}-${{ runner.arch }}-crm-cargo-v4-${{ hashFiles('rust-toolchain.toml') }}-
       # Report actual compiler-cache hits/misses, rather than assuming cache speedup.
       # The Mozilla action also emits end-of-job statistics for the complete job.
       # Clippy checks WASM compilation, so a separate cargo check repeats the work.
@@ -183,6 +184,8 @@ jobs:
           fi
           worker-build --version
       - name: Build the test Worker, run Rust owner tests and prepare Chromium
+        env:
+          CARGO_PROFILE_TEST_DEBUG: line-tables-only
         working-directory: apps/cloudflare-crm
         shell: bash
         run: |
@@ -218,7 +221,7 @@ jobs:
       - name: Preserve executed RPC evidence
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: crm-rpc-runtime-${{ github.sha }}
+          name: crm-rpc-runtime-${{ github.sha }}-attempt-${{ github.run_attempt }}
           path: |
             /tmp/crm-rpc-runtime.json
             /tmp/crm-module-coverage.json
@@ -231,7 +234,7 @@ jobs:
         if: ${{ always() && steps.crm_native_workerd.outcome != 'skipped' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: crm-native-party-proof-${{ github.sha }}
+          name: crm-native-party-proof-${{ github.sha }}-attempt-${{ github.run_attempt }}
           path: apps/cloudflare-crm/e2e-evidence-native/
           if-no-files-found: warn
           retention-days: 7
@@ -275,6 +278,7 @@ jobs:
             assert.deepEqual(evidence.features, ["native-ci"]);
           '
       - name: Seal exactly tested development bundle
+        id: seal
         shell: bash
         env:
           CRM_BUILD_SHA: ${{ github.sha }}
@@ -337,11 +341,12 @@ jobs:
             xargs -0 sha256sum > .release/compiled-sha256.txt
           sha256sum .release/provenance.json >> .release/compiled-sha256.txt
           sha256sum --check --strict .release/compiled-sha256.txt
+          echo "bundle_name=crm-native-bundle-$CRM_BUILD_SHA-attempt-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
           echo "CRM compiled bundle sealed for $CRM_BUILD_SHA"
       - name: Preserve exact compiled bundle for independent review and deployment
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: crm-native-bundle-${{ github.sha }}
+          name: ${{ steps.seal.outputs.bundle_name }}
           path: |
             apps/cloudflare-crm/dist/
             apps/cloudflare-crm/rust-party/build/
@@ -381,11 +386,12 @@ jobs:
       - name: Restore CI-verified Rust WASM and React bundle without rebuilding
         env:
           GH_TOKEN: ${{ github.token }}
+          CRM_BUNDLE_NAME: ${{ needs.cloudflare-crm-spike.outputs.bundle_name }}
         shell: bash
         run: |
           set -euo pipefail
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
-            --name "crm-native-bundle-$GITHUB_SHA" --dir apps/cloudflare-crm
+            --name "$CRM_BUNDLE_NAME" --dir apps/cloudflare-crm
           cd apps/cloudflare-crm
           test "$(cat .release/source-sha.txt)" = "$GITHUB_SHA"
           sha256sum --check --strict .release/compiled-sha256.txt

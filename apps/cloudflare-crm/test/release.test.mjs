@@ -16,7 +16,7 @@ async function subprocessEntry(){
  const nfcLegacy=variant==="nfc-migration"||variant==="nfc-noncanonical";
  let enabled=mode==="deploy",migrated=variant!=="migration-fails"&&!nfcLegacy,published=false,edgeAttempts=0,role="viewer";
  let auditAttempts=0,telemetryAttempts=0,anonymousAttempts=0;
- let telemetryInFlight=0,maxTelemetryInFlight=0;
+ let telemetryInFlight=0,maxTelemetryInFlight=0,postDeployReads=0;
  const commands=[];
  let db;
  if(mode==="deploy"){
@@ -86,9 +86,13 @@ async function subprocessEntry(){
    assert.equal(new URL(url).hostname,"api.cloudflare.com","Unexpected network target");
    if(options.method==="POST")posts.push(path);
    const wrap=result=>json({success:true,result});
-   if(path.endsWith("/deployments"))return wrap({deployments:[{versions:[{version_id:mode==="deploy"&&!published?"version-old":"version-new",percentage:100}]}]});
+   if(path.endsWith("/deployments")){
+     const stale=published&&variant==="repeat-sha"&&++postDeployReads===1;
+     const version=mode==="deploy"&&(!published||stale)?"version-old":"version-new";
+     return wrap({deployments:[{versions:[{version_id:version,percentage:100}]}]});
+   }
    if(path.endsWith("/versions/version-old"))return wrap({resources:{bindings:[
-     {name:"GIT_SHA",text:"90a352be2a70b74a64e5a774c9a76b7f02c86a5f"},{name:"DB",id:database}]}});
+     {name:"GIT_SHA",text:variant==="repeat-sha"?sha:"90a352be2a70b74a64e5a774c9a76b7f02c86a5f"},{name:"DB",id:database}]}});
    if(path.endsWith("/time_travel/bookmark"))return wrap({bookmark:"synthetic-bookmark"});
    if(path.endsWith("/settings"))return wrap({observability:{
      enabled:true,redact_query_string:variant!=="trace-redaction-disabled",
@@ -244,7 +248,7 @@ async function subprocessEntry(){
  process.argv[2]=mode;
  try{await import("./deploy.mjs");}finally{
    writeFileSync("posts.json",JSON.stringify(posts));
-   writeFileSync("state.json",JSON.stringify({enabled,migrated,published,edgeAttempts,anonymousAttempts,auditAttempts,telemetryAttempts,maxTelemetryInFlight,commands,role}));
+   writeFileSync("state.json",JSON.stringify({enabled,migrated,published,edgeAttempts,anonymousAttempts,auditAttempts,telemetryAttempts,maxTelemetryInFlight,postDeployReads,commands,role}));
    db?.close();
  }
 }
@@ -477,6 +481,13 @@ test("unchanged D1 ledger keeps public entry online and signed version checks Ac
  assert.equal(result.state.commands.filter(c=>c[2]==="d1"&&c[3]==="migrations").length,0);
  assert.equal(result.posts.filter(path=>path.endsWith("/subdomain")).length,1,
    "Code-only release must not stop public entry before deployment");
+});
+test("rebuilding the same SHA waits for the new active Worker version",()=>{
+ const result=run("deploy","repeat-sha");
+ assert.equal(result.status,0,result.error);
+ assert.equal(result.state.postDeployReads,2);
+ assert.equal(result.deployed,true);
+ assert.equal(result.state.commands.filter(c=>c[2]==="deploy").length,1);
 });
 test("anonymous transport reset recovers through real deploy script without replaying writes",()=>{
  const result=run("deploy","anonymous-reset");

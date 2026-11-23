@@ -119,7 +119,7 @@ async function bindings(deployedVersion){
 // Cloudflare deployments, version metadata and the public edge can converge
 // separately after Wrangler deploy. Never treat the first old-version read
 // as a final release result; read back the exact source and binding.
-async function waitForDeployment(expectedVersion,expectedSha,stage){
+async function waitForDeployment(previousVersion,expectedSha,stage){
   const start=Date.now(),deadline=start+60000;
   let observed={version:null,sha:null,db:null},attempts=0;
   for(;;){
@@ -128,7 +128,7 @@ async function waitForDeployment(expectedVersion,expectedSha,stage){
       const current=await version();
       const b=await bindings(current);
       observed={version:current,sha:b.sha||null,db:b.db||null};
-      if((expectedVersion===null||current===expectedVersion)&&
+      if(current!==previousVersion&&
           b.sha===expectedSha&&b.db===database){
         console.log(JSON.stringify({event:"crm.deployment-readback",
           stage,result:"PASS",worker_version:current,
@@ -137,7 +137,7 @@ async function waitForDeployment(expectedVersion,expectedSha,stage){
       }
     }catch(error){observed={error:String(error.message).slice(0,160)};}
     if(Date.now()>=deadline)throw Error("CRM deployment readback mismatch stage="+stage+
-      " expected_version="+(expectedVersion||"new")+" expected_sha="+expectedSha+
+      " previous_version="+previousVersion+" expected_sha="+expectedSha+
       " observed="+JSON.stringify(observed));
     if(attempts===1)console.log(JSON.stringify({event:"crm.deployment-readback",
       stage,result:"RETRY",observed}));
@@ -260,8 +260,7 @@ async function deploy(){
     assert.equal((await query("SELECT COUNT(*) AS n FROM "+table.name))[0].n,0,"Reset left business data");
   }
   cmd("wrangler","deploy","--var","GIT_SHA:"+sha);
-  const newVersion=await waitForDeployment(null,sha,"deploy");
-  if(newVersion===oldVersion)throw Error("Worker version did not advance");
+  const newVersion=await waitForDeployment(oldVersion,sha,"deploy");
   // Read the settings returned by Cloudflare, not an assumed Wrangler default.
   // Do not reopen public entry if trace privacy differs from committed config.
   const traceSettings=verifyTracePrivacySettings((await cf(worker+"/settings")).observability);
