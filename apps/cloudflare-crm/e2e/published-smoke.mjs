@@ -83,6 +83,34 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     const privateJwt="eyJhbGciOiJub25lIn0.eyJzdWIiOiJjcm0tc3ludGhldGljIn0.signature-"+runId;
     const privateQuery="crm-s3-query-"+runId;
     await context.addCookies([{name:"crm_s3_test_cookie",value:privateCookie,url:base}]);
+    // A new Cloudflare deployment can publish /api/version before every edge
+    // serves its RPC paths. Probe the exact write path with a READ-ONLY GET:
+    // the signed Rust Worker must reject its method with typed "unimplemented".
+    // Never retry a business mutation, and never mistake an edge-owned 404 for
+    // a domain NOT_FOUND. Keep this probe's synthetic privacy headers identical.
+    let stableRpcEdges=0;
+    for(let attempt=1;attempt<=20&&stableRpcEdges<2;attempt++){
+      const probe=await context.request.get(
+        base+"/crm.parties.v3.PartyService/CreateParty?crm_s3_test="+encodeURIComponent(privateQuery),
+        {headers:{"cache-control":"no-cache",authorization:privateAuthorization,
+          "x-crm-s3-test-probe":privateHeader,"x-crm-s3-test-jwt":privateJwt},
+          maxRedirects:0});
+      const h=probe.headers(),runtime=h["x-crm-runtime"];
+      if(runtime==="native-workers-rs"&&h["x-crm-source-sha"]===sourceSha&&
+          h["x-crm-error-code"]==="unimplemented"){
+        stableRpcEdges++;
+      }else if(probe.status()===404&&!runtime){
+        stableRpcEdges=0; // Cloudflare edge has not routed this RPC yet.
+      }else{
+        throw Error("CRM_PUBLISHED_RPC_PREFLIGHT_UNEXPECTED status="+probe.status()+
+          " runtime="+(runtime??"none")+" source="+(h["x-crm-source-sha"]??"none")+
+          " error_code="+(h["x-crm-error-code"]??"none"));
+      }
+      if(stableRpcEdges<2&&attempt<20)
+        await new Promise(resolve=>setTimeout(resolve,Math.min(attempt*500,2000)));
+    }
+    assert.equal(stableRpcEdges,2,"Published signed RPC edge never converged to the exact Worker SHA");
+    steps.push("signed-rpc-ready");
     let privateRequests=0;
     const writeRoute="**/crm.parties.v3.PartyService/CreateParty";
     const privacyRoute=async route=>{
