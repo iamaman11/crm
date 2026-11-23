@@ -1,5 +1,8 @@
 # Ultimate CRM — Agent and Contributor Operating Guide
 
+> **АКТУАЛЬНЫЙ ПОРЯДОК РАБОТЫ CRM (issue-first).** Ветка `dev`, remote [iamaman11/crm](https://github.com/iamaman11/crm) — единственный код. **Продуктовый план, 20 семейств, список и порядок задач — [#484](https://github.com/iamaman11/crm/issues/484); текущая функция, решение A/B/C/D и доказательства двух Gate — [#487](https://github.com/iamaman11/crm/issues/487).** Не вести параллельных дорожных карт и текущих статусов в Markdown. Исторические полные MD/матрицы перемещены в [docs/archive](docs/archive/), их `docs/*.md` адреса — только указатели. Техническая архитектура остаётся [apps/cloudflare-crm/ARCHITECTURE.md](apps/cloudflare-crm/ARCHITECTURE.md). Все старые инструкции ниже, противоречащие этому правилу, не применяются к текущей CRM.
+
+
 > **Текущий путь разработки CRM:** только `apps/cloudflare-crm` в канонической
 > удалённой ветке `dev`. Действуют `apps/cloudflare-crm/AGENTS.md`,
 > `apps/cloudflare-crm/ARCHITECTURE.md` и очередь [#484](https://github.com/iamaman11/crm/issues/484) со ссылкой на текущий курсор. Нижеследующие старые
