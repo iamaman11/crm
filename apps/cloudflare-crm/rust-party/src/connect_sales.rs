@@ -2,8 +2,9 @@
 //! Cloudflare Access and tenant selection happen BEFORE routing here.
 //! Domain rules and storage belong exclusively to existing crm-sales and D1.
 use super::{
-    access, access_members, accounts, activity_tasks, consents, contact_points, data_quality,
-    identity_resolution, parties, party_relationships, sales_deals, sales_pipelines, sales_views,
+    access, access_members, access_teams, accounts, activity_tasks, consents, contact_points,
+    data_quality, identity_resolution, parties, party_relationships, sales_deals, sales_pipelines,
+    sales_views,
 };
 use axum::Router;
 use buffa_types::google::protobuf::Timestamp;
@@ -119,6 +120,7 @@ enum CrudReceiptOwner {
     Consent,
     Pipeline,
     SalesView,
+    Team,
 }
 impl CrudReceiptOwner {
     fn sql(self) -> &'static str {
@@ -157,6 +159,10 @@ impl CrudReceiptOwner {
             ),
             Self::Pipeline => concat!(
                 "SELECT state,original_request_id FROM crm_sales_pipeline_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
+            Self::Team => concat!(
+                "SELECT state,original_request_id FROM crm_team_receipts",
                 " WHERE tenant=? AND key=?"
             ),
             Self::SalesView => concat!(

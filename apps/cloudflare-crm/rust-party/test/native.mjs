@@ -4591,6 +4591,51 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    member_receipts:true,cas:true,replay:true,revocation:true,
    task_assignee_original_domain:true,mine_signed:true,workload_before_paging:true}));
 
+ // SK-07.C shared Task pool and original Access team aggregate.
+ const teamId="sk07-team-"+randomUUID();
+ const teamMember="native-viewer@example.test";
+ const teamInput={teamId,name:"Native shared team "+teamId,description:"QA",
+   roster:{memberEmails:[teamMember,"native-a@example.test"]},
+   precondition:{idempotencyKey:"sk07-team-create-"+teamId}};
+ assert.equal((await memberV2("CreateTeam",viewer,teamInput)).status,403);
+ const teamCreated=await memberV2("CreateTeam",admin,teamInput);
+ assert.equal(teamCreated.status,200,describeProtobuf(teamCreated.body));
+ assert.equal((await memberV2("CreateTeam",admin,teamInput)).body.receipt?.replayed,true);
+ const teamRead=await memberV2("GetTeam",viewer,{teamId,receiptIdempotencyKey:teamInput.precondition.idempotencyKey});
+ assert.equal(teamRead.body.confirmedMutation?.resourceVersion,1n);
+ assert.equal((await memberV2("GetTeam",tenantB,{teamId})).status,404);
+ assert.ok((await memberV2("ListTeams",viewer,{page:{pageSize:100}})).body.teams.some(t=>t.teamId===teamId));
+ const poolId="sk07-pool-"+randomUUID();
+ const poolCreate={taskId:poolId,accountId,subject:"Native team pool",priority:2,ownerTeamId:teamId,
+   precondition:{idempotencyKey:"sk07-pool-create-"+poolId}};
+ const pool=await taskV2("CreateTask",admin,poolCreate);
+ assert.equal(pool.status,200,describeProtobuf(pool.body));
+ assert.equal(pool.body.task?.ownerTeamId,teamId);
+ const teamArchive={teamId,active:false,precondition:{expectedVersion:1n,idempotencyKey:"sk07-team-archive-"+teamId}};
+ assert.equal((await memberV2("UpdateTeam",admin,teamArchive)).status,409);
+ const teamList=await taskV2("ListTasks",viewer,{ownerTeamId:teamId,page:{pageSize:1}});
+ assert.equal(teamList.body.tasks[0]?.taskId,poolId);
+ assert.equal((await taskV2("ListTasks",tenantB,{ownerTeamId:teamId})).body.tasks.length,0);
+ const claim={taskId:poolId,precondition:{expectedVersion:1n,idempotencyKey:"sk07-pool-claim-"+poolId}};
+ assert.equal((await taskV2("ClaimTask",knownService,claim)).status,403);
+ assert.equal((await taskV2("ClaimTask",tenantB,claim)).status,404);
+ const claimOther={...claim,precondition:{...claim.precondition,idempotencyKey:"sk07-other-claim-"+poolId}};
+ const results=await Promise.all([taskV2("ClaimTask",viewer,claim),taskV2("ClaimTask",admin,claimOther)]);
+ assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
+ const winner=results[0].status===200?viewer:admin;
+ const wonInput=results[0].status===200?claim:claimOther;
+ const claimed=results.find(r=>r.status===200);
+ assert.equal(claimed.body.task?.version,2n);
+ assert.equal((await taskV2("ClaimTask",winner,wonInput)).body.receipt?.replayed,true);
+ assert.equal((await taskV2("ListTasks",viewer,{ownerTeamId:teamId})).body.tasks.length,0);
+ assert.equal((await taskV2("CompleteTask",winner,{taskId:poolId,
+   precondition:{expectedVersion:2n,idempotencyKey:"sk07-pool-complete-"+poolId}})).status,200);
+ assert.equal((await memberV2("UpdateTeam",admin,teamArchive)).status,200);
+ assert.equal((await taskV2("CreateTask",admin,{...poolCreate,taskId:"sk07-inactive-pool-"+poolId,
+   precondition:{idempotencyKey:"sk07-inactive-pool-"+poolId}})).status,400);
+ assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",poolId))[0].n,3);
+ console.log(JSON.stringify({event:"crm.native-sk07c-team-pool",result:"PASS",atomic_claim:true,tenant_ab:true,archive_guard:true,receipts:true}));
+
  await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
  const salesAuditBeforeFilter=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  assert.deepEqual((await collectPages(salesV2,"ListDeals","deals",{accountId})).map(d=>d.dealId),

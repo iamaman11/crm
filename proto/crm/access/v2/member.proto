@@ -68,7 +68,72 @@ message GetMemberResponse {
   crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
 }
 
+// Teams reference the one existing Access member registry.
+message Team {
+  string team_id = 1;
+  string name = 2;
+  string description = 3;
+  bool active = 4;
+  repeated string member_emails = 5;
+  int64 version = 6;
+}
+message TeamRoster {
+  repeated string member_emails = 1;
+}
+message GetTeamRequest {
+  string team_id = 1;
+  optional string receipt_idempotency_key = 2;
+}
+message GetTeamResponse {
+  Team team = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+message ListTeamsRequest {
+  crm.core.v2.PageRequest page = 1;
+  bool include_inactive = 2;
+}
+message ListTeamsResponse {
+  repeated Team teams = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+message CreateTeamRequest {
+  string team_id = 1;
+  string name = 2;
+  string description = 3;
+  TeamRoster roster = 4;
+  crm.core.v2.MutationPrecondition precondition = 5;
+}
+message CreateTeamResponse {
+  Team team = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+message UpdateTeamRequest {
+  string team_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional bool active = 4;
+  // Present means replace the complete roster at the expected version.
+  TeamRoster roster = 5;
+  crm.core.v2.MutationPrecondition precondition = 6;
+}
+message UpdateTeamResponse {
+  Team team = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
 service MemberService {
+  rpc GetTeam(GetTeamRequest) returns (GetTeamResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListTeams(ListTeamsRequest) returns (ListTeamsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CreateTeam(CreateTeamRequest) returns (CreateTeamResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateTeam(UpdateTeamRequest) returns (UpdateTeamResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   rpc GetMyMembership(GetMyMembershipRequest) returns (GetMyMembershipResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }

@@ -4,6 +4,32 @@ use super::*;
 
 impl task_wire::TaskService for TaskV2Service {
     #[worker::send]
+    async fn claim_task(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, task_wire::ClaimTaskRequest>,
+    ) -> ServiceResult<task_wire::ClaimTaskResponse> {
+        let input = req.to_owned_message();
+        let id = Self::valid_id(&input.task_id)?;
+        let (key, expected) = wire_precondition(input.precondition.as_option(), false)?;
+        let saved = activity_tasks::claim_typed(
+            expected.unwrap_or_default(),
+            &key,
+            &self.d1()?,
+            &id,
+            &self.actor,
+            &self.request_id,
+        )
+        .await
+        .map_err(|_| ConnectError::unavailable("ACTIVITIES_CLAIM_FAILED"))?
+        .map_err(|e| e.connect("ClaimTask", &self.request_id))?;
+        RpcResponse::ok(task_wire::ClaimTaskResponse {
+            task: Some(Self::convert(&saved.task, &self.persisted_account(&id).await?)?).into(),
+            receipt: Some(self.receipt(&saved)).into(),
+            ..Default::default()
+        })
+    }
+    #[worker::send]
     async fn create_task(
         &self,
         _ctx: RequestContext,
@@ -41,6 +67,7 @@ impl task_wire::TaskService for TaskV2Service {
                 account_id: input.account_id,
                 deal_id: input.deal_id,
                 assignee_email: input.assignee_email,
+                owner_team_id: input.owner_team_id,
                 priority,
                 due_at_unix_nanos: due,
                 reminder_at_unix_nanos: reminder,
@@ -124,6 +151,7 @@ impl task_wire::TaskService for TaskV2Service {
                 subject,
                 description,
                 owner,
+                owner_team_id: input.owner_team_id,
                 priority,
                 due_at_unix_nanos,
             },
@@ -363,8 +391,13 @@ impl task_wire::TaskService for TaskV2Service {
             Self::valid_id(id)?;
         }
         let search = wire_search(req.search)?;
-        if req.assigned_to_me && req.assignee_email.is_some() {
+        if (req.assigned_to_me && (req.assignee_email.is_some() || req.owner_team_id.is_some()))
+            || (req.assignee_email.is_some() && req.owner_team_id.is_some())
+        {
             return Err(ConnectError::invalid_argument("INVALID_ASSIGNEE_FILTERS"));
+        }
+        if let Some(team) = req.owner_team_id {
+            access_teams::id(team).map_err(|e| e.connect("ListTasks", &self.request_id))?;
         }
         let owner = if req.assigned_to_me {
             Some(self.actor.identity.clone())
@@ -392,6 +425,7 @@ impl task_wire::TaskService for TaskV2Service {
                 sort_by_due: req.sort_by_due,
                 without_due_only: req.without_due_only,
                 owner_identity: owner.as_deref(),
+                owner_team_id: req.owner_team_id,
             },
         )
         .await

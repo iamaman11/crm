@@ -4,7 +4,7 @@
 use super::{bind, now_nanos};
 use crm_activities::{
     CompleteTask, CreateTask, ScheduleReminder, Task, TaskMutation, TaskOwner, TaskPriority,
-    TaskStatus, UpdateTask, decode_task_state, encode_task_state,
+    TaskStatus, TeamId, UpdateTask, decode_task_state, encode_task_state,
 };
 use crm_core_contracts::Patch;
 use crm_module_sdk::{ActorId, RecordId, ResourceRef};
@@ -43,6 +43,8 @@ pub(super) struct CreateInput {
     pub(super) deal_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) assignee_email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) owner_team_id: Option<String>,
     pub(super) priority: Priority,
     pub(super) due_at_unix_nanos: Option<i64>,
     pub(super) reminder_at_unix_nanos: Option<i64>,
@@ -79,6 +81,8 @@ pub(super) struct UpdateInput {
     pub(super) subject: Change<String>,
     pub(super) description: Change<String>,
     pub(super) owner: Change<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) owner_team_id: Option<String>,
     pub(super) priority: Change<Priority>,
     pub(super) due_at_unix_nanos: Change<i64>,
 }
@@ -297,6 +301,13 @@ pub(super) async fn create_typed(
     // Membership is authoritative in the existing signed Access owner. The
     // lookup occurs AFTER the original receipt, so replay succeeds even if the
     // assignee was later deactivated. The INSERT also checks eligibility atomically.
+    let team_id = input.owner_team_id.as_deref();
+    if team_id.is_some() && input.assignee_email.is_some() {
+        return Ok(Err(MutationFailure::domain(
+            "ACTIVITIES_OWNER_CONFLICT",
+            ErrorCode::InvalidArgument,
+        )));
+    }
     let target = if let Some(requested) = input.assignee_email.as_deref() {
         let normalized = match super::access_members::email(requested) {
             Ok(value) => value,
@@ -317,13 +328,32 @@ pub(super) async fn create_typed(
     } else {
         actor.to_owned()
     };
-    let owner = match ActorId::try_new(target.as_str()) {
-        Ok(x) => TaskOwner::Actor(x),
-        Err(_) => {
+    let owner = if let Some(team) = team_id {
+        let team = match TeamId::try_new(team) {
+            Ok(value) => value,
+            Err(_) => {
+                return Ok(Err(MutationFailure::domain(
+                    "ACTIVITIES_OWNER_INVALID",
+                    ErrorCode::InvalidArgument,
+                )));
+            }
+        };
+        if !super::access_teams::eligible(db, tenant, team.as_str()).await? {
             return Ok(Err(MutationFailure::domain(
-                "ACTIVITIES_OWNER_INVALID",
+                "ACTIVITIES_TEAM_NOT_ELIGIBLE",
                 ErrorCode::InvalidArgument,
             )));
+        }
+        TaskOwner::Team(team)
+    } else {
+        match ActorId::try_new(target.as_str()) {
+            Ok(x) => TaskOwner::Actor(x),
+            Err(_) => {
+                return Ok(Err(MutationFailure::domain(
+                    "ACTIVITIES_OWNER_INVALID",
+                    ErrorCode::InvalidArgument,
+                )));
+            }
         }
     };
     let task = match Task::create(CreateTask {
@@ -346,12 +376,15 @@ pub(super) async fn create_typed(
         }
     };
     let saved = state(&task)?;
-    let r=bind(db,"INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1) ON CONFLICT(tenant,id) DO NOTHING",
+    let insert = format!("INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1) AND (? IS NULL OR {}) ON CONFLICT(tenant,id) DO NOTHING", super::access_teams::ELIGIBLE);
+    let r=bind(db,&insert,
         &[JsValue::from_str(tenant),JsValue::from_str(task.task_id().as_str()),
           JsValue::from_str(account_id.as_str()),JsValue::from_str(&saved),
           JsValue::from_f64(task.version() as f64),JsValue::from_str(key),
           JsValue::from_str(&digest),JsValue::from_str(trace),JsValue::from_str(actor),
-          JsValue::from_str(tenant),JsValue::from_str(&target)])?.run().await;
+          JsValue::from_str(tenant),JsValue::from_str(&target),
+          team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),JsValue::from_str(tenant),
+          team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL)])?.run().await;
     finish_write(
         prior(db, tenant, key),
         trace,
@@ -381,6 +414,7 @@ pub(super) async fn update_typed(
         && matches!(&input.description, Change::Keep)
         && matches!(&input.priority, Change::Keep)
         && matches!(&input.owner, Change::Keep)
+        && input.owner_team_id.is_none()
         && matches!(&input.due_at_unix_nanos, Change::Keep)
     {
         return Ok(Err(MutationFailure::domain(
@@ -419,41 +453,67 @@ pub(super) async fn update_typed(
     };
     let expected_version = input.expected_version;
     let mut assignee = None;
-    let owner = match input.owner {
-        Change::Keep => Patch::Keep,
-        Change::Clear => {
-            return Ok(Err(MutationFailure::domain(
-                "ACTIVITIES_TASK_OWNER_REQUIRED",
-                ErrorCode::InvalidArgument,
-            )));
-        }
-        Change::Set(value) => {
-            let normalized = match super::access_members::email(&value) {
-                Ok(value) => value,
-                Err(_) => {
-                    return Ok(Err(MutationFailure::domain(
-                        "ACTIVITIES_ASSIGNEE_INVALID",
-                        ErrorCode::InvalidArgument,
-                    )));
-                }
-            };
-            if !super::access_members::valid_assignee(db, tenant, &normalized).await? {
+    let team_id = input.owner_team_id.as_deref();
+    if team_id.is_some() && !matches!(&input.owner, Change::Keep) {
+        return Ok(Err(MutationFailure::domain(
+            "ACTIVITIES_OWNER_CONFLICT",
+            ErrorCode::InvalidArgument,
+        )));
+    }
+    let owner = if let Some(team) = team_id {
+        let team = match TeamId::try_new(team) {
+            Ok(value) => value,
+            Err(_) => {
                 return Ok(Err(MutationFailure::domain(
-                    "ACTIVITIES_ASSIGNEE_NOT_ENROLLED",
+                    "ACTIVITIES_OWNER_INVALID",
                     ErrorCode::InvalidArgument,
                 )));
             }
-            assignee = Some(normalized.clone());
-            let actor = match ActorId::try_new(normalized) {
-                Ok(value) => value,
-                Err(_) => {
+        };
+        if !super::access_teams::eligible(db, tenant, team.as_str()).await? {
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_TEAM_NOT_ELIGIBLE",
+                ErrorCode::InvalidArgument,
+            )));
+        }
+        Patch::Set(TaskOwner::Team(team))
+    } else {
+        match input.owner {
+            Change::Keep => Patch::Keep,
+            Change::Clear => {
+                return Ok(Err(MutationFailure::domain(
+                    "ACTIVITIES_TASK_OWNER_REQUIRED",
+                    ErrorCode::InvalidArgument,
+                )));
+            }
+            Change::Set(value) => {
+                let normalized = match super::access_members::email(&value) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        return Ok(Err(MutationFailure::domain(
+                            "ACTIVITIES_ASSIGNEE_INVALID",
+                            ErrorCode::InvalidArgument,
+                        )));
+                    }
+                };
+                if !super::access_members::valid_assignee(db, tenant, &normalized).await? {
                     return Ok(Err(MutationFailure::domain(
-                        "ACTIVITIES_ASSIGNEE_INVALID",
+                        "ACTIVITIES_ASSIGNEE_NOT_ENROLLED",
                         ErrorCode::InvalidArgument,
                     )));
                 }
-            };
-            Patch::Set(TaskOwner::Actor(actor))
+                assignee = Some(normalized.clone());
+                let actor = match ActorId::try_new(normalized) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        return Ok(Err(MutationFailure::domain(
+                            "ACTIVITIES_ASSIGNEE_INVALID",
+                            ErrorCode::InvalidArgument,
+                        )));
+                    }
+                };
+                Patch::Set(TaskOwner::Actor(actor))
+            }
         }
     };
     let priority = match input.priority {
@@ -482,15 +542,17 @@ pub(super) async fn update_typed(
     let saved = state(&task)?;
     // One CAS write; an explicit new assignee must still be active at commit.
     // The existing D1 trigger atomically stores receipt and audit.
-    let changed = bind(db,
-        "UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=? AND (? IS NULL OR EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1))",
+    let update = format!("UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=? AND (? IS NULL OR EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1)) AND (? IS NULL OR {})", super::access_teams::ELIGIBLE);
+    let changed = bind(db,&update,
         &[JsValue::from_str(&saved), JsValue::from_f64(task.version() as f64),
           JsValue::from_str(key), JsValue::from_str(&digest), JsValue::from_str(trace),
           JsValue::from_str(actor),JsValue::from_str(tenant), JsValue::from_str(id),
           JsValue::from_f64(expected_version as f64),
           assignee.as_deref().map(JsValue::from_str).unwrap_or(JsValue::NULL),
           JsValue::from_str(tenant),
-          assignee.as_deref().map(JsValue::from_str).unwrap_or(JsValue::NULL)])?.run().await;
+          assignee.as_deref().map(JsValue::from_str).unwrap_or(JsValue::NULL),
+          team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),JsValue::from_str(tenant),
+          team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL)])?.run().await;
     finish_write(
         prior(db, tenant, key),
         trace,
@@ -740,6 +802,110 @@ pub(super) async fn complete_typed(
     )
     .await
 }
+// Claim is a narrow SelfWrite, not a general viewer edit.
+pub(super) async fn claim_typed(
+    expected: i64,
+    key: &str,
+    db: &D1Database,
+    id: &str,
+    principal: &super::access::Actor,
+    trace: &str,
+) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    let tenant = principal.tenant.as_str();
+    let actor = principal.identity.as_str();
+    if super::access_members::email(actor).is_err() {
+        return Ok(Err(MutationFailure::domain(
+            "ACTIVITIES_CLAIM_HUMAN_REQUIRED",
+            ErrorCode::PermissionDenied,
+        )));
+    }
+    let digest = hash("claim", id, &(actor, expected))?;
+    if let Some(receipt) = prior(db, tenant, key).await? {
+        let task = decode(&receipt.state)?;
+        if receipt.digest != digest || task.task_id().as_str() != id {
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
+        }
+        return Ok(Ok(MutationOutcome {
+            task,
+            replayed: true,
+            original_request_id: receipt.original_request_id,
+            changed: true,
+        }));
+    }
+    let Some(mut task) = stored(db, tenant, id).await? else {
+        return Ok(Err(MutationFailure::domain("NOT_FOUND", ErrorCode::NotFound)));
+    };
+    if task.version() != expected || task.status() != TaskStatus::Open {
+        return Ok(Err(MutationFailure::domain(
+            "ACTIVITIES_TASK_VERSION_CONFLICT",
+            ErrorCode::Aborted,
+        )));
+    }
+    let TaskOwner::Team(team) = task.owner() else {
+        return Ok(Err(MutationFailure::domain(
+            "ACTIVITIES_TASK_NOT_IN_POOL",
+            ErrorCode::Aborted,
+        )));
+    };
+    let team_id = team.as_str().to_owned();
+    let eligible = "EXISTS (SELECT 1 FROM crm_access_teams AS t JOIN json_each(t.state,'$.member_emails') AS m JOIN crm_users AS u ON u.tenant_id=t.tenant AND u.email=m.value AND u.active=1 WHERE t.tenant=? AND t.id=? AND json_extract(t.state,'$.active')=1 AND u.email=?)";
+    let params = [
+        JsValue::from_str(tenant),
+        JsValue::from_str(&team_id),
+        JsValue::from_str(actor),
+    ];
+    if bind(db, &format!("SELECT 1 WHERE {eligible}"), &params)?
+        .first::<Value>(None)
+        .await?
+        .is_none()
+    {
+        return Ok(Err(MutationFailure::domain(
+            "ACTIVITIES_CLAIM_FORBIDDEN",
+            ErrorCode::PermissionDenied,
+        )));
+    }
+    let owner = ActorId::try_new(actor).map_err(|e| worker::Error::RustError(e.code))?;
+    if let Err(e) = task.apply_update(UpdateTask {
+        expected_version: expected,
+        subject: Patch::Keep,
+        description: Patch::Keep,
+        owner: Patch::Set(TaskOwner::Actor(owner)),
+        priority: Patch::Keep,
+        due_at_unix_nanos: Patch::Keep,
+        occurred_at_unix_nanos: now_nanos(),
+    }) {
+        return Ok(Err(MutationFailure::domain(e.code, ErrorCode::Aborted)));
+    }
+    let saved = state(&task)?;
+    let query = format!("UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=? AND json_extract(state,'$.owner.team_id')=? AND json_extract(state,'$.status')='open' AND {eligible}");
+    let mut values = vec![
+        JsValue::from_str(&saved),
+        JsValue::from_f64(task.version() as f64),
+        JsValue::from_str(key),
+        JsValue::from_str(&digest),
+        JsValue::from_str(trace),
+        JsValue::from_str(actor),
+        JsValue::from_str(tenant),
+        JsValue::from_str(id),
+        JsValue::from_f64(expected as f64),
+        JsValue::from_str(&team_id),
+    ];
+    values.extend(params);
+    let write = bind(db, &query, &values)?.run().await;
+    finish_write(
+        prior(db, tenant, key),
+        trace,
+        &digest,
+        task,
+        write,
+        "ACTIVITIES_CLAIM_CONFLICT",
+    )
+    .await
+}
+
 // A single typed, owner-local filter value instead of growing positional
 // parameters. This is not a generic registry or a second query owner.
 pub(super) struct TaskListFilters<'a> {
@@ -754,6 +920,7 @@ pub(super) struct TaskListFilters<'a> {
     pub(super) sort_by_due: bool,
     pub(super) without_due_only: bool,
     pub(super) owner_identity: Option<&'a str>,
+    pub(super) owner_team_id: Option<&'a str>,
 }
 pub(super) async fn list_page_typed(
     db: &D1Database,
@@ -774,6 +941,7 @@ pub(super) async fn list_page_typed(
         sort_by_due,
         without_due_only,
         owner_identity,
+        owner_team_id,
     } = filters;
     // Exactly one Task owner. The order/filter decision is made in SQL BEFORE
     // the keyset LIMIT; a browser cannot find due work in an ID-sorted page.
@@ -803,6 +971,10 @@ pub(super) async fn list_page_typed(
         // before LIMIT and any due cursor, never by a frontend slice.
         query.push_str(" AND json_extract(t.state,'$.owner.actor_id')=?");
         params.push(JsValue::from_str(owner));
+    }
+    if let Some(team) = owner_team_id {
+        query.push_str(" AND json_extract(t.state,'$.owner.team_id')=?");
+        params.push(JsValue::from_str(team));
     }
     if let Some(priority) = priority {
         query.push_str(" AND json_extract(state,'$.priority')=?");

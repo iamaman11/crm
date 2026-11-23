@@ -7,6 +7,7 @@ import {api,dateText} from "./api";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
 import {taskHref,taskAssigneeHref,workdayHref} from "./routes";
 import {allMembers,humanMember} from "./memberCatalog";
+import {TeamWorkspace} from "./TeamWorkspace";
 
 const roleName=(role:MemberRole)=>role===MemberRole.ADMIN?"Администратор":
   role===MemberRole.VIEWER?"Чтение всех полей":"Неизвестная роль";
@@ -131,6 +132,7 @@ export function MemberScreen(){
       </form>}
       <MutationNotice state={mutation}/>
     </section>
+    <TeamWorkspace members={members} isAdmin={isAdmin} actor={actor} onChanged={workload.reload}/>
     <section aria-label="Реальная нагрузка команды">
       <h2>Распределение и нагрузка</h2>
       <p>Авторитетные числа по всем задачам до LIMIT, включая завершённые.

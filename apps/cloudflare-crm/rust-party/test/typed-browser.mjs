@@ -2775,6 +2775,39 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.setViewportSize({width:1280,height:720});
    checkpoint("SK-07.B typed workforce, human membership, owner assignment/reassign, ACL audit, D1, reload and mobile");
 
+   if(features.includes("native-ci")){
+     const teamName="Browser SK07 team "+runId;
+     await navigate("team","Команда и распределение работы");
+     await page.getByRole("button",{name:"Создать команду",exact:true}).click();
+     await page.getByLabel("Название команды",{exact:true}).fill(teamName);
+     const teamForm=page.getByRole("form",{name:"Настройка команды"});
+     await teamForm.getByLabel("native-viewer@example.test",{exact:true}).check();
+     await mutation(teamForm.getByRole("button",{name:"Сохранить команду",exact:true}),"CreateTeam");
+     const teamId=(await sql("SELECT id FROM crm_access_teams WHERE tenant=? AND json_extract(state,'$.name')=?",tenantA,teamName))[0].id;
+     const teamRow=page.getByRole("row").filter({hasText:teamName});
+     await teamRow.getByRole("link",{name:"Задачи команды",exact:true}).click();
+     await page.getByRole("button",{name:"Новая задача",exact:true}).click();
+     const poolName="Browser SK07 pool "+runId;
+     await page.getByLabel("Тема задачи",{exact:true}).fill(poolName);
+     await selectPagedPicker(page,"Клиент",accountId,"account");
+     await page.getByLabel("Назначить сотруднику",{exact:true}).selectOption("team:"+teamId);
+     await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
+     const poolTask=page.locator("section").filter({has:page.getByRole("heading",{name:poolName,exact:true})});
+     await poolTask.getByText("Ответственный: Команда: "+teamName,{exact:true}).waitFor();
+     await reloadDocument();
+     await poolTask.getByText("Ответственный: Команда: "+teamName,{exact:true}).waitFor();
+     await poolTask.getByRole("button",{name:"Редактировать задачу",exact:true}).click();
+     await page.getByLabel("Переназначить задачу",{exact:true}).selectOption("native-viewer@example.test");
+     await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),"UpdateTask");
+     await poolTask.waitFor({state:"hidden"});
+     await navigate("team","Команда и распределение работы");
+     await teamRow.getByRole("button",{name:"Изменить команду",exact:true}).click();
+     await teamForm.getByLabel("Активная команда",{exact:true}).uncheck();
+     await mutation(teamForm.getByRole("button",{name:"Сохранить команду",exact:true}),"UpdateTeam");
+     await teamRow.getByText("Архив",{exact:true}).waitFor();
+     checkpoint("SK-07.C UI team roster, pool assignment, reload, reassignment and archive");
+   }
+
    await page.getByLabel("Тема",{exact:true}).selectOption("dark");
    assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
    await reloadDocument();

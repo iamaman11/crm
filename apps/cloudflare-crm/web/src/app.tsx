@@ -36,7 +36,7 @@ function App() {
       key={[route.start,route.end,route.pipelineId,route.includeArchived,route.compare].join("/")}
       start={route.start} end={route.end} pipelineId={route.pipelineId}
       includeArchived={route.includeArchived} compare={route.compare}/>:
-    route.kind==="workday"?<WorkdayScreen key={route.day+"/"+route.mine} day={route.day} mine={route.mine}/>:
+    route.kind==="workday"?<WorkdayScreen key={route.day+"/"+route.mine+"/"+(route.teamId??"")} day={route.day} mine={route.mine} teamId={route.teamId??""}/>:
     route.kind==="accounts"?<AccountScreen registerBlocker={registerNavigationBlocker} filters={{search:route.search,status:route.status,cursor:route.cursor}}/>:
     route.kind==="account"?<AccountPage registerBlocker={registerNavigationBlocker} accountId={route.accountId}/>:
     route.kind==="account-create"?<AccountCreatePage key={route.partyId} registerBlocker={registerNavigationBlocker} partyId={route.partyId}/>:
@@ -48,11 +48,11 @@ function App() {
       initialPartyId={route.partyId} focusedContactPointId={route.contactPointId??""}/>:
     route.screen==="relationships"?<RelationshipScreen key={route.partyId+"/"+(route.relationshipId??"")}
       initialPartyId={route.partyId} focusedRelationshipId={route.relationshipId??""}/>:
-    route.screen==="tasks"?<TaskScreen key={route.accountId+"/"+(route.taskId??"")+"/"+(route.dealId??"")+"/"+(route.overdue?"overdue":"all")+"/"+(route.assigneeEmail??"")+"/"+(route.mine?"mine":"team")}
+    route.screen==="tasks"?<TaskScreen key={route.accountId+"/"+(route.taskId??"")+"/"+(route.dealId??"")+"/"+(route.overdue?"overdue":"all")+"/"+(route.assigneeEmail??"")+"/"+(route.mine?"mine":"team")+"/"+(route.teamId??"")}
       initialAccountId={route.accountId} focusedTaskId={route.taskId??""}
       initialDealId={route.dealId??""} initialSearch={route.search??""}
       initialOverdue={route.overdue??false}
-      initialAssigneeEmail={route.assigneeEmail??""} initialMine={route.mine??false}/>:
+      initialAssigneeEmail={route.assigneeEmail??""} initialMine={route.mine??false} initialTeamId={route.teamId??""}/>:
     route.screen==="team"?<MemberScreen/>:
     route.screen==="sales"?<SalesScreen key={route.accountId}
       initialAccountId={route.accountId} initialSearch={route.search??""}

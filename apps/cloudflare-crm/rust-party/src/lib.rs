@@ -13,6 +13,8 @@ mod access;
 #[cfg(feature = "native")]
 mod access_members;
 #[cfg(feature = "native")]
+mod access_teams;
+#[cfg(feature = "native")]
 mod account_overview;
 #[cfg(feature = "native")]
 mod accounts;
@@ -383,6 +385,36 @@ impl RpcPolicy {
 
 #[cfg(feature = "native")]
 const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
+    (
+        "/crm.access.v2.MemberService/GetTeam",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.access.v2.MemberService/ListTeams",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.access.v2.MemberService/CreateTeam",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.access.v2.MemberService/UpdateTeam",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.activities.v2.TaskService/ClaimTask",
+        RpcPolicy {
+            permission: RpcPermission::SelfWrite,
+        },
+    ),
     (
         "/crm.access.v2.MemberService/GetMyMembership",
         RpcPolicy {

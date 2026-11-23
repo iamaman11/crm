@@ -24,7 +24,7 @@ export type { Account } from "../gen/crm/accounts/v2/account_pb";
 export type { ContactPoint } from "../gen/crm/contact_points/v2/contact_point_pb";
 export type { PartyRelationship } from "../gen/crm/party_relationships/v2/relationship_pb";
 export type { Task } from "../gen/crm/activities/v2/task_pb";
-export type { Member } from "../gen/crm/access/v2/member_pb";
+export type { Member, Team } from "../gen/crm/access/v2/member_pb";
 export type { Interaction } from "../gen/crm/activities/v2/interaction_pb";
 export type { Deal } from "../gen/crm/sales/v2/deal_pb";
 export type { DealEvent } from "../gen/crm/sales/v2/deal_pb";

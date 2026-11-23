@@ -12,11 +12,12 @@ import {accountHref,scopeHref,taskHref,dealHref,taskSearchHref} from "./routes";
 import {SearchField} from "./SearchField";
 import {navigateTo} from "./navigation";
 import {allMembers,humanMember} from "./memberCatalog";
+import {allTeams,ownerFields} from "./teamCatalog";
 
 export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="",initialSearch="",initialOverdue=false,
-  initialAssigneeEmail="",initialMine=false}:{
+  initialAssigneeEmail="",initialMine=false,initialTeamId=""}:{
   initialAccountId?:string;focusedTaskId?:string;initialDealId?:string;initialSearch?:string;
-  initialOverdue?:boolean;initialAssigneeEmail?:string;initialMine?:boolean;
+  initialOverdue?:boolean;initialAssigneeEmail?:string;initialMine?:boolean;initialTeamId?:string;
 }) {
   const [cursor,setCursor]=useState("");
   const [status,setStatus]=useState("");
@@ -32,6 +33,11 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
     me.data.role===MemberRole.VIEWER&&humanMember(me.data.email)&&task.assigneeIdentity===me.data.email);
   const membersQuery=useQuery(useCallback(allMembers,[]));
   const members=membersQuery.data?.filter(member=>humanMember(member.email))??[];
+  const teamsQuery=useQuery(useCallback(allTeams,[]));
+  const teams=teamsQuery.data??[];
+  const eligibleTeams=teams.filter(team=>team.active&&team.memberEmails.some(email=>members.some(m=>m.active&&m.email===email)));
+  const canClaim=(task:Task)=>me.data?.active===true&&humanMember(me.data.email)&&
+    teams.some(team=>team.active&&team.teamId===task.ownerTeamId&&team.memberEmails.includes(me.data?.email??""));
   const [editorMode,setEditorMode]=useState<"create"|"edit"|"reminder"|null>(null);
   const query=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(focusedTaskId)return undefined; // Direct-link view never loads a full task list.
@@ -39,12 +45,13 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
       overdueOnly:initialOverdue,
       ...(initialAssigneeEmail?{assigneeEmail:initialAssigneeEmail}:{}),
       ...(initialMine?{assignedToMe:true}:{}),
+      ...(initialTeamId?{ownerTeamId:initialTeamId}:{}),
       ...(initialDealId?{dealId:initialDealId}:{}),
       ...(accountId?{accountId}:{}),
       ...(status&&!initialOverdue?{status:enumValue(status,[TaskStatus.OPEN,TaskStatus.COMPLETED],"Статус задачи")}:{}),
       ...(priority?{priority:enumValue(priority,[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи")}:{})},{signal});
   },[cursor,status,priority,accountId,focusedTaskId,initialDealId,initialSearch,
-      initialOverdue,initialAssigneeEmail,initialMine]));
+      initialOverdue,initialAssigneeEmail,initialMine,initialTeamId]));
   const focused=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(!focusedTaskId)return undefined;
     const task=(await api.tasks.getTask({taskId:focusedTaskId},{signal})).task;
@@ -96,23 +103,24 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
     <SearchField label="Поиск задач" submitted={initialSearch}
       searchLabel="Найти задачу по названию" resetLabel="Сбросить поиск задач"
       onSearch={value=>{if(navigateTo(taskSearchHref(accountId,value,initialDealId,initialOverdue,
-        initialAssigneeEmail,initialMine)))setCursor("");}}/>
+        initialAssigneeEmail,initialMine,initialTeamId)))setCursor("");}}/>
     <p><label><input type="checkbox" aria-label="Только просроченные задачи" checked={initialOverdue}
       onChange={event=>{if(navigateTo(taskSearchHref(accountId,initialSearch,initialDealId,event.target.checked,
-        initialAssigneeEmail,initialMine)))setCursor("");}}/>
+        initialAssigneeEmail,initialMine,initialTeamId)))setCursor("");}}/>
       {" "}Только просроченные задачи</label></p>
     {initialOverdue&&<p>Показаны только открытые задачи с истёкшим сроком.</p>}
-    <QueryNotice query={membersQuery}/>
-    <SelectField label="Ответственный: фильтр" value={initialMine?"__mine":initialAssigneeEmail}
+    <QueryNotice query={membersQuery}/><QueryNotice query={teamsQuery}/>
+    <SelectField label="Ответственный: фильтр" value={initialMine?"__mine":initialTeamId?"team:"+initialTeamId:initialAssigneeEmail}
       onChange={event=>{
         const next=event.target.value;
         if(navigateTo(taskSearchHref(accountId,initialSearch,initialDealId,initialOverdue,
-          next==="__mine"?"":next,next==="__mine")))setCursor("");
+          next==="__mine"||next.startsWith("team:")?"":next,next==="__mine",next.startsWith("team:")?next.slice(5):"")))setCursor("");
       }}>
       <option value="">Все ответственные</option>
       <option value="__mine">Назначено мне по подписанной сессии</option>
       {members.map(m=><option value={m.email} key={m.email}>
         {m.email}{!m.active?" (неактивен)":""}</option>)}
+      {teams.map(team=><option key={team.teamId} value={"team:"+team.teamId}>Команда: {team.name}{team.active?"":" (архив)"}</option>)}
     </SelectField>
     {!initialDealId&&<AccountPicker label="Фильтр по клиенту" value={accountId} required={false}
       onSelect={id=>{setAccountId(id);setCursor("");}}/>}
@@ -133,9 +141,13 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
       <p>Напоминание: {dateText(t.reminderAt)}</p>
       <p>Ответственный: {t.assigneeIdentity?
         (humanMember(t.assigneeIdentity)?t.assigneeIdentity:"Технический агент") :
-        t.ownerTeamId?"Команда "+t.ownerTeamId:"неизвестен"}</p>
+        t.ownerTeamId?"Команда: "+(teams.find(team=>team.teamId===t.ownerTeamId)?.name??t.ownerTeamId):"неизвестен"}</p>
       {t.relatedDealId&&<p>Связанная сделка: <a href={dealHref(t.relatedDealId)}>Открыть сделку</a></p>}
       {!focusedTaskId&&<p><a href={taskHref(t.taskId,t.accountId)}>Открыть карточку задачи</a></p>}
+      {canClaim(t)&&t.status===TaskStatus.OPEN&&<Button disabled={mutation.busy||mutation.pending}
+        onClick={()=>void mutation.runIntent(()=>prepareMutation(api.tasks.claimTask,{
+          taskId:t.taskId,precondition:{idempotencyKey:mutation.key,expectedVersion:t.version}
+        },t.taskId),async()=>{await query.reload();await focused.reload();})}>Забрать задачу себе</Button>}{" "}
       {isAdmin&&<Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={async()=>{
         try {
           setSelected((await api.tasks.getTask({taskId:t.taskId})).task);
@@ -203,8 +215,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
             description:{operation:description
               ?{case:"set",value:description}:{case:"clear",value:true}},
             priority:enumValue(field(data,"editPriority"),[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи"),
-            ...(field(data,"editAssigneeEmail")?
-              {assigneeEmail:field(data,"editAssigneeEmail")} : {}),
+            ...ownerFields(field(data,"editAssigneeEmail")),
             ...(dueAt?{dueAt}:{}),
             precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
           },selected.taskId);
@@ -221,6 +232,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
           <option value="">Оставить действующего ответственного</option>
           {members.filter(m=>m.active).map(m=><option value={m.email} key={m.email}>
             {m.email}</option>)}
+          {eligibleTeams.map(team=><option value={"team:"+team.teamId} key={team.teamId}>Команда: {team.name}</option>)}
         </SelectField>
         <TimeFields name="editDue" label="Срок задачи" editing/>
       </FormGrid>
@@ -238,7 +250,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
         return prepareMutation(api.tasks.createTask,{taskId:draftId,subject:field(data,"subject"),accountId:targetAccount,
           ...(initialDealId?{dealId:initialDealId}:{}),
           priority:enumValue(field(data,"priority"),[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи"),...(description?{description}:{}),
-          ...(field(data,"assigneeEmail")?{assigneeEmail:field(data,"assigneeEmail")}:{}),
+          ...ownerFields(field(data,"assigneeEmail")),
           ...(dueAt?{dueAt}:{}),...(reminderAt?{reminderAt}:{}),precondition:{idempotencyKey:mutation.key}},draftId);
       },async()=>{setEditorMode(null);setDraftId(newId());await query.reload();});
     }}><FormGrid>
@@ -249,10 +261,11 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
       <SelectField label="Приоритет" name="priority" defaultValue="2">
         <option value={TaskPriority.LOW}>Низкий</option><option value={TaskPriority.NORMAL}>Обычный</option><option value={TaskPriority.HIGH}>Высокий</option><option value={TaskPriority.URGENT}>Срочный</option>
       </SelectField>
-      <SelectField label="Назначить сотруднику" name="assigneeEmail" defaultValue="">
+      <SelectField label="Назначить сотруднику" name="assigneeEmail" defaultValue={initialTeamId&&eligibleTeams.some(team=>team.teamId===initialTeamId)?"team:"+initialTeamId:""}>
         <option value="">Создатель — действующий подписанный актор</option>
         {members.filter(m=>m.active).map(m=><option value={m.email} key={m.email}>
           {m.email}</option>)}
+        {eligibleTeams.map(team=><option value={"team:"+team.teamId} key={team.teamId}>Команда: {team.name}</option>)}
       </SelectField>
       <TextField label="Срок" name="due" type="datetime-local" step="1"/>
       <TextField label="Напоминание" name="reminder" type="datetime-local" step="1"/>
