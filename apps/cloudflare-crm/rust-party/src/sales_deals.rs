@@ -1133,7 +1133,12 @@ pub(super) async fn reopen_typed(
             ErrorCategory::Conflict,
         ));
     }
-    let replacement = match input.owner.as_ref().map(SalesOwnerScope::domain_owner).transpose() {
+    let replacement = match input
+        .owner
+        .as_ref()
+        .map(SalesOwnerScope::domain_owner)
+        .transpose()
+    {
         Ok(owner) => owner,
         Err(e) => return Ok(rejected_sdk(e)),
     };
@@ -1153,16 +1158,16 @@ pub(super) async fn reopen_typed(
         owner_guard(Some(target))
     );
     let mut values = vec![
-            JsValue::from_str(&state),
-            JsValue::from_f64(deal.version() as f64),
-            JsValue::from_str(key),
-            JsValue::from_str(&digest),
-            JsValue::from_str(trace),
-            JsValue::from_str(actor),
-            JsValue::from_str(&input.reason_code),
-            JsValue::from_str(tenant),
-            JsValue::from_str(id),
-            JsValue::from_f64(input.expected_version as f64),
+        JsValue::from_str(&state),
+        JsValue::from_f64(deal.version() as f64),
+        JsValue::from_str(key),
+        JsValue::from_str(&digest),
+        JsValue::from_str(trace),
+        JsValue::from_str(actor),
+        JsValue::from_str(&input.reason_code),
+        JsValue::from_str(tenant),
+        JsValue::from_str(id),
+        JsValue::from_f64(input.expected_version as f64),
     ];
     owner_parameters(&mut values, tenant, Some(target));
     let result = bind(db, &sql, &values)?.run().await;

@@ -296,17 +296,34 @@ pub(super) async fn update(
     let sql = format!(
         "UPDATE crm_users SET role=COALESCE(?,role),active=COALESCE(?,active),version=version+1,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE email=? AND tenant_id=? AND version=? AND email<>? AND (role<>'admin' OR (COALESCE(?,role)='admin' AND COALESCE(?,active)=1) OR (SELECT COUNT(*) FROM crm_users WHERE tenant_id=? AND active=1 AND role='admin')>1) AND (active=0 OR COALESCE(?14,active)=1 OR NOT EXISTS (SELECT 1 FROM crm_access_teams AS tm WHERE tm.tenant=?8 AND json_extract(tm.state,'$.active')=1 AND EXISTS (SELECT 1 FROM json_each(tm.state,'$.member_emails') AS target WHERE target.value=?7) AND NOT EXISTS (SELECT 1 FROM json_each(tm.state,'$.member_emails') AS roster JOIN crm_users AS u ON u.tenant_id=tm.tenant AND u.email=roster.value AND u.active=1 WHERE u.email<>?7 AND u.email NOT LIKE 'service:%') AND {work}))"
     );
-    let write=bind(ctx.db,
-      &sql,
-      &[selected.map(JsValue::from_str).unwrap_or(JsValue::NULL),
-        active.map(|v|JsValue::from_f64(if v{1.0}else{0.0})).unwrap_or(JsValue::NULL),
-        JsValue::from_str(key),JsValue::from_str(&hash),JsValue::from_str(trace),
-        JsValue::from_str(ctx.actor),JsValue::from_str(&member),JsValue::from_str(ctx.tenant),
-        JsValue::from_f64(expected as f64),JsValue::from_str(ctx.actor),
-        selected.map(JsValue::from_str).unwrap_or(JsValue::NULL),
-        active.map(|v|JsValue::from_f64(if v{1.0}else{0.0})).unwrap_or(JsValue::NULL),
-        JsValue::from_str(ctx.tenant),
-        active.map(|v|JsValue::from_f64(if v{1.0}else{0.0})).unwrap_or(JsValue::NULL)])?.run().await;
+    let write = bind(
+        ctx.db,
+        &sql,
+        &[
+            selected.map(JsValue::from_str).unwrap_or(JsValue::NULL),
+            active
+                .map(|v| JsValue::from_f64(if v { 1.0 } else { 0.0 }))
+                .unwrap_or(JsValue::NULL),
+            JsValue::from_str(key),
+            JsValue::from_str(&hash),
+            JsValue::from_str(trace),
+            JsValue::from_str(ctx.actor),
+            JsValue::from_str(&member),
+            JsValue::from_str(ctx.tenant),
+            JsValue::from_f64(expected as f64),
+            JsValue::from_str(ctx.actor),
+            selected.map(JsValue::from_str).unwrap_or(JsValue::NULL),
+            active
+                .map(|v| JsValue::from_f64(if v { 1.0 } else { 0.0 }))
+                .unwrap_or(JsValue::NULL),
+            JsValue::from_str(ctx.tenant),
+            active
+                .map(|v| JsValue::from_f64(if v { 1.0 } else { 0.0 }))
+                .unwrap_or(JsValue::NULL),
+        ],
+    )?
+    .run()
+    .await;
     confirm(
         ctx,
         key,

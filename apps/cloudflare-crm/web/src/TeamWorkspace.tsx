@@ -38,7 +38,7 @@ export function TeamWorkspace({query,members,isAdmin,actor,onChanged}:{
   const rosterChanged=JSON.stringify([...roster].sort())!==JSON.stringify([...(editing?.memberEmails??[])].sort());
   return <section aria-label="Организационные команды">
     <h2>Организационные команды</h2>
-    <p>Сотрудник может состоять в нескольких командах. После получения из общего пула задача становится личной. Архивирование команды с открытой работой запрещено.</p>
+    <p>Сотрудник может состоять в нескольких командах. После получения из общего пула задача становится личной. Команду с открытой работой нельзя архивировать или оставить без активных сотрудников. Сначала переназначьте работу или добавьте действующего сотрудника.</p>
     <QueryNotice query={query}/>
     <TextField label="Поиск команд" value={search} onChange={e=>setSearch(e.target.value)}/>
     {isAdmin&&<Button disabled={pending} onClick={()=>start()}>Создать команду</Button>}
