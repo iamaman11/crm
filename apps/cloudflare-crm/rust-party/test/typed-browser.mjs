@@ -2613,6 +2613,32 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.getByRole("heading",{name:"Карточка сделки",exact:true}).waitFor();
    checkpoint("Manual Deal Task→original Task owner→Deal survives reload, exactly one receipt and audit");
 
+   // SK-06: the user sees one due-ordered, tenant-authorized workday,
+   // follows the original Task record and returns to the SAME selected date.
+   const workdayReadAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await navigate("workday?date=2026-11-23","Рабочий день");
+   await expect(page.getByLabel("Дата рабочего дня",{exact:true})).toHaveValue("2026-11-23");
+   const workdayPast=page.getByRole("region",{name:"До выбранной даты"});
+   const workdayFuture=page.getByRole("region",{name:"Ближайшие после даты"});
+   const workdayUndated=page.getByRole("region",{name:"Без срока"});
+   const workdayRecent=page.getByRole("region",{name:"Последние взаимодействия"});
+   await workdayPast.getByRole("link",{name:"Native overdue Z",exact:true}).waitFor();
+   await workdayFuture.getByRole("link",{name:"SK06 Workday earliest",exact:true}).waitFor();
+   await workdayUndated.getByRole("heading",{name:"Без срока",exact:true}).waitFor();
+   await workdayRecent.getByText(accountNote,{exact:true}).waitFor();
+   assert.ok(await workdayRecent.getByRole("link",{name:"Browser Account "+runId,exact:true}).count()>0);
+   await workdayFuture.getByRole("link",{name:"SK06 Workday earliest",exact:true}).click();
+   await page.getByRole("heading",{name:"Карточка задачи",exact:true}).waitFor();
+   await page.goBack();
+   await page.getByRole("heading",{name:"Рабочий день",exact:true}).waitFor();
+   await expect(page.getByLabel("Дата рабочего дня",{exact:true})).toHaveValue("2026-11-23");
+   await reloadDocument();
+   await workdayRecent.getByText(accountNote,{exact:true}).waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     workdayReadAudit,"SK-06 workday Task/Interaction reads and Back/reload must not write audit");
+   await page.screenshot({path:resolve(directory,"crm-workday.png"),fullPage:true});
+   checkpoint("SK-06 typed workday: due-before-LIMIT, linked Task/Account/Deal, recent across tenant, Back/reload, read-only");
+
    await page.getByLabel("Тема",{exact:true}).selectOption("dark");
    assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
    await reloadDocument();

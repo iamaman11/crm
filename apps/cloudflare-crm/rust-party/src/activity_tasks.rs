@@ -628,6 +628,10 @@ pub(super) struct TaskListFilters<'a> {
     pub(super) deal_id: Option<&'a str>,
     pub(super) search: &'a str,
     pub(super) overdue_only: bool,
+    pub(super) due_from: Option<i64>,
+    pub(super) due_before: Option<i64>,
+    pub(super) sort_by_due: bool,
+    pub(super) without_due_only: bool,
 }
 pub(super) async fn list_page_typed(
     db: &D1Database,
@@ -643,11 +647,22 @@ pub(super) async fn list_page_typed(
         deal_id,
         search,
         overdue_only,
+        due_from,
+        due_before,
+        sort_by_due,
+        without_due_only,
     } = filters;
+    // Exactly one Task owner. The order/filter decision is made in SQL BEFORE
+    // the keyset LIMIT; a browser cannot find due work in an ID-sorted page.
+    let due_sql = "CAST(json_extract(t.state,'$.due_at_unix_nanos') AS INTEGER)";
     let mut query = String::from(
-        "SELECT id,state,account_id, (SELECT a.search_name FROM crm_account_records a WHERE a.tenant=t.tenant AND a.id=t.account_id) AS account_name FROM crm_activity_task_records AS t WHERE tenant=? AND id>?",
+        "SELECT id,state,account_id, (SELECT a.search_name FROM crm_account_records a WHERE a.tenant=t.tenant AND a.id=t.account_id) AS account_name FROM crm_activity_task_records AS t WHERE tenant=?",
     );
-    let mut params = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
+    let mut params = vec![JsValue::from_str(tenant)];
+    if !sort_by_due {
+        query.push_str(" AND t.id>?");
+        params.push(JsValue::from_str(after));
+    }
     // Filters are checked in native SQL BEFORE LIMIT/cursor calculation.
     if let Some(status) = status {
         query.push_str(" AND json_extract(state,'$.status')=?");
@@ -694,7 +709,44 @@ pub(super) async fn list_page_typed(
         );
         params.push(JsValue::from_str(&now_nanos().to_string()));
     }
-    query.push_str(" ORDER BY id LIMIT ?");
+    if without_due_only {
+        query.push_str(" AND json_extract(t.state,'$.due_at_unix_nanos') IS NULL");
+    } else {
+        if let Some(from) = due_from {
+            query.push_str(" AND ");
+            query.push_str(due_sql);
+            query.push_str(" >= CAST(? AS INTEGER)");
+            params.push(JsValue::from_str(&from.to_string()));
+        }
+        if let Some(before) = due_before {
+            query.push_str(" AND ");
+            query.push_str(due_sql);
+            query.push_str(" < CAST(? AS INTEGER)");
+            params.push(JsValue::from_str(&before.to_string()));
+        }
+    }
+    if sort_by_due {
+        query.push_str(" AND json_extract(t.state,'$.due_at_unix_nanos') IS NOT NULL");
+        if !after.is_empty() {
+            // Handler already validates the exact '<nanos>|<Task id>' format.
+            let (time, id) = after.split_once('|').ok_or_else(|| {
+                worker::Error::RustError("INVALID_TASK_DUE_CURSOR".into())
+            })?;
+            query.push_str(" AND (");
+            query.push_str(due_sql);
+            query.push_str(" > CAST(? AS INTEGER) OR (");
+            query.push_str(due_sql);
+            query.push_str(" = CAST(? AS INTEGER) AND t.id>?))");
+            params.push(JsValue::from_str(time));
+            params.push(JsValue::from_str(time));
+            params.push(JsValue::from_str(id));
+        }
+        query.push_str(" ORDER BY ");
+        query.push_str(due_sql);
+        query.push_str(" ASC,t.id ASC LIMIT ?");
+    } else {
+        query.push_str(" ORDER BY t.id LIMIT ?");
+    }
     params.push(JsValue::from_f64((size + 1) as f64));
     let rows = bind(db, &query, &params)?
         .all()
@@ -702,7 +754,19 @@ pub(super) async fn list_page_typed(
         .results::<PagedRow>()?;
     let has_more = rows.len() > size;
     let next = if has_more {
-        rows.get(size - 1).map(|x| x.id.clone())
+        rows.get(size - 1)
+            .map(|row| {
+                if sort_by_due {
+                    let task = decode(&row.state)?;
+                    let due = task.due_at_unix_nanos().ok_or_else(|| {
+                        worker::Error::RustError("Task due sort returned undated row".into())
+                    })?;
+                    Ok(format!("{}|{}", due, row.id))
+                } else {
+                    Ok(row.id.clone())
+                }
+            })
+            .transpose()?
     } else {
         None
     };

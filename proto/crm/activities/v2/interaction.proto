@@ -57,11 +57,16 @@ message ListInteractionsRequest {
   // Empty lists both Account and linked Deal events. Nonempty only this Deal.
   string deal_id = 2;
   crm.core.v2.PageRequest page = 3;
+  // SK-06: request recent events across this authorized tenant only.
+  // Require an empty account_id and deal_id when true.
+  bool recent_across_accounts = 4;
 }
 
 message ListInteractionsResponse {
   repeated Interaction interactions = 1;
   crm.core.v2.PageInfo page_info = 2;
+  // Owner-resolved names, for the tenant-wide recent screen without N+1 reads.
+  map<string, string> account_names = 3;
 }
 
 service InteractionService {

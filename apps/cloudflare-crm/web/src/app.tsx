@@ -7,6 +7,7 @@ import {AccountScreen,AccountPage,AccountCreatePage,accountFilterStatuses} from 
 import {ContactScreen} from "./ContactScreen";
 import {RelationshipScreen} from "./RelationshipScreen";
 import {TaskScreen} from "./TaskScreen";
+import {WorkdayScreen} from "./WorkdayScreen";
 import {SalesScreen} from "./SalesScreen";
 import {ConsentScreen} from "./ConsentScreen";
 import {ReviewScreen} from "./ReviewScreen";
@@ -18,6 +19,7 @@ import {parseRoute,sectionLabels} from "./routes";
 import {currentRouteHash,subscribeNavigation,registerNavigationBlocker} from "./navigation";
 
 const screens=[
+  {id:"workday",label:"Рабочий день"},
   {id:"search",label:"Поиск"},
   {id:"accounts",label:"Клиенты"},
   ...Object.entries(sectionLabels).map(([id,label])=>({id,label})),
@@ -26,8 +28,9 @@ function unreachable(screen:never):never {throw Error("Unknown CRM screen "+scre
 function App() {
   const hash=useSyncExternalStore(subscribeNavigation,currentRouteHash);
   const route=useMemo(()=>parseRoute(hash,accountFilterStatuses),[hash]);
-  const current=route.kind==="accounts"||route.kind==="account"||route.kind==="account-create"?"accounts":route.kind==="deal"?"sales":route.kind==="search"?"search":route.kind==="section"?route.screen:"";
-  const content=route.kind==="accounts"?<AccountScreen registerBlocker={registerNavigationBlocker} filters={{search:route.search,status:route.status,cursor:route.cursor}}/>:
+  const current=route.kind==="workday"?"workday":route.kind==="accounts"||route.kind==="account"||route.kind==="account-create"?"accounts":route.kind==="deal"?"sales":route.kind==="search"?"search":route.kind==="section"?route.screen:"";
+  const content=route.kind==="workday"?<WorkdayScreen key={route.day} day={route.day}/>:
+    route.kind==="accounts"?<AccountScreen registerBlocker={registerNavigationBlocker} filters={{search:route.search,status:route.status,cursor:route.cursor}}/>:
     route.kind==="account"?<AccountPage registerBlocker={registerNavigationBlocker} accountId={route.accountId}/>:
     route.kind==="account-create"?<AccountCreatePage key={route.partyId} registerBlocker={registerNavigationBlocker} partyId={route.partyId}/>:
     route.kind==="deal"?<SalesScreen key={route.dealId} focusedDealId={route.dealId}/>:

@@ -4260,6 +4260,107 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    chronological_keyset:true,idempotent_replay:true,
    immutable_receipt_and_audit:true,failed_audit_rollback:true}));
 
+
+ // SK-06: one original Task owner filters due instants before LIMIT, using a
+ // different (due-nanos, id) keyset. Existing ID-sorted Task views are unchanged.
+ const sk06Seeds=[
+   ["sk06-task-z-"+randomUUID(),"SK06 Workday earliest",1800100000n],
+   ["sk06-task-a-"+randomUUID(),"SK06 Workday same A",1800200000n],
+   ["sk06-task-c-"+randomUUID(),"SK06 Workday same C",1800200000n],
+   ["sk06-task-undated-"+randomUUID(),"SK06 Workday undated",null],
+   ["sk06-task-done-"+randomUUID(),"SK06 Workday completed",1800150000n]
+ ];
+ for(const [taskId,subject,due] of sk06Seeds){
+   const made=await taskV2("CreateTask",admin,{
+     taskId,subject,accountId:accountNextId,priority:2,
+     ...(due===null?{}:{dueAt:{seconds:due,nanos:0}}),
+     precondition:{idempotencyKey:"sk06-task-create-"+taskId}
+   });
+   assert.equal(made.status,200,describeProtobuf(made.body));
+ }
+ const [sk06Early,sk06SameA,sk06SameC,sk06Undated,sk06Done]=sk06Seeds.map(x=>x[0]);
+ const sk06Completed=await taskV2("CompleteTask",admin,{taskId:sk06Done,
+   precondition:{expectedVersion:1n,idempotencyKey:"sk06-task-complete-"+sk06Done}});
+ assert.equal(sk06Completed.status,200,describeProtobuf(sk06Completed.body));
+ const sk06ReadAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
+ const sk06DueFilter={status:1,sortByDue:true,search:"SK06 Workday ",
+   dueFrom:{seconds:1800100000n,nanos:0},
+   dueBefore:{seconds:1800300000n,nanos:0},page:{pageSize:1}};
+ const sk06DueTasks=await collectPages(taskV2,"ListTasks","tasks",sk06DueFilter);
+ assert.deepEqual(sk06DueTasks.map(task=>task.taskId),
+   [sk06Early,sk06SameA,sk06SameC],
+   "Task due keyset must order by exact nanoseconds then ID before each LIMIT");
+ assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{
+   status:1,withoutDueOnly:true,search:"SK06 Workday ",page:{pageSize:1}
+ })).map(task=>task.taskId),[sk06Undated]);
+ assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{
+   status:1,sortByDue:true,
+   dueFrom:{seconds:1800200000n,nanos:0},
+   dueBefore:{seconds:1800200001n,nanos:0},search:"SK06 Workday ",page:{pageSize:1}
+ })).map(task=>task.taskId),[sk06SameA,sk06SameC]);
+ assert.equal((await taskV2("ListTasks",tenantB,sk06DueFilter)).body.tasks.length,0);
+ const sk06Viewer=await taskV2("ListTasks",viewer,{...sk06DueFilter,page:{pageSize:2}});
+ const sk06Admin=await taskV2("ListTasks",admin,{...sk06DueFilter,page:{pageSize:2}});
+ assert.equal(sk06Viewer.status,200);
+ assert.deepEqual(sk06Viewer.body,sk06Admin.body,"viewer must see same authorized Task fields");
+ for(const bad of [
+   {...sk06DueFilter,page:{pageSize:2,pageToken:"invalid"}},
+   {...sk06DueFilter,dueFrom:{seconds:1800300000n,nanos:0}},
+   {...sk06DueFilter,sortByDue:false,withoutDueOnly:true}
+ ]){
+   assert.equal((await taskV2("ListTasks",viewer,bad)).status,400,
+     "SK-06 invalid cursor/range/undated mix must fail closed");
+ }
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
+   sk06ReadAuditBefore,"SK-06 Task read filtering must never append audit");
+
+ // The SAME Interaction List RPC supports an explicitly authorized
+ // tenant-wide recent view; Account/Deal history remains scoped as before.
+ const sk06OtherInteraction="sk06-recent-"+randomUUID();
+ const sk06RecentInput={...interactionInput(sk06OtherInteraction,1,1790000000),
+   accountId:accountNextId};
+ const sk06Created=await interactionV2("CreateInteraction",admin,sk06RecentInput);
+ assert.equal(sk06Created.status,200,describeProtobuf(sk06Created.body));
+ const sk06RecentAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
+ const sk06Recent=await interactionV2("ListInteractions",viewer,{
+   recentAcrossAccounts:true,page:{pageSize:2}
+ });
+ assert.equal(sk06Recent.status,200);
+ assert.deepEqual(sk06Recent.body.interactions.map(event=>event.interactionId),
+   [sk06OtherInteraction,eventLater],
+   "SK-06 newest interactions span multiple Accounts before keyset LIMIT");
+ assert.ok(sk06Recent.body.accountNames[accountNextId]);
+ assert.ok(sk06Recent.body.accountNames[accountId]);
+ assert.ok(sk06Recent.body.pageInfo?.nextPageToken);
+ const sk06NextRecent=await interactionV2("ListInteractions",viewer,{
+   recentAcrossAccounts:true,page:{pageSize:2,
+     pageToken:sk06Recent.body.pageInfo.nextPageToken}
+ });
+ assert.deepEqual(sk06NextRecent.body.interactions.map(event=>event.interactionId),
+   [eventNote,eventEarlier]);
+ assert.deepEqual((await interactionV2("ListInteractions",admin,{
+   recentAcrossAccounts:true,page:{pageSize:2}
+ })).body,sk06Recent.body);
+ assert.deepEqual((await interactionV2("ListInteractions",tenantB,{
+   recentAcrossAccounts:true,page:{pageSize:3}
+ })).body.interactions,[]);
+ assert.equal((await interactionV2("ListInteractions",viewer,{
+   recentAcrossAccounts:true,accountId,page:{pageSize:2}
+ })).status,400);
+ assert.equal((await interactionV2("ListInteractions",viewer,{
+   recentAcrossAccounts:true,dealId,page:{pageSize:2}
+ })).status,400);
+ assert.equal((await interactionV2("ListInteractions",viewer,{
+   recentAcrossAccounts:false,page:{pageSize:2}
+ })).status,400);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
+   sk06RecentAuditBefore,"recent original Interaction reads are audit-free");
+ console.log(JSON.stringify({event:"crm.native-sk06-workday",result:"PASS",source_sha:sourceSha,
+   owner:"crm.activities",typed_binary:true,due_range_before_limit:true,
+   due_nanosecond_keyset:true,undated:true,tenant_ab:true,viewer_full_fields:true,
+   recent_across_accounts:true,account_names:true,invalid_scope_denied:true,
+   no_read_audit:true}));
+
  await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
  const salesAuditBeforeFilter=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  assert.deepEqual((await collectPages(salesV2,"ListDeals","deals",{accountId})).map(d=>d.dealId),

@@ -124,6 +124,15 @@ message ListTasksRequest {
   // Select only open Tasks with a non-null due instant strictly before
   // the server clock. Executed in the signed original owner before paging.
   bool overdue_only = 7;
+  // SK-06: absolute instants supplied from the user's chosen local-day bounds.
+  // Owner filters before LIMIT; [due_from, due_before) is half-open.
+  google.protobuf.Timestamp due_from = 8;
+  google.protobuf.Timestamp due_before = 9;
+  // Due-ordered keyset uses the (due_nanoseconds, task_id) pair, not the ID cursor.
+  // Only dated records participate. Default false retains existing Task list order.
+  bool sort_by_due = 10;
+  // Include only Tasks with no deadline; incompatible with due-range/sort.
+  bool without_due_only = 11;
 }
 
 message ListTasksResponse {

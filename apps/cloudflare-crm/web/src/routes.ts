@@ -16,6 +16,7 @@ export type Section=keyof typeof sectionLabels;
 export type AccountFilterStatus = AccountStatus.ACTIVE | AccountStatus.INACTIVE;
 export type AccountFilters = {search:string;status:AccountFilterStatus|null;cursor:string};
 export type Route =
+  | {kind:"workday";day:string}
   | ({kind:"accounts"} & AccountFilters)
   | {kind:"account";accountId:string}
   | {kind:"account-create";partyId:string}
@@ -38,6 +39,23 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
   const question=source.indexOf("?");
   const path=question<0?source:source.slice(0,question);
   const params=new URLSearchParams(question<0?"":source.slice(question+1));
+  if(path==="workday"){
+    const dates=params.getAll("date");
+    const day=dates[0]??"";
+    let invalid=false;
+    params.forEach((_,key)=>{if(key!=="date")invalid=true;});
+    if(dates.length>1||invalid)return {kind:"not-found",path:source};
+    if(day){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return {kind:"not-found",path:source};
+      const [year,month,date]=day.split("-").map(Number);
+      if(year===undefined||month===undefined||date===undefined||
+        year<2000||year>2100)return {kind:"not-found",path:source};
+      const valid=new Date(Date.UTC(year,month-1,date));
+      if(valid.getUTCFullYear()!==year||valid.getUTCMonth()!==month-1||
+        valid.getUTCDate()!==date)return {kind:"not-found",path:source};
+    }
+    return {kind:"workday",day};
+  }
   if(path==="search"){
     const queries=params.getAll("query");
     const query=queries[0]??"";
@@ -108,6 +126,9 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
       ...(pipelineIds[0]?{pipelineId:pipelineIds[0]}:{})};
   }
   return {kind:"not-found",path:source};
+}
+export function workdayHref(day=""):string {
+  return "#workday"+(day?"?"+new URLSearchParams({date:day}).toString():"");
 }
 export function accountsHref(filters:AccountFilters={search:"",status:null,cursor:""}):string {
   const params=new URLSearchParams();

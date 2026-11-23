@@ -112,9 +112,17 @@ impl interaction_wire::InteractionService for InteractionV2Service {
         req: ServiceRequest<'_, interaction_wire::ListInteractionsRequest>,
     ) -> ServiceResult<interaction_wire::ListInteractionsResponse> {
         let input = req.to_owned_message();
-        crm_activities::interactions::validate_identifier(&input.account_id).map_err(|_| {
-            ConnectError::invalid_argument("ACTIVITIES_INTERACTION_ACCOUNT_ID_INVALID")
-        })?;
+        if input.recent_across_accounts {
+            if !input.account_id.is_empty() || !input.deal_id.is_empty() {
+                return Err(ConnectError::invalid_argument(
+                    "ACTIVITIES_INTERACTION_RECENT_SCOPE_INVALID",
+                ));
+            }
+        } else {
+            crm_activities::interactions::validate_identifier(&input.account_id).map_err(|_| {
+                ConnectError::invalid_argument("ACTIVITIES_INTERACTION_ACCOUNT_ID_INVALID")
+            })?;
+        }
         if !input.deal_id.is_empty() {
             crm_activities::interactions::validate_identifier(&input.deal_id).map_err(|_| {
                 ConnectError::invalid_argument("ACTIVITIES_INTERACTION_DEAL_ID_INVALID")
@@ -139,7 +147,7 @@ impl interaction_wire::InteractionService for InteractionV2Service {
                 return Err(ConnectError::invalid_argument("INVALID_INTERACTION_CURSOR"));
             }
         }
-        let (items, next) = interactions::list(
+        let (items, next, account_names) = interactions::list(
             &self.d1()?,
             &self.actor.tenant,
             &input.account_id,
@@ -151,6 +159,7 @@ impl interaction_wire::InteractionService for InteractionV2Service {
         .map_err(|_| ConnectError::internal("Interaction D1 list failed"))?;
         RpcResponse::ok(interaction_wire::ListInteractionsResponse {
             interactions: items.iter().map(Self::convert).collect(),
+            account_names: account_names.into_iter().collect(),
             page_info: Some(core_v2::PageInfo {
                 next_page_token: next.unwrap_or_default(),
                 ..Default::default()

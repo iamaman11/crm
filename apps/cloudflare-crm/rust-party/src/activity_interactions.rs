@@ -22,6 +22,8 @@ struct PageRow {
     id: String,
     occurred_at_key: String,
     state: String,
+    account_id: String,
+    account_name: String,
 }
 
 pub(super) struct Saved {
@@ -207,7 +209,7 @@ pub(super) async fn list(
     deal_id: &str,
     cursor: &str,
     size: usize,
-) -> Result<(Vec<Interaction>, Option<String>)> {
+) -> Result<(Vec<Interaction>, Option<String>, Vec<(String, String)>)> {
     let (after_time, after_id) = if cursor.is_empty() {
         (String::new(), String::new())
     } else {
@@ -227,13 +229,17 @@ pub(super) async fn list(
     let rows = bind(
         db,
         concat!(
-            "SELECT id,occurred_at_key,state FROM crm_activity_interactions ",
-            "WHERE tenant=? AND account_id=? AND (?='' OR deal_id=?) ",
-            "AND (?='' OR occurred_at_key<? OR (occurred_at_key=? AND id<?)) ",
-            "ORDER BY occurred_at_key DESC,id DESC LIMIT ?"
+            "SELECT i.id,i.occurred_at_key,i.state,i.account_id, ",
+            "(SELECT a.search_name FROM crm_account_records AS a ",
+            "WHERE a.tenant=i.tenant AND a.id=i.account_id) AS account_name ",
+            "FROM crm_activity_interactions AS i ",
+            "WHERE i.tenant=? AND (?='' OR i.account_id=?) AND (?='' OR i.deal_id=?) ",
+            "AND (?='' OR i.occurred_at_key<? OR (i.occurred_at_key=? AND i.id<?)) ",
+            "ORDER BY i.occurred_at_key DESC,i.id DESC LIMIT ?"
         ),
         &[
             JsValue::from_str(tenant),
+            JsValue::from_str(account_id),
             JsValue::from_str(account_id),
             JsValue::from_str(deal_id),
             JsValue::from_str(deal_id),
@@ -249,12 +255,14 @@ pub(super) async fn list(
     .results::<PageRow>()?;
     let more = rows.len() > size;
     let mut interactions = Vec::with_capacity(rows.len().min(size));
+    let mut account_names = Vec::with_capacity(rows.len().min(size));
     let mut next = None;
     for (index, row) in rows.into_iter().enumerate().take(size) {
         if more && index + 1 == size {
             next = Some(format!("{}|{}", row.occurred_at_key, row.id));
         }
+        account_names.push((row.account_id, row.account_name));
         interactions.push(decode(&row.state)?);
     }
-    Ok((interactions, next))
+    Ok((interactions, next, account_names))
 }

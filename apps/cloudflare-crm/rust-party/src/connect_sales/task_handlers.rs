@@ -278,7 +278,33 @@ impl task_wire::TaskService for TaskV2Service {
         }
         let after = &req.page.page_token;
         if !after.is_empty() {
-            Self::valid_id(after)?;
+            if req.sort_by_due {
+                let (time, id) = after.split_once('|').ok_or_else(|| {
+                    ConnectError::invalid_argument("INVALID_TASK_DUE_CURSOR")
+                })?;
+                if time.parse::<i64>().ok().filter(|value| *value >= 0).is_none()
+                    || Self::valid_id(id).is_err()
+                {
+                    return Err(ConnectError::invalid_argument("INVALID_TASK_DUE_CURSOR"));
+                }
+            } else {
+                Self::valid_id(after)?;
+            }
+        }
+        let due_from = req.due_from.as_option()
+            .map(ContactPointV2Service::nanos).transpose()?;
+        let due_before = req.due_before.as_option()
+            .map(ContactPointV2Service::nanos).transpose()?;
+        if due_from.is_some_and(|value| value < 0)
+            || due_before.is_some_and(|value| value < 0)
+            || due_from.zip(due_before).is_some_and(|(from, before)| from >= before)
+        {
+            return Err(ConnectError::invalid_argument("INVALID_TASK_DUE_RANGE"));
+        }
+        if req.without_due_only && (due_from.is_some() || due_before.is_some()
+            || req.sort_by_due || req.overdue_only)
+        {
+            return Err(ConnectError::invalid_argument("INVALID_TASK_DUE_FILTERS"));
         }
         let status = match req.status {
             None => None,
@@ -330,6 +356,10 @@ impl task_wire::TaskService for TaskV2Service {
                 deal_id: deal,
                 search,
                 overdue_only: req.overdue_only,
+                due_from,
+                due_before,
+                sort_by_due: req.sort_by_due,
+                without_due_only: req.without_due_only,
             },
         )
         .await
