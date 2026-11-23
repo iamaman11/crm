@@ -48,7 +48,7 @@ export function InteractionTimeline({accountId,dealId=""}:{accountId:string;deal
       <strong>{label(item.kind)}</strong>{" · "}{dateText(item.occurredAt)}
       <p>{item.text}</p>
       <p>Автор: {item.author} · записано: {dateText(item.recordedAt)}
-        {!dealId&&item.dealId?<> · <a href={dealHref(item.dealId,accountId)}>Связанная сделка</a></>:null}
+        {!dealId&&item.dealId?<> · <a href={dealHref(item.dealId)}>Связанная сделка</a></>:null}
       </p>
     </li>)}</ol>
     {!history.busy&&!history.error&&items.length===0&&<p>Записей на этой странице нет.</p>}
