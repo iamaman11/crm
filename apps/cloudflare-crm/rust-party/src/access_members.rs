@@ -29,6 +29,12 @@ pub(super) struct Saved {
     pub original_request_id: String,
 }
 pub(super) type Failure = d1_write::OwnerFailure;
+pub(super) struct MemberContext<'a> {
+    pub(super) db: &'a D1Database,
+    pub(super) tenant: &'a str,
+    pub(super) actor: &'a str,
+}
+
 fn reject(code: &'static str, kind: ErrorCode) -> Failure {
     Failure::domain(code, kind)
 }
@@ -160,8 +166,7 @@ async fn replay(
     })))
 }
 async fn confirm(
-    db: &D1Database,
-    tenant: &str,
+    ctx: &MemberContext<'_>,
     key: &str,
     email: &str,
     digest: &str,
@@ -171,14 +176,14 @@ async fn confirm(
 ) -> Result<std::result::Result<Saved, Failure>> {
     match d1_write::confirm(
         write,
-        prior(db, tenant, key),
+        prior(ctx.db, ctx.tenant, key),
         zero,
         "ACCESS_MEMBER_WRITE_UNCONFIRMED",
     )
     .await
     {
         Ok(d1_write::Confirmation::Applied) => {
-            let member = get(db, tenant, email)
+            let member = get(ctx.db, ctx.tenant, email)
                 .await?
                 .ok_or_else(|| worker::Error::RustError("member write missing".into()))?;
             Ok(Ok(Saved {
@@ -203,13 +208,11 @@ async fn confirm(
     }
 }
 pub(super) async fn provision(
-    db: &D1Database,
-    tenant: &str,
+    ctx: &MemberContext<'_>,
     member: &str,
     new_role: &str,
     key: &str,
     trace: &str,
-    actor: &str,
 ) -> Result<std::result::Result<Saved, Failure>> {
     let member = match email(member) {
         Ok(v) => v,
@@ -220,18 +223,17 @@ pub(super) async fn provision(
         Err(e) => return Ok(Err(e)),
     };
     let hash = digest("provision", &member, new_role, "true", 0)?;
-    if let Some(existing) = replay(db, tenant, key, &member, &hash).await? {
+    if let Some(existing) = replay(ctx.db, ctx.tenant, key, &member, &hash).await? {
         return Ok(existing);
     }
-    let write=bind(db,
+    let write=bind(ctx.db,
       "INSERT INTO crm_users(email,tenant_id,role,active,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,1,1,?,?,?,?) ON CONFLICT(email) DO NOTHING",
-      &[JsValue::from_str(&member),JsValue::from_str(tenant),
+      &[JsValue::from_str(&member),JsValue::from_str(ctx.tenant),
         JsValue::from_str(new_role),JsValue::from_str(key),
         JsValue::from_str(&hash),JsValue::from_str(trace),
-        JsValue::from_str(actor)])?.run().await;
+        JsValue::from_str(ctx.actor)])?.run().await;
     confirm(
-        db,
-        tenant,
+        ctx,
         key,
         &member,
         &hash,
@@ -242,9 +244,7 @@ pub(super) async fn provision(
     .await
 }
 pub(super) async fn update(
-    db: &D1Database,
-    tenant: &str,
-    actor: &str,
+    ctx: &MemberContext<'_>,
     member: &str,
     new_role: Option<&str>,
     active: Option<bool>,
@@ -256,7 +256,7 @@ pub(super) async fn update(
         Ok(v) => v,
         Err(e) => return Ok(Err(e)),
     };
-    if actor == member {
+    if ctx.actor == member {
         return Ok(Err(reject(
             "ACCESS_MEMBER_SELF_LOCKOUT",
             ErrorCode::PermissionDenied,
@@ -285,24 +285,23 @@ pub(super) async fn update(
             .unwrap_or("keep"),
         expected,
     )?;
-    if let Some(existing) = replay(db, tenant, key, &member, &hash).await? {
+    if let Some(existing) = replay(ctx.db, ctx.tenant, key, &member, &hash).await? {
         return Ok(existing);
     }
     // One atomic CAS, prevents disabling the last active administrator even
     // if two administrators race. No preflight read authorizes the update.
-    let write=bind(db,
+    let write=bind(ctx.db,
       "UPDATE crm_users SET role=COALESCE(?,role),active=COALESCE(?,active),version=version+1,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE email=? AND tenant_id=? AND version=? AND email<>? AND (role<>'admin' OR (COALESCE(?,role)='admin' AND COALESCE(?,active)=1) OR (SELECT COUNT(*) FROM crm_users WHERE tenant_id=? AND active=1 AND role='admin')>1)",
       &[selected.map(JsValue::from_str).unwrap_or(JsValue::NULL),
         active.map(|v|JsValue::from_f64(if v{1.0}else{0.0})).unwrap_or(JsValue::NULL),
         JsValue::from_str(key),JsValue::from_str(&hash),JsValue::from_str(trace),
-        JsValue::from_str(actor),JsValue::from_str(&member),JsValue::from_str(tenant),
-        JsValue::from_f64(expected as f64),JsValue::from_str(actor),
+        JsValue::from_str(ctx.actor),JsValue::from_str(&member),JsValue::from_str(ctx.tenant),
+        JsValue::from_f64(expected as f64),JsValue::from_str(ctx.actor),
         selected.map(JsValue::from_str).unwrap_or(JsValue::NULL),
         active.map(|v|JsValue::from_f64(if v{1.0}else{0.0})).unwrap_or(JsValue::NULL),
-        JsValue::from_str(tenant)])?.run().await;
+        JsValue::from_str(ctx.tenant)])?.run().await;
     confirm(
-        db,
-        tenant,
+        ctx,
         key,
         &member,
         &hash,

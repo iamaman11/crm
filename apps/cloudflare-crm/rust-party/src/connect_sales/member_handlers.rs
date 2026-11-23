@@ -101,14 +101,18 @@ impl member_wire::MemberService for MemberV2Service {
         let input = req.to_owned_message();
         let (key, _) = wire_precondition(input.precondition.as_option(), true)?;
         let role = Self::role(input.role)?;
+        let db = self.d1()?;
+        let ctx = access_members::MemberContext {
+            db: &db,
+            tenant: &self.actor.tenant,
+            actor: &self.actor.identity,
+        };
         let saved = access_members::provision(
-            &self.d1()?,
-            &self.actor.tenant,
+            &ctx,
             &input.email,
             role,
             &key,
             &self.request_id,
-            &self.actor.identity,
         )
         .await
         .map_err(|_| ConnectError::unavailable("ACCESS_MEMBER_WRITE_FAILED"))?
@@ -128,10 +132,14 @@ impl member_wire::MemberService for MemberV2Service {
         let input = req.to_owned_message();
         let (key, expected) = wire_precondition(input.precondition.as_option(), false)?;
         let new_role = input.role.map(Self::role).transpose()?;
+        let db = self.d1()?;
+        let ctx = access_members::MemberContext {
+            db: &db,
+            tenant: &self.actor.tenant,
+            actor: &self.actor.identity,
+        };
         let saved = access_members::update(
-            &self.d1()?,
-            &self.actor.tenant,
-            &self.actor.identity,
+            &ctx,
             &input.email,
             new_role,
             input.active,
