@@ -27,7 +27,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
   context.on("response",record);
   const page=await context.newPage();
   page.on("pageerror",error=>pageErrors.push(error.message));
-  const responseFor=(method)=>page.waitForResponse(response=>
+  const responseFor=(targetPage,method)=>targetPage.waitForResponse(response=>
     new URL(response.url()).pathname.endsWith("/"+method)&&response.request().method()==="POST");
   const auditFor=async(requestId)=>{
     const result=await sql(
@@ -36,7 +36,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     return result;
   };
   const mutation=async(button,method,action)=>{
-    const pending=responseFor(method);
+    const pending=responseFor(page,method);
     await button.click();
     const response=await pending;
     assert.equal(response.status(),200,method+" failed");
@@ -57,23 +57,23 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     return requestId;
   };
   // Retry only demonstrably edge-owned asset/doc 404 on read-only navigation.
-  const open=async(path,heading)=>{
+  const open=async(targetPage,path,heading)=>{
     for(let attempt=1;attempt<=4;attempt++){
       // A same-hash page.goto() returns null in Playwright; use a real document
       // reload to prove the persisted Party remains visible after reopening.
-      const response=page.url()===base+path?
-        await page.reload():await page.goto(base+path);
+      const response=targetPage.url()===base+path?
+        await targetPage.reload():await targetPage.goto(base+path);
       if(response?.status()===404&&!response.headers()["x-crm-runtime"]){
         if(attempt===4)throw Error("CRM_PUBLISHED_EDGE_404_EXHAUSTED");
         continue;
       }
       assert.equal(response?.status(),200,"Published React document must load");
-      await page.getByRole("heading",{name:heading,exact:true}).waitFor();
+      await targetPage.getByRole("heading",{name:heading,exact:true}).waitFor();
       return;
     }
   };
   try {
-    await open("/#parties","Люди и организации");
+    await open(page,"/#parties","Люди и организации");
     steps.push("signed-access");
     // Real signed mutation with synthetic-only private values: no real user
     // names, credentials or data are written into privacy proof fixtures.
@@ -118,7 +118,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     assert.equal(parties.length,1,"Signed CreateParty must persist exactly one record");
     const partyId=parties[0].id;
     steps.push("party-create");
-    await open("/#parties","Люди и организации");
+    await open(page,"/#parties","Люди и организации");
     const heading=page.getByRole("heading",{name,exact:true});
     await heading.waitFor();
     steps.push("party-reload");
@@ -144,7 +144,7 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     try{
       const deniedPage=await denied.newPage();
       deniedPage.on("pageerror",error=>pageErrors.push(error.message));
-      await deniedPage.goto(base+"/#parties");
+      await open(deniedPage,"/#parties","Люди и организации");
       await deniedPage.getByRole("button",{name:"Создать участника",exact:true}).click();
       await deniedPage.getByLabel("Имя или название",{exact:true}).fill(deniedName);
       const forbidden=deniedPage.waitForResponse(response=>
@@ -161,7 +161,13 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
     try{
       const otherPage=await other.newPage();
       otherPage.on("pageerror",error=>pageErrors.push(error.message));
-      await otherPage.goto(base+"/#accounts");
+      await open(otherPage,"/#parties","Люди и организации");
+      const [list]=await Promise.all([
+        responseFor(otherPage,"ListAccounts"),
+        otherPage.getByRole("navigation").getByRole("link",{name:"Клиенты",exact:true}).click()
+      ]);
+      assert.equal(list.status(),200,"Tenant B must load its signed account list");
+      assert.equal(new URL(otherPage.url()).hash,"#accounts");
       await otherPage.getByText("Клиентов пока нет.",{exact:true}).waitFor();
       assert.equal(await otherPage.getByRole("heading",{name:accountName,exact:true}).count(),0);
     }finally{await other.close();}
