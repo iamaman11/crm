@@ -59,7 +59,6 @@ export function createCloudflareCrmClient(baseUrl: string) {
     enrichment: createClient(EnrichmentConfigurationService, transport),
     csv: createClient(PartyCsvService, transport),
     overview: createClient(Customer360Service, transport),
-    csvDownloadUrl: new URL("/api/customer-data-operations/parties.csv", baseUrl).href,
     describeError: (error: unknown): string => decodeCrmError(error).text,
     decodeError: decodeCrmError,
   };

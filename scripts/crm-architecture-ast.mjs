@@ -13,7 +13,21 @@ const fail=(file,message)=>{throw Error("CRM_AST_VIOLATION "+file+": "+message);
 const forbiddenSource=/(^|\/)(gateway|transport)(\.[cm]?[jt]sx?)?$|\/gen\/crm\/gateway\/|^@connectrpc\/connect-node(?:\/|$)/;
 const forbiddenSymbols=new Set(["createGrpcWebTransport","createGrpcTransport","ApplicationGatewayService","GovernedClient","GovernedCrmClient"]);
 const directHttp=new Set(["fetch","XMLHttpRequest","WebSocket","EventSource"]);
-const forbiddenHttpPath=/^\/api\/(?!health(?:$|\/)|doctor(?:$|\/)|session(?:$|\/)|version(?:$|\/)|customer-data-operations\/parties\.csv$)/;
+// Technical routes are the only HTTP exceptions, from the existing policy.
+const allowedTechnicalHttp=new Set(policy.allowed_non_rpc_http);
+const forbiddenHttpPath=path=>path.startsWith("/api/")&&!allowedTechnicalHttp.has(path);
+// Native Worker dispatch may not add another hand-written business HTTP route.
+// The single test-only CI probe remains behind the native-ci feature.
+export function inspectNativeHttpRoutes(source){
+ const paths=[...source.matchAll(/"(\/api\/[^"]+)"/g)].map(x=>x[1]);
+ const production=paths.filter(p=>p!=="/api/_ci/original-domain-check");
+ const sorted=values=>[...values].sort();
+ if(JSON.stringify(sorted(production))!==JSON.stringify(sorted(allowedTechnicalHttp)))
+  fail("rust-party/src/lib.rs","Worker non-RPC routes differ from the canonical technical policy");
+ if(paths.filter(p=>p==="/api/_ci/original-domain-check").length!==1)
+  fail("rust-party/src/lib.rs","test-only CI probe must be exactly one route");
+}
+
 // Resolve tsconfig inheritance with the compiler before inspecting the module graph.
 function compilerConfig(project){
  const path=resolve(root,project);
@@ -166,7 +180,7 @@ function inspect(file,source,strict=true){
   if(strict&&ts.isAsExpression(node)&&ts.isAsExpression(node.expression)
       &&node.expression.type.kind===ts.SyntaxKind.UnknownKeyword)
    fail(file,"double type assertions cannot bypass the generated contract");
-  if(ts.isStringLiteral(node)&&forbiddenHttpPath.test(node.text))
+  if(ts.isStringLiteral(node)&&forbiddenHttpPath(node.text))
    fail(file,"manual business REST URL "+node.text);
   ts.forEachChild(node,walk);
  };
@@ -200,6 +214,7 @@ function resolveInternal(spec,parent){
  return rel;
 }
 export function inspectFrontend(){
+ inspectNativeHttpRoutes(read("apps/cloudflare-crm/rust-party/src/lib.rs"));
  for(const [project,parsed] of [
   ["apps/cloudflare-crm",config],
   ["packages/client",compilerConfig("packages/client/tsconfig.json")],

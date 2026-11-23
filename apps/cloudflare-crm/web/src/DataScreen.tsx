@@ -53,10 +53,19 @@ export function DataScreen() {
       <SelectField label="Тип экспорта" value={kind} onChange={e=>setKind(e.target.value===""?"":String(enumValue(e.target.value,[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип экспорта")))}>
         <option value="">Все</option><option value={PartyKind.PERSON}>Люди</option><option value={PartyKind.ORGANIZATION}>Организации</option>
       </SelectField>
-      <p><Button disabled={exported.busy} onClick={()=>void exported.run(signal=>api.csv.previewPartyExport(kind?{kind:enumValue(kind,[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип экспорта")}:{},{signal}))}>Проверить экспорт</Button></p>
+      <p><Button disabled={exported.busy} onClick={()=>void exported.run(async signal=>{
+        const result=await api.csv.previewPartyExport(kind?
+          {kind:enumValue(kind,[PartyKind.PERSON,PartyKind.ORGANIZATION],"Тип экспорта")}:{},{signal});
+        // The generated Protobuf bytes are the downloaded file. No business REST route.
+        const url=URL.createObjectURL(new Blob([Uint8Array.from(result.csv)],{type:"text/csv;charset=utf-8"}));
+        try {
+          const link=document.createElement("a");
+          link.href=url;link.download="crm-parties.csv";link.click();
+        } finally {window.setTimeout(()=>URL.revokeObjectURL(url),0);}
+        return result;
+      })}>Скачать CSV</Button></p>
       {exported.error&&<FeedbackPanel tone="danger" title={exported.error}/>}
-      {exported.data&&<p>Записей: {exported.data.count}. Предел: {exported.data.maximumTenantParties} участников в организации.</p>}
-      <a href={api.csvDownloadUrl+(kind?"?kind="+(kind===String(PartyKind.PERSON)?"person":"organization"):"")}>Скачать CSV</a>
+      {exported.data&&<p>Записей: {exported.data.count}. Предел: {exported.data.maximumTenantParties} участников в организации.</p>
       <p>Файл содержит party_id, kind, display_name, resource_version.</p>
     </Card>
     <Card title="Импорт участников">

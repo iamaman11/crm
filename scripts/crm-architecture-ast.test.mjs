@@ -1,7 +1,8 @@
+import {readFileSync} from "node:fs";
 // Mutation-style self-tests: the gate must reject real prohibited code.
 import test from "node:test";
 import assert from "node:assert/strict";
-import {inspect,inspectFrontend,resolveInternal,assertStrictOptions} from "./crm-architecture-ast.mjs";
+import {inspect,inspectFrontend,inspectNativeHttpRoutes,resolveInternal,assertStrictOptions} from "./crm-architecture-ast.mjs";
 
 const web="apps/cloudflare-crm/web/src/Check.tsx";
 const client="packages/client/src/cloudflare.ts";
@@ -29,6 +30,8 @@ rejects("explicit any bypass", 'const input: any = {};');
 rejects("double unknown cast", 'const input = {} as unknown as Account;');
 rejects("typescript diagnostic suppression", '// @ts-ignore\nconst input = 1;');
 rejects("legacy business REST path", 'const endpoint="/api/parties";');
+rejects("retired Party CSV business REST path", 'const endpoint="/api/customer-data-operations/parties.csv";');
+rejects("nested URL under a technical route is not allowed", 'const endpoint="/api/version/other";');
 rejects("legacy transport in client package", 'import {createGrpcWebTransport} from "@connectrpc/connect-web";',client);
 rejects("second Connect transport in workspace helper", 'import {createConnectTransport as transport} from "@connectrpc/connect-web";',"packages/client/src/alternate.ts");
 rejects("Connect transport through shared UI", 'export {createConnectTransport} from "@connectrpc/connect-web";',"packages/ui/src/alternate.ts");
@@ -66,4 +69,14 @@ test("individual compiler overrides cannot weaken a strict CRM project",()=>{
  for(const override of [{noCheck:true},{allowJs:true},{strictNullChecks:false},{noImplicitAny:false}]){
   assert.throws(()=>assertStrictOptions("future CRM module",{...base,...override}),/TypeScript option/);
  }
+});
+
+test("native Worker only exposes policy-owned technical HTTP routes",()=>{
+ const file="apps/cloudflare-crm/rust-party/src/lib.rs";
+ const source=(awaitNativeSource());
+ assert.doesNotThrow(()=>inspectNativeHttpRoutes(source));
+ assert.throws(()=>inspectNativeHttpRoutes(source.replace('"/api/version"', '"/api/manual-business"')),
+   /CRM_AST_VIOLATION/);
+ assert.throws(()=>inspectNativeHttpRoutes(source.replace('"/api/health"', '"/api/health/extra"')),
+   /CRM_AST_VIOLATION/);
 });

@@ -4019,20 +4019,19 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal(exported.status,200,describeProtobuf(exported.body));
  assert.equal(exported.body.maximumTenantParties,100);
  assert.deepEqual(exported.body.fields,["party_id","kind","display_name","resource_version"]);
- const download=await rpcFetch("/api/customer-data-operations/parties.csv",{
-   headers:{"cf-access-jwt-assertion":admin}});
- assert.equal(download.status,200);
- assert.match(download.headers.get("content-type"),/^text\/csv/);
- const downloaded=new Uint8Array(await download.arrayBuffer());
+ const downloaded=exported.body.csv;
+ assert.ok(downloaded instanceof Uint8Array);
+ assert.match(new TextDecoder().decode(downloaded),/^party_id,kind,display_name,resource_version\r\n/);
  assert.equal(createHash("sha256").update(downloaded).digest("hex"),exported.body.csvSha256Hex);
- assert.equal(download.headers.get("x-crm-export-count"),String(exported.body.count));
- assert.equal(download.headers.get("cache-control"),"private, no-store");
- assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv")).status,401);
+ assert.equal((await csv("PreviewPartyExport",null,{})).status,401);
+ assert.equal((await csv("PreviewPartyExport",viewer,{})).status,403);
+ // Retired business HTTP route must not reappear alongside the typed RPC.
  assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv",{
-   headers:{"cf-access-jwt-assertion":viewer}})).status,403);
+   headers:{"cf-access-jwt-assertion":admin}})).status,404);
  const filteredExport=await csv("PreviewPartyExport",admin,{kind:1});
  assert.equal(filteredExport.status,200,describeProtobuf(filteredExport.body));
  assert.ok(filteredExport.body.count<exported.body.count);
+ assert.equal(createHash("sha256").update(filteredExport.body.csv).digest("hex"),filteredExport.body.csvSha256Hex);
  assert.equal((await csv("PreviewPartyExport",tenantB,{})).body.count,0);
  assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n,exportBefore);
  // Explicit boundary fixture in tenant B: the 101st row must prevent partial export,
@@ -4044,8 +4043,6 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  }).join(",");
  await sql("INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) VALUES "+boundaryRows);
  assert.equal((await csv("PreviewPartyExport",tenantB,{kind:2})).body.code,"failed_precondition");
- assert.equal((await rpcFetch("/api/customer-data-operations/parties.csv?kind=organization",{
-   headers:{"cf-access-jwt-assertion":tenantB}})).status,409);
  console.log(JSON.stringify({event:"crm.native-party-csv-v2",result:"PASS",admin_read:true,
    original_owner:"crm.customer-data-operations",party_owner:"crm.parties",
    tenant_ab:true,atomic:true,replay:true,audit:true,verified_actor:true,sql_failure_rollback:true,csv_bytes_sha256:true,bounded:true}));

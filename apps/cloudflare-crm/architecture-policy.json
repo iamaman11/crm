@@ -6,8 +6,7 @@
     "/api/health",
     "/api/doctor",
     "/api/session",
-    "/api/version",
-    "/api/customer-data-operations/parties.csv"
+    "/api/version"
   ],
   "integration_runtime": {
     "owner": "Wrangler/createTestHarness(workerd)",

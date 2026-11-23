@@ -2,14 +2,14 @@
 //! crm-customer-data-operations scope/profile/specification/CSV functions.
 //! One signed Access tenant, one original Party D1 owner; NO shadow export
 //! business rules, persisted export job, file store or background service.
-use super::{access, bind, error, parties};
+use super::{access, bind, parties};
 use crm_customer_data_operations::{
     CreateImportRow, ImportJobId, ImportParserProfile, ImportRow, PartyImportKind,
     PartyImportMapping, PreparedPartyRow, RowDiagnostic, parse_import_source,
     party_export_hash_parts,
 };
 use crm_customer_data_operations::{
-    PARTY_EXPORT_CSV_MEDIA_TYPE, PartyExportField, PartyExportKindFilter, PartyExportProfile,
+    PartyExportField, PartyExportKindFilter, PartyExportProfile,
     PartyExportScope, PartyExportSpecification, canonical_party_export_csv_record,
     party_export_hex, party_export_sha256,
 };
@@ -17,7 +17,7 @@ use crm_parties::{CreateParty, Party, PartyId, PartyKind, decode_party_state};
 use serde::Deserialize;
 use std::collections::BTreeSet;
 use wasm_bindgen::JsValue;
-use worker::{D1Database, Method, Request, Response, Result};
+use worker::{D1Database, Result};
 
 pub(super) const LIMIT: usize = 100;
 const RETENTION: &str = "crm.dev.transient_csv_download.v1";
@@ -29,25 +29,9 @@ struct Row {
 
 pub(super) struct Export {
     pub(super) count: usize,
-    bytes: Vec<u8>,
+    pub(super) bytes: Vec<u8>,
     pub(super) sha256: String,
     pub(super) specification: PartyExportSpecification,
-}
-
-fn filter(req: &Request) -> Result<Option<PartyExportKindFilter>> {
-    let mut value = None;
-    for (key, candidate) in req.url()?.query_pairs() {
-        if key != "kind" || value.is_some() {
-            return Err(worker::Error::RustError("EXPORT_QUERY_INVALID".into()));
-        }
-        value = Some(candidate.to_string());
-    }
-    match value.as_deref().unwrap_or("all") {
-        "all" => Ok(None),
-        "person" => Ok(Some(PartyExportKindFilter::Person)),
-        "organization" => Ok(Some(PartyExportKindFilter::Organization)),
-        _ => Err(worker::Error::RustError("EXPORT_KIND_INVALID".into())),
-    }
 }
 
 fn matches_kind(p: &Party, kind: Option<PartyExportKindFilter>) -> bool {
@@ -489,48 +473,4 @@ pub(super) async fn apply_import(
                 hash: plan.hash,
             }),
     )
-}
-
-// The only non-RPC business endpoint: bounded CSV attachment bytes.
-pub(super) async fn route(
-    req: Request,
-    db: D1Database,
-    tenant: &str,
-    role: Option<&str>,
-) -> Result<Response> {
-    if role != Some("admin") {
-        return error("FORBIDDEN", 403);
-    }
-    if req.method() != Method::Get || req.path() != "/api/customer-data-operations/parties.csv" {
-        return error("NOT_FOUND", 404);
-    }
-    let kind = match filter(&req) {
-        Ok(kind) => kind,
-        Err(_) => return error("EXPORT_QUERY_INVALID", 422),
-    };
-    let Some(export) = assemble(&db, tenant, kind).await? else {
-        return error("EXPORT_SCOPE_LIMIT_REACHED", 409);
-    };
-    let mut reply = Response::from_bytes(export.bytes)?;
-    reply
-        .headers_mut()
-        .set("content-type", PARTY_EXPORT_CSV_MEDIA_TYPE)?;
-    reply.headers_mut().set(
-        "content-disposition",
-        "attachment; filename=\"crm-parties.csv\"",
-    )?;
-    reply
-        .headers_mut()
-        .set("cache-control", "private, no-store")?;
-    reply
-        .headers_mut()
-        .set("x-crm-export-count", &export.count.to_string())?;
-    reply
-        .headers_mut()
-        .set("x-crm-export-sha256", &export.sha256)?;
-    reply.headers_mut().set(
-        "x-crm-export-specification",
-        export.specification.version_id().as_str(),
-    )?;
-    Ok(reply)
 }

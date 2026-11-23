@@ -32,7 +32,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
  let restoreViewer=async()=>{};
  const recordResponse=response=>{
    const path=new URL(response.url()).pathname;
-   if(!path.startsWith("/crm.")&&!path.endsWith("/parties.csv"))return;
+   if(!path.startsWith("/crm."))return;
    const entry={path,status:response.status()};
    requests.push(entry);
    const capture=headers=>Object.assign(entry,{
@@ -2330,11 +2330,11 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    checkpoint("Simple two-column CSV template -> original Rust preview -> atomic Party apply / D1 audit");
 
    const exportReply=page.waitForResponse(r=>responsePathEndsWith(r,"/PreviewPartyExport"));
-   await page.getByRole("button",{name:"Проверить экспорт",exact:true}).click();
-   assert.equal((await exportReply).status(),200);
    const downloadPending=page.waitForEvent("download");
-   await page.getByRole("link",{name:"Скачать CSV",exact:true}).click();
+   await page.getByRole("button",{name:"Скачать CSV",exact:true}).click();
+   assert.equal((await exportReply).status(),200);
    const download=await downloadPending;
+   assert.equal(download.suggestedFilename(),"crm-parties.csv");
    assert.equal(await download.failure(),null);
    const exported=await readFile(await download.path(),"utf8");
    assert.ok(exported.includes("Browser Import "+runId));

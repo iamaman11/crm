@@ -891,9 +891,6 @@ async fn dispatch(
             if checked { 200 } else { 503 },
         );
     }
-    if path == "/api/customer-data-operations/parties.csv" {
-        return customer_data_operations::route(req, db, tenant, Some(&actor.role)).await;
-    }
     #[cfg(feature = "native")]
     {
         if path == "/api/health" && method == Method::Get {

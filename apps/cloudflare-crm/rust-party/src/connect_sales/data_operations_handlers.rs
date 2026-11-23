@@ -53,6 +53,7 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
                 .map(|f| f.canonical_name().to_owned())
                 .collect(),
             maximum_tenant_parties: owner::LIMIT as u32,
+            csv: export.bytes.into(),
             ..Default::default()
         })
     }
