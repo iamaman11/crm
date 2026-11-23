@@ -26,6 +26,7 @@ const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 let base,fixtureDb;
 const successfulCalls=new Set();
 const mutationPaths=new Set();
+const writesWithReceipt=new Set();
 function assertUnconfirmed(result, domainCode){
  assert.equal(result.status,503);
  assert.equal(result.body.code,"unavailable");
@@ -81,10 +82,15 @@ const rpcFetch=async(path,options)=>{
  }
  if(path.startsWith("/crm.")&&response.ok){
    if(mutationPaths.has(path)){
-     const {receipt}=decodeRpcOutput(path,new Uint8Array(await response.clone().arrayBuffer()));
-     assert.ok(receipt,path+" missing typed receipt");
-     assert.ok(receipt.requestId && receipt.requestId===response.headers.get("x-request-id"),path);
-     assert.ok(receipt.resourceVersion>0n,path+" missing committed version");
+     const {receipt,changed}=decodeRpcOutput(path,new Uint8Array(await response.clone().arrayBuffer()));
+     if(changed===false){
+       assert.equal(receipt,undefined,path+" unchanged command claimed a write");
+     }else{
+       assert.ok(receipt,path+" missing typed receipt");
+       assert.ok(receipt.requestId && receipt.requestId===response.headers.get("x-request-id"),path);
+       assert.ok(receipt.resourceVersion>0n,path+" missing committed version");
+       writesWithReceipt.add(path);
+     }
    }
    successfulCalls.add(path);
  }
@@ -4735,6 +4741,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.deepEqual(await sql("SELECT request_id FROM crm_audit WHERE tenant_id=? AND subject_id=?",
      "tenant-a",subject),[{request_id:original}]);
  }
+ assert.deepEqual([...writesWithReceipt].sort(),[...mutationPaths].sort(),
+   "every write method must exercise a committed response with a typed receipt");
  assert.deepEqual([...successfulCalls].sort(),[...rpc.registered_methods].sort(),
    "every compiled RPC must have a successful executed binary call");
  writeFileSync(process.env.CRM_RPC_RUNTIME_PROOF,JSON.stringify({
