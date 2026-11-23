@@ -85,6 +85,12 @@
               }
             ]
           }
+        ],
+        "import/no-dynamic-require": [
+          "error",
+          {
+            "esmodule": true
+          }
         ]
       }
     },

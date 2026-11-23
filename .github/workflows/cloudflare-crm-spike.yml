@@ -122,6 +122,15 @@ jobs:
           npm install --global pnpm@12.21.0
           pnpm --version | grep -Fx '12.21.0'
           pnpm install --frozen-lockfile
+          # One-off native pnpm calculation. The final commit applies its exact
+          # generated lockfile output and removes this diagnostic block.
+          pnpm remove --workspace-root --save-dev @typescript/typescript6 --offline --ignore-scripts
+          echo '=== CRM471 GENERATED PNPM PATCH BEGIN ==='
+          git diff -- package.json pnpm-lock.yaml
+          echo '=== CRM471 GENERATED PNPM PATCH END ==='
+          node --test apps/cloudflare-crm/test/architecture-lint.test.mjs || true
+          echo 'CRM471 native lock calculation complete; stop before expensive build'
+          exit 1
       # Cargo unpacks registry/cache and git/db on demand. Keep compiled dependencies
       # and fingerprints, but avoid transferring a second copy of dependency sources.
       - name: Restore Cargo compilation cache
