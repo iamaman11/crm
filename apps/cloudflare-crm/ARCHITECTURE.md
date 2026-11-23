@@ -29,7 +29,7 @@ D1 SQL, CAS, receipts и audit и вызывать domain crates. Typed wire/dom
 | Регистрация | compiled Connect Router | Router::methods()/has_method() против descriptors |
 | Доступ | одна typed Rust policy | compiled policy и реальные role/tenant tests |
 | Семантика | original Rust owner | domain tests, workerd/D1 assertions |
-| Клиент | packages/client/cloudflare | strict TypeScript и AST/module graph |
+| Клиент | packages/client/cloudflare | TypeScript strict/tsc --showConfig, scoped native Oxlint и пакетные import boundaries |
 | UI | packages/ui + feature TSX | Chromium через generated client |
 | Данные | канонические SQL migrations | создание с нуля, CAS/replay/atomicity/audit |
 | Release | проверенный artifact | SHA/checksum и live readback |
@@ -46,7 +46,8 @@ FAIL. Исторические proto других потребителей не 
 
 Не использовать semantic regex для Rust/Protobuf, поиск строк как доказательство теста,
 ручной каталог покрытия или второй metadata generator. Использовать компиляторы, descriptors,
-штатный router и TypeScript AST. Временный CI-отчёт является результатом проверки.
+штатный router, TypeScript --showConfig и Oxlint. Старый собственный TS AST checker удалён;
+не возвращать его как параллельную защиту. Временный CI-отчёт является результатом проверки.
 
 ## 3. Типы, права и поведение
 

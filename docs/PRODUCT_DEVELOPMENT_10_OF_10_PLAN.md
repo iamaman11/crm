@@ -1,5 +1,13 @@
 # Продуктовый план Cloudflare CRM
 
+## Как использовать этот план в новой архитектуре
+
+**Действующий продуктовый план — именно этот файл в канонической ветке `dev`, а не его историческая редакция.** Исходная редакция (39 113 символов / 677 строк, созданная для прежнего `main`, PostgreSQL и `crm-application-runtime`) использована **только как источник полезных требований к CRM и отрицательных бизнес-сценариев**. Она не задаёт текущую архитектуру, очередность, способ сборки или критерии технической готовности. Ссылки ниже на старые `v1` RPC, SQLx/PostgreSQL-тесты, crates и архивные SHA — **материал для проверки семантики**, а не разрешение запускать старый runtime или напрямую переносить его шлюзы, SQL, модели и интерфейсы.
+
+**Единственная нормативная техническая схема — [Cloudflare CRM ARCHITECTURE](../apps/cloudflare-crm/ARCHITECTURE.md):** versioned `.proto` → Buf → generated Protobuf/Connect client → Rust Connect router с явной fail-closed policy → оригинальный Rust domain owner → одна Cloudflare D1. Один Worker и один типизированный транспорт. Никакого параллельного business REST/JS gateway, PostgreSQL, самостоятельного генератора, второго CI и новой бизнес-реализации только ради старого имени crate. Используются существующие штатные Buf, TypeScript strict/`tsc --showConfig`, Oxlint, Rust tests и реальные workerd/D1/Chromium; **Gate A и отдельный независимый Gate B** на точном опубликованном SHA.
+
+**Объём продукта не равен готовности реализации.** Все 20 семейств и 554 требования служат для предотвращения потери полезного функционала, но каждое действие сначала проверяют в актуальных `proto`/Rust/Worker/D1/React и по действующим Gate. `ACCEPTED` означает доказанный пользовательский результат, `CODE-NOT-ACCEPTED` — код либо частичный путь без полной приёмки, `NOT-IMPLEMENTED` — нет действующего сквозного результата. Решение A/B/C/D зависит от ценности для пользователя, а не от наличия старой реализации. **Приоритеты — здесь; один рабочий курсор — [#487](https://github.com/iamaman11/crm/issues/487), история доказательств — закрытый [#352](https://github.com/iamaman11/crm/issues/352).** Исторические планы и архивные issue не создают дополнительную очередь.
+
 ## Основание плана · 23 ноября 2026
 
 Проверенный код приложения в `dev/apps/cloudflare-crm` — [ce19c7b7](https://github.com/iamaman11/crm/commit/ce19c7b70e78ff1a95b510322508c7830611e664). На этом SHA штатный CI подтвердил 14 подключённых модулей, 72 исполняемых RPC и 34 операции с подтверждённой записью. Независимая браузерная приёмка на этом SHA охватывает опубликованный сценарий CSV. Для других принятых операций ниже указаны их собственные доказательства. Первая инвентаризация SK-00 проведена на c1f6501, сценарий R1 принят на 77611bd. [Gate A](https://github.com/iamaman11/crm/actions/runs/45214309179) · [Граница Gate B](https://github.com/iamaman11/crm/issues/352#issuecomment-7107062121)
@@ -1483,7 +1491,7 @@ Gate A собирает и исполняет штатный контракт, �
 - large-board performance and stable pagination;
 - keyboard and screen-reader operation;
 - drag/drop rollback on rejected transition;
-- permission and masking correctness on cards;
+- correct role/tenant access to cards; admin and viewer see the same allowed business fields of their tenant (redaction applies to secrets, diagnostics and logs, not to business fields in cards);
 - bulk-move preview and partial-failure reporting;
 - bounded-freshness updates across concurrent users;
 - pipeline-definition version migration;
@@ -1491,7 +1499,7 @@ Gate A собирает и исполняет штатный контракт, �
 
 При изменении контрактов сверять доменные тесты, wire boundary, права клиента и сервиса, хранение и диагностику. Показатели восстановления/доступности PostgreSQL и исторический статус Phase 8A относятся к прежнему runtime. Исходные формулировки P и C пронумерованы по строкам product plan и coverage baseline на c1f6501. Совпадающие требования из двух источников образуют разные ссылки на одну возможность, их суммы не используются как процент готовности.
 
-[PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md) · [CRM_CAPABILITY_COVERAGE.md](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/docs/CRM_CAPABILITY_COVERAGE.md) · [Архитектура #471](https://github.com/iamaman11/crm/issues/471) · [Ревизия #485](https://github.com/iamaman11/crm/issues/485)
+[Исторический продуктовый baseline (НЕ действующий план)](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/docs/PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md) · [CRM_CAPABILITY_COVERAGE.md](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/docs/CRM_CAPABILITY_COVERAGE.md) · [Архитектура #471](https://github.com/iamaman11/crm/issues/471) · [Ревизия #485](https://github.com/iamaman11/crm/issues/485)
 
 <a id="pilot-assignment"></a>
 
