@@ -90,6 +90,15 @@ Owner обеспечивает CAS, idempotent replay и атомарность 
 не меняет агрегат частично. UI не копирует domain policy; после успешной записи ошибка refresh
 означает сохранённый результат с устаревшим отображением, а не failed write.
 
+Каждая команда записи объявляет стандартную семантику Protobuf `IDEMPOTENT`, одно поле
+`precondition` типа `MutationPrecondition` и одно поле `receipt` типа `MutationReceipt`.
+Для новых версий действуют те же проверки Buf-дескрипторов, включая вложенные типы.
+При потере подтверждения D1 владелец сверяет намерение с квитанцией своего tenant и ключа.
+Клиент снимает ключ после отказа только при получении `DomainErrorDetail` с исходом
+`REJECTED` и идентификатором текущего запроса. При `UNCONFIRMED` он сохраняет ключ для повтора.
+Штатный workerd-тест сверяет квитанции и ошибки вызванных команд с реальным идентификатором ответа.
+Для нового пути записи нужен сценарий со сбоем внутри транзакции и проверкой результата в D1.
+
 React использует strict TSX, allowJs=false, noUncheckedIndexedAccess и exactOptionalPropertyTypes.
 Не обходить типы через any/as unknown as или suppressed diagnostics. Общий client — единственный
 business transport. Health/session/doctor/version и bounded CSV download — ограниченные исключения.

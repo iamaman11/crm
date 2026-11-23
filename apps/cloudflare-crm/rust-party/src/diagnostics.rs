@@ -261,3 +261,57 @@ pub(super) fn mutation_error(
         &detail,
     ))
 }
+
+/// Every write uses the same protobuf outcome, including errors raised before
+/// the owner runs. Preserve stronger owner evidence when it is available.
+pub(super) fn wire_write_error(
+    error: ConnectError,
+    request_id: &str,
+    before_dispatch: bool,
+) -> ConnectError {
+    if error
+        .details
+        .iter()
+        .any(|d| d.type_url == core_v2::DomainErrorDetail::FULL_NAME)
+    {
+        return error;
+    }
+    use connectrpc::ErrorCode;
+    let outcome = if before_dispatch
+        || matches!(
+            error.code,
+            ErrorCode::InvalidArgument
+                | ErrorCode::NotFound
+                | ErrorCode::AlreadyExists
+                | ErrorCode::PermissionDenied
+                | ErrorCode::FailedPrecondition
+                | ErrorCode::Aborted
+                | ErrorCode::OutOfRange
+                | ErrorCode::Unauthenticated
+                | ErrorCode::Unimplemented
+        ) {
+        core_v2::MutationCommitOutcome::Rejected
+    } else {
+        core_v2::MutationCommitOutcome::Unconfirmed
+    };
+    let domain_code = error
+        .message
+        .as_deref()
+        .filter(|s| {
+            !s.is_empty()
+                && s.bytes()
+                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+        })
+        .map(str::to_owned)
+        .unwrap_or_else(|| error.code.as_str().to_ascii_uppercase());
+    let detail = core_v2::DomainErrorDetail {
+        request_id: request_id.to_owned(),
+        domain_code,
+        commit_outcome: outcome.into(),
+        ..Default::default()
+    };
+    error.with_detail(connectrpc::ErrorDetail::from_message(
+        core_v2::DomainErrorDetail::FULL_NAME,
+        &detail,
+    ))
+}

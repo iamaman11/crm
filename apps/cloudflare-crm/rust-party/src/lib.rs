@@ -361,6 +361,23 @@ struct RpcPolicy {
 }
 
 #[cfg(feature = "native")]
+impl RpcPolicy {
+    fn wire_error(
+        self,
+        error: connectrpc::ConnectError,
+        request_id: &str,
+        before_dispatch: bool,
+    ) -> connectrpc::ConnectError {
+        match self.permission {
+            RpcPermission::Write | RpcPermission::SelfWrite => {
+                diagnostics::wire_write_error(error, request_id, before_dispatch)
+            }
+            RpcPermission::Read | RpcPermission::AdminRead => error,
+        }
+    }
+}
+
+#[cfg(feature = "native")]
 const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     (
         "/crm.customer_360.v2.Customer360Service/GetAccountOverview",
@@ -827,9 +844,13 @@ async fn dispatch(
             RpcPermission::Write | RpcPermission::AdminRead
         ) && actor.role != "admin"
         {
-            return rpc_error(connectrpc::ConnectError::permission_denied("FORBIDDEN"));
+            return rpc_error(rule.wire_error(
+                connectrpc::ConnectError::permission_denied("FORBIDDEN"),
+                request_id,
+                true,
+            ));
         }
-        return connect_sales::route(req, env, actor, request_id).await;
+        return connect_sales::route(req, env, actor, request_id, rule).await;
     }
     let db = env.d1("DB")?;
     // Explicitly CI-only, signed-Access-gated native workerd proof. This gate
@@ -907,6 +928,13 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         // Read version binding before dispatch takes ownership of Env.
         let source_sha = env.var("GIT_SHA").ok().map(|value| value.to_string());
         let operation = path.as_str();
+        let rpc_failure = |error, before_dispatch| {
+            let error = match rpc_policy(&path) {
+                Some(policy) => policy.wire_error(error, &request_id, before_dispatch),
+                None => error,
+            };
+            rpc_error(error)
+        };
         let (result, phase) = match access::actor(&req, &env).await {
             Ok(Some(actor)) if path == "/api/doctor" && method == Method::Get => {
                 (native_doctor(&env, &actor.tenant).await, "diagnostics")
@@ -916,7 +944,10 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 "domain_d1",
             ),
             Ok(None) if path.starts_with("/crm.") => (
-                rpc_error(connectrpc::ConnectError::unauthenticated("AUTH_REQUIRED")),
+                rpc_failure(
+                    connectrpc::ConnectError::unauthenticated("AUTH_REQUIRED"),
+                    true,
+                ),
                 "access",
             ),
             Ok(None) => (error("AUTH_REQUIRED", 401), "access"),
@@ -927,9 +958,10 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                     diagnostics::ReadFailureReason::AccessProviderFailed,
                 );
                 let reply = if path.starts_with("/crm.") {
-                    rpc_error(connectrpc::ConnectError::unavailable(
-                        "ACCESS_INTERNAL_ERROR",
-                    ))
+                    rpc_failure(
+                        connectrpc::ConnectError::unavailable("ACCESS_INTERNAL_ERROR"),
+                        true,
+                    )
                 } else {
                     error("ACCESS_INTERNAL_ERROR", 503)
                 };
@@ -939,7 +971,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         let mut reply = match result {
             Ok(reply) => reply,
             Err(_) if path.starts_with("/crm.") => {
-                rpc_error(connectrpc::ConnectError::internal("INTERNAL_ERROR"))?
+                rpc_failure(connectrpc::ConnectError::internal("INTERNAL_ERROR"), false)?
             }
             Err(_) => error("INTERNAL_ERROR", 500)?,
         };

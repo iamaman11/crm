@@ -81,13 +81,9 @@ export function decodeCrmError(error: unknown): CrmFailure {
   }
   const detail = error.findDetails(DomainErrorDetailSchema)[0];
   const requestId = error.metadata.get("x-request-id") ?? undefined;
-  // An edge-generated HTTP error without the Worker evidence is not proof
-  // that the operation was rejected before any write.
-  const workerRejected = !!requestId && error.metadata.get("x-crm-runtime")==="native-workers-rs" &&
-    [Code.InvalidArgument,Code.Unauthenticated,Code.PermissionDenied,Code.NotFound,
-      Code.Aborted,Code.FailedPrecondition,Code.AlreadyExists].includes(error.code);
-  const outcome = detail?.commitOutcome===MutationCommitOutcome.UNCONFIRMED?"unconfirmed":
-    detail?.commitOutcome===MutationCommitOutcome.REJECTED||workerRejected?"rejected":"unconfirmed";
+  // Only a typed rejection for this attempt can release its idempotency key.
+  const outcome = requestId && detail?.requestId===requestId &&
+    detail.commitOutcome===MutationCommitOutcome.REJECTED ? "rejected" : "unconfirmed";
   const explanations: Partial<Record<Code, string>> = {
     [Code.Unauthenticated]: "Сессия завершена. Войдите через Cloudflare Access.",
     [Code.PermissionDenied]: "Недостаточно прав для операции.",

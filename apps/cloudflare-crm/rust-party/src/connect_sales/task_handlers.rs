@@ -52,7 +52,7 @@ impl task_wire::TaskService for TaskV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Task D1 create failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| failure.connect("CreateTask", &self.request_id))?;
         RpcResponse::ok(task_wire::CreateTaskResponse {
             task: Some(Self::convert(
                 &saved.task,
@@ -130,7 +130,7 @@ impl task_wire::TaskService for TaskV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Task D1 update failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| failure.connect("UpdateTask", &self.request_id))?;
         RpcResponse::ok(task_wire::UpdateTaskResponse {
             task: Some(Self::convert(
                 &saved.task,
@@ -172,7 +172,7 @@ impl task_wire::TaskService for TaskV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Task D1 reminder failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| failure.connect("ScheduleReminder", &self.request_id))?;
         RpcResponse::ok(task_wire::ScheduleReminderResponse {
             task: Some(Self::convert(
                 &saved.task,
@@ -212,7 +212,7 @@ impl task_wire::TaskService for TaskV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Task D1 complete failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| failure.connect("CompleteTask", &self.request_id))?;
         RpcResponse::ok(task_wire::CompleteTaskResponse {
             task: Some(Self::convert(
                 &saved.task,

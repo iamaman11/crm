@@ -15,6 +15,12 @@ const registry=createFileRegistry(fromBinary(
 // One descriptor-owned codec for every test RPC. This helper NEVER defines
 // protobuf fields, wire tags or a parallel schema: Buf FileDescriptorSet is
 // the only source of request/response types and method paths.
+export function decodeRpcOutput(path, bytes){
+ const [service, name]=path.slice(1).split("/");
+ const method=registry.getService(service)?.methods.find(m=>m.name===name);
+ if(!method)throw Error("Compiled Buf RPC missing: "+path);
+ return fromBinary(method.output,bytes);
+}
 const serviceWire=name=>{
  const service=registry.getService(name);
  if(!service)throw Error("Compiled Buf service missing: "+name);

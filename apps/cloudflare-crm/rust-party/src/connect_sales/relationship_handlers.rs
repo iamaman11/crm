@@ -53,7 +53,7 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Relationship D1 create failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| failure.connect("CreatePartyRelationship", &self.request_id))?;
         RpcResponse::ok(rel_wire::CreatePartyRelationshipResponse {
             relationship: Some(Self::convert(&saved.relationship)?).into(),
             receipt: Some(self.receipt(&saved)).into(),
@@ -96,7 +96,7 @@ impl rel_wire::PartyRelationshipService for RelationshipV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Relationship D1 update failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| failure.connect("UpdatePartyRelationship", &self.request_id))?;
         RpcResponse::ok(rel_wire::UpdatePartyRelationshipResponse {
             relationship: Some(Self::convert(&saved.relationship)?).into(),
             receipt: Some(self.receipt(&saved)).into(),

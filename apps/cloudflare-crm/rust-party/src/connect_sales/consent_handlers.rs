@@ -22,7 +22,7 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Original Consent evaluation failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| failure.connect("EvaluateConsent", &self.request_id))?;
         let reason = match decision.reason {
             DomainConsentReason::ActiveGrant => {
                 consent_wire::EvaluationReason::EVALUATION_REASON_ACTIVE_GRANT
@@ -68,13 +68,14 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Original Consent suppression failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| failure.connect("SuppressCommunication", &self.request_id))?;
         RpcResponse::ok(consent_wire::SuppressCommunicationResponse {
             authorization: Some(Self::convert(&saved.item)).into(),
             receipt: Some(core_v2::MutationReceipt {
                 request_id: self.request_id.clone(),
                 resource_version: saved.item.version(),
                 replayed: saved.replayed,
+                original_request_id: saved.original_request_id.clone(),
                 ..Default::default()
             })
             .into(),
@@ -104,13 +105,14 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Original Consent Grant failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| failure.connect("GrantVerifiedEmailConsent", &self.request_id))?;
         RpcResponse::ok(consent_wire::GrantVerifiedEmailConsentResponse {
             authorization: Some(Self::convert(&saved.item)).into(),
             receipt: Some(core_v2::MutationReceipt {
                 request_id: self.request_id.clone(),
                 resource_version: saved.item.version(),
                 replayed: saved.replayed,
+                original_request_id: saved.original_request_id.clone(),
                 ..Default::default()
             })
             .into(),
@@ -135,13 +137,14 @@ impl consent_wire::ConsentAuthorizationService for ConsentV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Original Consent Withdrawal failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| failure.connect("WithdrawConsentAuthorization", &self.request_id))?;
         RpcResponse::ok(consent_wire::WithdrawConsentAuthorizationResponse {
             authorization: Some(Self::convert(&saved.item)).into(),
             receipt: Some(core_v2::MutationReceipt {
                 request_id: self.request_id.clone(),
                 resource_version: saved.item.version(),
                 replayed: saved.replayed,
+                original_request_id: saved.original_request_id.clone(),
                 ..Default::default()
             })
             .into(),

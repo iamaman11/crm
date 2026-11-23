@@ -82,18 +82,11 @@ pub(super) struct UpdateInput {
 pub(super) struct MutationOutcome {
     pub(super) task: Task,
     pub(super) replayed: bool,
+    pub(super) original_request_id: Option<String>,
     pub(super) changed: bool,
 }
-pub(super) struct MutationFailure {
-    pub(super) code: String,
-    pub(super) status: u16,
-}
-fn fail(code: impl Into<String>, status: u16) -> MutationFailure {
-    MutationFailure {
-        code: code.into(),
-        status,
-    }
-}
+pub(super) use super::d1_write::OwnerFailure as MutationFailure;
+use connectrpc::ErrorCode;
 #[derive(Deserialize)]
 struct Row {
     state: String,
@@ -105,11 +98,7 @@ struct PagedRow {
     state: String,
     account_id: String,
 }
-#[derive(Deserialize)]
-struct Receipt {
-    digest: String,
-    state: String,
-}
+use super::d1_write::Receipt;
 fn hash<T: Serialize>(operation: &str, id: &str, payload: &T) -> Result<String> {
     let bytes = serde_json::to_vec(&json!([operation, id, payload]))
         .map_err(|e| worker::Error::RustError(e.to_string()))?;
@@ -125,7 +114,7 @@ pub(super) fn decode(input: &str) -> Result<Task> {
 async fn prior(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receipt>> {
     bind(
         db,
-        "SELECT digest,state FROM crm_activity_task_receipts WHERE tenant = ? AND key = ?",
+        "SELECT digest,state,original_request_id FROM crm_activity_task_receipts WHERE tenant = ? AND key = ?",
         &[JsValue::from_str(tenant), JsValue::from_str(key)],
     )?
     .first::<Receipt>(None)
@@ -134,44 +123,50 @@ async fn prior(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receip
 // A missing write acknowledgement is ambiguous. Only a matching atomic receipt
 // or an explicit zero-row CAS/insert can settle it.
 async fn finish_write(
-    db: &D1Database,
-    tenant: &str,
-    key: &str,
+    lookup: impl Future<Output = Result<Option<Receipt>>>,
+    trace: &str,
     digest: &str,
     task: Task,
     write: Result<worker::D1Result>,
-    zero_code: &str,
+    zero_code: &'static str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
-    let changes = write
-        .ok()
-        .filter(|r| r.success())
-        .and_then(|r| r.meta().ok().flatten())
-        .and_then(|meta| meta.changes);
-    if changes.is_some_and(|count| count > 0) {
-        return Ok(Ok(MutationOutcome {
+    match super::d1_write::confirm(
+        write,
+        lookup,
+        zero_code,
+        "ACTIVITIES_TASK_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => Ok(Ok(MutationOutcome {
             task,
             replayed: false,
+            original_request_id: Some(trace.to_owned()),
             changed: true,
-        }));
-    }
-    if let Some(receipt) = prior(db, tenant, key).await? {
-        if receipt.digest != digest {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+        })),
+        Ok(super::d1_write::Confirmation::Replayed(receipt)) => {
+            if receipt.digest != digest {
+                return Ok(Err(MutationFailure::domain(
+                    "IDEMPOTENCY_CONFLICT",
+                    ErrorCode::Aborted,
+                )));
+            }
+            let committed = decode(&receipt.state)?;
+            if committed.task_id() != task.task_id() {
+                return Ok(Err(MutationFailure::domain(
+                    "IDEMPOTENCY_CONFLICT",
+                    ErrorCode::Aborted,
+                )));
+            }
+            Ok(Ok(MutationOutcome {
+                task: committed,
+                replayed: true,
+                original_request_id: receipt.original_request_id,
+                changed: true,
+            }))
         }
-        let committed = decode(&receipt.state)?;
-        if committed.task_id() != task.task_id() {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        return Ok(Ok(MutationOutcome {
-            task: committed,
-            replayed: true,
-            changed: true,
-        }));
+        Err(failure) => Ok(Err(MutationFailure::Write(failure))),
     }
-    if changes == Some(0) {
-        return Ok(Err(fail(zero_code, 409)));
-    }
-    Ok(Err(fail("ACTIVITIES_TASK_WRITE_UNCONFIRMED", 503)))
 }
 pub(super) async fn stored(db: &D1Database, tenant: &str, id: &str) -> Result<Option<Task>> {
     bind(
@@ -205,33 +200,56 @@ pub(super) async fn create_typed(
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(MutationFailure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let digest = hash("create", &input.id, &input)?;
     if let Some(p) = prior(db, tenant, key).await? {
         if p.digest != digest {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         let task = decode(&p.state)?;
         if task.task_id().as_str() != input.id {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         return Ok(Ok(MutationOutcome {
             task,
             replayed: true,
+            original_request_id: p.original_request_id,
             changed: false,
         }));
     }
     let task_id = match RecordId::try_new(&input.id) {
         Ok(x) => x,
-        Err(_) => return Ok(Err(fail("ACTIVITIES_TASK_ID_INVALID", 422))),
+        Err(_) => {
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_TASK_ID_INVALID",
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let account_id = match RecordId::try_new(&input.account_id) {
         Ok(x) => x,
-        Err(_) => return Ok(Err(fail("ACTIVITIES_ACCOUNT_ID_INVALID", 422))),
+        Err(_) => {
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_ACCOUNT_ID_INVALID",
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     if !account_exists(db, tenant, account_id.as_str()).await? {
-        return Ok(Err(fail("ACTIVITIES_ACCOUNT_NOT_FOUND", 422)));
+        return Ok(Err(MutationFailure::domain(
+            "ACTIVITIES_ACCOUNT_NOT_FOUND",
+            ErrorCode::InvalidArgument,
+        )));
     }
     // A manual Deal task must refer to an authorized, existing Deal owned by
     // the same Account. Use the original Sales owner read, not another SQL
@@ -245,16 +263,27 @@ pub(super) async fn create_typed(
     if let Some(deal_id) = input.deal_id.as_deref() {
         let deal_id = match RecordId::try_new(deal_id) {
             Ok(value) => value,
-            Err(_) => return Ok(Err(fail("ACTIVITIES_DEAL_ID_INVALID", 422))),
+            Err(_) => {
+                return Ok(Err(MutationFailure::domain(
+                    "ACTIVITIES_DEAL_ID_INVALID",
+                    ErrorCode::InvalidArgument,
+                )));
+            }
         };
         let Some(deal) = super::sales_deals::load(db, tenant, deal_id.as_str()).await? else {
-            return Ok(Err(fail("ACTIVITIES_DEAL_NOT_FOUND", 422)));
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_DEAL_NOT_FOUND",
+                ErrorCode::InvalidArgument,
+            )));
         };
         if !deal.account().is_some_and(|reference| {
             reference.resource_type == "crm.customer-accounts"
                 && reference.resource_id == account_id.as_str()
         }) {
-            return Ok(Err(fail("ACTIVITIES_DEAL_ACCOUNT_MISMATCH", 422)));
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_DEAL_ACCOUNT_MISMATCH",
+                ErrorCode::InvalidArgument,
+            )));
         }
         related_resources.push(ResourceRef {
             resource_type: "sales.deal".into(),
@@ -264,7 +293,12 @@ pub(super) async fn create_typed(
     }
     let owner = match ActorId::try_new(actor) {
         Ok(x) => TaskOwner::Actor(x),
-        Err(_) => return Ok(Err(fail("ACTIVITIES_OWNER_INVALID", 422))),
+        Err(_) => {
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_OWNER_INVALID",
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let task = match Task::create(CreateTask {
         task_id,
@@ -278,7 +312,12 @@ pub(super) async fn create_typed(
         occurred_at_unix_nanos: now_nanos(),
     }) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(MutationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let saved = state(&task)?;
     let r=bind(db,"INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
@@ -287,9 +326,8 @@ pub(super) async fn create_typed(
           JsValue::from_f64(task.version() as f64),JsValue::from_str(key),
           JsValue::from_str(&digest),JsValue::from_str(trace),JsValue::from_str(actor)])?.run().await;
     finish_write(
-        db,
-        tenant,
-        key,
+        prior(db, tenant, key),
+        trace,
         &digest,
         task,
         r,
@@ -307,32 +345,49 @@ pub(super) async fn update_typed(
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(MutationFailure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     if matches!(&input.subject, Change::Keep)
         && matches!(&input.description, Change::Keep)
         && matches!(&input.priority, Change::Keep)
         && matches!(&input.due_at_unix_nanos, Change::Keep)
     {
-        return Ok(Err(fail("ACTIVITIES_TASK_NO_CHANGES", 422)));
+        return Ok(Err(MutationFailure::domain(
+            "ACTIVITIES_TASK_NO_CHANGES",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let digest = hash("update", id, &input)?;
+    let current = stored(db, tenant, id).await;
     if let Some(previous) = prior(db, tenant, key).await? {
         if previous.digest != digest {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         let task = decode(&previous.state)?;
         if task.task_id().as_str() != id {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         return Ok(Ok(MutationOutcome {
             task,
             replayed: true,
+            original_request_id: previous.original_request_id,
             changed: false,
         }));
     }
-    let Some(mut task) = stored(db, tenant, id).await? else {
-        return Ok(Err(fail("NOT_FOUND", 404)));
+    let Some(mut task) = current? else {
+        return Ok(Err(MutationFailure::domain(
+            "NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     let expected_version = input.expected_version;
     let priority = match input.priority {
@@ -349,12 +404,12 @@ pub(super) async fn update_typed(
         due_at_unix_nanos: input.due_at_unix_nanos.into_patch(),
         occurred_at_unix_nanos: now_nanos(),
     }) {
-        return Ok(Err(fail(
+        return Ok(Err(MutationFailure::domain(
             error.code.clone(),
             if error.code == "ACTIVITIES_TASK_VERSION_CONFLICT" {
-                409
+                ErrorCode::Aborted
             } else {
-                422
+                ErrorCode::InvalidArgument
             },
         )));
     }
@@ -367,9 +422,8 @@ pub(super) async fn update_typed(
           JsValue::from_str(actor),JsValue::from_str(tenant), JsValue::from_str(id),
           JsValue::from_f64(expected_version as f64)])?.run().await;
     finish_write(
-        db,
-        tenant,
-        key,
+        prior(db, tenant, key),
+        trace,
         &digest,
         task,
         changed,
@@ -390,25 +444,39 @@ pub(super) async fn schedule_reminder_typed(
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(MutationFailure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let digest = hash("schedule_reminder", id, &input)?;
+    let current = stored(db, tenant, id).await;
     if let Some(previous) = prior(db, tenant, key).await? {
         if previous.digest != digest {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         let task = decode(&previous.state)?;
         if task.task_id().as_str() != id {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         return Ok(Ok(MutationOutcome {
             task,
             replayed: true,
+            original_request_id: previous.original_request_id,
             changed: true,
         }));
     }
-    let Some(mut task) = stored(db, tenant, id).await? else {
-        return Ok(Err(fail("NOT_FOUND", 404)));
+    let Some(mut task) = current? else {
+        return Ok(Err(MutationFailure::domain(
+            "NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     let changed = match task.schedule_reminder(ScheduleReminder {
         expected_version: input.expected_version,
@@ -417,14 +485,14 @@ pub(super) async fn schedule_reminder_typed(
     }) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(Err(fail(
+            return Ok(Err(MutationFailure::domain(
                 error.code.clone(),
                 if error.code == "ACTIVITIES_TASK_VERSION_CONFLICT"
                     || error.code == "ACTIVITIES_TASK_ALREADY_COMPLETED"
                 {
-                    409
+                    ErrorCode::Aborted
                 } else {
-                    422
+                    ErrorCode::InvalidArgument
                 },
             )));
         }
@@ -433,6 +501,7 @@ pub(super) async fn schedule_reminder_typed(
         return Ok(Ok(MutationOutcome {
             task,
             replayed: false,
+            original_request_id: None,
             changed: false,
         }));
     }
@@ -455,9 +524,8 @@ pub(super) async fn schedule_reminder_typed(
     .run()
     .await;
     finish_write(
-        db,
-        tenant,
-        key,
+        prior(db, tenant, key),
+        trace,
         &digest,
         task,
         result,
@@ -475,25 +543,39 @@ pub(super) async fn complete_typed(
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(MutationFailure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let digest = hash("complete", id, &input)?;
+    let current = stored(db, tenant, id).await;
     if let Some(p) = prior(db, tenant, key).await? {
         if p.digest != digest {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         let task = decode(&p.state)?;
         if task.task_id().as_str() != id {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         return Ok(Ok(MutationOutcome {
             task,
             replayed: true,
+            original_request_id: p.original_request_id,
             changed: true,
         }));
     }
-    let Some(mut task) = stored(db, tenant, id).await? else {
-        return Ok(Err(fail("NOT_FOUND", 404)));
+    let Some(mut task) = current? else {
+        return Ok(Err(MutationFailure::domain(
+            "NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     let changed = match task.complete(CompleteTask {
         expected_version: input.expected_version,
@@ -501,12 +583,12 @@ pub(super) async fn complete_typed(
     }) {
         Ok(x) => x,
         Err(e) => {
-            return Ok(Err(fail(
+            return Ok(Err(MutationFailure::domain(
                 e.code.clone(),
                 if e.code == "ACTIVITIES_TASK_VERSION_CONFLICT" {
-                    409
+                    ErrorCode::Aborted
                 } else {
-                    422
+                    ErrorCode::InvalidArgument
                 },
             )));
         }
@@ -517,6 +599,7 @@ pub(super) async fn complete_typed(
         return Ok(Ok(MutationOutcome {
             task,
             replayed: false,
+            original_request_id: None,
             changed: false,
         }));
     }
@@ -527,9 +610,8 @@ pub(super) async fn complete_typed(
           JsValue::from_str(actor),JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
     finish_write(
-        db,
-        tenant,
-        key,
+        prior(db, tenant, key),
+        trace,
         &digest,
         task,
         r,

@@ -38,25 +38,14 @@ struct PageRow {
     id: String,
     state: String,
 }
-#[derive(Deserialize)]
-struct Receipt {
-    digest: String,
-    state: String,
-}
+use super::d1_write::Receipt;
 pub(super) struct Saved {
     pub value: SalesDealView,
     pub replayed: bool,
+    pub(super) original_request_id: Option<String>,
 }
-pub(super) struct Failure {
-    pub code: String,
-    pub status: u16,
-}
-fn fail(code: impl Into<String>, status: u16) -> Failure {
-    Failure {
-        code: code.into(),
-        status,
-    }
-}
+pub(super) use super::d1_write::OwnerFailure as Failure;
+use connectrpc::ErrorCode;
 fn digest<T: Serialize>(kind: &str, input: &T) -> String {
     format!(
         "{:x}",
@@ -71,7 +60,7 @@ fn decode(state: &str) -> Result<SalesDealView> {
 async fn receipt(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receipt>> {
     bind(
         db,
-        "SELECT digest,state FROM crm_sales_saved_view_receipts WHERE tenant=? AND key=?",
+        "SELECT digest,state,original_request_id FROM crm_sales_saved_view_receipts WHERE tenant=? AND key=?",
         &[JsValue::from_str(tenant), JsValue::from_str(key)],
     )?
     .first::<Receipt>(None)
@@ -96,7 +85,10 @@ async fn check_pipeline(
     if let Some(id) = pipeline
         && super::sales_pipelines::get(db, tenant, id).await?.is_none()
     {
-        return Ok(Err(fail("SALES_VIEW_PIPELINE_NOT_FOUND", 404)));
+        return Ok(Err(Failure::domain(
+            "SALES_VIEW_PIPELINE_NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     }
     Ok(Ok(()))
 }
@@ -109,14 +101,21 @@ pub(super) async fn create(
     request_id: &str,
 ) -> Result<std::result::Result<Saved, Failure>> {
     let hash = digest("sales_view.create", &input);
-    if let Some(prior) = receipt(db, tenant, key).await? {
+    let replay = |prior: Receipt| {
         if prior.digest != hash {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(Failure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(Saved {
+        Ok(Ok(Saved {
             value: decode(&prior.state)?,
             replayed: true,
-        }));
+            original_request_id: prior.original_request_id,
+        }))
+    };
+    if let Some(prior) = receipt(db, tenant, key).await? {
+        return replay(prior);
     }
     let view = match SalesDealView::create(
         input.view_id,
@@ -126,7 +125,7 @@ pub(super) async fn create(
         input.account_id,
     ) {
         Ok(view) => view,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => return Ok(Err(Failure::domain(e.code, ErrorCode::InvalidArgument))),
     };
     if let Err(e) = check_pipeline(db, tenant, view.pipeline_id.as_deref()).await? {
         return Ok(Err(e));
@@ -135,7 +134,7 @@ pub(super) async fn create(
         .encode()
         .map_err(|e| worker::Error::RustError(e.code))?;
     let inserted = bind(db,
-        "INSERT INTO crm_sales_saved_view_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,last_action) VALUES(?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO crm_sales_saved_view_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,last_action) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
         &[
             JsValue::from_str(tenant), JsValue::from_str(&view.view_id),
             JsValue::from_str(&state), JsValue::from_f64(view.version as f64),
@@ -144,20 +143,22 @@ pub(super) async fn create(
             JsValue::from_str("sales_view.create"),
         ],
     )?.run().await;
-    if inserted.is_err() {
-        if let Some(prior) = receipt(db, tenant, key).await?
-            && prior.digest == hash
-        {
-            return Ok(Ok(Saved {
-                value: decode(&prior.state)?,
-                replayed: true,
-            }));
-        }
-        return Ok(Err(fail("SALES_VIEW_CREATE_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        inserted,
+        receipt(db, tenant, key),
+        "SALES_VIEW_CREATE_CONFLICT",
+        "SALES_VIEW_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(Failure::Write(failure))),
     }
     Ok(Ok(Saved {
         value: view,
         replayed: false,
+        original_request_id: Some(request_id.to_owned()),
     }))
 }
 pub(super) async fn update(
@@ -169,17 +170,28 @@ pub(super) async fn update(
     request_id: &str,
 ) -> Result<std::result::Result<Saved, Failure>> {
     let hash = digest("sales_view.update", &input);
-    if let Some(prior) = receipt(db, tenant, key).await? {
+    let replay = |prior: Receipt| {
         if prior.digest != hash {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(Failure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(Saved {
+        Ok(Ok(Saved {
             value: decode(&prior.state)?,
             replayed: true,
-        }));
+            original_request_id: prior.original_request_id,
+        }))
+    };
+    let current = get(db, tenant, &input.view_id).await;
+    if let Some(prior) = receipt(db, tenant, key).await? {
+        return replay(prior);
     }
-    let Some(existing) = get(db, tenant, &input.view_id).await? else {
-        return Ok(Err(fail("SALES_VIEW_NOT_FOUND", 404)));
+    let Some(existing) = current? else {
+        return Ok(Err(Failure::domain(
+            "SALES_VIEW_NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     let changed = match existing.reconfigure(
         input.expected_version,
@@ -191,12 +203,12 @@ pub(super) async fn update(
     ) {
         Ok(view) => view,
         Err(e) => {
-            return Ok(Err(fail(
+            return Ok(Err(Failure::domain(
                 e.code,
                 if e.category == crm_module_sdk::ErrorCategory::Conflict {
-                    409
+                    ErrorCode::Aborted
                 } else {
-                    422
+                    ErrorCode::InvalidArgument
                 },
             )));
         }
@@ -218,15 +230,22 @@ pub(super) async fn update(
             JsValue::from_f64(input.expected_version as f64),
         ]
     )?.run().await;
-    let Ok(done) = result else {
-        return Ok(Err(fail("SALES_VIEW_WRITE_CONFLICT", 409)));
-    };
-    if done.meta()?.and_then(|meta| meta.changes).unwrap_or(0) == 0 {
-        return Ok(Err(fail("SALES_VIEW_VERSION_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        result,
+        receipt(db, tenant, key),
+        "SALES_VIEW_VERSION_CONFLICT",
+        "SALES_VIEW_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(Failure::Write(failure))),
     }
     Ok(Ok(Saved {
         value: changed,
         replayed: false,
+        original_request_id: Some(request_id.to_owned()),
     }))
 }
 pub(super) async fn list(

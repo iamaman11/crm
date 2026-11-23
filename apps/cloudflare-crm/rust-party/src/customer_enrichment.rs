@@ -47,6 +47,7 @@ struct StateRow {
 }
 #[derive(Deserialize)]
 struct Receipt {
+    original_request_id: Option<String>,
     kind: String,
     digest: String,
     state: String,
@@ -82,7 +83,13 @@ fn digest<T: Serialize>(kind: &str, input: &T) -> String {
 async fn receipt(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receipt>> {
     bind(
         db,
-        "SELECT kind,digest,state FROM crm_enrichment_receipts WHERE tenant=? AND key=?",
+        "SELECT r.kind,r.digest,r.state,
+          CASE r.kind WHEN 'profile' THEN (SELECT request_id FROM crm_enrichment_profiles p
+            WHERE p.tenant=r.tenant AND p.idem_key=r.key AND p.idem_digest=r.digest AND p.state=r.state)
+          WHEN 'mapping' THEN (SELECT request_id FROM crm_enrichment_mappings m
+            WHERE m.tenant=r.tenant AND m.idem_key=r.key AND m.idem_digest=r.digest AND m.state=r.state)
+          END AS original_request_id
+         FROM crm_enrichment_receipts r WHERE r.tenant=? AND r.key=?",
         &[JsValue::from_str(tenant), JsValue::from_str(key)],
     )?
     .first::<Receipt>(None)
@@ -109,18 +116,28 @@ pub(super) async fn publish_profile(
 ) -> Result<std::result::Result<Saved<ProviderProfileVersion>, Failure>> {
     let tenant = actor.tenant.as_str();
     if !(8..=120).contains(&k.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(Failure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let hash = digest("profile", &input);
-    if let Some(r) = receipt(db, tenant, k).await? {
+    let replay = |r: Receipt| {
         if r.kind != "profile" || r.digest != hash {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(Failure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         let profile = decode_profile(&r.state)?;
-        return Ok(Ok(Saved {
+        Ok(Ok(Saved {
             value: profile,
             replayed: true,
-        }));
+            original_request_id: r.original_request_id,
+        }))
+    };
+    if let Some(r) = receipt(db, tenant, k).await? {
+        return replay(r);
     }
     let draft = ProviderProfileDraft {
         provider_key: input.provider_key,
@@ -139,31 +156,31 @@ pub(super) async fn publish_profile(
     };
     let profile = match ProviderProfileVersion::publish(draft) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => return Ok(Err(Failure::domain(e.code, ErrorCode::InvalidArgument))),
     };
     let saved = encode_profile(&profile)?;
-    let inserted=bind(db,"INSERT INTO crm_enrichment_profiles (tenant,id,state,idem_key,idem_digest,request_id,created_by) VALUES(?,?,?,?,?,?,?)",
+    let inserted=bind(db,"INSERT INTO crm_enrichment_profiles (tenant,id,state,idem_key,idem_digest,request_id,created_by) VALUES(?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
         &[JsValue::from_str(tenant),
           JsValue::from_str(profile.version_id().as_str()),
           JsValue::from_str(&saved),JsValue::from_str(k),
           JsValue::from_str(&hash),JsValue::from_str(trace),
           JsValue::from_str(&actor.identity)])?.run().await;
-    if inserted.is_err() {
-        // A race on the same key may have committed while we were inserting.
-        if let Some(r) = receipt(db, tenant, k).await?
-            && r.kind == "profile"
-            && r.digest == hash
-        {
-            return Ok(Ok(Saved {
-                value: decode_profile(&r.state)?,
-                replayed: true,
-            }));
-        }
-        return Ok(Err(fail("ENRICHMENT_PROFILE_CREATE_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        inserted,
+        receipt(db, tenant, k),
+        "ENRICHMENT_PROFILE_CREATE_CONFLICT",
+        "ENRICHMENT_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(Failure::Write(failure))),
     }
     Ok(Ok(Saved {
         value: profile,
         replayed: false,
+        original_request_id: Some(trace.to_owned()),
     }))
 }
 pub(super) async fn publish_mapping(
@@ -175,21 +192,34 @@ pub(super) async fn publish_mapping(
 ) -> Result<std::result::Result<Saved<MappingVersion>, Failure>> {
     let tenant = actor.tenant.as_str();
     if !(8..=120).contains(&k.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(Failure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let hash = digest("mapping", &input);
-    if let Some(r) = receipt(db, tenant, k).await? {
+    let replay = |r: Receipt| {
         if r.kind != "mapping" || r.digest != hash {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(Failure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(Saved {
+        Ok(Ok(Saved {
             value: decode_mapping(&r.state)?,
             replayed: true,
-        }));
+            original_request_id: r.original_request_id,
+        }))
+    };
+    if let Some(r) = receipt(db, tenant, k).await? {
+        return replay(r);
     }
     let Some(source) = state(db, PROFILES, tenant, &input.provider_profile_version_id).await?
     else {
-        return Ok(Err(fail("ENRICHMENT_PROVIDER_PROFILE_NOT_FOUND", 404)));
+        return Ok(Err(Failure::domain(
+            "ENRICHMENT_PROVIDER_PROFILE_NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     let profile = decode_profile(&source)?;
     // The only allowed target for this first usable native slice. The owner
@@ -198,7 +228,10 @@ pub(super) async fn publish_mapping(
         .supported_target_fields()
         .contains(&TargetField::PartyDisplayName)
     {
-        return Ok(Err(fail("ENRICHMENT_UNSUPPORTED_TARGET", 422)));
+        return Ok(Err(Failure::domain(
+            "ENRICHMENT_UNSUPPORTED_TARGET",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let mapping = match MappingVersion::publish(MappingDraft {
         mapping_key: input.mapping_key,
@@ -210,48 +243,42 @@ pub(super) async fn publish_mapping(
         confidence_required: input.confidence_required,
     }) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => return Ok(Err(Failure::domain(e.code, ErrorCode::InvalidArgument))),
     };
     let saved = encode_mapping(&mapping)?;
-    let inserted=bind(db,"INSERT INTO crm_enrichment_mappings (tenant,id,provider_profile_id,state,idem_key,idem_digest,request_id,created_by) VALUES(?,?,?,?,?,?,?,?)",
+    let inserted=bind(db,"INSERT INTO crm_enrichment_mappings (tenant,id,provider_profile_id,state,idem_key,idem_digest,request_id,created_by) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
         &[JsValue::from_str(tenant),
           JsValue::from_str(mapping.version_id().as_str()),
           JsValue::from_str(&input.provider_profile_version_id),
           JsValue::from_str(&saved),JsValue::from_str(k),
           JsValue::from_str(&hash),JsValue::from_str(trace),
           JsValue::from_str(&actor.identity)])?.run().await;
-    if inserted.is_err() {
-        if let Some(r) = receipt(db, tenant, k).await?
-            && r.kind == "mapping"
-            && r.digest == hash
-        {
-            return Ok(Ok(Saved {
-                value: decode_mapping(&r.state)?,
-                replayed: true,
-            }));
-        }
-        return Ok(Err(fail("ENRICHMENT_MAPPING_CREATE_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        inserted,
+        receipt(db, tenant, k),
+        "ENRICHMENT_MAPPING_CREATE_CONFLICT",
+        "ENRICHMENT_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(Failure::Write(failure))),
     }
     Ok(Ok(Saved {
         value: mapping,
         replayed: false,
+        original_request_id: Some(trace.to_owned()),
     }))
 }
 
 pub(super) struct Saved<T> {
     pub(super) value: T,
     pub(super) replayed: bool,
+    pub(super) original_request_id: Option<String>,
 }
-pub(super) struct Failure {
-    pub(super) code: String,
-    pub(super) status: u16,
-}
-fn fail(code: impl Into<String>, status: u16) -> Failure {
-    Failure {
-        code: code.into(),
-        status,
-    }
-}
+pub(super) use super::d1_write::OwnerFailure as Failure;
+use connectrpc::ErrorCode;
 pub(super) async fn profile(
     db: &D1Database,
     tenant: &str,

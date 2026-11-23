@@ -396,10 +396,10 @@ pub(super) async fn preview_import(
     let plan = match parse_import(bytes, tenant) {
         Ok(plan) => plan,
         Err(code) => {
-            return Ok(Err(parties::MutationFailure {
-                code: code.into(),
-                status: 422,
-            }));
+            return Ok(Err(parties::MutationFailure::domain(
+                code,
+                connectrpc::ErrorCode::InvalidArgument,
+            )));
         }
     };
     // A preview with ANY invalid row is informational, NEVER a write permit.
@@ -461,25 +461,25 @@ pub(super) async fn apply_import(
     let plan = match parse_import(bytes, &actor.tenant) {
         Ok(plan) => plan,
         Err(code) => {
-            return Ok(Err(parties::MutationFailure {
-                code: code.into(),
-                status: 422,
-            }));
+            return Ok(Err(parties::MutationFailure::domain(
+                code,
+                connectrpc::ErrorCode::InvalidArgument,
+            )));
         }
     };
     if expected != plan.hash {
-        return Ok(Err(parties::MutationFailure {
-            code: "IMPORT_SOURCE_CHANGED".into(),
-            status: 409,
-        }));
+        return Ok(Err(parties::MutationFailure::domain(
+            "IMPORT_SOURCE_CHANGED",
+            connectrpc::ErrorCode::Aborted,
+        )));
     }
     // Apply independently revalidates the same original rows: a partial
     // preview can NEVER create a partial batch or reserve its receipt key.
     if let Some(issue) = plan.row_issues.first() {
-        return Ok(Err(parties::MutationFailure {
-            code: issue.diagnostic.code().to_owned(),
-            status: 422,
-        }));
+        return Ok(Err(parties::MutationFailure::domain(
+            issue.diagnostic.code().to_owned(),
+            connectrpc::ErrorCode::InvalidArgument,
+        )));
     }
     Ok(
         parties::import_batch(db, actor, plan.commands, key, &plan.hash, trace)

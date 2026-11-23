@@ -101,20 +101,11 @@ impl PrivacyV2Service {
         Ok(core_v2::MutationReceipt {
             request_id: self.request_id.clone(),
             replayed: saved.replayed,
+            original_request_id: saved.original_request_id.clone(),
             resource_version: i64::try_from(saved.case.version())
                 .map_err(|_| ConnectError::internal("invalid PrivacyCase version"))?,
             ..Default::default()
         })
-    }
-    fn failed(error: customer_privacy::Failure) -> ConnectError {
-        match error.status {
-            403 => ConnectError::permission_denied(error.code),
-            404 => ConnectError::not_found(error.code),
-            409 => ConnectError::aborted(error.code),
-            412 => ConnectError::failed_precondition(error.code),
-            422 => ConnectError::invalid_argument(error.code),
-            _ => ConnectError::internal(error.code),
-        }
     }
     async fn transition(
         &self,
@@ -137,7 +128,7 @@ impl PrivacyV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("PrivacyCase D1 transition failed"))?
-        .map_err(Self::failed)
+        .map_err(|failure| failure.connect("Transition", &self.request_id))
     }
 }
 impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
@@ -175,7 +166,7 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("PrivacyCase D1 create failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| failure.connect("CreatePrivacyCase", &self.request_id))?;
         RpcResponse::ok(privacy_wire::CreatePrivacyCaseResponse {
             privacy_case: Some(Self::convert(&saved.case)?).into(),
             receipt: Some(self.receipt(&saved)?).into(),
@@ -229,7 +220,7 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("PrivacyCase D1 verification failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| failure.connect("VerifyOwnPrivacyCaseSubject", &self.request_id))?;
         RpcResponse::ok(privacy_wire::VerifyOwnPrivacyCaseSubjectResponse {
             privacy_case: Some(Self::convert(&saved.case)?).into(),
             receipt: Some(self.receipt(&saved)?).into(),
@@ -267,7 +258,7 @@ impl privacy_wire::PrivacyCaseService for PrivacyV2Service {
         let preview = customer_privacy::preview_own_scope(&self.d1()?, &self.actor, id.as_str())
             .await
             .map_err(|_| ConnectError::internal("Privacy scope D1 read failed"))?
-            .map_err(Self::failed)?;
+            .map_err(|failure| failure.connect("PreviewOwnPrivacyScope", &self.request_id))?;
         let resources = preview
             .contributions
             .iter()

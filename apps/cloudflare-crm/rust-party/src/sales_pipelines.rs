@@ -34,26 +34,15 @@ struct PageRow {
     id: String,
     state: String,
 }
-#[derive(Deserialize)]
-struct Receipt {
-    digest: String,
-    state: String,
-}
+use super::d1_write::Receipt;
 
 pub(super) struct Saved {
     pub value: SalesPipeline,
     pub replayed: bool,
+    pub(super) original_request_id: Option<String>,
 }
-pub(super) struct Failure {
-    pub code: String,
-    pub status: u16,
-}
-fn fail(code: impl Into<String>, status: u16) -> Failure {
-    Failure {
-        code: code.into(),
-        status,
-    }
-}
+pub(super) use super::d1_write::OwnerFailure as Failure;
+use connectrpc::ErrorCode;
 fn digest<T: Serialize>(kind: &str, input: &T) -> String {
     format!(
         "{:x}",
@@ -63,7 +52,7 @@ fn digest<T: Serialize>(kind: &str, input: &T) -> String {
 async fn receipt(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receipt>> {
     bind(
         db,
-        "SELECT digest,state FROM crm_sales_pipeline_receipts WHERE tenant=? AND key=?",
+        "SELECT digest,state,original_request_id FROM crm_sales_pipeline_receipts WHERE tenant=? AND key=?",
         &[JsValue::from_str(tenant), JsValue::from_str(key)],
     )?
     .first::<Receipt>(None)
@@ -118,26 +107,33 @@ pub(super) async fn create(
     request_id: &str,
 ) -> Result<std::result::Result<Saved, Failure>> {
     let hash = digest("pipeline.create", &input);
-    if let Some(prior) = receipt(db, tenant, key).await? {
+    let replay = |prior: Receipt| {
         if prior.digest != hash {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(Failure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(Saved {
+        Ok(Ok(Saved {
             value: SalesPipeline::decode(prior.state.as_bytes())
                 .map_err(|e| worker::Error::RustError(e.code))?,
             replayed: true,
-        }));
+            original_request_id: prior.original_request_id,
+        }))
+    };
+    if let Some(prior) = receipt(db, tenant, key).await? {
+        return replay(prior);
     }
     let pipeline = match SalesPipeline::create(input.pipeline_id, input.name, input.stages) {
         Ok(pipeline) => pipeline,
-        Err(err) => return Ok(Err(fail(err.code, 422))),
+        Err(err) => return Ok(Err(Failure::domain(err.code, ErrorCode::InvalidArgument))),
     };
     let state = pipeline
         .encode()
         .map_err(|e| worker::Error::RustError(e.code))?;
     let inserted = bind(
         db,
-        "INSERT INTO crm_sales_pipeline_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,last_action) VALUES(?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO crm_sales_pipeline_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,last_action) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
         &[
             JsValue::from_str(tenant),
             JsValue::from_str(&pipeline.pipeline_id),
@@ -152,21 +148,22 @@ pub(super) async fn create(
     )?
     .run()
     .await;
-    if inserted.is_err() {
-        if let Some(prior) = receipt(db, tenant, key).await?
-            && prior.digest == hash
-        {
-            return Ok(Ok(Saved {
-                value: SalesPipeline::decode(prior.state.as_bytes())
-                    .map_err(|e| worker::Error::RustError(e.code))?,
-                replayed: true,
-            }));
-        }
-        return Ok(Err(fail("SALES_PIPELINE_CREATE_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        inserted,
+        receipt(db, tenant, key),
+        "SALES_PIPELINE_CREATE_CONFLICT",
+        "SALES_PIPELINE_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(Failure::Write(failure))),
     }
     Ok(Ok(Saved {
         value: pipeline,
         replayed: false,
+        original_request_id: Some(request_id.to_owned()),
     }))
 }
 pub(super) async fn update(
@@ -178,18 +175,29 @@ pub(super) async fn update(
     request_id: &str,
 ) -> Result<std::result::Result<Saved, Failure>> {
     let hash = digest("pipeline.update", &input);
-    if let Some(prior) = receipt(db, tenant, key).await? {
+    let replay = |prior: Receipt| {
         if prior.digest != hash {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(Failure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(Saved {
+        Ok(Ok(Saved {
             value: SalesPipeline::decode(prior.state.as_bytes())
                 .map_err(|e| worker::Error::RustError(e.code))?,
             replayed: true,
-        }));
+            original_request_id: prior.original_request_id,
+        }))
+    };
+    let current = get(db, tenant, &input.pipeline_id).await;
+    if let Some(prior) = receipt(db, tenant, key).await? {
+        return replay(prior);
     }
-    let Some(existing) = get(db, tenant, &input.pipeline_id).await? else {
-        return Ok(Err(fail("SALES_PIPELINE_NOT_FOUND", 404)));
+    let Some(existing) = current? else {
+        return Ok(Err(Failure::domain(
+            "SALES_PIPELINE_NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     let changed = match existing.reconfigure(
         input.expected_version,
@@ -199,12 +207,12 @@ pub(super) async fn update(
     ) {
         Ok(pipeline) => pipeline,
         Err(e) => {
-            return Ok(Err(fail(
+            return Ok(Err(Failure::domain(
                 e.code,
                 if e.category == crm_module_sdk::ErrorCategory::Conflict {
-                    409
+                    ErrorCode::Aborted
                 } else {
-                    422
+                    ErrorCode::InvalidArgument
                 },
             )));
         }
@@ -214,7 +222,20 @@ pub(super) async fn update(
         .map_err(|e| worker::Error::RustError(e.code))?;
     let result = bind(
         db,
-        "UPDATE crm_sales_pipeline_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_pipeline.update' WHERE tenant=? AND id=? AND version=?",
+        "UPDATE crm_sales_pipeline_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_pipeline.update' WHERE tenant=? AND id=? AND version=? AND NOT EXISTS (
+SELECT 1 FROM crm_sales_deal_records d
+  WHERE d.tenant=crm_sales_pipeline_records.tenant
+    AND json_extract(d.state,'$.stage.pipeline_id')=crm_sales_pipeline_records.id
+    AND (
+      (json_extract(?1,'$.archived')=1
+        AND json_extract(d.state,'$.status')='open')
+      OR NOT EXISTS (
+        SELECT 1 FROM json_each(?1,'$.stages') s
+        WHERE json_extract(s.value,'$.stage_id')=json_extract(d.state,'$.stage.stage_id')
+          AND (json_extract(d.state,'$.status')!='open'
+            OR json_extract(s.value,'$.archived')=0)
+      )
+    ))",
         &[
             JsValue::from_str(&state),
             JsValue::from_f64(changed.version as f64),
@@ -229,20 +250,22 @@ pub(super) async fn update(
     )?
     .run()
     .await;
-    let Ok(done) = result else {
-        // D1 prohibits removal/archive of referenced stages and atomically
-        // rebases occupied ranks inside the same catalog update.
-        return Ok(Err(fail(
-            "SALES_PIPELINE_REFERENCED_STAGE_OR_WRITE_CONFLICT",
-            409,
-        )));
-    };
-    if done.meta()?.and_then(|meta| meta.changes).unwrap_or(0) == 0 {
-        return Ok(Err(fail("SALES_PIPELINE_VERSION_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        result,
+        receipt(db, tenant, key),
+        "SALES_PIPELINE_REFERENCED_STAGE_OR_VERSION_CONFLICT",
+        "SALES_PIPELINE_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(Failure::Write(failure))),
     }
     Ok(Ok(Saved {
         value: changed,
         replayed: false,
+        original_request_id: Some(request_id.to_owned()),
     }))
 }
 pub(super) async fn list(

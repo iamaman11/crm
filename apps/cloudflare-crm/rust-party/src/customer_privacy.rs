@@ -25,11 +25,7 @@ struct CreatorRow {
 struct StateRow {
     state: String,
 }
-#[derive(Deserialize)]
-struct Receipt {
-    digest: String,
-    state: String,
-}
+use super::d1_write::Receipt;
 #[derive(Deserialize)]
 struct PageRow {
     id: String,
@@ -38,11 +34,10 @@ struct PageRow {
 pub(super) struct Saved {
     pub(super) case: PrivacyCase,
     pub(super) replayed: bool,
+    pub(super) original_request_id: Option<String>,
 }
-pub(super) struct Failure {
-    pub(super) code: String,
-    pub(super) status: u16,
-}
+pub(super) use super::d1_write::OwnerFailure as Failure;
+use connectrpc::ErrorCode;
 pub(super) enum Transition {
     Submit,
     Cancel,
@@ -50,12 +45,6 @@ pub(super) enum Transition {
         submitted_party_id: RecordId,
         contact_point_id: RecordId,
     },
-}
-fn fail(code: impl Into<String>, status: u16) -> Failure {
-    Failure {
-        code: code.into(),
-        status,
-    }
 }
 fn encode(c: &PrivacyCase) -> Result<String> {
     String::from_utf8(encode_privacy_case_state(c).map_err(|e| worker::Error::RustError(e.code))?)
@@ -76,7 +65,7 @@ fn digest(op: &str, id: &str, payload: &Value) -> String {
 async fn receipt(db: &D1Database, tenant: &str, k: &str) -> Result<Option<Receipt>> {
     bind(
         db,
-        "SELECT digest,state FROM crm_privacy_case_receipts WHERE tenant=? AND key=?",
+        "SELECT digest,state,original_request_id FROM crm_privacy_case_receipts WHERE tenant=? AND key=?",
         &[JsValue::from_str(tenant), JsValue::from_str(k)],
     )?
     .first::<Receipt>(None)
@@ -103,11 +92,15 @@ async fn replay(
         .await?
         .map(|r| -> Result<std::result::Result<Saved, Failure>> {
             if r.digest != hash {
-                return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+                return Ok(Err(Failure::domain(
+                    "IDEMPOTENCY_CONFLICT",
+                    ErrorCode::Aborted,
+                )));
             }
             Ok(Ok(Saved {
                 case: decode(&r.state)?,
                 replayed: true,
+                original_request_id: r.original_request_id,
             }))
         })
         .transpose()
@@ -122,7 +115,10 @@ pub(super) async fn create_typed(
 ) -> Result<std::result::Result<Saved, Failure>> {
     let tenant = actor.tenant.as_str();
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(Failure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let hash = digest("create", id.as_str(), &json!([kind]));
     if let Some(saved) = replay(db, tenant, key, &hash).await? {
@@ -134,24 +130,31 @@ pub(super) async fn create_typed(
         SchemaVersion::try_new("1.0.0").map_err(|e| worker::Error::RustError(e.to_string()))?;
     let case = match PrivacyCase::new(id, tenant_id, kind, policy, now_nanos(), None) {
         Ok(case) => case,
-        Err(e) => return Ok(Err(fail(e.code(), 422))),
+        Err(e) => return Ok(Err(Failure::domain(e.code(), ErrorCode::InvalidArgument))),
     };
     let state = encode(&case)?;
     let inserted=bind(db,
-        "INSERT INTO crm_privacy_case_records(tenant,id,state,version,idem_key,idem_digest,request_id,created_by,actor) VALUES(?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO crm_privacy_case_records(tenant,id,state,version,idem_key,idem_digest,request_id,created_by,actor) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
         &[JsValue::from_str(tenant),JsValue::from_str(case.case_id().as_str()),
           JsValue::from_str(&state),JsValue::from_str(&case.version().to_string()),
           JsValue::from_str(key),JsValue::from_str(&hash),JsValue::from_str(trace),
           JsValue::from_str(&actor.identity),JsValue::from_str(&actor.identity)])?.run().await;
-    if inserted.is_err() {
-        if let Some(saved) = replay(db, tenant, key, &hash).await? {
-            return Ok(saved);
-        }
-        return Ok(Err(fail("PRIVACY_CASE_CREATE_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        inserted,
+        replay(db, tenant, key, &hash),
+        "PRIVACY_CASE_CREATE_CONFLICT",
+        "PRIVACY_CASE_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return Ok(saved),
+        Err(failure) => return Ok(Err(Failure::Write(failure))),
     }
     Ok(Ok(Saved {
         case,
         replayed: false,
+        original_request_id: Some(trace.to_owned()),
     }))
 }
 pub(super) async fn transition_typed(
@@ -165,7 +168,10 @@ pub(super) async fn transition_typed(
 ) -> Result<std::result::Result<Saved, Failure>> {
     let tenant = actor.tenant.as_str();
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(Failure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let (operation, payload) = match &action {
         Transition::Submit => ("submit", json!([expected_version])),
@@ -192,10 +198,16 @@ pub(super) async fn transition_typed(
     } = &action
     {
         let Some(email) = contact_points::signed_human_email(&actor.identity) else {
-            return Ok(Err(fail("PRIVACY_SIGNED_HUMAN_EMAIL_REQUIRED", 403)));
+            return Ok(Err(Failure::domain(
+                "PRIVACY_SIGNED_HUMAN_EMAIL_REQUIRED",
+                ErrorCode::PermissionDenied,
+            )));
         };
         let Some(point) = contact_points::load(db, tenant, contact_point_id.as_str()).await? else {
-            return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+            return Ok(Err(Failure::domain(
+                "PRIVACY_SUBJECT_OWNERSHIP_REQUIRED",
+                ErrorCode::PermissionDenied,
+            )));
         };
         let trusted = matches!(
             point.verification(),
@@ -209,7 +221,10 @@ pub(super) async fn transition_typed(
             || point.party_ref().as_str() != submitted_party_id.as_str()
             || !point.is_valid_at(now_nanos())
         {
-            return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+            return Ok(Err(Failure::domain(
+                "PRIVACY_SUBJECT_OWNERSHIP_REQUIRED",
+                ErrorCode::PermissionDenied,
+            )));
         }
         // A submitted case must belong to this exact signed human, not
         // merely be an unrelated admin-created case that happens to be visible.
@@ -221,13 +236,22 @@ pub(super) async fn transition_typed(
         .first::<CreatorRow>(None)
         .await?;
         if creator.is_none_or(|row| row.created_by != actor.identity) {
-            return Ok(Err(fail("PRIVACY_CASE_OWNERSHIP_REQUIRED", 403)));
+            return Ok(Err(Failure::domain(
+                "PRIVACY_CASE_OWNERSHIP_REQUIRED",
+                ErrorCode::PermissionDenied,
+            )));
         }
         let Some(party) = parties::stored(db, tenant, submitted_party_id.as_str()).await? else {
-            return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+            return Ok(Err(Failure::domain(
+                "PRIVACY_SUBJECT_OWNERSHIP_REQUIRED",
+                ErrorCode::PermissionDenied,
+            )));
         };
         if party.kind() != PartyKind::Person {
-            return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+            return Ok(Err(Failure::domain(
+                "PRIVACY_SUBJECT_OWNERSHIP_REQUIRED",
+                ErrorCode::PermissionDenied,
+            )));
         }
         Some((
             submitted_party_id.as_str().to_owned(),
@@ -237,11 +261,12 @@ pub(super) async fn transition_typed(
     } else {
         None
     };
+    let current = stored(db, tenant, id).await;
     if let Some(saved) = replay(db, tenant, key, &hash).await? {
         return Ok(saved);
     }
-    let Some(mut case) = stored(db, tenant, id).await? else {
-        return Ok(Err(fail("NOT_FOUND", 404)));
+    let Some(mut case) = current? else {
+        return Ok(Err(Failure::domain("NOT_FOUND", ErrorCode::NotFound)));
     };
     let now = now_nanos();
     let result = match action {
@@ -267,12 +292,12 @@ pub(super) async fn transition_typed(
         }
     };
     if let Err(error) = result {
-        return Ok(Err(fail(
+        return Ok(Err(Failure::domain(
             error.code(),
             match error {
-                PrivacyDomainError::InvalidArgument { .. } => 422,
-                PrivacyDomainError::InvalidTransition { .. } => 412,
-                PrivacyDomainError::VersionConflict { .. } => 409,
+                PrivacyDomainError::InvalidArgument { .. } => ErrorCode::InvalidArgument,
+                PrivacyDomainError::InvalidTransition { .. } => ErrorCode::FailedPrecondition,
+                PrivacyDomainError::VersionConflict { .. } => ErrorCode::Aborted,
             },
         )));
     }
@@ -303,19 +328,22 @@ pub(super) async fn transition_typed(
         "UPDATE crm_privacy_case_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?"
     };
     let result = bind(db, sql, &values)?.run().await;
-    let changed = match result {
-        Ok(result) => result.meta()?.and_then(|m| m.changes).unwrap_or(0) > 0,
-        Err(_) => false,
-    };
-    if !changed {
-        if let Some(saved) = replay(db, tenant, key, &hash).await? {
-            return Ok(saved);
-        }
-        return Ok(Err(fail("PRIVACY_CASE_VERSION_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        result,
+        replay(db, tenant, key, &hash),
+        "PRIVACY_CASE_VERSION_CONFLICT",
+        "PRIVACY_CASE_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return Ok(saved),
+        Err(failure) => return Ok(Err(Failure::Write(failure))),
     }
     Ok(Ok(Saved {
         case,
         replayed: false,
+        original_request_id: Some(trace.to_owned()),
     }))
 }
 // Read-only, **current** scope preview. The original privacy registry has NINE
@@ -336,16 +364,25 @@ pub(super) async fn preview_own_scope(
 ) -> Result<std::result::Result<ScopePreview, Failure>> {
     let tenant = actor.tenant.as_str();
     let Some(email) = contact_points::signed_human_email(&actor.identity) else {
-        return Ok(Err(fail("PRIVACY_SIGNED_HUMAN_EMAIL_REQUIRED", 403)));
+        return Ok(Err(Failure::domain(
+            "PRIVACY_SIGNED_HUMAN_EMAIL_REQUIRED",
+            ErrorCode::PermissionDenied,
+        )));
     };
     let Some(case) = stored(db, tenant, case_id).await? else {
-        return Ok(Err(fail("NOT_FOUND", 404)));
+        return Ok(Err(Failure::domain("NOT_FOUND", ErrorCode::NotFound)));
     };
     if case.status() != PrivacyCaseStatus::SubjectVerified {
-        return Ok(Err(fail("PRIVACY_SUBJECT_NOT_READY_FOR_SCOPE", 412)));
+        return Ok(Err(Failure::domain(
+            "PRIVACY_SUBJECT_NOT_READY_FOR_SCOPE",
+            ErrorCode::FailedPrecondition,
+        )));
     }
     let Some(subject) = case.subject_binding() else {
-        return Ok(Err(fail("PRIVACY_SUBJECT_UNVERIFIED", 412)));
+        return Ok(Err(Failure::domain(
+            "PRIVACY_SUBJECT_UNVERIFIED",
+            ErrorCode::FailedPrecondition,
+        )));
     };
     // Only signed-human own-case reads, never shared-tenant admin reads. A
     // previous verified email is not permission to inspect a different case.
@@ -359,7 +396,10 @@ pub(super) async fn preview_own_scope(
     if creator.is_none_or(|row| row.created_by != actor.identity)
         || subject.verified_by.as_str() != actor.identity
     {
-        return Ok(Err(fail("PRIVACY_CASE_OWNERSHIP_REQUIRED", 403)));
+        return Ok(Err(Failure::domain(
+            "PRIVACY_CASE_OWNERSHIP_REQUIRED",
+            ErrorCode::PermissionDenied,
+        )));
     }
     // The active Worker has no canonical merge topology. Generation 1 is an
     // unmerged Person; any future topology change must block this preview
@@ -367,17 +407,23 @@ pub(super) async fn preview_own_scope(
     if subject.identity_resolution_generation != 1
         || subject.canonical_party_id != subject.submitted_party_id
     {
-        return Ok(Err(fail(
+        return Ok(Err(Failure::domain(
             "PRIVACY_SCOPE_CANONICAL_GENERATION_REQUIRED",
-            412,
+            ErrorCode::FailedPrecondition,
         )));
     }
     let id = subject.canonical_party_id.as_str();
     let Some(party) = parties::stored(db, tenant, id).await? else {
-        return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+        return Ok(Err(Failure::domain(
+            "PRIVACY_SUBJECT_OWNERSHIP_REQUIRED",
+            ErrorCode::PermissionDenied,
+        )));
     };
     if party.kind() != PartyKind::Person {
-        return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+        return Ok(Err(Failure::domain(
+            "PRIVACY_SUBJECT_OWNERSHIP_REQUIRED",
+            ErrorCode::PermissionDenied,
+        )));
     }
     // Indexed, owner-owned D1 list filters by tenant+party BEFORE LIMIT.
     // Never silently truncate an incomplete subject inventory.
@@ -394,7 +440,10 @@ pub(super) async fn preview_own_scope(
     )
     .await?;
     if next.is_some() {
-        return Ok(Err(fail("PRIVACY_SCOPE_CONTACT_BOUND_EXCEEDED", 412)));
+        return Ok(Err(Failure::domain(
+            "PRIVACY_SCOPE_CONTACT_BOUND_EXCEEDED",
+            ErrorCode::FailedPrecondition,
+        )));
     }
     let now = now_nanos();
     let currently_owned = contacts.iter().any(|point| {
@@ -409,7 +458,10 @@ pub(super) async fn preview_own_scope(
             )
     });
     if !currently_owned {
-        return Ok(Err(fail("PRIVACY_SUBJECT_OWNERSHIP_REQUIRED", 403)));
+        return Ok(Err(Failure::domain(
+            "PRIVACY_SUBJECT_OWNERSHIP_REQUIRED",
+            ErrorCode::PermissionDenied,
+        )));
     }
     let as_scope_error = |error: crm_customer_privacy::PrivacyScopeError| {
         worker::Error::RustError(error.code().into())

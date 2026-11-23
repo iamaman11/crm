@@ -6,9 +6,9 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {createRequire} from "node:module";
 const clientRequire=createRequire(new URL("../packages/client/package.json",import.meta.url));
-const {fromBinary,toBinary,create,createFileRegistry,ScalarType}=clientRequire("@bufbuild/protobuf");
+const {fromBinary,toBinary,create,createFileRegistry,isFieldSet,ScalarType}=clientRequire("@bufbuild/protobuf");
 import {descriptorMethods,targetMethods} from "./crm-rpc-descriptors.mjs";
-const {FileDescriptorSetSchema,MethodOptions_IdempotencyLevel}=clientRequire("@bufbuild/protobuf/wkt");
+const {FileDescriptorSetSchema,AnySchema,FieldDescriptorProtoSchema,FieldDescriptorProto_Label,FieldDescriptorProto_Type,MethodOptions_IdempotencyLevel}=clientRequire("@bufbuild/protobuf/wkt");
 const descriptor=process.env.CRM_PROTO_DESCRIPTOR_FILE;
 if(!descriptor)throw Error("compiled Buf FileDescriptorSet required");
 const compiled=fromBinary(FileDescriptorSetSchema,readFileSync(descriptor));
@@ -42,6 +42,8 @@ function assertWireContracts(files, descriptors) {
   const seen=isInput?seenInputs:seenOutputs;
   if(seen.has(message.typeName))return;
   seen.add(message.typeName);
+  assert.ok(!["google.protobuf.Any","google.protobuf.Struct","google.protobuf.Value",
+   "google.protobuf.ListValue"].includes(message.typeName),"untyped payload "+message.typeName);
   for(const field of message.fields){
    const name=message.typeName+"."+field.name;
    if(isInput)assert.doesNotMatch(field.name,/^(tenant_id|actor_id|role_id|is_admin|allow_skip|allow_regression)$/,
@@ -99,10 +101,14 @@ function assertMutationContracts(files) {
   total++;
   const request=findMessage(file,method.inputType);
   const response=findMessage(file,method.outputType);
-  assert.equal(namedField(request,"precondition").typeName,
-   ".crm.core.v2.MutationPrecondition",method.name);
-  assert.equal(namedField(response,"receipt").typeName,
-   ".crm.core.v2.MutationReceipt",method.name);
+  for(const [message,name,type] of [[request,"precondition","MutationPrecondition"],
+   [response,"receipt","MutationReceipt"]]){
+   const field=namedField(message,name);
+   assert.equal(field.typeName,".crm.core.v2."+type,method.name);
+   assert.equal(field.type,FieldDescriptorProto_Type.MESSAGE,method.name);
+   assert.equal(field.label,FieldDescriptorProto_Label.OPTIONAL,method.name+" requires a singular "+name);
+   assert.ok(!isFieldSet(field,FieldDescriptorProtoSchema.field.oneofIndex)||field.proto3Optional,method.name+" requires independent "+name);
+  }
  }
  assert.ok(total>0,"no mutation proof");
 }
@@ -159,6 +165,18 @@ test("future v4 and v10 use the same active scope and reject invalid contracts",
   assert.ok(message);
   message.field=message.field.filter(f=>f.name!=="precondition");
   assert.throws(()=>assertMutationContracts([malformed]),/missing CreateTaskRequest.precondition/);
+  const repeated=structuredClone(next);
+  namedField(repeated.messageType.find(m=>m.name==="CreateTaskResponse"),"receipt").label=FieldDescriptorProto_Label.REPEATED;
+  assert.throws(()=>assertMutationContracts([repeated]),/requires a singular receipt/);
+  const opaque=structuredClone(next);
+  opaque.dependency.push(AnySchema.file.proto.name);
+  opaque.messageType.find(m=>m.name==="CreateTaskRequest").field.push({
+   name:"payload",number:1000,type:FieldDescriptorProto_Type.MESSAGE,
+   typeName:".google.protobuf.Any",label:FieldDescriptorProto_Label.OPTIONAL
+  });
+  assert.throws(()=>assertWireContracts([opaque],[
+   ...compiled.file.filter(f=>f.name!==AnySchema.file.proto.name),AnySchema.file.proto,opaque
+  ]),/untyped payload google.protobuf.Any/);
   const unsafe=structuredClone(next);
   unsafe.messageType.find(m=>m.name==="CreateTaskRequest").field.push({
    name:"unsafe_float",number:1000,type:1,label:1,jsonName:"unsafeFloat"

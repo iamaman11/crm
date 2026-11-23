@@ -36,7 +36,7 @@ impl party_v3::PartyService for PartyV3Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Party D1 create failed"))?
-        .map_err(Self::mutation_error)?;
+        .map_err(|failure| failure.connect("CreateParty", &self.request_id))?;
         RpcResponse::ok(party_v3::CreatePartyResponse {
             party: Some(Self::convert(&saved.party)?).into(),
             receipt: Some(self.receipt(&saved)?).into(),
@@ -72,7 +72,7 @@ impl party_v3::PartyService for PartyV3Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Party D1 update failed"))?
-        .map_err(Self::mutation_error)?;
+        .map_err(|failure| failure.connect("UpdateParty", &self.request_id))?;
         RpcResponse::ok(party_v3::UpdatePartyResponse {
             party: Some(Self::convert(&saved.party)?).into(),
             receipt: Some(self.receipt(&saved)?).into(),

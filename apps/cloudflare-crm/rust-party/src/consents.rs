@@ -84,27 +84,16 @@ struct PagedRow {
 pub(super) struct SuppressionOutcome {
     pub(super) item: ConsentAuthorization,
     pub(super) replayed: bool,
+    pub(super) original_request_id: Option<String>,
 }
 pub(super) struct ConsentDecision {
     pub(super) allowed: bool,
     pub(super) reason: CommunicationAuthorizationReason,
     pub(super) determining_ids: Vec<String>,
 }
-pub(super) struct OperationFailure {
-    pub(super) code: String,
-    pub(super) status: u16,
-}
-fn fail(code: impl Into<String>, status: u16) -> OperationFailure {
-    OperationFailure {
-        code: code.into(),
-        status,
-    }
-}
-#[derive(Deserialize)]
-struct Receipt {
-    digest: String,
-    state: String,
-}
+pub(super) use super::d1_write::OwnerFailure as OperationFailure;
+use super::d1_write::Receipt;
+use connectrpc::ErrorCode;
 fn hash<T: Serialize>(op: &str, id: &str, payload: &T) -> Result<String> {
     let bytes = serde_json::to_vec(&json!([op, id, payload]))
         .map_err(|e| worker::Error::RustError(e.to_string()))?;
@@ -130,7 +119,7 @@ fn decode(value: &str) -> Result<ConsentAuthorization> {
 async fn receipt(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receipt>> {
     bind(
         db,
-        "SELECT digest,state FROM crm_consent_receipts WHERE tenant=? AND key=?",
+        "SELECT digest,state,original_request_id FROM crm_consent_receipts WHERE tenant=? AND key=?",
         &[JsValue::from_str(tenant), JsValue::from_str(key)],
     )?
     .first::<Receipt>(None)
@@ -209,48 +198,89 @@ pub(super) async fn suppress_typed(
     trace: &str,
 ) -> Result<std::result::Result<SuppressionOutcome, OperationFailure>> {
     if !(8..=120).contains(&k.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(OperationFailure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let digest = hash("operator-suppress", &input.id, &input)?;
-    if let Some(p) = receipt(db, tenant, k).await? {
+    let replay = |p: Receipt| {
         if p.digest != digest {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(OperationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(SuppressionOutcome {
+        Ok(Ok(SuppressionOutcome {
             item: decode(&p.state)?,
             replayed: true,
-        }));
+            original_request_id: p.original_request_id,
+        }))
+    };
+    if let Some(p) = receipt(db, tenant, k).await? {
+        return replay(p);
     }
     let id = match ConsentAuthorizationId::try_new(&input.id) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let party = match PartyReference::try_new(&input.party_id) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     if !party_exists(db, tenant, party.as_str()).await? {
-        return Ok(Err(fail("CONSENTS_PARTY_NOT_FOUND", 422)));
+        return Ok(Err(OperationFailure::domain(
+            "CONSENTS_PARTY_NOT_FOUND",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let contact = match input.contact_point_id {
         Some(id) => {
             if !contact_belongs(db, tenant, party.as_str(), &id).await? {
-                return Ok(Err(fail("CONSENTS_CONTACT_POINT_PARTY_MISMATCH", 422)));
+                return Ok(Err(OperationFailure::domain(
+                    "CONSENTS_CONTACT_POINT_PARTY_MISMATCH",
+                    ErrorCode::InvalidArgument,
+                )));
             }
             match ContactPointReference::try_new(id) {
                 Ok(x) => Some(x),
-                Err(e) => return Ok(Err(fail(e.code, 422))),
+                Err(e) => {
+                    return Ok(Err(OperationFailure::domain(
+                        e.code,
+                        ErrorCode::InvalidArgument,
+                    )));
+                }
             }
         }
         None => None,
     };
     let purpose = match PurposeCode::try_new(input.purpose) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let jurisdiction = match JurisdictionCode::try_new(input.jurisdiction) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let legal_basis = LegalBasisCode::try_new("operational.suppression")
         .map_err(|e| worker::Error::RustError(e.code))?;
@@ -275,21 +305,36 @@ pub(super) async fn suppress_typed(
         occurred_at_unix_nanos: now,
     }) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let saved = state(&item)?;
-    let r=bind(db,"INSERT INTO crm_consent_records(tenant,id,party_id,state,version,idem_key,idem_digest,request_id,operator_identity) VALUES(?,?,?,?,?,?,?,?,?)",
+    let r=bind(db,"INSERT INTO crm_consent_records(tenant,id,party_id,state,version,idem_key,idem_digest,request_id,operator_identity) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
         &[JsValue::from_str(tenant),JsValue::from_str(item.authorization_id().as_str()),
           JsValue::from_str(party.as_str()),JsValue::from_str(&saved),
           JsValue::from_f64(item.version() as f64),JsValue::from_str(k),
           JsValue::from_str(&digest),JsValue::from_str(trace),
           JsValue::from_str(actor)])?.run().await;
-    if r.is_err() {
-        return Ok(Err(fail("CONSENTS_SUPPRESSION_CREATE_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        r,
+        receipt(db, tenant, k),
+        "CONSENTS_SUPPRESSION_CREATE_CONFLICT",
+        "CONSENTS_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(OperationFailure::Write(failure))),
     }
     Ok(Ok(SuppressionOutcome {
         item,
         replayed: false,
+        original_request_id: Some(trace.to_owned()),
     }))
 }
 // Human consent requires a matching verified Access email. Dev service-admin
@@ -305,50 +350,97 @@ pub(super) async fn grant_verified_email_typed(
     let human_email = contact_points::signed_human_email(&actor.identity);
     let test_agent = actor.is_dev_test_agent();
     if human_email.is_none() && !test_agent {
-        return Ok(Err(fail("CONSENTS_SIGNED_HUMAN_EMAIL_REQUIRED", 403)));
+        return Ok(Err(OperationFailure::domain(
+            "CONSENTS_SIGNED_HUMAN_EMAIL_REQUIRED",
+            ErrorCode::PermissionDenied,
+        )));
     }
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(OperationFailure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let digest = hash("email-grant", &input.id, &json!([&input, &actor.identity]))?;
-    if let Some(prior) = receipt(db, &actor.tenant, key).await? {
+    let replay = |prior: Receipt| {
         if prior.digest != digest {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(OperationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         let item = decode(&prior.state)?;
         if item.authorization_id().as_str() != input.id || item.effect() != ConsentEffect::Grant {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(OperationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(SuppressionOutcome {
+        Ok(Ok(SuppressionOutcome {
             item,
             replayed: true,
-        }));
+            original_request_id: prior.original_request_id,
+        }))
+    };
+    if let Some(prior) = receipt(db, &actor.tenant, key).await? {
+        return replay(prior);
     }
     let id = match ConsentAuthorizationId::try_new(&input.id) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let party = match PartyReference::try_new(&input.party_id) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let contact = match ContactPointReference::try_new(&input.contact_point_id) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let purpose = match PurposeCode::try_new(input.purpose) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let jurisdiction = match JurisdictionCode::try_new(input.jurisdiction) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     if !party_exists(db, &actor.tenant, party.as_str()).await? {
-        return Ok(Err(fail("CONSENTS_PARTY_NOT_FOUND", 422)));
+        return Ok(Err(OperationFailure::domain(
+            "CONSENTS_PARTY_NOT_FOUND",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let Some(point) = contact_points::load(db, &actor.tenant, contact.as_str()).await? else {
-        return Ok(Err(fail("CONSENTS_CONTACT_NOT_FOUND", 422)));
+        return Ok(Err(OperationFailure::domain(
+            "CONSENTS_CONTACT_NOT_FOUND",
+            ErrorCode::InvalidArgument,
+        )));
     };
     let now = now_nanos();
     let proof_matches_actor = point.verification().evidence().is_some_and(|e| {
@@ -366,7 +458,10 @@ pub(super) async fn grant_verified_email_typed(
         || !point.verification().is_verified()
         || !proof_matches_actor
     {
-        return Ok(Err(fail("CONSENTS_VERIFIED_EMAIL_OWNERSHIP_REQUIRED", 403)));
+        return Ok(Err(OperationFailure::domain(
+            "CONSENTS_VERIFIED_EMAIL_OWNERSHIP_REQUIRED",
+            ErrorCode::PermissionDenied,
+        )));
     }
     let evidence = contact_proof(&point)
         .ok_or_else(|| worker::Error::RustError("CONTACT_EVIDENCE_MISSING".into()))?;
@@ -397,13 +492,18 @@ pub(super) async fn grant_verified_email_typed(
         occurred_at_unix_nanos: now,
     }) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let saved = state(&item)?;
     // Atomic ContactPoint-version guard closes the check->insert race.
     // D1 trigger commits grant receipt/audit in this SAME SQL statement.
     let result = bind(db,
-        "INSERT INTO crm_consent_records(tenant,id,party_id,state,version,idem_key,idem_digest,request_id,operator_identity,last_action) SELECT ?,?,?,?,?,?,?,?,?,'consents.grant' FROM crm_contact_point_records WHERE tenant=? AND id=? AND version=?",
+        "INSERT INTO crm_consent_records(tenant,id,party_id,state,version,idem_key,idem_digest,request_id,operator_identity,last_action) SELECT ?,?,?,?,?,?,?,?,?,'consents.grant' FROM crm_contact_point_records WHERE tenant=? AND id=? AND version=? ON CONFLICT(tenant,id) DO NOTHING",
         &[JsValue::from_str(&actor.tenant),
         JsValue::from_str(item.authorization_id().as_str()),
         JsValue::from_str(party.as_str()), JsValue::from_str(&saved),
@@ -412,15 +512,22 @@ pub(super) async fn grant_verified_email_typed(
         JsValue::from_str(&actor.identity), JsValue::from_str(&actor.tenant),
         JsValue::from_str(point.contact_point_id().as_str()),
         JsValue::from_f64(point.version() as f64)])?.run().await;
-    let Ok(changed) = result else {
-        return Ok(Err(fail("CONSENTS_GRANT_CREATE_CONFLICT", 409)));
-    };
-    if changed.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
-        return Ok(Err(fail("CONSENTS_CONTACT_CHANGED", 409)));
+    match super::d1_write::confirm(
+        result,
+        receipt(db, &actor.tenant, key),
+        "CONSENTS_CONTACT_CHANGED",
+        "CONSENTS_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(OperationFailure::Write(failure))),
     }
     Ok(Ok(SuppressionOutcome {
         item,
         replayed: false,
+        original_request_id: Some(trace.to_owned()),
     }))
 }
 
@@ -435,11 +542,19 @@ pub(super) async fn withdraw_typed(
     trace: &str,
 ) -> Result<std::result::Result<SuppressionOutcome, OperationFailure>> {
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(OperationFailure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let id = match ConsentAuthorizationId::try_new(id) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let Some(existing) = bind(
         db,
@@ -452,39 +567,55 @@ pub(super) async fn withdraw_typed(
     .first::<ExistingConsent>(None)
     .await?
     else {
-        return Ok(Err(fail("NOT_FOUND", 404)));
+        return Ok(Err(OperationFailure::domain(
+            "NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     if actor.role != "admin"
         && (contact_points::signed_human_email(&actor.identity).is_none()
             || existing.operator_identity != actor.identity)
     {
-        return Ok(Err(fail("CONSENTS_WITHDRAW_NOT_OWNER", 403)));
+        return Ok(Err(OperationFailure::domain(
+            "CONSENTS_WITHDRAW_NOT_OWNER",
+            ErrorCode::PermissionDenied,
+        )));
     }
     let digest = hash("withdraw", id.as_str(), &expected_version)?;
-    if let Some(prior) = receipt(db, &actor.tenant, key).await? {
+    let replay = |prior: Receipt| {
         if prior.digest != digest {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(OperationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         let item = decode(&prior.state)?;
         if item.authorization_id() != &id {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(OperationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(SuppressionOutcome {
+        Ok(Ok(SuppressionOutcome {
             item,
             replayed: true,
-        }));
+            original_request_id: prior.original_request_id,
+        }))
+    };
+    if let Some(prior) = receipt(db, &actor.tenant, key).await? {
+        return replay(prior);
     }
     let mut item = decode(&existing.state)?;
     if let Err(e) = item.withdraw(WithdrawConsentAuthorization {
         expected_version,
         occurred_at_unix_nanos: now_nanos(),
     }) {
-        return Ok(Err(fail(
+        return Ok(Err(OperationFailure::domain(
             e.code.clone(),
             if e.code == "CONSENTS_VERSION_CONFLICT" || e.code == "CONSENTS_ALREADY_WITHDRAWN" {
-                409
+                ErrorCode::Aborted
             } else {
-                422
+                ErrorCode::InvalidArgument
             },
         )));
     }
@@ -495,15 +626,22 @@ pub(super) async fn withdraw_typed(
         JsValue::from_str(key),JsValue::from_str(&digest),JsValue::from_str(trace),
         JsValue::from_str(&actor.identity),JsValue::from_str(&actor.tenant),
         JsValue::from_str(id.as_str()),JsValue::from_f64(expected_version as f64)])?.run().await;
-    let Ok(changed) = r else {
-        return Ok(Err(fail("CONSENTS_WITHDRAW_CONFLICT", 409)));
-    };
-    if changed.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
-        return Ok(Err(fail("CONSENTS_VERSION_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        r,
+        receipt(db, &actor.tenant, key),
+        "CONSENTS_VERSION_CONFLICT",
+        "CONSENTS_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(OperationFailure::Write(failure))),
     }
     Ok(Ok(SuppressionOutcome {
         item,
         replayed: false,
+        original_request_id: Some(trace.to_owned()),
     }))
 }
 
@@ -514,26 +652,47 @@ pub(super) async fn evaluate_typed(
 ) -> Result<std::result::Result<ConsentDecision, OperationFailure>> {
     let party = match PartyReference::try_new(&input.party_id) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     if !party_exists(db, tenant, party.as_str()).await? {
-        return Ok(Err(fail("CONSENTS_PARTY_NOT_FOUND", 422)));
+        return Ok(Err(OperationFailure::domain(
+            "CONSENTS_PARTY_NOT_FOUND",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let contact = match input.contact_point_id {
         Some(id) => {
             if !contact_belongs(db, tenant, party.as_str(), &id).await? {
-                return Ok(Err(fail("CONSENTS_CONTACT_POINT_PARTY_MISMATCH", 422)));
+                return Ok(Err(OperationFailure::domain(
+                    "CONSENTS_CONTACT_POINT_PARTY_MISMATCH",
+                    ErrorCode::InvalidArgument,
+                )));
             }
             match ContactPointReference::try_new(id) {
                 Ok(x) => Some(x),
-                Err(e) => return Ok(Err(fail(e.code, 422))),
+                Err(e) => {
+                    return Ok(Err(OperationFailure::domain(
+                        e.code,
+                        ErrorCode::InvalidArgument,
+                    )));
+                }
             }
         }
         None => None,
     };
     let purpose = match PurposeCode::try_new(input.purpose) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(OperationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let scope = EvaluateCommunicationAuthorization {
         party_ref: party,

@@ -8,14 +8,6 @@ impl IdentityV2Service {
             .d1("DB")
             .map_err(|_| ConnectError::internal("D1 unavailable"))
     }
-    fn merge_failure(f: identity_resolution::MergeFault) -> ConnectError {
-        match f.status {
-            404 => ConnectError::not_found(f.code),
-            409 => ConnectError::aborted(f.code),
-            422 => ConnectError::invalid_argument(f.code),
-            _ => ConnectError::unavailable(f.code),
-        }
-    }
     fn merge_wire(
         operation: &crm_identity_resolution::MergeOperation,
     ) -> identity_wire::MergeOperation {
@@ -188,7 +180,7 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
         )
         .await
         .map_err(|_| ConnectError::unavailable("IDENTITY_MERGE_WRITE_UNAVAILABLE"))?
-        .map_err(Self::merge_failure)?;
+        .map_err(|failure| failure.connect("MergeParty", &self.request_id))?;
         RpcResponse::ok(identity_wire::MergePartyResponse {
             operation: Some(Self::merge_wire(&committed.operation)).into(),
             receipt: Some(self.merge_receipt(&committed)).into(),
@@ -231,7 +223,7 @@ impl identity_wire::IdentityResolutionService for IdentityV2Service {
         )
         .await
         .map_err(|_| ConnectError::unavailable("IDENTITY_UNMERGE_WRITE_UNAVAILABLE"))?
-        .map_err(Self::merge_failure)?;
+        .map_err(|failure| failure.connect("UnmergeParty", &self.request_id))?;
         RpcResponse::ok(identity_wire::UnmergePartyResponse {
             operation: Some(Self::merge_wire(&committed.operation)).into(),
             receipt: Some(self.merge_receipt(&committed)).into(),

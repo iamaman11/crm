@@ -36,7 +36,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales view D1 create failed"))?
-        .map_err(Self::view_failed)?;
+        .map_err(|failure| failure.connect("CreateSalesView", &self.request_id))?;
         RpcResponse::ok(sale_wire::CreateSalesViewResponse {
             view: Some(Self::view(&saved.value)).into(),
             receipt: Some(self.view_receipt(&saved)).into(),
@@ -77,7 +77,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Sales view D1 update failed"))?
-        .map_err(Self::view_failed)?;
+        .map_err(|failure| failure.connect("UpdateSalesView", &self.request_id))?;
         RpcResponse::ok(sale_wire::UpdateSalesViewResponse {
             view: Some(Self::view(&saved.value)).into(),
             receipt: Some(self.view_receipt(&saved)).into(),
@@ -198,7 +198,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Pipeline D1 create failed"))?
-        .map_err(Self::pipeline_failed)?;
+        .map_err(|failure| failure.connect("CreatePipeline", &self.request_id))?;
         RpcResponse::ok(sale_wire::CreatePipelineResponse {
             pipeline: Some(Self::pipeline(&saved.value)).into(),
             receipt: Some(self.pipeline_receipt(&saved)).into(),
@@ -230,7 +230,7 @@ impl sale_wire::DealService for SalesV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Pipeline D1 update failed"))?
-        .map_err(Self::pipeline_failed)?;
+        .map_err(|failure| failure.connect("UpdatePipeline", &self.request_id))?;
         RpcResponse::ok(sale_wire::UpdatePipelineResponse {
             pipeline: Some(Self::pipeline(&saved.value)).into(),
             receipt: Some(self.pipeline_receipt(&saved)).into(),

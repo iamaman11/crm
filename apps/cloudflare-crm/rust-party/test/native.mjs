@@ -21,10 +21,11 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryPrivacyV2,decodePrivacyV2,privacyV2Path,
   binaryEnrichmentV2,decodeEnrichmentV2,enrichmentV2Path,
   binaryCsvV2,decodeCsvV2,csvV2Path,
-  binaryOverviewV2,decodeOverviewV2,overviewV2Path,decodeDomainErrorDetail} from "../../../../scripts/crm-connect-binary-fixture.mjs";
+  binaryOverviewV2,decodeOverviewV2,overviewV2Path,decodeDomainErrorDetail,decodeRpcOutput} from "../../../../scripts/crm-connect-binary-fixture.mjs";
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 let base,fixtureDb;
 const successfulCalls=new Set();
+const mutationPaths=new Set();
 function assertUnconfirmed(result, domainCode){
  assert.equal(result.status,503);
  assert.equal(result.body.code,"unavailable");
@@ -78,7 +79,15 @@ const rpcFetch=async(path,options)=>{
    console.error(JSON.stringify(evidence));
    throw new Error("Native workerd transport failure: "+JSON.stringify(evidence),{cause:error});
  }
- if(path.startsWith("/crm.")&&response.ok)successfulCalls.add(path);
+ if(path.startsWith("/crm.")&&response.ok){
+   if(mutationPaths.has(path)){
+     const {receipt}=decodeRpcOutput(path,new Uint8Array(await response.clone().arrayBuffer()));
+     assert.ok(receipt,path+" missing typed receipt");
+     assert.ok(receipt.requestId && receipt.requestId===response.headers.get("x-request-id"),path);
+     assert.ok(receipt.resourceVersion>0n,path+" missing committed version");
+   }
+   successfulCalls.add(path);
+ }
  if(path.startsWith("/crm.")&&!response.ok){
    const raw=await response.clone().text();
    let error;
@@ -90,6 +99,12 @@ const rpcFetch=async(path,options)=>{
        body_excerpt:raw.slice(0,600),request_id:response.headers.get("x-request-id")};
      console.error(JSON.stringify(evidence));
      throw new Error("Non-Connect RPC response: "+JSON.stringify(evidence));
+   }
+   if(mutationPaths.has(path)){
+     const detail=decodeDomainErrorDetail(error.details?.find(d=>d.type==="crm.core.v2.DomainErrorDetail"));
+     assert.ok(detail.domainCode && [1,2].includes(detail.commitOutcome),path);
+     assert.ok(detail.requestId && detail.requestId===response.headers.get("x-request-id"),path);
+     if([401,403].includes(response.status))assert.equal(detail.commitOutcome,1,path);
    }
    assert.equal(response.headers.get("x-crm-error-code"),error.code,
      "RPC diagnostics must preserve the actual Connect error code");
@@ -204,6 +219,9 @@ try{
  assert.equal(new Set(rpc.registered_methods).size,rpc.registered_methods.length);
  assert.equal(new Map(rpc.policies).size,rpc.policies.length,"duplicate compiled policy");
  assert.deepEqual(rpc.policies.map(([path])=>path).sort(),[...rpc.registered_methods].sort());
+ for(const [path,rule] of rpc.policies){
+   if(rule.permission==="Write"||rule.permission==="SelfWrite")mutationPaths.add(path);
+ }
  const unauthenticatedDenials=[],viewerDenials=[];
  for(const [path,rule] of rpc.policies){
    const unauthenticated=await rpcFetch(path,{method:"POST",
@@ -365,10 +383,10 @@ try{
    "WHEN NEW.subject_id IN ('party-audit-failure','"+id+"') "+
    "BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;"));
  try{
-   assert.equal((await v3("CreateParty",admin,{partyId:"party-audit-failure",kind:1,displayName:"Rollback",
-     precondition:{idempotencyKey:"party-audit-failed-create"}})).status,409);
-   assert.equal((await v3("UpdateParty",admin,{...updatedInput,displayName:"Must roll back",
-     precondition:{expectedVersion:2n,idempotencyKey:"party-audit-failed-update"}})).status,409);
+   assertUnconfirmed(await v3("CreateParty",admin,{partyId:"party-audit-failure",kind:1,displayName:"Rollback",
+     precondition:{idempotencyKey:"party-audit-failed-create"}}),"PARTIES_WRITE_UNCONFIRMED");
+   assertUnconfirmed(await v3("UpdateParty",admin,{...updatedInput,displayName:"Must roll back",
+     precondition:{expectedVersion:2n,idempotencyKey:"party-audit-failed-update"}}),"PARTIES_WRITE_UNCONFIRMED");
    assert.deepEqual((await partySnapshot()),partyBeforeDenials,"SQL audit failure must roll back the state and receipt too");
  }finally{await sql("DROP TRIGGER fixture_fail_party_audit");}
  console.log(JSON.stringify({event:"crm.native-party-actor-audit",result:"PASS",
@@ -978,8 +996,8 @@ try{
   (await sql("CREATE TRIGGER fixture_fail_rel_actor BEFORE INSERT ON crm_audit "+
     "WHEN NEW.subject_id='"+rMid+"' BEGIN SELECT RAISE(ABORT,'fixture relation audit'); END;"));
   try{
-    assert.equal((await relationV2("UpdatePartyRelationship",admin,{relationshipId:rMid,status:1,
-      precondition:{expectedVersion:4n,idempotencyKey:"candidate-rel-actor-failed"}})).status,409);
+    assertUnconfirmed(await relationV2("UpdatePartyRelationship",admin,{relationshipId:rMid,status:1,
+      precondition:{expectedVersion:4n,idempotencyKey:"candidate-rel-actor-failed"}}),"PARTY_RELATIONSHIPS_WRITE_UNCONFIRMED");
     assert.deepEqual((await relSnapshot()),beforeRelFault);
   }finally{await sql("DROP TRIGGER fixture_fail_rel_actor");}
   console.log(JSON.stringify({event:"crm.native-r2a-relationship-actor-audit",result:"PASS",
@@ -1219,9 +1237,9 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
   (await sql("CREATE TRIGGER fixture_fail_task_actor BEFORE INSERT ON crm_audit "+
     "WHEN NEW.subject_id='"+taskOther+"' BEGIN SELECT RAISE(ABORT,'fixture task audit'); END;"));
   try{
-    assert.equal((await taskV2("UpdateTask",admin,{taskId:taskOther,
+    assertUnconfirmed(await taskV2("UpdateTask",admin,{taskId:taskOther,
       subject:patchSubject("Must not persist"),
-      precondition:{expectedVersion:3n,idempotencyKey:"candidate-task-actor-failed"}})).status,503);
+      precondition:{expectedVersion:3n,idempotencyKey:"candidate-task-actor-failed"}}),"ACTIVITIES_TASK_WRITE_UNCONFIRMED");
     assert.deepEqual((await taskActorSnapshot()),beforeTaskFault);
   }finally{await sql("DROP TRIGGER fixture_fail_task_actor");}
   console.log(JSON.stringify({event:"crm.native-r2a-task-actor-audit",result:"PASS",
@@ -1485,6 +1503,13 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
    ...intent,sourcePartyVersion:2n,
    precondition:{idempotencyKey:"l03-stale-"+randomUUID()}
  })).status,409);
+ await sql("CREATE TRIGGER fixture_identity_rollback BEFORE INSERT ON crm_audit "+
+   "WHEN NEW.action='identity_resolution.merge' BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;");
+ try {
+   assertUnconfirmed(await identityV2("MergeParty",admin,intent),"IDENTITY_MERGE_COMMIT_UNCONFIRMED");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_identity_merge_receipts WHERE tenant=? AND key=?",
+     "tenant-a",intent.precondition.idempotencyKey))[0].n,0);
+ } finally {await sql("DROP TRIGGER fixture_identity_rollback");}
  const merged=await identityV2("MergeParty",admin,intent);
  if(merged.status!==200){
    const rowProof=await sql("SELECT status,version FROM crm_identity_merge_records WHERE tenant='tenant-a' AND id='"+mergeOpId+"'");
@@ -1542,6 +1567,13 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
  assert.equal((await identityV2("UnmergeParty",admin,{
    ...undo,precondition:{expectedVersion:2n,idempotencyKey:"l03-undo-stale-"+randomUUID()}
  })).status,409);
+ await sql("CREATE TRIGGER fixture_identity_rollback BEFORE INSERT ON crm_audit "+
+   "WHEN NEW.action='identity_resolution.unmerge' BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;");
+ try {
+   assertUnconfirmed(await identityV2("UnmergeParty",admin,undo),"IDENTITY_UNMERGE_COMMIT_UNCONFIRMED");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_identity_merge_receipts WHERE tenant=? AND key=?",
+     "tenant-a",undo.precondition.idempotencyKey))[0].n,0);
+ } finally {await sql("DROP TRIGGER fixture_identity_rollback");}
  const undone=await identityV2("UnmergeParty",admin,undo);
  assert.equal(undone.status,200,describeProtobuf(undone.body));
  assert.equal(undone.body.operation?.active,false);
@@ -1773,9 +1805,9 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
    "WHEN NEW.subject_id='"+failingGrantId+"' AND NEW.action='consents.grant' "+
    "BEGIN SELECT RAISE(ABORT,'fixture R3 consent grant audit failure'); END;"));
  try{
-   assert.equal((await consentV2("GrantVerifiedEmailConsent",admin,{
+   assertUnconfirmed(await consentV2("GrantVerifiedEmailConsent",admin,{
      ...r3Grant,authorizationId:failingGrantId,
-     precondition:{idempotencyKey:failingKey}})).status,409);
+     precondition:{idempotencyKey:failingKey}}),"CONSENTS_WRITE_UNCONFIRMED");
    assert.deepEqual((await sql("SELECT "+
      "(SELECT COUNT(*) FROM crm_consent_records) AS records,"+
      "(SELECT COUNT(*) FROM crm_consent_receipts) AS receipts,"+
@@ -2048,7 +2080,7 @@ try {
     ...viewUpdate,name:"Failed write",precondition:{
       expectedVersion:2n,idempotencyKey:"r73-view-audit-rollback"}
   });
-  assert.notEqual(failed.status,200,describeProtobuf(failed.body));
+  assertUnconfirmed(failed,"SALES_VIEW_WRITE_UNCONFIRMED");
   assert.deepEqual((await sql("SELECT state,version FROM crm_sales_saved_view_records "+
     "WHERE tenant='tenant-a' AND id='"+viewAId+"'")),beforeFailedView);
   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_sales_saved_view_receipts "+
@@ -3022,7 +3054,7 @@ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='te
     const denied=await salesV2("UpdatePipeline",admin,{
       ...reorder,precondition:{expectedVersion:2n,idempotencyKey:"r7-rebase-rollback"}
     });
-    assert.equal(denied.status,409,describeProtobuf(denied.body));
+    assertUnconfirmed(denied,"SALES_PIPELINE_WRITE_UNCONFIRMED");
     assert.deepEqual((await failedRebaseSnapshot()),beforeFailedRebase,
       "Late D1 failure must roll back catalog, both Deals, receipts and audit");
   }finally{await sql("DROP TRIGGER fixture_deny_rank_rebase");}
@@ -3284,13 +3316,13 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    "WHEN NEW.subject_id IN ('privacy-audit-failed-create','"+failingTransitionId+"') "+
    "BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END;"));
  try{
-   assert.equal((await privacy("CreatePrivacyCase",admin,{
+   assertUnconfirmed(await privacy("CreatePrivacyCase",admin,{
      caseId:"privacy-audit-failed-create",kind:1,
-     precondition:{idempotencyKey:"privacy-audit-failed-create-key"}})).body.code,"aborted");
-   assert.equal((await privacy("SubmitPrivacyCase",knownService,{
+     precondition:{idempotencyKey:"privacy-audit-failed-create-key"}}),"PRIVACY_CASE_WRITE_UNCONFIRMED");
+   assertUnconfirmed(await privacy("SubmitPrivacyCase",knownService,{
      caseId:failingTransitionId,
      precondition:{expectedVersion:1n,idempotencyKey:"privacy-audit-failed-submit-key"}
-   })).body.code,"aborted");
+   }),"PRIVACY_CASE_WRITE_UNCONFIRMED");
    assert.deepEqual((await privacySnapshot()),privacyBeforeDenials,
      "Audit failure must roll back Privacy state, receipt and audit together");
  }finally{await sql("DROP TRIGGER fixture_fail_privacy_audit");}
@@ -3453,8 +3485,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    "WHEN NEW.subject_id='"+failProofId+"' AND NEW.action='customer_privacy.subject.verify_own' "+
    "BEGIN SELECT RAISE(ABORT,'test audit failure'); END");
  try {
-   assert.equal((await privacy("VerifyOwnPrivacyCaseSubject",admin,failVerification))
-     .body.code,"aborted");
+   assertUnconfirmed(await privacy("VerifyOwnPrivacyCaseSubject",admin,failVerification),"PRIVACY_CASE_WRITE_UNCONFIRMED");
    assert.equal((await privacy("GetPrivacyCase",admin,{caseId:failProofId}))
      .body.privacyCase?.subjectVerified,false);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_privacy_case_receipts "+
@@ -3629,14 +3660,14 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    "BEGIN SELECT RAISE(ABORT,'fixture enrichment audit failure'); END;"));
  const beforeAuditFailure=(await enrichmentSnapshot());
  try{
-   assert.equal((await enrichment("PublishProviderProfile",admin,{
+   assertUnconfirmed(await enrichment("PublishProviderProfile",admin,{
      ...profileInput,retentionDays:37,
      precondition:{idempotencyKey:"enrichment-profile-audit-failure"}
-   })).body.code,"aborted");
-   assert.equal((await enrichment("PublishMapping",knownService,{
+   }),"ENRICHMENT_WRITE_UNCONFIRMED");
+   assertUnconfirmed(await enrichment("PublishMapping",knownService,{
      ...mappingInput,providerResponseFieldPath:"organization.alternate_legal_name",
      precondition:{idempotencyKey:"enrichment-mapping-audit-failure"}
-   })).body.code,"aborted");
+   }),"ENRICHMENT_WRITE_UNCONFIRMED");
    assert.deepEqual((await enrichmentSnapshot()),beforeAuditFailure,
      "Audit failure must atomically roll back published state and receipt");
  }finally{await sql("DROP TRIGGER fixture_fail_enrichment_audit");}
@@ -3916,7 +3947,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    "WHEN NEW.subject_id='"+rollbackPreview.body.targetPartyIds[1]+"' "+
    "BEGIN SELECT RAISE(ABORT,'fixture late import audit failure'); END;"));
  try{
-   assert.equal((await csv("ApplyPartyImport",knownService,rollbackInput)).status,409);
+   assertUnconfirmed(await csv("ApplyPartyImport",knownService,rollbackInput),"IMPORT_WRITE_UNCONFIRMED");
    assert.deepEqual((await partySnapshot()),beforeRollback,"Late batch failure must remove every state, receipt and audit");
  }finally{await sql("DROP TRIGGER fixture_fail_import_audit");}
  const retryImport=await csv("ApplyPartyImport",knownService,rollbackInput);
@@ -4685,6 +4716,10 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  // Retry the exact previously unconfirmed intents concurrently. Both callers must
  // see one committed version with the same original request ID and audit row.
  for(const [call,method,input,subject] of [
+   [v3,"CreateParty",{partyId:"party-audit-failure",kind:1,displayName:"Rollback",
+     precondition:{idempotencyKey:"party-audit-failed-create"}},"party-audit-failure"],
+   [privacy,"CreatePrivacyCase",{caseId:"privacy-audit-failed-create",kind:1,
+     precondition:{idempotencyKey:"privacy-audit-failed-create-key"}},"privacy-audit-failed-create"],
    [accountV2,"CreateAccount",accountRetryInput,accountRetryInput.accountId],
    [contactV2,"CreateContactPoint",contactRetryInput,contactRetryInput.contactPointId],
  ]){

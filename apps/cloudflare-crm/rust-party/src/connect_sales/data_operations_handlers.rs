@@ -95,7 +95,7 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
         let preview = owner::preview_import(&input.csv, &db, &self.actor.tenant)
             .await
             .map_err(|_| ConnectError::internal("import preview D1 read failed"))?
-            .map_err(PartyV3Service::mutation_error)?;
+            .map_err(|failure| failure.connect("PreviewPartyImport", &self.request_id))?;
         RpcResponse::ok(csv_wire::PreviewPartyImportResponse {
             count: preview.count as u32,
             csv_sha256_hex: preview.hash,
@@ -132,7 +132,7 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("import D1 apply failed"))?
-        .map_err(PartyV3Service::mutation_error)?;
+        .map_err(|failure| failure.connect("ApplyPartyImport", &self.request_id))?;
         RpcResponse::ok(csv_wire::ApplyPartyImportResponse {
             created_count: applied.saved.created as u32,
             replayed_count: applied.saved.replayed as u32,
@@ -141,6 +141,7 @@ impl csv_wire::PartyCsvService for PartyCsvV2Service {
                 request_id: self.request_id.clone(),
                 resource_version: 1,
                 replayed: applied.saved.operation_replayed,
+                original_request_id: Some(applied.saved.original_request_id),
                 ..Default::default()
             })
             .into(),

@@ -18,14 +18,6 @@ impl EnrichmentV2Service {
             .d1("DB")
             .map_err(|_| ConnectError::internal("D1 unavailable"))
     }
-    fn failed(error: owner::Failure) -> ConnectError {
-        match error.status {
-            404 => ConnectError::not_found(error.code),
-            409 => ConnectError::aborted(error.code),
-            422 => ConnectError::invalid_argument(error.code),
-            _ => ConnectError::internal(error.code),
-        }
-    }
     fn id(raw: &str) -> std::result::Result<(), ConnectError> {
         if raw.is_empty() || raw.len() > 180 || raw != raw.trim() || raw.contains('/') {
             return Err(ConnectError::invalid_argument(
@@ -101,12 +93,13 @@ impl EnrichmentV2Service {
             ..Default::default()
         }
     }
-    fn receipt(&self, replayed: bool) -> core_v2::MutationReceipt {
+    fn receipt<T>(&self, saved: &owner::Saved<T>) -> core_v2::MutationReceipt {
         // Each content-addressed definition is immutable: its resource version is one.
         core_v2::MutationReceipt {
             request_id: self.request_id.clone(),
             resource_version: 1,
-            replayed,
+            replayed: saved.replayed,
+            original_request_id: saved.original_request_id.clone(),
             ..Default::default()
         }
     }
@@ -156,10 +149,10 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         let saved = owner::publish_profile(draft, &key, &self.d1()?, &self.actor, &self.request_id)
             .await
             .map_err(|_| ConnectError::internal("profile D1 publish failed"))?
-            .map_err(Self::failed)?;
+            .map_err(|failure| failure.connect("PublishProviderProfile", &self.request_id))?;
         RpcResponse::ok(enrichment_wire::PublishProviderProfileResponse {
             profile: Some(Self::profile(&saved.value)?).into(),
-            receipt: Some(self.receipt(saved.replayed)).into(),
+            receipt: Some(self.receipt(&saved)).into(),
             ..Default::default()
         })
     }
@@ -182,10 +175,10 @@ impl enrichment_wire::EnrichmentConfigurationService for EnrichmentV2Service {
         let saved = owner::publish_mapping(draft, &key, &self.d1()?, &self.actor, &self.request_id)
             .await
             .map_err(|_| ConnectError::internal("mapping D1 publish failed"))?
-            .map_err(Self::failed)?;
+            .map_err(|failure| failure.connect("PublishMapping", &self.request_id))?;
         RpcResponse::ok(enrichment_wire::PublishMappingResponse {
             mapping: Some(Self::mapping(&saved.value)).into(),
-            receipt: Some(self.receipt(saved.replayed)).into(),
+            receipt: Some(self.receipt(&saved)).into(),
             ..Default::default()
         })
     }

@@ -267,16 +267,9 @@ impl PartyV3Service {
             request_id: self.request_id.clone(),
             resource_version: outcome.party.version(),
             replayed: outcome.replayed,
+            original_request_id: outcome.original_request_id.clone(),
             ..Default::default()
         })
-    }
-    fn mutation_error(f: parties::MutationFailure) -> ConnectError {
-        match f.status {
-            404 => ConnectError::not_found(f.code),
-            409 => ConnectError::aborted(f.code),
-            422 => ConnectError::invalid_argument(f.code),
-            _ => ConnectError::internal(f.code),
-        }
     }
 }
 
@@ -559,15 +552,8 @@ impl RelationshipV2Service {
             request_id: self.request_id.clone(),
             resource_version: out.relationship.version(),
             replayed: out.replayed,
+            original_request_id: out.original_request_id.clone(),
             ..Default::default()
-        }
-    }
-    fn failed(f: party_relationships::MutationFailure) -> ConnectError {
-        match f.status {
-            404 => ConnectError::not_found(f.code),
-            409 => ConnectError::aborted(f.code),
-            422 => ConnectError::invalid_argument(f.code),
-            _ => ConnectError::internal(f.code),
         }
     }
 }
@@ -652,16 +638,8 @@ impl TaskV2Service {
             request_id: self.request_id.clone(),
             resource_version: out.task.version(),
             replayed: out.replayed,
+            original_request_id: out.original_request_id.clone(),
             ..Default::default()
-        }
-    }
-    fn failed(f: activity_tasks::MutationFailure) -> ConnectError {
-        match f.status {
-            404 => ConnectError::not_found(f.code),
-            409 => ConnectError::aborted(f.code),
-            422 => ConnectError::invalid_argument(f.code),
-            503 => ConnectError::unavailable(f.code),
-            _ => ConnectError::internal(f.code),
         }
     }
 }
@@ -773,15 +751,6 @@ impl ConsentV2Service {
             jurisdiction: item.jurisdiction().as_str().to_owned(),
             version: item.version(),
             ..Default::default()
-        }
-    }
-    fn failed(f: consents::OperationFailure) -> ConnectError {
-        match f.status {
-            403 => ConnectError::permission_denied(f.code),
-            404 => ConnectError::not_found(f.code),
-            409 => ConnectError::aborted(f.code),
-            422 => ConnectError::invalid_argument(f.code),
-            _ => ConnectError::internal(f.code),
         }
     }
 }
@@ -1019,15 +988,8 @@ impl SalesV2Service {
             request_id: self.request_id.clone(),
             resource_version: saved.value.version,
             replayed: saved.replayed,
+            original_request_id: saved.original_request_id.clone(),
             ..Default::default()
-        }
-    }
-    fn view_failed(f: sales_views::Failure) -> ConnectError {
-        match f.status {
-            404 => ConnectError::not_found(f.code),
-            409 => ConnectError::aborted(f.code),
-            422 => ConnectError::invalid_argument(f.code),
-            _ => ConnectError::internal(f.code),
         }
     }
     fn pipeline_receipt(&self, saved: &sales_pipelines::Saved) -> core_v2::MutationReceipt {
@@ -1035,15 +997,8 @@ impl SalesV2Service {
             request_id: self.request_id.clone(),
             resource_version: saved.value.version,
             replayed: saved.replayed,
+            original_request_id: saved.original_request_id.clone(),
             ..Default::default()
-        }
-    }
-    fn pipeline_failed(f: sales_pipelines::Failure) -> ConnectError {
-        match f.status {
-            404 => ConnectError::not_found(f.code),
-            409 => ConnectError::aborted(f.code),
-            422 => ConnectError::invalid_argument(f.code),
-            _ => ConnectError::internal(f.code),
         }
     }
 }
@@ -1164,13 +1119,17 @@ pub(super) async fn route(
     env: Env,
     actor: &access::Actor,
     request_id: &str,
+    policy: super::RpcPolicy,
 ) -> Result<Response> {
     // Preserve the typed Connect code for the existing request log; never log payloads.
+    let correlation = request_id.to_owned();
     let service = router(env, actor, request_id, None)
         .into_axum_service()
-        .with_interceptor(connectrpc::unary_interceptor(|req, next| {
+        .with_interceptor(connectrpc::unary_interceptor(move |req, next| {
+            let correlation = correlation.clone();
             Box::pin(async move {
-                next.run(req).await.map_err(|mut error| {
+                next.run(req).await.map_err(|error| {
+                    let mut error = policy.wire_error(error, &correlation, false);
                     let code = axum::http::HeaderValue::from_static(error.code.as_str());
                     error
                         .response_headers_mut()

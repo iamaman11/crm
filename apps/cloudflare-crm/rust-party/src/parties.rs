@@ -15,11 +15,7 @@ use worker::{D1Database, Result};
 struct Stored {
     state: String,
 }
-#[derive(Deserialize)]
-struct Receipt {
-    digest: String,
-    state: String,
-}
+use super::d1_write::Receipt;
 #[derive(Serialize, Deserialize)]
 struct PartyRow {
     id: String,
@@ -69,6 +65,7 @@ pub(super) struct ImportSaved {
     pub(super) created: usize,
     pub(super) replayed: usize,
     pub(super) operation_replayed: bool,
+    pub(super) original_request_id: String,
 }
 #[derive(Deserialize)]
 pub(super) struct ImportReceipt {
@@ -99,40 +96,63 @@ pub(super) async fn import_batch(
 ) -> Result<std::result::Result<ImportSaved, MutationFailure>> {
     let tenant = &actor.tenant;
     if !(8..=120).contains(&operation_key.len()) || rows.is_empty() {
-        return Ok(Err(failed("IMPORT_PRECONDITION_INVALID", 422)));
+        return Ok(Err(MutationFailure::domain(
+            "IMPORT_PRECONDITION_INVALID",
+            ErrorCode::InvalidArgument,
+        )));
     }
-    if let Some(old) = import_operation(db, tenant, operation_key).await? {
+    let replay = |old: ImportReceipt| {
         if old.source_sha256 != source_hash || old.row_count != rows.len() {
-            return Ok(Err(failed("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(ImportSaved {
+        Ok(Ok(ImportSaved {
             created: 0,
             replayed: old.row_count,
             operation_replayed: true,
-        }));
+            original_request_id: old.request_id,
+        }))
+    };
+    if let Some(old) = import_operation(db, tenant, operation_key).await? {
+        return replay(old);
     }
     let mut statements = Vec::with_capacity(rows.len() + 1);
     let mut ids = BTreeSet::new();
     let mut receipts = 0;
     for (id, kind, name, key) in &rows {
         if !ids.insert(id.clone()) {
-            return Ok(Err(failed("IMPORT_DUPLICATE_TARGET_ID", 422)));
+            return Ok(Err(MutationFailure::domain(
+                "IMPORT_DUPLICATE_TARGET_ID",
+                ErrorCode::InvalidArgument,
+            )));
         }
         let hash = digest("create", id, name, 0);
+        let current = stored(db, tenant, id).await;
         if let Some(old) = previous(db, tenant, key).await? {
             if old.digest != hash {
-                return Ok(Err(failed("IDEMPOTENCY_CONFLICT", 409)));
+                return Ok(Err(MutationFailure::domain(
+                    "IDEMPOTENCY_CONFLICT",
+                    ErrorCode::Aborted,
+                )));
             }
             let party = decode_party_state(old.state.as_bytes())
                 .map_err(|e| worker::Error::RustError(e.code))?;
             if party.party_id().as_str() != id || party.kind() != *kind {
-                return Ok(Err(failed("IMPORT_RECEIPT_ID_CONFLICT", 409)));
+                return Ok(Err(MutationFailure::domain(
+                    "IMPORT_RECEIPT_ID_CONFLICT",
+                    ErrorCode::Aborted,
+                )));
             }
             receipts += 1;
             continue;
         }
-        if stored(db, tenant, id).await?.is_some() {
-            return Ok(Err(failed("IMPORT_TARGET_PARTY_CONFLICT", 409)));
+        if current?.is_some() {
+            return Ok(Err(MutationFailure::domain(
+                "IMPORT_TARGET_PARTY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         let party = Party::create(CreateParty {
             party_id: PartyId::try_new(id.clone()).map_err(|e| worker::Error::RustError(e.code))?,
@@ -153,7 +173,13 @@ pub(super) async fn import_batch(
               JsValue::from_str(trace),JsValue::from_str(&actor.identity),JsValue::from_str(&crm_core_contracts::nfc_text_key(party.display_name()))])?);
     }
     if receipts > 0 && receipts != rows.len() {
-        return Ok(Err(failed("IMPORT_PARTIAL_REPLAY_CONFLICT", 409)));
+        if let Some(old) = import_operation(db, tenant, operation_key).await? {
+            return replay(old);
+        }
+        return Ok(Err(MutationFailure::domain(
+            "IMPORT_PARTIAL_REPLAY_CONFLICT",
+            ErrorCode::Aborted,
+        )));
     }
     // Operation-key receipt and all original Party writes commit in one D1 batch.
     // The UNIQUE(tenant,key) constraint also serializes concurrent retry attempts.
@@ -162,30 +188,34 @@ pub(super) async fn import_batch(
         &[JsValue::from_str(tenant),JsValue::from_str(operation_key),
           JsValue::from_str(source_hash),JsValue::from_f64(rows.len() as f64),
           JsValue::from_str(trace)])?);
-    if db.batch(statements).await.is_err() {
-        if let Some(old) = import_operation(db, tenant, operation_key).await?
-            && old.source_sha256 == source_hash
-            && old.row_count == rows.len()
+    let statement_count = statements.len();
+    let acknowledged = db.batch(statements).await.is_ok_and(|results| {
+        results.len() == statement_count && results.iter().all(|result| result.success())
+    });
+    if !acknowledged {
+        let old = match super::d1_write::require_receipt(
+            import_operation(db, tenant, operation_key),
+            "IMPORT_WRITE_UNCONFIRMED",
+        )
+        .await
         {
-            return Ok(Ok(ImportSaved {
-                created: 0,
-                replayed: old.row_count,
-                operation_replayed: true,
-            }));
-        }
-        return Ok(Err(failed("IMPORT_ATOMIC_WRITE_CONFLICT", 409)));
+            Ok(old) => old,
+            Err(failure) => return Ok(Err(failure)),
+        };
+        return replay(old);
     }
     Ok(Ok(ImportSaved {
         created: rows.len() - receipts,
         replayed: receipts,
         operation_replayed: receipts > 0,
+        original_request_id: trace.to_owned(),
     }))
 }
 
 async fn previous(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receipt>> {
     bind(
         db,
-        "SELECT digest, state FROM crm_party_receipts WHERE tenant = ? AND key = ?",
+        "SELECT digest,state,original_request_id FROM crm_party_receipts WHERE tenant = ? AND key = ?",
         &[JsValue::from_str(tenant), JsValue::from_str(key)],
     )?
     .first::<Receipt>(None)
@@ -198,17 +228,10 @@ async fn previous(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Rec
 pub(super) struct MutationOutcome {
     pub(super) party: Party,
     pub(super) replayed: bool,
+    pub(super) original_request_id: Option<String>,
 }
-pub(super) struct MutationFailure {
-    pub(super) code: String,
-    pub(super) status: u16,
-}
-fn failed(code: impl Into<String>, status: u16) -> MutationFailure {
-    MutationFailure {
-        code: code.into(),
-        status,
-    }
-}
+pub(super) use super::d1_write::OwnerFailure as MutationFailure;
+use connectrpc::ErrorCode;
 pub(super) async fn create_typed(
     db: &D1Database,
     actor: &access::Actor,
@@ -220,26 +243,44 @@ pub(super) async fn create_typed(
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     let tenant = &actor.tenant;
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(failed("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(MutationFailure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let hash = digest("create", &id, &name, 0);
-    if let Some(old) = previous(db, tenant, key).await? {
+    let replay = |old: Receipt| {
         if old.digest != hash {
-            return Ok(Err(failed("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         let party = decode_party_state(old.state.as_bytes())
             .map_err(|e| worker::Error::RustError(e.code))?;
         if party.party_id().as_str() != id || party.kind() != kind {
-            return Ok(Err(failed("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(MutationOutcome {
+        Ok(Ok(MutationOutcome {
             party,
             replayed: true,
-        }));
+            original_request_id: old.original_request_id,
+        }))
+    };
+    if let Some(old) = previous(db, tenant, key).await? {
+        return replay(old);
     }
-    let id = match PartyId::try_new(id) {
+    let id = match PartyId::try_new(id.clone()) {
         Ok(value) => value,
-        Err(_) => return Ok(Err(failed("PARTIES_PARTY_ID_INVALID", 422))),
+        Err(_) => {
+            return Ok(Err(MutationFailure::domain(
+                "PARTIES_PARTY_ID_INVALID",
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let party = match Party::create(CreateParty {
         party_id: id,
@@ -248,7 +289,12 @@ pub(super) async fn create_typed(
         occurred_at_unix_nanos: now_nanos(),
     }) {
         Ok(value) => value,
-        Err(e) => return Ok(Err(failed(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(MutationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let state = String::from_utf8(
         encode_party_state(&party).map_err(|e| worker::Error::RustError(e.code))?,
@@ -256,17 +302,27 @@ pub(super) async fn create_typed(
     .map_err(|e| worker::Error::RustError(e.to_string()))?;
     // Existing D1 triggers write the audit and idempotency receipt atomically.
     let result = bind(db,
-        "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) VALUES(?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO crm_party_records(tenant,id,state,version,idem_key,idem_digest,request_id,actor,search_name) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
         &[JsValue::from_str(tenant), JsValue::from_str(party.party_id().as_str()),
           JsValue::from_str(&state), JsValue::from_f64(1.0),
           JsValue::from_str(key), JsValue::from_str(&hash),
           JsValue::from_str(request_id), JsValue::from_str(&actor.identity), JsValue::from_str(&crm_core_contracts::nfc_text_key(party.display_name()))])?.run().await;
-    if result.is_err() {
-        return Ok(Err(failed("PARTIES_PARTY_CREATE_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        result,
+        previous(db, tenant, key),
+        "PARTIES_PARTY_CREATE_CONFLICT",
+        "PARTIES_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(MutationFailure::Write(failure))),
     }
     Ok(Ok(MutationOutcome {
         party,
         replayed: false,
+        original_request_id: Some(request_id.to_owned()),
     }))
 }
 pub(super) async fn update_typed(
@@ -280,25 +336,42 @@ pub(super) async fn update_typed(
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     let tenant = &actor.tenant;
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(failed("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(MutationFailure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let hash = digest("update", id, &name, expected_version);
-    if let Some(old) = previous(db, tenant, key).await? {
+    let replay = |old: Receipt| {
         if old.digest != hash {
-            return Ok(Err(failed("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         let party = decode_party_state(old.state.as_bytes())
             .map_err(|e| worker::Error::RustError(e.code))?;
         if party.party_id().as_str() != id {
-            return Ok(Err(failed("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(MutationOutcome {
+        Ok(Ok(MutationOutcome {
             party,
             replayed: true,
-        }));
+            original_request_id: old.original_request_id,
+        }))
+    };
+    let current = stored(db, tenant, id).await;
+    if let Some(old) = previous(db, tenant, key).await? {
+        return replay(old);
     }
-    let Some(mut party) = stored(db, tenant, id).await? else {
-        return Ok(Err(failed("NOT_FOUND", 404)));
+    let Some(mut party) = current? else {
+        return Ok(Err(MutationFailure::domain(
+            "NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     if let Err(e) = party.apply_update(UpdateParty {
         expected_version,
@@ -306,11 +379,11 @@ pub(super) async fn update_typed(
         occurred_at_unix_nanos: now_nanos(),
     }) {
         let status = if e.code == "PARTIES_PARTY_VERSION_CONFLICT" {
-            409
+            ErrorCode::Aborted
         } else {
-            422
+            ErrorCode::InvalidArgument
         };
-        return Ok(Err(failed(e.code, status)));
+        return Ok(Err(MutationFailure::domain(e.code, status)));
     }
     let state = String::from_utf8(
         encode_party_state(&party).map_err(|e| worker::Error::RustError(e.code))?,
@@ -322,15 +395,22 @@ pub(super) async fn update_typed(
           JsValue::from_str(key), JsValue::from_str(&hash),
           JsValue::from_str(request_id), JsValue::from_str(&actor.identity), JsValue::from_str(&crm_core_contracts::nfc_text_key(party.display_name())), JsValue::from_str(tenant),
           JsValue::from_str(id), JsValue::from_f64(expected_version as f64)])?.run().await;
-    let Ok(changed) = result else {
-        return Ok(Err(failed("PARTIES_PARTY_UPDATE_CONFLICT", 409)));
-    };
-    if changed.meta()?.and_then(|meta| meta.changes).unwrap_or(0) == 0 {
-        return Ok(Err(failed("PARTIES_PARTY_VERSION_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        result,
+        previous(db, tenant, key),
+        "PARTIES_PARTY_VERSION_CONFLICT",
+        "PARTIES_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(MutationFailure::Write(failure))),
     }
     Ok(Ok(MutationOutcome {
         party,
         replayed: false,
+        original_request_id: Some(request_id.to_owned()),
     }))
 }
 pub(super) async fn list_page_typed(

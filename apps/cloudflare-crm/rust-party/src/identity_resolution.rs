@@ -137,15 +137,33 @@ pub(super) struct MergeCommit {
     pub(super) replayed: bool,
     pub(super) original_request_id: String,
 }
-pub(super) struct MergeFault {
-    pub(super) code: String,
-    pub(super) status: u16,
-}
-fn merge_fail(code: impl Into<String>, status: u16) -> MergeFault {
-    MergeFault {
-        code: code.into(),
-        status,
+pub(super) use super::d1_write::OwnerFailure as MergeFault;
+use connectrpc::ErrorCode;
+fn committed_merge(
+    receipt: MergeReceipt,
+    digest: &str,
+    operation_id: &str,
+    version: i64,
+    request_id: &str,
+) -> Result<std::result::Result<MergeCommit, MergeFault>> {
+    if receipt.digest != digest {
+        return Ok(Err(MergeFault::domain(
+            "IDEMPOTENCY_CONFLICT",
+            ErrorCode::Aborted,
+        )));
     }
+    let operation = merge_decode(&receipt.state)?;
+    if operation.operation_id().as_str() != operation_id || operation.version() != version {
+        return Ok(Err(MergeFault::domain(
+            "IDENTITY_RECEIPT_MISMATCH",
+            ErrorCode::Unavailable,
+        )));
+    }
+    Ok(Ok(MergeCommit {
+        operation,
+        replayed: receipt.original_request_id != request_id,
+        original_request_id: receipt.original_request_id,
+    }))
 }
 fn merge_decode(state: &str) -> Result<MergeOperation> {
     decode_merge_operation_state(state.as_bytes()).map_err(|e| worker::Error::RustError(e.code))
@@ -231,7 +249,10 @@ pub(super) async fn create_merge_typed(
     } = input;
     let tenant = &actor.tenant;
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(merge_fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(MergeFault::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let hash = merge_digest(&json!([
         "merge",
@@ -242,75 +263,89 @@ pub(super) async fn create_merge_typed(
         survivor_version,
         reason
     ]));
+    let graph = canonical_graph(db, tenant).await;
+    let existing = stored_merge(db, tenant, &operation_id).await;
     if let Some(old) = merge_receipt(db, tenant, key).await? {
-        if old.digest != hash {
-            return Ok(Err(merge_fail("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        let operation = merge_decode(&old.state)?;
-        if operation.operation_id().as_str() != operation_id || operation.version() != 1 {
-            return Ok(Err(merge_fail("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        return Ok(Ok(MergeCommit {
-            operation,
-            replayed: true,
-            original_request_id: old.original_request_id,
-        }));
+        return committed_merge(old, &hash, &operation_id, 1, request_id);
+    }
+    if existing?.is_some() {
+        return Ok(Err(MergeFault::domain(
+            "IDENTITY_MERGE_OPERATION_EXISTS",
+            ErrorCode::Aborted,
+        )));
     }
     let Some(source) = parties::stored(db, tenant, &source_party_id).await? else {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_SOURCE_NOT_FOUND", 404)));
+        return Ok(Err(MergeFault::domain(
+            "IDENTITY_MERGE_SOURCE_NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     let Some(survivor) = parties::stored(db, tenant, &survivor_party_id).await? else {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_SURVIVOR_NOT_FOUND", 404)));
+        return Ok(Err(MergeFault::domain(
+            "IDENTITY_MERGE_SURVIVOR_NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     if source.version() != source_version || survivor.version() != survivor_version {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_STALE_PARTY", 409)));
+        return Ok(Err(MergeFault::domain(
+            "IDENTITY_MERGE_STALE_PARTY",
+            ErrorCode::Aborted,
+        )));
     }
     if source.kind() != survivor.kind() {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_KIND_MISMATCH", 422)));
+        return Ok(Err(MergeFault::domain(
+            "IDENTITY_MERGE_KIND_MISMATCH",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let command = CreateMergeOperation {
         operation_id: match MergeOperationId::try_new(operation_id.clone()) {
             Ok(x) => x,
-            Err(e) => return Ok(Err(merge_fail(e.code, 422))),
+            Err(e) => return Ok(Err(MergeFault::domain(e.code, ErrorCode::InvalidArgument))),
         },
         source_party_ref: match PartyReference::try_new(source_party_id.clone()) {
             Ok(x) => x,
-            Err(e) => return Ok(Err(merge_fail(e.code, 422))),
+            Err(e) => return Ok(Err(MergeFault::domain(e.code, ErrorCode::InvalidArgument))),
         },
         source_party_version: source_version,
         survivor_party_ref: match PartyReference::try_new(survivor_party_id.clone()) {
             Ok(x) => x,
-            Err(e) => return Ok(Err(merge_fail(e.code, 422))),
+            Err(e) => return Ok(Err(MergeFault::domain(e.code, ErrorCode::InvalidArgument))),
         },
         survivor_party_version: survivor_version,
         decision_ref: match DecisionReference::try_new(operation_id.clone()) {
             Ok(x) => x,
-            Err(e) => return Ok(Err(merge_fail(e.code, 422))),
+            Err(e) => return Ok(Err(MergeFault::domain(e.code, ErrorCode::InvalidArgument))),
         },
         decided_by: match ActorId::try_new(actor.identity.clone()) {
             Ok(x) => x,
-            Err(e) => return Ok(Err(merge_fail(e.to_string(), 422))),
+            Err(e) => {
+                return Ok(Err(MergeFault::domain(
+                    e.to_string(),
+                    ErrorCode::InvalidArgument,
+                )));
+            }
         },
         reason: match LineageDecisionReasonCode::try_new(reason) {
             Ok(x) => x,
-            Err(e) => return Ok(Err(merge_fail(e.code, 422))),
+            Err(e) => return Ok(Err(MergeFault::domain(e.code, ErrorCode::InvalidArgument))),
         },
         survivorship: Vec::new(), // No field is copied or overwritten.
         occurred_at_unix_nanos: now_nanos(),
     };
     let operation = match MergeOperation::create(command) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(merge_fail(e.code, 422))),
+        Err(e) => return Ok(Err(MergeFault::domain(e.code, ErrorCode::InvalidArgument))),
     };
-    let graph = canonical_graph(db, tenant).await?;
+    let graph = graph?;
     if let Err(e) = graph.with_added_edge(operation.active_edge().expect("new operation active")) {
-        return Ok(Err(merge_fail(e.code, 409)));
+        return Ok(Err(MergeFault::domain(e.code, ErrorCode::Aborted)));
     }
     let state = merge_encode(&operation)?;
     // The native BEFORE INSERT trigger guards both Party versions and roots
     // atomically. Use an ordinary D1 INSERT, not a conditional SELECT whose
     // changes metadata may be zero with an otherwise successful statement.
-    let write = bind(
+    let _acknowledgement = bind(
         db,
         "INSERT INTO crm_identity_merge_records(
             tenant,id,source_party,survivor_party,state,version,status,
@@ -330,28 +365,17 @@ pub(super) async fn create_merge_typed(
     )?
     .run()
     .await;
-    if write.is_err() {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_COMMIT_CONFLICT", 409)));
-    }
-    // D1 may report zero changes despite a successful triggered write. The
-    // original immutable receipt, not a driver metadata counter, is proof.
-    // No inferred success when receipt lookup is absent or mismatched.
-    let receipt = merge_receipt(db, tenant, key).await?;
-    let Some(receipt) = receipt else {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_COMMIT_UNCONFIRMED", 503)));
+    // The atomic receipt also covers a lost acknowledgement and concurrent retries.
+    let receipt = match super::d1_write::require_receipt(
+        merge_receipt(db, tenant, key),
+        "IDENTITY_MERGE_COMMIT_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(receipt) => receipt,
+        Err(failure) => return Ok(Err(failure)),
     };
-    if receipt.digest != hash || receipt.original_request_id != request_id {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_RECEIPT_MISMATCH", 503)));
-    }
-    let saved = merge_decode(&receipt.state)?;
-    if saved.operation_id().as_str() != operation_id || saved.version() != 1 {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_RECEIPT_MISMATCH", 503)));
-    }
-    Ok(Ok(MergeCommit {
-        operation: saved,
-        replayed: false,
-        original_request_id: receipt.original_request_id,
-    }))
+    committed_merge(receipt, &hash, &operation_id, 1, request_id)
 }
 
 pub(super) struct UnmergeInput<'a> {
@@ -377,7 +401,10 @@ pub(super) async fn unmerge_typed(
     } = input;
     let tenant = &actor.tenant;
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(merge_fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(MergeFault::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let hash = merge_digest(&json!([
         "unmerge",
@@ -387,60 +414,68 @@ pub(super) async fn unmerge_typed(
         survivor_version,
         reason
     ]));
+    let graph = canonical_graph(db, tenant).await;
+    let existing = stored_merge(db, tenant, operation_id).await;
     if let Some(old) = merge_receipt(db, tenant, key).await? {
-        if old.digest != hash {
-            return Ok(Err(merge_fail("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        let operation = merge_decode(&old.state)?;
-        if operation.operation_id().as_str() != operation_id || operation.version() != 2 {
-            return Ok(Err(merge_fail("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        return Ok(Ok(MergeCommit {
-            operation,
-            replayed: true,
-            original_request_id: old.original_request_id,
-        }));
+        return committed_merge(old, &hash, operation_id, 2, request_id);
     }
-    let Some(mut operation) = stored_merge(db, tenant, operation_id).await? else {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_NOT_FOUND", 404)));
+    let Some(mut operation) = existing? else {
+        return Ok(Err(MergeFault::domain(
+            "IDENTITY_MERGE_NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     let Some(source) = parties::stored(db, tenant, operation.source_party_ref().as_str()).await?
     else {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_SOURCE_NOT_FOUND", 404)));
+        return Ok(Err(MergeFault::domain(
+            "IDENTITY_MERGE_SOURCE_NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     let Some(survivor) =
         parties::stored(db, tenant, operation.survivor_party_ref().as_str()).await?
     else {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_SURVIVOR_NOT_FOUND", 404)));
+        return Ok(Err(MergeFault::domain(
+            "IDENTITY_MERGE_SURVIVOR_NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     if source.version() != source_version || survivor.version() != survivor_version {
-        return Ok(Err(merge_fail("IDENTITY_MERGE_STALE_PARTY", 409)));
+        return Ok(Err(MergeFault::domain(
+            "IDENTITY_MERGE_STALE_PARTY",
+            ErrorCode::Aborted,
+        )));
     }
-    let graph = canonical_graph(db, tenant).await?;
+    let graph = graph?;
     if let Err(e) = graph.without_operation(operation.operation_id()) {
-        return Ok(Err(merge_fail(e.code, 409)));
+        return Ok(Err(MergeFault::domain(e.code, ErrorCode::Aborted)));
     }
     let input = UnmergeMergeOperation {
         expected_version,
         decision_ref: match DecisionReference::try_new(format!("unmerge-{}", request_id)) {
             Ok(x) => x,
-            Err(e) => return Ok(Err(merge_fail(e.code, 422))),
+            Err(e) => return Ok(Err(MergeFault::domain(e.code, ErrorCode::InvalidArgument))),
         },
         decided_by: match ActorId::try_new(actor.identity.clone()) {
             Ok(x) => x,
-            Err(e) => return Ok(Err(merge_fail(e.to_string(), 422))),
+            Err(e) => {
+                return Ok(Err(MergeFault::domain(
+                    e.to_string(),
+                    ErrorCode::InvalidArgument,
+                )));
+            }
         },
         reason: match LineageDecisionReasonCode::try_new(reason) {
             Ok(x) => x,
-            Err(e) => return Ok(Err(merge_fail(e.code, 422))),
+            Err(e) => return Ok(Err(MergeFault::domain(e.code, ErrorCode::InvalidArgument))),
         },
         occurred_at_unix_nanos: now_nanos().max(operation.updated_at_unix_nanos() + 1),
     };
     if let Err(e) = operation.unmerge(input) {
-        return Ok(Err(merge_fail(e.code, 409)));
+        return Ok(Err(MergeFault::domain(e.code, ErrorCode::Aborted)));
     }
     let state = merge_encode(&operation)?;
-    let write = bind(
+    let _acknowledgement = bind(
         db,
         "UPDATE crm_identity_merge_records SET state=?,version=2,status='unmerged',
            idem_key=?,idem_digest=?,request_id=?,actor=?
@@ -466,25 +501,17 @@ pub(super) async fn unmerge_typed(
     )?
     .run()
     .await;
-    if write.is_err() {
-        return Ok(Err(merge_fail("IDENTITY_UNMERGE_COMMIT_CONFLICT", 409)));
-    }
-    let receipt = merge_receipt(db, tenant, key).await?;
-    let Some(receipt) = receipt else {
-        return Ok(Err(merge_fail("IDENTITY_UNMERGE_COMMIT_UNCONFIRMED", 503)));
+    // The atomic receipt also covers a lost acknowledgement and concurrent retries.
+    let receipt = match super::d1_write::require_receipt(
+        merge_receipt(db, tenant, key),
+        "IDENTITY_UNMERGE_COMMIT_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(receipt) => receipt,
+        Err(failure) => return Ok(Err(failure)),
     };
-    if receipt.digest != hash || receipt.original_request_id != request_id {
-        return Ok(Err(merge_fail("IDENTITY_UNMERGE_RECEIPT_MISMATCH", 503)));
-    }
-    let saved = merge_decode(&receipt.state)?;
-    if saved.operation_id().as_str() != operation_id || saved.version() != 2 {
-        return Ok(Err(merge_fail("IDENTITY_UNMERGE_RECEIPT_MISMATCH", 503)));
-    }
-    Ok(Ok(MergeCommit {
-        operation: saved,
-        replayed: false,
-        original_request_id: receipt.original_request_id,
-    }))
+    committed_merge(receipt, &hash, operation_id, 2, request_id)
 }
 
 pub(super) async fn list_merges(

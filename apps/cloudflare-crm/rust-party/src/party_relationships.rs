@@ -91,17 +91,10 @@ pub(super) struct UpdateCommand {
 pub(super) struct MutationOutcome {
     pub(super) relationship: PartyRelationship,
     pub(super) replayed: bool,
+    pub(super) original_request_id: Option<String>,
 }
-pub(super) struct MutationFailure {
-    pub(super) code: String,
-    pub(super) status: u16,
-}
-fn fail(code: impl Into<String>, status: u16) -> MutationFailure {
-    MutationFailure {
-        code: code.into(),
-        status,
-    }
-}
+pub(super) use super::d1_write::OwnerFailure as MutationFailure;
+use connectrpc::ErrorCode;
 #[derive(Deserialize)]
 struct PagedRow {
     id: String,
@@ -111,11 +104,7 @@ struct PagedRow {
 struct Row {
     state: String,
 }
-#[derive(Deserialize)]
-struct Receipt {
-    digest: String,
-    state: String,
-}
+use super::d1_write::Receipt;
 
 fn digest<T: Serialize>(op: &str, id: &str, input: &T) -> Result<String> {
     let bytes = serde_json::to_vec(&json!([op, id, input]))
@@ -134,7 +123,7 @@ pub(super) fn decoded(state: &str) -> Result<PartyRelationship> {
 async fn prior(db: &D1Database, tenant: &str, k: &str) -> Result<Option<Receipt>> {
     bind(
         db,
-        "SELECT digest,state FROM crm_party_relationship_receipts WHERE tenant = ? AND key = ?",
+        "SELECT digest,state,original_request_id FROM crm_party_relationship_receipts WHERE tenant = ? AND key = ?",
         &[JsValue::from_str(tenant), JsValue::from_str(k)],
     )?
     .first::<Receipt>(None)
@@ -176,38 +165,69 @@ pub(super) async fn create_typed(
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     if !(8..=120).contains(&k.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(MutationFailure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let hash = digest("create", &input.id, &input)?;
-    if let Some(p) = prior(db, tenant, k).await? {
+    let replay = |p: Receipt| {
         if p.digest != hash {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         let relationship = decoded(&p.state)?;
         if relationship.party_relationship_id().as_str() != input.id {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(MutationOutcome {
+        Ok(Ok(MutationOutcome {
             relationship,
             replayed: true,
-        }));
+            original_request_id: p.original_request_id,
+        }))
+    };
+    if let Some(p) = prior(db, tenant, k).await? {
+        return replay(p);
     }
     let id = match PartyRelationshipId::try_new(&input.id) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(MutationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let from = match PartyReference::try_new(&input.from_party_id) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(MutationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let to = match PartyReference::try_new(&input.to_party_id) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(MutationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     if !party_exists(db, tenant, from.as_str()).await?
         || !party_exists(db, tenant, to.as_str()).await?
     {
-        return Ok(Err(fail("PARTY_RELATIONSHIPS_PARTY_NOT_FOUND", 422)));
+        return Ok(Err(MutationFailure::domain(
+            "PARTY_RELATIONSHIPS_PARTY_NOT_FOUND",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let typ = match RelationshipType::try_new(
         input.code,
@@ -216,7 +236,12 @@ pub(super) async fn create_typed(
         input.to_role,
     ) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(MutationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let relationship = match PartyRelationship::create(CreatePartyRelationship {
         party_relationship_id: id,
@@ -228,10 +253,15 @@ pub(super) async fn create_typed(
         occurred_at_unix_nanos: now_nanos(),
     }) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => {
+            return Ok(Err(MutationFailure::domain(
+                e.code,
+                ErrorCode::InvalidArgument,
+            )));
+        }
     };
     let stored = encoded(&relationship)?;
-    let r=bind(db,"INSERT INTO crm_party_relationship_records(tenant,id,from_party,to_party,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?,?)",
+    let r=bind(db,"INSERT INTO crm_party_relationship_records(tenant,id,from_party,to_party,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
         &[JsValue::from_str(tenant),
           JsValue::from_str(relationship.party_relationship_id().as_str()),
           JsValue::from_str(relationship.from_party_ref().as_str()),
@@ -239,12 +269,22 @@ pub(super) async fn create_typed(
           JsValue::from_str(&stored),JsValue::from_f64(relationship.version() as f64),
           JsValue::from_str(k),JsValue::from_str(&hash),JsValue::from_str(trace),JsValue::from_str(actor)])?
         .run().await;
-    if r.is_err() {
-        return Ok(Err(fail("PARTY_RELATIONSHIPS_CREATE_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        r,
+        prior(db, tenant, k),
+        "PARTY_RELATIONSHIPS_CREATE_CONFLICT",
+        "PARTY_RELATIONSHIPS_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(MutationFailure::Write(failure))),
     }
     Ok(Ok(MutationOutcome {
         relationship,
         replayed: false,
+        original_request_id: Some(trace.to_owned()),
     }))
 }
 pub(super) async fn update_typed(
@@ -257,24 +297,41 @@ pub(super) async fn update_typed(
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
     if !(8..=120).contains(&k.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Ok(Err(MutationFailure::domain(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCode::InvalidArgument,
+        )));
     }
     let hash = digest("update", id, &input)?;
-    if let Some(p) = prior(db, tenant, k).await? {
+    let replay = |p: Receipt| {
         if p.digest != hash {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         let relationship = decoded(&p.state)?;
         if relationship.party_relationship_id().as_str() != id {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+            return Ok(Err(MutationFailure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
-        return Ok(Ok(MutationOutcome {
+        Ok(Ok(MutationOutcome {
             relationship,
             replayed: true,
-        }));
+            original_request_id: p.original_request_id,
+        }))
+    };
+    let current = load(db, tenant, id).await;
+    if let Some(p) = prior(db, tenant, k).await? {
+        return replay(p);
     }
-    let Some(mut relationship) = load(db, tenant, id).await? else {
-        return Ok(Err(fail("NOT_FOUND", 404)));
+    let Some(mut relationship) = current? else {
+        return Ok(Err(MutationFailure::domain(
+            "NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     let from = input
         .valid_from
@@ -289,12 +346,12 @@ pub(super) async fn update_typed(
         valid_until_unix_nanos: until,
         occurred_at_unix_nanos: now_nanos(),
     }) {
-        return Ok(Err(fail(
+        return Ok(Err(MutationFailure::domain(
             e.code.clone(),
             if e.code == "PARTY_RELATIONSHIPS_VERSION_CONFLICT" {
-                409
+                ErrorCode::Aborted
             } else {
-                422
+                ErrorCode::InvalidArgument
             },
         )));
     }
@@ -304,15 +361,22 @@ pub(super) async fn update_typed(
           JsValue::from_str(k),JsValue::from_str(&hash),JsValue::from_str(trace),
           JsValue::from_str(actor),JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
-    let Ok(result) = r else {
-        return Ok(Err(fail("PARTY_RELATIONSHIPS_UPDATE_CONFLICT", 409)));
-    };
-    if result.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
-        return Ok(Err(fail("PARTY_RELATIONSHIPS_VERSION_CONFLICT", 409)));
+    match super::d1_write::confirm(
+        r,
+        prior(db, tenant, k),
+        "PARTY_RELATIONSHIPS_VERSION_CONFLICT",
+        "PARTY_RELATIONSHIPS_WRITE_UNCONFIRMED",
+    )
+    .await
+    {
+        Ok(super::d1_write::Confirmation::Applied) => {}
+        Ok(super::d1_write::Confirmation::Replayed(saved)) => return replay(saved),
+        Err(failure) => return Ok(Err(MutationFailure::Write(failure))),
     }
     Ok(Ok(MutationOutcome {
         relationship,
         replayed: false,
+        original_request_id: Some(trace.to_owned()),
     }))
 }
 pub(super) async fn list_page_typed(

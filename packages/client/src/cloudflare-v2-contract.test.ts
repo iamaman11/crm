@@ -74,6 +74,9 @@ describe("S1 generated mutation outcomes and correlation",()=>{
    const failure=decodeCrmError(error);
    expect(failure).toMatchObject({outcome:"rejected",domainCode:"INVALID_DEAL",requestId:"attempt-id"});
    expect(failure.fieldViolations[0]).toMatchObject({fieldPath:"amount.currency_code"});
+   const wrongAttempt=new ConnectError("invalid",Code.Aborted,{...meta,"x-request-id":"other"},
+     [{desc:DomainErrorDetailSchema,value:detail}]);
+   expect(decodeCrmError(wrongAttempt).outcome).toBe("unconfirmed");
    const received=new ConnectError("invalid wire response",Code.InvalidArgument,meta);
    received.details=[{type:DomainErrorDetailSchema.typeName,value:toBinary(DomainErrorDetailSchema,detail)}];
    expect(decodeCrmError(received)).toMatchObject({
@@ -85,6 +88,6 @@ describe("S1 generated mutation outcomes and correlation",()=>{
    expect(decodeCrmError(new ConnectError("HTTP 404",Code.NotFound)).outcome).toBe("unconfirmed");
    expect(decodeCrmError(new ConnectError("transport",Code.Unavailable,meta)).outcome).toBe("unconfirmed");
    expect(decodeCrmError(new Error("network")).outcome).toBe("unconfirmed");
-   expect(decodeCrmError(new ConnectError("stale",Code.Aborted,meta)).outcome).toBe("rejected");
+   expect(decodeCrmError(new ConnectError("stale",Code.Aborted,meta)).outcome).toBe("unconfirmed");
  });
 });
