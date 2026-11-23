@@ -4021,7 +4021,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.deepEqual(exported.body.fields,["party_id","kind","display_name","resource_version"]);
  const downloaded=exported.body.csv;
  assert.ok(downloaded instanceof Uint8Array);
- assert.match(new TextDecoder().decode(downloaded),/^party_id,kind,display_name,resource_version\r\n/);
+ // Original party-export-csv/v1 uses LF records; do not alter canonical bytes.
+ assert.match(new TextDecoder().decode(downloaded),/^party_id,kind,display_name,resource_version\n/);
  assert.equal(createHash("sha256").update(downloaded).digest("hex"),exported.body.csvSha256Hex);
  assert.equal((await csv("PreviewPartyExport",null,{})).status,401);
  assert.equal((await csv("PreviewPartyExport",viewer,{})).status,403);
