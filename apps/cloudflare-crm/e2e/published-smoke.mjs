@@ -110,7 +110,6 @@ export async function publishedSmoke({base,sourceSha,tenantA,adminIdentity,admin
         await new Promise(resolve=>setTimeout(resolve,Math.min(attempt*500,2000)));
     }
     assert.equal(stableRpcEdges,2,"Published signed RPC edge never converged to the exact Worker SHA");
-    steps.push("signed-rpc-ready");
     let privateRequests=0;
     const writeRoute="**/crm.parties.v3.PartyService/CreateParty";
     const privacyRoute=async route=>{
