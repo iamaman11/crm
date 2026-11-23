@@ -139,17 +139,19 @@ jobs:
       # Report actual compiler-cache hits/misses, rather than assuming cache speedup.
       # The Mozilla action also emits end-of-job statistics for the complete job.
       # Clippy checks WASM compilation, so a separate cargo check repeats the work.
-      - name: Validate the typed schema and frontend alongside WASM Clippy
+      # The parallel pnpm codegen/tsc + Rust compilation occasionally exhausts
+      # GitHub runner process slots (EAGAIN/os error 11), wasting entire heavy
+      # attempts. Run the cheaper contract/frontend gate first, then Clippy
+      # within the SAME job; no duplicate CI, checker or compilation.
+      - name: Validate typed schema and frontend, then WASM Clippy
         env:
           CRM_PROTO_DESCRIPTOR_FILE: /tmp/crm-proto-descriptors.binpb
         shell: bash
         run: |
-          cargo clippy --jobs 2 --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations &
-          clippy_pid=$!
-          status=0
-          pnpm web:check && git diff --exit-code -- pnpm-lock.yaml || status=$?
-          wait "$clippy_pid" || status=$?
-          exit "$status"
+          set -euo pipefail
+          pnpm web:check
+          git diff --exit-code -- pnpm-lock.yaml
+          cargo clippy --jobs 2 --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations
       # Installer binaries are cached separately from Cargo compilation outputs.
       - name: Cache pinned native Rust tool CLIs
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
