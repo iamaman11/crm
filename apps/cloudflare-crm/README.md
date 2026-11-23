@@ -2,9 +2,9 @@
 
 Канонический source — [iamaman11/crm](https://github.com/iamaman11/crm), ветка `dev`.
 [ARCHITECTURE.md](ARCHITECTURE.md) описывает схему, [AGENTS.md](AGENTS.md) — правила разработки.
-Очередь задач и ограничения — в [#484](https://github.com/iamaman11/crm/issues/484). Там же указан текущий курсор с доказательствами приёмки. Архитектурные решения — #338,
+**Единый полный продуктовый план и очередь — в [#484](https://github.com/iamaman11/crm/issues/484), единственный текущий исполнительный курсор, A/B/C/D и Gate A/B — в [#487](https://github.com/iamaman11/crm/issues/487). Статусы не обновляются в Markdown.** Архитектурные решения — #338,
 история cutover — #350. Markdown не является журналом релизов.
-Для продолжения в другом чате первым делом открыть [упорядоченную матрицу функций](../../docs/crm-functional-execution-matrix.md): у каждого ID есть старый Rust-источник, действующий код, точное действие и критерий приёмки. Перед реализацией конкретного ID обязательно сверять исходные тесты, а не переносить целый crate.
+Продолжение в другом чате: открыть **#484 → #487**, проверить актуальный код/принятые Gate, затем для конкретной функции сверить [сохранённую историческую Rust-матрицу](../../docs/archive/cloudflare-snapshots/crm-functional-execution-matrix.md) и исходные тесты. Архивный Markdown — только source evidence, **не второй план**.
 
 ```text
 Protobuf → generated Rust/TypeScript
