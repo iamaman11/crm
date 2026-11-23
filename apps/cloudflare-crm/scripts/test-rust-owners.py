@@ -17,7 +17,13 @@ if not linked:
 # own tests when testing a consumer. Test the shared foundation too.
 owner_features = {"crm-core-contracts": [], "crm-module-sdk": []}
 for module in linked:
-    dep = by_path[Path(module["crate_path"]).resolve()]
+    path = Path(module["crate_path"]).resolve()
+    # A module implemented directly by the Worker is not its own Cargo
+    # path dependency. Worker native Clippy + signed workerd tests execute it;
+    # this host-side loop only tests independent owner dependencies.
+    if path == worker.resolve():
+        continue
+    dep = by_path[path]
     flags = []
     if not dep.get("default-features", True):
         flags.append("--no-default-features")
