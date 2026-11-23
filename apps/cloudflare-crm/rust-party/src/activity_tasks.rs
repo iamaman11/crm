@@ -376,15 +376,32 @@ pub(super) async fn create_typed(
         }
     };
     let saved = state(&task)?;
-    let insert = format!("INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1) AND (? IS NULL OR {}) ON CONFLICT(tenant,id) DO NOTHING", super::access_teams::ELIGIBLE);
-    let r=bind(db,&insert,
-        &[JsValue::from_str(tenant),JsValue::from_str(task.task_id().as_str()),
-          JsValue::from_str(account_id.as_str()),JsValue::from_str(&saved),
-          JsValue::from_f64(task.version() as f64),JsValue::from_str(key),
-          JsValue::from_str(&digest),JsValue::from_str(trace),JsValue::from_str(actor),
-          JsValue::from_str(tenant),JsValue::from_str(&target),
-          team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),JsValue::from_str(tenant),
-          team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL)])?.run().await;
+    let insert = format!(
+        "INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1) AND (? IS NULL OR {}) ON CONFLICT(tenant,id) DO NOTHING",
+        super::access_teams::ELIGIBLE
+    );
+    let r = bind(
+        db,
+        &insert,
+        &[
+            JsValue::from_str(tenant),
+            JsValue::from_str(task.task_id().as_str()),
+            JsValue::from_str(account_id.as_str()),
+            JsValue::from_str(&saved),
+            JsValue::from_f64(task.version() as f64),
+            JsValue::from_str(key),
+            JsValue::from_str(&digest),
+            JsValue::from_str(trace),
+            JsValue::from_str(actor),
+            JsValue::from_str(tenant),
+            JsValue::from_str(&target),
+            team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),
+            JsValue::from_str(tenant),
+            team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),
+        ],
+    )?
+    .run()
+    .await;
     finish_write(
         prior(db, tenant, key),
         trace,
@@ -542,17 +559,39 @@ pub(super) async fn update_typed(
     let saved = state(&task)?;
     // One CAS write; an explicit new assignee must still be active at commit.
     // The existing D1 trigger atomically stores receipt and audit.
-    let update = format!("UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=? AND (? IS NULL OR EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1)) AND (? IS NULL OR {})", super::access_teams::ELIGIBLE);
-    let changed = bind(db,&update,
-        &[JsValue::from_str(&saved), JsValue::from_f64(task.version() as f64),
-          JsValue::from_str(key), JsValue::from_str(&digest), JsValue::from_str(trace),
-          JsValue::from_str(actor),JsValue::from_str(tenant), JsValue::from_str(id),
-          JsValue::from_f64(expected_version as f64),
-          assignee.as_deref().map(JsValue::from_str).unwrap_or(JsValue::NULL),
-          JsValue::from_str(tenant),
-          assignee.as_deref().map(JsValue::from_str).unwrap_or(JsValue::NULL),
-          team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),JsValue::from_str(tenant),
-          team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL)])?.run().await;
+    let update = format!(
+        "UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=? AND (? IS NULL OR EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1)) AND (? IS NULL OR {})",
+        super::access_teams::ELIGIBLE
+    );
+    let changed = bind(
+        db,
+        &update,
+        &[
+            JsValue::from_str(&saved),
+            JsValue::from_f64(task.version() as f64),
+            JsValue::from_str(key),
+            JsValue::from_str(&digest),
+            JsValue::from_str(trace),
+            JsValue::from_str(actor),
+            JsValue::from_str(tenant),
+            JsValue::from_str(id),
+            JsValue::from_f64(expected_version as f64),
+            assignee
+                .as_deref()
+                .map(JsValue::from_str)
+                .unwrap_or(JsValue::NULL),
+            JsValue::from_str(tenant),
+            assignee
+                .as_deref()
+                .map(JsValue::from_str)
+                .unwrap_or(JsValue::NULL),
+            team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),
+            JsValue::from_str(tenant),
+            team_id.map(JsValue::from_str).unwrap_or(JsValue::NULL),
+        ],
+    )?
+    .run()
+    .await;
     finish_write(
         prior(db, tenant, key),
         trace,
@@ -836,7 +875,10 @@ pub(super) async fn claim_typed(
         }));
     }
     let Some(mut task) = stored(db, tenant, id).await? else {
-        return Ok(Err(MutationFailure::domain("NOT_FOUND", ErrorCode::NotFound)));
+        return Ok(Err(MutationFailure::domain(
+            "NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
     };
     if task.version() != expected || task.status() != TaskStatus::Open {
         return Ok(Err(MutationFailure::domain(
@@ -880,7 +922,9 @@ pub(super) async fn claim_typed(
         return Ok(Err(MutationFailure::domain(e.code, ErrorCode::Aborted)));
     }
     let saved = state(&task)?;
-    let query = format!("UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=? AND json_extract(state,'$.owner.team_id')=? AND json_extract(state,'$.status')='open' AND {eligible}");
+    let query = format!(
+        "UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=? AND json_extract(state,'$.owner.team_id')=? AND json_extract(state,'$.status')='open' AND {eligible}"
+    );
     let mut values = vec![
         JsValue::from_str(&saved),
         JsValue::from_f64(task.version() as f64),

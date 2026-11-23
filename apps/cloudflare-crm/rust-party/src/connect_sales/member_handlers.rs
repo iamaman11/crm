@@ -10,8 +10,8 @@ impl member_wire::MemberService for MemberV2Service {
         req: ServiceRequest<'_, member_wire::GetTeamRequest>,
     ) -> ServiceResult<member_wire::GetTeamResponse> {
         let input = req.to_owned_message();
-        let id = access_teams::id(&input.team_id)
-            .map_err(|e| e.connect("GetTeam", &self.request_id))?;
+        let id =
+            access_teams::id(&input.team_id).map_err(|e| e.connect("GetTeam", &self.request_id))?;
         let db = self.d1()?;
         let team = access_teams::get(&db, &self.actor.tenant, &id)
             .await

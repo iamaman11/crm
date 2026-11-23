@@ -141,8 +141,8 @@ pub(super) async fn mutate(
     trace: &str,
 ) -> Result<std::result::Result<Saved, Failure>> {
     let tenant = principal.tenant.as_str();
-    let bytes = serde_json::to_vec(&(id, &intent))
-        .map_err(|e| worker::Error::RustError(e.to_string()))?;
+    let bytes =
+        serde_json::to_vec(&(id, &intent)).map_err(|e| worker::Error::RustError(e.to_string()))?;
     let hash = format!("{:x}", Sha256::digest(bytes));
     if let Some(receipt) = prior(db, tenant, key).await? {
         return replay(receipt, id, &hash);
@@ -166,7 +166,10 @@ pub(super) async fn mutate(
             return Ok(Err(reject("ACCESS_TEAM_NOT_FOUND", ErrorCode::NotFound)));
         };
         if Some(team.version) != intent.expected {
-            return Ok(Err(reject("ACCESS_TEAM_VERSION_CONFLICT", ErrorCode::Aborted)));
+            return Ok(Err(reject(
+                "ACCESS_TEAM_VERSION_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         team
     };
@@ -192,7 +195,10 @@ pub(super) async fn mutate(
         }
         normalized.sort();
         if normalized.windows(2).any(|pair| pair[0] == pair[1]) {
-            return Ok(Err(reject("ACCESS_TEAM_DUPLICATE_MEMBER", ErrorCode::InvalidArgument)));
+            return Ok(Err(reject(
+                "ACCESS_TEAM_DUPLICATE_MEMBER",
+                ErrorCode::InvalidArgument,
+            )));
         }
         team.member_emails = normalized;
     }
@@ -201,18 +207,25 @@ pub(super) async fn mutate(
         || team.description.chars().count() > 4000
         || team.member_emails.len() > 1000
     {
-        return Ok(Err(reject("ACCESS_TEAM_INVALID", ErrorCode::InvalidArgument)));
+        return Ok(Err(reject(
+            "ACCESS_TEAM_INVALID",
+            ErrorCode::InvalidArgument,
+        )));
     }
     team.version += 1;
-    let state = serde_json::to_string(&team)
-        .map_err(|e| worker::Error::RustError(e.to_string()))?;
+    let state =
+        serde_json::to_string(&team).map_err(|e| worker::Error::RustError(e.to_string()))?;
     // One statement checks actor rights, roster, duplicate name and open work.
     // Existing inactive members can remain in an unchanged historical roster.
     let guard = " EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=?1 AND email=?7 AND active=1 AND role='admin') AND NOT EXISTS (SELECT 1 FROM crm_access_teams AS t WHERE t.tenant=?1 AND t.id<>?2 AND lower(json_extract(t.state,'$.name'))=lower(json_extract(?3,'$.name'))) AND (?9=0 OR NOT EXISTS (SELECT 1 FROM json_each(?3,'$.member_emails') AS m WHERE NOT EXISTS (SELECT 1 FROM crm_users AS u WHERE u.tenant_id=?1 AND u.email=m.value AND u.active=1 AND u.email NOT LIKE 'service:%'))) AND (json_extract(?3,'$.active')=1 OR (NOT EXISTS (SELECT 1 FROM crm_activity_task_records WHERE tenant=?1 AND json_extract(state,'$.owner.team_id')=?2 AND json_extract(state,'$.status')='open') AND NOT EXISTS (SELECT 1 FROM crm_sales_deal_records WHERE tenant=?1 AND json_extract(state,'$.owner.team_id')=?2 AND json_extract(state,'$.status')='open')))";
     let sql = if create {
-        format!("INSERT INTO crm_access_teams(tenant,id,state,version,idem_key,idem_digest,actor,request_id) SELECT ?1,?2,?3,?4,?5,?6,?7,?8 WHERE ?10=0 AND {guard} ON CONFLICT(tenant,id) DO NOTHING")
+        format!(
+            "INSERT INTO crm_access_teams(tenant,id,state,version,idem_key,idem_digest,actor,request_id) SELECT ?1,?2,?3,?4,?5,?6,?7,?8 WHERE ?10=0 AND {guard} ON CONFLICT(tenant,id) DO NOTHING"
+        )
     } else {
-        format!("UPDATE crm_access_teams SET state=?3,version=?4,idem_key=?5,idem_digest=?6,actor=?7,request_id=?8 WHERE tenant=?1 AND id=?2 AND version=?10 AND {guard}")
+        format!(
+            "UPDATE crm_access_teams SET state=?3,version=?4,idem_key=?5,idem_digest=?6,actor=?7,request_id=?8 WHERE tenant=?1 AND id=?2 AND version=?10 AND {guard}"
+        )
     };
     let write = bind(
         db,

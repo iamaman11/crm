@@ -44,9 +44,30 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.access.v2.MemberService.UpdateMember
+    - id: access.team.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.access.v2.MemberService.GetTeam
+    - id: access.team.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.access.v2.MemberService.ListTeams
+    - id: access.team.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.access.v2.MemberService.CreateTeam
+    - id: access.team.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.access.v2.MemberService.UpdateTeam
   events: []
   objects:
     - access.member
+    - access.team
   ui_extensions: []
 consumes:
   capabilities: []
@@ -54,8 +75,10 @@ consumes:
 storage:
   record_types:
     - access.member
+    - access.team
   private_state_namespaces:
     - crm.access.member
+    - crm.access.team
 security:
   data_classes:
     - personal
@@ -68,3 +91,4 @@ lifecycle:
   uninstall_policy: retain_business_records
   retained_record_types:
     - access.member
+    - access.team

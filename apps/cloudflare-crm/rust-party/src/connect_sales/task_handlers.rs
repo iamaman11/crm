@@ -24,7 +24,11 @@ impl task_wire::TaskService for TaskV2Service {
         .map_err(|_| ConnectError::unavailable("ACTIVITIES_CLAIM_FAILED"))?
         .map_err(|e| e.connect("ClaimTask", &self.request_id))?;
         RpcResponse::ok(task_wire::ClaimTaskResponse {
-            task: Some(Self::convert(&saved.task, &self.persisted_account(&id).await?)?).into(),
+            task: Some(Self::convert(
+                &saved.task,
+                &self.persisted_account(&id).await?,
+            )?)
+            .into(),
             receipt: Some(self.receipt(&saved)).into(),
             ..Default::default()
         })
