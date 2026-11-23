@@ -18,13 +18,13 @@ Read only what is required for the current task:
 6. The active GitHub issue — executable scope, acceptance boundary and current work state.
 7. The task-specific guide from the table below.
 
-For Cloudflare CRM, read [the ordered feature-to-legacy-source execution matrix](crm-functional-execution-matrix.md) FIRST (ID → historical code/tests → active owner → acceptance), then #352 for current status and checkpoints; app Markdown describes stable rules only. Historical PostgreSQL status below does not govern the Worker release. Do not reconstruct current status from historical packet documents, old PR descriptions or directory names.
+For Cloudflare CRM, read [the ordered feature-to-legacy-source execution matrix](crm-functional-execution-matrix.md) FIRST (ID → historical code/tests → active owner → acceptance), then the current issue linked at the top of [#484](https://github.com/iamaman11/crm/issues/484) for status and checkpoints; app Markdown describes stable rules only. Historical PostgreSQL status below does not govern the Worker release. Do not reconstruct current status from historical packet documents, old PR descriptions or directory names.
 
 ## 2. Choose by task
 
 | Task | Read first | Then inspect |
 |---|---|---|
-| Develop or review Cloudflare CRM | [`crm-functional-execution-matrix.md`](crm-functional-execution-matrix.md), [`../apps/cloudflare-crm/AGENTS.md`](../apps/cloudflare-crm/AGENTS.md), [`../apps/cloudflare-crm/ARCHITECTURE.md`](../apps/cloudflare-crm/ARCHITECTURE.md) | [Issue #352](https://github.com/iamaman11/crm/issues/352) owns scope, checkpoints and remaining work; direct `dev` development with one code CI/deployment pipeline, no build for Markdown-only changes |
+| Develop or review Cloudflare CRM | [`crm-functional-execution-matrix.md`](crm-functional-execution-matrix.md), [`../apps/cloudflare-crm/AGENTS.md`](../apps/cloudflare-crm/AGENTS.md), [`../apps/cloudflare-crm/ARCHITECTURE.md`](../apps/cloudflare-crm/ARCHITECTURE.md) | [#484](https://github.com/iamaman11/crm/issues/484) sets scope and links to the current issue for checkpoints; direct `dev` development with one code CI/deployment pipeline, no build for Markdown-only changes |
 | Understand what is being built now | `PROJECT_STATUS.md`, `ACTIVE_PACKET.md` | `IMPLEMENTATION_ROADMAP.md`, `PHASE8_DELIVERY_PLAN.md`, active issue |
 | First usable closed-pilot CRM and modular developer path | [`FIRST_USABLE_CRM_PILOT.md`](FIRST_USABLE_CRM_PILOT.md) | #310 (G0–G5), #311–#316; ADR-033 and active packet determine allowed work |
 | Understand the complete future CRM product | `PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md` | `CRM_CAPABILITY_COVERAGE.md`, `IMPLEMENTATION_ROADMAP.md`, `MODULE_CATALOG.md` |

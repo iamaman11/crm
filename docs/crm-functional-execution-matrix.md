@@ -1,4 +1,4 @@
-# CRM #352 — функция → исторический Rust → действующий owner → приемка
+# CRM — функция → исторический Rust → действующий owner → приемка
 
 **Назначение:** долговечная исполнимая очередь разработки тестовой CRM, а не просто индекс старых crate. Открывать при каждом следующем сеансе **до** выбора задач и изменения кода. Правило приоритетов: `M1 → M2 → NEXT (по доказанному спросу) → LATER → END`. Ни один пункт LATER/END не блокирует готовность MVP. **Первое действие: проверить, какую реальную пользовательскую задачу ещё НЕЛЬЗЯ выполнить, и сверить исходный owner, существующий UI и реальные тесты. OPEN в старой матрице НЕ означает отсутствующий функционал: нельзя выбирать ID механически, заново реализовывать или прогонять тяжёлые Gate без доказанного пробела. Для уже существующего A — переиспользовать прежний Gate A, быстро проверить независимый Gate B только при недостающем свидетельстве, зафиксировать ACCEPTED без кода; для C — не реализовывать; только доказанный пользовательский B требует кодового среза.** Нельзя превращать исходную бизнес-логику в отдельный старый runtime.
 
@@ -10,7 +10,7 @@
 
 **Три разных источника, не подменять друг другом:**
 - [PRODUCT_DEVELOPMENT_10_OF_10_PLAN](PRODUCT_DEVELOPMENT_10_OF_10_PLAN.md) и [CRM_CAPABILITY_COVERAGE](CRM_CAPABILITY_COVERAGE.md) — целевой охват **20 групп** бизнес-возможностей, включая продажи, коммуникации, поддержку, маркетинг, работу, автоматизацию, документы, аналитику, администрирование и т. д. Все группы должны иметь явное состояние/волну; ни одна не считается реализованной по наличию старого .proto/crate/PR.
-- [MODULE_CATALOG](MODULE_CATALOG.md), [IMPLEMENTATION_ROADMAP](IMPLEMENTATION_ROADMAP.md), [PROJECT_STATUS](PROJECT_STATUS.md) описывают также **историческую** PostgreSQL/main product-plane готовность: старое «Complete» **не равно** принятой функциональности текущего Cloudflare Worker/D1. Точный активный факт и Gate evidence — #352.
+- [MODULE_CATALOG](MODULE_CATALOG.md), [IMPLEMENTATION_ROADMAP](IMPLEMENTATION_ROADMAP.md), [PROJECT_STATUS](PROJECT_STATUS.md) описывают также **историческую** PostgreSQL/main product-plane готовность: старое «Complete» **не равно** принятой функциональности текущего Cloudflare Worker/D1. Текущий срез и доказательства приёмки ведутся в курсоре, указанном в [#484](https://github.com/iamaman11/crm/issues/484).
 - **Этот файл** — действующая матрица 39 ранее выбранных dev/MVP функций плюс source/consumer mapping 93 исторических crates. Она **не покрывает всё продуктовое ТЗ 20 групп**; X-01 operation review нельзя выдавать за полную функциональную инвентаризацию 20 продуктовых направлений.
 
 ### Что считать скелетом (не пустыми экранами и не полноценными enterprise-модулями)
@@ -52,15 +52,15 @@
 
 **Параллельный обязательный X-01, а не блокирующая очередь кода:** 93/93 исходных crate / 532 файла уже перечислены, но **каждую** содержательную операцию/side effect/re-export/negative test надо сопоставить с текущей typed реализацией и одним из `A/B/C/D`, указать consumers, ссылку на proof и условие пересмотра C. Пока эта пер-операционная сверка не полная, **не утверждать full historical parity и не удалять старые исходники/тесты массово**. Это условие завершения инвентаризации, но не причина задерживать уже готовый MVP.
 
-**Приёмка каждого нового B:** конкретная нужда пользователя → до code push сверить source/tests/current → один coherent code candidate на `dev` → штатный Buf/strict TS/Rust/policy/workerd/Chromium, D1 atomics/CAS/tenant/audit + release **того же** artifact (**Gate A PASS**) → независимый LIVE Browser MCP на exact published SHA с реальными ссылками, reload, негативными случаями и D1 readback (**Gate B PASS**) → запись `ID / source method / A-B-C-D / source SHA / CI URL / Gate B evidence / остаток` в #352 и этой матрице. Не запускать отдельную систему CI, генератор, owner, Worker, реестр или callback для ускорения. Если код уже существует и Gate A+B достаточны — принять A **без нового кода и повторного CI**.
+**Приёмка каждого нового B:** конкретная нужда пользователя → до code push сверить source/tests/current → один coherent code candidate на `dev` → штатный Buf/strict TS/Rust/policy/workerd/Chromium, D1 atomics/CAS/tenant/audit + release **того же** artifact (**Gate A PASS**) → независимый LIVE Browser MCP на exact published SHA с реальными ссылками, reload, негативными случаями и D1 readback (**Gate B PASS**) → запись `ID / source method / A-B-C-D / source SHA / CI URL / Gate B evidence / остаток` в текущем курсоре и этой матрице. Не запускать отдельную систему CI, генератор, owner, Worker, реестр или callback для ускорения. Если код уже существует и Gate A+B достаточны — принять A **без нового кода и повторного CI**.
 
 ---
 
 ## Сначала полезный пользовательский сценарий, затем перенос бизнес-семантики
 
-Нельзя автоматически превращать обнаруженную в старых crates операцию в новую кнопку, фильтр или RPC. Для каждого ID **до кодирования** ответить по существующим исходникам и реальному UI: кто пользователь, какое конкретное действие хочет совершить, каково ожидаемое изменение/чтение и как оно проверяется, хватает ли существующих данных и прав, что станет непонятным или лишним, можно ли решить задачу меньшим изменением. Проверить несколько связанных записей/ролей, пустой результат, отрицательные случаи, navigation/reload. Если нет действительного пользовательского смысла или отсутствует фундаментальная функция (например, назначения сотрудника), оформить в #352 **обоснованное C только для MVP** с условием пересмотра; не объявлять исчезнувшей доменную семантику и не удалять historical source/tests. Если есть смысл, **B = полный конкретный путь UI→типизированный owner→D1→обратные ссылки**, а не 1:1 перенос generic query engine. Если уже работает — доказать A; D только для технической инфраструктуры и после consumer review.
+Нельзя автоматически превращать обнаруженную в старых crates операцию в новую кнопку, фильтр или RPC. Для каждого ID **до кодирования** ответить по существующим исходникам и реальному UI: кто пользователь, какое конкретное действие хочет совершить, каково ожидаемое изменение/чтение и как оно проверяется, хватает ли существующих данных и прав, что станет непонятным или лишним, можно ли решить задачу меньшим изменением. Проверить несколько связанных записей/ролей, пустой результат, отрицательные случаи, navigation/reload. Если нет действительного пользовательского смысла или отсутствует фундаментальная функция (например, назначения сотрудника), оформить в текущем курсоре **обоснованное C только для MVP** с условием пересмотра; не объявлять исчезнувшей доменную семантику и не удалять historical source/tests. Если есть смысл, **B = полный конкретный путь UI→типизированный owner→D1→обратные ссылки**, а не 1:1 перенос generic query engine. Если уже работает — доказать A; D только для технической инфраструктуры и после consumer review.
 
-Продуктовый разбор записать в #352 **перед code push**, в виде короткого решения `пользователь → задача → самая простая модель → A/B/C/D → критерий`. Это не третий acceptance gate и не новый реестр; два обязательных Gate A и B остаются прежними. Не показывать пользователю внутренние ресурсные типы, ID, версии и не обещать несуществующее создание связей или назначение задач.
+Продуктовый разбор записать в текущем курсоре **перед code push**, в виде короткого решения `пользователь → задача → самая простая модель → A/B/C/D → критерий`. Это не третий acceptance gate и не новый реестр; два обязательных Gate A и B остаются прежними. Не показывать пользователю внутренние ресурсные типы, ID, версии и не обещать несуществующее создание связей или назначение задач.
 
 ## Единица разработки: крупный логический срез, а не микропатч
 
@@ -79,17 +79,17 @@
 
 - **Gate A / CODE:** существующий `cloudflare-crm-spike.yml`: Buf/strict generated Rust/TS, Rust owners/policy, D1 migrations+atomicity/CAS/replay/audit, workerd и встроенный Chromium → deploy **того же** проверенного artifact без пересборки → exact published SHA/Worker version, live Access/traces/D1 checks. Статус `PASS/FAIL`, URL run и SHA. CI Chromium является частью **Gate A**, не Gate B.
 - **Gate B / INDEPENDENT LIVE:** только **после** PASS Gate A, **отдельный Universal Browser MCP** открывает опубликованную CRM через реальную Cloudflare Access/Connect identity, проверяет тот же SHA/Worker version до/после, сам выполняет пользовательские действия и проверяет postconditions после reload, связанные сущности, применимые негативные случаи, readback/audit. Статус `PASS/FAIL/UNCERTAIN`, реальные шаги/доказательства, идентичные source SHA/Worker version. Service principal — не реальный human: positive-human-only операции требуют отдельного честного proof, impersonation запрещён. MCP инструмент при сбое → `MCP_FAIL` и повторить **только Gate B** после исправления инструмента; дефект CRM → исправить код и повторить Gate A → Gate B.
-- **DONE/ACCEPTED:** **оба `Gate A=PASS` И `Gate B=PASS`** + применимые human-only доп. условия, source→active evidence и business readback. Нет Browser MCP или непроверенный SHA? **NO-GO/PARTIAL**. Не подменять Gate B CI/live-check внутри Gate A. За один срез один issue/checkpoint в #352; не создавать второй CI/регистр/approval platform.
+- **DONE/ACCEPTED:** **оба `Gate A=PASS` И `Gate B=PASS`** + применимые human-only доп. условия, source→active evidence и business readback. Нет Browser MCP или непроверенный SHA? **NO-GO/PARTIAL**. Не подменять Gate B CI/live-check внутри Gate A. За один срез одна запись в текущем курсоре; не создавать второй CI/регистр/approval platform.
 
 **Встроенная защита от потери legacy:** все исходные 93 crates распределены по таблице покрытия ниже, но **ни одна не подтверждённая операция не считается C/D автоматически**. В срезе нужно проверить ВСЕ соответствующие старые `src`/tests, включая вложенные public методы/побочные эффекты и скрытые invariant helpers. Любая новая полезная функция, замеченная в source, получает отдельную явную строку текущей таблицы или чётко обоснованный B-LATER/B-END; её нельзя потерять потому, что её crate уже записан как инфраструктурный.
 
 ## Правило для следующего чата/исполнителя (обязательно, не рекомендация)
 
-1. Прочитать [#352](https://github.com/iamaman11/crm/issues/352), `apps/cloudflare-crm/AGENTS.md`, **эту матрицу** и текущий `dev`. **Сначала** определить, какое конкретное полезное действие пользователь пока не может выполнить, и проверить имеющиеся owner/RPC/UI/native tests и ранее принятые Gate A/B. `OPEN` означает **проверить**, а не **реализовать**; номер строки и её непринятый статус не определяют следующую кодовую задачу. Уже принятые сценарии повторно не разрабатывать и не тестировать без регрессии. Выбирать B только после доказанного пробела; для существующего A — принять по достаточному актуальному evidence без нового кода, для C — записать обоснованное решение.
+1. Прочитать текущий курсор из [#484](https://github.com/iamaman11/crm/issues/484), `apps/cloudflare-crm/AGENTS.md`, **эту матрицу** и текущий `dev`. **Сначала** определить, какое конкретное полезное действие пользователь пока не может выполнить, и проверить имеющиеся owner/RPC/UI/native tests и ранее принятые Gate A/B. `OPEN` означает **проверить**, а не **реализовать**; номер строки и её непринятый статус не определяют следующую кодовую задачу. Уже принятые сценарии повторно не разрабатывать и не тестировать без регрессии. Выбирать B только после доказанного пробела; для существующего A — принять по достаточному актуальному evidence без нового кода, для C — записать обоснованное решение.
 2. **До изменения кода обязательно открыть источники из поля «Legacy» выбранного ID**, связанные с ними негативные тесты, вложенные modules/re-exports и их consumers (по [evidence](legacy-crate-operation-evidence.md)). Записать инварианты/ветки: вход, успешный выход, actor/tenant, права, version/CAS, idempotency/replay, audit/receipt, side effects. Если старой реализации именно этой операции нет — так и записать, без домыслов.
 3. **Сверить «Сейчас»**, один original Rust owner, действующий `.proto`, generated Rust/TS, RPC/manifest/compiled policy, D1/transaction, React и браузерные тесты. Поставить **по операции** вердикт `A` (эквивалентность доказана), `B` (бизнес-gap к реализации), `C` (не нужен сознательно), `D` (legacy infrastructure, когда доказаны инварианты и все consumers), иначе `OPEN`. Наличие legacy crate — это не команда перепортировать crate.
 4. Делать только gap в существующей архитектуре: один Worker + D1 + Buf Protobuf + original owners + Connect/React + один штатный CI. Не новые генераторы, registry, worker, SQLx/PostgreSQL, generic framework и обратная совместимость тестовой БД.
-5. После каждого завершённого логического среза — обязательные ДВА отдельных Gate A и Gate B на одном опубликованном SHA (см. раздел выше): штатный CI/workerd/D1/Chromium/exact-artifact deploy, затем **отдельный независимый LIVE Browser MCP**, без исключения для обычного UX. Отдельные human-only prerequisites отмечать честно. В #352 записать **ID, исходный метод/отрицательный тест, точный B-gap либо решение C, SHA, CI/live/Gate B, доказательство и остаток**. Только после **Gate A=PASS + Gate B=PASS** и исходного A/B/C/D evidence пометить ID как ACCEPTED. **Новый чат начинает с проверки реального незакрытого пользовательского сценария и уже имеющихся доказательств, не с первого `OPEN`.** Для уже реализованного A переиспользовать успешно выполненный Gate A на точном опубликованном SHA; независимый Gate B выполнять лишь при отсутствии достаточного прежнего proof. Если оба подтверждены, принять A без кода, новой сборки или CI. Только подтверждённый B начинает новый логический кодовый срез и требует оба gate на новом SHA.
+5. После каждого завершённого логического среза — обязательные ДВА отдельных Gate A и Gate B на одном опубликованном SHA (см. раздел выше): штатный CI/workerd/D1/Chromium/exact-artifact deploy, затем **отдельный независимый LIVE Browser MCP**, без исключения для обычного UX. Отдельные human-only prerequisites отмечать честно. В текущем курсоре записать **ID, исходный метод/отрицательный тест, точный B-gap либо решение C, SHA, CI/live/Gate B, доказательство и остаток**. Только после **Gate A=PASS + Gate B=PASS** и исходного A/B/C/D evidence пометить ID как ACCEPTED. **Новый чат начинает с проверки реального незакрытого пользовательского сценария и уже имеющихся доказательств, не с первого `OPEN`.** Для уже реализованного A переиспользовать успешно выполненный Gate A на точном опубликованном SHA; независимый Gate B выполнять лишь при отсутствии достаточного прежнего proof. Если оба подтверждены, принять A без кода, новой сборки или CI. Только подтверждённый B начинает новый логический кодовый срез и требует оба gate на новом SHA.
 6. Действующие auth, tenant, signed identity, policy, CAS/idempotency, audit, PII redaction и fail-closed действуют **сейчас**. Partial Privacy 2/9 `complete=false` остаётся закрыт для export/erasure. Полная 93-crate behavioral parity **ещё не доказана**, поэтому старый исходный код не удалять массово.
 
 ## Финальная приёмка M1 для dev/MVP (22.11.2026; принята, не перепроверять без регрессии)
@@ -100,7 +100,7 @@
 
 **Граница приёмки:** admin service-browser разрешён для обычных UI-сценариев M1; **положительный интерактивный human Cloudflare Access login/verification остаётся отдельным pre-real-user release check** и не притворяется доказанным service session. Глобальная поведенческая эквивалентность **93 crates НЕ принята**: сохранённые ниже 93 legacy crosswalk строки / «все операции OPEN» относятся именно к индивидуальным historical operations за пределами доказанного M1 dev/MVP, не открывают M1 заново. Privacy scope 2/9 остаётся fail-closed.
 
-**M2-02/M2-04 ACCEPTED #7072122525/#7072127526; N-01 ACCEPTED позднейшим #7079664966, следующая исполнимая очередь N-02 по реальному пользовательскому gap** (M2-05 = C). Не запускать новые M1 QA-срезы, новый CI или ACL engine ради формальной галочки. Проверять существующий owner и историческую операцию *до* выбора B; уже принятые M2 stage labels и Deal name search не дублировать. #352 остаётся открытой до остальной функциональной очереди.
+**M2-02/M2-04 ACCEPTED #7072122525/#7072127526; N-01 ACCEPTED позднейшим #7079664966, следующая исполнимая очередь N-02 по реальному пользовательскому gap** (M2-05 = C). Не запускать новые M1 QA-срезы, новый CI или ACL engine ради формальной галочки. Проверять существующий owner и историческую операцию *до* выбора B; уже принятые M2 stage labels и Deal name search не дублировать.
 
 ## M2-01 FINAL dev/MVP ACCEPTED — Sales Pipeline, этапы, Kanban и адресуемая ручная доска (22.11.2026)
 
@@ -112,7 +112,7 @@
 
 **Независимый Gate B PASS** на опубликованном том же SHA: Browser MCP `27ee381c-15cb-4fd1-9c74-27410c0320ed`, точный `/api/version`; ручной выбор `pipeline.enterprise` пережил Deal→Back/reload, поиск/reload и reset; отказ для duplicate/conflicting/malformed URLs, unknown = unavailable. Полный отдельный QA user flow: 3 стадии, Deal 250.50 USD, advance, occupied reorder (StageId неизменен, Deal version 2), archive-open **ожидаемый 409**, won→reopen→won, archive after close. D1 QA Pipeline v3 archived=1, QA Deal v5 won, пять immutable events. Independent D1 before/after audit `188→200`, Pipeline rows `2→3`, Deal rows `14→15`, Pipeline receipts `5→8`, Deal receipts `56→61`; 12 audit actions разбиты точно на 3 каталога + 5 Deal + 4 original Sales–Activities/Task. Read-only navigation не создаёт write. Official sanitized HAR 1.2 = 199 entries / 151305 bytes / SHA256 `c3baf97e74cc5d54985e15d18097b8ee648094478d301e881539506cb6bbc7de`, Browser Run закрыт. Ошибка консоли одна, от намеренного HTTP 409, не необъяснённая регрессия.
 
-**M2-02/M2-04 позднее ACCEPTED, следующая очередь N-01 по доказанному пользовательскому gap**, M2-03 ранее ACCEPTED, M2-05 C. Не возобновлять M2-01 QA без регрессии; независимый positive human Cloudflare Access login остаётся pre-real-user check, а глобальная behavioral parity 93 crates **не** принята. #352 остаётся открытой для всей очереди.
+**M2-02/M2-04 позднее ACCEPTED, следующая очередь N-01 по доказанному пользовательскому gap**, M2-03 ранее ACCEPTED, M2-05 C. Не возобновлять M2-01 QA без регрессии; независимый positive human Cloudflare Access login остаётся pre-real-user check, а глобальная behavioral parity 93 crates **не** принята.
 
 ## M2-01 accepted scope (22.11.2026): пользовательские названия стадий в Deal
 
@@ -140,11 +140,11 @@
 
 **Independent LIVE Browser MCP Gate B PASS** на опубликованном том же SHA: create selected view, reload автоприменение полных фильтров, Deal→Back, search + reload, update + reload, archive, stale/duplicate/malformed links; сервисный admin, не human-only. Independent D1 readback: audit 185→188, saved-view receipts 6→9, records 2→3 — ровно три намеренных записи; созданный QA view v3/archived, 3 audit для него, чтение без дополнительных writes. HAR 181 entries / 149 RPC / 154 HTTP 200 / 0 HTTP 4xx-5xx, SHA256 `f770d1f3d02ff7129da9a478d41c1028633fe115126094084c135615e5f4617a`, Browser Run закрыт. Прежние M2 Deal name-search и stage-name B-slices сохраняются.
 
-**Дальнейшая очередь:** M2-01 ACCEPTED позднейшим #7071938677, M2-02/M2-04 ACCEPTED позднейшими #7072122525/#7072127526; M2-05 C (отдельная Lead не нужна). Не переписывать готовые Sales owners/views или добавлять новый backend ради переноса. 93/93 исторических crates остаются источником для индивидуальной сверки, не доказанной глобальной parity; pre-real-user human Cloudflare Access login остаётся отдельно, #352 OPEN.
+**Дальнейшая очередь:** M2-01 ACCEPTED позднейшим #7071938677, M2-02/M2-04 ACCEPTED позднейшими #7072122525/#7072127526; M2-05 C (отдельная Lead не нужна). Не переписывать готовые Sales owners/views или добавлять новый backend ради переноса. 93/93 исторических crates остаются источником для индивидуальной сверки, не доказанной глобальной parity; pre-real-user human Cloudflare Access login остаётся отдельно.
 
 ## M2 FINAL dev/MVP ACCEPTED (22.11.2026) — следующая очередь N-01
 
-**M2-01, M2-02, M2-03, M2-04 = ACCEPTED для текущей dev/MVP; M2-05 = DECIDED C (отдельная Lead не нужна).** Gate A — штатный подписанный workerd/Chromium/Rust/TS и exact artifact deploy; Gate B — независимый LIVE Browser MCP с D1 SELECT-only на том же опубликованном SHA. Исходная бизнес-семантика сверена по конкретным legacy crates до приёмки, работающие owners не переписывались. **Глобальная эквивалентность 93 исторических crates НЕ доказана; human Cloudflare Access login остаётся отдельным pre-real-user gate; #352 OPEN.**
+**M2-01, M2-02, M2-03, M2-04 = ACCEPTED для текущей dev/MVP; M2-05 = DECIDED C (отдельная Lead не нужна).** Gate A — штатный подписанный workerd/Chromium/Rust/TS и exact artifact deploy; Gate B — независимый LIVE Browser MCP с D1 SELECT-only на том же опубликованном SHA. Исходная бизнес-семантика сверена по конкретным legacy crates до приёмки, работающие owners не переписывались. **Глобальная эквивалентность 93 исторических crates НЕ доказана; human Cloudflare Access login остаётся отдельным pre-real-user gate.**
 
 - **M2-01**: исходный Sales pipeline/Deal owner, stages, stable IDs, advance/reorder/archive/close/reopen, Kanban и native `pipelineId` после reload/Back/search. [#7071938677](https://github.com/iamaman11/crm/issues/352#issuecomment-7071938677), Gate A #44968322133 + independent B PASS, source SHA `f8f1fcea`.
 - **M2-02**: original typed ContactPoint/Account/Sales owner, проверка active/tenant/Party, выбор предпочтительного контакта и clear/CAS/receipt. Закрыт реальный B-пробел: из Deal ссылка на точный `contactHref(contactPointId,partyId)`, а не на список. [#7072122525](https://github.com/iamaman11/crm/issues/352#issuecomment-7072122525), Gate A #44969797203 + independent B PASS, source SHA `54e37933`.
@@ -164,7 +164,7 @@
 
 **Independent Gate B PASS**: Browser MCP `fc3aaaa9-b09c-4cdd-9eff-0e0c006ba1df`, deployed `/api/version.source` совпал с code SHA. Невалидный четырёхстрочный CSV: четыре конкретные ошибки (row1 kind+source version, row2 duplicate source_id, row3 empty name), нет Confirm; D1 audit `200→200`, Party `12→12`, import receipts `2→2`. Исправленный CSV: 4 Party (3 Person/1 Organization), D1 Party `12→16`, audit `200→204`, import receipts `2→3`, Party receipts `16→20`. Повторный Preview `previouslyImported=4` и повторный Apply без создания Party, audit `204`, Party receipts `20`, только новый operation receipt `3→4`. 9 HTTP 200, 0 HTTP/console errors; sanitized HAR 1.2 11 entries, SHA256 `14b012e98c5a654473a03bafb07d2966f3c7fd0eebdc83c761885d3d5ea91bf5`, Browser Run закрыт. [Финальная приёмка #7079664966](https://github.com/iamaman11/crm/issues/352#issuecomment-7079664966).
 
-**N-02 подтверждён A #7079751195 без кода, N-03 подтверждён A+B #7079988713, N-04 подтверждён A+B #7080576593, N-05 подтверждён A+B #7081074390, N-06 подтверждён A+B #7081939213 (в рамках typed Consent authorization без внешней отправки); NEXT завершён.** Исторический `export_execution_worker.rs` реализует долговременные Postgres/immutable artifact jobs и является C для ограниченного MVP; не воскрешать его без реального пользовательского запроса. **N-01 ≠ L-01 durable import**, глобальная parity 93 crates и human Cloudflare Access positive login отдельно, #352 остаётся OPEN.
+**N-02 подтверждён A #7079751195 без кода, N-03 подтверждён A+B #7079988713, N-04 подтверждён A+B #7080576593, N-05 подтверждён A+B #7081074390, N-06 подтверждён A+B #7081939213 (в рамках typed Consent authorization без внешней отправки); NEXT завершён.** Исторический `export_execution_worker.rs` реализует долговременные Postgres/immutable artifact jobs и является C для ограниченного MVP; не воскрешать его без реального пользовательского запроса. **N-01 ≠ L-01 durable import**, глобальная parity 93 crates и human Cloudflare Access positive login отдельно.
 
 ## N-03 FINAL dev/MVP ACCEPTED — Customer360 named stages, open Task status (22.11.2026)
 
@@ -176,7 +176,7 @@
 
 **Independent LIVE Gate B PASS**, Browser MCP `6dd8a033-1836-4e48-8a38-46fadb35ca08`, deployed `/api/version.source=f1260dfa...`, exact Account with 3 Deals/5 Tasks. QA archived Sales pipeline stage `b43ec1cd...` now visibly «Квалификация», independently matching SELECT-only original D1 stage name with archived=1. Open Task «Открыта», completed «Выполнена»; reload, exact Deal→Back and Task→Back preserved original links/Account route. D1 tenant audit `204→204`, no reads writes. 21 HTTP 200, zero 4xx/5xx and console errors (8 navigational aborted/status-0), official sanitized HAR 1.2 35 entries, SHA256 `a2c465749cf7e8d3df262cdb1e4bcd8ff42e624e4cc2da528722da331642cc8b`, workspace closed. [Final acceptance #7079988713](https://github.com/iamaman11/crm/issues/352#issuecomment-7079988713).
 
-**N-04 ПРИНЯТ #7080576593 — существующие `EvaluatePartyName` и `UpdateParty` + точная навигация и повторная проверка после reload; findings jobs не создавались. N-05 ПРИНЯТ #7081074390 — существующие `FindSharedEmailCandidates` и `CompareParties` + прямое сравнение кандидата, точные Party-ссылки, без Merge. N-06 ПРИНЯТ #7081939213 — оригинальный typed Consent owner, выбор Party/ContactPoint по имени, Grant/Withdraw/Suppress/точная Evaluate и D1 audit.** Не создавать send pipeline без реальной отправки. Условие «отзыв блокирует внешний send» остаётся gate будущей send-интеграции, которая сейчас отсутствует. Никакой глобальной parity 93 crates и human Cloudflare Access positive login пока не заявлено; #352 OPEN.
+**N-04 ПРИНЯТ #7080576593 — существующие `EvaluatePartyName` и `UpdateParty` + точная навигация и повторная проверка после reload; findings jobs не создавались. N-05 ПРИНЯТ #7081074390 — существующие `FindSharedEmailCandidates` и `CompareParties` + прямое сравнение кандидата, точные Party-ссылки, без Merge. N-06 ПРИНЯТ #7081939213 — оригинальный typed Consent owner, выбор Party/ContactPoint по имени, Grant/Withdraw/Suppress/точная Evaluate и D1 audit.** Не создавать send pipeline без реальной отправки. Условие «отзыв блокирует внешний send» остаётся gate будущей send-интеграции, которая сейчас отсутствует. Никакой глобальной parity 93 crates и human Cloudflare Access positive login пока не заявлено.
 
 ## Упорядоченная матрица бизнес-функций
 
@@ -548,7 +548,7 @@
 
 **DONE только при:** Resume после fault, row outcome/duplicates/replay, версионный progress в D1.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### L-02
 
@@ -562,7 +562,7 @@
 
 **DONE только при:** Stable artifact digest, version binding, expiry, authorized download, replay proof.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### L-03
 
@@ -590,7 +590,7 @@
 
 **DONE только при:** Persist/assign/remediate/re-evaluate, stale evidence denied, owner-only mutation.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### L-05
 
@@ -604,7 +604,7 @@
 
 **DONE только при:** Endpoint/secret/consent/quota/timeout/circuit, sanitized result, D1 provenance.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### L-06
 
@@ -618,7 +618,7 @@
 
 **DONE только при:** Approve/reject с версионированной policy, expiry и stale guard, no unwanted owner write.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### L-07
 
@@ -632,7 +632,7 @@
 
 **DONE только при:** Один approved suggestion→один owner UpdateParty; stale/CAS/replay/provenance.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### L-08
 
@@ -660,7 +660,7 @@
 
 **DONE только при:** Directed/reverse/effective edges, tenant and rebuild state correct.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### E-01
 
@@ -674,7 +674,7 @@
 
 **DONE только при:** Signed real human/tenant proof, service denied, 2/9 complete=false; export/erasure blocked.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### E-02
 
@@ -688,7 +688,7 @@
 
 **DONE только при:** 9/9 bounded scans, immutable snapshot, completeness & version digest, fail closed.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### E-03
 
@@ -702,7 +702,7 @@
 
 **DONE только при:** Trusted case+scope, approved plan, correct hold/retention, D1 audited decisions.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### E-04
 
@@ -716,7 +716,7 @@
 
 **DONE только при:** Signed human+complete scope, immutable versioned artifact, allowed recipient and audit.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### E-05
 
@@ -730,7 +730,7 @@
 
 **DONE только при:** Approved complete scope, legal hold checks, idempotent owner checkpoint, audit.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### E-06
 
@@ -744,7 +744,7 @@
 
 **DONE только при:** Без второго источника схемы/registry/worker; explicit product decision.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### E-07
 
@@ -758,7 +758,7 @@
 
 **DONE только при:** Каждая новая область с отдельным владельцем и ценностью, не по инерции roadmap.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ### E-08
 
@@ -772,7 +772,7 @@
 
 **DONE только при:** Отдельные требования реальных пользователей, нагрузка/DR/право, без ложного production-ready.
 
-**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в #352; для `LATER/END` это сознательно отложено.
+**Evidence для исполнения:** `Legacy operation / source test: OPEN · A/B/C/D: OPEN · actual gap / product decision: OPEN · commit: — · CI: — · live/Browser Gate B: —`. Обновлять эти поля только после подтверждённых результатов в текущем курсоре; для `LATER/END` это сознательно отложено.
 
 ## Полное покрытие legacy исходников — 93/93 crates → функциональные ID или обязательная проверка X-01
 
@@ -882,4 +882,4 @@
 
 **M1:** ID M1-01…M1-10 приняты по UI+owner+D1+signed CI/browser; M1-11 явно решён (B или C), не бесконечный спор об удалении. **M2:** M2-01…M2-04 доказаны; M2-05 имеет чёткое B/C решение, а не новый модуль по умолчанию. **MVP:** M1/M2 и только необходимые NEXT, без LATER/END. Полная **93/93** исходная карта существует в двух связанных документах, но не означает полную parity старых алгоритмов.
 
-**Запрет на забывание:** новый чат начинается с чтения этого файла и #352. Если отсутствует сравнение с историческим кодом для выбранного ID, работа над ним **не может называться DONE**. Результат конкретной функции — строка `ID → source/tests → current mapping → A/B/C/D → exact evidence`, а не ещё одна глобальная матрица или промежуточный отчёт.
+**Запрет на забывание:** новый чат начинается с чтения этого файла и текущего курсора из #484. Если отсутствует сравнение с историческим кодом для выбранного ID, работа над ним **не может называться DONE**. Результат конкретной функции — строка `ID → source/tests → current mapping → A/B/C/D → exact evidence`, а не ещё одна глобальная матрица или промежуточный отчёт.

@@ -3,13 +3,13 @@
   "packet_id": "cloudflare-crm-development",
   "title": "Cloudflare CRM: typed application development",
   "status": "active",
-  "objective": "Maintain one Protobuf contract, generated Rust/TS, original owners and one Worker/D1. Issue #352 owns product scope and acceptance; #471 owns the active architecture/typed-runtime work. The former PostgreSQL process runtime and its CI are retired and must not be reintroduced as a second backend.",
+  "objective": "Maintain one Protobuf contract, generated Rust/TS, original owners and one Worker/D1. Issue #484 sets product scope and links to the current acceptance issue. #471 records the accepted typed architecture. The former PostgreSQL process runtime and its CI are retired and must not be reintroduced as a second backend.",
   "baseline": {
     "ref": "dev"
   },
   "tracking_issues": [
     338,
-    352,
+    484,
     471
   ],
   "allowed_paths": [
@@ -138,7 +138,7 @@
     "Code changes pass the existing full CI and live acceptance; Markdown-only changes do not build or deploy",
     "Current contracts compile together with all consumers; no historical compatibility pin for the development CRM API",
     "Actual Access A/B, browser, D1/audit, Cloudflare Logs and deployed SHA/version/binding readback",
-    "Issue #352 records tested source, CI result, deployed version and remaining work; app Markdown contains no release checkpoints",
+    "The current issue linked from #484 records tested source, CI result, deployed version and remaining work; app Markdown contains no release checkpoints",
     "No active PostgreSQL process CI, Docker-backed local database lifecycle or crm-api compatibility build remains."
   ],
   "non_goals": [

@@ -6,7 +6,7 @@ This document is the concise authoritative current-state snapshot. Product depen
 
 ## Cloudflare CRM navigation
 
-Current scope, accepted releases, CI/live checkpoints and remaining work are recorded in [Issue #352](https://github.com/iamaman11/crm/issues/352) and #471. The app-specific [architecture](../apps/cloudflare-crm/ARCHITECTURE.md) and [contributor rules](../apps/cloudflare-crm/AGENTS.md) describe stable rules. #338 holds architectural decisions; #350 is historical cutover evidence. The former PostgreSQL process runtime (`services/crm-api`, `crates/crm-application-runtime`), its CI and local Docker lifecycle were retired from active development on 2026-11-20. The PostgreSQL history below is historical evidence, not a current runtime or product-readiness claim.
+[#484](https://github.com/iamaman11/crm/issues/484) sets the product order and links to the current issue for CI and live acceptance. #352 and #471 preserve earlier evidence. The app-specific [architecture](../apps/cloudflare-crm/ARCHITECTURE.md) and [contributor rules](../apps/cloudflare-crm/AGENTS.md) describe stable rules. #338 holds architectural decisions; #350 is historical cutover evidence. The former PostgreSQL process runtime (`services/crm-api`, `crates/crm-application-runtime`), its CI and local Docker lifecycle were retired from active development on 2026-11-20. The PostgreSQL history below is historical evidence, not a current runtime or product-readiness claim.
 
 ## Authoritative references
 

@@ -2,7 +2,7 @@
 
 > **Текущий путь разработки CRM:** только `apps/cloudflare-crm` в канонической
 > удалённой ветке `dev`. Действуют `apps/cloudflare-crm/AGENTS.md`,
-> `apps/cloudflare-crm/ARCHITECTURE.md` и задача #352. Нижеследующие старые
+> `apps/cloudflare-crm/ARCHITECTURE.md` и очередь [#484](https://github.com/iamaman11/crm/issues/484) со ссылкой на текущий курсор. Нижеследующие старые
 > инструкции по PostgreSQL, RLS, packet/PR и дополнительным runtime
 > относятся только к историческому product-plane, не к активной CRM.
 > Не восстанавливать старые генераторы, CI или инфраструктуру.
@@ -21,7 +21,7 @@
 > Сначала определить реальное незакрытое действие пользователя и проверить действующие typed
 > owner/RPC/UI/tests и ранее принятые evidence; только затем сопоставлять старые операции.
 > **До написания любой функции открыть её исторический код и отрицательные тесты**, сверить
-> с текущей реализацией, записать A/B/C/D и proof в #352. Не повторять уже действующие RPC.
+> с текущей реализацией, записать A/B/C/D и proof в текущем курсоре. Не повторять уже действующие RPC.
 > Существующее доказанное A принимается без нового кода/CI (при необходимости добрать только
 > независимый Gate B); только доказанный B создаёт кодовый срез. Недопустим обход единой
 > Protobuf → generated Connect → compiled policy → original Rust owner → D1 схемы.
@@ -29,11 +29,11 @@
 > кому нужна, для какого реального действия, понятен ли путь в UI, есть ли необходимые данные,
 > что решает проще существующий сценарий и какую сложность добавит. Ненужное обоснованно
 > классифицировать C для MVP, полезное перенести как целостный пользовательский сценарий,
-> сохраняя бизнес-инварианты. Решение/причины зафиксировать в #352 до кода; третьего gate нет.
+> сохраняя бизнес-инварианты. Решение/причины зафиксировать в текущем курсоре до кода; третьего gate нет.
 > Единица работы — **законченный крупный пользовательский срез** (S-M1-A → S-M1-B → S-M2),
 > а не микроизменение. После каждого среза **оба gate обязательны**: Gate A — штатный CI,
 > workerd/D1/Chromium + exact SHA deploy; Gate B — независимый LIVE Universal Browser MCP
-> на опубликованном том же SHA. Оба PASS либо NO-GO; статус в #352.
+> на опубликованном том же SHA. Оба PASS либо NO-GO; статус в текущем курсоре.
 > Все **93/93 crates, 532/532 старых Rust-файла, 6633 распознанные функции**
 > привязаны к функциональным ID или X-01 review в матрице; это контроль полноты учёта,
 > не доказанная behavioral parity. Исторические исходники и тесты не удалять до пооперационного A/B/C/D.
@@ -42,8 +42,7 @@
 This file is the default operating guide for humans and coding agents working in this repository.
 
 For the Cloudflare application and its CI, follow `apps/cloudflare-crm/AGENTS.md` and
-`apps/cloudflare-crm/ARCHITECTURE.md`. Issue #352 owns current scope, checkpoints and
-acceptance. Its direct-dev, single-pipeline, development-API policy supersedes the
+`apps/cloudflare-crm/ARCHITECTURE.md`. Issue #484 sets the product order and links to the current issue for acceptance evidence. The app’s direct-dev, single-pipeline, development-API policy supersedes the
 historical PostgreSQL packet/PR/compatibility process below for that application.
 App Markdown contains stable rules only; Markdown-only pushes do not build or deploy CRM.
 
