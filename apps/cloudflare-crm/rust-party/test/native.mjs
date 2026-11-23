@@ -4620,15 +4620,15 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await taskV2("ClaimTask",knownService,claim)).status,403);
  assert.equal((await taskV2("ClaimTask",tenantB,claim)).status,404);
  const claimOther={...claim,precondition:{...claim.precondition,idempotencyKey:"sk07-other-claim-"+poolId}};
- const results=await Promise.all([taskV2("ClaimTask",viewer,claim),taskV2("ClaimTask",admin,claimOther)]);
- assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
- const winner=results[0].status===200?viewer:admin;
- const wonInput=results[0].status===200?claim:claimOther;
- const claimed=results.find(r=>r.status===200);
+ const claimResults=await Promise.all([taskV2("ClaimTask",viewer,claim),taskV2("ClaimTask",admin,claimOther)]);
+ assert.deepEqual(claimResults.map(r=>r.status).sort(),[200,409]);
+ const claimWinner=claimResults[0].status===200?viewer:admin;
+ const wonInput=claimResults[0].status===200?claim:claimOther;
+ const claimed=claimResults.find(r=>r.status===200);
  assert.equal(claimed.body.task?.version,2n);
- assert.equal((await taskV2("ClaimTask",winner,wonInput)).body.receipt?.replayed,true);
+ assert.equal((await taskV2("ClaimTask",claimWinner,wonInput)).body.receipt?.replayed,true);
  assert.equal((await taskV2("ListTasks",viewer,{ownerTeamId:teamId})).body.tasks.length,0);
- assert.equal((await taskV2("CompleteTask",winner,{taskId:poolId,
+ assert.equal((await taskV2("CompleteTask",claimWinner,{taskId:poolId,
    precondition:{expectedVersion:2n,idempotencyKey:"sk07-pool-complete-"+poolId}})).status,200);
  assert.equal((await memberV2("UpdateTeam",admin,teamArchive)).status,200);
  assert.equal((await taskV2("CreateTask",admin,{...poolCreate,taskId:"sk07-inactive-pool-"+poolId,
