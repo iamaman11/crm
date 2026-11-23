@@ -55,7 +55,7 @@ export function TerritoryWorkspace({isAdmin}:{isAdmin:boolean}) {
   const choices=owners.data?.choices??[];
   const [editing,setEditing]=useState<SalesTerritory>();
   const [creating,setCreating]=useState(false);
-  const [id,setId]=useState(newId);
+  const [id,setId]=useState<SalesTerritory["territoryId"]>(newId);
   const [name,setName]=useState("");
   const [parent,setParent]=useState("");
   const [owner,setOwner]=useState("");
