@@ -1053,8 +1053,8 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await dealAfterAccountNote.getByText(laterCall,{exact:true}).waitFor();
    assert.equal(await dealAfterAccountNote.getByText(accountNote,{exact:true}).count(),0,
      "Account-only note must not be misattributed to Deal");
-   const navigationAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
-   assert.equal(navigationAuditBefore,boardAuditBefore+3,
+   const sk05BackAuditBefore=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   assert.equal(sk05BackAuditBefore,boardAuditBefore+3,
      "three SK-05 interactions must have exactly three new audit records");
    checkpoint("SK-05 React Account+Deal typed interaction history, authored facts, reload, ordering and D1 receipts");
    const dealContactLink=detailsFromBoard.getByRole("link",{
@@ -1093,7 +1093,7 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await reloadDocument();
    await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
-     navigationAuditBefore,"manual board navigation must not write D1 audit");
+     sk05BackAuditBefore,"manual board navigation must not write D1 audit");
    checkpoint("M2-01 native board and M2-02 exact Deal Contact direct Get survive reload/Back without read-audit");
    const leadTotals=page.getByRole("group",{name:"Итоги этапа Первичный контакт"});
    await leadTotals.getByText("90071992547409.93 USD · сделок с суммой: 1",
