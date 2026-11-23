@@ -16,6 +16,7 @@ export type Section=keyof typeof sectionLabels;
 export type AccountFilterStatus = AccountStatus.ACTIVE | AccountStatus.INACTIVE;
 export type AccountFilters = {search:string;status:AccountFilterStatus|null;cursor:string};
 export type Route =
+  | {kind:"insights";start:string;end:string;pipelineId:string;includeArchived:boolean;compare:boolean}
   | {kind:"workday";day:string}
   | ({kind:"accounts"} & AccountFilters)
   | {kind:"account";accountId:string}
@@ -55,6 +56,29 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
         valid.getUTCDate()!==date)return {kind:"not-found",path:source};
     }
     return {kind:"workday",day};
+  }
+  if(path==="insights"){
+    const allowed=new Set(["start","end","pipelineId","includeArchived","compare"]);
+    let invalid=false;
+    params.forEach((_,key)=>{if(!allowed.has(key)||params.getAll(key).length!==1)invalid=true;});
+    const start=params.get("start")??"",end=params.get("end")??"";
+    const pipelineId=params.get("pipelineId")??"";
+    const include=params.get("includeArchived")??"";
+    const compare=params.get("compare")??"";
+    const validDate=(day:string)=>{
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return false;
+      const [y,m,d]=day.split("-").map(Number);
+      if(y===undefined||m===undefined||d===undefined||y<2000||y>2100)return false;
+      const date=new Date(Date.UTC(y,m-1,d));
+      return date.getUTCFullYear()===y&&date.getUTCMonth()===m-1&&date.getUTCDate()===d;
+    };
+    if(invalid||(!!start!==!!end)||(start&&(!validDate(start)||!validDate(end)||start>end))||
+       (pipelineId&&(pipelineId.length>128||pipelineId.includes("/")||
+         pipelineId.includes("\\")||pipelineId.includes("%")||
+         pipelineId==="."||pipelineId===".."))||
+       (include!==""&&include!=="1")||(compare!==""&&compare!=="1")||
+       (compare==="1"&&!start))return {kind:"not-found",path:source};
+    return {kind:"insights",start,end,pipelineId,includeArchived:include==="1",compare:compare==="1"};
   }
   if(path==="search"){
     const queries=params.getAll("query");
@@ -126,6 +150,16 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
       ...(pipelineIds[0]?{pipelineId:pipelineIds[0]}:{})};
   }
   return {kind:"not-found",path:source};
+}
+export function intelligenceHref(opts:{start?:string;end?:string;pipelineId?:string;
+  includeArchived?:boolean;compare?:boolean}={}):string {
+  const p=new URLSearchParams();
+  if(opts.start)p.set("start",opts.start);
+  if(opts.end)p.set("end",opts.end);
+  if(opts.pipelineId)p.set("pipelineId",opts.pipelineId);
+  if(opts.includeArchived)p.set("includeArchived","1");
+  if(opts.compare&&opts.start&&opts.end)p.set("compare","1");
+  return "#insights"+(p.size?"?"+p.toString():"");
 }
 export function workdayHref(day=""):string {
   return "#workday"+(day?"?"+new URLSearchParams({date:day}).toString():"");

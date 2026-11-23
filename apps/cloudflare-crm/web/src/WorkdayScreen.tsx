@@ -112,6 +112,7 @@ export function WorkdayScreen({day}:{day:string}) {
     <TaskBucket key={chosen+"/undated"} title="Без срока" kind="undated"
       start={bounds.start} before={bounds.before}/>
     <RecentInteractions/>
-    <p><a href="#tasks">Все задачи</a>{" · "}<a href="#sales">Все сделки</a></p>
+    <p><a href="#tasks">Все задачи</a>{" · "}<a href="#sales">Все сделки</a>
+      {" · "}<a href="#insights">Аналитика бизнеса и риски</a></p>
   </>;
 }

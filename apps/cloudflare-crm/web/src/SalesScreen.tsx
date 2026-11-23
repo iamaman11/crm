@@ -334,6 +334,8 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
       }}>Новая сделка</Button>
     </>}/>
     <QueryNotice query={pipelinesQuery}/>
+    <p><a href="#insights">Портфельная аналитика всех воронок, прогноз и операционные риски</a>
+      {" · "}<a href="#workday">Рабочий день</a></p>
     <section aria-label="Сохранённые представления">
       <h2>Сохранённые представления</h2>
       <p>Именованные фильтры доступны в этом рабочем пространстве. Применение

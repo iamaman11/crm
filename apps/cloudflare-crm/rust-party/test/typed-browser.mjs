@@ -2639,6 +2639,44 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.screenshot({path:resolve(directory,"crm-workday.png"),fullPage:true});
    checkpoint("SK-06 typed workday: due-before-LIMIT, linked Task/Account/Deal, recent across tenant, Back/reload, read-only");
 
+   // SK-07: complete portfolio analysis from existing Sales owner metrics,
+   // not the visible first Deal pages. Audited read-only, URL-owned period.
+   const intelligenceAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n;
+   await navigate("insights","Аналитика бизнеса");
+   const portfolio=page.getByRole("region",{name:"Общий портфель"});
+   const risks=page.getByRole("region",{name:"Операционные риски"});
+   const portfolioForecast=page.getByRole("region",{name:"Прогноз портфеля"});
+   const conversion=page.getByRole("region",{name:"Фактическая конверсия портфеля"});
+   await portfolio.getByText(/Сделок:/).waitFor();
+   await risks.getByText(/Просрочена ожидаемая дата закрытия:/).waitFor();
+   await portfolioForecast.getByRole("heading",{name:"Прогноз и категории"}).waitFor();
+   await conversion.getByText(/Знаменатель:/).waitFor();
+   const portfolioLink=page.getByRole("link",{name:"Открыть воронку Browser Pipeline "+runId,exact:true});
+   await portfolioLink.waitFor();
+   await portfolioLink.click();
+   await page.getByRole("heading",{name:"Сделки",exact:true}).waitFor();
+   await expect(page.getByLabel("Воронка продаж",{exact:true})).toHaveValue(newPipelineId);
+   await page.goBack();
+   await page.getByRole("heading",{name:"Аналитика бизнеса",exact:true}).waitFor();
+   await page.getByLabel("Начало периода",{exact:true}).fill("2026-11-01");
+   await page.getByLabel("Конец периода",{exact:true}).fill("2026-11-30");
+   await page.getByRole("button",{name:"Применить период",exact:true}).click();
+   await expect(page.getByLabel("Начало периода",{exact:true})).toHaveValue("2026-11-01");
+   assert.ok(new URL(page.url()).hash.includes("start=2026-11-01"));
+   await page.getByLabel("Сравнить с предыдущим периодом той же длительности").check();
+   await conversion.getByText(/Предыдущий период:/).waitFor();
+   await reloadDocument();
+   await conversion.getByText(/Предыдущий период:/).waitFor();
+   await page.getByRole("heading",{name:"Аналитика бизнеса",exact:true}).waitFor();
+   await expect(page.getByLabel("Конец периода",{exact:true})).toHaveValue("2026-11-30");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,
+     intelligenceAudit,"Portfolio reads/compare/Back/reload must never write audit");
+   await navigate("insights?start=2026-02-30&end=2026-03-01","Страница не найдена");
+   await page.goBack();
+   await page.getByRole("heading",{name:"Аналитика бизнеса",exact:true}).waitFor();
+   await page.screenshot({path:resolve(directory,"crm-portfolio-intelligence.png"),fullPage:true});
+   checkpoint("SK-07 full portfolio, exact native metrics, linked settings, period comparison, invalid dates, Back/reload, no read audit");
+
    await page.getByLabel("Тема",{exact:true}).selectOption("dark");
    assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
    await reloadDocument();

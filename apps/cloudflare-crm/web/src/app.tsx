@@ -8,6 +8,7 @@ import {ContactScreen} from "./ContactScreen";
 import {RelationshipScreen} from "./RelationshipScreen";
 import {TaskScreen} from "./TaskScreen";
 import {WorkdayScreen} from "./WorkdayScreen";
+import {IntelligenceScreen} from "./IntelligenceScreen";
 import {SalesScreen} from "./SalesScreen";
 import {ConsentScreen} from "./ConsentScreen";
 import {ReviewScreen} from "./ReviewScreen";
@@ -20,6 +21,7 @@ import {currentRouteHash,subscribeNavigation,registerNavigationBlocker} from "./
 
 const screens=[
   {id:"workday",label:"Рабочий день"},
+  {id:"insights",label:"Аналитика бизнеса"},
   {id:"search",label:"Поиск"},
   {id:"accounts",label:"Клиенты"},
   ...Object.entries(sectionLabels).map(([id,label])=>({id,label})),
@@ -28,8 +30,12 @@ function unreachable(screen:never):never {throw Error("Unknown CRM screen "+scre
 function App() {
   const hash=useSyncExternalStore(subscribeNavigation,currentRouteHash);
   const route=useMemo(()=>parseRoute(hash,accountFilterStatuses),[hash]);
-  const current=route.kind==="workday"?"workday":route.kind==="accounts"||route.kind==="account"||route.kind==="account-create"?"accounts":route.kind==="deal"?"sales":route.kind==="search"?"search":route.kind==="section"?route.screen:"";
-  const content=route.kind==="workday"?<WorkdayScreen key={route.day} day={route.day}/>:
+  const current=route.kind==="workday"?"workday":route.kind==="insights"?"insights":route.kind==="accounts"||route.kind==="account"||route.kind==="account-create"?"accounts":route.kind==="deal"?"sales":route.kind==="search"?"search":route.kind==="section"?route.screen:"";
+  const content=route.kind==="insights"?<IntelligenceScreen
+      key={[route.start,route.end,route.pipelineId,route.includeArchived,route.compare].join("/")}
+      start={route.start} end={route.end} pipelineId={route.pipelineId}
+      includeArchived={route.includeArchived} compare={route.compare}/>:
+    route.kind==="workday"?<WorkdayScreen key={route.day} day={route.day}/>:
     route.kind==="accounts"?<AccountScreen registerBlocker={registerNavigationBlocker} filters={{search:route.search,status:route.status,cursor:route.cursor}}/>:
     route.kind==="account"?<AccountPage registerBlocker={registerNavigationBlocker} accountId={route.accountId}/>:
     route.kind==="account-create"?<AccountCreatePage key={route.partyId} registerBlocker={registerNavigationBlocker} partyId={route.partyId}/>:
