@@ -1,8 +1,8 @@
 # Продуктовый план Cloudflare CRM
 
-## Результат SK-00 · 23 ноября 2026
+## Основание плана · 23 ноября 2026
 
-Действующее приложение — dev/apps/cloudflare-crm. Срез исходников c1f6501. Последняя принятая сборка 77611bd. Между версиями изменились три файла документации. [CI и опубликованный артефакт](https://github.com/iamaman11/crm/actions/runs/45063068917) · [Gate A/B](https://github.com/iamaman11/crm/issues/352#issuecomment-7084953850).
+Проверенный код приложения в `dev/apps/cloudflare-crm` — [ce19c7b7](https://github.com/iamaman11/crm/commit/ce19c7b70e78ff1a95b510322508c7830611e664). На этом SHA штатный CI подтвердил 14 подключённых модулей, 72 исполняемых RPC и 34 операции с подтверждённой записью. Независимая браузерная приёмка на этом SHA охватывает опубликованный сценарий CSV. Для других принятых операций ниже указаны их собственные доказательства. Первая инвентаризация SK-00 проведена на c1f6501, сценарий R1 принят на 77611bd. [Gate A](https://github.com/iamaman11/crm/actions/runs/45214309179) · [Граница Gate B](https://github.com/iamaman11/crm/issues/352#issuecomment-7107062121)
 
 Предмет сверки — возможности самой CRM, включая исполнение без сессии человека. Основания — доменные методы и их потребители, манифесты, D1, React, исторические адаптеры, подписанный runtime-отчёт и журнал опубликованных сценариев. В сборке 14 связанных модулей, 72 выполненных метода, 72 анонимных отказа и 32 отказа viewer для Write/AdminRead. Для независимой проверки каждого продукта нужен соответствующий сценарий. Успешный вызов сам по себе устанавливает существование кода.
 
@@ -12,9 +12,44 @@
 
 **Решение о переносе** — A — сохранить принятое; B — построить нужное поведение на уже существующей семантике либо добавить нового владельца при новом изменяемом домене; C — отложить до указанной зависимости; D — оставить историческую инфраструктуру. Эти решения относятся к конкретной границе действия. При появлении новых доказательств строка пересматривается.
 
-**Следующий срез — SK-01 + SK-04.** Реальный сотрудник входит в свой tenant; уполномоченный инициатор назначает задачу действующему коллеге; коллега видит её в своей очереди и завершает. Actor/Team, Patch<TaskOwner> и фильтр владельца уже есть в [domain.rs#L101](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/domain.rs#L101). В адаптере create владелец выводится из текущего actor, публичный UpdateTask не даёт выбрать коллегу. Переиспользовать apply_update с проверкой версии. До записи проверить членство, полномочия и tenant; в том же пути проверить повтор, потерю ответа и чтение подтверждения из #485. Положительный human Access проверяется человеком. Сервисный актор получает только разрешения своей операции.
+**Следующий срез — SK-01 + SK-04.** Администратор назначает открытую задачу коллеге, коллега видит её в своей очереди и завершает. Матрица полномочий, тестовые данные и критерии приёмки приведены [в постановке среза](#pilot-assignment).
 
 Далее SK-05 — фиксировать звонок, встречу и заметку с источником, временем и ссылками; SK-06/07 — рабочая очередь из разрешённых чтений и переход к первичным записям; SK-09 — единый пилот. У SK-02, SK-03 и SK-08 уже есть принятые части. Отдельный Lead нужен при независимом жизненном цикле до сделки. Большой CSV нужен при подтверждённом выходе за пределы 20 строк/16 KiB импорта или 100 Party экспорта.
+
+<a id="pilot-assignment"></a>
+
+## Ближайший срез SK-01 + SK-04. Назначение задачи коллеге
+
+**Результат для пилота.** Руководитель назначает открытую задачу сотруднику своего tenant. Сотрудник находит её в «Моих задачах», видит контекст и завершает. После нового входа обе стороны видят сохранённый результат. Исполнителем этого среза служит конкретный человек. Назначение команде и распределение по загрузке возвращаются в очередь, когда пилоту понадобится общий пул задач.
+
+**Исходное состояние.** Домен Activities уже поддерживает смену владельца и выборку по нему. В действующем публичном контракте владелец при создании определяется по актору, а `UpdateTask` не принимает нового исполнителя. В пути восстановления уже есть `GetTaskRequest.receipt_idempotency_key` и `GetTaskResponse.confirmed_mutation`. Таблица задач получает имена клиентов в ответе списка. Переиспользовать эти механизмы и проверить восстановление именно для назначения. [Домен Activities](../modules/crm-activities/src/domain.rs) · [Контракт Task](../proto/crm/activities/v2/task.proto) · [Экран задач](../apps/cloudflare-crm/web/src/TaskScreen.tsx)
+
+### Права и границы пилота
+
+| Кто действует | Разрешённое действие | Граница |
+|---|---|---|
+| Действующий администратор своего tenant | Предоставляет или отзывает право исполнения у сотрудника своего tenant. Выбирает активного сотрудника по имени, назначает или переназначает открытую задачу. Сохраняет действующие административные права на задачи. | Сервер непосредственно перед записью проверяет полномочия, версию задачи и действующее членство получателя. Завершённая задача сохраняет свою историю. |
+| Активный сотрудник с правом исполнения своих задач | Открывает свою очередь и завершает открытую задачу, чей текущий исполнитель совпадает с его подтверждённой личностью. | Ограниченное право исполнения не даёт общей записи, назначения, переназначения, управления членством или завершения задачи коллеги. При переназначении сервер проверяет актуального владельца перед завершением. |
+| Пользователь только с ролью viewer | Сохраняет разрешённые чтения своего tenant. | Назначение и завершение отклоняются. Для выполнения задач сотруднику требуется отдельное узкое полномочие, проверяемое центральной политикой. |
+| Неактивный сотрудник, сотрудник другого tenant, анонимный посетитель | Не появляется как доступный получатель назначения. | Прямой запрос с известным идентификатором не позволяет назначить задачу или действовать за её владельца. После деактивации существующее назначение и аудит сохраняются. Администратор может передать открытую задачу другому активному сотруднику. |
+
+Рабочее решение для пилота ограничивает назначение администратором. Узкое право связывается с действующим членством сотрудника в tenant. Проверить выдачу и отзыв отдельно от самого входа через Access. Отдельный интерфейс управления ролями относится к SK-07 при подтверждённом сценарии. Инициатора сервер определяет по подписанному Access и актуальному членству. Выбранный в форме получатель является данными команды. Для «Моих задач» сервер выводит исполнителя из сессии и применяет фильтр до пагинации. Существующие права чтения карточек своего tenant регулируются прежней политикой. Узкое полномочие описывает требуемое поведение пилота. Название роли, поле контракта и способ представления полномочия выбираются при реализации в существующих typed policy и owner.
+
+### Критерии приёмки назначения
+
+Тестовые данные включают администратора A, сотрудников B и C с правом исполнения, viewer и деактивированного сотрудника одного tenant, а также D из другого tenant. Есть открытая задача с известной версией, завершённая задача и достаточно задач других исполнителей, чтобы общая выдача занимала несколько страниц. В Gate B A и B используют разные человеческие учётные записи.
+
+| Сценарий | Что выполнить | Наблюдаемый результат |
+|---|---|---|
+| Вход и выбор | A и B входят в отдельных сессиях. A открывает задачу и находит B по имени. | Доступны активные получатели своего tenant. Деактивированный сотрудник и D отсутствуют. Каждая сессия показывает своего пользователя. |
+| Назначение | A назначает B при актуальной версии. Обе стороны повторно открывают CRM. | Сохранён исполнитель B, версия увеличена один раз. В истории одно назначение с инициатором A. B видит задачу в личной очереди, C не видит её в своей. |
+| Очередь и завершение | Поместить задачу B за первой страницей общей выборки. B открывает «Мои задачи», переходит в карточку, возвращается и завершает задачу. | Задача находится через персональную выдачу. После нового входа карточка показывает завершение, в очереди открытых задач её нет. Чтение и навигация не добавляют записей о мутации. |
+| Переназначение и деактивация | Передать задачу от B к C. Отдельно деактивировать B после назначения, пока его карточка открыта. | В первом случае задача есть в очереди C и исчезает из очереди B. В обоих случаях попытка B завершить задачу со старой страницы получает отказ. После деактивации A видит прежнее назначение и может передать задачу C. |
+| Запрет изменения | Попытаться назначить D, неактивного получателя или завершённую задачу. Проверить viewer, сотрудника без права назначения и сотрудника с отозванным правом исполнения. | Проверить отказ через RPC даже при известном ID. Владелец, состояние и версия остаются прежними, отсутствует аудит успешной операции. Из ответа нельзя узнать данные D. |
+| Конкуренция и повтор | Два допустимых назначения исходят из одной версии. Затем повторить выигравшую команду с тем же ключом. | Сохраняется одно назначение. Проигравшая команда получает конфликт и после перечитывания видит победителя. Идентичный повтор возвращает подтверждённый исход, иное содержимое с тем же ключом отклоняется. |
+| Потеря ответа | Потерять ответ после commit, переоткрыть карточку и сверить исход по исходному ключу. Отдельно прервать операцию до подтверждённого commit. | В первом случае подтверждение, D1 и аудит указывают на одну запись. Во втором интерфейс сохраняет намерение и различает неизвестный результат и подтверждённый отказ. Сверка сама по себе не создаёт новое назначение. |
+
+**Готовность среза.** В Gate A штатный CI проверяет сгенерированный Connect-контракт, привязку Activities, скомпилированные права и исполнение в workerd/D1. Chromium проверяет выбор сотрудника, очередь и восстановление. В независимом Gate B на том же опубликованном SHA люди A и B проходят назначение, повторный вход и завершение. В [#352](https://github.com/iamaman11/crm/issues/352) записываются SHA, ссылки на обе проверки, роли, наблюдаемый итог и границы принятого. До подтверждения человеческого входа и передачи между двумя сотрудниками срез имеет статус `CODE-NOT-ACCEPTED`.
 
 ## Очередь по зависимостям
 
@@ -27,6 +62,17 @@
 7. Проекты, документы, отчётность и интеграции данных.
 8. Управляемое расширение, AI, marketplace и вертикали. Защита данных и диагностика действуют в каждой волне.
 
+### Условия перехода к пилоту
+
+| Этап | Когда начинать | Что предъявить для приёмки |
+|---|---|---|
+| SK-05. История клиента | После SK-01/04 можно установить автора и право сотрудника на запись. | Из карточки клиента и из связанной сделки фиксируются звонок, встреча и заметка. После повторного входа сверить автора, время факта и связи. Подать два события в обратном порядке и одно повторно. В истории два события в порядке времени факта. Контрольная запись другого tenant недоступна. |
+| SK-06. Рабочий день | Есть личные назначения, сроки задач и доступные взаимодействия SK-05. | В согласованном часовом поясе проверить задачи по обе стороны полуночи, просроченную, завершённую и задачу коллеги. Сверить разделы и количество до пагинации. Из очереди открыть связанную сделку и вернуться к тому же фильтру. Чтение не добавляет аудит записи. |
+| SK-07. Настройка команды | Из пилота известна конкретная настройка, влияющая на работу команды. | Администратор изменяет её для своего tenant. Обычный сотрудник видит применимый результат, попытка изменить настройку отклоняется. После повторного входа прежние данные и настройки другого tenant сохранены. |
+| SK-09. Два сотрудника в закрытом пилоте | SK-01/04, SK-05 и SK-06/07 приняты в нужных для сценария границах. | В двух человеческих сессиях пройти обращение, клиента, сделку, запись разговора, передачу и завершение задачи. Для автоматической связи Deal→Task проверить одно поручение после повтора события при закрытом браузере. Открыть записи повторно, связать версии и аудит с действиями сотрудников. Оба Gate должны относиться к одному опубликованному SHA. |
+
+Для последующих волн условия начала и контрольные примеры приведены в таблицах каждого семейства. Если строка помечена C, её пересматривают при выполнении указанного условия и наличии соответствующего сценария у пилота. Результат принимают в границах конкретной строки. Успех соседней операции из того же сценария сам по себе статус не меняет.
+
 ## 01. Клиенты и Customer 360
 
 Party, Account и Relationship уже имеют владельцев. Принятая merge-линия обратима; при оценке требования о survivorship проверять ещё и выбор значения каждого поля с его источником. Статус verify собственного email не переносить на подтверждение номера телефона.
@@ -35,25 +81,35 @@ Party, Account и Relationship уже имеют владельцев. Прин�
 
 Проверенная смежная граница: [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-parties/src/lib.rs). [Gate A/B](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108)
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| F01-01 | Вычислить владельца и provenance отдельного значения при конфликте источников | CODE-NOT-ACCEPTED | В исходниках импорта и enrichment есть provenance. Правила survivorship с несколькими источниками в dev не приняты. |
-| C32 | Person and Organization Party identities | ACCEPTED | M1-02/03: создание и изменение Party, Account со ссылкой на Party. |
-| C33 | customer/commercial Accounts referencing parties | ACCEPTED | M1-02/03: создание и изменение Party, Account со ссылкой на Party. |
-| C34 | multiple email, phone, postal, web, social and messaging Contact Points | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. |
-| C35 | preferred and verified contact methods | CODE-NOT-ACCEPTED | У ContactPoint есть preferred; signed self-verification определена для email. Остальные способы верификации требуют политики и независимого доказательства. |
-| C36 | Party Relationships: employment, household, parent/subsidiary, partner and configurable typed roles | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. |
-| C37 | account hierarchies and group structures | CODE-NOT-ACCEPTED | Историческая projection строит иерархию Party. Сначала решить, какая связь нужна для Account; доказать обработку цикла, tenant и удалённой связи. [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-party-relationships-projection/src/lib.rs) |
-| C38 | source-system identifiers and reconciliation | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. |
-| C39 | field-level provenance and survivorship | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. |
-| C40 | deterministic and explainable duplicate candidates | ACCEPTED | N-05: детерминированные кандидаты по общему email и сравнение. |
-| C41 | governed merge and unmerge with immutable lineage | ACCEPTED | L-03: обратимая линия merge/unmerge, без перепривязки всех сторонних объектов. |
-| C42 | consent, communication preferences and legal-basis evidence | CODE-NOT-ACCEPTED | Доступны GrantVerifiedEmailConsent, WithdrawConsentAuthorization, SuppressCommunication и EvaluateConsent. На границе реальной доставки потребуется повторить проверку согласия перед отправкой. |
-| C43 | privacy export, deletion, restriction and legal-hold interaction | CODE-NOT-ACCEPTED | Существуют legacy owner action, hold/restriction и access export. В dev приняты intake и отмена; positive human verification, frozen scope и полный экспорт проверяются отдельно. [access_export.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-customer-privacy/tests/access_export.rs) |
-| C44 | data-quality rules, completeness indicators and stewardship queues | CODE-NOT-ACCEPTED | N-04 принимает оценку имени и повторную проверку после исправления. Legacy finding assignment/waiver и его тесты пригодны для очереди stewardship. [finding_stewardship.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-data-quality/tests/finding_stewardship.rs) |
-| C45 | governed enrichment with provenance and source policy | CODE-NOT-ACCEPTED | В dev принята публикация конфигурации. Dispatch, review, materialization и provenance результата требуют отдельного исполнения с провайдером. [независимая приёмка](https://github.com/iamaman11/crm/issues/424#issuecomment-6905530278) |
-| C46 | versioned import/export, mapping, dry run, resumability and reconciliation | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. |
-| C47 | customer timeline and cross-domain Customer 360 projections | CODE-NOT-ACCEPTED | GetAccountOverview принят для связанных Deal/Task/Contact/Relationship. Потребуется включить Interaction с временем/источником и проверить хронологию. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| F01-01 | Вычислить владельца и provenance отдельного значения при конфликте источников | CODE-NOT-ACCEPTED | В исходниках импорта и enrichment есть provenance. Правила survivorship с несколькими источниками в dev не приняты. | Для конфликта двух значений показать победившее значение, его источник и применённое правило. [Происхождение значения](#accept-f01-01) |
+| C32 | Person and Organization Party identities | ACCEPTED | M1-02/03: создание и изменение Party, Account со ссылкой на Party. | Повторно открыть созданные Person и Organization, по ссылке из Account получить именно выбранную Party. [Карточка и связи](#accept-c32) |
+| C33 | customer/commercial Accounts referencing parties | ACCEPTED | M1-02/03: создание и изменение Party, Account со ссылкой на Party. | Повторно открыть созданные Person и Organization, по ссылке из Account получить именно выбранную Party. [Карточка и связи](#accept-c32) |
+| C34 | multiple email, phone, postal, web, social and messaging Contact Points | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. | Сохранить по одному контакту каждого заявленного вида и проверить тип после загрузки карточки. [Карточка и связи](#accept-c32) |
+| C35 | preferred and verified contact methods | CODE-NOT-ACCEPTED | У ContactPoint есть preferred; signed self-verification определена для email. Остальные способы верификации требуют политики и независимого доказательства. | Проверить предпочтительный способ связи отдельно от доказательства его верификации. [Карточка и связи](#accept-c32) |
+| C36 | Party Relationships: employment, household, parent/subsidiary, partner and configurable typed roles | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. | Связь сохраняет выбранную роль и направление при чтении с обеих сторон. [Карточка и связи](#accept-c32) |
+| C37 | account hierarchies and group structures | CODE-NOT-ACCEPTED | Историческая projection строит иерархию Party. Сначала решить, какая связь нужна для Account; доказать обработку цикла, tenant и удалённой связи. [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-party-relationships-projection/src/lib.rs) | После переноса подразделения перечитать родителя и дочерние узлы. Попытка создать цикл отклоняется. [Карточка и связи](#accept-c32) |
+| C38 | source-system identifiers and reconciliation | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. | Два сообщения с одним внешним ID относятся к одной исходной записи. [Происхождение значения](#accept-f01-01) |
+| C39 | field-level provenance and survivorship | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. | Для конфликта двух значений показать победившее значение, его источник и применённое правило. [Происхождение значения](#accept-f01-01) |
+| C40 | deterministic and explainable duplicate candidates | ACCEPTED | N-05: детерминированные кандидаты по общему email и сравнение. | Повтор расчёта даёт тот же список пар и причины совпадения. [Дубликаты и исправление](#accept-c40) |
+| C41 | governed merge and unmerge with immutable lineage | ACCEPTED | L-03: обратимая линия merge/unmerge, без перепривязки всех сторонних объектов. | После unmerge сверить исходные идентификаторы, связи и сохранённую историю объединения. [Дубликаты и исправление](#accept-c40) |
+| C42 | consent, communication preferences and legal-basis evidence | CODE-NOT-ACCEPTED | Доступны GrantVerifiedEmailConsent, WithdrawConsentAuthorization, SuppressCommunication и EvaluateConsent. На границе реальной доставки потребуется повторить проверку согласия перед отправкой. | Для проверяемой цели видны основание, канал и время последнего решения о согласии. [Согласие и privacy](#accept-c42) |
+| C43 | privacy export, deletion, restriction and legal-hold interaction | CODE-NOT-ACCEPTED | Существуют legacy owner action, hold/restriction и access export. В dev приняты intake и отмена; positive human verification, frozen scope и полный экспорт проверяются отдельно. [access_export.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-customer-privacy/tests/access_export.rs) | Сверить состав выгрузки, ограничение доступа и результат удаления с активным удержанием. [Согласие и privacy](#accept-c42) |
+| C44 | data-quality rules, completeness indicators and stewardship queues | CODE-NOT-ACCEPTED | N-04 принимает оценку имени и повторную проверку после исправления. Legacy finding assignment/waiver и его тесты пригодны для очереди stewardship. [finding_stewardship.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-data-quality/tests/finding_stewardship.rs) | После исправления обязательного поля меняются показатель полноты и соответствующая очередь исправлений. [Дубликаты и исправление](#accept-c40) |
+| C45 | governed enrichment with provenance and source policy | CODE-NOT-ACCEPTED | В dev принята публикация конфигурации. Dispatch, review, materialization и provenance результата требуют отдельного исполнения с провайдером. [независимая приёмка](https://github.com/iamaman11/crm/issues/424#issuecomment-6905530278) | У обогащённого значения есть источник, время и разрешение на использование для данной цели. [Происхождение значения](#accept-f01-01) |
+| C46 | versioned import/export, mapping, dry run, resumability and reconciliation | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. | Предварительный просмотр и фактическая загрузка дают одинаковое число допустимых строк на контрольном файле. [Импорт и история клиента](#accept-c46) |
+| C47 | customer timeline and cross-domain Customer 360 projections | CODE-NOT-ACCEPTED | GetAccountOverview принят для связанных Deal/Task/Contact/Relationship. Потребуется включить Interaction с временем/источником и проверить хронологию. | Одно междоменное событие появляется у соответствующего клиента с корректной ссылкой на владельца. [Импорт и история клиента](#accept-c46) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-f01-01"></a>Происхождение значения | Появились два разрешённых источника одного поля и правило выбора. | Подать конфликтующие значения, показать выбранное значение и источник, повторить импорт. Выбор и его объяснение воспроизводятся. |
+| <a id="accept-c32"></a>Карточка и связи | Есть пользовательский сценарий для конкретного вида контакта или связи. | Сохранить связь двух записей и перечитать карточку. Для выбранного контакта проверить тип, предпочтительность и основание верификации. В иерархии отклонить цикл без изменения родителя. |
+| <a id="accept-c40"></a>Дубликаты и исправление | Согласованы пара совпадений и пример похожих, но разных клиентов. | Проверить причины совпадения, исправить подтверждённую пару, восстановить исходные записи и связи. Ложная пара остаётся раздельной. |
+| <a id="accept-c42"></a>Согласие и privacy | Согласованы цель обработки, область запроса и ограничение хранения. | Отозвать согласие и проверить следующую отправку. По запросу на удаление проверить отдельно данные под удержанием и разрешённую часть, сохранить результат решения. |
+| <a id="accept-c46"></a>Импорт и история клиента | Есть согласованный формат импорта либо тип события для истории. | Перечитать результат по клиенту. Повтор файла или события сохраняет одну запись, позднее событие занимает место по времени факта. |
 
 ## 02. Продажи и партнёры
 
@@ -63,114 +119,137 @@ Account может быть связан со сделкой, primary Contact �
 
 Проверенная смежная граница: [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-sales/src/lib.rs). [Gate A/B](https://github.com/iamaman11/crm/issues/352#issuecomment-7071938677)
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| C56 | leads/prospects and qualification lifecycle | NOT-IMPLEMENTED | Отдельная конверсия Lead отсутствует. Стадии lead/qualified сделки доступны в Sales. |
-| C57 | opportunity/deal pipelines and stages | ACCEPTED | M2-01: воронки и стадии Sales. |
-| C58 | account/contact/opportunity relationship roles | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. |
-| C59 | activities, tasks, calls, meetings, reminders and follow-ups | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. |
-| C63 | products and line items through Catalog/CPQ references rather than Sales-owned catalog state | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C64 | configurable sales processes and stage-entry/exit rules | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. |
-| C65 | routing, assignment, queues and workload distribution | CODE-NOT-ACCEPTED | TaskListQuery.owner и UpdateTask.owner доступны в Rust. Следующий срез добавляет проверяемые выборку и назначение в публичном API. [domain.rs#L101](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/domain.rs#L101) |
-| C66 | territory management | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C67 | teams, overlays and account/opportunity team roles | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C68 | quota and target management | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C69 | forecasting, forecast categories, rollups and scenario comparison | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. |
-| C70 | win/loss reason governance and sales-cycle analytics | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. |
-| C71 | renewal, expansion and cross-sell opportunity support | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C72 | partner-influenced and channel-sourced opportunity attribution | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C189 | partner organizations and partner contacts | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. |
-| C190 | partner tiers, programs, certifications and eligibility | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C191 | deal registration and conflict rules | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C192 | lead/opportunity distribution to partners | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C193 | partner-sourced/influenced attribution | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C194 | channel incentives/rebate integration boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C195 | partner portal and delegated access boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C196 | partner performance scorecards | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P297 | multiple pipelines per supported owner/resource type | CODE-NOT-ACCEPTED | Несколько Sales pipelines приняты. Для другого типа ресурса потребуется собственный owner и тест смены воронки. |
-| P298 | versioned stage definitions and ordering | ACCEPTED | Принята граница Sales в M2-01/M2-04; обобщение на другие домены выполняется отдельно. |
-| P299 | stage entry/exit criteria | CODE-NOT-ACCEPTED | StageTransitionPolicy и фиксированная связь Sales→Task работают в ограниченной области. Пользовательские условия/действия требуют отдельной управляемой конфигурации. [Sales domain](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-sales/src/domain.rs#L234) |
-| P300 | required fields and checklists | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P301 | allowed transitions and role restrictions | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P302 | stage probability, target duration and SLA | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P303 | automatic transitions through workflow actions where policy allows | CODE-NOT-ACCEPTED | StageTransitionPolicy и фиксированная связь Sales→Task работают в ограниченной области. Пользовательские условия/действия требуют отдельной управляемой конфигурации. [Sales domain](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-sales/src/domain.rs#L234) |
-| P304 | manual transition with validation and conflict handling | ACCEPTED | Принята граница Sales в M2-01/M2-04; обобщение на другие домены выполняется отдельно. |
-| P305 | reasons for skip, regression, loss, cancellation or reopening | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P306 | pipeline templates and controlled cloning | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P307 | migration of active records when a pipeline version changes | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P308 | cross-pipeline transfer rules | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P309 | stage history and duration analytics | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P310 | funnel conversion and leakage analytics | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P356 | leads/prospects, qualification and conversion lineage | NOT-IMPLEMENTED | Отдельный Lead с собственной конверсией отложен C для MVP. Сейчас квалификация выполняется стадиями Deal. |
-| P357 | richer opportunities/deals and configurable sales processes | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P358 | account/contact/opportunity roles and buying groups | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P359 | routing, assignment, queues, workload balancing and territories | CODE-NOT-ACCEPTED | TaskListQuery.owner и UpdateTask.owner доступны в Rust. Следующий срез добавляет проверяемые выборку и назначение в публичном API. [domain.rs#L101](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/domain.rs#L101) |
-| P360 | teams, overlays and collaboration | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P361 | quotas, targets and period management | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P362 | forecasting, categories, rollups and scenarios | CODE-NOT-ACCEPTED | Часть поведения реализована в типах Sales/Activities, runtime доступа, ModuleRegistry либо штатной поставке. Принятая граница и недостающее развитие разделены в каталогах ниже. |
-| P363 | pipeline inspection, risk signals and coaching | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P364 | win/loss taxonomies and sales-cycle analytics | CODE-NOT-ACCEPTED | Часть поведения реализована в типах Sales/Activities, runtime доступа, ModuleRegistry либо штатной поставке. Принятая граница и недостающее развитие разделены в каталогах ниже. |
-| P365 | renewals, expansion and cross-sell coordination | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P366 | partner-sourced/influenced attribution | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P367 | product/quote context through Phase 8B references | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P368 | mobile and offline field-selling journeys where required | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P423 | partner organizations/contacts | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P424 | tiers, programs, certification and eligibility | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P425 | deal registration and conflict resolution | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P426 | lead/opportunity distribution | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P427 | incentives/rebate integration boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P428 | delegated partner portal access | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P429 | partner performance analytics | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| C56 | leads/prospects and qualification lifecycle | NOT-IMPLEMENTED | Отдельная конверсия Lead отсутствует. Стадии lead/qualified сделки доступны в Sales. | После повторной конверсии квалифицированного обращения существует ровно одна сделка, связанная с исходным обращением. [Квалификация обращения](#accept-c56) |
+| C57 | opportunity/deal pipelines and stages | ACCEPTED | M2-01: воронки и стадии Sales. | После изменения порядка стадий проверить текущую воронку и воспроизводимость истории по старой версии. [Этап и версия воронки](#accept-c57) |
+| C58 | account/contact/opportunity relationship roles | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. | У одного участника могут различаться роль в клиенте и роль в конкретной сделке. [Участники сделки](#accept-c58) |
+| C59 | activities, tasks, calls, meetings, reminders and follow-ups | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. | В истории отдельно видны выполненная активность и запланированный следующий контакт. [Участники сделки](#accept-c58) |
+| C63 | products and line items through Catalog/CPQ references rather than Sales-owned catalog state | NOT-IMPLEMENTED | C | Строка сделки указывает на версию каталога и предложения, её сумма воспроизводима после обновления прайса. [Строка предложения в сделке](#accept-c63) |
+| C64 | configurable sales processes and stage-entry/exit rules | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. | В двух воронках применяются их собственные правила этапов. [Этап и версия воронки](#accept-c57) |
+| C65 | routing, assignment, queues and workload distribution | CODE-NOT-ACCEPTED | TaskListQuery.owner и UpdateTask.owner доступны в Rust. Следующий срез добавляет проверяемые выборку и назначение в публичном API. [domain.rs#L101](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/domain.rs#L101) | Проверить выбор исполнителя при пересечении правил и достижении лимита загрузки. [Распределение продаж](#accept-c65) |
+| C66 | territory management | NOT-IMPLEMENTED | C | Клиенты по обе стороны границы территории попадают к ожидаемым исполнителям. [Распределение продаж](#accept-c65) |
+| C67 | teams, overlays and account/opportunity team roles | NOT-IMPLEMENTED | C | У основной и дополнительной команд проверяется доступ к одной сделке до и после исключения участника. [Распределение продаж](#accept-c65) |
+| C68 | quota and target management | NOT-IMPLEMENTED | C | Факт на границе двух периодов попадает только в соответствующую квоту. [План и результат продаж](#accept-c68) |
+| C69 | forecasting, forecast categories, rollups and scenario comparison | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. | Сумма прогноза по категориям совпадает с контрольными сделками для каждого сценария. [План и результат продаж](#accept-c68) |
+| C70 | win/loss reason governance and sales-cycle analytics | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. | Для закрытых сделок сверить причины выигрыша и потери и рассчитанную длительность. [План и результат продаж](#accept-c68) |
+| C71 | renewal, expansion and cross-sell opportunity support | NOT-IMPLEMENTED | C | Повтор сигнала продления или расширения сохраняет исходную связь с обязательством и одну возможность данного вида. [Продление и расширение](#accept-c71) |
+| C72 | partner-influenced and channel-sourced opportunity attribution | NOT-IMPLEMENTED | C | Сделка с источником-партнёром и сделка с влиянием партнёра остаются различимыми в отчёте. [Партнёрская сделка](#accept-c72) |
+| C189 | partner organizations and partner contacts | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. | Партнёр видит свою организацию и связанных с ней контактов в пределах делегированного доступа. [Партнёрская сделка](#accept-c72) |
+| C190 | partner tiers, programs, certifications and eligibility | NOT-IMPLEMENTED | C | По истечении сертификации новая регистрация перестаёт получать привилегию программы. [Партнёрская сделка](#accept-c72) |
+| C191 | deal registration and conflict rules | NOT-IMPLEMENTED | C | Две регистрации одной возможности приводят к объяснимому решению о конфликте. [Партнёрская сделка](#accept-c72) |
+| C192 | lead/opportunity distribution to partners | NOT-IMPLEMENTED | C | Распределённая возможность видна выбранному партнёру, соседнему партнёру доступ закрыт. [Партнёрская сделка](#accept-c72) |
+| C193 | partner-sourced/influenced attribution | NOT-IMPLEMENTED | C | Сделка с источником-партнёром и сделка с влиянием партнёра остаются различимыми в отчёте. [Партнёрская сделка](#accept-c72) |
+| C194 | channel incentives/rebate integration boundaries | NOT-IMPLEMENTED | C | Сверить ссылку и сумму вознаграждения с одним внешним начислением. [Партнёрская сделка](#accept-c72) |
+| C195 | partner portal and delegated access boundaries | NOT-IMPLEMENTED | C | Отозванный пользователь партнёра теряет доступ к прямой ссылке. [Партнёрская сделка](#accept-c72) |
+| C196 | partner performance scorecards | NOT-IMPLEMENTED | C | Показатель партнёра воспроизводится по зарегистрированным и принятым сделкам. [Партнёрская сделка](#accept-c72) |
+| P297 | multiple pipelines per supported owner/resource type | CODE-NOT-ACCEPTED | Несколько Sales pipelines приняты. Для другого типа ресурса потребуется собственный owner и тест смены воронки. | После изменения порядка стадий проверить текущую воронку и воспроизводимость истории по старой версии. [Этап и версия воронки](#accept-c57) |
+| P298 | versioned stage definitions and ordering | ACCEPTED | Принята граница Sales в M2-01/M2-04; обобщение на другие домены выполняется отдельно. | После изменения порядка стадий проверить текущую воронку и воспроизводимость истории по старой версии. [Этап и версия воронки](#accept-c57) |
+| P299 | stage entry/exit criteria | CODE-NOT-ACCEPTED | StageTransitionPolicy и фиксированная связь Sales→Task работают в ограниченной области. Пользовательские условия/действия требуют отдельной управляемой конфигурации. [Sales domain](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-sales/src/domain.rs#L234) | Одинаковые входные данные подчиняются одним правилам перехода при ручном и автоматическом запуске. Конфликт версии сохраняет фактический этап. [Этап и версия воронки](#accept-c57) |
+| P300 | required fields and checklists | NOT-IMPLEMENTED | C | Пропущенный обязательный пункт блокирует переход, заполнение открывает его. [Этап и версия воронки](#accept-c57) |
+| P301 | allowed transitions and role restrictions | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Одинаковый переход даёт разрешение уполномоченной роли и отказ другой. [Этап и версия воронки](#accept-c57) |
+| P302 | stage probability, target duration and SLA | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Версия этапа задаёт ожидаемые вероятность, целевое время и срок для контрольной сделки. [Этап и версия воронки](#accept-c57) |
+| P303 | automatic transitions through workflow actions where policy allows | CODE-NOT-ACCEPTED | StageTransitionPolicy и фиксированная связь Sales→Task работают в ограниченной области. Пользовательские условия/действия требуют отдельной управляемой конфигурации. [Sales domain](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-sales/src/domain.rs#L234) | Одинаковые входные данные подчиняются одним правилам перехода при ручном и автоматическом запуске. Конфликт версии сохраняет фактический этап. [Этап и версия воронки](#accept-c57) |
+| P304 | manual transition with validation and conflict handling | ACCEPTED | Принята граница Sales в M2-01/M2-04; обобщение на другие домены выполняется отдельно. | Одинаковые входные данные подчиняются одним правилам перехода при ручном и автоматическом запуске. Конфликт версии сохраняет фактический этап. [Этап и версия воронки](#accept-c57) |
+| P305 | reasons for skip, regression, loss, cancellation or reopening | CODE-NOT-ACCEPTED | Расширение действующего сценария. | При возврате стадии или переоткрытии сохраняется выбранная причина. [Этап и версия воронки](#accept-c57) |
+| P306 | pipeline templates and controlled cloning | NOT-IMPLEMENTED | C | Изменение клона воронки сохраняет исходный шаблон. [Этап и версия воронки](#accept-c57) |
+| P307 | migration of active records when a pipeline version changes | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Для открытой сделки на удаляемом этапе проверяется согласованное сопоставление до активации версии. [Этап и версия воронки](#accept-c57) |
+| P308 | cross-pipeline transfer rules | NOT-IMPLEMENTED | C | Разрешённый перенос сохраняет историю обеих воронок, запрещённый сохраняет исходный этап. [Этап и версия воронки](#accept-c57) |
+| P309 | stage history and duration analytics | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Время на этапе сверяется с отметками входа и выхода. [План и результат продаж](#accept-c68) |
+| P310 | funnel conversion and leakage analytics | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Числитель и знаменатель конверсии сверяются со сделками, вошедшими и вышедшими из этапа. [План и результат продаж](#accept-c68) |
+| P356 | leads/prospects, qualification and conversion lineage | NOT-IMPLEMENTED | Отдельный Lead с собственной конверсией отложен C для MVP. Сейчас квалификация выполняется стадиями Deal. | После повторной конверсии квалифицированного обращения существует ровно одна сделка, связанная с исходным обращением. [Квалификация обращения](#accept-c56) |
+| P357 | richer opportunities/deals and configurable sales processes | CODE-NOT-ACCEPTED | Расширение действующего сценария. | В двух воронках применяются их собственные правила этапов. [Этап и версия воронки](#accept-c57) |
+| P358 | account/contact/opportunity roles and buying groups | CODE-NOT-ACCEPTED | Расширение действующего сценария. | У одного участника могут различаться роль в клиенте и роль в конкретной сделке. [Участники сделки](#accept-c58) |
+| P359 | routing, assignment, queues, workload balancing and territories | CODE-NOT-ACCEPTED | TaskListQuery.owner и UpdateTask.owner доступны в Rust. Следующий срез добавляет проверяемые выборку и назначение в публичном API. [domain.rs#L101](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/domain.rs#L101) | Проверить выбор исполнителя при пересечении правил и достижении лимита загрузки. [Распределение продаж](#accept-c65) |
+| P360 | teams, overlays and collaboration | NOT-IMPLEMENTED | C | У основной и дополнительной команд проверяется доступ к одной сделке до и после исключения участника. [Распределение продаж](#accept-c65) |
+| P361 | quotas, targets and period management | NOT-IMPLEMENTED | C | Факт на границе двух периодов попадает только в соответствующую квоту. [План и результат продаж](#accept-c68) |
+| P362 | forecasting, categories, rollups and scenarios | CODE-NOT-ACCEPTED | Часть поведения реализована в типах Sales/Activities, runtime доступа, ModuleRegistry либо штатной поставке. Принятая граница и недостающее развитие разделены в каталогах ниже. | Сумма прогноза по категориям совпадает с контрольными сделками для каждого сценария. [План и результат продаж](#accept-c68) |
+| P363 | pipeline inspection, risk signals and coaching | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Сигнал риска ведёт к конкретной сделке и показывает условие срабатывания. [План и результат продаж](#accept-c68) |
+| P364 | win/loss taxonomies and sales-cycle analytics | CODE-NOT-ACCEPTED | Часть поведения реализована в типах Sales/Activities, runtime доступа, ModuleRegistry либо штатной поставке. Принятая граница и недостающее развитие разделены в каталогах ниже. | Причины выигрыша и потери можно сверить с исходными сделками и длительностью цикла за выбранный период. [План и результат продаж](#accept-c68) |
+| P365 | renewals, expansion and cross-sell coordination | NOT-IMPLEMENTED | C | Повтор сигнала продления или расширения сохраняет исходную связь с обязательством и одну возможность данного вида. [Продление и расширение](#accept-c71) |
+| P366 | partner-sourced/influenced attribution | NOT-IMPLEMENTED | C | Сделка с источником-партнёром и сделка с влиянием партнёра остаются различимыми в отчёте. [Партнёрская сделка](#accept-c72) |
+| P367 | product/quote context through Phase 8B references | NOT-IMPLEMENTED | C | Строка сделки указывает на версию каталога и предложения, её сумма воспроизводима после обновления прайса. [Строка предложения в сделке](#accept-c63) |
+| P368 | mobile and offline field-selling journeys where required | NOT-IMPLEMENTED | C | После работы без сети проверить синхронизацию одного изменения и показать пользователю конфликт при одновременной записи. [Полевая продажа](#accept-p368) |
+| P423 | partner organizations/contacts | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Партнёр видит свою организацию и связанных с ней контактов в пределах делегированного доступа. [Партнёрская сделка](#accept-c72) |
+| P424 | tiers, programs, certification and eligibility | NOT-IMPLEMENTED | C | По истечении сертификации новая регистрация перестаёт получать привилегию программы. [Партнёрская сделка](#accept-c72) |
+| P425 | deal registration and conflict resolution | NOT-IMPLEMENTED | C | Две регистрации одной возможности приводят к объяснимому решению о конфликте. [Партнёрская сделка](#accept-c72) |
+| P426 | lead/opportunity distribution | NOT-IMPLEMENTED | C | Распределённая возможность видна выбранному партнёру, соседнему партнёру доступ закрыт. [Партнёрская сделка](#accept-c72) |
+| P427 | incentives/rebate integration boundaries | NOT-IMPLEMENTED | C | Сверить ссылку и сумму вознаграждения с одним внешним начислением. [Партнёрская сделка](#accept-c72) |
+| P428 | delegated partner portal access | NOT-IMPLEMENTED | C | Отозванный пользователь партнёра теряет доступ к прямой ссылке. [Партнёрская сделка](#accept-c72) |
+| P429 | partner performance analytics | NOT-IMPLEMENTED | C | Показатель партнёра воспроизводится по зарегистрированным и принятым сделкам. [Партнёрская сделка](#accept-c72) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-c56"></a>Квалификация обращения | Подтверждён жизненный цикл до сделки с самостоятельным решением о квалификации. | Принять одно обращение, отклонить другое с причиной. Повтор конверсии первого открывает ту же сделку с исходной ссылкой. |
+| <a id="accept-c57"></a>Этап и версия воронки | Определены действующая и будущая версии, разрешённый переход и пример запрета. | Перевести тестовую сделку с заполненными обязательными полями, проверить этап, историю, вероятность и срок. Отказ по роли или отсутствующему полю сохраняет этап. При клонировании, смене версии или воронки сверить судьбу открытой сделки. |
+| <a id="accept-c58"></a>Участники сделки | Приняты идентичность и карточка сделки, описаны роли покупателя и контакт по активности. | Связать двух участников с разными ролями и зафиксировать встречу. После открытия сделки видны нужные контакт, роль и событие, у соседней сделки их нет. |
+| <a id="accept-c63"></a>Строка предложения в сделке | Каталог и CPQ отдают версионированное предложение. | Открыть предложение из сделки, сверить товар, версию цены и сумму. Позднейшая смена цены сохраняет исходную сумму принятого предложения. |
+| <a id="accept-c65"></a>Распределение продаж | Приняты членство и назначение, согласованы территории, перекрытие команд и доступная ёмкость. | На двух подходящих кандидатах проверить выбор по правилу, повтор, отзыв участника и границу территории. Показать причину выбора, исполнителя и доступ команды. |
+| <a id="accept-c68"></a>План и результат продаж | Есть период, валюта, история этапов и контрольный набор выигранных и проигранных сделок. | Сверить квоту и факт, конверсию, длительность и причины потерь с исходными сделками. Смена прогноза меняет сценарий, закрытый факт сохраняется. |
+| <a id="accept-c71"></a>Продление и расширение | У клиента есть действующее обязательство с датой продления. | В срок появляется связанная возможность продления, повтор сигнала ведёт к той же возможности. Проверить отдельный исход расширения и отказа. |
+| <a id="accept-c72"></a>Партнёрская сделка | Есть программа, два партнёра, правила допуска, конфликта регистрации и атрибуции. | Зарегистрировать одну возможность от двух партнёров. Решение фиксирует получателя, источник и основание. Сверить это решение с доступом в портале, расчётом показателя и, если подключён расчёт вознаграждения, одной передачей во внешнюю систему. |
+| <a id="accept-p368"></a>Полевая продажа | Пилот подтвердил работу продавца вне сети и выбран доступный набор записей. | Открыть сохранённую сделку без сети, изменить её одновременно на сервере, восстановить связь. Продавец видит конфликт и подтверждает актуальный результат. |
 
 ## 03. Рабочие представления и поиск
 
-В Task различаются сохранение даты напоминания и доставка уведомления в нужный момент. Второму пути нужны планировщик, идентификатор действия, обработка отмены и доказательство доставки без браузера. Заголовок клиента в списке Task сейчас может породить отдельное чтение на строку (#485).
+В Task различаются сохранение даты напоминания и доставка уведомления в нужный момент. Второму пути нужны планировщик, идентификатор действия, обработка отмены и доказательство доставки без браузера. В списке Task подписи клиентов приходят вместе со страницей задач, в отдельной карточке клиент доступен по ссылке.
 
 **Очередь:** 1. **Ответственность:** Activities, Sales, читающие представления. **Критерий перехода:** Очередь строится по правам текущего субъекта; фильтр действует до пагинации и сохраняется в ссылке.
 
 Проверенная смежная граница: [TaskScreen.tsx](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/cloudflare-crm/web/src/TaskScreen.tsx). [Gate A/B](https://github.com/iamaman11/crm/issues/352#issuecomment-7084072103)
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| F03-01 | Создать задачу, назначить срок, перенести напоминание, завершить | ACCEPTED | M1-08; отдельные операции и публичные методы перечислены ниже. |
-| F03-02 | Отобрать открытые просроченные задачи до пагинации | ACCEPTED | R1; Gate A/B 77611bd. |
-| F03-03 | Переназначить задачу сотруднику или команде | CODE-NOT-ACCEPTED | UpdateTask.owner и отрицательные тесты уже есть в Rust domain. Нужны контракт, проверка членства и адаптер D1. |
-| F03-04 | Открыть персональную очередь по владельцу | CODE-NOT-ACCEPTED | TaskListQuery.owner есть в домене. Требуется публичный фильтр с ограничением видимости. |
-| F03-05 | Показать сводку ближайших задач, сделок и последних взаимодействий | NOT-IMPLEMENTED | Отдельные списки и Customer360 доступны; совместная рабочая очередь требует агрегированного чтения. |
-| C60 | calendar synchronization boundaries and scheduling | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C62 | pipeline views, Kanban, lists, saved views and bulk actions | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. |
-| C272 | notifications and notification preferences | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C273 | mentions, comments and collaboration threads where appropriate | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C274 | shared/team queues and work lists | CODE-NOT-ACCEPTED | TaskListQuery.owner и UpdateTask.owner доступны в Rust. Следующий срез добавляет проверяемые выборку и назначение в публичном API. [domain.rs#L101](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/domain.rs#L101) |
-| C275 | personal task/calendar views | CODE-NOT-ACCEPTED | TaskListQuery.owner и UpdateTask.owner доступны в Rust. Следующий срез добавляет проверяемые выборку и назначение в публичном API. [domain.rs#L101](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/domain.rs#L101) |
-| C276 | activity feed and recent items | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C277 | favorites/pins | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C278 | command palette and global navigation | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C279 | saved views, filters and column configurations | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. |
-| C280 | bulk actions with preview, authorization and partial-failure semantics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C282 | keyboard accessibility and productivity shortcuts | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C290 | global search across authorized CRM resources | ACCEPTED | L-08: поиск по Party/Account/Deal/Task, фильтры и переходы в доступные записи. |
-| C291 | domain-specific search and filtering | ACCEPTED | L-08: поиск по Party/Account/Deal/Task, фильтры и переходы в доступные записи. |
-| C292 | typo tolerance/relevance adapters where enabled | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C293 | permission changes enforced at disclosure time | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. |
-| C294 | deterministic pagination and rebuild/switch generations | CODE-NOT-ACCEPTED | Keyset в списках есть. В legacy существует SearchReindexCoordinator; поколение восстановить и переключить без пропуска записи перед переходом на общий индекс. [generation.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-search-runtime/src/generation.rs) |
-| C295 | recent/popular suggestions as non-authoritative projections | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C296 | knowledge and document discovery | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C297 | semantic/vector retrieval only through permission-filtered governed paths | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C298 | deletion/restriction/consent effects propagated with defined freshness guarantees | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P314 | drag-and-drop with server-authoritative transition validation | CODE-NOT-ACCEPTED | Реальные Chromium-тесты выполняют dragTo и проверяют предвыбор этапа. Для жеста отдельно зафиксировать независимое подтверждение; сам переход AdvanceStage принят. [Browser test](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/cloudflare-crm/rust-party/test/typed-browser.mjs#L1312) |
-| P315 | optimistic UX only with explicit rollback on conflict | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P316 | customizable cards and fields | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P317 | grouping and swimlanes | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P318 | filters, saved views and sharing | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P319 | sorting, search and quick actions | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P320 | aggregate totals and weighted values | ACCEPTED | Принята граница Sales в M2-01/M2-04; обобщение на другие домены выполняется отдельно. |
-| P321 | WIP/staleness/SLA indicators | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P322 | bulk move with preview and partial-failure results | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P323 | permissions and field masking on every card | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P324 | responsive and keyboard-accessible operation | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P325 | large-pipeline virtualization and stable pagination | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P326 | real-time or bounded-freshness updates | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| F03-01 | Создать задачу, назначить срок, перенести напоминание, завершить | ACCEPTED | M1-08; отдельные операции и публичные методы перечислены ниже. | После повторного открытия сверить статус завершения, сохранённый срок и последнее время напоминания. [Личная работа](#accept-f03-01) |
+| F03-02 | Отобрать открытые просроченные задачи до пагинации | ACCEPTED | R1; Gate A/B 77611bd. | Проверить просроченную открытую задачу за первой страницей исходной выборки, исключить закрытую и будущую. [Личная работа](#accept-f03-01) |
+| F03-03 | Переназначить задачу сотруднику или команде | CODE-NOT-ACCEPTED | UpdateTask.owner и отрицательные тесты уже есть в Rust domain. Нужны контракт, проверка членства и адаптер D1. | В пилоте проверить передачу человеку. Для передачи группе отдельно определить членство, получение задачи из пула и конфликт двух исполнителей. [Личная работа](#accept-f03-01) |
+| F03-04 | Открыть персональную очередь по владельцу | CODE-NOT-ACCEPTED | TaskListQuery.owner есть в домене. Требуется публичный фильтр с ограничением видимости. | B получает открытые собственные задачи на всех страницах и видит актуальный срок после нового входа. [Личная работа](#accept-f03-01) |
+| F03-05 | Показать сводку ближайших задач, сделок и последних взаимодействий | NOT-IMPLEMENTED | Отдельные списки и Customer360 доступны; совместная рабочая очередь требует агрегированного чтения. | Из каждой части сводки перейти к исходной задаче, сделке или записи истории с действующим правом чтения. [Личная работа](#accept-f03-01) |
+| C60 | calendar synchronization boundaries and scheduling | NOT-IMPLEMENTED | C | Перенос встречи через границу часового пояса сохраняет один согласованный момент у обоих участников. [Рабочее место сотрудника](#accept-c60) |
+| C62 | pipeline views, Kanban, lists, saved views and bulk actions | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. | Переместить допустимую карточку, открыть ту же сделку из списка и сверить сохранённый этап. [Представление и массовый переход](#accept-c62) |
+| C272 | notifications and notification preferences | NOT-IMPLEMENTED | C | Отключённый вид уведомлений не доставляется, разрешённый ведёт к исходной записи. [Рабочее место сотрудника](#accept-c60) |
+| C273 | mentions, comments and collaboration threads where appropriate | NOT-IMPLEMENTED | C | Упоминание приходит доступному адресату, отзыв доступа закрывает переписку. [Рабочее место сотрудника](#accept-c60) |
+| C274 | shared/team queues and work lists | CODE-NOT-ACCEPTED | TaskListQuery.owner и UpdateTask.owner доступны в Rust. Следующий срез добавляет проверяемые выборку и назначение в публичном API. [domain.rs#L101](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/domain.rs#L101) | Задача после передачи в пул видна действующим участникам соответствующей команды. Закрытая или забранная задача покидает открытый пул по принятому правилу. [Личная работа](#accept-f03-01) |
+| C275 | personal task/calendar views | CODE-NOT-ACCEPTED | TaskListQuery.owner и UpdateTask.owner доступны в Rust. Следующий срез добавляет проверяемые выборку и назначение в публичном API. [domain.rs#L101](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/domain.rs#L101) | B получает открытые собственные задачи на всех страницах и видит актуальный срок после нового входа. [Личная работа](#accept-f03-01) |
+| C276 | activity feed and recent items | NOT-IMPLEMENTED | C | Повторное открытие обновляет порядок недавних записей без дубля. [Рабочее место сотрудника](#accept-c60) |
+| C277 | favorites/pins | NOT-IMPLEMENTED | C | Закрепление сохраняется для автора после нового входа и не меняет список коллеги. [Рабочее место сотрудника](#accept-c60) |
+| C278 | command palette and global navigation | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Выбор результата с клавиатуры открывает нужную запись и сохраняет возможность возврата. [Рабочее место сотрудника](#accept-c60) |
+| C279 | saved views, filters and column configurations | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. | Сохранённый фильтр воспроизводится после входа, общий доступ учитывает права получателя. [Представление и массовый переход](#accept-c62) |
+| C280 | bulk actions with preview, authorization and partial-failure semantics | NOT-IMPLEMENTED | C | Для каждой строки смешанного набора показан собственный исход выполнения. [Представление и массовый переход](#accept-c62) |
+| C282 | keyboard accessibility and productivity shortcuts | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Основное действие выполняется без мыши, после отказа фокус возвращается к доступному элементу. [Рабочее место сотрудника](#accept-c60) |
+| C290 | global search across authorized CRM resources | ACCEPTED | L-08: поиск по Party/Account/Deal/Task, фильтры и переходы в доступные записи. | Один запрос и доменный фильтр на известном наборе возвращают ожидаемые доступные записи. [Поиск и раскрытие записи](#accept-c290) |
+| C291 | domain-specific search and filtering | ACCEPTED | L-08: поиск по Party/Account/Deal/Task, фильтры и переходы в доступные записи. | Один запрос и доменный фильтр на известном наборе возвращают ожидаемые доступные записи. [Поиск и раскрытие записи](#accept-c290) |
+| C292 | typo tolerance/relevance adapters where enabled | NOT-IMPLEMENTED | C | Для заранее заданных опечаток проверить ожидаемые результаты и отсутствие закрытых записей. [Поиск и раскрытие записи](#accept-c290) |
+| C293 | permission changes enforced at disclosure time | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. | Отзыв права между поиском и открытием ссылки закрывает чтение источника. [Поиск и раскрытие записи](#accept-c290) |
+| C294 | deterministic pagination and rebuild/switch generations | CODE-NOT-ACCEPTED | Keyset в списках есть. В legacy существует SearchReindexCoordinator; поколение восстановить и переключить без пропуска записи перед переходом на общий индекс. [generation.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-search-runtime/src/generation.rs) | Переключить поколение поисковой выдачи и сверить полный контрольный набор по страницам. [Поиск и раскрытие записи](#accept-c290) |
+| C295 | recent/popular suggestions as non-authoritative projections | NOT-IMPLEMENTED | C | Отозванная запись исчезает также из подсказок недавнего и популярного поиска. [Поиск и раскрытие записи](#accept-c290) |
+| C296 | knowledge and document discovery | NOT-IMPLEMENTED | C | Найденная статья или версия документа открывается с повторной проверкой доступа. [Поиск и раскрытие записи](#accept-c290) |
+| C297 | semantic/vector retrieval only through permission-filtered governed paths | NOT-IMPLEMENTED | C | Семантически близкий закрытый документ не виден в выдаче и фрагментах. [Поиск и раскрытие записи](#accept-c290) |
+| C298 | deletion/restriction/consent effects propagated with defined freshness guarantees | NOT-IMPLEMENTED | C | Измерить время распространения ограничения и сравнить с согласованным пределом. [Поиск и раскрытие записи](#accept-c290) |
+| P314 | drag-and-drop with server-authoritative transition validation | CODE-NOT-ACCEPTED | Реальные Chromium-тесты выполняют dragTo и проверяют предвыбор этапа. Для жеста отдельно зафиксировать независимое подтверждение; сам переход AdvanceStage принят. [Browser test](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/cloudflare-crm/rust-party/test/typed-browser.mjs#L1312) | Переместить допустимую карточку, открыть ту же сделку из списка и сверить сохранённый этап. [Представление и массовый переход](#accept-c62) |
+| P315 | optimistic UX only with explicit rollback on conflict | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Отклонённый сервером перенос возвращает карточку в сохранённый этап. [Представление и массовый переход](#accept-c62) |
+| P316 | customizable cards and fields | NOT-IMPLEMENTED | C | Выбор полей карточки сохраняется, набор учитывает политику текущего пользователя. [Представление и массовый переход](#accept-c62) |
+| P317 | grouping and swimlanes | NOT-IMPLEMENTED | C | После группировки единственная сделка не попадает одновременно в две взаимоисключающие группы. [Представление и массовый переход](#accept-c62) |
+| P318 | filters, saved views and sharing | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Сохранённый фильтр воспроизводится после входа, общий доступ учитывает права получателя. [Представление и массовый переход](#accept-c62) |
+| P319 | sorting, search and quick actions | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Быстрое действие выполняется над выбранной строкой после смены сортировки. [Представление и массовый переход](#accept-c62) |
+| P320 | aggregate totals and weighted values | ACCEPTED | Принята граница Sales в M2-01/M2-04; обобщение на другие домены выполняется отдельно. | Сумма и взвешенный итог воспроизводятся по значениям и вероятностям входящих карточек. [Представление и массовый переход](#accept-c62) |
+| P321 | WIP/staleness/SLA indicators | NOT-IMPLEMENTED | C | Две записи по разные стороны порога получают разные индикаторы. [Представление и массовый переход](#accept-c62) |
+| P322 | bulk move with preview and partial-failure results | NOT-IMPLEMENTED | C | Для каждой строки смешанного набора показан собственный исход выполнения. [Представление и массовый переход](#accept-c62) |
+| P323 | permissions and field masking on every card | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Поля карточки и карточка в списке подчиняются действующей модели видимости tenant. [Представление и массовый переход](#accept-c62) |
+| P324 | responsive and keyboard-accessible operation | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Основное действие выполняется без мыши, после отказа фокус возвращается к доступному элементу. [Представление и массовый переход](#accept-c62) |
+| P325 | large-pipeline virtualization and stable pagination | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Пройти все страницы большого набора и сверить уникальные ID и порядок. [Представление и массовый переход](#accept-c62) |
+| P326 | real-time or bounded-freshness updates | NOT-IMPLEMENTED | C | Обновление первого пользователя становится видимым второму в согласованный интервал. [Представление и массовый переход](#accept-c62) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-f03-01"></a>Личная работа | Есть участники tenant и открытые задачи с разными владельцами, сроками и страницами выдачи. | Пройти назначение по критериям SK-01/04. Задача нужного исполнителя попадает в его очередь даже за первой страницей общей выборки. Завершённая уходит из открытой очереди. |
+| <a id="accept-c60"></a>Рабочее место сотрудника | Приняты идентичность, связанная запись и наблюдаемое действие сотрудника. | Открыть запись из выбранной поверхности клавиатурой. Проверить адресата упоминания или напоминания, часовой пояс календарного события и сохранение закрепления после входа. При отзыве прав ссылка перестаёт раскрывать запись. |
+| <a id="accept-c62"></a>Представление и массовый переход | Есть воронка с двумя этапами, две страницы карточек и записи с разными разрешениями. | Проверить сохранённый фильтр, сортировку, группы, доступные поля и итог по контрольным карточкам. Переместить разрешённую карточку с клавиатуры. Для смешанной пачки сверить предварительный состав и исход каждой строки, конфликт возвращает карточку в фактический этап. |
+| <a id="accept-c290"></a>Поиск и раскрытие записи | Приняты источник записей, политика чтения и контрольные запросы с ожидаемыми совпадениями. | Проверить поиск, подсказку и переход на разрешённый источник. После удаления или отзыва доступа запись исчезает в согласованный срок, прямой переход закрыт сразу. При смене поколения выдачи сверить отсутствие пропусков и дублей. |
 
 ## 04. Автоматизация и правила
 
@@ -180,89 +259,100 @@ Account может быть связан со сделкой, primary Contact �
 
 Проверенная смежная граница: [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-core-workflow/src/lib.rs). [Gate A/B](https://github.com/iamaman11/crm/issues/352#issuecomment-7070842108)
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| F04-01 | При переходе сделки автоматически создать связанную задачу один раз | ACCEPTED | M1-09: внутренний Sales→Activities link и атомарное изменение в D1; общий редактор правил — следующая волна. |
-| C257 | trigger, condition, branch, wait, timer and schedule semantics | CODE-NOT-ACCEPTED | Есть фиксированная Sales→Task связь и расчёт recurrence в Activities. Универсальная публикация триггера и durable запуск по расписанию требуют отдельного исполнения. [recurrence.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/recurrence.rs) |
-| C258 | exact governed capability invocation as workflow actions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C259 | approvals and human tasks | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C260 | retries, idempotency and compensation/recovery strategies | CODE-NOT-ACCEPTED | Есть replay конкретных команд и публикация версий metadata; требуется исполняемая общая модель workflow. |
-| C261 | versioned workflow definitions and immutable execution evidence | CODE-NOT-ACCEPTED | Опубликованные revision metadata доступны в прежнем runtime; цель включает версию запущенного workflow и неизменяемый журнал его шагов. |
-| C262 | business calendars and SLA timers | CODE-NOT-ACCEPTED | В Activities есть календарный расчёт recurrence с отрицательными тестами. Durable пробуждение и SLA в Worker отдельно не приняты. [Recurrence](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/recurrence.rs#L72) |
-| C263 | event-driven and scheduled automation | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C264 | integration actions through allowlisted governed connectors | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C265 | no arbitrary SQL, secret access, unrestricted HTTP or hidden mutation bypass | CODE-NOT-ACCEPTED | Архитектурное ограничение действует в текущем Worker. Для планируемого редактора или проекции самостоятельно проверить соблюдение после подключения. |
-| C266 | simulation/test mode and execution observability | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P177 | record created, updated, deleted or restored | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P178 | selected field/value changes | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P179 | lifecycle or pipeline stage entry/exit | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P180 | governed domain events | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P181 | inbound verified webhook events | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P182 | scheduled date/time and recurring schedules | CODE-NOT-ACCEPTED | В Activities есть календарный расчёт recurrence с отрицательными тестами. Durable пробуждение и SLA в Worker отдельно не приняты. [Recurrence](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/recurrence.rs#L72) |
-| P183 | relative timers, inactivity and SLA thresholds | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P184 | message delivery/open/reply/bounce events where providers expose them | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P185 | assignment, ownership or queue changes | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P186 | analytics/score/health threshold crossings through governed derived events | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P187 | manual user start | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P188 | API/integration start | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P189 | bulk/import completion and reconciliation outcomes | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P197 | typed comparisons and null/empty semantics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P198 | related-resource predicates through authorized queries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P199 | AND/OR/NOT groups | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P200 | deterministic expression functions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P201 | business-calendar calculations | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P202 | changed-from/changed-to predicates | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P203 | actor/team/territory/permission conditions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P204 | consent, privacy and data-class conditions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P205 | feature/module activation conditions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P206 | bounded decision tables | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P207 | explainable rule outcomes | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P215 | create or update a domain resource through its owner capability | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P216 | move a record through an allowed lifecycle or pipeline transition | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P217 | assign/reassign to user, team, queue, territory or routing policy | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P218 | create task, appointment, reminder, checklist or human work item | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P219 | send notification | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P220 | send consent-authorized email/SMS/message through Communications | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P221 | start, pause, resume or cancel a sales cadence/journey where allowed | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P222 | request serial/parallel approval | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P223 | generate a document or e-signature envelope | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P224 | invoke an allowlisted connector action | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P225 | publish a governed integration event | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P226 | wait until time, event, condition or human completion | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P227 | branch, parallelize, join or call a reusable subflow | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P228 | invoke a governed AI tool with policy and approval controls | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P229 | compensate or reverse a prior action only when the owner exposes a supported reversal | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P237 | immutable definition versions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P238 | explicit draft, test, published, suspended and retired states | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P239 | exact binding to action/capability versions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P240 | durable execution instances and step history | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P241 | retries with bounded backoff | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P242 | idempotency and duplicate-trigger suppression | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P243 | leases, crash recovery and replay | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P244 | waits and timers that survive deployment/restart | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P245 | parallel branches and deterministic joins | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P246 | bounded loops/iteration with quota controls | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P247 | cancellation and timeout | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P248 | compensation strategy where supported | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P249 | dead-letter and operator recovery queues | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P250 | version-aware migration policy for running instances | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P251 | complete actor, reason, input digest, result and cost evidence | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P252 | tenant/workflow/action concurrency and rate limits | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P258 | trigger/action node palette | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P259 | drag-and-drop graph editor | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P260 | typed configuration forms | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P261 | branch and decision-table editors | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P262 | reusable subflows/templates | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P263 | validation before save and publish | CODE-NOT-ACCEPTED | Историческое metadata authoring валидирует пакет и его влияние. Для графа процесса проверять связи, права команд и циклы перед публикацией. |
-| P264 | dependency and permission impact analysis | CODE-NOT-ACCEPTED | Историческое metadata authoring валидирует пакет и его влияние. Для графа процесса проверять связи, права команд и циклы перед публикацией. |
-| P265 | simulation using representative/synthetic data | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P266 | dry-run mode with no side effects | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P267 | step-through testing and captured traces | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P268 | version diff, clone and rollback | CODE-NOT-ACCEPTED | Admin Studio умеет показать изменения версии metadata и откатить публикацию; редактор исполняемого workflow и управление запущенными экземплярами требуют отдельного среза. |
-| P269 | sandbox-to-production promotion | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P270 | run explorer, failure diagnostics and replay controls | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P271 | usage, latency, error and cost dashboards | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P272 | localized descriptions and accessibility | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| F04-01 | При переходе сделки автоматически создать связанную задачу один раз | ACCEPTED | M1-09: внутренний Sales→Activities link и атомарное изменение в D1; общий редактор правил — следующая волна. | Дважды доставить один принятый переход сделки, найти одну связанную задачу в Activities. [Действие владельца](#accept-f04-01) |
+| C257 | trigger, condition, branch, wait, timer and schedule semantics | CODE-NOT-ACCEPTED | Есть фиксированная Sales→Task связь и расчёт recurrence в Activities. Универсальная публикация триггера и durable запуск по расписанию требуют отдельного исполнения. [recurrence.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/recurrence.rs) | Событие и очередной такт расписания имеют различимые источники, повтор такта сохраняет одно исполнение. [Запуск правила](#accept-c257) |
+| C258 | exact governed capability invocation as workflow actions | NOT-IMPLEMENTED | C | Вызванная версия операции и сохранённый результат совпадают с журналом целевого владельца. [Действие владельца](#accept-f04-01) |
+| C259 | approvals and human tasks | NOT-IMPLEMENTED | C | Согласование и отказ уполномоченного сотрудника приводят к разным конечным состояниям. [Ожидание и согласование](#accept-c259) |
+| C260 | retries, idempotency and compensation/recovery strategies | CODE-NOT-ACCEPTED | Есть replay конкретных команд и публикация версий metadata; требуется исполняемая общая модель workflow. | После обрыва между записью и ответом восстановить исполнение без дублирования эффекта. [Восстановление исполнения](#accept-c260) |
+| C261 | versioned workflow definitions and immutable execution evidence | CODE-NOT-ACCEPTED | Опубликованные revision metadata доступны в прежнем runtime; цель включает версию запущенного workflow и неизменяемый журнал его шагов. | Повторное чтение завершённого запуска возвращает первоначальную версию правила и его историю. [Восстановление исполнения](#accept-c260) |
+| C262 | business calendars and SLA timers | CODE-NOT-ACCEPTED | В Activities есть календарный расчёт recurrence с отрицательными тестами. Durable пробуждение и SLA в Worker отдельно не приняты. [Recurrence](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/recurrence.rs#L72) | Срок на стыке выходного и рабочего дня совпадает с принятым бизнес-календарём. [Восстановление исполнения](#accept-c260) |
+| C263 | event-driven and scheduled automation | NOT-IMPLEMENTED | C | Событие и очередной такт расписания имеют различимые источники, повтор такта сохраняет одно исполнение. [Запуск правила](#accept-c257) |
+| C264 | integration actions through allowlisted governed connectors | NOT-IMPLEMENTED | C | Действие разрешённого адаптера исполняется с его полномочиями. Незаявленное обращение к инфраструктуре отклоняется. [Действие владельца](#accept-f04-01) |
+| C265 | no arbitrary SQL, secret access, unrestricted HTTP or hidden mutation bypass | CODE-NOT-ACCEPTED | Архитектурное ограничение действует в текущем Worker. Для планируемого редактора или проекции самостоятельно проверить соблюдение после подключения. | Действие разрешённого адаптера исполняется с его полномочиями. Незаявленное обращение к инфраструктуре отклоняется. [Действие владельца](#accept-f04-01) |
+| C266 | simulation/test mode and execution observability | NOT-IMPLEMENTED | C | Сверить прогноз симуляции с маршрутом реального запуска и отсутствием внешних эффектов у симуляции. [Редактор и симуляция](#accept-c266) |
+| P177 | record created, updated, deleted or restored | NOT-IMPLEMENTED | C | Для каждого выбранного события жизненного цикла сверить конкретный ID объекта и вид изменения. [Запуск правила](#accept-c257) |
+| P178 | selected field/value changes | NOT-IMPLEMENTED | C | Только заданная пара старого и нового значений удовлетворяет условию. [Запуск правила](#accept-c257) |
+| P179 | lifecycle or pipeline stage entry/exit | NOT-IMPLEMENTED | C | Вход и выход из этапа различаются в истории запуска. [Запуск правила](#accept-c257) |
+| P180 | governed domain events | NOT-IMPLEMENTED | C | Повторный экземпляр одного события домена ведёт к прежнему исполнению. [Запуск правила](#accept-c257) |
+| P181 | inbound verified webhook events | NOT-IMPLEMENTED | C | Один и тот же проверенный входящий webhook запускает цепочку один раз. [Запуск правила](#accept-c257) |
+| P182 | scheduled date/time and recurring schedules | CODE-NOT-ACCEPTED | В Activities есть календарный расчёт recurrence с отрицательными тестами. Durable пробуждение и SLA в Worker отдельно не приняты. [Recurrence](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/recurrence.rs#L72) | Событие и очередной такт расписания имеют различимые источники, повтор такта сохраняет одно исполнение. [Запуск правила](#accept-c257) |
+| P183 | relative timers, inactivity and SLA thresholds | NOT-IMPLEMENTED | C | Событие непосредственно до порога не запускает таймер, после порога запускает. [Запуск правила](#accept-c257) |
+| P184 | message delivery/open/reply/bounce events where providers expose them | NOT-IMPLEMENTED | C | Доставка, ответ и отказ провайдера ведут к соответствующим разным ветвям. [Запуск правила](#accept-c257) |
+| P185 | assignment, ownership or queue changes | NOT-IMPLEMENTED | C | Смена ответственного запускает правило, повторное чтение задачи его не запускает. [Запуск правила](#accept-c257) |
+| P186 | analytics/score/health threshold crossings through governed derived events | NOT-IMPLEMENTED | C | Порог срабатывает при пересечении, повтор значения по ту же сторону не дублирует запуск. [Запуск правила](#accept-c257) |
+| P187 | manual user start | NOT-IMPLEMENTED | C | Оператор видит собственный ручной запуск и его результат. [Запуск правила](#accept-c257) |
+| P188 | API/integration start | NOT-IMPLEMENTED | C | Для сервисного запуска видны сервисный субъект и область его полномочий. [Запуск правила](#accept-c257) |
+| P189 | bulk/import completion and reconciliation outcomes | NOT-IMPLEMENTED | C | Правило получает окончательный результат импорта и отличает частичный отказ. [Запуск правила](#accept-c257) |
+| P197 | typed comparisons and null/empty semantics | NOT-IMPLEMENTED | C | Отдельно сверить отсутствующее поле, пустую строку, ноль и ложное значение. [Условие правила](#accept-p197) |
+| P198 | related-resource predicates through authorized queries | NOT-IMPLEMENTED | C | Отзыв доступа к связанной записи меняет результат разрешённого чтения условия. [Условие правила](#accept-p197) |
+| P199 | AND/OR/NOT groups | NOT-IMPLEMENTED | C | Проверить истинностную таблицу вложенных AND, OR и NOT на контрольных строках. [Условие правила](#accept-p197) |
+| P200 | deterministic expression functions | NOT-IMPLEMENTED | C | Повтор вычисления с теми же типизированными входами воспроизводит результат. [Условие правила](#accept-p197) |
+| P201 | business-calendar calculations | NOT-IMPLEMENTED | C | Срок через выходной вычисляется по рабочему календарю владельца. [Условие правила](#accept-p197) |
+| P202 | changed-from/changed-to predicates | NOT-IMPLEMENTED | C | Только заданная пара старого и нового значений удовлетворяет условию. [Условие правила](#accept-p197) |
+| P203 | actor/team/territory/permission conditions | NOT-IMPLEMENTED | C | Отзыв членства между запуском и шагом учитывается при проверке прав. [Условие правила](#accept-p197) |
+| P204 | consent, privacy and data-class conditions | NOT-IMPLEMENTED | C | Отозванное согласие блокирует действие, зависящее от цели обработки. [Условие правила](#accept-p197) |
+| P205 | feature/module activation conditions | NOT-IMPLEMENTED | C | Выключенный модуль не исполняет зависимую команду. [Условие правила](#accept-p197) |
+| P206 | bounded decision tables | NOT-IMPLEMENTED | C | Для пересекающихся правил применяется заданный порядок или возвращается диагностируемый конфликт. [Условие правила](#accept-p197) |
+| P207 | explainable rule outcomes | NOT-IMPLEMENTED | C | Для выбранной ветви видны совпавшие условия и версия правила. [Условие правила](#accept-p197) |
+| P215 | create or update a domain resource through its owner capability | NOT-IMPLEMENTED | C | Перечитать ресурс у владельца и сверить одну новую версию и допустимый переход. [Действие владельца](#accept-f04-01) |
+| P216 | move a record through an allowed lifecycle or pipeline transition | NOT-IMPLEMENTED | C | Перечитать ресурс у владельца и сверить одну новую версию и допустимый переход. [Действие владельца](#accept-f04-01) |
+| P217 | assign/reassign to user, team, queue, territory or routing policy | NOT-IMPLEMENTED | C | По запуску найти одно назначение или одно поручение с ожидаемыми исполнителем и сроком. [Действие владельца](#accept-f04-01) |
+| P218 | create task, appointment, reminder, checklist or human work item | NOT-IMPLEMENTED | C | По запуску найти одно назначение или одно поручение с ожидаемыми исполнителем и сроком. [Действие владельца](#accept-f04-01) |
+| P219 | send notification | NOT-IMPLEMENTED | C | Проверить фактического адресата и подтверждение канала, для отозванного согласия — отсутствие отправки. [Действие владельца](#accept-f04-01) |
+| P220 | send consent-authorized email/SMS/message through Communications | NOT-IMPLEMENTED | C | Проверить фактического адресата и подтверждение канала, для отозванного согласия — отсутствие отправки. [Действие владельца](#accept-f04-01) |
+| P221 | start, pause, resume or cancel a sales cadence/journey where allowed | NOT-IMPLEMENTED | C | После паузы или отмены следующий шаг последовательности не отправляется. [Действие владельца](#accept-f04-01) |
+| P222 | request serial/parallel approval | NOT-IMPLEMENTED | C | При параллельном и последовательном согласовании команда ждёт требуемых решений. [Ожидание и согласование](#accept-c259) |
+| P223 | generate a document or e-signature envelope | NOT-IMPLEMENTED | C | Созданный документ или конверт ссылается на точную версию входных данных. [Действие владельца](#accept-f04-01) |
+| P224 | invoke an allowlisted connector action | NOT-IMPLEMENTED | C | Выполняется только заявленное действие подключённого адаптера. [Действие владельца](#accept-f04-01) |
+| P225 | publish a governed integration event | NOT-IMPLEMENTED | C | Повтор шага доставляет потребителю тот же идентификатор события. [Действие владельца](#accept-f04-01) |
+| P226 | wait until time, event, condition or human completion | NOT-IMPLEMENTED | C | Смена состояния между ожиданием и возобновлением перечитывается перед действием. [Ожидание и согласование](#accept-c259) |
+| P227 | branch, parallelize, join or call a reusable subflow | NOT-IMPLEMENTED | C | Завершение ветвей в обратном порядке ведёт к одному продолжению. [Ожидание и согласование](#accept-c259) |
+| P228 | invoke a governed AI tool with policy and approval controls | NOT-IMPLEMENTED | C | Без требуемого согласования вызов инструмента не приводит к изменению CRM. [Действие владельца](#accept-f04-01) |
+| P229 | compensate or reverse a prior action only when the owner exposes a supported reversal | NOT-IMPLEMENTED | C | Компенсация доступна только через предусмотренную владельцем обратную операцию с исходной ссылкой. [Действие владельца](#accept-f04-01) |
+| P237 | immutable definition versions | NOT-IMPLEMENTED | C | Старая версия воспроизводима после новой публикации, черновик и приостановленная версия не принимают новые запуски. [Восстановление исполнения](#accept-c260) |
+| P238 | explicit draft, test, published, suspended and retired states | NOT-IMPLEMENTED | C | Старая версия воспроизводима после новой публикации, черновик и приостановленная версия не принимают новые запуски. [Восстановление исполнения](#accept-c260) |
+| P239 | exact binding to action/capability versions | NOT-IMPLEMENTED | C | В истории шага видна версия фактически вызванной операции. [Восстановление исполнения](#accept-c260) |
+| P240 | durable execution instances and step history | NOT-IMPLEMENTED | C | После перезапуска доступны последний завершённый и следующий ожидаемый шаги. [Восстановление исполнения](#accept-c260) |
+| P241 | retries with bounded backoff | NOT-IMPLEMENTED | C | После заданного числа отказов автоматические попытки прекращаются. [Восстановление исполнения](#accept-c260) |
+| P242 | idempotency and duplicate-trigger suppression | NOT-IMPLEMENTED | C | Дубликат триггера даёт один экземпляр исполнения. [Восстановление исполнения](#accept-c260) |
+| P243 | leases, crash recovery and replay | NOT-IMPLEMENTED | C | После потери исполнителя другой продолжает тот же шаг без повторного бизнес-эффекта. [Восстановление исполнения](#accept-c260) |
+| P244 | waits and timers that survive deployment/restart | NOT-IMPLEMENTED | C | Таймер переживает публикацию Worker и срабатывает единожды. [Восстановление исполнения](#accept-c260) |
+| P245 | parallel branches and deterministic joins | NOT-IMPLEMENTED | C | Завершение ветвей в обратном порядке ведёт к одному продолжению. [Ожидание и согласование](#accept-c259) |
+| P246 | bounded loops/iteration with quota controls | NOT-IMPLEMENTED | C | При превышении лимита итераций или квоты одного tenant действие останавливается с видимой причиной. [Восстановление исполнения](#accept-c260) |
+| P247 | cancellation and timeout | NOT-IMPLEMENTED | C | Отмена ожидания и истечение срока различаются в истории. [Восстановление исполнения](#accept-c260) |
+| P248 | compensation strategy where supported | NOT-IMPLEMENTED | C | Компенсация доступна только через предусмотренную владельцем обратную операцию с исходной ссылкой. [Восстановление исполнения](#accept-c260) |
+| P249 | dead-letter and operator recovery queues | NOT-IMPLEMENTED | C | Оператор находит окончательно неудавшийся шаг и возобновляет его с сохранённой позиции. [Восстановление исполнения](#accept-c260) |
+| P250 | version-aware migration policy for running instances | NOT-IMPLEMENTED | C | На двух запусках по разные стороны публикации сверить закреплённую версию и решение о миграции. [Восстановление исполнения](#accept-c260) |
+| P251 | complete actor, reason, input digest, result and cost evidence | NOT-IMPLEMENTED | C | Из истории восстанавливаются субъект, причина, версия входа, итог и учтённая стоимость. [Восстановление исполнения](#accept-c260) |
+| P252 | tenant/workflow/action concurrency and rate limits | NOT-IMPLEMENTED | C | При превышении лимита итераций или квоты одного tenant действие останавливается с видимой причиной. [Восстановление исполнения](#accept-c260) |
+| P258 | trigger/action node palette | NOT-IMPLEMENTED | C | Из доступных узлов собрать граф, сохранить и вновь открыть те же связи. [Редактор и симуляция](#accept-c266) |
+| P259 | drag-and-drop graph editor | NOT-IMPLEMENTED | C | Из доступных узлов собрать граф, сохранить и вновь открыть те же связи. [Редактор и симуляция](#accept-c266) |
+| P260 | typed configuration forms | NOT-IMPLEMENTED | C | Несовместимые типы в форме или ветвях выявляются до публикации. [Редактор и симуляция](#accept-c266) |
+| P261 | branch and decision-table editors | NOT-IMPLEMENTED | C | Несовместимые типы в форме или ветвях выявляются до публикации. [Редактор и симуляция](#accept-c266) |
+| P262 | reusable subflows/templates | NOT-IMPLEMENTED | C | Проверить, какую версию повторно используемого подграфа выполняет старый запуск. [Редактор и симуляция](#accept-c266) |
+| P263 | validation before save and publish | CODE-NOT-ACCEPTED | Историческое metadata authoring валидирует пакет и его влияние. Для графа процесса проверять связи, права команд и циклы перед публикацией. | До публикации показать ошибочную ссылку или утраченное полномочие и затронутые узлы. [Редактор и симуляция](#accept-c266) |
+| P264 | dependency and permission impact analysis | CODE-NOT-ACCEPTED | Историческое metadata authoring валидирует пакет и его влияние. Для графа процесса проверять связи, права команд и циклы перед публикацией. | До публикации показать ошибочную ссылку или утраченное полномочие и затронутые узлы. [Редактор и симуляция](#accept-c266) |
+| P265 | simulation using representative/synthetic data | NOT-IMPLEMENTED | C | На синтетическом входе показан расчётный результат, счётчик фактических внешних эффектов равен нулю. [Редактор и симуляция](#accept-c266) |
+| P266 | dry-run mode with no side effects | NOT-IMPLEMENTED | C | На синтетическом входе показан расчётный результат, счётчик фактических внешних эффектов равен нулю. [Редактор и симуляция](#accept-c266) |
+| P267 | step-through testing and captured traces | NOT-IMPLEMENTED | C | Пошаговая трасса совпадает с ожидаемой ветвью на контрольном входе. [Редактор и симуляция](#accept-c266) |
+| P268 | version diff, clone and rollback | CODE-NOT-ACCEPTED | Admin Studio умеет показать изменения версии metadata и откатить публикацию; редактор исполняемого workflow и управление запущенными экземплярами требуют отдельного среза. | Сравнение показывает изменённые узлы, откат восстанавливает проверенную версию для новых запусков. [Редактор и симуляция](#accept-c266) |
+| P269 | sandbox-to-production promotion | NOT-IMPLEMENTED | C | В целевой среде активируется та же проверенная версия конфигурации. [Редактор и симуляция](#accept-c266) |
+| P270 | run explorer, failure diagnostics and replay controls | NOT-IMPLEMENTED | C | После восстановления доступна история прежней ошибки и нового исхода. [Редактор и симуляция](#accept-c266) |
+| P271 | usage, latency, error and cost dashboards | NOT-IMPLEMENTED | C | Счётчики запусков, ошибок и затрат сверяются с контрольной серией. [Редактор и симуляция](#accept-c266) |
+| P272 | localized descriptions and accessibility | NOT-IMPLEMENTED | C | Редактор доступен с клавиатуры, названия и причины ошибок показаны на выбранном языке. [Редактор и симуляция](#accept-c266) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-f04-01"></a>Действие владельца | Целевой владелец уже предоставляет нужную типизированную операцию или обратное действие, а интеграция имеет тестовый приёмник. | Вызвать действие из правила с правами инициатора, перечитать результат у владельца. Повтор сохраняет один эффект. Отзыв согласия или разрешения до исполнения исключает эффект. Для компенсации проверить ссылку на исходное действие. |
+| <a id="accept-c257"></a>Запуск правила | Выбран конкретный тип события или расписания с идентификатором, временем и тестовым источником. | Подать подходящее и неподходящее событие, повторить первое. История содержит ровно один запуск от первого и его источник. Таймер проверяется при закрытом браузере. |
+| <a id="accept-c259"></a>Ожидание и согласование | Выбран маршрут, задано условие завершения ветвей и определены согласующие. | Остановить выполнение на ожидании, перезапустить Worker и завершить ветви в обратном порядке. Продолжение происходит один раз после нужных решений. Отказ оставляет причину и прекращает зависимое действие. |
+| <a id="accept-c260"></a>Восстановление исполнения | Есть опубликованная версия, рабочий календарь и управляемые точки сбоя. | Прервать шаг после commit, восстановить по идентификатору исполнения. Сверить версию, попытки, лимит, таймер и журнал. Отмена исключает последующее действие. Невосстановимый шаг виден оператору, новый запуск не меняет историю старого. |
+| <a id="accept-c266"></a>Редактор и симуляция | Приняты исполняемые типы узлов и тестовый набор входов с известным маршрутом. | Собрать правило клавиатурой, проверить ошибки конфигурации и зависимости. Прогон показывает шаги, время и ошибки без внешних эффектов. После публикации сверить версию и маршрут с историей реального исполнения. |
+| <a id="accept-p197"></a>Условие правила | Описаны типы входов и таблица примеров, включая пустое значение, границу времени и отказ доступа. | Выполнить таблицу на закреплённой версии. Каждому входу соответствует ожидаемая ветвь с объяснением, запрещённые связанные поля не раскрываются. |
 
 ## 05. Cadences и playbooks
 
@@ -272,24 +362,30 @@ Account может быть связан со сделкой, primary Contact �
 
 Проверенная смежная граница: [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-consents/src/lib.rs).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| C74 | sales playbooks, sequences and guided next actions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P336 | enroll/unenroll individuals or segments | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P337 | manual, rule-based and workflow-based enrollment | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P338 | email, call, task, meeting, social/manual and wait steps | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P339 | conditional branches based on activity, reply, field, score or stage | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P340 | automatic stop on reply, opt-out, conversion, disqualification or policy condition | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P341 | quiet hours, locale/time zone and frequency caps | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P342 | consent and suppression enforcement | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P343 | templates, snippets, scripts and personalization | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P344 | owner/team work queues and next-best task ordering | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P345 | overdue handling, reassignment and pause/resume | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P346 | A/B variants and performance analytics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P347 | cadence versioning and in-flight target policy | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P348 | reusable sales/service/success playbooks | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P349 | guided stage checklists and recommended next actions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P350 | AI-assisted drafting/recommendation only through governed policy | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| C74 | sales playbooks, sequences and guided next actions | NOT-IMPLEMENTED | C | Сотрудник получает правильный следующий шаг по версии сценария, завершение шага отражается в истории участия. [Участие в последовательности](#accept-c74) |
+| P336 | enroll/unenroll individuals or segments | NOT-IMPLEMENTED | C | Ручной и автоматический вход одной цели не создают лишнего активного участия. [Участие в последовательности](#accept-c74) |
+| P337 | manual, rule-based and workflow-based enrollment | NOT-IMPLEMENTED | C | Ручной и автоматический вход одной цели не создают лишнего активного участия. [Участие в последовательности](#accept-c74) |
+| P338 | email, call, task, meeting, social/manual and wait steps | NOT-IMPLEMENTED | C | Контрольные ответ и смена этапа приводят к ожидаемым разным следующим шагам. [Участие в последовательности](#accept-c74) |
+| P339 | conditional branches based on activity, reply, field, score or stage | NOT-IMPLEMENTED | C | Контрольные ответ и смена этапа приводят к ожидаемым разным следующим шагам. [Участие в последовательности](#accept-c74) |
+| P340 | automatic stop on reply, opt-out, conversion, disqualification or policy condition | NOT-IMPLEMENTED | C | После ответа или отписки проверить уже запланированный шаг непосредственно перед отправкой. [Участие в последовательности](#accept-c74) |
+| P341 | quiet hours, locale/time zone and frequency caps | NOT-IMPLEMENTED | C | На границе местного тихого часа отправка переносится в разрешённый интервал. [Участие в последовательности](#accept-c74) |
+| P342 | consent and suppression enforcement | NOT-IMPLEMENTED | C | После ответа или отписки проверить уже запланированный шаг непосредственно перед отправкой. [Участие в последовательности](#accept-c74) |
+| P343 | templates, snippets, scripts and personalization | NOT-IMPLEMENTED | C | По отсутствующему полю шаблон выдаёт предусмотренный результат без раскрытия чужих данных. [Участие в последовательности](#accept-c74) |
+| P344 | owner/team work queues and next-best task ordering | NOT-IMPLEMENTED | C | Просроченный шаг виден правильному сотруднику и после переназначения исчезает из прежней очереди. [Участие в последовательности](#accept-c74) |
+| P345 | overdue handling, reassignment and pause/resume | NOT-IMPLEMENTED | C | Просроченный шаг виден правильному сотруднику и после переназначения исчезает из прежней очереди. [Участие в последовательности](#accept-c74) |
+| P346 | A/B variants and performance analytics | NOT-IMPLEMENTED | C | Численность вариантов и результаты воспроизводятся из историй участников. [Участие в последовательности](#accept-c74) |
+| P347 | cadence versioning and in-flight target policy | NOT-IMPLEMENTED | C | Правка общего шаблона не изменяет версию уже начатого участия. [Участие в последовательности](#accept-c74) |
+| P348 | reusable sales/service/success playbooks | NOT-IMPLEMENTED | C | Правка общего шаблона не изменяет версию уже начатого участия. [Участие в последовательности](#accept-c74) |
+| P349 | guided stage checklists and recommended next actions | NOT-IMPLEMENTED | C | Завершение обязательного пункта открывает следующее допустимое действие. [Участие в последовательности](#accept-c74) |
+| P350 | AI-assisted drafting/recommendation only through governed policy | NOT-IMPLEMENTED | C | Черновик AI требует предусмотренного разрешения до внешней отправки. [Участие в последовательности](#accept-c74) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-c74"></a>Участие в последовательности | Есть получатель, разрешённый канал, версия сценария и условия остановки. | Включить получателя дважды, получить одно участие. При ответе или отписке во время ожидания следующий шаг отменяется. Проверить часовой пояс, лимит, очередь сотрудника и версию уже начатой цепочки. Для эксперимента сверить назначенный вариант и исход участия. |
 
 ## 06. Каналы и взаимодействия
 
@@ -299,25 +395,32 @@ ContactPoint с типом messaging хранит адрес. Для входа 
 
 Проверенная смежная граница: [message.proto](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/proto/crm/communications/v1/message.proto). [Gate A/B](https://github.com/iamaman11/crm/issues/352#issuecomment-7081939213)
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| F06-01 | Записать завершённый звонок, встречу или заметку в историю клиента и сделки | NOT-IMPLEMENTED | Задача и технический аудит не содержат такого общего журнала. Ввести Interaction и проверить ссылку, автора и видимость. |
-| C61 | notes, attachments and timeline activity | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C127 | email send/receive and threading | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C128 | telephony/call events, recordings and transcription references | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C129 | SMS and messaging channels | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C130 | web chat and bot handoff | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C131 | social/direct-message channel adapters where enabled | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C132 | unified conversation/thread model | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C133 | inbound/outbound message identity and participant resolution | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C134 | templates, signatures and localization | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C135 | attachments and governed file references | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C136 | delivery, bounce, read and provider status events where available | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C137 | communication consent enforcement before send | CODE-NOT-ACCEPTED | Доступны GrantVerifiedEmailConsent, WithdrawConsentAuthorization, SuppressCommunication и EvaluateConsent. На границе реальной доставки потребуется повторить проверку согласия перед отправкой. |
-| C138 | quiet hours, frequency limits and channel preferences | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C139 | agent inbox, queues and assignment | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C140 | searchable interaction history with live authorization | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C141 | provider abstraction, webhook verification, replay safety and delivery reconciliation | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| F06-01 | Записать завершённый звонок, встречу или заметку в историю клиента и сделки | NOT-IMPLEMENTED | Задача и технический аудит не содержат такого общего журнала. Ввести Interaction и проверить ссылку, автора и видимость. | После нового входа сверить время, автора, связь и доступность заметки или совершившегося взаимодействия. [История и входящие](#accept-f06-01) |
+| C61 | notes, attachments and timeline activity | NOT-IMPLEMENTED | C | После нового входа сверить время, автора, связь и доступность заметки или совершившегося взаимодействия. [История и входящие](#accept-f06-01) |
+| C127 | email send/receive and threading | NOT-IMPLEMENTED | C | Ответ по email продолжает исходную переписку. [Первый внешний канал](#accept-c127) |
+| C128 | telephony/call events, recordings and transcription references | NOT-IMPLEMENTED | C | Один вызов даёт одно событие, доступ к записи или расшифровке проверяется отдельно. [Первый внешний канал](#accept-c127) |
+| C129 | SMS and messaging channels | NOT-IMPLEMENTED | C | Сообщение и callback выбранного провайдера связываются с одним диалогом. [Первый внешний канал](#accept-c127) |
+| C130 | web chat and bot handoff | NOT-IMPLEMENTED | C | После передачи от бота сотрудник видит предыдущие реплики в том же диалоге. [Первый внешний канал](#accept-c127) |
+| C131 | social/direct-message channel adapters where enabled | NOT-IMPLEMENTED | C | Сообщение и callback выбранного провайдера связываются с одним диалогом. [Первый внешний канал](#accept-c127) |
+| C132 | unified conversation/thread model | NOT-IMPLEMENTED | C | Сообщения двух участников одного разговора попадают в нужный диалог, совпадение имён разных людей не объединяет диалоги. [История и входящие](#accept-f06-01) |
+| C133 | inbound/outbound message identity and participant resolution | NOT-IMPLEMENTED | C | Сообщения двух участников одного разговора попадают в нужный диалог, совпадение имён разных людей не объединяет диалоги. [История и входящие](#accept-f06-01) |
+| C134 | templates, signatures and localization | NOT-IMPLEMENTED | C | Язык шаблона и подпись совпадают с выбранными для адресата. [Первый внешний канал](#accept-c127) |
+| C135 | attachments and governed file references | NOT-IMPLEMENTED | C | По ссылке на вложение повторно проверяется право чтения. [Первый внешний канал](#accept-c127) |
+| C136 | delivery, bounce, read and provider status events where available | NOT-IMPLEMENTED | C | Повтор статуса доставки не удваивает сообщение, поздний статус сохраняет последовательность событий. [Первый внешний канал](#accept-c127) |
+| C137 | communication consent enforcement before send | CODE-NOT-ACCEPTED | Доступны GrantVerifiedEmailConsent, WithdrawConsentAuthorization, SuppressCommunication и EvaluateConsent. На границе реальной доставки потребуется повторить проверку согласия перед отправкой. | Отозвать согласие после постановки в очередь, подтвердить отсутствие фактической отправки. [Первый внешний канал](#accept-c127) |
+| C138 | quiet hours, frequency limits and channel preferences | NOT-IMPLEMENTED | C | Одно сообщение за пределами допустимого окна не нарушает частотный лимит. [Первый внешний канал](#accept-c127) |
+| C139 | agent inbox, queues and assignment | NOT-IMPLEMENTED | C | После передачи диалога новый ответственный видит его в своей очереди. [История и входящие](#accept-f06-01) |
+| C140 | searchable interaction history with live authorization | NOT-IMPLEMENTED | C | Поиск истории сотрудником с отозванным доступом не раскрывает её фрагменты. [История и входящие](#accept-f06-01) |
+| C141 | provider abstraction, webhook verification, replay safety and delivery reconciliation | NOT-IMPLEMENTED | C | После таймаута сверить исход у провайдера до повторной отправки. [Первый внешний канал](#accept-c127) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-f06-01"></a>История и входящие | Есть сотрудник, клиент, сделка и идентификатор взаимодействия. | Записать событие, перечитать автора, время и связи из карточек. Поздняя встреча занимает место по времени встречи. Повтор сообщения остаётся в том же диалоге. Чужой tenant не читает историю. |
+| <a id="accept-c127"></a>Первый внешний канал | Для выбранного канала есть тестовый источник, адресат, правила согласия и возможность сверить результат. | Принять сообщение дважды, увидеть одну запись. Сверить исходящий ответ, вложение или запись звонка с подтверждением канала. Отписка до отправки блокирует отправку, неизвестный исход сверяется до повторной доставки. |
 
 ## 07. Сервис, knowledge, field service
 
@@ -327,37 +430,45 @@ ContactPoint с типом messaging хранит адрес. Для входа 
 
 Проверенная смежная граница: [ticket.proto](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/proto/crm/support/v1/ticket.proto).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| C104 | cases/tickets with configurable lifecycle and priority | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C105 | queues, assignment, skills and routing | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C106 | SLAs, milestones, business calendars and breach escalation | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C107 | entitlements, service contracts and warranty references | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C108 | omnichannel case creation and conversation linkage | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C109 | customer, asset/product and order/contract context | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C110 | internal notes versus customer-visible replies | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C111 | macros, templates, guided resolution and automation | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C112 | parent/child, duplicate and major-incident case relationships | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C113 | escalation, swarming and collaboration | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C114 | knowledge-base authoring, review, publication, localization and feedback | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C115 | knowledge suggestion and deflection analytics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C116 | CSAT/NPS/CES or configurable feedback collection boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C117 | service analytics, backlog, response/resolution time and SLA reporting | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C118 | self-service portal/API boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C119 | field service where enabled: work orders, dispatch, skills, territories, appointments, technician mobile/offline workflow and parts/inventory integration boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P374 | cases/tickets with configurable lifecycle, priority and major-incident relationships | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P375 | skills, queues, assignment and capacity-aware routing | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P376 | SLAs, milestones, business calendars and escalations | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P377 | customer/order/contract/product/asset context | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P378 | email, messaging, SMS, telephony, web chat and bot handoff | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P379 | unified conversation and participant resolution | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P380 | internal notes versus customer-visible replies | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P381 | templates, macros and guided resolution | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P382 | knowledge authoring, review, localization, publication and feedback | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P383 | self-service portal/API and deflection analytics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P384 | CSAT/NPS/CES or configurable feedback boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P385 | field-service work orders, dispatch, territories, appointments and technician mobile/offline workflows | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P386 | parts/inventory integration rather than hidden inventory ownership | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| C104 | cases/tickets with configurable lifecycle and priority | NOT-IMPLEMENTED | C | При изменении приоритета и статуса остаётся история того же обращения. [Обработка обращения](#accept-c104) |
+| C105 | queues, assignment, skills and routing | NOT-IMPLEMENTED | C | Из двух исполнителей выбирается доступный с нужным навыком. [Обработка обращения](#accept-c104) |
+| C106 | SLAs, milestones, business calendars and breach escalation | NOT-IMPLEMENTED | C | Срок и однократную эскалацию сверить с контрольным рабочим календарём. [Обработка обращения](#accept-c104) |
+| C107 | entitlements, service contracts and warranty references | NOT-IMPLEMENTED | C | Проверить обслуживание одного клиента до и после истечения гарантии. [Обработка обращения](#accept-c104) |
+| C108 | omnichannel case creation and conversation linkage | NOT-IMPLEMENTED | C | Повтор входящего сообщения выбранного канала ведёт к тому же обращению. [Обработка обращения](#accept-c104) |
+| C109 | customer, asset/product and order/contract context | NOT-IMPLEMENTED | C | Ссылки ведут к нужному заказу, продукту и клиенту с проверкой прав. [Обработка обращения](#accept-c104) |
+| C110 | internal notes versus customer-visible replies | NOT-IMPLEMENTED | C | Внутренняя заметка отсутствует в публичной переписке клиента. [Обработка обращения](#accept-c104) |
+| C111 | macros, templates, guided resolution and automation | NOT-IMPLEMENTED | C | Макрос исполняет только разрешённые оператору операции над обращением. [Обработка обращения](#accept-c104) |
+| C112 | parent/child, duplicate and major-incident case relationships | NOT-IMPLEMENTED | C | После выделения дубликата сохраняются исходные номера и связь с главным инцидентом. [Обработка обращения](#accept-c104) |
+| C113 | escalation, swarming and collaboration | NOT-IMPLEMENTED | C | При эскалации видны ответственный, привлечённые участники и срок. [Обработка обращения](#accept-c104) |
+| C114 | knowledge-base authoring, review, publication, localization and feedback | NOT-IMPLEMENTED | C | Черновик статьи и неопубликованный перевод закрыты для клиента. [База знаний и обратная связь](#accept-c114) |
+| C115 | knowledge suggestion and deflection analytics | NOT-IMPLEMENTED | C | Проверить путь из подсказки в статью и отдельно исход с открытием обращения. [База знаний и обратная связь](#accept-c114) |
+| C116 | CSAT/NPS/CES or configurable feedback collection boundaries | NOT-IMPLEMENTED | C | Повтор отправки оценки сохраняет один ответ на один опрос. [База знаний и обратная связь](#accept-c114) |
+| C117 | service analytics, backlog, response/resolution time and SLA reporting | NOT-IMPLEMENTED | C | Сверить очередь, первое время ответа и нарушения SLA с контрольными обращениями. [База знаний и обратная связь](#accept-c114) |
+| C118 | self-service portal/API boundaries | NOT-IMPLEMENTED | C | В личном кабинете клиента открываются только его обращения. [База знаний и обратная связь](#accept-c114) |
+| C119 | field service where enabled: work orders, dispatch, skills, territories, appointments, technician mobile/offline workflow and parts/inventory integration boundaries | NOT-IMPLEMENTED | C | Диспетчер назначает наряд подходящему технику, после синхронизации видит его результат и одну подтверждённую передачу расхода деталей. [Выездное обслуживание](#accept-c119) |
+| P374 | cases/tickets with configurable lifecycle, priority and major-incident relationships | NOT-IMPLEMENTED | C | При изменении приоритета и статуса остаётся история того же обращения. [Обработка обращения](#accept-c104) |
+| P375 | skills, queues, assignment and capacity-aware routing | NOT-IMPLEMENTED | C | Из двух исполнителей выбирается доступный с нужным навыком. [Обработка обращения](#accept-c104) |
+| P376 | SLAs, milestones, business calendars and escalations | NOT-IMPLEMENTED | C | Срок и однократную эскалацию сверить с контрольным рабочим календарём. [Обработка обращения](#accept-c104) |
+| P377 | customer/order/contract/product/asset context | NOT-IMPLEMENTED | C | Ссылки ведут к нужному заказу, продукту и клиенту с проверкой прав. [Обработка обращения](#accept-c104) |
+| P378 | email, messaging, SMS, telephony, web chat and bot handoff | NOT-IMPLEMENTED | C | Повтор входящего сообщения выбранного канала ведёт к тому же обращению. [Обработка обращения](#accept-c104) |
+| P379 | unified conversation and participant resolution | NOT-IMPLEMENTED | C | Сообщения двух участников одного разговора попадают в нужный диалог, совпадение имён разных людей не объединяет диалоги. [Обработка обращения](#accept-c104) |
+| P380 | internal notes versus customer-visible replies | NOT-IMPLEMENTED | C | Внутренняя заметка отсутствует в публичной переписке клиента. [Обработка обращения](#accept-c104) |
+| P381 | templates, macros and guided resolution | NOT-IMPLEMENTED | C | Макрос исполняет только разрешённые оператору операции над обращением. [Обработка обращения](#accept-c104) |
+| P382 | knowledge authoring, review, localization, publication and feedback | NOT-IMPLEMENTED | C | Черновик статьи и неопубликованный перевод закрыты для клиента. [База знаний и обратная связь](#accept-c114) |
+| P383 | self-service portal/API and deflection analytics | NOT-IMPLEMENTED | C | Проверить путь из подсказки в статью и отдельно исход с открытием обращения. [База знаний и обратная связь](#accept-c114) |
+| P384 | CSAT/NPS/CES or configurable feedback boundaries | NOT-IMPLEMENTED | C | Повтор отправки оценки сохраняет один ответ на один опрос. [База знаний и обратная связь](#accept-c114) |
+| P385 | field-service work orders, dispatch, territories, appointments and technician mobile/offline workflows | NOT-IMPLEMENTED | C | При переносе окна предыдущее назначение техника освобождается. [Выездное обслуживание](#accept-c119) |
+| P386 | parts/inventory integration rather than hidden inventory ownership | NOT-IMPLEMENTED | C | Повтор сообщения о расходе детали сохраняет одну запись во внешнем учёте. [Выездное обслуживание](#accept-c119) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-c104"></a>Обработка обращения | Приняты входящий канал и назначение, заданы право на обслуживание, календарь и контрольный срок. | Из входящего сообщения создать одно обращение, назначить исполнителю и проверить сроки и одну эскалацию на границе рабочего дня. Клиент видит внешний ответ, внутренняя заметка доступна сотруднику. Связанные обращения сохраняют свою историю. |
+| <a id="accept-c114"></a>База знаний и обратная связь | Есть обращение, открытая статья и черновик, заданы правила публикации и подсчёта. | Найти только опубликованную версию от лица клиента. Связать оценку с конкретным обращением, сверить обратную связь, время решения и показатель самообслуживания с исходными событиями. |
+| <a id="accept-c119"></a>Выездное обслуживание | Подтверждён сценарий диспетчера и техника, есть календарь и тестовый источник данных о запчастях при их учёте. | Назначить подходящего техника в доступное окно, закрыть наряд после восстановления связи. Повтор не удваивает исполнение и передачу расхода во внешнюю систему. |
 
 ## 08. Маркетинг
 
@@ -367,38 +478,46 @@ Consent suppression действует в узкой области. Для ка
 
 Проверенная смежная граница: [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-consents/src/lib.rs).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| C149 | campaigns and campaign hierarchy | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C150 | audience segmentation and dynamic segments | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C151 | lists and suppression lists | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C152 | acquisition source and campaign-member history | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C153 | forms, landing-page and event ingestion boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C154 | lead scoring and qualification models | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C155 | journeys, branching, waits, triggers and goals | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C156 | consent-aware channel activation | CODE-NOT-ACCEPTED | Доступны GrantVerifiedEmailConsent, WithdrawConsentAuthorization, SuppressCommunication и EvaluateConsent. На границе реальной доставки потребуется повторить проверку согласия перед отправкой. |
-| C157 | A/B and multivariate experiment support where applicable | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C158 | marketing content/template references | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C159 | campaign costs and external ad-platform integration boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C160 | attribution models and touchpoint lineage | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C161 | funnel, cohort and conversion analytics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C162 | event/webinar registration and attendance integration | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C163 | account-based marketing and buying-group support | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C164 | loyalty/referral programs as optional governed modules rather than hidden campaign fields | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P392 | campaigns and hierarchy | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P393 | static and dynamic segments | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P394 | lists and suppression lists | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P395 | forms, landing-page and event ingestion boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P396 | scoring and qualification models | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P397 | multi-step journeys with trigger, branch, wait, goal and exit semantics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P398 | email/SMS/messaging activation through consent-aware Communications | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P399 | experiments and holdout groups | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P400 | frequency caps, quiet hours and deliverability policy | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P401 | campaign-member and touchpoint lineage | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P402 | attribution, funnel, cohort and conversion analytics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P403 | webinar/event integration | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P404 | account-based marketing and buying groups | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P405 | loyalty/referral as optional governed modules | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| C149 | campaigns and campaign hierarchy | NOT-IMPLEMENTED | C | Итог родительской кампании сверяется с дочерними без двойного учёта. [Состав кампании](#accept-c149) |
+| C150 | audience segmentation and dynamic segments | NOT-IMPLEMENTED | C | Пересчёт меняет динамический сегмент по правилу и сохраняет статический список. [Состав кампании](#accept-c149) |
+| C151 | lists and suppression lists | NOT-IMPLEMENTED | C | Контакт из списка подавления исключён даже при совпадении с целевым сегментом. [Состав кампании](#accept-c149) |
+| C152 | acquisition source and campaign-member history | NOT-IMPLEMENTED | C | Для участника прослеживаются исходная регистрация и последующие контакты. [Состав кампании](#accept-c149) |
+| C153 | forms, landing-page and event ingestion boundaries | NOT-IMPLEMENTED | C | Двойная доставка одной формы создаёт одну регистрацию с исходным ID. [Состав кампании](#accept-c149) |
+| C154 | lead scoring and qualification models | NOT-IMPLEMENTED | C | Для граничного балла проверить версию формулы и решение о квалификации. [Состав кампании](#accept-c149) |
+| C155 | journeys, branching, waits, triggers and goals | NOT-IMPLEMENTED | C | Достижение цели во время ожидания останавливает очередной шаг. [Рассылка и атрибуция](#accept-c155) |
+| C156 | consent-aware channel activation | CODE-NOT-ACCEPTED | Доступны GrantVerifiedEmailConsent, WithdrawConsentAuthorization, SuppressCommunication и EvaluateConsent. На границе реальной доставки потребуется повторить проверку согласия перед отправкой. | Отозвать согласие после постановки в очередь, подтвердить отсутствие фактической отправки. [Рассылка и атрибуция](#accept-c155) |
+| C157 | A/B and multivariate experiment support where applicable | NOT-IMPLEMENTED | C | Участник сохраняет вариант эксперимента, контрольная группа учитывается отдельно. [Рассылка и атрибуция](#accept-c155) |
+| C158 | marketing content/template references | NOT-IMPLEMENTED | C | Проверяется версия шаблона, фактически использованная при доставке. [Рассылка и атрибуция](#accept-c155) |
+| C159 | campaign costs and external ad-platform integration boundaries | NOT-IMPLEMENTED | C | Повтор импорта затрат одной внешней кампании не увеличивает бюджет повторно. [Рассылка и атрибуция](#accept-c155) |
+| C160 | attribution models and touchpoint lineage | NOT-IMPLEMENTED | C | Сверить атрибуцию и конверсию с хронологией контактов на двух известных клиентах. [Рассылка и атрибуция](#accept-c155) |
+| C161 | funnel, cohort and conversion analytics | NOT-IMPLEMENTED | C | Сверить атрибуцию и конверсию с хронологией контактов на двух известных клиентах. [Рассылка и атрибуция](#accept-c155) |
+| C162 | event/webinar registration and attendance integration | NOT-IMPLEMENTED | C | Регистрация, посещение и повтор callback различаются в истории события. [Состав кампании](#accept-c149) |
+| C163 | account-based marketing and buying-group support | NOT-IMPLEMENTED | C | Два участника одной группы закупки связываются с правильным Account. [Состав кампании](#accept-c149) |
+| C164 | loyalty/referral programs as optional governed modules rather than hidden campaign fields | NOT-IMPLEMENTED | C | Повтор достижения цели не даёт второго начисления по реферальной программе. [Реферальная программа](#accept-c164) |
+| P392 | campaigns and hierarchy | NOT-IMPLEMENTED | C | Итог родительской кампании сверяется с дочерними без двойного учёта. [Состав кампании](#accept-c149) |
+| P393 | static and dynamic segments | NOT-IMPLEMENTED | C | Пересчёт меняет динамический сегмент по правилу и сохраняет статический список. [Состав кампании](#accept-c149) |
+| P394 | lists and suppression lists | NOT-IMPLEMENTED | C | Контакт из списка подавления исключён даже при совпадении с целевым сегментом. [Состав кампании](#accept-c149) |
+| P395 | forms, landing-page and event ingestion boundaries | NOT-IMPLEMENTED | C | Двойная доставка одной формы создаёт одну регистрацию с исходным ID. [Состав кампании](#accept-c149) |
+| P396 | scoring and qualification models | NOT-IMPLEMENTED | C | Для граничного балла проверить версию формулы и решение о квалификации. [Состав кампании](#accept-c149) |
+| P397 | multi-step journeys with trigger, branch, wait, goal and exit semantics | NOT-IMPLEMENTED | C | Достижение цели во время ожидания останавливает очередной шаг. [Рассылка и атрибуция](#accept-c155) |
+| P398 | email/SMS/messaging activation through consent-aware Communications | NOT-IMPLEMENTED | C | Для отписки и превышения частоты сверить отсутствие отправки у канала. [Рассылка и атрибуция](#accept-c155) |
+| P399 | experiments and holdout groups | NOT-IMPLEMENTED | C | Участник сохраняет вариант эксперимента, контрольная группа учитывается отдельно. [Рассылка и атрибуция](#accept-c155) |
+| P400 | frequency caps, quiet hours and deliverability policy | NOT-IMPLEMENTED | C | Для отписки и превышения частоты сверить отсутствие отправки у канала. [Рассылка и атрибуция](#accept-c155) |
+| P401 | campaign-member and touchpoint lineage | NOT-IMPLEMENTED | C | Для участника прослеживаются исходная регистрация и последующие контакты. [Состав кампании](#accept-c149) |
+| P402 | attribution, funnel, cohort and conversion analytics | NOT-IMPLEMENTED | C | Сверить атрибуцию и конверсию с хронологией контактов на двух известных клиентах. [Рассылка и атрибуция](#accept-c155) |
+| P403 | webinar/event integration | NOT-IMPLEMENTED | C | Регистрация, посещение и повтор callback различаются в истории события. [Состав кампании](#accept-c149) |
+| P404 | account-based marketing and buying groups | NOT-IMPLEMENTED | C | Два участника одной группы закупки связываются с правильным Account. [Состав кампании](#accept-c149) |
+| P405 | loyalty/referral as optional governed modules | NOT-IMPLEMENTED | C | Повтор достижения цели не даёт второго начисления по реферальной программе. [Реферальная программа](#accept-c164) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-c149"></a>Состав кампании | Приняты клиент, согласие, источник регистрации и контрольный набор аудитории. | Загрузить регистрацию повторно, сверить членство, источник, балл и группу покупателей. Переоценить сегмент после изменения одного признака. Исключённый участник остаётся в списке подавления. |
+| <a id="accept-c155"></a>Рассылка и атрибуция | Работает доставка выбранного канала, определены цель кампании, вариант и модель атрибуции. | Сверить вариант, маршрут, квоту и стоимость по контрольным контактам. Отписка до отправки исключает доставку. Повтор callback оставляет один подтверждённый контакт в отчёте, контрольная группа рассылку не получает. |
+| <a id="accept-c164"></a>Реферальная программа | Согласованы отдельная программа и событие, дающее право на начисление. | Повтор события создаёт одно начисление, отмена связывается с ним. Отключение программы сохраняет историю и прекращает новые начисления. |
 
 ## 09. Customer success
 
@@ -408,25 +527,32 @@ Account и Deal поставляют идентичность клиента и 
 
 Проверенная смежная граница: [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-customer-accounts/src/lib.rs).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| C172 | customer lifecycle stage and onboarding plans | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C173 | success plans, objectives and milestones | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C174 | health scores with explainable component evidence | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C175 | adoption and usage-signal integration boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C176 | risks, alerts and playbooks | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C177 | customer touch plans and business reviews | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C178 | renewal and expansion coordination | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C179 | churn reason taxonomy and retention analytics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C180 | stakeholder maps and relationship coverage | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C181 | product entitlement/subscription context through stable references | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P413 | onboarding plans and lifecycle stages | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P414 | success plans, objectives and milestones | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P415 | explainable health scores | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P416 | product adoption/usage signals | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P417 | risks, alerts and playbooks | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P418 | business reviews and stakeholder maps | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P419 | renewal, expansion and churn coordination | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| C172 | customer lifecycle stage and onboarding plans | NOT-IMPLEMENTED | C | На одном клиенте сопоставить этап подключения, исполнителя и факт завершения вехи. [План сопровождения](#accept-c172) |
+| C173 | success plans, objectives and milestones | NOT-IMPLEMENTED | C | На одном клиенте сопоставить этап подключения, исполнителя и факт завершения вехи. [План сопровождения](#accept-c172) |
+| C174 | health scores with explainable component evidence | NOT-IMPLEMENTED | C | Пересчитать контрольный балл из указанных компонентов и версии формулы. [Сигнал риска и продление](#accept-c174) |
+| C175 | adoption and usage-signal integration boundaries | NOT-IMPLEMENTED | C | Дубликат и позднее событие использования учитываются по их исходным идентификаторам. [Сигнал риска и продление](#accept-c174) |
+| C176 | risks, alerts and playbooks | NOT-IMPLEMENTED | C | На одно пересечение порога появляется одно поручение по риску. [Сигнал риска и продление](#accept-c174) |
+| C177 | customer touch plans and business reviews | NOT-IMPLEMENTED | C | У обзора есть участники и следующее действие, по карте видна незаполненная роль. [План сопровождения](#accept-c172) |
+| C178 | renewal and expansion coordination | NOT-IMPLEMENTED | C | Повтор сигнала о продлении ведёт к тому же обязательству или сделке. [Сигнал риска и продление](#accept-c174) |
+| C179 | churn reason taxonomy and retention analytics | NOT-IMPLEMENTED | C | Уход учитывается один раз в когорте с указанной причиной. [Сигнал риска и продление](#accept-c174) |
+| C180 | stakeholder maps and relationship coverage | NOT-IMPLEMENTED | C | У обзора есть участники и следующее действие, по карте видна незаполненная роль. [План сопровождения](#accept-c172) |
+| C181 | product entitlement/subscription context through stable references | NOT-IMPLEMENTED | C | Ссылка показывает объём обслуживания на выбранную дату. [План сопровождения](#accept-c172) |
+| P413 | onboarding plans and lifecycle stages | NOT-IMPLEMENTED | C | На одном клиенте сопоставить этап подключения, исполнителя и факт завершения вехи. [План сопровождения](#accept-c172) |
+| P414 | success plans, objectives and milestones | NOT-IMPLEMENTED | C | На одном клиенте сопоставить этап подключения, исполнителя и факт завершения вехи. [План сопровождения](#accept-c172) |
+| P415 | explainable health scores | NOT-IMPLEMENTED | C | Пересчитать контрольный балл из указанных компонентов и версии формулы. [Сигнал риска и продление](#accept-c174) |
+| P416 | product adoption/usage signals | NOT-IMPLEMENTED | C | Дубликат и позднее событие использования учитываются по их исходным идентификаторам. [Сигнал риска и продление](#accept-c174) |
+| P417 | risks, alerts and playbooks | NOT-IMPLEMENTED | C | На одно пересечение порога появляется одно поручение по риску. [Сигнал риска и продление](#accept-c174) |
+| P418 | business reviews and stakeholder maps | NOT-IMPLEMENTED | C | У обзора есть участники и следующее действие, по карте видна незаполненная роль. [План сопровождения](#accept-c172) |
+| P419 | renewal, expansion and churn coordination | NOT-IMPLEMENTED | C | Повтор сигнала о продлении ведёт к тому же обязательству или сделке. [Сигнал риска и продление](#accept-c174) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-c172"></a>План сопровождения | Приняты клиент, участники и обязательство, выбраны этапы подключения и контрольные цели. | Назначить ответственных, закрыть контрольную точку, провести обзор с нужными участниками. При повторном входе видны состояние цели, связь с клиентом и действующий объём обслуживания. |
+| <a id="accept-c174"></a>Сигнал риска и продление | Есть версия формулы, входные события и тестовое обязательство с датой окончания. | На контрольном наборе воспроизвести балл и объяснить вклад каждого сигнала. Повтор и позднее событие учитываются один раз, пересечение порога создаёт одно поручение. Продление и уход имеют различимые исходы. |
 
 ## 10. Каталог и CPQ
 
@@ -436,41 +562,48 @@ Account и Deal поставляют идентичность клиента и 
 
 Проверенная смежная граница: [quote.proto](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/proto/crm/sales/v1/quote.proto).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| C73 | approval processes for discounts and other high-risk commercial actions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C83 | product and service catalog ownership | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C84 | product families, bundles, options, dependencies and compatibility rules | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C85 | catalog versioning and effective dating | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C86 | price books, currencies, price lists and customer/segment-specific pricing | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C87 | discounts, promotions, approval thresholds and exception evidence | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C88 | CPQ configuration and validation | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C89 | quote creation, revisions, comparison, expiry and approval | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C90 | quote line items, taxes/fees as governed inputs or integration results | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P116 | products and services | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P117 | families, categories, variants and units of measure | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P118 | bundles, options, dependencies and compatibility constraints | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P119 | catalog versions and effective dates | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P120 | price books, currencies and price-list versions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P121 | customer, segment and channel price eligibility | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P122 | base prices, tiered prices and governed promotion references | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P123 | active/inactive/retired lifecycle | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P124 | import/export and migration profile | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P125 | catalog search, list and record UX | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P126 | authorization-aware product selection for downstream domains | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P142 | quote creation and revision lineage | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P143 | quote lines referencing exact catalog/price versions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P144 | configurable product validation | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P145 | discount and exception rules | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P146 | serial and parallel approval chains | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P147 | human approval tasks, delegation, expiry and escalation | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P148 | wait/timer semantics and business calendars | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P149 | immutable orchestration execution evidence | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P150 | retry, idempotency, cancellation and recovery | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P151 | quote comparison, expiry and customer-ready document preview | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P152 | Kanban/list views for quote work queues and approval state | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P160 | 8B.3 — CPQ configuration depth: option groups, dependency rules, guided selling, validation explanations and simulation | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P161 | 8B.4 — Quotes: customer-facing revisions, acceptance, expiry, approval evidence and document generation | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| C73 | approval processes for discounts and other high-risk commercial actions | NOT-IMPLEMENTED | C | Скидки по обе стороны порога дают разные решения о согласовании. [Коммерческое предложение](#accept-c73) |
+| C83 | product and service catalog ownership | NOT-IMPLEMENTED | C | Товар и услуга после выбора ссылаются на свои каталожные записи. [Каталог и действующая цена](#accept-c83) |
+| C84 | product families, bundles, options, dependencies and compatibility rules | NOT-IMPLEMENTED | C | Несовместимые опции отклоняются с указанием причины, допустимая комплектация сохраняет единицы измерения. [Каталог и действующая цена](#accept-c83) |
+| C85 | catalog versioning and effective dating | NOT-IMPLEMENTED | C | На границе действия выбирается ожидаемая версия каталога. [Каталог и действующая цена](#accept-c83) |
+| C86 | price books, currencies, price lists and customer/segment-specific pricing | NOT-IMPLEMENTED | C | Для двух сегментов и дат сверить точные суммы и валюты действующего прайса. [Каталог и действующая цена](#accept-c83) |
+| C87 | discounts, promotions, approval thresholds and exception evidence | NOT-IMPLEMENTED | C | Скидки по обе стороны порога дают разные решения о согласовании. [Коммерческое предложение](#accept-c73) |
+| C88 | CPQ configuration and validation | NOT-IMPLEMENTED | C | Симуляция недопустимой конфигурации объясняет конфликт до формирования предложения. [Коммерческое предложение](#accept-c73) |
+| C89 | quote creation, revisions, comparison, expiry and approval | NOT-IMPLEMENTED | C | При сравнении версий видны изменённые строки, попытка принять просроченную редакцию отклоняется. [Коммерческое предложение](#accept-c73) |
+| C90 | quote line items, taxes/fees as governed inputs or integration results | NOT-IMPLEMENTED | C | Сумма строк и подтверждённых сборов совпадает с итогом зафиксированной редакции. [Коммерческое предложение](#accept-c73) |
+| P116 | products and services | NOT-IMPLEMENTED | C | Товар и услуга после выбора ссылаются на свои каталожные записи. [Каталог и действующая цена](#accept-c83) |
+| P117 | families, categories, variants and units of measure | NOT-IMPLEMENTED | C | Несовместимые опции отклоняются с указанием причины, допустимая комплектация сохраняет единицы измерения. [Каталог и действующая цена](#accept-c83) |
+| P118 | bundles, options, dependencies and compatibility constraints | NOT-IMPLEMENTED | C | Несовместимые опции отклоняются с указанием причины, допустимая комплектация сохраняет единицы измерения. [Каталог и действующая цена](#accept-c83) |
+| P119 | catalog versions and effective dates | NOT-IMPLEMENTED | C | На границе действия выбирается ожидаемая версия каталога. [Каталог и действующая цена](#accept-c83) |
+| P120 | price books, currencies and price-list versions | NOT-IMPLEMENTED | C | Для двух сегментов и дат сверить точные суммы и валюты действующего прайса. [Каталог и действующая цена](#accept-c83) |
+| P121 | customer, segment and channel price eligibility | NOT-IMPLEMENTED | C | Для двух сегментов и дат сверить точные суммы и валюты действующего прайса. [Каталог и действующая цена](#accept-c83) |
+| P122 | base prices, tiered prices and governed promotion references | NOT-IMPLEMENTED | C | Для двух сегментов и дат сверить точные суммы и валюты действующего прайса. [Каталог и действующая цена](#accept-c83) |
+| P123 | active/inactive/retired lifecycle | NOT-IMPLEMENTED | C | Снятый товар остаётся в старой строке, новый выбор его исключает. [Каталог и действующая цена](#accept-c83) |
+| P124 | import/export and migration profile | NOT-IMPLEMENTED | C | Повтор импорта версии каталога не дублирует её позиции. [Каталог и действующая цена](#accept-c83) |
+| P125 | catalog search, list and record UX | NOT-IMPLEMENTED | C | Поиск и выбор для предложения выдают только позиции, доступные этому пользователю. [Каталог и действующая цена](#accept-c83) |
+| P126 | authorization-aware product selection for downstream domains | NOT-IMPLEMENTED | C | Поиск и выбор для предложения выдают только позиции, доступные этому пользователю. [Каталог и действующая цена](#accept-c83) |
+| P142 | quote creation and revision lineage | NOT-IMPLEMENTED | C | При сравнении версий видны изменённые строки, попытка принять просроченную редакцию отклоняется. [Коммерческое предложение](#accept-c73) |
+| P143 | quote lines referencing exact catalog/price versions | NOT-IMPLEMENTED | C | Сумма строк и подтверждённых сборов совпадает с итогом зафиксированной редакции. [Коммерческое предложение](#accept-c73) |
+| P144 | configurable product validation | NOT-IMPLEMENTED | C | Симуляция недопустимой конфигурации объясняет конфликт до формирования предложения. [Коммерческое предложение](#accept-c73) |
+| P145 | discount and exception rules | NOT-IMPLEMENTED | C | Скидки по обе стороны порога дают разные решения о согласовании. [Коммерческое предложение](#accept-c73) |
+| P146 | serial and parallel approval chains | NOT-IMPLEMENTED | C | Проверить ожидание всех необходимых согласующих, делегирование и истечение срока по календарю. [Коммерческое предложение](#accept-c73) |
+| P147 | human approval tasks, delegation, expiry and escalation | NOT-IMPLEMENTED | C | Проверить ожидание всех необходимых согласующих, делегирование и истечение срока по календарю. [Коммерческое предложение](#accept-c73) |
+| P148 | wait/timer semantics and business calendars | NOT-IMPLEMENTED | C | Проверить ожидание всех необходимых согласующих, делегирование и истечение срока по календарю. [Коммерческое предложение](#accept-c73) |
+| P149 | immutable orchestration execution evidence | NOT-IMPLEMENTED | C | После прерывания исполнения в истории видны исходная команда, решение и одна принятая операция. [Коммерческое предложение](#accept-c73) |
+| P150 | retry, idempotency, cancellation and recovery | NOT-IMPLEMENTED | C | После прерывания исполнения в истории видны исходная команда, решение и одна принятая операция. [Коммерческое предложение](#accept-c73) |
+| P151 | quote comparison, expiry and customer-ready document preview | NOT-IMPLEMENTED | C | При сравнении версий видны изменённые строки, попытка принять просроченную редакцию отклоняется. [Коммерческое предложение](#accept-c73) |
+| P152 | Kanban/list views for quote work queues and approval state | NOT-IMPLEMENTED | C | Одна редакция имеет одинаковый статус в списке и на доске согласований. [Коммерческое предложение](#accept-c73) |
+| P160 | 8B.3 — CPQ configuration depth: option groups, dependency rules, guided selling, validation explanations and simulation | NOT-IMPLEMENTED | C | Симуляция недопустимой конфигурации объясняет конфликт до формирования предложения. [Коммерческое предложение](#accept-c73) |
+| P161 | 8B.4 — Quotes: customer-facing revisions, acceptance, expiry, approval evidence and document generation | NOT-IMPLEMENTED | C | При сравнении версий видны изменённые строки, попытка принять просроченную редакцию отклоняется. [Коммерческое предложение](#accept-c73) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-c73"></a>Коммерческое предложение | Каталог выдаёт версии цен. Определены граница скидки, согласующий и срок действия. | Сравнить две редакции с ожидаемыми суммами строк, налогов и скидок. Принять допустимую редакцию один раз. Превышение порога ждёт согласования. Устаревшая или просроченная редакция не порождает заказ. |
+| <a id="accept-c83"></a>Каталог и действующая цена | Есть продукты двух версий, правила совместимости и цены для двух дат или сегментов. | Из разрешённого каталога выбрать товар с допустимой комплектацией. Сверить цену, единицу, валюту и версию на обе даты. Историческая строка заказа сохраняет цену при выводе товара из продажи. |
 
 ## 11. Заказ, договор и подписка
 
@@ -480,17 +613,24 @@ Invoice/payment v1 — входные формы данных. Полный пу
 
 Проверенная смежная граница: [payment.proto](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/proto/crm/billing/v1/payment.proto).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| C91 | order capture and order lifecycle handoff | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C92 | contracts, amendments, renewals and termination | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C93 | subscriptions, plans, entitlements, usage references and lifecycle changes | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C94 | billing/ERP/payment/tax integration boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C95 | commercial commitment lineage from opportunity through quote, order, contract and subscription | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P162 | 8B.5 — Orders: order capture, change/cancel lifecycle, fulfillment coordination and reconciliation boundaries | NOT-IMPLEMENTED | Требуется отдельный владелец заказа, ссылающийся на точную ревизию предложения. |
-| P163 | 8B.6 — Contracts: terms, amendments, renewals, termination, obligations and e-signature references | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P164 | 8B.7 — Subscriptions/Entitlements/Usage: plans, lifecycle changes, entitlement checks and governed usage ingestion | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P165 | 8B.8 — Billing integration: invoicing/payment/tax/ERP boundaries, reconciliation and commercial lineage without moving accounting ownership into CRM | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| C91 | order capture and order lifecycle handoff | NOT-IMPLEMENTED | C | Внешнее подтверждение исполнения привязано к исходному заказу. [Коммерческое обязательство](#accept-c91) |
+| C92 | contracts, amendments, renewals and termination | NOT-IMPLEMENTED | C | Поправка и расторжение меняют обязательство в свои даты, исходные условия доступны по версии. [Коммерческое обязательство](#accept-c91) |
+| C93 | subscriptions, plans, entitlements, usage references and lifecycle changes | NOT-IMPLEMENTED | C | Доступ проверяется непосредственно до и после смены плана. [Коммерческое обязательство](#accept-c91) |
+| C94 | billing/ERP/payment/tax integration boundaries | NOT-IMPLEMENTED | C | Для выбранного внешнего учёта сверить номер, сумму, налог и состояние операции при повторном уведомлении. [Передача в учётную систему](#accept-c94) |
+| C95 | commercial commitment lineage from opportunity through quote, order, contract and subscription | NOT-IMPLEMENTED | C | Из подписки можно проследить цепочку до исходной принятой редакции предложения. [Коммерческое обязательство](#accept-c91) |
+| P162 | 8B.5 — Orders: order capture, change/cancel lifecycle, fulfillment coordination and reconciliation boundaries | NOT-IMPLEMENTED | Требуется отдельный владелец заказа, ссылающийся на точную ревизию предложения. | После изменения и отмены заказа сверить состояние у владельца и подтверждение исполнения или отмены у получателя. [Коммерческое обязательство](#accept-c91) |
+| P163 | 8B.6 — Contracts: terms, amendments, renewals, termination, obligations and e-signature references | NOT-IMPLEMENTED | C | Поправка и расторжение меняют обязательство в свои даты, исходные условия доступны по версии. [Коммерческое обязательство](#accept-c91) |
+| P164 | 8B.7 — Subscriptions/Entitlements/Usage: plans, lifecycle changes, entitlement checks and governed usage ingestion | NOT-IMPLEMENTED | C | Доступ проверяется непосредственно до и после смены плана. [Коммерческое обязательство](#accept-c91) |
+| P165 | 8B.8 — Billing integration: invoicing/payment/tax/ERP boundaries, reconciliation and commercial lineage without moving accounting ownership into CRM | NOT-IMPLEMENTED | C | Для выбранного внешнего учёта сверить номер, сумму, налог и состояние операции при повторном уведомлении. [Передача в учётную систему](#accept-c94) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-c91"></a>Коммерческое обязательство | Приняты редакция предложения, контрагент и дата начала обязательства. | Пройти предложение, заказ, договор и подписку по ссылкам. Проверить изменение условий, продление и прекращение на границе даты. Повтор уведомления сохраняет один переход и верный объём прав. |
+| <a id="accept-c94"></a>Передача в учётную систему | Назначена внешняя система учёта и доступен тестовый получатель с подтверждением. | Передать принятый заказ, потерять ответ и сверить результат по ключу. В CRM видны внешний номер и статус, повтор отправки не создаёт второй счёт. |
 
 ## 12. Проекты и рабочие дела
 
@@ -500,24 +640,31 @@ TaskOwner и срок можно использовать в work item. Project 
 
 Проверенная смежная граница: [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-activities/src/lib.rs).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| C204 | projects, workstreams, milestones and tasks | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C205 | configurable business cases/process instances distinct from support cases | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C206 | dependencies, assignees, teams and due dates | CODE-NOT-ACCEPTED | Есть типы субъекта/владельца, текущая политика или TaskOwner. Открыт полный путь сотрудника, назначения и чтения области доступа. |
-| C207 | checklists and repeatable templates | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C208 | status, risk and issue tracking | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C209 | time/cost integration boundaries where enabled | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C210 | customer-facing project visibility boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C211 | automation and timeline integration | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C212 | portfolio and delivery analytics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P433 | projects, workstreams, milestones and tasks | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P434 | dependencies, checklists, templates and recurring work | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P435 | risks, issues and decisions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P436 | Kanban/list/calendar/timeline views | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P437 | customer-facing visibility policy | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P438 | portfolio and delivery analytics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P439 | configurable operational case types built on governed metadata/process primitives | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| C204 | projects, workstreams, milestones and tasks | NOT-IMPLEMENTED | C | Из вехи открываются связанные работы с фактическими сроками и исполнителями. [Исполнение проекта](#accept-c204) |
+| C205 | configurable business cases/process instances distinct from support cases | NOT-IMPLEMENTED | C | У экземпляра рабочего дела собственное состояние и связь с исходной записью клиента. [Исполнение проекта](#accept-c204) |
+| C206 | dependencies, assignees, teams and due dates | CODE-NOT-ACCEPTED | Есть типы субъекта/владельца, текущая политика или TaskOwner. Открыт полный путь сотрудника, назначения и чтения области доступа. | Зависимая работа получает допустимый срок и исполнителя, пока обязательная предыдущая работа открыта — её завершение блокируется по согласованной зависимости. [Исполнение проекта](#accept-c204) |
+| C207 | checklists and repeatable templates | NOT-IMPLEMENTED | C | Повтор запуска шаблона на один период не дублирует периодическую работу. [Исполнение проекта](#accept-c204) |
+| C208 | status, risk and issue tracking | NOT-IMPLEMENTED | C | Из решения по риску прослеживается исходная проблема и следующий ответственный. [Исполнение проекта](#accept-c204) |
+| C209 | time/cost integration boundaries where enabled | NOT-IMPLEMENTED | C | Часы и затраты сверяются с одной подтверждённой внешней записью. [Доступ и результат проекта](#accept-c209) |
+| C210 | customer-facing project visibility boundaries | NOT-IMPLEMENTED | C | Клиент не видит закрытые внутренние работы по прямой ссылке. [Доступ и результат проекта](#accept-c209) |
+| C211 | automation and timeline integration | NOT-IMPLEMENTED | C | После завершения работы в хронологии появляется одно связанное событие. [Исполнение проекта](#accept-c204) |
+| C212 | portfolio and delivery analytics | NOT-IMPLEMENTED | C | Итоги портфеля сверяются с входящими в него проектами и разрешённым объёмом. [Доступ и результат проекта](#accept-c209) |
+| P433 | projects, workstreams, milestones and tasks | NOT-IMPLEMENTED | C | Из вехи открываются связанные работы с фактическими сроками и исполнителями. [Исполнение проекта](#accept-c204) |
+| P434 | dependencies, checklists, templates and recurring work | NOT-IMPLEMENTED | C | Повтор запуска шаблона на один период не дублирует периодическую работу. [Исполнение проекта](#accept-c204) |
+| P435 | risks, issues and decisions | NOT-IMPLEMENTED | C | Из решения по риску прослеживается исходная проблема и следующий ответственный. [Исполнение проекта](#accept-c204) |
+| P436 | Kanban/list/calendar/timeline views | NOT-IMPLEMENTED | C | Переход между списком, доской и календарём сохраняет выбранную работу и срок. [Исполнение проекта](#accept-c204) |
+| P437 | customer-facing visibility policy | NOT-IMPLEMENTED | C | Клиент не видит закрытые внутренние работы по прямой ссылке. [Доступ и результат проекта](#accept-c209) |
+| P438 | portfolio and delivery analytics | NOT-IMPLEMENTED | C | Итоги портфеля сверяются с входящими в него проектами и разрешённым объёмом. [Доступ и результат проекта](#accept-c209) |
+| P439 | configurable operational case types built on governed metadata/process primitives | NOT-IMPLEMENTED | C | У экземпляра рабочего дела собственное состояние и связь с исходной записью клиента. [Исполнение проекта](#accept-c204) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-c204"></a>Исполнение проекта | Приняты исполнители и задачи, определены шаблон этапов и зависимость работ. | Создать проект из шаблона, назначить работы и зарегистрировать риск. Предшественник блокирует зависимую работу до завершения. Смена представления сохраняет сроки, решения и исполнителей. |
+| <a id="accept-c209"></a>Доступ и результат проекта | Есть два проекта с разными правами и источники согласованных затрат или времени. | Проверить доступ заказчика к выделенным работам и сверить итог портфеля по исходным работам. Повтор внешней записи затрат не изменяет сумму. |
 
 ## 13. Документы и подпись
 
@@ -527,24 +674,31 @@ TaskOwner и срок можно использовать в work item. Project 
 
 Проверенная смежная граница: [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-core-files/src/lib.rs).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| C220 | secure file upload/download and malware scanning boundary | CODE-NOT-ACCEPTED | Legacy immutable file store поддерживает chunks/finalize. Для пользовательского вложения потребуются связь с записью, права и результат проверки файла. [postgres_file_artifact.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-core-data/tests/postgres_file_artifact.rs) |
-| C221 | versioned documents and metadata | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C222 | folders/workspaces or typed document relationships | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C223 | document generation from governed templates | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C224 | merge fields with authorization-aware data access | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C225 | e-signature envelope, signer and status integration | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C226 | immutable signed-document references and evidence | NOT-IMPLEMENTED | Файловый артефакт доступен в прежнем store. Связать неизменяемый экземпляр с подписанным документом и подтверждением провайдера. |
-| C227 | retention, legal hold and deletion policy interaction | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C228 | preview/search/OCR as rebuildable derived capabilities, not authoritative file mutation | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P443 | secure files and malware scanning | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P444 | versioned documents and relationships | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P445 | template-based generation and authorized merge fields | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P446 | e-signature envelope/signer/status integration | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P447 | immutable signed evidence | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P448 | privacy, retention and legal-hold interaction | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P449 | rebuildable preview, OCR and search | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| C220 | secure file upload/download and malware scanning boundary | CODE-NOT-ACCEPTED | Legacy immutable file store поддерживает chunks/finalize. Для пользовательского вложения потребуются связь с записью, права и результат проверки файла. [postgres_file_artifact.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-core-data/tests/postgres_file_artifact.rs) | Разрешённый файл доступен после проверки, карантинный файл остаётся недоступен даже по сохранённой ссылке. [Файл и документ](#accept-c220) |
+| C221 | versioned documents and metadata | NOT-IMPLEMENTED | C | После новой редакции прежняя версия остаётся доступной по своей ссылке. [Файл и документ](#accept-c220) |
+| C222 | folders/workspaces or typed document relationships | NOT-IMPLEMENTED | C | Переименование папки сохраняет типизированную связь документа с записью. [Файл и документ](#accept-c220) |
+| C223 | document generation from governed templates | NOT-IMPLEMENTED | C | В сгенерированном документе указана версия шаблона и отсутствуют недоступные поля. [Файл и документ](#accept-c220) |
+| C224 | merge fields with authorization-aware data access | NOT-IMPLEMENTED | C | В сгенерированном документе указана версия шаблона и отсутствуют недоступные поля. [Файл и документ](#accept-c220) |
+| C225 | e-signature envelope, signer and status integration | NOT-IMPLEMENTED | C | Событие от другого конверта не подтверждает подпись выбранного документа. [Подпись и хранение](#accept-c225) |
+| C226 | immutable signed-document references and evidence | NOT-IMPLEMENTED | Файловый артефакт доступен в прежнем store. Связать неизменяемый экземпляр с подписанным документом и подтверждением провайдера. | Подтверждение подписания указывает на хеш той редакции, которую получил подписант. [Подпись и хранение](#accept-c225) |
+| C227 | retention, legal hold and deletion policy interaction | NOT-IMPLEMENTED | C | Истечение обычного срока хранения при активном удержании не удаляет версию. [Подпись и хранение](#accept-c225) |
+| C228 | preview/search/OCR as rebuildable derived capabilities, not authoritative file mutation | NOT-IMPLEMENTED | C | После перестроения OCR и preview контрольная сумма исходного файла сохраняется. [Файл и документ](#accept-c220) |
+| P443 | secure files and malware scanning | NOT-IMPLEMENTED | C | Карантинный файл нельзя скачать по сохранённому адресу. [Файл и документ](#accept-c220) |
+| P444 | versioned documents and relationships | NOT-IMPLEMENTED | C | После новой редакции прежняя версия остаётся доступной по своей ссылке. [Файл и документ](#accept-c220) |
+| P445 | template-based generation and authorized merge fields | NOT-IMPLEMENTED | C | В сгенерированном документе указана версия шаблона и отсутствуют недоступные поля. [Файл и документ](#accept-c220) |
+| P446 | e-signature envelope/signer/status integration | NOT-IMPLEMENTED | C | Событие от другого конверта не подтверждает подпись выбранного документа. [Подпись и хранение](#accept-c225) |
+| P447 | immutable signed evidence | NOT-IMPLEMENTED | C | Проверить подписанную версию по хешу и подтверждению конкретного подписанта. [Подпись и хранение](#accept-c225) |
+| P448 | privacy, retention and legal-hold interaction | NOT-IMPLEMENTED | C | Истечение обычного срока хранения при активном удержании не удаляет версию. [Подпись и хранение](#accept-c225) |
+| P449 | rebuildable preview, OCR and search | NOT-IMPLEMENTED | C | После перестроения OCR и preview контрольная сумма исходного файла сохраняется. [Файл и документ](#accept-c220) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-c220"></a>Файл и документ | Есть связь с разрешённой записью, шаблон и политика доступа к файлу. | Загрузить две версии, проверить контрольные суммы и права на скачивание. Сгенерировать документ только из доступных полей, поиск и preview можно восстановить из версии. Для карантинного файла выдача закрыта. |
+| <a id="accept-c225"></a>Подпись и хранение | Есть точная версия документа, уполномоченный подписант и тестовый канал подписи. | Сопоставить callback с подписанным хешем и подписантом. Дубликат подтверждения не создаёт новую подписанную версию. Удержание блокирует применимое удаление до снятия. |
 
 ## 14. Аналитика
 
@@ -554,32 +708,39 @@ TaskOwner и срок можно использовать в work item. Project 
 
 Проверенная смежная граница: [sales_deals.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/cloudflare-crm/rust-party/src/sales_deals.rs). [Gate A/B](https://github.com/iamaman11/crm/issues/352#issuecomment-7072127526)
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| C96 | revenue-related analytics without moving accounting ownership into CRM | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C236 | operational dashboards and KPIs | CODE-NOT-ACCEPTED | Есть Deal metrics / Customer360 и переходы к источникам. Для обобщённого отчёта нужны проекция, расчёт по периоду и сверка результата. |
-| C237 | configurable reports with permission-aware semantic fields | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C238 | drill-down to live-authorized source resources | CODE-NOT-ACCEPTED | Есть Deal metrics / Customer360 и переходы к источникам. Для обобщённого отчёта нужны проекция, расчёт по периоду и сверка результата. |
-| C239 | funnels, cohorts, retention and lifecycle analytics | CODE-NOT-ACCEPTED | Есть Deal metrics / Customer360 и переходы к источникам. Для обобщённого отчёта нужны проекция, расчёт по периоду и сверка результата. |
-| C240 | sales pipeline and forecast analytics | ACCEPTED | M2-04: принятые показатели воронки и ограниченный прогноз. |
-| C241 | service/SLA and workforce analytics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C242 | marketing attribution and campaign analytics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C243 | customer success and churn analytics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C244 | territory, quota and performance scorecards | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C245 | scheduled report delivery with authorization re-checks | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C246 | export controls and data-class policy | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C247 | warehouse/lakehouse/BI integration boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C248 | metric definitions, lineage, freshness and reproducibility | CODE-NOT-ACCEPTED | Есть Deal metrics / Customer360 и переходы к источникам. Для обобщённого отчёта нужны проекция, расчёт по периоду и сверка результата. |
-| C249 | no analytical projection becoming an undocumented system of record | CODE-NOT-ACCEPTED | Архитектурное ограничение действует в текущем Worker. Для планируемого редактора или проекции самостоятельно проверить соблюдение после подключения. |
-| P455 | operational dashboards and KPIs | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P456 | permission-aware report builder | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P457 | semantic fields and reusable metrics | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P458 | drill-down to live-authorized records | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P459 | funnel, cohort, retention, forecast, SLA and performance analytics | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P460 | scheduled delivery with authorization re-check | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P461 | lineage, freshness and reproducibility | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P462 | governed export and warehouse/BI integration | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P463 | no analytical projection becoming a hidden system of record | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| C96 | revenue-related analytics without moving accounting ownership into CRM | NOT-IMPLEMENTED | C | Выручку сверить с внешним подтверждённым источником и согласованной валютой. [Расчёт показателя](#accept-c96) |
+| C236 | operational dashboards and KPIs | CODE-NOT-ACCEPTED | Есть Deal metrics / Customer360 и переходы к источникам. Для обобщённого отчёта нужны проекция, расчёт по периоду и сверка результата. | Показатель за выбранный период сверяется с исходными событиями воронки или когорты. [Расчёт показателя](#accept-c96) |
+| C237 | configurable reports with permission-aware semantic fields | NOT-IMPLEMENTED | C | Один и тот же сохранённый отчёт учитывает разрешённые поля текущего пользователя. [Расчёт показателя](#accept-c96) |
+| C238 | drill-down to live-authorized source resources | CODE-NOT-ACCEPTED | Есть Deal metrics / Customer360 и переходы к источникам. Для обобщённого отчёта нужны проекция, расчёт по периоду и сверка результата. | После отзыва права переход к исходному ресурсу закрыт из ранее открытого отчёта. [Расчёт показателя](#accept-c96) |
+| C239 | funnels, cohorts, retention and lifecycle analytics | CODE-NOT-ACCEPTED | Есть Deal metrics / Customer360 и переходы к источникам. Для обобщённого отчёта нужны проекция, расчёт по периоду и сверка результата. | Показатель за выбранный период сверяется с исходными событиями воронки или когорты. [Расчёт показателя](#accept-c96) |
+| C240 | sales pipeline and forecast analytics | ACCEPTED | M2-04: принятые показатели воронки и ограниченный прогноз. | Показатель за выбранный период сверяется с исходными событиями воронки или когорты. [Расчёт показателя](#accept-c96) |
+| C241 | service/SLA and workforce analytics | NOT-IMPLEMENTED | C | Открытые обращения, время ответа и нарушения SLA сверяются с контрольными событиями. [Расчёт показателя](#accept-c96) |
+| C242 | marketing attribution and campaign analytics | NOT-IMPLEMENTED | C | Показатель кампании воспроизводится по подтверждённым контактам и выбранной модели. [Расчёт показателя](#accept-c96) |
+| C243 | customer success and churn analytics | NOT-IMPLEMENTED | C | Числитель оттока и состав исходной когорты проверяются на известных клиентах. [Расчёт показателя](#accept-c96) |
+| C244 | territory, quota and performance scorecards | NOT-IMPLEMENTED | C | Разбиение по территориям воспроизводит утверждённую квоту каждого периода. [Расчёт показателя](#accept-c96) |
+| C245 | scheduled report delivery with authorization re-checks | NOT-IMPLEMENTED | C | Отзыв права до доставки исключает получателя из выдачи. [Доставка отчёта](#accept-c245) |
+| C246 | export controls and data-class policy | NOT-IMPLEMENTED | C | Файл содержит только разрешённые столбцы и строки контрольной выборки. [Доставка отчёта](#accept-c245) |
+| C247 | warehouse/lakehouse/BI integration boundaries | NOT-IMPLEMENTED | C | Повтор поставки набора в хранилище не дублирует версию выгрузки. [Доставка отчёта](#accept-c245) |
+| C248 | metric definitions, lineage, freshness and reproducibility | CODE-NOT-ACCEPTED | Есть Deal metrics / Customer360 и переходы к источникам. Для обобщённого отчёта нужны проекция, расчёт по периоду и сверка результата. | Опубликовать формулу и время данных, перестроить проекцию и сверить результат без изменения первичных записей. [Расчёт показателя](#accept-c96) |
+| C249 | no analytical projection becoming an undocumented system of record | CODE-NOT-ACCEPTED | Архитектурное ограничение действует в текущем Worker. Для планируемого редактора или проекции самостоятельно проверить соблюдение после подключения. | Опубликовать формулу и время данных, перестроить проекцию и сверить результат без изменения первичных записей. [Расчёт показателя](#accept-c96) |
+| P455 | operational dashboards and KPIs | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Для выбранной метрики предъявить ручной расчёт на исходных фактах. [Расчёт показателя](#accept-c96) |
+| P456 | permission-aware report builder | NOT-IMPLEMENTED | C | Один и тот же сохранённый отчёт учитывает разрешённые поля текущего пользователя. [Расчёт показателя](#accept-c96) |
+| P457 | semantic fields and reusable metrics | NOT-IMPLEMENTED | C | Один и тот же сохранённый отчёт учитывает разрешённые поля текущего пользователя. [Расчёт показателя](#accept-c96) |
+| P458 | drill-down to live-authorized records | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Прямая ссылка из показателя учитывает отзыв доступа к исходной записи. [Расчёт показателя](#accept-c96) |
+| P459 | funnel, cohort, retention, forecast, SLA and performance analytics | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Для выбранной метрики предъявить ручной расчёт на исходных фактах. [Расчёт показателя](#accept-c96) |
+| P460 | scheduled delivery with authorization re-check | NOT-IMPLEMENTED | C | Отзыв права до доставки исключает получателя из выдачи. [Доставка отчёта](#accept-c245) |
+| P461 | lineage, freshness and reproducibility | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Полная перестройка воспроизводит результат на тех же данных и не меняет состояние исходного владельца. [Расчёт показателя](#accept-c96) |
+| P462 | governed export and warehouse/BI integration | NOT-IMPLEMENTED | C | Файл содержит только разрешённые столбцы и строки контрольной выборки. [Доставка отчёта](#accept-c245) |
+| P463 | no analytical projection becoming a hidden system of record | NOT-IMPLEMENTED | C | Полная перестройка воспроизводит результат на тех же данных и не меняет состояние исходного владельца. [Расчёт показателя](#accept-c96) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-c96"></a>Расчёт показателя | У владельца есть исходные факты, зафиксированы формула, период, валюта и ожидаемый результат на малом наборе. | Пересчитать показатель, сверить с исходными строками и пройти в доступную запись. После повтора и позднего события сумма соответствует ручному расчёту. Перестроение отчёта сохраняет данные владельца. |
+| <a id="accept-c245"></a>Доставка отчёта | Определены адресат, допустимые поля и внешний тестовый получатель при выгрузке. | Отозвать доступ между планированием и доставкой. Получатель с сохранённым правом получает ровно разрешённый срез, для отозванного выдача закрыта. Экспорт совпадает с контрольной выборкой. |
 
 ## 15. Данные и интеграции
 
@@ -589,31 +750,38 @@ TaskOwner и срок можно использовать в work item. Project 
 
 Проверенная смежная граница: [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-customer-data-operations/src/lib.rs). [Gate A/B](https://github.com/iamaman11/crm/issues/352#issuecomment-7084460484)
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| F15-01 | Импортировать простой CSV с двумя колонками или расширенный с четырьмя | ACCEPTED | N-01; preview, apply, построчные ошибки и оригинальный Party owner. |
-| F15-02 | Выгрузить малый CSV Party | ACCEPTED | N-02; preview и существующая граница скачивания. |
-| F15-03 | Выполнить двустороннюю синхронизацию по курсору с независимым провайдером | NOT-IMPLEMENTED | Согласовать приоритет источников, хранить курсор, повторить после сбоя без второго эффекта. |
-| C304 | versioned bulk import/export | CODE-NOT-ACCEPTED | Малый CSV уже принят. Для больших файлов есть исторические import/export jobs, chunks, validation, checkpoint. Подключать при доказанном лимите; возобновление после сбоя не дублирует строку. |
-| C305 | API and webhook platform | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C306 | inbound webhook verification and replay protection | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C307 | outbound delivery retry, reconciliation and dead-letter handling | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C308 | connector lifecycle, credentials and secret-handle boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C309 | mapping/transformation with versioned schemas | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. |
-| C310 | sync cursors, conflict strategy and source-of-truth declarations | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C311 | data enrichment with provenance | CODE-NOT-ACCEPTED | В dev принята публикация конфигурации. Dispatch, review, materialization и provenance результата требуют отдельного исполнения с провайдером. [независимая приёмка](https://github.com/iamaman11/crm/issues/424#issuecomment-6905530278) |
-| C312 | iPaaS/event-stream/warehouse integration boundaries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C313 | ERP, finance, payment, tax, identity, telephony, messaging and ad-platform adapters | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C314 | rate limits, quotas and tenant isolation for integration workloads | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P467 | versioned bulk import/export | CODE-NOT-ACCEPTED | Малый CSV уже принят. Для больших файлов есть исторические import/export jobs, chunks, validation, checkpoint. Подключать при доказанном лимите; возобновление после сбоя не дублирует строку. |
-| P468 | public API and webhook platform | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P469 | verified inbound webhooks and replay protection | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P470 | reliable outbound delivery, retry, reconciliation and dead-letter handling | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P471 | connector credentials through secret handles | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P472 | mapping/transformation with versioned schemas | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P473 | sync cursors, conflict strategy and source-of-truth declarations | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P474 | ERP, finance, payment, tax, identity, telephony, messaging, ad and data-provider adapters | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P475 | tenant quotas and rate limits | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| F15-01 | Импортировать простой CSV с двумя колонками или расширенный с четырьмя | ACCEPTED | N-01; preview, apply, построчные ошибки и оригинальный Party owner. | Сверить поддерживаемые заголовки двух форматов и количество Party после повторного импорта одного файла. [Пакетный обмен](#accept-f15-01) |
+| F15-02 | Выгрузить малый CSV Party | ACCEPTED | N-02. Подтверждено скачивание канонических байтов CSV исходного владельца. [Независимая проверка](https://github.com/iamaman11/crm/issues/352#issuecomment-7107062121). | Сверить байты ограниченной выгрузки, переводы строк LF и контрольную сумму, включая поле с потенциальной формулой таблицы. [Пакетный обмен](#accept-f15-01) |
+| F15-03 | Выполнить двустороннюю синхронизацию по курсору с независимым провайдером | NOT-IMPLEMENTED | Согласовать приоритет источников, хранить курсор, повторить после сбоя без второго эффекта. | Прервать обмен после подтверждения одной стороны, продолжить по курсору и сверить обе системы. [Обмен с внешним источником](#accept-f15-03) |
+| C304 | versioned bulk import/export | CODE-NOT-ACCEPTED | Малый CSV уже принят. Для больших файлов есть исторические import/export jobs, chunks, validation, checkpoint. Подключать при доказанном лимите; возобновление после сбоя не дублирует строку. | Старая и новая версии формата распознаются явно. На прерванном пакете предъявить результат по каждой строке. [Пакетный обмен](#accept-f15-01) |
+| C305 | API and webhook platform | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Повтор подписанного входа сохраняет один эффект, неподтверждённый вход отклоняется. [Обмен с внешним источником](#accept-f15-03) |
+| C306 | inbound webhook verification and replay protection | NOT-IMPLEMENTED | C | Повтор подписанного входа сохраняет один эффект, неподтверждённый вход отклоняется. [Обмен с внешним источником](#accept-f15-03) |
+| C307 | outbound delivery retry, reconciliation and dead-letter handling | NOT-IMPLEMENTED | C | После исчерпания попыток оператор видит исходное сообщение и результат его сверки. [Обмен с внешним источником](#accept-f15-03) |
+| C308 | connector lifecycle, credentials and secret-handle boundaries | NOT-IMPLEMENTED | C | После ротации действует новый доступ, отозванный доступ больше не исполняет операцию. [Обмен с внешним источником](#accept-f15-03) |
+| C309 | mapping/transformation with versioned schemas | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. | Один и тот же пример входа воспроизводит значения по выбранной версии сопоставления. [Обмен с внешним источником](#accept-f15-03) |
+| C310 | sync cursors, conflict strategy and source-of-truth declarations | NOT-IMPLEMENTED | C | После остановки обмен продолжается с подтверждённой позиции и разрешает конфликт по версии сопоставления и владельцу поля. [Обмен с внешним источником](#accept-f15-03) |
+| C311 | data enrichment with provenance | CODE-NOT-ACCEPTED | В dev принята публикация конфигурации. Dispatch, review, materialization и provenance результата требуют отдельного исполнения с провайдером. [независимая приёмка](https://github.com/iamaman11/crm/issues/424#issuecomment-6905530278) | У обогащённого значения есть источник, время и разрешение на использование для данной цели. [Обмен с внешним источником](#accept-f15-03) |
+| C312 | iPaaS/event-stream/warehouse integration boundaries | NOT-IMPLEMENTED | C | Для выбранной интеграции сверить внешний ID, подтверждённый итог и повтор события. [Обмен с внешним источником](#accept-f15-03) |
+| C313 | ERP, finance, payment, tax, identity, telephony, messaging and ad-platform adapters | NOT-IMPLEMENTED | C | Для выбранной интеграции сверить внешний ID, подтверждённый итог и повтор события. [Обмен с внешним источником](#accept-f15-03) |
+| C314 | rate limits, quotas and tenant isolation for integration workloads | NOT-IMPLEMENTED | C | Насыщение квоты одного tenant не блокирует контрольный запрос другого. [Обмен с внешним источником](#accept-f15-03) |
+| P467 | versioned bulk import/export | CODE-NOT-ACCEPTED | Малый CSV уже принят. Для больших файлов есть исторические import/export jobs, chunks, validation, checkpoint. Подключать при доказанном лимите; возобновление после сбоя не дублирует строку. | Старая и новая версии формата распознаются явно. На прерванном пакете предъявить результат по каждой строке. [Пакетный обмен](#accept-f15-01) |
+| P468 | public API and webhook platform | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Повтор подписанного входа сохраняет один эффект, неподтверждённый вход отклоняется. [Обмен с внешним источником](#accept-f15-03) |
+| P469 | verified inbound webhooks and replay protection | NOT-IMPLEMENTED | C | Повтор подписанного входа сохраняет один эффект, неподтверждённый вход отклоняется. [Обмен с внешним источником](#accept-f15-03) |
+| P470 | reliable outbound delivery, retry, reconciliation and dead-letter handling | NOT-IMPLEMENTED | C | После исчерпания попыток оператор видит исходное сообщение и результат его сверки. [Обмен с внешним источником](#accept-f15-03) |
+| P471 | connector credentials through secret handles | NOT-IMPLEMENTED | C | После ротации действует новый доступ, отозванный доступ больше не исполняет операцию. [Обмен с внешним источником](#accept-f15-03) |
+| P472 | mapping/transformation with versioned schemas | CODE-NOT-ACCEPTED | Расширение действующего сценария. | После остановки обмен продолжается с подтверждённой позиции и разрешает конфликт по версии сопоставления и владельцу поля. [Обмен с внешним источником](#accept-f15-03) |
+| P473 | sync cursors, conflict strategy and source-of-truth declarations | NOT-IMPLEMENTED | C | После остановки обмен продолжается с подтверждённой позиции и разрешает конфликт по версии сопоставления и владельцу поля. [Обмен с внешним источником](#accept-f15-03) |
+| P474 | ERP, finance, payment, tax, identity, telephony, messaging, ad and data-provider adapters | NOT-IMPLEMENTED | C | Для выбранной интеграции сверить внешний ID, подтверждённый итог и повтор события. [Обмен с внешним источником](#accept-f15-03) |
+| P475 | tenant quotas and rate limits | NOT-IMPLEMENTED | C | Насыщение квоты одного tenant не блокирует контрольный запрос другого. [Обмен с внешним источником](#accept-f15-03) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-f15-01"></a>Пакетный обмен | Подтверждён конкретный объём и формат, для малого CSV известны принятые пределы. | На эталонном файле сверить preview, число созданных строк, ошибки и байты выгрузки. Повтор не дублирует Party. Для большего объёма проверить возобновление с последней подтверждённой строки. |
+| <a id="accept-f15-03"></a>Обмен с внешним источником | Определены владелец каждого поля, версия сопоставления, лимиты tenant и тестовый источник выбранного типа. | Сверить результат при повторе, конфликте и перезапуске с курсора. Запрос с отозванным доступом отклоняется до записи. Лимит одного tenant оставляет доступную квоту другого. Потерянный внешний ответ сверяется по стабильному ключу. |
 
 ## 16. Администрирование и metadata
 
@@ -623,33 +791,40 @@ TaskOwner и срок можно использовать в work item. Project 
 
 Проверенная смежная граница: [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| F16-01 | Прочитать список сотрудников своего tenant | NOT-IMPLEMENTED | Верификация актора существует, отдельной принятой операции каталога команды нет. |
-| F16-02 | Предоставить сотруднику право выполнить ограниченную рабочую операцию | CODE-NOT-ACCEPTED | Access связывает сервис/актора с tenant и ролью. Для рабочего сценария расширить policy и независимо проверить право. |
-| C48 | configurable customer attributes through governed metadata extension points | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. |
-| C322 | custom objects and fields through governed typed schemas | CODE-NOT-ACCEPTED | MetadataRuntime хранит документы, проверяет зависимости и выпускает immutable revision. Нужна публикация и откат конкретной конфигурации для tenant в dev. [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs) |
-| C323 | layouts, related lists, saved views and pipelines | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. |
-| C324 | validation rules and business process configuration | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. |
-| C325 | permission templates and role/team administration | CODE-NOT-ACCEPTED | Есть типы субъекта/владельца, текущая политика или TaskOwner. Открыт полный путь сотрудника, назначения и чтения области доступа. |
-| C326 | workflow authoring through governed actions | CODE-NOT-ACCEPTED | MetadataKind::Workflow существует в прежнем authoring runtime. Нет принятого редактора и исполнения графа в Cloudflare. [Metadata](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs#L23) |
-| C327 | immutable publication, impact analysis, activation and rollback | CODE-NOT-ACCEPTED | MetadataRuntime хранит документы, проверяет зависимости и выпускает immutable revision. Нужна публикация и откат конкретной конфигурации для tenant в dev. [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs) |
-| C328 | module install/upgrade/suspend/uninstall lifecycle | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. |
-| C329 | tenant settings, branding, localization and feature policy | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C330 | audit views and administrative diagnostics | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C331 | sandbox/test environment strategy and controlled promotion between environments | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C332 | no raw production JSON/SQL/script escape hatch for critical invariants | CODE-NOT-ACCEPTED | Архитектурное ограничение действует в текущем Worker. Для планируемого редактора или проекции самостоятельно проверить соблюдение после подключения. |
-| P479 | custom objects and typed custom fields | CODE-NOT-ACCEPTED | MetadataRuntime хранит документы, проверяет зависимости и выпускает immutable revision. Нужна публикация и откат конкретной конфигурации для tenant в dev. [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs) |
-| P480 | layouts, sections, related lists and conditional visibility | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P481 | pipelines, stages, forms and saved views | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P482 | validation and calculation rules | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P483 | permissions, roles, teams and templates | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P484 | workflow/process authoring | CODE-NOT-ACCEPTED | MetadataKind::Workflow существует в прежнем authoring runtime. Нет принятого редактора и исполнения графа в Cloudflare. [Metadata](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs#L23) |
-| P485 | module activation and lifecycle | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P486 | tenant settings, branding and localization | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P487 | audit/diagnostics | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P488 | sandbox, package and controlled promotion | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P489 | impact analysis, publication and rollback | CODE-NOT-ACCEPTED | MetadataRuntime хранит документы, проверяет зависимости и выпускает immutable revision. Нужна публикация и откат конкретной конфигурации для tenant в dev. [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs) |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| F16-01 | Прочитать список сотрудников своего tenant | NOT-IMPLEMENTED | Верификация актора существует, отдельной принятой операции каталога команды нет. | В выборе по имени A видит активного B, чужой и отключённый участники отсутствуют. [Членство и полномочия](#accept-f16-01) |
+| F16-02 | Предоставить сотруднику право выполнить ограниченную рабочую операцию | CODE-NOT-ACCEPTED | Access связывает сервис/актора с tenant и ролью. Для рабочего сценария расширить policy и независимо проверить право. | После выдачи узкого полномочия B завершает свою задачу, но попытка завершить задачу C отклоняется. [Членство и полномочия](#accept-f16-01) |
+| C48 | configurable customer attributes through governed metadata extension points | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. | После публикации разрешённое значение дополнительного поля сохраняется и читается в объявленном типе, несовместимое значение отклоняется. [Публикация настройки](#accept-c48) |
+| C322 | custom objects and fields through governed typed schemas | CODE-NOT-ACCEPTED | MetadataRuntime хранит документы, проверяет зависимости и выпускает immutable revision. Нужна публикация и откат конкретной конфигурации для tenant в dev. [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs) | После публикации разрешённое значение дополнительного поля сохраняется и читается в объявленном типе, несовместимое значение отклоняется. [Публикация настройки](#accept-c48) |
+| C323 | layouts, related lists, saved views and pipelines | CODE-NOT-ACCEPTED | Есть операции клиентского/сделочного ядра в каталоге ниже; для расширенного набора свойств и связей требуется собственная проверка. | Опубликованное представление или форма открываются в целевом tenant с ожидаемой версией конфигурации. [Публикация настройки](#accept-c48) |
+| C324 | validation rules and business process configuration | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. | Проверить отклонение запрещённого значения и успешную запись граничного разрешённого значения. [Публикация настройки](#accept-c48) |
+| C325 | permission templates and role/team administration | CODE-NOT-ACCEPTED | Есть типы субъекта/владельца, текущая политика или TaskOwner. Открыт полный путь сотрудника, назначения и чтения области доступа. | Изменить полномочие участника и проверить следующую операцию из ранее открытой сессии. [Членство и полномочия](#accept-f16-01) |
+| C326 | workflow authoring through governed actions | CODE-NOT-ACCEPTED | MetadataKind::Workflow существует в прежнем authoring runtime. Нет принятого редактора и исполнения графа в Cloudflare. [Metadata](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs#L23) | Настроенное правило вызывает только разрешённые команды с объявленными типами. [Публикация настройки](#accept-c48) |
+| C327 | immutable publication, impact analysis, activation and rollback | CODE-NOT-ACCEPTED | MetadataRuntime хранит документы, проверяет зависимости и выпускает immutable revision. Нужна публикация и откат конкретной конфигурации для tenant в dev. [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs) | Перед активацией видны затронутые операции, после отката они работают по указанной прежней версии. [Публикация настройки](#accept-c48) |
+| C328 | module install/upgrade/suspend/uninstall lifecycle | CODE-NOT-ACCEPTED | Сохранить доменную семантику из таблицы исторических операций и реализаций ниже; подтвердить полный результат на D1. | Приостановка прекращает новые исполнения, после согласованного удаления сохраняется предусмотренная история. [Публикация настройки](#accept-c48) |
+| C329 | tenant settings, branding, localization and feature policy | NOT-IMPLEMENTED | C | После смены локали и настройки они видны только участникам выбранного tenant. [Публикация настройки](#accept-c48) |
+| C330 | audit views and administrative diagnostics | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Администратор находит операцию по ID и видит разрешённые диагностические сведения. [Публикация настройки](#accept-c48) |
+| C331 | sandbox/test environment strategy and controlled promotion between environments | NOT-IMPLEMENTED | C | В целевой среде проверяется именно испытанная редакция пакета настроек. [Публикация настройки](#accept-c48) |
+| C332 | no raw production JSON/SQL/script escape hatch for critical invariants | CODE-NOT-ACCEPTED | Архитектурное ограничение действует в текущем Worker. Для планируемого редактора или проекции самостоятельно проверить соблюдение после подключения. | Попытка задать правило вне поддерживаемых типизированных свойств отклоняется до публикации. [Публикация настройки](#accept-c48) |
+| P479 | custom objects and typed custom fields | CODE-NOT-ACCEPTED | MetadataRuntime хранит документы, проверяет зависимости и выпускает immutable revision. Нужна публикация и откат конкретной конфигурации для tenant в dev. [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs) | После публикации разрешённое значение дополнительного поля сохраняется и читается в объявленном типе, несовместимое значение отклоняется. [Публикация настройки](#accept-c48) |
+| P480 | layouts, sections, related lists and conditional visibility | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Опубликованное представление или форма открываются в целевом tenant с ожидаемой версией конфигурации. [Публикация настройки](#accept-c48) |
+| P481 | pipelines, stages, forms and saved views | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Опубликованное представление или форма открываются в целевом tenant с ожидаемой версией конфигурации. [Публикация настройки](#accept-c48) |
+| P482 | validation and calculation rules | NOT-IMPLEMENTED | C | Нарушение опубликованного правила отклоняет изменение без записи. [Публикация настройки](#accept-c48) |
+| P483 | permissions, roles, teams and templates | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Отзыв роли у сотрудника применяется к следующему запросу из открытой сессии. [Членство и полномочия](#accept-f16-01) |
+| P484 | workflow/process authoring | CODE-NOT-ACCEPTED | MetadataKind::Workflow существует в прежнем authoring runtime. Нет принятого редактора и исполнения графа в Cloudflare. [Metadata](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs#L23) | Настроенное правило вызывает только разрешённые команды с объявленными типами. [Публикация настройки](#accept-c48) |
+| P485 | module activation and lifecycle | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Приостановка модуля закрывает его новые операции, история сохраняется. [Публикация настройки](#accept-c48) |
+| P486 | tenant settings, branding and localization | NOT-IMPLEMENTED | C | После смены локали и настройки они видны только участникам выбранного tenant. [Публикация настройки](#accept-c48) |
+| P487 | audit/diagnostics | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Администратор находит операцию по ID и видит разрешённые диагностические сведения. [Публикация настройки](#accept-c48) |
+| P488 | sandbox, package and controlled promotion | NOT-IMPLEMENTED | C | В целевой среде проверяется именно испытанная редакция пакета настроек. [Публикация настройки](#accept-c48) |
+| P489 | impact analysis, publication and rollback | CODE-NOT-ACCEPTED | MetadataRuntime хранит документы, проверяет зависимости и выпускает immutable revision. Нужна публикация и откат конкретной конфигурации для tenant в dev. [lib.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-metadata-runtime/src/lib.rs) | Перед активацией видны затронутые операции, после отката они работают по указанной прежней версии. [Публикация настройки](#accept-c48) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-f16-01"></a>Членство и полномочия | Есть два действующих сотрудника одного tenant и контрольная учётная запись другого. | Пройти матрицу SK-01/04, отозвать доступ до исполнения команды. После отзыва выдача каталога и запись соответствуют обновлённым правам. |
+| <a id="accept-c48"></a>Публикация настройки | Принята настраиваемая операция, выделены тестовый tenant, старая и новая версии. | Опубликовать в одном tenant, пройти настроенную форму или правило, проверить диагностику и версию. Некорректная конфигурация отклоняется до активации. Откат возвращает прежнее поведение, соседний tenant сохраняет своё. |
 
 ## 17. UX, мобильность, локализация
 
@@ -659,30 +834,37 @@ TaskOwner и срок можно использовать в work item. Project 
 
 Проверенная смежная граница: [routes.ts](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/cloudflare-crm/web/src/routes.ts).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| F17-01 | Найти принятую запись по ссылке после Back/reload | ACCEPTED | M1-06, M2-02 и R1 в границе соответствующих экранов. |
-| C75 | mobile and offline-capable field selling workflows where product tier requires them | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C281 | imports and guided onboarding | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C397 | responsive desktop and mobile web experience | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C398 | accessible navigation, forms, tables, dialogs and charts | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C399 | localization, locale-aware dates/numbers/currency and RTL readiness where required | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C400 | fast list, record, timeline and workspace experiences | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C401 | empty/loading/error/offline/retry states | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C402 | onboarding and contextual guidance | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C403 | mobile-native or installable/offline experience where target deployment requires it | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C404 | notification surfaces and deep links | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C405 | safe optimistic UX only where server authority remains explicit | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C406 | browser E2E against real governed application paths for critical workflows | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| P493 | responsive desktop/mobile web | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P494 | installable/offline-capable journeys where required | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P495 | accessibility across critical flows | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P496 | localization and locale-aware values | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P497 | fast records, lists, boards and search | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P498 | empty/loading/error/offline/retry states | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P499 | onboarding, contextual help and templates | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P500 | notifications and deep links | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P501 | command palette, keyboard shortcuts, recent items and favorites | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| F17-01 | Найти принятую запись по ссылке после Back/reload | ACCEPTED | M1-06, M2-02 и R1 в границе соответствующих экранов. | Back и reload возвращают согласованный фильтр и ту же карточку по стабильному ID. [Доступный рабочий путь](#accept-f17-01) |
+| C75 | mobile and offline-capable field selling workflows where product tier requires them | NOT-IMPLEMENTED | C | После работы без сети проверить синхронизацию одного изменения и показать пользователю конфликт при одновременной записи. [Работа без сети](#accept-c75) |
+| C281 | imports and guided onboarding | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Новый сотрудник проходит стартовый сценарий по подсказкам и открывает созданную запись. [Доступный рабочий путь](#accept-f17-01) |
+| C397 | responsive desktop and mobile web experience | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | На согласованных мобильной и настольной ширинах доступны основное действие и результат. [Доступный рабочий путь](#accept-f17-01) |
+| C398 | accessible navigation, forms, tables, dialogs and charts | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Проверить доступные имена, порядок фокуса и возврат фокуса после закрытия диалога. [Доступный рабочий путь](#accept-f17-01) |
+| C399 | localization, locale-aware dates/numbers/currency and RTL readiness where required | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Дата и сумма меняют представление между локалями, исходное значение сохраняется. [Доступный рабочий путь](#accept-f17-01) |
+| C400 | fast list, record, timeline and workspace experiences | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Сравнить измеренную задержку длинного списка и карточки с заранее записанным бюджетом. [Доступный рабочий путь](#accept-f17-01) |
+| C401 | empty/loading/error/offline/retry states | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | На пустой ответ, разрыв сети и отказ доступа интерфейс показывает различимые исходы. [Доступный рабочий путь](#accept-f17-01) |
+| C402 | onboarding and contextual guidance | NOT-IMPLEMENTED | C | Новый сотрудник проходит стартовый сценарий по подсказкам и открывает созданную запись. [Доступный рабочий путь](#accept-f17-01) |
+| C403 | mobile-native or installable/offline experience where target deployment requires it | NOT-IMPLEMENTED | C | В выбранном поддерживаемом клиенте проверить восстановление офлайн-намерения после закрытия приложения. [Работа без сети](#accept-c75) |
+| C404 | notification surfaces and deep links | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Ссылка из уведомления открывает правильную запись и повторно проверяет доступ. [Доступный рабочий путь](#accept-f17-01) |
+| C405 | safe optimistic UX only where server authority remains explicit | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | После отказа сервера временное изменение на экране возвращается к фактическому значению. [Доступный рабочий путь](#accept-f17-01) |
+| C406 | browser E2E against real governed application paths for critical workflows | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Сквозная браузерная проверка подтверждает эффект чтением у настоящего владельца. [Доступный рабочий путь](#accept-f17-01) |
+| P493 | responsive desktop/mobile web | CODE-NOT-ACCEPTED | Расширение действующего сценария. | На согласованных мобильной и настольной ширинах доступны основное действие и результат. [Доступный рабочий путь](#accept-f17-01) |
+| P494 | installable/offline-capable journeys where required | NOT-IMPLEMENTED | C | В выбранном поддерживаемом клиенте проверить восстановление офлайн-намерения после закрытия приложения. [Работа без сети](#accept-c75) |
+| P495 | accessibility across critical flows | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Проверить доступные имена, порядок фокуса и возврат фокуса после закрытия диалога. [Доступный рабочий путь](#accept-f17-01) |
+| P496 | localization and locale-aware values | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Дата и сумма меняют представление между локалями, исходное значение сохраняется. [Доступный рабочий путь](#accept-f17-01) |
+| P497 | fast records, lists, boards and search | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Сравнить измеренную задержку длинного списка и карточки с заранее записанным бюджетом. [Доступный рабочий путь](#accept-f17-01) |
+| P498 | empty/loading/error/offline/retry states | CODE-NOT-ACCEPTED | Расширение действующего сценария. | На пустой ответ, разрыв сети и отказ доступа интерфейс показывает различимые исходы. [Доступный рабочий путь](#accept-f17-01) |
+| P499 | onboarding, contextual help and templates | NOT-IMPLEMENTED | C | Новый сотрудник проходит стартовый сценарий по подсказкам и открывает созданную запись. [Доступный рабочий путь](#accept-f17-01) |
+| P500 | notifications and deep links | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Ссылка из уведомления открывает правильную запись и повторно проверяет доступ. [Доступный рабочий путь](#accept-f17-01) |
+| P501 | command palette, keyboard shortcuts, recent items and favorites | NOT-IMPLEMENTED | C | Из палитры по клавиатуре открывается доступная запись и добавляется в недавние. [Доступный рабочий путь](#accept-f17-01) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-f17-01"></a>Доступный рабочий путь | Принят основной сценарий и указаны поддерживаемые устройства, локаль и, для скорости, набор данных и бюджет времени. | Пройти создание или чтение с клавиатуры, открыть ссылку, вернуться и обновить карточку. Проверить подписи, фокус, формат даты и суммы, состояния пустой выдачи и ошибки. При конфликте пользователь видит сохранённый итог. |
+| <a id="accept-c75"></a>Работа без сети | Пилот подтвердил конкретное действие без связи и правила локального хранения. | Прервать сеть, изменить доступную запись и восстановить соединение. Повтор синхронизации сохраняет один результат, конфликт показывает обе версии для решения, отзыв доступа закрывает чтение. |
 
 ## 18. AI
 
@@ -692,32 +874,39 @@ TaskOwner и срок можно использовать в work item. Project 
 
 Проверенная смежная граница: [ai.proto](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/proto/crm/core/v1/ai.proto).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| C362 | AI as an authenticated audited Actor | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C363 | tenant/purpose/data-class/residency/cost-aware model routing | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C364 | tool schemas generated from governed capability/query registries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C365 | live authorization before retrieval and before every side effect | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C366 | permission-filtered retrieval and grounding | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C367 | summarization, drafting, classification, extraction and recommendation | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C368 | next-best-action and risk/opportunity suggestions with explanations | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C369 | duplicate/match suggestions without autonomous identity merge | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C370 | human approval for configured high-risk actions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C371 | prompt-injection, data-leakage, hallucination and tool-correctness evaluations | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C372 | budget, latency and provider-failure controls | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C373 | complete actor/tool/model/prompt-policy/cost audit evidence | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C374 | reversible actions where the underlying domain supports reversal | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P509 | tenant/purpose/data-class/residency/cost-aware model routing | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P510 | permission-filtered retrieval and grounding | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P511 | summarization, drafting, classification and extraction | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P512 | next-best-action, risk and opportunity recommendations with explanations | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P513 | conversational analytics and knowledge assistance | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P514 | governed tool schemas generated from capability/query registries | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P515 | human approval for configured high-risk actions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P516 | prompt-injection/data-leakage/hallucination/tool-correctness evaluations | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P517 | budget, latency and provider-failure controls | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P518 | complete actor/model/prompt-policy/tool/cost audit evidence | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P519 | reversible action handling where the domain supports reversal | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| C362 | AI as an authenticated audited Actor | NOT-IMPLEMENTED | C | Для вызова в истории указан самостоятельный субъект AI с ограниченными правами. [Ответ и происхождение AI](#accept-c362) |
+| C363 | tenant/purpose/data-class/residency/cost-aware model routing | NOT-IMPLEMENTED | C | На контрольных запросах проверить маршрут согласно tenant, классу данных, региону и бюджету. [Ответ и происхождение AI](#accept-c362) |
+| C364 | tool schemas generated from governed capability/query registries | NOT-IMPLEMENTED | C | Несовместимый тип аргумента инструмента отклоняется до вызова владельца. [Действие AI](#accept-c364) |
+| C365 | live authorization before retrieval and before every side effect | NOT-IMPLEMENTED | C | После отзыва доступа источник отсутствует в контексте и выдаче следующего запроса. [Ответ и происхождение AI](#accept-c362) |
+| C366 | permission-filtered retrieval and grounding | NOT-IMPLEMENTED | C | После отзыва доступа источник отсутствует в контексте и выдаче следующего запроса. [Ответ и происхождение AI](#accept-c362) |
+| C367 | summarization, drafting, classification, extraction and recommendation | NOT-IMPLEMENTED | C | На эталонном наборе отдельно проверить каждую заявленную операцию и ссылку на основание. [Ответ и происхождение AI](#accept-c362) |
+| C368 | next-best-action and risk/opportunity suggestions with explanations | NOT-IMPLEMENTED | C | У рекомендации есть причина и доступная пользователю исходная запись. [Ответ и происхождение AI](#accept-c362) |
+| C369 | duplicate/match suggestions without autonomous identity merge | NOT-IMPLEMENTED | C | Предложение совпадения оставляет обе записи самостоятельными до решения уполномоченного человека. [Ответ и происхождение AI](#accept-c362) |
+| C370 | human approval for configured high-risk actions | NOT-IMPLEMENTED | C | Действие повышенного риска не выполняется без предусмотренного человеческого согласования. [Действие AI](#accept-c364) |
+| C371 | prompt-injection, data-leakage, hallucination and tool-correctness evaluations | NOT-IMPLEMENTED | C | На контрольном наборе недоверенного содержимого закрытые данные не раскрываются, незаявленная команда не исполняется. [Ответ и происхождение AI](#accept-c362) |
+| C372 | budget, latency and provider-failure controls | NOT-IMPLEMENTED | C | При исчерпании бюджета или сбое провайдера фиксируется отказ и отсутствует побочный эффект. [Ответ и происхождение AI](#accept-c362) |
+| C373 | complete actor/tool/model/prompt-policy/cost audit evidence | NOT-IMPLEMENTED | C | По ID исполнения проверяются модель, политика, вызванная операция и фактическая стоимость. [Ответ и происхождение AI](#accept-c362) |
+| C374 | reversible actions where the underlying domain supports reversal | NOT-IMPLEMENTED | C | Для обратимой команды проверить разрешённую компенсацию и её связь с исходной записью. [Действие AI](#accept-c364) |
+| P509 | tenant/purpose/data-class/residency/cost-aware model routing | NOT-IMPLEMENTED | C | На контрольных запросах проверить маршрут согласно tenant, классу данных, региону и бюджету. [Ответ и происхождение AI](#accept-c362) |
+| P510 | permission-filtered retrieval and grounding | NOT-IMPLEMENTED | C | После отзыва доступа источник отсутствует в контексте и выдаче следующего запроса. [Ответ и происхождение AI](#accept-c362) |
+| P511 | summarization, drafting, classification and extraction | NOT-IMPLEMENTED | C | На эталонном наборе отдельно проверить каждую заявленную операцию и ссылку на основание. [Ответ и происхождение AI](#accept-c362) |
+| P512 | next-best-action, risk and opportunity recommendations with explanations | NOT-IMPLEMENTED | C | У рекомендации есть причина и доступная пользователю исходная запись. [Ответ и происхождение AI](#accept-c362) |
+| P513 | conversational analytics and knowledge assistance | NOT-IMPLEMENTED | C | Аналитический ответ воспроизводится по разрешённым показателям и источникам. [Ответ и происхождение AI](#accept-c362) |
+| P514 | governed tool schemas generated from capability/query registries | NOT-IMPLEMENTED | C | Несовместимый тип аргумента инструмента отклоняется до вызова владельца. [Действие AI](#accept-c364) |
+| P515 | human approval for configured high-risk actions | NOT-IMPLEMENTED | C | Действие повышенного риска не выполняется без предусмотренного человеческого согласования. [Действие AI](#accept-c364) |
+| P516 | prompt-injection/data-leakage/hallucination/tool-correctness evaluations | NOT-IMPLEMENTED | C | На контрольном наборе недоверенного содержимого закрытые данные не раскрываются, незаявленная команда не исполняется. [Ответ и происхождение AI](#accept-c362) |
+| P517 | budget, latency and provider-failure controls | NOT-IMPLEMENTED | C | При исчерпании бюджета или сбое провайдера фиксируется отказ и отсутствует побочный эффект. [Ответ и происхождение AI](#accept-c362) |
+| P518 | complete actor/model/prompt-policy/tool/cost audit evidence | NOT-IMPLEMENTED | C | По ID исполнения проверяются модель, политика, вызванная операция и фактическая стоимость. [Ответ и происхождение AI](#accept-c362) |
+| P519 | reversible action handling where the domain supports reversal | NOT-IMPLEMENTED | C | Для обратимой команды проверить разрешённую компенсацию и её связь с исходной записью. [Действие AI](#accept-c364) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-c362"></a>Ответ и происхождение AI | Есть разрешённый корпус, эталонные вопросы, лимит стоимости и критерий качества для выбранного действия. | Сверить ответ с видимыми источниками, проверить объяснение рекомендации и учтённую стоимость. Контрольный закрытый документ не попадает в ответ. При отсутствии основания вывод отмечается как неподтверждённый, предложение дубля не объединяет записи. |
+| <a id="accept-c364"></a>Действие AI | Целевой владелец уже предоставляет типизированную команду и, где применимо, обратную операцию. | Согласовать конкретное действие, проверить право перед записью и один результат при повторе. Отзыв согласования блокирует исполнение, отмена связывается с исходным действием. |
 
 ## 19. Marketplace и вертикали
 
@@ -727,39 +916,46 @@ ModuleRegistry умеет разрешать зависимости и изме�
 
 Проверенная смежная граница: [registry.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-module-registry/src/registry.rs).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| C382 | signed packages and publisher identity | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C383 | dependency and compatibility resolution | CODE-NOT-ACCEPTED | ModuleRegistry::resolve_dependencies учитывает версии и установленные модули. Переносить при первом подписанном расширении. [registry.rs#L190](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-module-registry/src/registry.rs#L190) |
-| C384 | SBOM/provenance and vulnerability policy | NOT-IMPLEMENTED | CI проверяет зависимости самого приложения. Для устанавливаемого стороннего пакета требуется проверка происхождения и SBOM до активации. |
-| C385 | explicit capability/data/network/secret grants | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C386 | sandboxed untrusted execution, planned as WASM | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C387 | quotas, timeouts and resource limits | NOT-IMPLEMENTED | Для указанной целевой операции промышленная реализация в активном и историческом доменном пути не выявлена. Согласовать целевой предел и проверить отдельным сценарием. |
-| C388 | install/upgrade/rollback/suspend/uninstall evidence | CODE-NOT-ACCEPTED | Есть переходы установки, активации, остановки и отката, а также тесты registry. Проверить отключение запущенного расширения в реальном Worker. [registry.rs#L203](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-module-registry/src/registry.rs#L203) |
-| C389 | kill switch and emergency revocation | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C390 | marketplace UI extensions through bounded host-owned context | CODE-NOT-ACCEPTED | Исторический record page поддерживает typed extension slots и изоляцию render/load failures. Для Cloudflare нужен запуск с ограниченными правами. [Playwright](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/web/e2e/ui-extensions.spec.ts) |
-| C391 | extension failure isolation and no infrastructure bypass | CODE-NOT-ACCEPTED | Исторический record page поддерживает typed extension slots и изоляцию render/load failures. Для Cloudflare нужен запуск с ограниченными правами. [Playwright](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/web/e2e/ui-extensions.spec.ts) |
-| P278 | typed custom functions compiled or sandboxed under resource limits | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P279 | no raw database connectivity | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P280 | no unrestricted network or secret access | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P281 | declared input/output schemas | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P282 | declared data classes and permissions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P283 | deterministic timeout, memory and CPU quotas | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P284 | signed package/version identity | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P285 | test fixtures and contract compatibility | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P286 | complete execution audit | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P287 | kill switch and revocation | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P525 | signed packages and publisher identity | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P526 | dependency/compatibility resolution | CODE-NOT-ACCEPTED | ModuleRegistry::resolve_dependencies учитывает версии и установленные модули. Переносить при первом подписанном расширении. [registry.rs#L190](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-module-registry/src/registry.rs#L190) |
-| P527 | explicit data, capability, UI, network and secret grants | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P528 | sandboxed untrusted execution | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P529 | resource quotas and timeouts | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P530 | install, upgrade, rollback, suspend and uninstall evidence | CODE-NOT-ACCEPTED | Есть переходы установки, активации, остановки и отката, а также тесты registry. Проверить отключение запущенного расширения в реальном Worker. [registry.rs#L203](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-module-registry/src/registry.rs#L203) |
-| P531 | emergency kill switch and revocation | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P532 | bounded UI extensions using host-owned context | CODE-NOT-ACCEPTED | Исторический record page поддерживает typed extension slots и изоляцию render/load failures. Для Cloudflare нужен запуск с ограниченными правами. [Playwright](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/web/e2e/ui-extensions.spec.ts) |
-| P533 | connector and workflow action packages | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P534 | vertical packages using the same owner/security/audit rules | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P535 | extension failure isolation and no infrastructure bypass | CODE-NOT-ACCEPTED | Исторический record page поддерживает typed extension slots и изоляцию render/load failures. Для Cloudflare нужен запуск с ограниченными правами. [Playwright](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/web/e2e/ui-extensions.spec.ts) |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| C382 | signed packages and publisher identity | NOT-IMPLEMENTED | C | Пакет с неверной подписью или неизвестным издателем отклоняется до активации. [Установка и отзыв расширения](#accept-c382) |
+| C383 | dependency and compatibility resolution | CODE-NOT-ACCEPTED | ModuleRegistry::resolve_dependencies учитывает версии и установленные модули. Переносить при первом подписанном расширении. [registry.rs#L190](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-module-registry/src/registry.rs#L190) | Конфликт версий зависимостей выявляется до активации пакета. [Установка и отзыв расширения](#accept-c382) |
+| C384 | SBOM/provenance and vulnerability policy | NOT-IMPLEMENTED | CI проверяет зависимости самого приложения. Для устанавливаемого стороннего пакета требуется проверка происхождения и SBOM до активации. | У версии пакета проверяются происхождение и перечень зависимостей, запрещённая политикой версия не активируется. [Установка и отзыв расширения](#accept-c382) |
+| C385 | explicit capability/data/network/secret grants | NOT-IMPLEMENTED | C | Каждый выданный грант соответствует заявленному доступу, незаявленное действие закрыто. [Установка и отзыв расширения](#accept-c382) |
+| C386 | sandboxed untrusted execution, planned as WASM | NOT-IMPLEMENTED | C | Ошибочный пользовательский модуль завершается изолированно, соседний сценарий доступен. [Изоляция исполнения](#accept-c386) |
+| C387 | quotas, timeouts and resource limits | NOT-IMPLEMENTED | Для указанной целевой операции промышленная реализация в активном и историческом доменном пути не выявлена. Согласовать целевой предел и проверить отдельным сценарием. | На контрольном превышении лимита останавливается конкретное расширение, соседнее продолжает работу. [Изоляция исполнения](#accept-c386) |
+| C388 | install/upgrade/rollback/suspend/uninstall evidence | CODE-NOT-ACCEPTED | Есть переходы установки, активации, остановки и отката, а также тесты registry. Проверить отключение запущенного расширения в реальном Worker. [registry.rs#L203](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-module-registry/src/registry.rs#L203) | Сверить версию и аудит после установки, обновления, отката, приостановки и удаления. [Установка и отзыв расширения](#accept-c382) |
+| C389 | kill switch and emergency revocation | NOT-IMPLEMENTED | C | После экстренного отзыва уже начатое расширение не совершает следующую запись. [Установка и отзыв расширения](#accept-c382) |
+| C390 | marketplace UI extensions through bounded host-owned context | CODE-NOT-ACCEPTED | Исторический record page поддерживает typed extension slots и изоляцию render/load failures. Для Cloudflare нужен запуск с ограниченными правами. [Playwright](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/web/e2e/ui-extensions.spec.ts) | UI-расширение получает только контекст открытой разрешённой записи. [Установка и отзыв расширения](#accept-c382) |
+| C391 | extension failure isolation and no infrastructure bypass | CODE-NOT-ACCEPTED | Исторический record page поддерживает typed extension slots и изоляцию render/load failures. Для Cloudflare нужен запуск с ограниченными правами. [Playwright](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/web/e2e/ui-extensions.spec.ts) | После отказа расширения выполнить контрольную операцию CRM и проверить её штатный аудит. [Установка и отзыв расширения](#accept-c382) |
+| P278 | typed custom functions compiled or sandboxed under resource limits | NOT-IMPLEMENTED | C | Ошибочный пользовательский модуль завершается изолированно, соседний сценарий доступен. [Изоляция исполнения](#accept-c386) |
+| P279 | no raw database connectivity | NOT-IMPLEMENTED | C | Запрос незаявленного доступа к БД, сети или секрету даёт отказ среды исполнения. [Изоляция исполнения](#accept-c386) |
+| P280 | no unrestricted network or secret access | NOT-IMPLEMENTED | C | Запрос незаявленного доступа к БД, сети или секрету даёт отказ среды исполнения. [Изоляция исполнения](#accept-c386) |
+| P281 | declared input/output schemas | NOT-IMPLEMENTED | C | Несовместимый выход и незаявленный класс данных отклоняются на границе расширения. [Изоляция исполнения](#accept-c386) |
+| P282 | declared data classes and permissions | NOT-IMPLEMENTED | C | Несовместимый выход и незаявленный класс данных отклоняются на границе расширения. [Изоляция исполнения](#accept-c386) |
+| P283 | deterministic timeout, memory and CPU quotas | NOT-IMPLEMENTED | C | Превышение установленной квоты памяти или времени завершает конкретное исполнение. [Изоляция исполнения](#accept-c386) |
+| P284 | signed package/version identity | NOT-IMPLEMENTED | C | Пакет с неверной подписью или неизвестным издателем отклоняется до активации. [Установка и отзыв расширения](#accept-c382) |
+| P285 | test fixtures and contract compatibility | NOT-IMPLEMENTED | C | Обновление с несовместимым контрактом не активируется. [Установка и отзыв расширения](#accept-c382) |
+| P286 | complete execution audit | NOT-IMPLEMENTED | C | В аудите доступны версия пакета, субъект, затронутая операция и итог. [Изоляция исполнения](#accept-c386) |
+| P287 | kill switch and revocation | NOT-IMPLEMENTED | C | После экстренного отзыва уже начатое расширение не совершает следующую запись. [Установка и отзыв расширения](#accept-c382) |
+| P525 | signed packages and publisher identity | NOT-IMPLEMENTED | C | Пакет с неверной подписью или неизвестным издателем отклоняется до активации. [Установка и отзыв расширения](#accept-c382) |
+| P526 | dependency/compatibility resolution | CODE-NOT-ACCEPTED | ModuleRegistry::resolve_dependencies учитывает версии и установленные модули. Переносить при первом подписанном расширении. [registry.rs#L190](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-module-registry/src/registry.rs#L190) | Конфликт версий зависимостей выявляется до активации пакета. [Установка и отзыв расширения](#accept-c382) |
+| P527 | explicit data, capability, UI, network and secret grants | NOT-IMPLEMENTED | C | Каждый выданный грант соответствует заявленному доступу, незаявленное действие закрыто. [Установка и отзыв расширения](#accept-c382) |
+| P528 | sandboxed untrusted execution | NOT-IMPLEMENTED | C | Ошибочный пользовательский модуль завершается изолированно, соседний сценарий доступен. [Изоляция исполнения](#accept-c386) |
+| P529 | resource quotas and timeouts | NOT-IMPLEMENTED | C | Превышение установленной квоты памяти или времени завершает конкретное исполнение. [Изоляция исполнения](#accept-c386) |
+| P530 | install, upgrade, rollback, suspend and uninstall evidence | CODE-NOT-ACCEPTED | Есть переходы установки, активации, остановки и отката, а также тесты registry. Проверить отключение запущенного расширения в реальном Worker. [registry.rs#L203](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/crates/crm-module-registry/src/registry.rs#L203) | Сверить версию и аудит после установки, обновления, отката, приостановки и удаления. [Установка и отзыв расширения](#accept-c382) |
+| P531 | emergency kill switch and revocation | NOT-IMPLEMENTED | C | После экстренного отзыва уже начатое расширение не совершает следующую запись. [Установка и отзыв расширения](#accept-c382) |
+| P532 | bounded UI extensions using host-owned context | CODE-NOT-ACCEPTED | Исторический record page поддерживает typed extension slots и изоляцию render/load failures. Для Cloudflare нужен запуск с ограниченными правами. [Playwright](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/web/e2e/ui-extensions.spec.ts) | UI-расширение получает только контекст открытой разрешённой записи. [Установка и отзыв расширения](#accept-c382) |
+| P533 | connector and workflow action packages | NOT-IMPLEMENTED | C | После установки выполнить согласованную операцию адаптера или отраслевого пакета через владельца данных. [Установка и отзыв расширения](#accept-c382) |
+| P534 | vertical packages using the same owner/security/audit rules | NOT-IMPLEMENTED | C | После установки выполнить согласованную операцию адаптера или отраслевого пакета через владельца данных. [Установка и отзыв расширения](#accept-c382) |
+| P535 | extension failure isolation and no infrastructure bypass | CODE-NOT-ACCEPTED | Исторический record page поддерживает typed extension slots и изоляцию render/load failures. Для Cloudflare нужен запуск с ограниченными правами. [Playwright](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/web/e2e/ui-extensions.spec.ts) | После отказа расширения выполнить контрольную операцию CRM и проверить её штатный аудит. [Установка и отзыв расширения](#accept-c382) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-c382"></a>Установка и отзыв расширения | Выбрано расширение с версией, издателем, совместимым хостом и явными разрешениями. | Проверить подпись и совместимость, установить в одном tenant, обновить и откатить. Отзыв гранта останавливает следующее действие уже запущенного расширения. Сбой расширения оставляет базовый CRM-сценарий доступным. |
+| <a id="accept-c386"></a>Изоляция исполнения | Определены типизированные входы и выходы, лимиты ресурсов и тестовый пакет. | Передать ошибочный тип, превысить квоту и запросить незаявленный ресурс. Исполнение завершается контролируемым отказом с записью причины. Допустимый вызов возвращает проверяемый типизированный результат. |
 
 ## 20. Enterprise и эксплуатация
 
@@ -769,37 +965,47 @@ ModuleRegistry умеет разрешать зависимости и изме�
 
 Проверенная смежная граница: [access.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/apps/cloudflare-crm/rust-party/src/access.rs).
 
-| ID | Операция или требование к ней | Статус | Решение / граница |
-|---|---|---|---|
-| F20-01 | Положительный вход человека с реальной Access identity | CODE-NOT-ACCEPTED | Проверяются подпись и tenant. Принятый live R1 использовал service admin. Требуется отдельный вход человека. |
-| F20-02 | Восстановить исход Task после неопределённой ошибки D1 | CODE-NOT-ACCEPTED | Текущий адаптер может вернуть конфликт при ошибке записи. Проверить receipt, повтор и audit согласно #485. |
-| C340 | authentication with OIDC/SAML where required | CODE-NOT-ACCEPTED | Есть типы субъекта/владельца, текущая политика или TaskOwner. Открыт полный путь сотрудника, назначения и чтения области доступа. |
-| C341 | SCIM provisioning and deprovisioning | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C342 | tenant, organization, team, role and resource authorization | CODE-NOT-ACCEPTED | Есть типы субъекта/владельца, текущая политика или TaskOwner. Открыт полный путь сотрудника, назначения и чтения области доступа. |
-| C343 | field-level visibility and masking | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C344 | delegated administration and separation of duties | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C345 | approval policies for high-risk actions | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C346 | tenant key hierarchy and field/data-class encryption where required | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C347 | immutable audit evidence and WORM export | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C348 | consent and communication authorization enforcement | CODE-NOT-ACCEPTED | Доступны GrantVerifiedEmailConsent, WithdrawConsentAuthorization, SuppressCommunication и EvaluateConsent. На границе реальной доставки потребуется повторить проверку согласия перед отправкой. |
-| C349 | privacy access/export/deletion/restriction/legal-hold workflows | CODE-NOT-ACCEPTED | Существуют legacy owner action, hold/restriction и access export. В dev приняты intake и отмена; positive human verification, frozen scope и полный экспорт проверяются отдельно. [access_export.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-customer-privacy/tests/access_export.rs) |
-| C350 | data residency and tenant mobility | NOT-IMPLEMENTED | Для указанной целевой операции промышленная реализация в активном и историческом доменном пути не выявлена. Согласовать целевой предел и проверить отдельным сценарием. |
-| C351 | backup, PITR, tenant restore and disaster recovery | CODE-NOT-ACCEPTED | Исторические операции восстановления касаются PostgreSQL. Тест выпуска D1 не выполняет tenant restore. Принять на отдельном восстановленном экземпляре с измеренными RPO/RTO. [customer_privacy_operations.py](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/scripts/customer_privacy_operations.py) |
-| C352 | retention and crypto-shredding strategies | NOT-IMPLEMENTED | C до зависимостей волны. |
-| C353 | security scans, SBOM, provenance, penetration and abuse testing | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| C354 | SLOs, alerting, incident response and operational runbooks | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. |
-| P541 | OIDC/SAML and SCIM where required | CODE-NOT-ACCEPTED | Часть поведения реализована в типах Sales/Activities, runtime доступа, ModuleRegistry либо штатной поставке. Принятая граница и недостающее развитие разделены в каталогах ниже. |
-| P542 | resource/field-level authorization, masking and separation of duties | CODE-NOT-ACCEPTED | Часть поведения реализована в типах Sales/Activities, runtime доступа, ModuleRegistry либо штатной поставке. Принятая граница и недостающее развитие разделены в каталогах ниже. |
-| P543 | tenant key hierarchy, encryption and residency controls | NOT-IMPLEMENTED | C до зависимостей волны. |
-| P544 | immutable audit/WORM export | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P545 | backup, PITR, tenant restore and disaster recovery | CODE-NOT-ACCEPTED | Исторические операции восстановления касаются PostgreSQL. Тест выпуска D1 не выполняет tenant restore. Принять на отдельном восстановленном экземпляре с измеренными RPO/RTO. [customer_privacy_operations.py](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/scripts/customer_privacy_operations.py) |
-| P546 | defined RPO/RTO and tested runbooks | CODE-NOT-ACCEPTED | Исторические операции восстановления касаются PostgreSQL. Тест выпуска D1 не выполняет tenant restore. Принять на отдельном восстановленном экземпляре с измеренными RPO/RTO. [customer_privacy_operations.py](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/scripts/customer_privacy_operations.py) |
-| P547 | SLOs, alerting, capacity and incident response | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P548 | security scans, SBOM, provenance, penetration and abuse testing | CODE-NOT-ACCEPTED | Расширить действующую границу семейства; подтвердить полный указанный результат. |
-| P549 | upgrade, rollback and data migration safety | CODE-NOT-ACCEPTED | Часть поведения реализована в типах Sales/Activities, runtime доступа, ModuleRegistry либо штатной поставке. Принятая граница и недостающее развитие разделены в каталогах ниже. |
-| P550 | high-volume and large-tenant performance profiles | NOT-IMPLEMENTED | Для указанной целевой операции промышленная реализация в активном и историческом доменном пути не выявлена. Согласовать целевой предел и проверить отдельным сценарием. |
-| P551 | deployment topology and operational support policy | CODE-NOT-ACCEPTED | У Worker есть штатная поставка и fail-closed при ошибке; эксплуатационная поддержка коммерческой среды требует отдельных критериев. |
-| P552 | representative vertical packages proving governed extensibility | NOT-IMPLEMENTED | C до зависимостей волны. |
+| ID | Операция или требование к ней | Статус | Решение / граница | Приёмка операции |
+|---|---|---|---|---|
+| F20-01 | Положительный вход человека с реальной Access identity | CODE-NOT-ACCEPTED | Проверяются подпись и tenant. Принятый live R1 использовал service admin. Требуется отдельный вход человека. | Сотрудники раздельно проходят Access и после повторного входа видят собственные рабочие очереди. [Человеческий вход в пилот](#accept-f20-01) |
+| F20-02 | Восстановить исход Task после неопределённой ошибки D1 | CODE-NOT-ACCEPTED | Чтение подтверждения по исходному ключу уже есть в GetTask и UI. Для новой команды назначения проверить commit с потерянным ответом, отсутствие commit и повтор. Доказательство относится к конкретной операции. | Сверить сохранённый Task по исходному ключу и связать подтверждение с одной версией и одним аудитом. [Подтверждение записи Task](#accept-f20-02) |
+| C340 | authentication with OIDC/SAML where required | CODE-NOT-ACCEPTED | Есть типы субъекта/владельца, текущая политика или TaskOwner. Открыт полный путь сотрудника, назначения и чтения области доступа. | В тестовом провайдере проверить вход и последующее прекращение доступа после деактивации. [Корпоративный доступ](#accept-c340) |
+| C341 | SCIM provisioning and deprovisioning | NOT-IMPLEMENTED | C | Отключение пользователя в тестовом каталоге закрывает следующую операцию CRM. [Корпоративный доступ](#accept-c340) |
+| C342 | tenant, organization, team, role and resource authorization | CODE-NOT-ACCEPTED | Есть типы субъекта/владельца, текущая политика или TaskOwner. Открыт полный путь сотрудника, назначения и чтения области доступа. | Для одной записи проверить разрешение своего сотрудника, отказ чужому и отзыв полномочия до записи. [Корпоративный доступ](#accept-c340) |
+| C343 | field-level visibility and masking | NOT-IMPLEMENTED | C | Пересмотреть при отдельно согласованной потребности скрывать поле. На одной записи сравнить выдачу двух ролей в списке и карточке с принятой матрицей полей. Для текущего пилота действует одинаковая видимость бизнес-полей доступной записи. [Корпоративный доступ](#accept-c340) |
+| C344 | delegated administration and separation of duties | NOT-IMPLEMENTED | C | Делегированный согласующий не может подтвердить действие вне выданной области или после отзыва. [Корпоративный доступ](#accept-c340) |
+| C345 | approval policies for high-risk actions | NOT-IMPLEMENTED | C | Делегированный согласующий не может подтвердить действие вне выданной области или после отзыва. [Корпоративный доступ](#accept-c340) |
+| C346 | tenant key hierarchy and field/data-class encryption where required | NOT-IMPLEMENTED | C | На двух tenant проверить изоляцию ключей и регион системы, получившей данные. [Жизненный цикл данных](#accept-c346) |
+| C347 | immutable audit evidence and WORM export | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Попытка изменить принятую выгрузку аудита отклоняется, контрольная сумма сходится. [Жизненный цикл данных](#accept-c346) |
+| C348 | consent and communication authorization enforcement | CODE-NOT-ACCEPTED | Доступны GrantVerifiedEmailConsent, WithdrawConsentAuthorization, SuppressCommunication и EvaluateConsent. На границе реальной доставки потребуется повторить проверку согласия перед отправкой. | Отозвать согласие после постановки в очередь, подтвердить отсутствие фактической отправки. [Жизненный цикл данных](#accept-c346) |
+| C349 | privacy access/export/deletion/restriction/legal-hold workflows | CODE-NOT-ACCEPTED | Существуют legacy owner action, hold/restriction и access export. В dev приняты intake и отмена; positive human verification, frozen scope и полный экспорт проверяются отдельно. [access_export.rs](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/modules/crm-customer-privacy/tests/access_export.rs) | На контрольном субъекте сверить разрешённую выгрузку, ограничение чтения и исключение из удаления по удержанию. [Жизненный цикл данных](#accept-c346) |
+| C350 | data residency and tenant mobility | NOT-IMPLEMENTED | Для указанной целевой операции промышленная реализация в активном и историческом доменном пути не выявлена. Согласовать целевой предел и проверить отдельным сценарием. | При переносе tenant сверить целевой регион, состав записей и прекращение выдачи со старого размещения. [Жизненный цикл данных](#accept-c346) |
+| C351 | backup, PITR, tenant restore and disaster recovery | CODE-NOT-ACCEPTED | Исторические операции восстановления касаются PostgreSQL. Тест выпуска D1 не выполняет tenant restore. Принять на отдельном восстановленном экземпляре с измеренными RPO/RTO. [customer_privacy_operations.py](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/scripts/customer_privacy_operations.py) | В изолированной среде восстановить контрольные записи, измерить фактические RPO/RTO и сравнить с согласованными порогами. [Жизненный цикл данных](#accept-c346) |
+| C352 | retention and crypto-shredding strategies | NOT-IMPLEMENTED | C | При удержании данные сохраняются, после разрешённого уничтожения восстановление сверяется с политикой. [Жизненный цикл данных](#accept-c346) |
+| C353 | security scans, SBOM, provenance, penetration and abuse testing | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Зафиксировать версию поставки, состав зависимостей, результаты разрешённой проверки и устранение подтверждённых дефектов. [Эксплуатация](#accept-c353) |
+| C354 | SLOs, alerting, incident response and operational runbooks | CODE-NOT-ACCEPTED | Есть часть в действующем клиенте/CI либо историческом product-plane. Полный перечисленный охват и эксплуатационные пределы отдельно не приняты. | Контрольный инцидент вызывает согласованное оповещение, время реакции и восстановления измерено. [Эксплуатация](#accept-c353) |
+| P541 | OIDC/SAML and SCIM where required | CODE-NOT-ACCEPTED | Часть поведения реализована в типах Sales/Activities, runtime доступа, ModuleRegistry либо штатной поставке. Принятая граница и недостающее развитие разделены в каталогах ниже. | В тестовом провайдере проверить вход и последующее прекращение доступа после деактивации. [Корпоративный доступ](#accept-c340) |
+| P542 | resource/field-level authorization, masking and separation of duties | CODE-NOT-ACCEPTED | Часть поведения реализована в типах Sales/Activities, runtime доступа, ModuleRegistry либо штатной поставке. Принятая граница и недостающее развитие разделены в каталогах ниже. | Для одной записи проверить разрешение своего сотрудника, отказ чужому и отзыв полномочия до записи. [Корпоративный доступ](#accept-c340) |
+| P543 | tenant key hierarchy, encryption and residency controls | NOT-IMPLEMENTED | C | На двух tenant проверить изоляцию ключей и регион системы, получившей данные. [Жизненный цикл данных](#accept-c346) |
+| P544 | immutable audit/WORM export | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Попытка изменить принятую выгрузку аудита отклоняется, контрольная сумма сходится. [Жизненный цикл данных](#accept-c346) |
+| P545 | backup, PITR, tenant restore and disaster recovery | CODE-NOT-ACCEPTED | Исторические операции восстановления касаются PostgreSQL. Тест выпуска D1 не выполняет tenant restore. Принять на отдельном восстановленном экземпляре с измеренными RPO/RTO. [customer_privacy_operations.py](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/scripts/customer_privacy_operations.py) | В изолированной среде восстановить контрольные записи, измерить фактические RPO/RTO и сравнить с согласованными порогами. [Жизненный цикл данных](#accept-c346) |
+| P546 | defined RPO/RTO and tested runbooks | CODE-NOT-ACCEPTED | Исторические операции восстановления касаются PostgreSQL. Тест выпуска D1 не выполняет tenant restore. Принять на отдельном восстановленном экземпляре с измеренными RPO/RTO. [customer_privacy_operations.py](https://github.com/iamaman11/crm/blob/c1f65019359641ae20c0426653c08aac3ef3529f/scripts/customer_privacy_operations.py) | В изолированной среде восстановить контрольные записи, измерить фактические RPO/RTO и сравнить с согласованными порогами. [Жизненный цикл данных](#accept-c346) |
+| P547 | SLOs, alerting, capacity and incident response | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Контрольный инцидент вызывает согласованное оповещение, время реакции и восстановления измерено. [Эксплуатация](#accept-c353) |
+| P548 | security scans, SBOM, provenance, penetration and abuse testing | CODE-NOT-ACCEPTED | Расширение действующего сценария. | Зафиксировать версию поставки, состав зависимостей, результаты разрешённой проверки и устранение подтверждённых дефектов. [Эксплуатация](#accept-c353) |
+| P549 | upgrade, rollback and data migration safety | CODE-NOT-ACCEPTED | Часть поведения реализована в типах Sales/Activities, runtime доступа, ModuleRegistry либо штатной поставке. Принятая граница и недостающее развитие разделены в каталогах ниже. | Пройти обновление с предыдущей схемы, сверить записи и отработать утверждённое восстановление после сбоя миграции. [Эксплуатация](#accept-c353) |
+| P550 | high-volume and large-tenant performance profiles | NOT-IMPLEMENTED | Для указанной целевой операции промышленная реализация в активном и историческом доменном пути не выявлена. Согласовать целевой предел и проверить отдельным сценарием. | Измерить задержку и ошибки на заранее определённых объёмах большого tenant и одновременно работающего контрольного tenant. [Эксплуатация](#accept-c353) |
+| P551 | deployment topology and operational support policy | CODE-NOT-ACCEPTED | У Worker есть штатная поставка и fail-closed при ошибке; эксплуатационная поддержка коммерческой среды требует отдельных критериев. | В согласованной топологии подтвердить обработку инцидента, ответственного и восстановление сервиса. [Эксплуатация](#accept-c353) |
+| P552 | representative vertical packages proving governed extensibility | NOT-IMPLEMENTED | C | Репрезентативный отраслевой сценарий выполняется через те же права и аудит, что и основной продукт. [Эксплуатация](#accept-c353) |
+
+**Условия начала и контрольные сценарии**
+
+| Сценарий | Когда брать в работу | Как проверить результат |
+|---|---|---|
+| <a id="accept-f20-01"></a>Человеческий вход в пилот | Двум действующим сотрудникам одного тестового tenant доступны собственные сессии Cloudflare Access. | Пройти SK-01/04 под обеими учётными записями, после выхода открыть вторую сессию и подтвердить принадлежность очереди вошедшему сотруднику. |
+| <a id="accept-f20-02"></a>Подтверждение записи Task | Типизированное чтение по исходному ключу уже доступно. Новый переход назначения добавлен в тот же путь. | Потерять ответ после commit, перечитать подтверждение, сверить версию и одну запись аудита. Если исход не доказан, UI предлагает сверку и сохраняет исходный ключ. |
+| <a id="accept-c340"></a>Корпоративный доступ | Есть подтверждённая потребность в федерации, делегировании или более узкой видимости, определены тестовые субъекты и границы доступа. | Проверить вход, делегированное действие, отзыв и недоступность чужого tenant. Для расширенных прав и полей сверить разрешённую выдачу до и после отзыва. Для SCIM отключение пользователя закрывает следующее действие. |
+| <a id="accept-c346"></a>Жизненный цикл данных | Определены применимая политика хранения, владелец обработки, согласованные RPO/RTO и изолированная среда восстановления. | Восстановить контрольный набор, измерить потерю данных и время, сверить аудит и доступ. Для удаления проверить удержание и последующее исполнение, для перемещения сверить регион и ключи назначения. |
+| <a id="accept-c353"></a>Эксплуатация | Есть репрезентативный сценарий, модель нагрузки, целевые показатели и ответственный за приёмку. | Проверить обновление и восстановление после сбоя на согласованной нагрузке. Зафиксировать исход записи, задержку, ошибки, диагностическое событие и действия оператора. Для корпоративного пакета пройти конкретный отраслевой сценарий с его правами. |
 
 ## Действующий Worker — проверка по каждому RPC
 
@@ -1237,14 +1443,14 @@ ModuleRegistry умеет разрешать зависимости и изме�
 | Шаг | Текущая граница | Следующий результат и проверка |
 |---|---|---|
 | 00 | Сверены операции текущих и прежних контрактов, целевые семейства, ограниченные сценарии и зависимости. | Пересматривать строку после изменения кода или появления доказательств. |
-| 01 | CODE-NOT-ACCEPTED · подписанный Access и tenant действуют; последний Gate B использовал сервис. | B: получить positive human sign-in, проверить видимость состава своей команды, отказ для чужой и отзыв роли. |
+| 01 | CODE-NOT-ACCEPTED · подписанный Access и tenant действуют. Для рабочего сценария ещё нужны две подтверждённые человеческие сессии. | B: получить positive human sign-in, проверить видимость состава своей команды, отказ для чужой и отзыв роли. |
 | 02 | ACCEPTED · Party → Account, контакты, связи и карточка Customer360, M1-02…06/N-03. | A: использовать существующие идентификаторы, связи и права в следующем срезе. |
 | 03 | ACCEPTED · ограниченный Deal → stage → close/reopen и история; отдельный Lead — NOT-IMPLEMENTED. | A для Deal. C для отдельного Lead до подтверждения собственного жизненного цикла и lineage конверсии. |
 | 04 | ACCEPTED · Task, срок, напоминание и overdue. CODE-NOT-ACCEPTED · назначение и выборка по владельцу. | B вместе с SK-01. Исполнитель завершает назначенную задачу; попытка чужого tenant, просроченная версия и повтор оставляют корректный результат. |
 | 05 | NOT-IMPLEMENTED · единый журнал фактических звонков, встреч и заметок по клиенту/сделке. | B после идентификации субъектов: сохранить Interaction, provenance и связь. Проверить хронологию при повторе или поступлении старого события. |
 | 06 | NOT-IMPLEMENTED · общая домашняя очередь сегодняшней работы и взаимодействий. | B после SK-04/05: прочитать очередь с фильтром до пагинации, ссылки ведут на разрешённую запись; чтение не создаёт аудит записи. |
 | 07 | ACCEPTED · настройки Sales в пределах M2. CODE-NOT-ACCEPTED · полное управление членством и общие показатели. | B для минимальной настройки команды и обзорного чтения; запрет изменения для обычного сотрудника. |
-| 08 | ACCEPTED · малый CSV import/export. CODE-NOT-ACCEPTED · durable jobs и неопределённый исход Task. | A для малых CSV. Включить исправление неопределённой записи в работу над Task; большие объёмы — C до измеримой потребности. |
+| 08 | ACCEPTED · малый CSV import/export. CODE-NOT-ACCEPTED · возобновляемые задания и восстановление ещё не реализованного назначения Task. | A для малых CSV. Переиспользовать подтверждение Task и проверить новый переход назначения; большие объёмы — C до измеримой потребности. |
 | 09 | CODE-NOT-ACCEPTED · принят связанный M1-10, полной приёмки операционного пилота нет. | В одном tenant человек проходит login, клиента, взаимодействие, продажу и назначение; коллега завершает задачу. Проверить фоновой эффект, Back/reload, аудит и независимый live Gate на опубликованном SHA. |
 
 ## Правила реализации и наблюдения
