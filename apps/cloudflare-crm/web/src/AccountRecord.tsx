@@ -8,6 +8,7 @@ import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice} from ".
 import {scopeHref,partyHref,dealHref,taskHref,contactHref,relationshipHref} from "./routes";
 import {PartyPicker,PartyName} from "./Pickers";
 import {allPipelines,stageName} from "./salesPipelineCatalog";
+import {InteractionTimeline} from "./InteractionTimeline";
 
 export function accountStatusLabel(status:AccountStatus):string {
   switch(status) {
@@ -61,6 +62,7 @@ export function AccountDetails({accountId}:{accountId:string}) {
     <h3>Задачи</h3><ul>{card.tasks.map(t=><li key={t.taskId}><a href={taskHref(t.taskId,accountId)}>{t.subject}</a> · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?"Открыта"+(t.dueAt?" · срок: "+dateText(t.dueAt):""):"Неизвестный статус"}</li>)}</ul>
     {card.truncated?.tasks&&<p>Показаны первые {card.perCollectionLimit} задач.</p>}
     <a href={scopeHref("tasks",accountId)}>Все задачи клиента</a>
+    <InteractionTimeline accountId={accountId}/>
   </>}</div>;
 }
 /** A single typed editor, GetAccount and UpdateAccount implementation for every Account projection. */

@@ -2,7 +2,7 @@ schema_version: crm.module/v1
 module_id: crm.activities
 version: 0.1.2
 display_name: CRM Activities
-description: Independent activities domain module owning tasks and reminder state.
+description: Independent activities owner for tasks, reminders and immutable interaction history.
 owner:
   team: activities-platform
   contact: crm-owner@example.com
@@ -79,6 +79,21 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v2.TaskService.ListTasks
+    - id: activities.interaction.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.InteractionService.CreateInteraction
+    - id: activities.interaction.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.InteractionService.GetInteraction
+    - id: activities.interaction.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.InteractionService.ListInteractions
   events:
     - id: activities.task.created
       version: 1.0.0
@@ -102,6 +117,7 @@ provides:
         message: crm.activities.v1.TaskReminderScheduledEvent
   objects:
     - activities.task
+    - activities.interaction
   ui_extensions:
     - id: activities.tasks.navigation
       type: navigation.item
@@ -119,6 +135,7 @@ consumes:
 storage:
   record_types:
     - activities.task
+    - activities.interaction
   private_state_namespaces:
     - crm.activities
 security:

@@ -51,6 +51,7 @@ pub mod proto {
 }
 use proto::crm::accounts::v2 as account_wire;
 use proto::crm::activities::v2 as task_wire;
+use proto::crm::activities::v2 as interaction_wire;
 use proto::crm::consents::v2 as consent_wire;
 use proto::crm::contact_points::v2 as contact_wire;
 use proto::crm::core::v2 as core_v2;
@@ -71,6 +72,7 @@ mod quality_handlers;
 mod relationship_handlers;
 mod sales_handlers;
 mod task_handlers;
+mod interaction_handlers;
 use overview_handlers::Customer360V2Service;
 use proto::crm::customer_360::v2 as overview_wire;
 mod data_operations_handlers;
@@ -110,6 +112,7 @@ enum CrudReceiptOwner {
     Contact,
     Relationship,
     Task,
+    Interaction,
     Privacy,
     Consent,
     Pipeline,
@@ -136,6 +139,10 @@ impl CrudReceiptOwner {
             ),
             Self::Task => concat!(
                 "SELECT state,original_request_id FROM crm_activity_task_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
+            Self::Interaction => concat!(
+                "SELECT state,original_request_id FROM crm_activity_interaction_receipts",
                 " WHERE tenant=? AND key=?"
             ),
             Self::Privacy => concat!(
@@ -1003,6 +1010,44 @@ impl SalesV2Service {
     }
 }
 
+// The ORIGINAL crm-activities owner validates immutable Interaction events.
+// Only its D1 adapter writes receipts/audit; this is a generated Connect trait.
+struct InteractionV2Service {
+    env: Arc<Env>,
+    actor: access::Actor,
+    request_id: String,
+}
+impl OwnedService for InteractionV2Service {
+    const OWNER: &'static str = crm_activities::MODULE_ID;
+}
+impl InteractionV2Service {
+    fn d1(&self) -> std::result::Result<D1Database,ConnectError> {
+        self.env.d1("DB").map_err(|_|ConnectError::internal("D1 unavailable"))
+    }
+    fn convert(item: &crm_activities::interactions::Interaction) -> interaction_wire::Interaction {
+        let kind=match item.kind {
+            crm_activities::interactions::InteractionKind::Call=>
+                interaction_wire::InteractionKind::INTERACTION_KIND_CALL,
+            crm_activities::interactions::InteractionKind::Meeting=>
+                interaction_wire::InteractionKind::INTERACTION_KIND_MEETING,
+            crm_activities::interactions::InteractionKind::Note=>
+                interaction_wire::InteractionKind::INTERACTION_KIND_NOTE,
+        };
+        interaction_wire::Interaction {
+            interaction_id:item.interaction_id.clone(),
+            account_id:item.account_id.clone(),
+            deal_id:item.deal_id.clone().unwrap_or_default(),
+            kind:kind.into(),
+            text:item.text.clone(),
+            author:item.author.clone(),
+            occurred_at:Some(ContactPointV2Service::timestamp(item.occurred_at_nanos)).into(),
+            recorded_at:Some(ContactPointV2Service::timestamp(item.recorded_at_nanos)).into(),
+            version:item.version,
+            ..Default::default()
+        }
+    }
+}
+
 // One constructor serves dispatch and the existing signed workerd diagnostic.
 // Router::methods() inspects the registered compiled handlers.
 trait OwnedService {
@@ -1070,6 +1115,11 @@ pub(super) fn router(
         env: Arc::clone(&env),
         tenant: tenant.to_owned(),
         actor: actor.to_owned(),
+        request_id: request_id.to_owned(),
+    }))
+    .add_service(Arc::new(InteractionV2Service {
+        env: Arc::clone(&env),
+        actor: verified.clone(),
         request_id: request_id.to_owned(),
     }))
     .add_service(Arc::new(DataQualityV2Service {

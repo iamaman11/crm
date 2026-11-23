@@ -12,6 +12,7 @@ import type {CurrencyCatalog} from "./money";
 import {inputDate} from "./calendarInput";
 import {scopeHref,contactHref,taskHref,dealTasksHref} from "./routes";
 import {stageName as stageLabel} from "./salesPipelineCatalog";
+import {InteractionTimeline} from "./InteractionTimeline";
 
 export function dealStatusText(status:DealStatus):string {
   switch(status){
@@ -171,6 +172,7 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen
         Открыть повторно
       </Button>:null}
       <DealHistory key={deal.dealId} dealId={deal.dealId} accountId={deal.accountId} pipeline={pipeline}/>
+      <InteractionTimeline accountId={deal.accountId} dealId={deal.dealId}/>
     </>}
   </section>;
 }

@@ -17,6 +17,8 @@ mod accounts;
 #[cfg(feature = "native")]
 mod activity_tasks;
 #[cfg(feature = "native")]
+mod activity_interactions;
+#[cfg(feature = "native")]
 mod connect_sales;
 #[cfg(feature = "native")]
 mod consents;
@@ -379,6 +381,18 @@ impl RpcPolicy {
 
 #[cfg(feature = "native")]
 const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
+    (
+        "/crm.activities.v2.InteractionService/CreateInteraction",
+        RpcPolicy { permission: RpcPermission::Write },
+    ),
+    (
+        "/crm.activities.v2.InteractionService/GetInteraction",
+        RpcPolicy { permission: RpcPermission::Read },
+    ),
+    (
+        "/crm.activities.v2.InteractionService/ListInteractions",
+        RpcPolicy { permission: RpcPermission::Read },
+    ),
     (
         "/crm.customer_360.v2.Customer360Service/GetAccountOverview",
         RpcPolicy {

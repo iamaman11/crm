@@ -1005,6 +1005,55 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    const detailsFromBoard=page.getByRole("region",{name:"Подробности сделки "+dealId});
    await expect(detailsFromBoard.getByRole("link",{name:"Browser Account "+runId,exact:true}))
      .toHaveAttribute("href","#accounts/"+accountId);
+   // SK-05: the actual user records fact-time interactions from the Deal,
+   // sees both in chronological order after reload and an Account-only note.
+   const dealHistory=detailsFromBoard.getByRole("region",
+     {name:"История взаимодействий "+dealId});
+   const saveInteraction=async(panel,kind,when,body)=>{
+     await panel.getByLabel("Вид взаимодействия",{exact:true}).selectOption(String(kind));
+     await panel.getByLabel("Время события",{exact:true}).fill(when);
+     await panel.getByLabel("Что произошло",{exact:true}).fill(body);
+     await mutation(panel.getByRole("button",{name:"Добавить в историю",exact:true}),
+       "CreateInteraction");
+     await panel.getByText(body,{exact:true}).waitFor();
+   };
+   const laterCall="Browser SK05 call "+runId;
+   const earlierMeeting="Browser SK05 meeting "+runId;
+   const accountNote="Browser SK05 note "+runId;
+   await saveInteraction(dealHistory,1,"2026-05-19T12:30",laterCall);
+   await saveInteraction(dealHistory,2,"2026-05-18T11:00",earlierMeeting);
+   await reloadDocument();
+   const dealReloadHistory=page.getByRole("region",
+     {name:"История взаимодействий "+dealId});
+   await dealReloadHistory.getByText(laterCall,{exact:true}).waitFor();
+   await dealReloadHistory.getByText(earlierMeeting,{exact:true}).waitFor();
+   const dealText=await dealReloadHistory.locator("ol li").allTextContents();
+   assert.ok(dealText[0].includes(laterCall)&&dealText[1].includes(earlierMeeting),
+     "SK05 must sort by fact time, not insertion order");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_interactions WHERE tenant=? AND deal_id=?",
+     tenantA,dealId))[0].n,2);
+   await navigate("accounts/"+accountId,"Карточка клиента");
+   const accountTimeline=page.getByRole("region",{name:"История взаимодействий "+accountId});
+   await accountTimeline.getByText(laterCall,{exact:true}).waitFor();
+   await accountTimeline.getByText(earlierMeeting,{exact:true}).waitFor();
+   await saveInteraction(accountTimeline,3,"2026-05-17T10:00",accountNote);
+   await reloadDocument();
+   const accountReload=page.getByRole("region",{name:"История взаимодействий "+accountId});
+   for(const text of [laterCall,earlierMeeting,accountNote])
+     await accountReload.getByText(text,{exact:true}).waitFor();
+   const accountRows=await accountReload.locator("ol li").allTextContents();
+   assert.ok(accountRows[0].includes(laterCall)&&accountRows[1].includes(earlierMeeting)&&
+     accountRows[2].includes(accountNote),"Account history must contain deal events and own note");
+   const receipts=await sql("SELECT count(*) AS n FROM crm_activity_interaction_receipts WHERE tenant=?",
+     tenantA);
+   assert.ok(receipts[0].n>=3,"each UI write has an original immutable owner receipt");
+   await navigate("sales/"+dealId,"Карточка сделки");
+   const dealAfterAccountNote=page.getByRole("region",
+     {name:"История взаимодействий "+dealId});
+   await dealAfterAccountNote.getByText(laterCall,{exact:true}).waitFor();
+   assert.equal(await dealAfterAccountNote.getByText(accountNote,{exact:true}).count(),0,
+     "Account-only note must not be misattributed to Deal");
+   checkpoint("SK-05 React Account+Deal typed interaction history, authored facts, reload, ordering and D1 receipts");
    const dealContactLink=detailsFromBoard.getByRole("link",{
      name:"browser-"+runId+"@example.org",exact:true
    });

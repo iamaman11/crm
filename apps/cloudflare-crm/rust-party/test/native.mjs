@@ -14,6 +14,7 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryContactV2,decodeContactV2,contactV2Path,
   binaryRelationshipV2,decodeRelationshipV2,relationshipV2Path,
   binaryTaskV2,decodeTaskV2,taskV2Path,
+  binaryInteractionV2,decodeInteractionV2,interactionV2Path,
   binaryQualityV2,decodeQualityV2,qualityV2Path,
   binaryIdentityV2,decodeIdentityV2,identityV2Path,
   binaryConsentV2,decodeConsentV2,consentV2Path,
@@ -4121,6 +4122,144 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    signed_admin_and_viewer:true,full_wire_fields_equal:true,tenant_b_not_found:true,
    get_owners:m1FullReads.length,list_owners:m1ListReads.length,
    party_account_deal_sales_event_task_customer360:true,read_only:true}));
+ // SK-05: the SAME binary Connect + signed worker + original Activities D1
+ // validates completed calls/meetings/notes independently of Sales stage audit.
+ const interactionV2=async(method,token,payload)=>{
+   const response=await rpcFetch(interactionV2Path(method),{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+       ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:binaryInteractionV2(method,payload)});
+   return {status:response.status,headers:response.headers,
+     body:response.status<400
+       ?decodeInteractionV2(method,new Uint8Array(await response.arrayBuffer()))
+       :await response.json()};
+ };
+ const eventLater="sk05-later-"+randomUUID();
+ const eventEarlier="sk05-earlier-"+randomUUID();
+ const eventNote="sk05-note-"+randomUUID();
+ const occurrence=(seconds)=>({seconds:BigInt(seconds),nanos:123456789});
+ const interactionInput=(interactionId,kind,seconds,deal="")=>({
+   interactionId,accountId,dealId:deal,kind,
+   text:"SK05 validated interaction "+interactionId,
+   occurredAt:occurrence(seconds),
+   precondition:{idempotencyKey:"sk05-"+interactionId}
+ });
+ const laterInput=interactionInput(eventLater,1,1780000000,dealId);
+ const earlierInput=interactionInput(eventEarlier,2,1770000000,dealId);
+ const noteInput=interactionInput(eventNote,3,1775000000);
+ const interactionAuditBefore=(await sql(
+   "SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='activities.interaction.recorded'"))[0].n;
+ assert.equal((await interactionV2("CreateInteraction",null,laterInput)).status,401);
+ assert.equal((await interactionV2("CreateInteraction",viewer,laterInput)).status,403);
+ assert.equal((await interactionV2("CreateInteraction",tenantB,laterInput)).status,404,
+   "cross-tenant Account must not accept events");
+ assert.equal((await interactionV2("CreateInteraction",admin,{
+   ...laterInput,accountId:accountNextId,
+   precondition:{idempotencyKey:"sk05-mismatch-"+eventLater}})).status,400,
+   "Deal and Account must have identical tenant-scoped parent");
+ assert.equal((await interactionV2("CreateInteraction",admin,{
+   ...laterInput,dealId:"sk05-nonexistent-deal",
+   precondition:{idempotencyKey:"sk05-absent-"+eventLater}})).status,404);
+ assert.equal((await interactionV2("CreateInteraction",admin,{
+   ...laterInput,kind:0,
+   precondition:{idempotencyKey:"sk05-unknown-kind-"+eventLater}})).status,400);
+ const recordedLater=await interactionV2("CreateInteraction",admin,laterInput);
+ assert.equal(recordedLater.status,200,describeProtobuf(recordedLater.body));
+ assert.equal(recordedLater.body.interaction?.author,"native-a@example.test");
+ assert.equal(recordedLater.body.interaction?.dealId,dealId);
+ assert.equal(recordedLater.body.interaction?.accountId,accountId);
+ assert.equal(recordedLater.body.interaction?.kind,1);
+ assert.equal(recordedLater.body.interaction?.occurredAt?.seconds,1780000000n);
+ assert.equal(recordedLater.body.receipt?.resourceVersion,1n);
+ const recordedEarlier=await interactionV2("CreateInteraction",admin,earlierInput);
+ const recordedNote=await interactionV2("CreateInteraction",admin,noteInput);
+ for(const result of [recordedEarlier,recordedNote]){
+   assert.equal(result.status,200,describeProtobuf(result.body));
+   assert.equal(result.body.receipt?.resourceVersion,1n);
+ }
+ assert.equal(recordedNote.body.interaction?.kind,3);
+ assert.equal(recordedNote.body.interaction?.dealId,"");
+ const replayed=await interactionV2("CreateInteraction",admin,laterInput);
+ assert.equal(replayed.status,200,describeProtobuf(replayed.body));
+ assert.equal(replayed.body.receipt?.replayed,true);
+ assert.equal(replayed.body.receipt?.originalRequestId,recordedLater.receipt?.requestId
+   ??recordedLater.headers.get("x-request-id"));
+ assert.equal((await interactionV2("CreateInteraction",admin,{
+   ...laterInput,text:"Modified on replay"
+ })).status,409);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_interactions WHERE tenant=? AND id=?",
+   "tenant-a",eventLater))[0].n,1);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_interaction_receipts WHERE tenant='tenant-a'"))[0].n,3);
+ assert.equal((await sql(
+   "SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a' AND action='activities.interaction.recorded'"))[0].n,
+   interactionAuditBefore+3,"replay and rejected writes must not create another audit");
+ const getAdmin=await interactionV2("GetInteraction",admin,{
+   interactionId:eventLater,receiptIdempotencyKey:laterInput.precondition.idempotencyKey});
+ const getViewer=await interactionV2("GetInteraction",viewer,{
+   interactionId:eventLater,receiptIdempotencyKey:laterInput.precondition.idempotencyKey});
+ assert.equal(getAdmin.status,200);
+ assert.equal(getViewer.status,200);
+ assert.equal(getViewer.body.interaction?.author,"native-a@example.test");
+ assert.deepEqual(getAdmin.body.interaction,getViewer.body.interaction);
+ assert.equal(getAdmin.body.confirmedMutation?.originalRequestId,
+   recordedLater.headers.get("x-request-id"));
+ assert.equal(getAdmin.body.confirmedMutation?.resourceVersion,1n);
+ assert.equal((await interactionV2("GetInteraction",viewer,{
+   interactionId:eventEarlier,receiptIdempotencyKey:laterInput.precondition.idempotencyKey
+ })).body.confirmedMutation,undefined,"other record receipt must not be disclosed");
+ assert.equal((await interactionV2("GetInteraction",tenantB,{
+   interactionId:eventLater})).status,404);
+ const firstPage=await interactionV2("ListInteractions",viewer,{accountId,page:{pageSize:2}});
+ assert.equal(firstPage.status,200);
+ assert.deepEqual(firstPage.body.interactions.map(row=>row.interactionId),[eventLater,eventNote],
+   "late backdated event must sort by fact time, not recorded/audit time");
+ assert.ok(firstPage.body.pageInfo?.nextPageToken);
+ const secondPage=await interactionV2("ListInteractions",viewer,{
+   accountId,page:{pageSize:2,pageToken:firstPage.body.pageInfo.nextPageToken}
+ });
+ assert.deepEqual(secondPage.body.interactions.map(row=>row.interactionId),[eventEarlier]);
+ assert.equal(secondPage.body.pageInfo?.nextPageToken??"","");
+ const listAdmin=await interactionV2("ListInteractions",admin,{accountId,page:{pageSize:2}});
+ assert.deepEqual(listAdmin.body,firstPage.body,
+   "viewer sees all accessible original business fields and chronology");
+ const dealPage=await interactionV2("ListInteractions",viewer,{accountId,dealId,page:{pageSize:10}});
+ assert.deepEqual(dealPage.body.interactions.map(row=>row.interactionId),
+   [eventLater,eventEarlier],"Deal history cannot show Account-only note");
+ assert.deepEqual((await interactionV2("ListInteractions",tenantB,{
+   accountId,page:{pageSize:10}})).body.interactions,[]);
+ assert.deepEqual((await interactionV2("ListInteractions",viewer,{
+   accountId:accountNextId,dealId,page:{pageSize:10}})).body.interactions,[]);
+ assert.equal((await interactionV2("ListInteractions",viewer,{
+   accountId,page:{pageSize:2,pageToken:"invalid"}
+ })).status,400);
+ const interactionAuditBeforeReads=(await sql(
+   "SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
+ await interactionV2("GetInteraction",viewer,{interactionId:eventNote});
+ await interactionV2("ListInteractions",viewer,{accountId,page:{pageSize:5}});
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
+   interactionAuditBeforeReads,"read-only history must not write audit");
+ const failedId="sk05-failed-"+randomUUID();
+ const failedInput=interactionInput(failedId,3,1773000000);
+ await sql("CREATE TRIGGER fixture_fail_sk05_audit BEFORE INSERT ON crm_audit "+
+   "WHEN NEW.subject_id='"+failedId+"' BEGIN SELECT RAISE(ABORT,'fixture audit'); END;");
+ try{
+   assertUnconfirmed(await interactionV2("CreateInteraction",admin,failedInput),
+     "ACTIVITIES_INTERACTION_WRITE_UNCONFIRMED");
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_interactions WHERE id=?",
+     failedId))[0].n,0);
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_activity_interaction_receipts WHERE key=?",
+     failedInput.precondition.idempotencyKey))[0].n,0);
+ }finally{await sql("DROP TRIGGER fixture_fail_sk05_audit");}
+ const recovered=await interactionV2("CreateInteraction",admin,failedInput);
+ assert.equal(recovered.status,200);
+ assert.equal(recovered.body.receipt?.replayed,false);
+ assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE subject_id=?",failedId))[0].n,1);
+ console.log(JSON.stringify({event:"crm.native-sk05-interaction",result:"PASS",
+   source_sha:sourceSha,original_owner:"crm.activities",binary_connect:true,tenant_ab:true,
+   viewer_fields_equal:true,viewer_write_denied:true,account_deal_fk:true,
+   chronological_keyset:true,idempotent_replay:true,
+   immutable_receipt_and_audit:true,failed_audit_rollback:true}));
+
  await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
  const salesAuditBeforeFilter=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  assert.deepEqual((await collectPages(salesV2,"ListDeals","deals",{accountId})).map(d=>d.dealId),
