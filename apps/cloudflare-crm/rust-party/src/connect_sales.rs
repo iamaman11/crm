@@ -88,6 +88,38 @@ mod privacy_handlers;
 use privacy_handlers::PrivacyV2Service;
 use proto::crm::customer_privacy::v2 as privacy_wire;
 
+// The generated core.v2 oneof is the sole new owner wire contract for Tasks
+// and Deals. The old Task scalar tags are decoded only at this boundary; both
+// paths produce the exact same domain input/digest and no extra business state.
+fn wire_owner(value: core_v2::actor_or_team_owner::Owner) -> core_v2::ActorOrTeamOwner {
+    core_v2::ActorOrTeamOwner {
+        owner: Some(value),
+        ..Default::default()
+    }
+}
+
+fn task_owner_intent(
+    owner: Option<&core_v2::ActorOrTeamOwner>,
+    assignee_email: Option<String>,
+    team_id: Option<String>,
+) -> std::result::Result<(Option<String>, Option<String>), ConnectError> {
+    use core_v2::actor_or_team_owner::Owner;
+    if let Some(owner) = owner {
+        if assignee_email.is_some() || team_id.is_some() {
+            return Err(ConnectError::invalid_argument("ACTIVITIES_OWNER_CONFLICT"));
+        }
+        return match owner.owner.as_ref() {
+            Some(Owner::AssigneeIdentity(value)) => Ok((Some(value.clone()), None)),
+            Some(Owner::TeamId(value)) => Ok((None, Some(value.clone()))),
+            None => Err(ConnectError::invalid_argument("ACTIVITIES_OWNER_REQUIRED")),
+        };
+    }
+    if assignee_email.is_some() && team_id.is_some() {
+        return Err(ConnectError::invalid_argument("ACTIVITIES_OWNER_CONFLICT"));
+    }
+    Ok((assignee_email, team_id))
+}
+
 // Shared validation of the wire precondition; domain owners still perform
 // authoritative CAS, idempotent replay and SQL/audit checks.
 fn wire_precondition(
@@ -698,6 +730,15 @@ impl TaskV2Service {
                 .find(|relation| relation.resource_type == "sales.deal")
                 .map(|relation| relation.resource_id.clone())
                 .unwrap_or_default(),
+            owner: Some(wire_owner(match task.owner() {
+                crm_activities::TaskOwner::Actor(value) => {
+                    core_v2::actor_or_team_owner::Owner::AssigneeIdentity(value.to_string())
+                }
+                crm_activities::TaskOwner::Team(value) => {
+                    core_v2::actor_or_team_owner::Owner::TeamId(value.as_str().to_owned())
+                }
+            }))
+            .into(),
             assignee_identity: match task.owner() {
                 crm_activities::TaskOwner::Actor(value) => value.to_string(),
                 crm_activities::TaskOwner::Team(_) => String::new(),
@@ -916,14 +957,11 @@ impl SalesV2Service {
         Ok(Some(selection))
     }
     fn owner_wire(owner: &crm_sales::SalesOwnerScope) -> core_v2::ActorOrTeamOwner {
-        use core_v2::{ActorOrTeamOwner, actor_or_team_owner::Owner};
-        ActorOrTeamOwner {
-            owner: Some(match owner {
-                crm_sales::SalesOwnerScope::Actor(id) => Owner::AssigneeIdentity(id.clone()),
-                crm_sales::SalesOwnerScope::Team(id) => Owner::TeamId(id.clone()),
-            }),
-            ..Default::default()
-        }
+        use core_v2::actor_or_team_owner::Owner;
+        wire_owner(match owner {
+            crm_sales::SalesOwnerScope::Actor(id) => Owner::AssigneeIdentity(id.clone()),
+            crm_sales::SalesOwnerScope::Team(id) => Owner::TeamId(id.clone()),
+        })
     }
     fn convert(deal: &DomainDeal) -> std::result::Result<sale_wire::Deal, ConnectError> {
         let stage = deal.stage();

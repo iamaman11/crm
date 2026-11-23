@@ -14,7 +14,3 @@ export async function allTeams(signal:AbortSignal):Promise<Team[]> {
   }while(next);
   return result;
 }
-export function ownerFields(value:string) {
-  return value.startsWith("team:")?{ownerTeamId:value.slice(5)}:
-    value?{assigneeEmail:value}:{};
-}

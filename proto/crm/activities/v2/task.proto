@@ -34,10 +34,11 @@ message Task {
   // Only the existing Task owner projects a real sales.deal relationship.
   // Empty for ordinary Account tasks. Only a validated Deal link at creation can set it.
   string related_deal_id = 11;
-  // Original domain TaskOwner: signed Access actor or enrolled human; a team
-  // owner is a distinct future assignment kind, never a fabricated user.
+  // Historical v2 read aliases; both are projections of the same original
+  // TaskOwner. New consumers use the shared typed owner below.
   string assignee_identity = 12;
   string owner_team_id = 13;
+  crm.core.v2.ActorOrTeamOwner owner = 14;
 }
 
 message CreateTaskRequest {
@@ -54,8 +55,9 @@ message CreateTaskRequest {
   // Only an ACTIVE member in this tenant can be assigned by the administrator.
   // Absent uses the verified creator; never a caller-supplied actor claim.
   optional string assignee_email = 10;
-  // Mutually exclusive with assignee_email; validated at the owner boundary.
+  // Retained v2 wire aliases. Mixing either alias with owner is invalid.
   optional string owner_team_id = 11;
+  crm.core.v2.ActorOrTeamOwner owner = 12;
 }
 
 message CreateTaskResponse {
@@ -66,7 +68,7 @@ message CreateTaskResponse {
 // Priority is required: absent means Keep, a present enum means Set.
 // Clear is invalid, so an enum-valued oneof/parallel patch type is unnecessary.
 // Absent patch = keep; explicit clear is valid only for optional values.
-// Actor/owner remain fixed. Reminder scheduling is a separate typed Task intent.
+// Owner assignment uses the shared oneof. Reminder scheduling is a separate typed Task intent.
 message UpdateTaskRequest {
   string task_id = 1;
   crm.core.v2.StringPatch subject = 2;
@@ -78,6 +80,8 @@ message UpdateTaskRequest {
   // idempotency receipt, immutable history and audit. Absent means Keep.
   optional string assignee_email = 7;
   optional string owner_team_id = 8;
+  // Canonical Keep (absent) / Set (oneof). Never combine with old aliases.
+  crm.core.v2.ActorOrTeamOwner owner = 9;
 }
 
 message UpdateTaskResponse {
@@ -161,6 +165,9 @@ message ListTasksRequest {
   // Resolve from the signed Access Actor, never a caller-supplied identity.
   bool assigned_to_me = 13;
   optional string owner_team_id = 14;
+  // Same owner dimension as Sales; mutually exclusive with assigned_to_me
+  // and the historical input aliases.
+  crm.core.v2.ActorOrTeamOwner owner_filter = 15;
 }
 
 message ListTasksResponse {
@@ -177,6 +184,7 @@ message TaskWorkloadBucket {
   uint64 completed_count = 4;
   uint64 overdue_open_count = 5;
   uint64 due_next_7_days_count = 6;
+  crm.core.v2.ActorOrTeamOwner owner = 7;
 }
 message ListTaskWorkloadResponse {
   repeated TaskWorkloadBucket buckets = 1;

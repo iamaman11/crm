@@ -33,7 +33,7 @@ export type { AccountOverview } from "../gen/crm/customer_360/v2/customer_360_pb
 export type { PrivacyCase } from "../gen/crm/customer_privacy/v2/case_pb";
 export type { ProviderProfileVersion, MappingVersion } from "../gen/crm/customer_enrichment/v2/config_pb";
 export type { ConsentAuthorization } from "../gen/crm/consents/v2/consent_pb";
-export type { MutationReceipt, TimestampPatch } from "../gen/crm/core/v2/operation_pb";
+export type { ActorOrTeamOwner, MutationReceipt, TimestampPatch } from "../gen/crm/core/v2/operation_pb";
 
 export { AccountStatus } from "../gen/crm/accounts/v2/account_pb";
 export { PartyKind } from "../gen/crm/parties/v3/party_pb";

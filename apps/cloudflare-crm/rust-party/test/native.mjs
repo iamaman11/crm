@@ -4606,16 +4606,28 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await memberV2("GetTeam",tenantB,{teamId})).status,404);
  assert.ok((await memberV2("ListTeams",viewer,{page:{pageSize:100}})).body.teams.some(t=>t.teamId===teamId));
  const poolId="sk07-pool-"+randomUUID();
- const poolCreate={taskId:poolId,accountId,subject:"Native team pool",priority:2,ownerTeamId:teamId,
+ const poolOwner={owner:{case:"teamId",value:teamId}};
+ const poolCreate={taskId:poolId,accountId,subject:"Native team pool",priority:2,owner:poolOwner,
    precondition:{idempotencyKey:"sk07-pool-create-"+poolId}};
  const pool=await taskV2("CreateTask",admin,poolCreate);
  assert.equal(pool.status,200,describeProtobuf(pool.body));
  assert.equal(pool.body.task?.ownerTeamId,teamId);
+ assert.deepEqual(pool.body.task?.owner?.owner,poolOwner.owner);
+ // A pre-existing v2 request maps to precisely the same original digest.
+ const {owner:canonicalPoolOwner,...legacyPoolCreate}=poolCreate;
+ assert.equal(canonicalPoolOwner.owner.value,teamId);
+ assert.equal((await taskV2("CreateTask",admin,{...legacyPoolCreate,ownerTeamId:teamId})).body.receipt?.replayed,true);
+ assert.equal((await taskV2("CreateTask",admin,{...poolCreate,ownerTeamId:teamId})).status,400);
+ assert.equal((await taskV2("CreateTask",admin,{...poolCreate,owner:{}})).status,400);
+ assert.equal((await taskV2("ListTasks",viewer,{ownerFilter:poolOwner,assignedToMe:true})).status,400);
+ assert.equal((await taskV2("ListTasks",viewer,{ownerFilter:poolOwner,ownerTeamId:teamId})).status,400);
+ const poolBucket=(await taskV2("ListTaskWorkload",viewer,{})).body.buckets.find(b=>b.owner?.owner.case==="teamId"&&b.owner.owner.value===teamId);
+ assert.equal(poolBucket?.openCount,1n);
  const teamArchive={teamId,active:false,precondition:{expectedVersion:1n,idempotencyKey:"sk07-team-archive-"+teamId}};
  assert.equal((await memberV2("UpdateTeam",admin,teamArchive)).status,409);
- const teamList=await taskV2("ListTasks",viewer,{ownerTeamId:teamId,page:{pageSize:1}});
+ const teamList=await taskV2("ListTasks",viewer,{ownerFilter:poolOwner,page:{pageSize:1}});
  assert.equal(teamList.body.tasks[0]?.taskId,poolId);
- assert.equal((await taskV2("ListTasks",tenantB,{ownerTeamId:teamId})).body.tasks.length,0);
+ assert.equal((await taskV2("ListTasks",tenantB,{ownerFilter:poolOwner})).body.tasks.length,0);
  const claim={taskId:poolId,precondition:{expectedVersion:1n,idempotencyKey:"sk07-pool-claim-"+poolId}};
  assert.equal((await taskV2("ClaimTask",knownService,claim)).status,403);
  assert.equal((await taskV2("ClaimTask",tenantB,claim)).status,404);
@@ -4626,6 +4638,8 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  const wonInput=claimResults[0].status===200?claim:claimOther;
  const claimed=claimResults.find(r=>r.status===200);
  assert.equal(claimed.body.task?.version,2n);
+ assert.equal(claimed.body.task?.owner?.owner.case,"assigneeIdentity");
+ assert.equal(claimed.body.task?.owner?.owner.value,claimWinner===viewer?teamMember:"native-a@example.test");
  assert.equal((await taskV2("ClaimTask",claimWinner,wonInput)).body.receipt?.replayed,true);
  assert.equal((await taskV2("ListTasks",viewer,{ownerTeamId:teamId})).body.tasks.length,0);
  assert.equal((await taskV2("CompleteTask",claimWinner,{taskId:poolId,
@@ -4636,6 +4650,72 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",poolId))[0].n,3);
  console.log(JSON.stringify({event:"crm.native-sk07c-team-pool",result:"PASS",atomic_claim:true,tenant_ab:true,archive_guard:true,receipts:true}));
 
+ // SK-07.C3: roster revocation and assignment/archival are actual atomic
+ // owner races, not browser timing assumptions. All identities remain signed.
+ {
+   const id="sk07-claim-race-"+randomUUID();
+   const create={teamId:id,name:"Claim revocation "+id,roster:{memberEmails:["native-a@example.test"]},
+     precondition:{idempotencyKey:"create-"+id}};
+   assert.equal((await memberV2("CreateTeam",admin,create)).status,200);
+   const owner={owner:{case:"teamId",value:id}};
+   const taskId="sk07-race-task-"+randomUUID();
+   const input={taskId,accountId,subject:"Claim revocation QA",priority:2,owner,
+     precondition:{idempotencyKey:"create-"+taskId}};
+   assert.equal((await taskV2("CreateTask",admin,input)).status,200);
+   const attempt={taskId,precondition:{expectedVersion:1n,idempotencyKey:"claim-"+taskId}};
+   assert.equal((await taskV2("ClaimTask",viewer,attempt)).status,403);
+   const add={teamId:id,roster:{memberEmails:["native-a@example.test",teamMember]},
+     precondition:{expectedVersion:1n,idempotencyKey:"add-"+id}};
+   assert.equal((await memberV2("UpdateTeam",admin,add)).status,200);
+   const remove={teamId:id,roster:{memberEmails:["native-a@example.test"]},
+     precondition:{expectedVersion:2n,idempotencyKey:"remove-"+id}};
+   const [claim,removed]=await Promise.all([
+     taskV2("ClaimTask",viewer,attempt),memberV2("UpdateTeam",admin,remove)
+   ]);
+   assert.equal(removed.status,200,describeProtobuf(removed.body));
+   assert.ok([200,403,409].includes(claim.status),describeProtobuf(claim.body));
+   const current=await taskV2("GetTask",admin,{taskId});
+   assert.equal(current.status,200);
+   if(claim.status===200){
+     assert.equal(current.body.task?.owner?.owner.value,teamMember);
+     assert.equal(current.body.task?.version,2n);
+   }else{
+     assert.equal(current.body.task?.owner?.owner.value,id);
+     assert.equal(current.body.task?.version,1n);
+     assert.equal((await taskV2("ClaimTask",viewer,{...attempt,precondition:{...attempt.precondition,idempotencyKey:"denied-"+taskId}})).status,403);
+     assert.equal((await taskV2("ClaimTask",admin,{...attempt,precondition:{...attempt.precondition,idempotencyKey:"admin-"+taskId}})).status,200);
+   }
+   assert.equal((await taskV2("CompleteTask",claim.status===200?viewer:admin,{taskId,
+     precondition:{expectedVersion:2n,idempotencyKey:"complete-"+taskId}})).status,200);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",taskId))[0].n,3);
+   assert.equal((await memberV2("UpdateTeam",admin,{teamId:id,active:false,
+     precondition:{expectedVersion:3n,idempotencyKey:"archive-"+id}})).status,200);
+
+   const raceTeam="sk07-assignment-race-"+randomUUID();
+   const raceCreate={teamId:raceTeam,name:"Assignment archive "+raceTeam,roster:{memberEmails:["native-a@example.test"]},
+     precondition:{idempotencyKey:"create-"+raceTeam}};
+   assert.equal((await memberV2("CreateTeam",admin,raceCreate)).status,200);
+   const raceTask="sk07-assignment-task-"+randomUUID();
+   const raceInput={taskId:raceTask,accountId,subject:"Assignment archive QA",priority:2,
+     owner:{owner:{case:"teamId",value:raceTeam}},precondition:{idempotencyKey:"create-"+raceTask}};
+   const archive={teamId:raceTeam,active:false,precondition:{expectedVersion:1n,idempotencyKey:"archive-"+raceTeam}};
+   const [assigned,archived]=await Promise.all([taskV2("CreateTask",admin,raceInput),memberV2("UpdateTeam",admin,archive)]);
+   assert.equal(Number(assigned.status===200)+Number(archived.status===200),1,
+     "assignment and archive cannot both commit");
+   if(assigned.status===200){
+     assert.equal(archived.status,409);
+     assert.equal((await taskV2("ClaimTask",admin,{taskId:raceTask,precondition:{expectedVersion:1n,idempotencyKey:"claim-"+raceTask}})).status,200);
+     assert.equal((await taskV2("CompleteTask",admin,{taskId:raceTask,precondition:{expectedVersion:2n,idempotencyKey:"complete-"+raceTask}})).status,200);
+     assert.equal((await memberV2("UpdateTeam",admin,archive)).status,200);
+   }else{
+     assert.ok([400,409].includes(assigned.status),describeProtobuf(assigned.body));
+     assert.equal((await taskV2("GetTask",admin,{taskId:raceTask})).status,404);
+   }
+   const team=await memberV2("GetTeam",viewer,{teamId:raceTeam});
+   assert.equal(team.body.team?.active,false);
+   console.log(JSON.stringify({event:"crm.native-sk07c3-owner-oneof",result:"PASS",shared_owner:true,
+     legacy_digest:true,mixed_rejected:true,nonmember_denied:true,claim_remove_race:true,assignment_archive_race:true}));
+ }
  await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
  const salesAuditBeforeFilter=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;
  assert.deepEqual((await collectPages(salesV2,"ListDeals","deals",{accountId})).map(d=>d.dealId),

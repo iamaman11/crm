@@ -13,7 +13,7 @@ import {inputDate} from "./calendarInput";
 import {scopeHref,contactHref,taskHref,dealTasksHref} from "./routes";
 import {stageName as stageLabel} from "./salesPipelineCatalog";
 import {InteractionTimeline} from "./InteractionTimeline";
-import {salesOwners,ownerLabel} from "./salesOwner";
+import {allOwners,ownerLabel} from "./ownerCatalog";
 
 export function dealStatusText(status:DealStatus):string {
   switch(status){
@@ -180,6 +180,6 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen
 }
 
 function DealOwnerLabel({deal}:{deal:Deal}) {
-  const query=useQuery(useCallback(salesOwners,[]));
+  const query=useQuery(useCallback(allOwners,[]));
   return <p>Ответственный: {ownerLabel(deal.owner,query.data?.choices??[])}</p>;
 }

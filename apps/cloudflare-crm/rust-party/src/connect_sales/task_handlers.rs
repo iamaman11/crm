@@ -63,6 +63,11 @@ impl task_wire::TaskService for TaskV2Service {
             .as_option()
             .map(ContactPointV2Service::nanos)
             .transpose()?;
+        let (assignee_email, owner_team_id) = task_owner_intent(
+            input.owner.as_option(),
+            input.assignee_email,
+            input.owner_team_id,
+        )?;
         let saved = activity_tasks::create_typed(
             activity_tasks::CreateInput {
                 id,
@@ -70,8 +75,8 @@ impl task_wire::TaskService for TaskV2Service {
                 description: input.description,
                 account_id: input.account_id,
                 deal_id: input.deal_id,
-                assignee_email: input.assignee_email,
-                owner_team_id: input.owner_team_id,
+                assignee_email,
+                owner_team_id,
                 priority,
                 due_at_unix_nanos: due,
                 reminder_at_unix_nanos: reminder,
@@ -145,7 +150,12 @@ impl task_wire::TaskService for TaskV2Service {
                 _ => return Err(ConnectError::invalid_argument("invalid due_at patch")),
             },
         };
-        let owner = match input.assignee_email {
+        let (assignee_email, owner_team_id) = task_owner_intent(
+            input.owner.as_option(),
+            input.assignee_email,
+            input.owner_team_id,
+        )?;
+        let owner = match assignee_email {
             None => Change::Keep,
             Some(email) => Change::Set(email),
         };
@@ -155,7 +165,7 @@ impl task_wire::TaskService for TaskV2Service {
                 subject,
                 description,
                 owner,
-                owner_team_id: input.owner_team_id,
+                owner_team_id,
                 priority,
                 due_at_unix_nanos,
             },
@@ -395,18 +405,22 @@ impl task_wire::TaskService for TaskV2Service {
             Self::valid_id(id)?;
         }
         let search = wire_search(req.search)?;
-        if (req.assigned_to_me && (req.assignee_email.is_some() || req.owner_team_id.is_some()))
-            || (req.assignee_email.is_some() && req.owner_team_id.is_some())
-        {
+        let (assignee_email, owner_team_id) = task_owner_intent(
+            owned.owner_filter.as_option(),
+            owned.assignee_email,
+            owned.owner_team_id,
+        )?;
+        if req.assigned_to_me && (assignee_email.is_some() || owner_team_id.is_some()) {
             return Err(ConnectError::invalid_argument("INVALID_ASSIGNEE_FILTERS"));
         }
-        if let Some(team) = req.owner_team_id {
+        if let Some(team) = owner_team_id.as_deref() {
             access_teams::id(team).map_err(|e| e.connect("ListTasks", &self.request_id))?;
         }
         let owner = if req.assigned_to_me {
             Some(self.actor.identity.clone())
         } else {
-            req.assignee_email
+            assignee_email
+                .as_deref()
                 .map(|v| {
                     access_members::email(v).map_err(|e| e.connect("ListTasks", &self.request_id))
                 })
@@ -429,7 +443,7 @@ impl task_wire::TaskService for TaskV2Service {
                 sort_by_due: req.sort_by_due,
                 without_due_only: req.without_due_only,
                 owner_identity: owner.as_deref(),
-                owner_team_id: req.owner_team_id,
+                owner_team_id: owner_team_id.as_deref(),
             },
         )
         .await
@@ -466,6 +480,14 @@ impl task_wire::TaskService for TaskV2Service {
         let mut converted = Vec::with_capacity(buckets.len());
         for b in buckets {
             converted.push(task_wire::TaskWorkloadBucket {
+                owner: Some(wire_owner(if b.owner_team_id.is_empty() {
+                    core_v2::actor_or_team_owner::Owner::AssigneeIdentity(
+                        b.assignee_identity.clone(),
+                    )
+                } else {
+                    core_v2::actor_or_team_owner::Owner::TeamId(b.owner_team_id.clone())
+                }))
+                .into(),
                 assignee_identity: b.assignee_identity,
                 owner_team_id: b.owner_team_id,
                 open_count: as_count(b.open_count)?,

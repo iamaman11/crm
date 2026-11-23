@@ -6,6 +6,7 @@ import {useQuery,QueryNotice} from "./hooks";
 import {accountHref,dealHref,taskHref,workdayHref} from "./routes";
 import {navigateTo} from "./navigation";
 import {allTeams} from "./teamCatalog";
+import {ownerWire} from "./ownerCatalog";
 
 function localToday():string {
   const now=new Date();
@@ -22,7 +23,7 @@ function TaskBucket({title,kind,start,before,mine,teamId}:{title:string;kind:Buc
     page:{pageSize:12,pageToken:cursor},
     status:TaskStatus.OPEN,
     assignedToMe:mine,
-    ...(teamId?{ownerTeamId:teamId}:{}),
+    ...(teamId?{ownerFilter:ownerWire("team:"+teamId)}:{}),
     sortByDue:kind!=="undated",
     withoutDueOnly:kind==="undated",
     ...(kind==="today"||kind==="after"?{dueFrom:timestamp(kind==="today"?start:before)}:{}),

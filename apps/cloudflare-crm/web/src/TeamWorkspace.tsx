@@ -1,16 +1,16 @@
-import {useCallback,useState} from "react";
+import {useState} from "react";
 import {Button,TextField} from "@ultimate-crm/ui";
 import type {Member,Team} from "@ultimate-crm/client/cloudflare";
 import {api,newId} from "./api";
-import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
-import {allTeams} from "./teamCatalog";
+import {useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
+import type {useQuery} from "./hooks";
 import {humanMember} from "./memberCatalog";
 import {taskTeamHref,workdayHref,salesPipelineHref,intelligenceHref} from "./routes";
 
-export function TeamWorkspace({members,isAdmin,actor,onChanged}:{
+export function TeamWorkspace({query,members,isAdmin,actor,onChanged}:{
+  query:ReturnType<typeof useQuery<Team[]>>;
   members:Member[];isAdmin:boolean;actor:string;onChanged:()=>Promise<unknown>;
 }){
-  const query=useQuery(useCallback(allTeams,[]));
   const [editing,setEditing]=useState<Team>();
   const [creating,setCreating]=useState(false);
   const [draftId,setDraftId]=useState(newId);

@@ -8,6 +8,8 @@ import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice} from ".
 import {taskHref,taskAssigneeHref,taskTeamHref,workdayHref,salesPipelineHref,intelligenceHref} from "./routes";
 import {allMembers,humanMember} from "./memberCatalog";
 import {TeamWorkspace} from "./TeamWorkspace";
+import {allTeams} from "./teamCatalog";
+import {ownerValue} from "./ownerCatalog";
 
 const roleName=(role:MemberRole)=>role===MemberRole.ADMIN?"Администратор":
   role===MemberRole.VIEWER?"Чтение всех полей":"Неизвестная роль";
@@ -25,6 +27,7 @@ export function MemberScreen(){
   const [editActive,setEditActive]=useState(true);
   const [myCursor,setMyCursor]=useState("");
   const roster=useQuery(useCallback(allMembers,[]));
+  const teams=useQuery(useCallback(allTeams,[]));
   const me=useQuery(useCallback(async(signal:AbortSignal)=>
     (await api.members.getMyMembership({}, {signal})).member,[]));
   const workload=useQuery(useCallback((signal:AbortSignal)=>
@@ -134,7 +137,7 @@ export function MemberScreen(){
       </form>}
       <MutationNotice state={mutation}/>
     </section>
-    <TeamWorkspace members={members} isAdmin={isAdmin} actor={actor} onChanged={workload.reload}/>
+    <TeamWorkspace query={teams} members={members} isAdmin={isAdmin} actor={actor} onChanged={workload.reload}/>
     <section aria-label="Реальная нагрузка команды">
       <h2>Распределение и нагрузка</h2>
       <p>Авторитетные числа по всем задачам до LIMIT, включая завершённые.
@@ -149,11 +152,13 @@ export function MemberScreen(){
           <th scope="col">Просрочено</th><th scope="col">До 7 дней</th>
           <th scope="col">Действие</th></tr></thead><tbody>
           {overview.map(bucket=>{
-            const email=bucket.assigneeIdentity;
+            const email=bucket.owner?.owner.case==="assigneeIdentity"?bucket.owner.owner.value:"";
+            const teamId=bucket.owner?.owner.case==="teamId"?bucket.owner.owner.value:"";
+            const team=teams.data?.find(t=>t.teamId===teamId);
             const member=members.find(m=>m.email===email);
-            const key=email||bucket.ownerTeamId;
+            const key=ownerValue(bucket.owner);
             return <tr key={key}>
-              <th scope="row">{email||"Команда: "+bucket.ownerTeamId}
+              <th scope="row">{email||"Команда: "+(team?.name??teamId)}{team&&!team.active?" · архив":""}
                 {email&&!humanMember(email)?" · агент":""}
                 {member&&!member.active?" · доступ отключён":""}
                 {email&&humanMember(email)&&!member?" · нет активного членства":""}</th>
@@ -162,8 +167,8 @@ export function MemberScreen(){
               <td>{bucket.overdueOpenCount.toString()}</td>
               <td>{bucket.dueNext7DaysCount.toString()}</td>
               <td>{email&&humanMember(email)?
-                <a href={taskAssigneeHref(email)}>Открыть задачи</a>:bucket.ownerTeamId?
-                <a href={taskTeamHref(bucket.ownerTeamId)}>Открыть задачи команды</a>:"—"}</td>
+                <a href={taskAssigneeHref(email)}>Открыть задачи</a>:teamId?
+                <a href={taskTeamHref(teamId)}>Открыть задачи команды</a>:"—"}</td>
             </tr>;
           })}
         </tbody></table>

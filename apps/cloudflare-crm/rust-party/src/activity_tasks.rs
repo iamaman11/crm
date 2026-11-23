@@ -893,7 +893,7 @@ pub(super) async fn claim_typed(
         )));
     };
     let team_id = team.as_str().to_owned();
-    let eligible = "EXISTS (SELECT 1 FROM crm_access_teams AS t JOIN json_each(t.state,'$.member_emails') AS m JOIN crm_users AS u ON u.tenant_id=t.tenant AND u.email=m.value AND u.active=1 WHERE t.tenant=? AND t.id=? AND json_extract(t.state,'$.active')=1 AND u.email=?)";
+    let eligible = super::access_teams::MEMBER_ELIGIBLE;
     let params = [
         JsValue::from_str(tenant),
         JsValue::from_str(&team_id),

@@ -11,7 +11,7 @@ import type {CurrencyCatalog} from "./money";
 import {allPipelines} from "./salesPipelineCatalog";
 import {salesPipelineHref,intelligenceHref,workdayHref} from "./routes";
 import {navigateTo} from "./navigation";
-import {salesOwners,ownerWire} from "./salesOwner";
+import {allOwners,ownerWire} from "./ownerCatalog";
 
 // Infer from the ONE generated Connect client; never maintain a parallel DTO.
 type GetPipelineMetricsResponse=Awaited<ReturnType<typeof api.deals.getPipelineMetrics>>;
@@ -105,7 +105,7 @@ function CurrencyTable({title,rows,catalog}:{title:string;rows:CurrencyTotal[];
 
 /** SK-07: complete authorised native metrics, never partial Deal pages as analytics. */
 export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare,owner=""}:Inputs) {
-  const owners=useQuery(useCallback(salesOwners,[]));
+  const owners=useQuery(useCallback(allOwners,[]));
   const [draftStart,setDraftStart]=useState(start);
   const [draftEnd,setDraftEnd]=useState(end);
   const [formError,setFormError]=useState("");

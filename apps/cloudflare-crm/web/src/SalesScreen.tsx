@@ -14,7 +14,7 @@ import {navigateTo} from "./navigation";
 import {minorUnits,decimalUnits,moneyText,basisPoints,percent,weightedMoneyText} from "./money";
 import {allPipelines} from "./salesPipelineCatalog";
 import styles from "./App.module.css";
-import {salesOwners,ownerValue,ownerWire,ownerLabel} from "./salesOwner";
+import {allOwners,ownerValue,ownerWire,ownerLabel} from "./ownerCatalog";
 
 type EditorMode="create"|"edit"|"advance"|"close"|"reopen"|null;
 type StageDraft={stageId:string;name:string;probability:string;archived:boolean};
@@ -54,7 +54,7 @@ export function SalesScreen({initialAccountId="",initialSearch="",initialViewId=
   const [allDealsCursor,setAllDealsCursor]=useState("");
   const [status,setStatus]=useState("");
   const [owner,setOwner]=useState(initialOwner);
-  const owners=useQuery(useCallback(salesOwners,[]));
+  const owners=useQuery(useCallback(allOwners,[]));
   const ownerChoices=owners.data?.choices??[];
   useEffect(()=>{if(!initialViewId){setOwner(initialOwner);setStageCursors({});setAllDealsCursor("");}},[initialOwner,initialViewId]);
   // Deal lookup is independent of saved views, Kanban metrics and stage totals.

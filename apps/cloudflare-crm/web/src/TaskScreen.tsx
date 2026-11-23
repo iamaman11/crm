@@ -12,7 +12,8 @@ import {accountHref,scopeHref,taskHref,dealHref,taskSearchHref} from "./routes";
 import {SearchField} from "./SearchField";
 import {navigateTo} from "./navigation";
 import {allMembers,humanMember} from "./memberCatalog";
-import {allTeams,ownerFields} from "./teamCatalog";
+import {allTeams} from "./teamCatalog";
+import {ownerValue,ownerWire,taskOwnerFields} from "./ownerCatalog";
 
 export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="",initialSearch="",initialOverdue=false,
   initialAssigneeEmail="",initialMine=false,initialTeamId=""}:{
@@ -30,22 +31,22 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
     (await api.members.getMyMembership({}, {signal})).member,[]));
   const isAdmin=me.data?.active===true&&me.data.role===MemberRole.ADMIN;
   const canWorkOn=(task:Task)=>isAdmin||(me.data?.active===true&&
-    me.data.role===MemberRole.VIEWER&&humanMember(me.data.email)&&task.assigneeIdentity===me.data.email);
+    me.data.role===MemberRole.VIEWER&&humanMember(me.data.email)&&ownerValue(task.owner)==="actor:"+me.data.email);
   const membersQuery=useQuery(useCallback(allMembers,[]));
   const members=membersQuery.data?.filter(member=>humanMember(member.email))??[];
   const teamsQuery=useQuery(useCallback(allTeams,[]));
   const teams=teamsQuery.data??[];
   const eligibleTeams=teams.filter(team=>team.active&&team.memberEmails.some(email=>members.some(m=>m.active&&m.email===email)));
   const canClaim=(task:Task)=>me.data?.active===true&&humanMember(me.data.email)&&
-    teams.some(team=>team.active&&team.teamId===task.ownerTeamId&&team.memberEmails.includes(me.data?.email??""));
+    teams.some(team=>team.active&&ownerValue(task.owner)==="team:"+team.teamId&&team.memberEmails.includes(me.data?.email??""));
   const [editorMode,setEditorMode]=useState<"create"|"edit"|"reminder"|null>(null);
   const query=useQuery(useCallback(async(signal:AbortSignal)=>{
     if(focusedTaskId)return undefined; // Direct-link view never loads a full task list.
     return api.tasks.listTasks({page:{pageSize:25,pageToken:cursor},search:initialSearch.trim(),
       overdueOnly:initialOverdue,
-      ...(initialAssigneeEmail?{assigneeEmail:initialAssigneeEmail}:{}),
+      ...(initialAssigneeEmail?{ownerFilter:ownerWire("actor:"+initialAssigneeEmail)}:{}),
       ...(initialMine?{assignedToMe:true}:{}),
-      ...(initialTeamId?{ownerTeamId:initialTeamId}:{}),
+      ...(initialTeamId?{ownerFilter:ownerWire("team:"+initialTeamId)}:{}),
       ...(initialDealId?{dealId:initialDealId}:{}),
       ...(accountId?{accountId}:{}),
       ...(status&&!initialOverdue?{status:enumValue(status,[TaskStatus.OPEN,TaskStatus.COMPLETED],"Статус задачи")}:{}),
@@ -139,9 +140,9 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
           Number(t.dueAt.seconds)*1000+Math.floor(t.dueAt.nanos/1000000)<Date.now()&&
           <> · <strong>Просрочена</strong></>}</p>
       <p>Напоминание: {dateText(t.reminderAt)}</p>
-      <p>Ответственный: {t.assigneeIdentity?
-        (humanMember(t.assigneeIdentity)?t.assigneeIdentity:"Технический агент") :
-        t.ownerTeamId?"Команда: "+(teams.find(team=>team.teamId===t.ownerTeamId)?.name??t.ownerTeamId):"неизвестен"}</p>
+      <p>Ответственный: {t.owner?.owner.case==="assigneeIdentity"?
+        (humanMember(t.owner.owner.value)?t.owner.owner.value:"Технический агент"):
+        t.owner?.owner.case==="teamId"?"Команда: "+(teams.find(team=>team.teamId===t.owner?.owner.value)?.name??t.owner.owner.value):"неизвестен"}</p>
       {t.relatedDealId&&<p>Связанная сделка: <a href={dealHref(t.relatedDealId)}>Открыть сделку</a></p>}
       {!focusedTaskId&&<p><a href={taskHref(t.taskId,t.accountId)}>Открыть карточку задачи</a></p>}
       {canClaim(t)&&t.status===TaskStatus.OPEN&&<Button disabled={mutation.busy||mutation.pending}
@@ -215,7 +216,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
             description:{operation:description
               ?{case:"set",value:description}:{case:"clear",value:true}},
             priority:enumValue(field(data,"editPriority"),[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи"),
-            ...ownerFields(field(data,"editAssigneeEmail")),
+            ...taskOwnerFields(field(data,"editAssigneeEmail")),
             ...(dueAt?{dueAt}:{}),
             precondition:{idempotencyKey:mutation.key,expectedVersion:selected.version}
           },selected.taskId);
@@ -250,7 +251,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
         return prepareMutation(api.tasks.createTask,{taskId:draftId,subject:field(data,"subject"),accountId:targetAccount,
           ...(initialDealId?{dealId:initialDealId}:{}),
           priority:enumValue(field(data,"priority"),[TaskPriority.LOW,TaskPriority.NORMAL,TaskPriority.HIGH,TaskPriority.URGENT],"Приоритет задачи"),...(description?{description}:{}),
-          ...ownerFields(field(data,"assigneeEmail")),
+          ...taskOwnerFields(field(data,"assigneeEmail")),
           ...(dueAt?{dueAt}:{}),...(reminderAt?{reminderAt}:{}),precondition:{idempotencyKey:mutation.key}},draftId);
       },async()=>{setEditorMode(null);setDraftId(newId());await query.reload();});
     }}><FormGrid>

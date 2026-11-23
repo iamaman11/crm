@@ -121,6 +121,8 @@ fn replay(
 }
 // Reused in the same D1 statement as any new owner assignment.
 pub(super) const ELIGIBLE: &str = "EXISTS (SELECT 1 FROM crm_access_teams AS tm JOIN json_each(tm.state,'$.member_emails') AS m JOIN crm_users AS u ON u.email=m.value AND u.tenant_id=tm.tenant AND u.active=1 WHERE tm.tenant=? AND tm.id=? AND json_extract(tm.state,'$.active')=1 AND u.email NOT LIKE 'service:%')";
+// Same Access roster authority for ClaimTask and every explicit team assignment.
+pub(super) const MEMBER_ELIGIBLE: &str = "EXISTS (SELECT 1 FROM crm_access_teams AS tm JOIN json_each(tm.state,'$.member_emails') AS m JOIN crm_users AS u ON u.email=m.value AND u.tenant_id=tm.tenant AND u.active=1 WHERE tm.tenant=? AND tm.id=? AND json_extract(tm.state,'$.active')=1 AND u.email=? AND u.email NOT LIKE 'service:%')";
 pub(super) async fn eligible(db: &D1Database, tenant: &str, id: &str) -> Result<bool> {
     let query = format!("SELECT 1 WHERE {ELIGIBLE}");
     Ok(bind(
