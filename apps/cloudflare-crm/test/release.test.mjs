@@ -22,6 +22,12 @@ async function subprocessEntry(){
  if(mode==="deploy"){
    const {DatabaseSync}=await import("node:sqlite");
    db=new DatabaseSync(":memory:");
+   // "migration-fails" declares 0001 as applied in the fake D1 ledger.
+   // Build that real SQLite schema: a pending migration must preserve the
+   // original Access columns before traffic is closed. Empty query fixtures
+   // no longer exercise the actual pre-migration integrity gate.
+   if(variant==="migration-fails")
+     db.exec(readFileSync("apps/cloudflare-crm/migrations/0001_initial.sql","utf8"));
    // The ordinary release starts with the full current SQL schema.
    if(migrated||nfcLegacy)for(const name of readdirSync("apps/cloudflare-crm/migrations").filter(n=>n.endsWith(".sql")).sort()){
      if(nfcLegacy&&name>="0016_nfc_search_name.sql")continue;
@@ -208,7 +214,7 @@ async function subprocessEntry(){
          variant==="migration-history-drift"?["unrecognized.sql"]:nfcLegacy&&!migrated?
             names.filter(name=>name<"0016_nfc_search_name.sql"):names;
        const results=sql.includes("FROM d1_migrations")?ledger.map(name=>({name})):
-         !migrated&&!nfcLegacy?[]:db.prepare(sql).all(...params);
+         !migrated&&!nfcLegacy&&variant!=="migration-fails"?[]:db.prepare(sql).all(...params);
        return wrap([{success:true,results}]);
      }
      const {sql,params=[]}=JSON.parse(options.body);
