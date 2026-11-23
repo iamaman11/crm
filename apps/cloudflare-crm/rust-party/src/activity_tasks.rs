@@ -729,9 +729,9 @@ pub(super) async fn list_page_typed(
         query.push_str(" AND json_extract(t.state,'$.due_at_unix_nanos') IS NOT NULL");
         if !after.is_empty() {
             // Handler already validates the exact '<nanos>|<Task id>' format.
-            let (time, id) = after.split_once('|').ok_or_else(|| {
-                worker::Error::RustError("INVALID_TASK_DUE_CURSOR".into())
-            })?;
+            let (time, id) = after
+                .split_once('|')
+                .ok_or_else(|| worker::Error::RustError("INVALID_TASK_DUE_CURSOR".into()))?;
             query.push_str(" AND (");
             query.push_str(due_sql);
             query.push_str(" > CAST(? AS INTEGER) OR (");

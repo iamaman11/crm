@@ -279,10 +279,14 @@ impl task_wire::TaskService for TaskV2Service {
         let after = &req.page.page_token;
         if !after.is_empty() {
             if req.sort_by_due {
-                let (time, id) = after.split_once('|').ok_or_else(|| {
-                    ConnectError::invalid_argument("INVALID_TASK_DUE_CURSOR")
-                })?;
-                if time.parse::<i64>().ok().filter(|value| *value >= 0).is_none()
+                let (time, id) = after
+                    .split_once('|')
+                    .ok_or_else(|| ConnectError::invalid_argument("INVALID_TASK_DUE_CURSOR"))?;
+                if time
+                    .parse::<i64>()
+                    .ok()
+                    .filter(|value| *value >= 0)
+                    .is_none()
                     || Self::valid_id(id).is_err()
                 {
                     return Err(ConnectError::invalid_argument("INVALID_TASK_DUE_CURSOR"));
@@ -291,18 +295,26 @@ impl task_wire::TaskService for TaskV2Service {
                 Self::valid_id(after)?;
             }
         }
-        let due_from = req.due_from.as_option()
-            .map(ContactPointV2Service::nanos).transpose()?;
-        let due_before = req.due_before.as_option()
-            .map(ContactPointV2Service::nanos).transpose()?;
+        let due_from = req
+            .due_from
+            .as_option()
+            .map(ContactPointV2Service::nanos)
+            .transpose()?;
+        let due_before = req
+            .due_before
+            .as_option()
+            .map(ContactPointV2Service::nanos)
+            .transpose()?;
         if due_from.is_some_and(|value| value < 0)
             || due_before.is_some_and(|value| value < 0)
-            || due_from.zip(due_before).is_some_and(|(from, before)| from >= before)
+            || due_from
+                .zip(due_before)
+                .is_some_and(|(from, before)| from >= before)
         {
             return Err(ConnectError::invalid_argument("INVALID_TASK_DUE_RANGE"));
         }
-        if req.without_due_only && (due_from.is_some() || due_before.is_some()
-            || req.sort_by_due || req.overdue_only)
+        if req.without_due_only
+            && (due_from.is_some() || due_before.is_some() || req.sort_by_due || req.overdue_only)
         {
             return Err(ConnectError::invalid_argument("INVALID_TASK_DUE_FILTERS"));
         }
