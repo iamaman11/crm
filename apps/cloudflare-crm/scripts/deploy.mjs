@@ -225,7 +225,19 @@ async function deploy(){
     "One-time reset requires the audited frozen predecessor");
   console.log(JSON.stringify({event:"crm.migration-readback",result:"PASS",
     pending:pendingMigrations,applied:appliedMigrations.length,canonical:localMigrations.length}));
-  const principals=await query("SELECT * FROM crm_users ORDER BY email");
+  // Compare every pre-existing principal column across migrations. SELECT *
+  // would reject legitimate ADD COLUMN changes even when all prior account
+  // identities, roles and membership data were preserved byte-for-byte.
+  // SQLite itself supplies this list; no parallel schema registry.
+  const principalColumns=(await query("PRAGMA table_info(crm_users)")).map(row=>row.name);
+  assert.ok(["email","tenant_id","role","active"].every(name=>principalColumns.includes(name)),
+    "The existing signed Access admission columns must remain present");
+  const principalColumnsSql=principalColumns.map(name=>{
+    assert.match(name,/^[a-z_][a-z0-9_]*$/,"Invalid canonical D1 column name");
+    return '"'+name+'"';
+  }).join(",");
+  const principalReadSql="SELECT "+principalColumnsSql+" FROM crm_users ORDER BY email";
+  const principals=await query(principalReadSql);
   const tenants=await query("SELECT * FROM crm_tenants ORDER BY id");
   record("checkpoint.json",{git_sha:sha,previous_sha:before.sha,previous_version:oldVersion,
     d1_database:database,pre_migration_bookmark:bookmark,
@@ -242,7 +254,8 @@ async function deploy(){
   }
   assert.deepEqual((await query("SELECT name FROM d1_migrations ORDER BY name"))
     .map(row=>row.name),localMigrations,"D1 must have exactly the canonical migrations");
-  assert.deepEqual(await query("SELECT * FROM crm_users ORDER BY email"),principals);
+  assert.deepEqual(await query(principalReadSql),principals,
+    "Migration changed previously existing signed CRM user membership data");
   assert.deepEqual(await query("SELECT * FROM crm_tenants ORDER BY id"),tenants);
   assert.deepEqual(await query("PRAGMA foreign_key_check"),[]);
   // SQLite compiles the committed schema; no SQL source parser or second table registry.
