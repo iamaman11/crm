@@ -388,7 +388,10 @@ async fn eligible_owner(db: &D1Database, tenant: &str, owner: &SalesOwnerScope) 
 fn owner_guard(owner: Option<&SalesOwnerScope>) -> String {
     match owner {
         None => String::new(),
-        Some(SalesOwnerScope::Actor(_)) => " AND EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1)".into(),
+        Some(SalesOwnerScope::Actor(_)) => {
+            " AND EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1)"
+                .into()
+        }
         Some(SalesOwnerScope::Team(_)) => format!(" AND {}", super::access_teams::ELIGIBLE),
     }
 }
@@ -586,7 +589,14 @@ pub(super) async fn create_typed(
         }
         return Ok(Ok(acknowledged(deal, trace, count)));
     }
-    Ok(reconcile(db, tenant, k, &digest, r.as_ref().ok().and_then(changes) == Some(0)).await)
+    Ok(reconcile(
+        db,
+        tenant,
+        k,
+        &digest,
+        r.as_ref().ok().and_then(changes) == Some(0),
+    )
+    .await)
 }
 pub(super) async fn update_typed(
     input: UpdateInput,

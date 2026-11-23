@@ -199,15 +199,16 @@ pub(super) async fn update(
             ErrorCode::NotFound,
         )));
     };
-    let changed = match existing.reconfigure(
-        input.expected_version,
-        input.name,
-        input.pipeline_id,
-        input.status,
-        input.account_id,
-        input.archived,
-    )
-    .and_then(|view| view.with_owner_filter(input.owner_filter))
+    let changed = match existing
+        .reconfigure(
+            input.expected_version,
+            input.name,
+            input.pipeline_id,
+            input.status,
+            input.account_id,
+            input.archived,
+        )
+        .and_then(|view| view.with_owner_filter(input.owner_filter))
     {
         Ok(view) => view,
         Err(e) => {

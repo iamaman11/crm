@@ -5,7 +5,7 @@ import type {Member} from "@ultimate-crm/client/cloudflare";
 import {MemberRole,TaskStatus} from "@ultimate-crm/client/cloudflare";
 import {api,dateText} from "./api";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
-import {taskHref,taskAssigneeHref,workdayHref} from "./routes";
+import {taskHref,taskAssigneeHref,taskTeamHref,workdayHref,salesPipelineHref,intelligenceHref} from "./routes";
 import {allMembers,humanMember} from "./memberCatalog";
 import {TeamWorkspace} from "./TeamWorkspace";
 
@@ -79,7 +79,9 @@ export function MemberScreen(){
             <th scope="row">{m.email}{!humanMember(m.email)?" · технический агент":""}</th>
             <td>{roleName(m.role)}</td><td>{m.active?"Активен":"Деактивирован"}</td>
             <td>{humanMember(m.email)?<a href={taskAssigneeHref(m.email)}>
-              Задачи участника</a>:"Системные задания"}</td>
+              Задачи участника</a>:"Системные задания"}{humanMember(member.email)&&<><span>{" · "}</span>
+              <a href={salesPipelineHref("","","","actor:"+member.email)}>Сделки участника</a>{" · "}
+              <a href={intelligenceHref({owner:"actor:"+member.email})}>Портфель участника</a></>}</td>
             <td>{isAdmin&&humanMember(m.email)&&m.email!==actor?
               <Button variant="secondary" disabled={pending} onClick={()=>{
                 setEditing(m);setEditRole(m.role);setEditActive(m.active);mutation.changed();

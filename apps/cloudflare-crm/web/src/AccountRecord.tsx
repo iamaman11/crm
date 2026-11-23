@@ -9,6 +9,7 @@ import {scopeHref,partyHref,dealHref,taskHref,contactHref,relationshipHref} from
 import {PartyPicker,PartyName} from "./Pickers";
 import {allPipelines,stageName} from "./salesPipelineCatalog";
 import {InteractionTimeline} from "./InteractionTimeline";
+import {salesOwners,ownerLabel} from "./salesOwner";
 
 export function accountStatusLabel(status:AccountStatus):string {
   switch(status) {
@@ -21,7 +22,7 @@ export function accountStatusLabel(status:AccountStatus):string {
 // a request per Deal and not another Client360 projection. Original typed Deal
 // refs and Account ID remain unchanged; if the catalog is missing we preserve
 // the stored immutable stage ID rather than claiming a fabricated stage name.
-function AccountDeals({deals}:{deals:readonly Deal[]}) {
+function AccountDeals({deals,choices}:{deals:readonly Deal[];choices:ReadonlyArray<{value:string;label:string}>}) {
   const catalog=useQuery(useCallback(allPipelines,[]));
   const pipelines=catalog.data?.pipelines??[];
   return <>
@@ -34,6 +35,7 @@ function AccountDeals({deals}:{deals:readonly Deal[]}) {
         {" · "}{catalog.busy&&!catalog.data?"Этапы загружаются…":
           "Воронка: "+(pipeline?.name??deal.stage?.pipelineId??"неизвестна")+
           " · этап: "+stage}
+        <span>{" · Ответственный: "+ownerLabel(deal.owner,choices)}</span>
       </li>;
     })}</ul>
   </>;
@@ -42,6 +44,8 @@ function AccountDeals({deals}:{deals:readonly Deal[]}) {
 export function AccountDetails({accountId}:{accountId:string}) {
   const query=useQuery(useCallback((signal:AbortSignal)=>api.overview.getAccountOverview({accountId},{signal}),[accountId]));
   const card:AccountOverview|undefined=query.error?undefined:query.data?.overview;
+  const owners=useQuery(useCallback(salesOwners,[]));
+  const choices=owners.data?.choices??[];
   return <div><QueryNotice query={query}/>{!query.error&&card&&<>
     <h3>{card.account?.name}</h3>
     <p>Статус: {card.account?accountStatusLabel(card.account.status):"Неизвестно"}</p>
@@ -56,10 +60,12 @@ export function AccountDetails({accountId}:{accountId:string}) {
         {r.type?.code??"Связь"}</a>: <PartyName partyId={r.fromPartyId}/> → <PartyName partyId={r.toPartyId}/></li>)}</ul>
     {card.truncated?.relationships&&<p>Показаны первые {card.perCollectionLimit} связей.</p>}
     {card.primaryParty&&<a href={scopeHref("relationships",card.primaryParty.partyId)}>Все связи участника</a>}
-    <h3>Сделки</h3>{card.deals.length>0&&<AccountDeals deals={card.deals}/>} 
+    <QueryNotice query={owners}/>
+    <h3>Сделки</h3>{card.deals.length>0&&<AccountDeals deals={card.deals} choices={choices}/>} 
     {card.truncated?.deals&&<p>Показаны первые {card.perCollectionLimit} сделок.</p>}
     <a href={scopeHref("sales",accountId)}>Все сделки клиента</a>
-    <h3>Задачи</h3><ul>{card.tasks.map(t=><li key={t.taskId}><a href={taskHref(t.taskId,accountId)}>{t.subject}</a> · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?"Открыта"+(t.dueAt?" · срок: "+dateText(t.dueAt):""):"Неизвестный статус"}</li>)}</ul>
+    <h3>Задачи</h3><ul>{card.tasks.map(t=><li key={t.taskId}><a href={taskHref(t.taskId,accountId)}>{t.subject}</a> · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?"Открыта"+(t.dueAt?" · срок: "+dateText(t.dueAt):""):"Неизвестный статус"}
+      <span>{" · Ответственный: "+(choices.find(c=>c.value===(t.ownerTeamId?"team:"+t.ownerTeamId:"actor:"+t.ownerActorId))?.label??(t.ownerTeamId?"Команда: "+t.ownerTeamId:t.ownerActorId??"Неизвестен"))}</span></li>)}</ul>
     {card.truncated?.tasks&&<p>Показаны первые {card.perCollectionLimit} задач.</p>}
     <a href={scopeHref("tasks",accountId)}>Все задачи клиента</a>
     <InteractionTimeline accountId={accountId}/>
