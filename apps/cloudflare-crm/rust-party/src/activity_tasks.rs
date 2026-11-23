@@ -761,9 +761,9 @@ pub(super) async fn list_page_typed(
                     let due = task.due_at_unix_nanos().ok_or_else(|| {
                         worker::Error::RustError("Task due sort returned undated row".into())
                     })?;
-                    Ok(format!("{}|{}", due, row.id))
+                    Ok::<String, worker::Error>(format!("{}|{}", due, row.id))
                 } else {
-                    Ok(row.id.clone())
+                    Ok::<String, worker::Error>(row.id.clone())
                 }
             })
             .transpose()?

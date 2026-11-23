@@ -295,12 +295,15 @@ impl task_wire::TaskService for TaskV2Service {
                 Self::valid_id(after)?;
             }
         }
-        let due_from = req
+        // Generated ServiceRequest borrows TimestampView; use the standard
+        // generated owned message for the existing UtcInstant validator.
+        let owned = req.to_owned_message();
+        let due_from = owned
             .due_from
             .as_option()
             .map(ContactPointV2Service::nanos)
             .transpose()?;
-        let due_before = req
+        let due_before = owned
             .due_before
             .as_option()
             .map(ContactPointV2Service::nanos)
