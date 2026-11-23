@@ -80,6 +80,15 @@ def policy(
 
 
 class AffectedScopeTests(unittest.TestCase):
+    def test_dev_deploy_requires_successful_build(self) -> None:
+        from ruamel.yaml import YAML
+
+        workflow = Path(__file__).resolve().parents[1] / ".github/workflows/cloudflare-crm-spike.yml"
+        jobs = YAML(typ="safe").load(workflow.read_text(encoding="utf-8"))["jobs"]
+        self.assertIn("cloudflare-crm-spike", jobs)
+        needs = jobs["deploy-crm-dev"]["needs"]
+        self.assertIn("cloudflare-crm-spike", [needs] if isinstance(needs, str) else needs)
+
     def test_reverse_dependency_closure_is_explainable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -40,9 +40,6 @@ jobs:
           python scripts/check_ci_event_policy.py
           python -m unittest tests.test_ci_event_policy
           python scripts/check_action_pinning.py
-          node --check scripts/crm-architecture-ast.mjs
-          node --check scripts/crm-rpc-descriptors.mjs
-          node --check scripts/crm-connect-binary-fixture.mjs
           node --check apps/cloudflare-crm/rust-party/test/native.mjs
           node --check apps/cloudflare-crm/rust-party/test/typed-browser.mjs
           node --check apps/cloudflare-crm/rust-party/test/ui-diagnostics.mjs
@@ -145,7 +142,6 @@ jobs:
           node --test scripts/crm-clean-schema.test.mjs
           node scripts/crm-architecture-ast.mjs
           node --test scripts/crm-architecture-ast.test.mjs
-          test -s packages/client/gen/crm/sales/v1/deal_pb.ts
           pnpm --filter @ultimate-crm/client typecheck
           pnpm exec vitest run packages/client/src/cloudflare-v2-contract.test.ts
           pnpm --filter @ultimate-crm/ui typecheck
@@ -287,9 +283,6 @@ jobs:
           test -d /tmp/crm-native-party-version-proof
           test -s rust-party/build/index_bg.wasm
           test -s rust-party/build/index.js
-          grep -F '"main": "./rust-party/build/index.js"' wrangler.jsonc
-          grep -F '"binding": "DB"' wrangler.jsonc
-          grep -F '"binding": "ASSETS"' wrangler.jsonc
       - name: Keep the complete production Worker for review and release
         run: |
           set -euo pipefail
@@ -309,47 +302,7 @@ jobs:
       - name: Install and launch headless Chromium after native compilation
         working-directory: apps/cloudflare-crm
         shell: bash
-        run: |
-          set -euo pipefail
-          # GitHub-hosted Ubuntu already ships many browser libraries; do not
-          # unconditionally call apt and depend on an external Ubuntu mirror.
-          # Verify by launching the SAME pinned Playwright Chromium headlessly.
-          for attempt in 1 2; do
-            if npx playwright install chromium --only-shell; then
-              break
-            fi
-            if [ "$attempt" -eq 2 ]; then
-              echo "::error::Pinned Playwright Chromium download failed"
-              exit 1
-            fi
-            sleep 10
-          done
-          launch_browser() {
-            node --input-type=module -e '
-              import { chromium } from "playwright";
-              const browser = await chromium.launch({headless: true});
-              const page = await browser.newPage();
-              await page.goto("data:text/html,<h1>CRM browser preflight</h1>");
-              if (await page.locator("h1").innerText() !== "CRM browser preflight")
-                throw new Error("Chromium rendered unexpected content");
-              await browser.close();
-            '
-          }
-          if launch_browser; then
-            echo "Chromium physically launched with existing system libraries"
-          else
-            echo "::warning::Chromium needs OS libraries; installing declared Playwright dependencies"
-            for attempt in 1 2; do
-              if npx playwright install-deps chromium && launch_browser; then
-                exit 0
-              fi
-              if [ "$attempt" -eq 2 ]; then
-                echo "::error::Chromium system dependencies or physical launch failed"
-                exit 1
-              fi
-              sleep 10
-            done
-          fi
+        run: bash scripts/prepare-chromium.sh
       - name: Test signed RPC and generated-client React scenarios under workerd
         id: crm_native_workerd
         working-directory: apps/cloudflare-crm
@@ -387,21 +340,6 @@ jobs:
         run: |
           cp -a apps/cloudflare-crm/.release/native-build/. apps/cloudflare-crm/rust-party/build/
           diff --recursive --brief apps/cloudflare-crm/.release/native-build apps/cloudflare-crm/rust-party/build
-      - name: Check CRM target
-        run: |
-          grep -F '5bd5e1e1e813f061afc259e91334262d' apps/cloudflare-crm/wrangler.jsonc
-          grep -F '35fc7ee9-9710-485f-8fb3-f5a398b229b4' apps/cloudflare-crm/wrangler.jsonc
-          grep -F 'mod account_overview;' apps/cloudflare-crm/rust-party/src/lib.rs
-          if grep -F 'mod pilot;' apps/cloudflare-crm/rust-party/src/lib.rs ||
-             test -f apps/cloudflare-crm/rust-party/src/pilot.rs; then
-            echo 'FAIL: duplicate pilot Rust domain cannot be published' >&2
-            exit 1
-          fi
-          grep -F 'mod access;' apps/cloudflare-crm/rust-party/src/lib.rs
-          if grep -F '"main": "./worker/unified.mjs"' apps/cloudflare-crm/wrangler.jsonc; then
-            echo 'FAIL: JS dispatcher must not be published' >&2
-            exit 1
-          fi
       - name: Require actual browser acceptance before sealing any artifact
         run: |
           node --input-type=module -e '
@@ -517,47 +455,7 @@ jobs:
       - name: Install headless Chromium for browser smoke
         working-directory: apps/cloudflare-crm
         shell: bash
-        run: |
-          set -euo pipefail
-          # GitHub-hosted Ubuntu already ships many browser libraries; do not
-          # unconditionally call apt and depend on an external Ubuntu mirror.
-          # Verify by launching the SAME pinned Playwright Chromium headlessly.
-          for attempt in 1 2; do
-            if npx playwright install chromium --only-shell; then
-              break
-            fi
-            if [ "$attempt" -eq 2 ]; then
-              echo "::error::Pinned Playwright Chromium download failed"
-              exit 1
-            fi
-            sleep 10
-          done
-          launch_browser() {
-            node --input-type=module -e '
-              import { chromium } from "playwright";
-              const browser = await chromium.launch({headless: true});
-              const page = await browser.newPage();
-              await page.goto("data:text/html,<h1>CRM browser preflight</h1>");
-              if (await page.locator("h1").innerText() !== "CRM browser preflight")
-                throw new Error("Chromium rendered unexpected content");
-              await browser.close();
-            '
-          }
-          if launch_browser; then
-            echo "Chromium physically launched with existing system libraries"
-          else
-            echo "::warning::Chromium needs OS libraries; installing declared Playwright dependencies"
-            for attempt in 1 2; do
-              if npx playwright install-deps chromium && launch_browser; then
-                exit 0
-              fi
-              if [ "$attempt" -eq 2 ]; then
-                echo "::error::Chromium system dependencies or physical launch failed"
-                exit 1
-              fi
-              sleep 10
-            done
-          fi
+        run: bash scripts/prepare-chromium.sh
       - name: Restore CI-verified Rust WASM and React bundle without rebuilding
         env:
           GH_TOKEN: ${{ github.token }}

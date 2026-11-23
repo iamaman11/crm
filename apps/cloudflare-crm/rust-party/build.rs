@@ -1,6 +1,16 @@
 use std::path::{Path, PathBuf};
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ActiveVersions {
+    minimum_version: u32,
+    domain_minimums: std::collections::HashMap<String, u32>,
+}
+
 fn active_protos(proto_root: &Path) -> Vec<PathBuf> {
+    let versions: ActiveVersions =
+        serde_json::from_str(include_str!("../active-proto-versions.json"))
+            .expect("active CRM Protobuf versions");
     let mut files = Vec::new();
     // The existing Protobuf tree is the only source of Rust service selection.
     // Historical v1 is source-only; Parties v2 was superseded by v3.
@@ -20,7 +30,12 @@ fn active_protos(proto_root: &Path) -> Vec<PathBuf> {
                 .and_then(|name| name.strip_prefix('v'))
                 .and_then(|number| number.parse::<u32>().ok())
                 .unwrap_or(0);
-            if number < 2 || (domain.file_name().to_str() == Some("parties") && number == 2) {
+            if number
+                < *versions
+                    .domain_minimums
+                    .get(domain.file_name().to_str().expect("UTF-8 domain"))
+                    .unwrap_or(&versions.minimum_version)
+            {
                 continue;
             }
             for entry in std::fs::read_dir(version.path()).expect("read CRM Protobuf files") {
@@ -49,6 +64,7 @@ fn main() {
     unsafe {
         std::env::set_var("PROTOC", protoc);
     }
+    println!("cargo:rerun-if-changed=../active-proto-versions.json");
     println!("cargo:rerun-if-changed=../../../proto");
     connectrpc_build::Config::new()
         .files(&files)

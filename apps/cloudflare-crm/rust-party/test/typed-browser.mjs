@@ -839,11 +839,19 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await filterTasks("Приоритет задач","2");
    await page.getByRole("heading",{name:"Browser Task "+runId,exact:true}).waitFor();
    await page.getByRole("heading",{name:"Browser Urgent "+runId,exact:true}).waitFor({state:"hidden"});
+   const rowAccountReads=[];
+   const trackAccountRead=request=>{
+     if(new URL(request.url()).pathname.endsWith("/GetAccount"))rowAccountReads.push(request.url());
+   };
+   page.on("request",trackAccountRead);
    await filterTasks("Статус задачи","");
    await filterTasks("Приоритет задач","");
    await page.getByRole("heading",{name:"Browser Task "+runId,exact:true}).waitFor();
    await page.getByRole("heading",{name:"Browser Urgent "+runId,exact:true}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+tenantSql+"'"))[0].n,beforeTaskFilters);
+   await expect(taskCard.locator('a[href="#accounts/'+accountId+'"]')).toHaveText(/.+/);
+   page.off("request",trackAccountRead);
+   assert.equal(rowAccountReads.length,0,"rendered task lists must use the account labels from ListTasks");
    // Real React -> generated Connect UpdateTask -> D1 and audit -> reload.
    const urgentCard=page.locator("section").filter({has:page.getByRole("heading",
      {name:"Browser Urgent "+runId,exact:true})});

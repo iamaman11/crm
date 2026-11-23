@@ -334,18 +334,20 @@ impl task_wire::TaskService for TaskV2Service {
         )
         .await
         .map_err(|_| ConnectError::internal("Task D1 list failed"))?;
-        let mut tasks = Vec::with_capacity(list.len());
-        for (task, account_id) in &list {
-            tasks.push(Self::convert(task, account_id)?);
+        let mut response = task_wire::ListTasksResponse::default();
+        for (task, account_id, name) in &list {
+            response
+                .account_names
+                .insert(account_id.clone(), name.clone());
+            response.tasks.push(Self::convert(task, account_id)?);
         }
         RpcResponse::ok(task_wire::ListTasksResponse {
-            tasks,
             page_info: Some(core_v2::PageInfo {
                 next_page_token: next.unwrap_or_default(),
                 ..Default::default()
             })
             .into(),
-            ..Default::default()
+            ..response
         })
     }
 }

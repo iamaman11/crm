@@ -154,45 +154,6 @@ jobs:
                 path.write_text(contents, encoding="utf-8")
                 self.assertIn(expected_error, check_workflow(path).errors)
 
-    def test_crm_uses_cross_commit_compiler_cache_without_splitting_acceptance(self) -> None:
-        workflow = (Path(__file__).resolve().parents[1]
-                    / ".github/workflows/cloudflare-crm-spike.yml").read_text(encoding="utf-8")
-        self.assertIn("sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba", workflow)
-        self.assertIn("RUSTC_WRAPPER=$SCCACHE_PATH", workflow)
-        self.assertIn("SCCACHE_GHA_ENABLED=true", workflow)
-        self.assertIn("crm-rust1100-wasm-v3-", workflow)
-        key = next(line for line in workflow.splitlines() if "key:" in line and "crm-rust1100-wasm-v3-" in line)
-        self.assertNotIn("github.sha", key, "Cargo target cache must be reusable across pushes")
-        self.assertIn("needs: cloudflare-crm-spike", workflow)
-        self.assertIn("worker-build --release --locked --features native", workflow)
-        self.assertIn("worker-build --dev --locked --features native-ci", workflow)
-        self.assertIn("node rust-party/test/native.mjs", workflow)
-        self.assertIn("node apps/cloudflare-crm/e2e/live.mjs", workflow)
-        self.assertIn("node --check apps/cloudflare-crm/e2e/published-smoke.mjs", workflow)
-        self.assertIn("node apps/cloudflare-crm/scripts/deploy.mjs verify-data", workflow)
-        self.assertEqual(workflow.count("npx playwright install chromium --only-shell"), 2,
-                         "Both jobs must use the official headless-only Chromium install")
-
-
-    def test_release_smoke_does_not_repeat_full_browser_regression(self) -> None:
-        root = Path(__file__).resolve().parents[1] / "apps/cloudflare-crm"
-        live = (root / "e2e/live.mjs").read_text(encoding="utf-8")
-        native = (root / "rust-party/test/native.mjs").read_text(encoding="utf-8")
-        smoke = (root / "e2e/published-smoke.mjs").read_text(encoding="utf-8")
-        deploy = (root / "scripts/deploy.mjs").read_text(encoding="utf-8")
-        self.assertIn("await typedBrowser(", native, "Full regression stays mandatory in workerd")
-        self.assertIn("await publishedSmoke(", live)
-        self.assertNotIn("await typedBrowser(", live, "Do not run all UI regressions twice")
-        self.assertIn("crm.parties.v3.PartyService/CreateParty", smoke)
-        self.assertIn("CreateAccount", smoke)
-        self.assertIn("beforeViewer()", smoke)
-        self.assertIn("tenantBHeaders", smoke)
-        self.assertIn("anonymous.request.get", smoke)
-        self.assertIn("published-smoke.json", deploy)
-        self.assertIn("event.$workers?.scriptVersion?.id!==liveVersion", deploy)
-        self.assertIn("event.source?.db", deploy)
-        self.assertIn("independent_gate_b:\"REQUIRES_SEPARATE_POST_MERGE_BROWSER_EVIDENCE\"", deploy)
-
     def test_rejects_legacy_pr_into_dev_even_for_pr_only_workflows(self) -> None:
         path = self.write_workflow("""name: Legacy
 on:

@@ -64,6 +64,7 @@ test("typed CRM routes preserve filters and deep links without a second router",
   assert.equal(route("#accounts/").kind,"not-found");
   assert.deepEqual(route(scopeHref("contacts","party?1")),{kind:"section",screen:"contacts",partyId:"party?1",accountId:""});
   assert.deepEqual(route(scopeHref("sales","account&2")),{kind:"section",screen:"sales",partyId:"",accountId:"account&2"});
+  assert.equal(route("#tasks?accountId=a&accountId=b").kind,"not-found");
   assert.equal(route("#not-a-screen").kind,"not-found");
 });
 

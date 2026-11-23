@@ -13,8 +13,8 @@
     "web:typecheck": "pnpm web:generate && pnpm -r --if-present typecheck",
     "web:lint": "pnpm -r --if-present lint",
     "web:test": "pnpm -r --if-present test",
-    "web:build": "pnpm web:generate && pnpm --filter @ultimate-crm/web build",
-    "web:check": "pnpm gen && pnpm --filter @ultimate-crm/client typecheck && pnpm --filter @ultimate-crm/ui typecheck && pnpm web:lint && pnpm web:test && pnpm --filter @ultimate-crm/web build"
+    "web:build": "pnpm web:generate && pnpm --filter cloudflare-crm build",
+    "web:check": "python apps/cloudflare-crm/scripts/check-web.py"
   },
   "devDependencies": {
     "binaryen": "132.0.0",

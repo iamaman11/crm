@@ -39,10 +39,11 @@ export function validateBindings(report,available){
 // Select the Cloudflare generation of contracts from compiled file descriptors.
 // Historical v1 and superseded Party v2 remain available to other consumers.
 // Later versions automatically enter the required scope; omission cannot pass.
+const activeVersions=JSON.parse(readFileSync(resolve(root,"apps/cloudflare-crm/active-proto-versions.json"),"utf8"));
 export function targetMethods(available){
  return [...available].filter(([,d])=>{
-  const version=/^crm\/[^/]+\/v([1-9][0-9]*)\/[^/]+\.proto$/.exec(d.file)?.[1];
-  return version!==undefined&&Number(version)>=2&&d.package!=="crm.parties.v2";
+  const file=/^crm\/([^/]+)\/v([1-9][0-9]*)\/[^/]+\.proto$/.exec(d.file);
+  return file&&Number(file[2])>=(activeVersions.domain_minimums[file[1]]??activeVersions.minimum_version);
  })
   .map(([path])=>path).sort();
 }

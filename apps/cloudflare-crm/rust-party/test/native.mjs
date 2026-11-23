@@ -1051,7 +1051,10 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
  assert.equal((await collectPages(taskV2,"ListTasks","tasks",{search:"check original account"})).length,0,"search follows case-sensitive UI contract");
  assert.equal((await collectPages(taskV2,"ListTasks","tasks",{search:"' OR 1=1 --"})).length,0,"search never interpolates SQL");
  assert.equal((await taskV2("ListTasks",tenantB,{search:"Check original Account"})).body.tasks.length,0);
- assert.equal((await taskV2("ListTasks",viewer,{search:"Check original Account mid"})).body.tasks[0].taskId,taskMid);
+ const namedTasks=(await taskV2("ListTasks",viewer,{search:"Check original Account mid"})).body;
+ assert.equal(namedTasks.tasks[0].taskId,taskMid);
+ const namedAccount=(await sql("SELECT search_name FROM crm_account_records WHERE tenant=? AND id=?","tenant-a",accountId))[0];
+ assert.deepEqual(Object.entries(namedTasks.accountNames),[[accountId,namedAccount.search_name]]);
  assert.equal((await taskV2("ListTasks",viewer,{search:"x".repeat(201)})).status,400);
  assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{priority:2})).map(t=>t.taskId),[taskMid,taskLast]);
  assert.deepEqual((await collectPages(taskV2,"ListTasks","tasks",{priority:4})).map(t=>t.taskId),[taskOther]);
@@ -1206,7 +1209,7 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
   try{
     assert.equal((await taskV2("UpdateTask",admin,{taskId:taskOther,
       subject:patchSubject("Must not persist"),
-      precondition:{expectedVersion:3n,idempotencyKey:"candidate-task-actor-failed"}})).status,409);
+      precondition:{expectedVersion:3n,idempotencyKey:"candidate-task-actor-failed"}})).status,503);
     assert.deepEqual((await taskActorSnapshot()),beforeTaskFault);
   }finally{await sql("DROP TRIGGER fixture_fail_task_actor");}
   console.log(JSON.stringify({event:"crm.native-r2a-task-actor-audit",result:"PASS",

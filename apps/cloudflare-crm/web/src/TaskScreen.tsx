@@ -8,7 +8,7 @@ import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} 
 import {AccountPicker,AccountName} from "./Pickers";
 import {TimeFields} from "./TimeFields";
 import {timePatch} from "./timePatch";
-import {scopeHref,taskHref,dealHref,taskSearchHref} from "./routes";
+import {accountHref,scopeHref,taskHref,dealHref,taskSearchHref} from "./routes";
 import {SearchField} from "./SearchField";
 import {navigateTo} from "./navigation";
 
@@ -96,7 +96,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
     <QueryNotice query={focusedTaskId?focused:query}/>
     {visibleTasks.map(t=><Card title={t.subject} key={t.taskId}>
       {focusedTaskId&&<p>ID: {t.taskId} · версия {t.version.toString()}</p>}
-      <p>{t.description}</p><p>Клиент: <AccountName accountId={t.accountId}/></p>
+      <p>{t.description}</p><p>Клиент: {focusedTaskId?<AccountName accountId={t.accountId}/>:<a href={accountHref(t.accountId)}>{query.data?.accountNames[t.accountId]}</a>}</p>
       <p>Срок: {dateText(t.dueAt)} · {t.status===TaskStatus.COMPLETED?"Выполнена":t.status===TaskStatus.OPEN?"Открыта":"Неизвестный статус"}
         {t.status===TaskStatus.OPEN&&t.dueAt&&
           Number(t.dueAt.seconds)*1000+Math.floor(t.dueAt.nanos/1000000)<Date.now()&&

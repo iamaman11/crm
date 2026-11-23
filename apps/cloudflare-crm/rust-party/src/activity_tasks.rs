@@ -100,6 +100,7 @@ struct Row {
 }
 #[derive(Deserialize)]
 struct PagedRow {
+    account_name: String,
     id: String,
     state: String,
     account_id: String,
@@ -129,6 +130,48 @@ async fn prior(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receip
     )?
     .first::<Receipt>(None)
     .await
+}
+// A missing write acknowledgement is ambiguous. Only a matching atomic receipt
+// or an explicit zero-row CAS/insert can settle it.
+async fn finish_write(
+    db: &D1Database,
+    tenant: &str,
+    key: &str,
+    digest: &str,
+    task: Task,
+    write: Result<worker::D1Result>,
+    zero_code: &str,
+) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    let changes = write
+        .ok()
+        .filter(|r| r.success())
+        .and_then(|r| r.meta().ok().flatten())
+        .and_then(|meta| meta.changes);
+    if changes.is_some_and(|count| count > 0) {
+        return Ok(Ok(MutationOutcome {
+            task,
+            replayed: false,
+            changed: true,
+        }));
+    }
+    if let Some(receipt) = prior(db, tenant, key).await? {
+        if receipt.digest != digest {
+            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+        }
+        let committed = decode(&receipt.state)?;
+        if committed.task_id() != task.task_id() {
+            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
+        }
+        return Ok(Ok(MutationOutcome {
+            task: committed,
+            replayed: true,
+            changed: true,
+        }));
+    }
+    if changes == Some(0) {
+        return Ok(Err(fail(zero_code, 409)));
+    }
+    Ok(Err(fail("ACTIVITIES_TASK_WRITE_UNCONFIRMED", 503)))
 }
 pub(super) async fn stored(db: &D1Database, tenant: &str, id: &str) -> Result<Option<Task>> {
     bind(
@@ -238,19 +281,21 @@ pub(super) async fn create_typed(
         Err(e) => return Ok(Err(fail(e.code, 422))),
     };
     let saved = state(&task)?;
-    let r=bind(db,"INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?)",
+    let r=bind(db,"INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
         &[JsValue::from_str(tenant),JsValue::from_str(task.task_id().as_str()),
           JsValue::from_str(account_id.as_str()),JsValue::from_str(&saved),
           JsValue::from_f64(task.version() as f64),JsValue::from_str(key),
           JsValue::from_str(&digest),JsValue::from_str(trace),JsValue::from_str(actor)])?.run().await;
-    if r.is_err() {
-        return Ok(Err(fail("ACTIVITIES_TASK_CREATE_CONFLICT", 409)));
-    }
-    Ok(Ok(MutationOutcome {
+    finish_write(
+        db,
+        tenant,
+        key,
+        &digest,
         task,
-        replayed: false,
-        changed: true,
-    }))
+        r,
+        "ACTIVITIES_TASK_CREATE_CONFLICT",
+    )
+    .await
 }
 pub(super) async fn update_typed(
     input: UpdateInput,
@@ -321,17 +366,16 @@ pub(super) async fn update_typed(
           JsValue::from_str(key), JsValue::from_str(&digest), JsValue::from_str(trace),
           JsValue::from_str(actor),JsValue::from_str(tenant), JsValue::from_str(id),
           JsValue::from_f64(expected_version as f64)])?.run().await;
-    let Ok(result) = changed else {
-        return Ok(Err(fail("ACTIVITIES_TASK_UPDATE_CONFLICT", 409)));
-    };
-    if result.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
-        return Ok(Err(fail("ACTIVITIES_TASK_VERSION_CONFLICT", 409)));
-    }
-    Ok(Ok(MutationOutcome {
+    finish_write(
+        db,
+        tenant,
+        key,
+        &digest,
         task,
-        replayed: false,
-        changed: true,
-    }))
+        changed,
+        "ACTIVITIES_TASK_VERSION_CONFLICT",
+    )
+    .await
 }
 // The existing Task domain owns all schedule invariants. The SAME D1 UPDATE
 // trigger as UpdateTask atomically writes the original receipt and audit.
@@ -410,17 +454,16 @@ pub(super) async fn schedule_reminder_typed(
     )?
     .run()
     .await;
-    let Ok(result) = result else {
-        return Ok(Err(fail("ACTIVITIES_TASK_REMINDER_CONFLICT", 409)));
-    };
-    if result.meta()?.and_then(|meta| meta.changes).unwrap_or(0) == 0 {
-        return Ok(Err(fail("ACTIVITIES_TASK_VERSION_CONFLICT", 409)));
-    }
-    Ok(Ok(MutationOutcome {
+    finish_write(
+        db,
+        tenant,
+        key,
+        &digest,
         task,
-        replayed: false,
-        changed: true,
-    }))
+        result,
+        "ACTIVITIES_TASK_VERSION_CONFLICT",
+    )
+    .await
 }
 pub(super) async fn complete_typed(
     input: CompleteInput,
@@ -483,17 +526,16 @@ pub(super) async fn complete_typed(
           JsValue::from_str(key),JsValue::from_str(&digest),JsValue::from_str(trace),
           JsValue::from_str(actor),JsValue::from_str(tenant),JsValue::from_str(id),
           JsValue::from_f64(input.expected_version as f64)])?.run().await;
-    let Ok(result) = r else {
-        return Ok(Err(fail("ACTIVITIES_TASK_COMPLETE_CONFLICT", 409)));
-    };
-    if result.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
-        return Ok(Err(fail("ACTIVITIES_TASK_VERSION_CONFLICT", 409)));
-    }
-    Ok(Ok(MutationOutcome {
+    finish_write(
+        db,
+        tenant,
+        key,
+        &digest,
         task,
-        replayed: false,
-        changed: true,
-    }))
+        r,
+        "ACTIVITIES_TASK_VERSION_CONFLICT",
+    )
+    .await
 }
 // A single typed, owner-local filter value instead of growing positional
 // parameters. This is not a generic registry or a second query owner.
@@ -511,7 +553,7 @@ pub(super) async fn list_page_typed(
     after: &str,
     size: usize,
     filters: TaskListFilters<'_>,
-) -> Result<(Vec<(Task, String)>, Option<String>)> {
+) -> Result<(Vec<(Task, String, String)>, Option<String>)> {
     let TaskListFilters {
         status,
         account_id,
@@ -521,7 +563,7 @@ pub(super) async fn list_page_typed(
         overdue_only,
     } = filters;
     let mut query = String::from(
-        "SELECT id,state,account_id FROM crm_activity_task_records WHERE tenant=? AND id>?",
+        "SELECT id,state,account_id, (SELECT a.search_name FROM crm_account_records a WHERE a.tenant=t.tenant AND a.id=t.account_id) AS account_name FROM crm_activity_task_records AS t WHERE tenant=? AND id>?",
     );
     let mut params = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
     // Filters are checked in native SQL BEFORE LIMIT/cursor calculation.
@@ -550,7 +592,7 @@ pub(super) async fn list_page_typed(
         // Filter BEFORE LIMIT/page-token, matching only actual sales.deal IDs
         // in the same tenant. No generic resource syntax, no new registry.
         query.push_str(
-            " AND EXISTS (SELECT 1 FROM json_each(crm_activity_task_records.state,'$.related_resources') AS related WHERE json_extract(related.value,'$.resource_type')='sales.deal' AND json_extract(related.value,'$.resource_id')=?)",
+            " AND EXISTS (SELECT 1 FROM json_each(t.state,'$.related_resources') AS related WHERE json_extract(related.value,'$.resource_type')='sales.deal' AND json_extract(related.value,'$.resource_id')=?)",
         );
         params.push(JsValue::from_str(deal_id));
     }
@@ -585,7 +627,9 @@ pub(super) async fn list_page_typed(
     let tasks = rows
         .iter()
         .take(size)
-        .map(|row| decode(&row.state).map(|task| (task, row.account_id.clone())))
+        .map(|row| {
+            decode(&row.state).map(|task| (task, row.account_id.clone(), row.account_name.clone()))
+        })
         .collect::<Result<Vec<_>>>()?;
     Ok((tasks, next))
 }

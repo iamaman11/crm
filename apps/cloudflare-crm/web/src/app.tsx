@@ -14,23 +14,15 @@ import {PrivacyScreen} from "./PrivacyScreen";
 import {EnrichmentScreen} from "./EnrichmentScreen";
 import {DataScreen} from "./DataScreen";
 import {SearchScreen} from "./SearchScreen";
-import {parseRoute} from "./routes";
+import {parseRoute,sectionLabels} from "./routes";
 import {currentRouteHash,subscribeNavigation,registerNavigationBlocker} from "./navigation";
 
 const screens=[
   {id:"search",label:"Поиск"},
   {id:"accounts",label:"Клиенты"},
-  {id:"parties",label:"Участники"},
-  {id:"contacts",label:"Контакты"},
-  {id:"relationships",label:"Связи"},
-  {id:"sales",label:"Сделки"},
-  {id:"tasks",label:"Задачи"},
-  {id:"consents",label:"Коммуникации"},
-  {id:"review",label:"Качество и совпадения"},
-  {id:"privacy",label:"Запросы о данных"},
-  {id:"enrichment",label:"Обогащение"},
-  {id:"data",label:"Импорт и экспорт"},
+  ...Object.entries(sectionLabels).map(([id,label])=>({id,label})),
 ] as const;
+function unreachable(screen:never):never {throw Error("Unknown CRM screen "+screen);}
 function App() {
   const hash=useSyncExternalStore(subscribeNavigation,currentRouteHash);
   const route=useMemo(()=>parseRoute(hash,accountFilterStatuses),[hash]);
@@ -56,7 +48,7 @@ function App() {
     route.screen==="consents"?<ConsentScreen/>:
     route.screen==="review"?<ReviewScreen key={route.partyId} initialPartyId={route.partyId}/>:
     route.screen==="privacy"?<PrivacyScreen/>:
-    route.screen==="enrichment"?<EnrichmentScreen/>:<DataScreen/>;
+    route.screen==="enrichment"?<EnrichmentScreen/>:route.screen==="data"?<DataScreen/>:unreachable(route.screen);
   return <AppShell productName="CRM" accountSlot={<ThemePicker/>}
     navigation={screens.map(s=>({id:s.id,label:s.label,href:"#"+s.id,current:s.id===current}))}>
     <div data-crm-route-kind={route.kind} data-crm-account-status={route.kind==="accounts"?(route.status??""):undefined}>

@@ -1,6 +1,18 @@
 import type {AccountStatus} from "@ultimate-crm/client/cloudflare";
 
-export type Section = "parties"|"contacts"|"relationships"|"sales"|"tasks"|"consents"|"review"|"privacy"|"enrichment"|"data";
+export const sectionLabels={
+  parties:"Участники",
+  contacts:"Контакты",
+  relationships:"Связи",
+  sales:"Сделки",
+  tasks:"Задачи",
+  consents:"Коммуникации",
+  review:"Качество и совпадения",
+  privacy:"Запросы о данных",
+  enrichment:"Обогащение",
+  data:"Импорт и экспорт",
+} as const;
+export type Section=keyof typeof sectionLabels;
 export type AccountFilterStatus = AccountStatus.ACTIVE | AccountStatus.INACTIVE;
 export type AccountFilters = {search:string;status:AccountFilterStatus|null;cursor:string};
 export type Route =
@@ -12,8 +24,7 @@ export type Route =
   | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;overdue?:boolean;viewId?:string;pipelineId?:string}
   | {kind:"not-found";path:string};
 
-const sections:readonly Section[]=["parties","contacts","relationships","sales","tasks","consents","review","privacy","enrichment","data"];
-function isSection(path:string):path is Section {return sections.some(screen=>screen===path);}
+function isSection(path:string):path is Section {return Object.prototype.hasOwnProperty.call(sectionLabels,path);}
 
 /** The URL/HTML boundary must accept only known generated AccountStatus members. */
 export function accountFilterStatus(raw:string|null,allowed:readonly AccountFilterStatus[]):AccountFilterStatus|null {
@@ -77,7 +88,7 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     const partyIds=params.getAll("partyId");
     const partyId=partyIds[0]??"";
     const focusedPartyRecord=contacts.length>0||relations.length>0;
-    if(ids.length>1||deals.length>1||searches.length>1||
+    if(params.getAll("accountId").length>1||partyIds.length>1||ids.length>1||deals.length>1||searches.length>1||
        overdueValues.length>1||overdueValues.some(value=>value!=="1")||
        (taskId&&overdueValues.length>0)||viewIds.length>1||
        pipelineIds.length>1||(viewIds.length>0&&pipelineIds.length>0)||

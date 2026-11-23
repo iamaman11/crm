@@ -1,6 +1,6 @@
 // Static configuration checks only. Runtime acceptance is performed after
 // compiled workerd execution; TypeScript owns source/module analysis.
-import {readFileSync,readdirSync} from "node:fs";
+import {existsSync,readFileSync,readdirSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {dirname,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -78,6 +78,7 @@ export function validateWorkerConfig(production,local){
  check(production.observability?.enabled===true,"Worker logs required");
  check(production.version_metadata?.binding==="CF_VERSION_METADATA","version metadata required");
 }
+check(!existsSync(resolve(repo,"apps/cloudflare-crm/rust-party/src/pilot.rs")),"retired pilot source in native Worker");
 const production=JSON.parse(read("apps/cloudflare-crm/wrangler.jsonc"));
 const local=JSON.parse(read("apps/cloudflare-crm/rust-party/wrangler.jsonc"));
 validateWorkerConfig(production,local);

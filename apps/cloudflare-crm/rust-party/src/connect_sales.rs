@@ -675,6 +675,7 @@ impl TaskV2Service {
             404 => ConnectError::not_found(f.code),
             409 => ConnectError::aborted(f.code),
             422 => ConnectError::invalid_argument(f.code),
+            503 => ConnectError::unavailable(f.code),
             _ => ConnectError::internal(f.code),
         }
     }
