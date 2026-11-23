@@ -33,9 +33,9 @@ function App() {
   const route=useMemo(()=>parseRoute(hash,accountFilterStatuses),[hash]);
   const current=route.kind==="workday"?"workday":route.kind==="insights"?"insights":route.kind==="accounts"||route.kind==="account"||route.kind==="account-create"?"accounts":route.kind==="deal"?"sales":route.kind==="search"?"search":route.kind==="section"?route.screen:"";
   const content=route.kind==="insights"?<IntelligenceScreen
-      key={[route.start,route.end,route.pipelineId,route.includeArchived,route.compare].join("/")}
+      key={[route.start,route.end,route.pipelineId,route.includeArchived,route.compare,route.owner??""].join("/")}
       start={route.start} end={route.end} pipelineId={route.pipelineId}
-      includeArchived={route.includeArchived} compare={route.compare}/>:
+      includeArchived={route.includeArchived} compare={route.compare} owner={route.owner??""}/>:
     route.kind==="workday"?<WorkdayScreen key={route.day+"/"+route.mine+"/"+(route.teamId??"")} day={route.day} mine={route.mine} teamId={route.teamId??""}/>:
     route.kind==="accounts"?<AccountScreen registerBlocker={registerNavigationBlocker} filters={{search:route.search,status:route.status,cursor:route.cursor}}/>:
     route.kind==="account"?<AccountPage registerBlocker={registerNavigationBlocker} accountId={route.accountId}/>:
@@ -56,7 +56,7 @@ function App() {
     route.screen==="team"?<MemberScreen/>:
     route.screen==="sales"?<SalesScreen key={route.accountId}
       initialAccountId={route.accountId} initialSearch={route.search??""}
-      initialViewId={route.viewId??""} initialPipelineId={route.pipelineId??""}/>:
+      initialViewId={route.viewId??""} initialPipelineId={route.pipelineId??""} initialOwner={route.owner??""}/>:
     route.screen==="consents"?<ConsentScreen/>:
     route.screen==="review"?<ReviewScreen key={route.partyId} initialPartyId={route.partyId}/>:
     route.screen==="privacy"?<PrivacyScreen/>:

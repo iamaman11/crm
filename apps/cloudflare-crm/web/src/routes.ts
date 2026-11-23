@@ -17,14 +17,14 @@ export type Section=keyof typeof sectionLabels;
 export type AccountFilterStatus = AccountStatus.ACTIVE | AccountStatus.INACTIVE;
 export type AccountFilters = {search:string;status:AccountFilterStatus|null;cursor:string};
 export type Route =
-  | {kind:"insights";start:string;end:string;pipelineId:string;includeArchived:boolean;compare:boolean}
+  | {kind:"insights";start:string;end:string;pipelineId:string;includeArchived:boolean;compare:boolean;owner?:string}
   | {kind:"workday";day:string;mine:boolean;teamId?:string}
   | ({kind:"accounts"} & AccountFilters)
   | {kind:"account";accountId:string}
   | {kind:"account-create";partyId:string}
   | {kind:"deal";dealId:string}
   | {kind:"search";query:string}
-  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;overdue?:boolean;viewId?:string;pipelineId?:string;assigneeEmail?:string;mine?:boolean;teamId?:string}
+  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;overdue?:boolean;viewId?:string;pipelineId?:string;assigneeEmail?:string;mine?:boolean;teamId?:string;owner?:string}
   | {kind:"not-found";path:string};
 
 function isSection(path:string):path is Section {return Object.prototype.hasOwnProperty.call(sectionLabels,path);}
@@ -35,6 +35,13 @@ export function accountFilterStatus(raw:string|null,allowed:readonly AccountFilt
   const status=allowed.find(value=>String(value)===raw);
   if(status===undefined)throw Error("Недопустимый статус клиента в маршруте");
   return status;
+}
+function validSalesOwner(value:string):boolean {
+  if(!value)return true;
+  if(value.startsWith("team:"))return validTeamId(value.slice(5));
+  if(!value.startsWith("actor:"))return false;
+  const id=value.slice(6);
+  return !!id&&id.length<=254&&id===id.trim()&&!id.includes("/")&&!id.includes("\\")&&!id.includes("%");
 }
 function validTeamId(id:string):boolean {
   return !!id&&id.length<=128&&!id.includes("/")&&!id.includes("\\")&&!id.includes("%")&&id!=="."&&id!=="..";
@@ -67,13 +74,14 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     return {kind:"workday",day,mine:scopes[0]==="mine",...(teamId?{teamId}:{})};
   }
   if(path==="insights"){
-    const allowed=new Set(["start","end","pipelineId","includeArchived","compare"]);
+    const allowed=new Set(["start","end","pipelineId","includeArchived","compare","owner"]);
     let invalid=false;
     params.forEach((_,key)=>{if(!allowed.has(key)||params.getAll(key).length!==1)invalid=true;});
     const start=params.get("start")??"",end=params.get("end")??"";
     const pipelineId=params.get("pipelineId")??"";
     const include=params.get("includeArchived")??"";
     const compare=params.get("compare")??"";
+    const owner=params.get("owner")??"";
     const validDate=(day:string)=>{
       if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return false;
       const [y,m,d]=day.split("-").map(Number);
@@ -81,13 +89,13 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
       const date=new Date(Date.UTC(y,m-1,d));
       return date.getUTCFullYear()===y&&date.getUTCMonth()===m-1&&date.getUTCDate()===d;
     };
-    if(invalid||(!!start!==!!end)||(start&&(!validDate(start)||!validDate(end)||start>end))||
+    if(invalid||!validSalesOwner(owner)||(!!start!==!!end)||(start&&(!validDate(start)||!validDate(end)||start>end))||
        (pipelineId&&(pipelineId.length>128||pipelineId.includes("/")||
          pipelineId.includes("\\")||pipelineId.includes("%")||
          pipelineId==="."||pipelineId===".."))||
        (include!==""&&include!=="1")||(compare!==""&&compare!=="1")||
        (compare==="1"&&!start))return {kind:"not-found",path:source};
-    return {kind:"insights",start,end,pipelineId,includeArchived:include==="1",compare:compare==="1"};
+    return {kind:"insights",start,end,pipelineId,includeArchived:include==="1",compare:compare==="1",...(owner?{owner}:{})};
   }
   if(path==="search"){
     const queries=params.getAll("query");
@@ -136,6 +144,8 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     const searches=path==="sales"||path==="tasks"?params.getAll("search"):[];
     const overdueValues=path==="tasks"?params.getAll("overdue"):[];
     const viewIds=path==="sales"?params.getAll("viewId"):[];
+    const owners=path==="sales"?params.getAll("owner"):[];
+    const owner=owners[0]??"";
     const pipelineIds=path==="sales"?params.getAll("pipelineId"):[];
     const contacts=path==="contacts"?params.getAll("contactPointId"):[];
     const relations=path==="relationships"?params.getAll("relationshipId"):[];
@@ -151,7 +161,7 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
        teamIds.length>1||(teamIds.length>0&&(!validTeamId(teamId)||assignees.length>0||mineFlags.length>0||!!taskId))||
        mineFlags.some(value=>value!=="1")||(assigneeEmail&&mineFlags.length>0)||
        assigneeEmail.length>254||(assigneeEmail&&!assigneeEmail.includes("@"))||
-       viewIds.length>1||
+       owners.length>1||!validSalesOwner(owner)||(!!owner&&viewIds.length>0)||viewIds.length>1||
        pipelineIds.length>1||(viewIds.length>0&&pipelineIds.length>0)||
        pipelineIds.some(id=>!id)||
        contacts.length>1||relations.length>1||
@@ -169,16 +179,18 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
       ...(teamId?{teamId}:{}),
       ...(mineFlags.length?{mine:true}:{}),
       ...(viewIds[0]?{viewId:viewIds[0]}:{}),
+      ...(owner?{owner}:{}),
       ...(pipelineIds[0]?{pipelineId:pipelineIds[0]}:{})};
   }
   return {kind:"not-found",path:source};
 }
 export function intelligenceHref(opts:{start?:string;end?:string;pipelineId?:string;
-  includeArchived?:boolean;compare?:boolean}={}):string {
+  includeArchived?:boolean;compare?:boolean;owner?:string}={}):string {
   const p=new URLSearchParams();
   if(opts.start)p.set("start",opts.start);
   if(opts.end)p.set("end",opts.end);
   if(opts.pipelineId)p.set("pipelineId",opts.pipelineId);
+  if(opts.owner)p.set("owner",opts.owner);
   if(opts.includeArchived)p.set("includeArchived","1");
   if(opts.compare&&opts.start&&opts.end)p.set("compare","1");
   return "#insights"+(p.size?"?"+p.toString():"");
@@ -252,12 +264,13 @@ export function dealTasksHref(dealId:string,accountId:string):string {
   return "#tasks?"+new URLSearchParams({accountId,dealId}).toString();
 }
 
-export function salesSearchHref(initialAccountId:string,search:string,viewId="",pipelineId=""):string {
+export function salesSearchHref(initialAccountId:string,search:string,viewId="",pipelineId="",owner=""):string {
   const params=new URLSearchParams();
   if(initialAccountId)params.set("accountId",initialAccountId);
   if(search)params.set("search",search);
   if(viewId)params.set("viewId",viewId);
   if(pipelineId&&!viewId)params.set("pipelineId",pipelineId);
+  if(owner&&!viewId)params.set("owner",owner);
   const query=params.toString();
   return "#sales"+(query?"?"+query:"");
 }
@@ -268,8 +281,8 @@ export function salesViewHref(initialAccountId:string,viewId:string,search=""):s
 }
 
 /** A manually selected Kanban uses the same URL owner, never storage. */
-export function salesPipelineHref(initialAccountId:string,pipelineId:string,search=""):string {
-  return salesSearchHref(initialAccountId,search,"",pipelineId);
+export function salesPipelineHref(initialAccountId:string,pipelineId:string,search="",owner=""):string {
+  return salesSearchHref(initialAccountId,search,"",pipelineId,owner);
 }
 
 export function dealHref(dealId:string):string {

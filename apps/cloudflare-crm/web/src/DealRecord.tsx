@@ -13,6 +13,7 @@ import {inputDate} from "./calendarInput";
 import {scopeHref,contactHref,taskHref,dealTasksHref} from "./routes";
 import {stageName as stageLabel} from "./salesPipelineCatalog";
 import {InteractionTimeline} from "./InteractionTimeline";
+import {salesOwners,ownerLabel} from "./salesOwner";
 
 export function dealStatusText(status:DealStatus):string {
   switch(status){
@@ -150,6 +151,7 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen
     <QueryNotice query={details}/>
     {deal&&<>
       <h3>{deal.name}</h3>
+      <DealOwnerLabel deal={deal}/>
       <p>ID: {deal.dealId} · версия {deal.version.toString()}</p>
       <p>Клиент: <AccountName accountId={deal.accountId}/></p>
       <p>Основной контакт: {details.data?.contact?
@@ -175,4 +177,9 @@ export function DealDetails({dealId,currencies,pipelines,onEdit,onClose,onReopen
       <InteractionTimeline accountId={deal.accountId} dealId={deal.dealId}/>
     </>}
   </section>;
+}
+
+function DealOwnerLabel({deal}:{deal:Deal}) {
+  const query=useQuery(useCallback(salesOwners,[]));
+  return <p>Ответственный: {ownerLabel(deal.owner,query.data?.choices??[])}</p>;
 }

@@ -2,7 +2,7 @@
 //! The signed transport supplies tenant/actor; D1 trigger commits audit and
 //! replay receipt atomically with exactly one insert/update.
 use super::bind;
-use crm_sales::{DealStatus, SalesDealView};
+use crm_sales::{DealStatus, SalesDealView, SalesOwnerScope};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -17,6 +17,8 @@ pub(super) struct CreateInput {
     pub pipeline_id: Option<String>,
     pub status: Option<DealStatus>,
     pub account_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_filter: Option<SalesOwnerScope>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -27,6 +29,8 @@ pub(super) struct UpdateInput {
     pub pipeline_id: Option<String>,
     pub status: Option<DealStatus>,
     pub account_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_filter: Option<SalesOwnerScope>,
     pub archived: bool,
 }
 #[derive(Deserialize)]
@@ -123,7 +127,7 @@ pub(super) async fn create(
         input.pipeline_id,
         input.status,
         input.account_id,
-    ) {
+    ).and_then(|view| view.with_owner_filter(input.owner_filter)) {
         Ok(view) => view,
         Err(e) => return Ok(Err(Failure::domain(e.code, ErrorCode::InvalidArgument))),
     };
@@ -200,7 +204,7 @@ pub(super) async fn update(
         input.status,
         input.account_id,
         input.archived,
-    ) {
+    ).and_then(|view| view.with_owner_filter(input.owner_filter)) {
         Ok(view) => view,
         Err(e) => {
             return Ok(Err(Failure::domain(

@@ -27,6 +27,7 @@ impl sale_wire::DealService for SalesV2Service {
                 pipeline_id: input.pipeline_id,
                 status,
                 account_id: input.account_id,
+                owner_filter: Self::owner_scope(input.owner_filter.as_option())?,
             },
             &key,
             &self.d1()?,
@@ -67,6 +68,7 @@ impl sale_wire::DealService for SalesV2Service {
                 pipeline_id: input.pipeline_id,
                 status,
                 account_id: input.account_id,
+                owner_filter: Self::owner_scope(input.owner_filter.as_option())?,
                 archived: input.archived,
             },
             &key,
@@ -381,6 +383,8 @@ impl sale_wire::DealService for SalesV2Service {
         if pipeline.stage(req.stage_id).is_none() {
             return Err(ConnectError::not_found("SALES_PIPELINE_STAGE_NOT_FOUND"));
         }
+        let input = req.to_owned_message();
+        let owner_filter = Self::owner_scope(input.owner_filter.as_option())?;
         let (list, next, total_count, currency_totals) = sales_deals::list_stage_page(
             &db,
             &self.tenant,
@@ -391,6 +395,7 @@ impl sale_wire::DealService for SalesV2Service {
                 limit: size as usize,
                 status,
                 account: req.account_id,
+                owner_filter: owner_filter.as_ref(),
             },
         )
         .await
@@ -469,6 +474,7 @@ impl sale_wire::DealService for SalesV2Service {
                     .map_err(ConnectError::invalid_argument)
             })
             .transpose()?;
+        let owner_filter = Self::owner_scope(input.owner_filter.as_option())?;
         let metrics = sales_deals::pipeline_metrics(
             &db,
             &self.tenant,
@@ -476,6 +482,7 @@ impl sale_wire::DealService for SalesV2Service {
             status,
             req.account_id,
             period,
+            owner_filter.as_ref(),
         )
         .await
         .map_err(|error| {
@@ -619,6 +626,7 @@ impl sale_wire::DealService for SalesV2Service {
                 id,
                 name: input.name,
                 account_id: input.account_id,
+                owner: Self::owner_scope(input.owner.as_option())?,
                 pipeline_id,
                 stage_id,
                 probability_bps,
@@ -742,6 +750,7 @@ impl sale_wire::DealService for SalesV2Service {
                 forecast_category: Self::forecast_category(input.forecast_category)?,
                 primary_contact,
                 expected_close_date,
+                owner: Self::owner_scope(input.owner.as_option())?,
             },
             &key,
             &self.d1()?,
@@ -1109,6 +1118,8 @@ impl sale_wire::DealService for SalesV2Service {
         if let Some(id) = account {
             AccountV2Service::valid_id(id)?;
         }
+        let input = req.to_owned_message();
+        let owner_filter = Self::owner_scope(input.owner_filter.as_option())?;
         let (list, next) = sales_deals::list_page_typed(
             &self.d1()?,
             &self.tenant,
@@ -1119,6 +1130,7 @@ impl sale_wire::DealService for SalesV2Service {
                 status,
                 account,
                 search: wire_search(req.search)?,
+                owner_filter: owner_filter.as_ref(),
             },
         )
         .await

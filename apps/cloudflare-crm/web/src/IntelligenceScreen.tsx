@@ -11,12 +11,13 @@ import type {CurrencyCatalog} from "./money";
 import {allPipelines} from "./salesPipelineCatalog";
 import {salesPipelineHref,intelligenceHref,workdayHref} from "./routes";
 import {navigateTo} from "./navigation";
+import {salesOwners,ownerWire} from "./salesOwner";
 
 // Infer from the ONE generated Connect client; never maintain a parallel DTO.
 type GetPipelineMetricsResponse=Awaited<ReturnType<typeof api.deals.getPipelineMetrics>>;
 type Slice={pipeline:SalesPipeline;current:GetPipelineMetricsResponse;previous?:GetPipelineMetricsResponse};
 type Portfolio={slices:Slice[];currencies:CurrencyCatalog};
-type Inputs={start:string;end:string;pipelineId:string;includeArchived:boolean;compare:boolean};
+type Inputs={start:string;end:string;pipelineId:string;includeArchived:boolean;compare:boolean;owner?:string};
 const MAX_CONCURRENT=4;
 function n(value:bigint):string {return new Intl.NumberFormat("ru-RU").format(value);}
 function signed(value:string):bigint {return BigInt(value);}
@@ -103,7 +104,8 @@ function CurrencyTable({title,rows,catalog}:{title:string;rows:CurrencyTotal[];
 }
 
 /** SK-07: complete authorised native metrics, never partial Deal pages as analytics. */
-export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare}:Inputs) {
+export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare,owner=""}:Inputs) {
+  const owners=useQuery(useCallback(salesOwners,[]));
   const [draftStart,setDraftStart]=useState(start);
   const [draftEnd,setDraftEnd]=useState(end);
   const [formError,setFormError]=useState("");
@@ -123,10 +125,11 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
     for(let i=0;i<eligible.length;i+=MAX_CONCURRENT) {
       const group=await Promise.all(eligible.slice(i,i+MAX_CONCURRENT).map(async pipeline=>{
         const current=await api.deals.getPipelineMetrics({
-          pipelineId:pipeline.pipelineId,...(period?{analysisPeriod:period}:{})
+          pipelineId:pipeline.pipelineId,...(period?{analysisPeriod:period}:{}),
+          ...(owner?{ownerFilter:ownerWire(owner)}:{})
         },{signal});
         const previous=prior?await api.deals.getPipelineMetrics({
-          pipelineId:pipeline.pipelineId,analysisPeriod:{
+          pipelineId:pipeline.pipelineId,...(owner?{ownerFilter:ownerWire(owner)}:{}),analysisPeriod:{
             startDate:parseDate(prior.start),endDate:parseDate(prior.end)
           }
         },{signal}):undefined;
@@ -135,7 +138,7 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
       slices.push(...group);
     }
     return {slices,currencies:catalog.currencies};
-  },[start,end,pipelineId,includeArchived,compare]));
+  },[start,end,pipelineId,includeArchived,compare,owner]));
   const data=query.data,slices=data?.slices??[];
   const total=slices.reduce((sum,s)=>sum+s.current.totalDealCount,0n);
   const open=dealCount(slices,DealStatus.OPEN);
@@ -170,6 +173,11 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
       description="Портфель всех авторизованных воронок, прогноз и причины операционных рисков. Полные показатели рассчитывает исходный Rust Sales owner, не неполные страницы сделок."/>
     <p><a href="#sales">Сделки и настройка воронок</a>{" · "}
       <a href={workdayHref()}>Рабочий день и действия</a></p>
+    <QueryNotice query={owners}/>
+    <p><label>Ответственный за портфель{" "}<select value={owner} onChange={e=>navigateTo(intelligenceHref({start,end,pipelineId,includeArchived,compare,owner:e.target.value}))}>
+      <option value="">Все ответственные</option>{owners.data?.choices.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}
+    </select></label></p>
+    {owner&&<p>По текущему владельцу сделки, не историческая атрибуция выручки.</p>}
     <form onSubmit={apply} aria-label="Фильтры аналитики">
       <label>Начало периода{" "}
         <input type="date" value={draftStart} onChange={e=>setDraftStart(e.target.value)}/></label>
@@ -178,7 +186,7 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
       <Button type="submit">Применить период</Button>{" "}
       <Button type="button" variant="secondary" onClick={()=>{
         setDraftStart("");setDraftEnd("");setFormError("");
-        navigateTo(intelligenceHref({pipelineId,includeArchived}));
+        navigateTo(intelligenceHref({pipelineId,includeArchived,owner}));
       }}>Все даты</Button>
     </form>
     <p>Период (UTC, включительно) ограничивает прогноз по ожидаемой дате и
@@ -188,10 +196,10 @@ export function IntelligenceScreen({start,end,pipelineId,includeArchived,compare
     {formError&&<p role="alert">{formError}</p>}
     <p>
       <label><input type="checkbox" checked={includeArchived} onChange={e=>
-        navigateTo(intelligenceHref({start,end,pipelineId,compare,
+        navigateTo(intelligenceHref({start,end,pipelineId,compare,owner,
           includeArchived:e.target.checked}))}/> Включить архивные воронки</label>{" · "}
       <label><input type="checkbox" checked={compare} disabled={!start||!end}
-        onChange={e=>navigateTo(intelligenceHref({start,end,pipelineId,
+        onChange={e=>navigateTo(intelligenceHref({start,end,pipelineId,owner,
           includeArchived,compare:e.target.checked}))}/>
         Сравнить с предыдущим периодом той же длительности</label>
     </p>

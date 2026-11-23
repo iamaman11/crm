@@ -5257,6 +5257,74 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    assert.deepEqual(await sql("SELECT request_id FROM crm_audit WHERE tenant_id=? AND subject_id=?",
      "tenant-a",subject),[{request_id:original}]);
  }
+ // SK-07.C: Sales owner shares the Access team, original Deal state and
+ // one server-side filter across list, board totals, saved views and forecast.
+ {
+   const salesTeam="sk07-sales-team-"+randomUUID();
+   const salesTeamCreated=await memberV2("CreateTeam",admin,{
+     teamId:salesTeam,name:"Sales owner QA "+salesTeam,roster:{memberEmails:["native-viewer@example.test"]},
+     precondition:{idempotencyKey:"team-"+salesTeam}
+   });
+   assert.equal(salesTeamCreated.status,200,describeProtobuf(salesTeamCreated.body));
+   const ownerFilter={owner:{case:"teamId",value:salesTeam}};
+   const actorOwner={owner:{case:"actorId",value:"native-viewer@example.test"}};
+   const pId="sk07-sales-owner-"+randomUUID();
+   const pMade=await salesV2("CreatePipeline",admin,{pipelineId:pId,name:"Owner filter QA "+pId,
+     stages:[{stageId:"lead",name:"Lead",probabilityBasisPoints:5000}],
+     precondition:{idempotencyKey:"pipeline-"+pId}});
+   assert.equal(pMade.status,200,describeProtobuf(pMade.body));
+   const input=(id,owner,currency,units)=>({dealId:id,name:"Sales owner QA "+id,accountId,
+     stage:{pipelineId:pId,stageId:"lead",ordinal:1},owner,amount:{currencyCode:currency,minorUnits:units},
+     precondition:{idempotencyKey:"owner-create-"+id}});
+   const ids=["sk07-owner-a-"+randomUUID(),"sk07-owner-b-"+randomUUID(),"sk07-owner-c-"+randomUUID()];
+   const inputs=[input(ids[0],ownerFilter,"EUR",10001n),input(ids[1],ownerFilter,"USD",20000n),input(ids[2],actorOwner,"EUR",40000n)];
+   for(const request of inputs){
+     const result=await salesV2("CreateDeal",admin,request);
+     assert.equal(result.status,200,describeProtobuf(result.body));
+     assert.equal(result.body.deal?.owner?.owner.case,request.owner.owner.case);
+     assert.equal(result.body.deal?.owner?.owner.value,request.owner.owner.value);
+   }
+   assert.equal((await salesV2("CreateDeal",admin,inputs[0])).body.receipt?.replayed,true);
+   const missing=input("sk07-owner-bad-"+randomUUID(),{owner:{case:"teamId",value:"missing-team"}},"EUR",1n);
+   assert.equal((await salesV2("CreateDeal",admin,missing)).status,400);
+   assert.equal((await salesV2("CreateDeal",viewer,{...inputs[0],dealId:"sk07-owner-denied-"+randomUUID()})).status,403);
+   const list=await salesV2("ListDeals",viewer,{ownerFilter,pipelineId:pId,page:{pageSize:1}});
+   assert.equal(list.status,200,describeProtobuf(list.body));
+   assert.equal(list.body.deals[0]?.dealId,ids[0]);
+   const next=await salesV2("ListDeals",viewer,{ownerFilter,pipelineId:pId,page:{pageSize:1,pageToken:list.body.pageInfo.nextPageToken}});
+   assert.equal(next.body.deals[0]?.dealId,ids[1]);
+   assert.equal((await salesV2("ListDeals",tenantB,{ownerFilter})).body.deals.length,0);
+   const board=await salesV2("ListStageDeals",viewer,{pipelineId:pId,stageId:"lead",ownerFilter,page:{pageSize:1}});
+   assert.equal(board.body.totalCount,2n);
+   assert.deepEqual(board.body.currencyTotals.map(x=>[x.currencyCode,x.totalMinorUnits]),[["EUR","10001"],["USD","20000"]]);
+   const metrics=await salesV2("GetPipelineMetrics",viewer,{pipelineId:pId,ownerFilter});
+   assert.equal(metrics.status,200,describeProtobuf(metrics.body));
+   assert.equal(metrics.body.totalDealCount,2n);
+   assert.deepEqual(metrics.body.forecastCurrencies.map(x=>[x.currencyCode,x.totalMinorUnits,x.weightedMinorUnitsTimesBasisPoints]),
+     [["EUR","10001","50005000"],["USD","20000","100000000"]]);
+   const viewId="sk07-owner-view-"+randomUUID();
+   const viewCreated=await salesV2("CreateSalesView",admin,{viewId,name:"Team owner view",pipelineId:pId,ownerFilter,
+     precondition:{idempotencyKey:"view-"+viewId}});
+   assert.equal(viewCreated.status,200,describeProtobuf(viewCreated.body));
+   const viewRead=await salesV2("GetSalesView",viewer,{viewId});
+   assert.equal(viewRead.body.view?.ownerFilter?.owner.value,salesTeam);
+   const archive={teamId:salesTeam,active:false,precondition:{expectedVersion:1n,idempotencyKey:"archive-"+salesTeam}};
+   assert.equal((await memberV2("UpdateTeam",admin,archive)).status,409);
+   for(const id of ids.slice(0,2)){
+     const change={dealId:id,owner:actorOwner,precondition:{expectedVersion:1n,idempotencyKey:"owner-update-"+id}};
+     assert.equal((await salesV2("UpdateDeal",viewer,change)).status,403);
+     const result=await salesV2("UpdateDeal",admin,change);
+     assert.equal(result.status,200,describeProtobuf(result.body));
+     assert.equal(result.body.deal?.owner?.owner.value,"native-viewer@example.test");
+     assert.equal((await salesV2("UpdateDeal",admin,change)).body.receipt?.replayed,true);
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=?","tenant-a",id))[0].n,2);
+   }
+   assert.equal((await memberV2("UpdateTeam",admin,archive)).status,200);
+   assert.equal((await salesV2("GetPipelineMetrics",viewer,{pipelineId:pId,ownerFilter})).body.totalDealCount,0n);
+   assert.equal((await salesV2("GetPipelineMetrics",viewer,{pipelineId:pId,ownerFilter:actorOwner})).body.totalDealCount,3n);
+   console.log(JSON.stringify({event:"crm.native-sk07c-sales-owner",result:"PASS",typed_owner:true,tenant_ab:true,
+     list_before_limit:true,exact_currency:true,forecast:true,saved_view:true,archive_guard:true,replay:true}));
+ }
  assert.deepEqual([...writesWithReceipt].sort(),[...mutationPaths].sort(),
    "every write method must exercise a committed response with a typed receipt");
  assert.deepEqual([...successfulCalls].sort(),[...rpc.registered_methods].sort(),

@@ -898,6 +898,29 @@ impl SalesV2Service {
         }
     }
 
+    fn owner_scope(
+        value: Option<&proto::crm::core::v1::ActorOrTeamOwner>,
+    ) -> std::result::Result<Option<crm_sales::SalesOwnerScope>, ConnectError> {
+        use proto::crm::core::v1::actor_or_team_owner::Owner;
+        let Some(value) = value else { return Ok(None); };
+        let selection = match value.owner.as_ref() {
+            Some(Owner::ActorId(id)) => crm_sales::SalesOwnerScope::Actor(id.clone()),
+            Some(Owner::TeamId(id)) => crm_sales::SalesOwnerScope::Team(id.clone()),
+            None => return Err(ConnectError::invalid_argument("SALES_OWNER_REQUIRED")),
+        };
+        selection.validate().map_err(|e| ConnectError::invalid_argument(e.code))?;
+        Ok(Some(selection))
+    }
+    fn owner_wire(owner: &crm_sales::SalesOwnerScope) -> proto::crm::core::v1::ActorOrTeamOwner {
+        use proto::crm::core::v1::{ActorOrTeamOwner, actor_or_team_owner::Owner};
+        ActorOrTeamOwner {
+            owner: Some(match owner {
+                crm_sales::SalesOwnerScope::Actor(id) => Owner::ActorId(id.clone()),
+                crm_sales::SalesOwnerScope::Team(id) => Owner::TeamId(id.clone()),
+            }),
+            ..Default::default()
+        }
+    }
     fn convert(deal: &DomainDeal) -> std::result::Result<sale_wire::Deal, ConnectError> {
         let stage = deal.stage();
         let status = match deal.status() {
@@ -922,6 +945,10 @@ impl SalesV2Service {
             .transpose()?;
         Ok(sale_wire::Deal {
             deal_id: deal.deal_id().as_str().to_owned(),
+            owner: Some(Self::owner_wire(&match deal.owner() {
+                crm_sales::DealOwner::Actor(id) => crm_sales::SalesOwnerScope::Actor(id.as_str().to_owned()),
+                crm_sales::DealOwner::Team(id) => crm_sales::SalesOwnerScope::Team(id.as_str().to_owned()),
+            })).into(),
             name: deal.name().to_owned(),
             account_id: account.resource_id.clone(),
             stage: Some(sale_wire::DealStage {
@@ -1050,6 +1077,7 @@ impl SalesV2Service {
         });
         sale_wire::SalesDealView {
             view_id: value.view_id.clone(),
+            owner_filter: value.owner_filter.as_ref().map(Self::owner_wire).into(),
             name: value.name.clone(),
             pipeline_id: value.pipeline_id.clone(),
             status,

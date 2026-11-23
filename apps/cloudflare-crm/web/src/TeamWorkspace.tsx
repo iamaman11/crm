@@ -5,7 +5,7 @@ import {api,newId} from "./api";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice} from "./hooks";
 import {allTeams} from "./teamCatalog";
 import {humanMember} from "./memberCatalog";
-import {taskTeamHref,workdayHref} from "./routes";
+import {taskTeamHref,workdayHref,salesPipelineHref,intelligenceHref} from "./routes";
 
 export function TeamWorkspace({members,isAdmin,actor,onChanged}:{
   members:Member[];isAdmin:boolean;actor:string;onChanged:()=>Promise<unknown>;
@@ -54,7 +54,9 @@ export function TeamWorkspace({members,isAdmin,actor,onChanged}:{
         <td><ul>{team.memberEmails.map(email=><li key={email}>{email}
           {human.find(m=>m.email===email)?.active?"":" · неактивен"}</li>)}</ul></td>
         <td><a href={taskTeamHref(team.teamId)}>Задачи команды</a>{" · "}
-          <a href={workdayHref("",false,team.teamId)}>Рабочий день команды</a></td>
+          <a href={workdayHref("",false,team.teamId)}>Рабочий день команды</a>{" · "}
+          <a href={salesPipelineHref("","","","team:"+team.teamId)}>Сделки команды</a>{" · "}
+          <a href={intelligenceHref({owner:"team:"+team.teamId})}>Портфель команды</a></td>
         <td>{isAdmin&&<Button variant="secondary" disabled={pending}
           onClick={()=>start(team)}>Изменить команду</Button>}</td>
       </tr>)}</tbody></table>

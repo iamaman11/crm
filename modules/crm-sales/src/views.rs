@@ -1,9 +1,37 @@
 //! Tenant-scoped named Sales Deal filters. Business validation and CAS live in
 //! original crm-sales; D1 and Connect are adapters, never parallel owners.
-use crate::{DealStatus, PipelineId};
-use crm_module_sdk::{ErrorCategory, RecordId, SdkError};
+use crate::{DealOwner, DealStatus, PipelineId, TeamId};
+use crm_module_sdk::{ActorId, ErrorCategory, RecordId, SdkError};
 use serde::{Deserialize, Serialize};
 
+// A saved query dimension, never a second owner of a Deal.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SalesOwnerScope {
+    Actor(String),
+    Team(String),
+}
+impl SalesOwnerScope {
+    pub fn domain_owner(&self) -> Result<DealOwner, SdkError> {
+        match self {
+            Self::Actor(value) => ActorId::try_new(value.as_str())
+                .map(DealOwner::Actor)
+                .map_err(|_| invalid("SALES_OWNER_INVALID")),
+            Self::Team(value) => TeamId::try_new(value.as_str()).map(DealOwner::Team),
+        }
+    }
+    pub fn validate(&self) -> Result<(), SdkError> {
+        let value = match self {
+            Self::Actor(value) | Self::Team(value) => value,
+        };
+        if value.is_empty() || value != value.trim() || value.contains(['/', '\\', '%'])
+            || value.chars().any(char::is_control)
+        {
+            return Err(invalid("SALES_OWNER_INVALID"));
+        }
+        self.domain_owner().map(|_| ())
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SalesDealView {
@@ -12,6 +40,8 @@ pub struct SalesDealView {
     pub pipeline_id: Option<String>,
     pub status: Option<DealStatus>,
     pub account_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_filter: Option<SalesOwnerScope>,
     pub version: i64,
     pub archived: bool,
 }
@@ -69,6 +99,7 @@ impl SalesDealView {
             pipeline_id,
             status,
             account_id,
+            owner_filter: None,
             version: 1,
             archived: false,
         })
@@ -96,12 +127,21 @@ impl SalesDealView {
             pipeline_id,
             status,
             account_id,
+            owner_filter: None,
             version: self
                 .version
                 .checked_add(1)
                 .ok_or_else(|| failure("SALES_VIEW_VERSION_OVERFLOW", ErrorCategory::Conflict))?,
             archived,
         })
+    }
+
+    pub fn with_owner_filter(mut self, owner: Option<SalesOwnerScope>) -> Result<Self, SdkError> {
+        if let Some(scope) = &owner {
+            scope.validate()?;
+        }
+        self.owner_filter = owner;
+        Ok(self)
     }
 
     pub fn decode(bytes: &[u8]) -> Result<Self, SdkError> {
@@ -114,6 +154,9 @@ impl SalesDealView {
             &value.account_id,
         )
         .map_err(|_| invalid("SALES_VIEW_STATE_INVALID"))?;
+        if let Some(owner) = &value.owner_filter {
+            owner.validate().map_err(|_| invalid("SALES_VIEW_STATE_INVALID"))?;
+        }
         if value.version < 1 {
             return Err(invalid("SALES_VIEW_STATE_INVALID"));
         }

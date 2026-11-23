@@ -11,7 +11,8 @@ use crm_module_sdk::{ActorId, ErrorCategory, RecordId, ResourceRef, SdkError};
 use crm_sales::{
     AdvanceDealStage, CloseDeal, CreateDeal, Deal, DealOwner, DealStage, DealStatus,
     ForecastCategory, PipelineId, ProbabilityEstimate, ProbabilitySource, ReasonCode, ReopenDeal,
-    StageId, StageTransitionPolicy, UpdateDeal, decode_deal_state, encode_deal_state,
+    SalesOwnerScope, StageId, StageTransitionPolicy, UpdateDeal, decode_deal_state,
+    encode_deal_state,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -35,6 +36,8 @@ pub(super) struct CreateInput {
     pub(super) currency: Option<String>,
     pub(super) primary_contact_id: Option<String>,
     pub(super) expected_close_date: Option<DateInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) owner: Option<SalesOwnerScope>,
 }
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -104,6 +107,8 @@ pub(super) struct UpdateInput {
     pub(super) forecast_category: Option<ForecastCategory>,
     pub(super) primary_contact: FieldChange<String>,
     pub(super) expected_close_date: FieldChange<DateInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) owner: Option<SalesOwnerScope>,
 }
 #[derive(Deserialize)]
 struct Row {
@@ -367,6 +372,60 @@ pub(super) async fn probe_receipt_read(
     }
 }
 
+// Owner selection validates against the single Access authority; the same
+// predicate is checked again in the original Deal write, at commit time.
+async fn eligible_owner(
+    db: &D1Database,
+    tenant: &str,
+    owner: &SalesOwnerScope,
+) -> Result<bool> {
+    match owner {
+        SalesOwnerScope::Actor(email) => {
+            if super::access_members::email(email).ok().as_deref() != Some(email.as_str()) {
+                return Ok(false);
+            }
+            super::access_members::valid_assignee(db, tenant, email).await
+        }
+        SalesOwnerScope::Team(id) => super::access_teams::eligible(db, tenant, id).await,
+    }
+}
+fn owner_guard(owner: Option<&SalesOwnerScope>) -> String {
+    match owner {
+        None => String::new(),
+        Some(SalesOwnerScope::Actor(_)) => " AND EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1)".into(),
+        Some(SalesOwnerScope::Team(_)) => format!(" AND {}", super::access_teams::ELIGIBLE),
+    }
+}
+fn owner_parameters(values: &mut Vec<JsValue>, tenant: &str, owner: Option<&SalesOwnerScope>) {
+    if let Some(scope) = owner {
+        let id = match scope {
+            SalesOwnerScope::Actor(id) | SalesOwnerScope::Team(id) => id,
+        };
+        values.extend([JsValue::from_str(tenant), JsValue::from_str(id)]);
+    }
+}
+// Filter list, stage totals and period analytics by the identical current
+// owner dimension, before pagination or monetary aggregation.
+fn append_owner_filter(
+    query: &mut String,
+    values: &mut Vec<JsValue>,
+    owner: Option<&SalesOwnerScope>,
+) {
+    if let Some(owner) = owner {
+        let id = match owner {
+            SalesOwnerScope::Actor(id) => {
+                query.push_str(" AND json_extract(state,'$.owner.actor_id')=?");
+                id
+            }
+            SalesOwnerScope::Team(id) => {
+                query.push_str(" AND json_extract(state,'$.owner.team_id')=?");
+                id
+            }
+        };
+        values.push(JsValue::from_str(id));
+    }
+}
+
 pub(super) async fn create_typed(
     input: CreateInput,
     k: &str,
@@ -411,13 +470,23 @@ pub(super) async fn create_typed(
             ErrorCategory::InvalidArgument,
         ));
     }
-    let owner = match ActorId::try_new(actor) {
-        Ok(x) => DealOwner::Actor(x),
-        Err(_) => {
-            return Ok(rejected(
-                "SALES_OWNER_INVALID",
-                ErrorCategory::InvalidArgument,
-            ));
+    let owner = if let Some(selection) = &input.owner {
+        if !eligible_owner(db, tenant, selection).await? {
+            return Ok(rejected("SALES_OWNER_NOT_ELIGIBLE", ErrorCategory::InvalidArgument));
+        }
+        match selection.domain_owner() {
+            Ok(owner) => owner,
+            Err(e) => return Ok(rejected_sdk(e)),
+        }
+    } else {
+        match ActorId::try_new(actor) {
+            Ok(x) => DealOwner::Actor(x),
+            Err(_) => {
+                return Ok(rejected(
+                    "SALES_OWNER_INVALID",
+                    ErrorCategory::InvalidArgument,
+                ));
+            }
         }
     };
     let Some(catalog_stage) =
@@ -493,11 +562,23 @@ pub(super) async fn create_typed(
         Err(e) => return Ok(rejected_sdk(e)),
     };
     let saved = encode(&deal)?;
-    let r=bind(db,"INSERT INTO crm_sales_deal_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?)",
-        &[JsValue::from_str(tenant),JsValue::from_str(deal.deal_id().as_str()),
-          JsValue::from_str(account_id.as_str()),JsValue::from_str(&saved),
-          JsValue::from_f64(deal.version() as f64),JsValue::from_str(k),
-          JsValue::from_str(&digest),JsValue::from_str(trace),JsValue::from_str(actor)])?.run().await;
+    let sql = format!(
+        "INSERT INTO crm_sales_deal_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?,?,?,?,?,?,?,?,? WHERE 1=1{} ON CONFLICT(tenant,id) DO NOTHING",
+        owner_guard(input.owner.as_ref())
+    );
+    let mut values = vec![
+        JsValue::from_str(tenant),
+        JsValue::from_str(deal.deal_id().as_str()),
+        JsValue::from_str(account_id.as_str()),
+        JsValue::from_str(&saved),
+        JsValue::from_f64(deal.version() as f64),
+        JsValue::from_str(k),
+        JsValue::from_str(&digest),
+        JsValue::from_str(trace),
+        JsValue::from_str(actor),
+    ];
+    owner_parameters(&mut values, tenant, input.owner.as_ref());
+    let r = bind(db, &sql, &values)?.run().await;
     if let Some(count) = r.as_ref().ok().and_then(changes).filter(|count| *count > 0) {
         // Discard the genuine D1 write acknowledgement in isolated CI only.
         #[cfg(feature = "native-ci")]
@@ -506,7 +587,7 @@ pub(super) async fn create_typed(
         }
         return Ok(Ok(acknowledged(deal, trace, count)));
     }
-    Ok(reconcile(db, tenant, k, &digest, false).await)
+    Ok(reconcile(db, tenant, k, &digest, r.as_ref().ok().and_then(changes) == Some(0)).await)
 }
 pub(super) async fn update_typed(
     input: UpdateInput,
@@ -628,7 +709,19 @@ pub(super) async fn update_typed(
             Err(code) => return Ok(rejected(code, ErrorCategory::InvalidArgument)),
         },
     };
-    if matches!(name, Patch::Keep)
+    let owner = if let Some(selection) = &input.owner {
+        if !eligible_owner(db, tenant, selection).await? {
+            return Ok(rejected("SALES_OWNER_NOT_ELIGIBLE", ErrorCategory::InvalidArgument));
+        }
+        match selection.domain_owner() {
+            Ok(owner) => Patch::Set(owner),
+            Err(e) => return Ok(rejected_sdk(e)),
+        }
+    } else {
+        Patch::Keep
+    };
+    if matches!(owner, Patch::Keep)
+        && matches!(name, Patch::Keep)
         && matches!(amount, Patch::Keep)
         && matches!(probability, Patch::Keep)
         && matches!(contact_patch, Patch::Keep)
@@ -643,7 +736,7 @@ pub(super) async fn update_typed(
     if let Err(e) = deal.apply_update(UpdateDeal {
         expected_version: input.expected_version,
         name,
-        owner: Patch::Keep,
+        owner,
         account: Patch::Keep,
         primary_contact: contact_patch,
         amount,
@@ -655,11 +748,23 @@ pub(super) async fn update_typed(
         return Ok(rejected_sdk(e));
     }
     let saved = encode(&deal)?;
-    let result=bind(db,"UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.update' WHERE tenant=? AND id=? AND version=?",
-        &[JsValue::from_str(&saved),JsValue::from_f64(deal.version() as f64),
-          JsValue::from_str(key),JsValue::from_str(&digest),JsValue::from_str(trace),
-          JsValue::from_str(actor),JsValue::from_str(tenant),JsValue::from_str(id),
-          JsValue::from_f64(input.expected_version as f64)])?.run().await;
+    let sql = format!(
+        "UPDATE crm_sales_deal_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='sales_deals.update' WHERE tenant=? AND id=? AND version=?{}",
+        owner_guard(input.owner.as_ref())
+    );
+    let mut values = vec![
+        JsValue::from_str(&saved),
+        JsValue::from_f64(deal.version() as f64),
+        JsValue::from_str(key),
+        JsValue::from_str(&digest),
+        JsValue::from_str(trace),
+        JsValue::from_str(actor),
+        JsValue::from_str(tenant),
+        JsValue::from_str(id),
+        JsValue::from_f64(input.expected_version as f64),
+    ];
+    owner_parameters(&mut values, tenant, input.owner.as_ref());
+    let result = bind(db, &sql, &values)?.run().await;
     let count = result.as_ref().ok().and_then(changes);
     if let Some(changed) = count.filter(|value| *value > 0) {
         return Ok(Ok(acknowledged(deal, trace, changed)));
@@ -1266,6 +1371,7 @@ pub(super) async fn pipeline_metrics(
     status: Option<DealStatus>,
     account: Option<&str>,
     period: Option<AnalysisPeriod>,
+    owner_filter: Option<&SalesOwnerScope>,
 ) -> std::result::Result<PipelineMetrics, ReadFailureReason> {
     let mut condition =
         String::from("d.tenant=? AND json_extract(d.state,'$.stage.pipeline_id')=?");
@@ -1282,6 +1388,7 @@ pub(super) async fn pipeline_metrics(
         condition.push_str(" AND d.account_id=?");
         arguments.push(JsValue::from_str(account));
     }
+    append_owner_filter(&mut condition, &mut arguments, owner_filter);
     // Materialize the database clock once; correlated indexed event/task
     // lookups are evaluated inside the same read statement.
     let sql = format!(
@@ -1520,6 +1627,7 @@ pub(super) struct StageListQuery<'a> {
     pub limit: usize,
     pub status: Option<DealStatus>,
     pub account: Option<&'a str>,
+    pub owner_filter: Option<&'a SalesOwnerScope>,
 }
 pub(super) async fn list_stage_page(
     db: &D1Database,
@@ -1534,6 +1642,7 @@ pub(super) async fn list_stage_page(
         limit,
         status,
         account,
+        owner_filter,
     } = query;
     let mut condition = String::from(
         "tenant=? AND json_extract(state,'$.stage.pipeline_id')=? AND json_extract(state,'$.stage.stage_id')=?",
@@ -1555,6 +1664,7 @@ pub(super) async fn list_stage_page(
         condition.push_str(" AND account_id=?");
         arguments.push(JsValue::from_str(account));
     }
+    append_owner_filter(&mut condition, &mut arguments, owner_filter);
     // One indexed snapshot supplies counts, exact totals and the requested
     // keyset page. The cursor limits returned cards, not the summary facts.
     // There is no second read that can observe another committed Deal state.
@@ -1614,6 +1724,7 @@ pub(super) struct DealListQuery<'a> {
     pub pipeline: Option<&'a str>,
     pub status: Option<DealStatus>,
     pub account: Option<&'a str>,
+    pub owner_filter: Option<&'a SalesOwnerScope>,
     pub search: &'a str,
 }
 pub(super) async fn list_page_typed(
@@ -1628,6 +1739,7 @@ pub(super) async fn list_page_typed(
         status,
         account,
         search,
+        owner_filter,
     } = query;
     let mut args = vec![JsValue::from_str(tenant), JsValue::from_str(after)];
     let mut sql =
@@ -1648,6 +1760,7 @@ pub(super) async fn list_page_typed(
         sql.push_str(" AND account_id=?");
         args.push(JsValue::from_str(account));
     }
+    append_owner_filter(&mut sql, &mut args, owner_filter);
     // Literal substring matching (including %, _, and quotes) is performed
     // BEFORE keyset pagination. SQL params protect both name and ID search.
     // The original Deal state remains the sole owner of the name.
