@@ -1,7 +1,7 @@
 import {useCallback,useState} from "react";
 import type {FormEvent} from "react";
 import {Button,Card,PageHeader} from "@ultimate-crm/ui";
-import type {GetPipelineMetricsResponse,SalesPipeline} from "@ultimate-crm/client/cloudflare";
+import type {SalesPipeline} from "@ultimate-crm/client/cloudflare";
 import {DealStatus,ForecastCategory} from "@ultimate-crm/client/cloudflare";
 import {api} from "./api";
 import {useQuery,QueryNotice} from "./hooks";
@@ -12,6 +12,8 @@ import {allPipelines} from "./salesPipelineCatalog";
 import {salesPipelineHref,intelligenceHref,workdayHref} from "./routes";
 import {navigateTo} from "./navigation";
 
+// Infer from the ONE generated Connect client; never maintain a parallel DTO.
+type GetPipelineMetricsResponse=Awaited<ReturnType<typeof api.deals.getPipelineMetrics>>;
 type Slice={pipeline:SalesPipeline;current:GetPipelineMetricsResponse;previous?:GetPipelineMetricsResponse};
 type Portfolio={slices:Slice[];currencies:CurrencyCatalog};
 type Inputs={start:string;end:string;pipelineId:string;includeArchived:boolean;compare:boolean};
