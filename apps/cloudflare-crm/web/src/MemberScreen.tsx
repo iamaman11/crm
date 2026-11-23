@@ -8,6 +8,7 @@ import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice} from ".
 import {taskHref,taskAssigneeHref,taskTeamHref,workdayHref,salesPipelineHref,intelligenceHref} from "./routes";
 import {allMembers,humanMember} from "./memberCatalog";
 import {TeamWorkspace} from "./TeamWorkspace";
+import {TerritoryWorkspace} from "./SalesCoverage";
 import {allTeams} from "./teamCatalog";
 import {ownerValue} from "./ownerCatalog";
 
@@ -138,6 +139,7 @@ export function MemberScreen(){
       <MutationNotice state={mutation}/>
     </section>
     <TeamWorkspace query={teams} members={members} isAdmin={isAdmin} actor={actor} onChanged={workload.reload}/>
+    <TerritoryWorkspace isAdmin={isAdmin}/>
     <section aria-label="Реальная нагрузка команды">
       <h2>Распределение и нагрузка</h2>
       <p>Авторитетные числа по всем задачам до LIMIT, включая завершённые.

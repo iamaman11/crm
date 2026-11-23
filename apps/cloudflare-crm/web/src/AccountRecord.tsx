@@ -10,6 +10,7 @@ import {PartyPicker,PartyName} from "./Pickers";
 import {allPipelines,stageName} from "./salesPipelineCatalog";
 import {InteractionTimeline} from "./InteractionTimeline";
 import {allOwners,ownerLabel} from "./ownerCatalog";
+import {AccountSalesAssignment} from "./SalesCoverage";
 
 export function accountStatusLabel(status:AccountStatus):string {
   switch(status) {
@@ -51,6 +52,7 @@ export function AccountDetails({accountId}:{accountId:string}) {
     <p>Статус: {card.account?accountStatusLabel(card.account.status):"Неизвестно"}</p>
     <p>ID: {accountId} · версия {card.account?.version.toString()??"—"}</p>
     <p>Основной участник: {card.primaryParty?<a href={partyHref(card.primaryParty.partyId)}>{card.primaryParty.displayName}</a>:"Не указан"}</p>
+    <AccountSalesAssignment accountId={accountId}/>
     <h3>Контакты</h3><ul>{card.contactPoints.map(p=><li key={p.contactPointId}>
       <a href={contactHref(p.contactPointId,p.partyId)}>{p.displayValue}</a>{p.verified?" · подтверждён":""}</li>)}</ul>
     {card.truncated?.contactPoints&&<p>Показаны первые {card.perCollectionLimit} контактов.</p>}

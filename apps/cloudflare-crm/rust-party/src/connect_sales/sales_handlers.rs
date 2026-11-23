@@ -5,6 +5,321 @@ use crate::diagnostics;
 
 impl sale_wire::DealService for SalesV2Service {
     #[worker::send]
+    async fn create_territory(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::CreateTerritoryRequest>,
+    ) -> ServiceResult<sale_wire::CreateTerritoryResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.territory_id)?;
+        let (key, expected) = wire_precondition(input.precondition.as_option(), true)?;
+        let cfg = input.configuration.as_option().ok_or_else(|| {
+            ConnectError::invalid_argument("SALES_COVERAGE_CONFIGURATION_REQUIRED")
+        })?;
+        let record = Self::territory_draft(id, cfg)?;
+        let db = self.d1()?;
+        let saved = sales_territories::mutate(
+            &sales_territories::Context {
+                db: &db,
+                tenant: &self.tenant,
+                actor: &self.actor,
+                request_id: &self.request_id,
+            },
+            record,
+            &key,
+            expected,
+        )
+        .await
+        .map_err(|_| ConnectError::unavailable("SALES_COVERAGE_WRITE_FAILED"))?
+        .map_err(|failure| failure.connect("CreateTerritory", &self.request_id))?;
+        let receipt = self.coverage_receipt(&saved);
+        RpcResponse::ok(sale_wire::CreateTerritoryResponse {
+            territory: Some(Self::territory_wire(saved.record)?).into(),
+            receipt: Some(receipt).into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn update_territory(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::UpdateTerritoryRequest>,
+    ) -> ServiceResult<sale_wire::UpdateTerritoryResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.territory_id)?;
+        let (key, expected) = wire_precondition(input.precondition.as_option(), false)?;
+        let cfg = input.configuration.as_option().ok_or_else(|| {
+            ConnectError::invalid_argument("SALES_COVERAGE_CONFIGURATION_REQUIRED")
+        })?;
+        let record = Self::territory_draft(id, cfg)?;
+        let db = self.d1()?;
+        let saved = sales_territories::mutate(
+            &sales_territories::Context {
+                db: &db,
+                tenant: &self.tenant,
+                actor: &self.actor,
+                request_id: &self.request_id,
+            },
+            record,
+            &key,
+            expected,
+        )
+        .await
+        .map_err(|_| ConnectError::unavailable("SALES_COVERAGE_WRITE_FAILED"))?
+        .map_err(|failure| failure.connect("UpdateTerritory", &self.request_id))?;
+        let receipt = self.coverage_receipt(&saved);
+        RpcResponse::ok(sale_wire::UpdateTerritoryResponse {
+            territory: Some(Self::territory_wire(saved.record)?).into(),
+            receipt: Some(receipt).into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn get_territory(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::GetTerritoryRequest>,
+    ) -> ServiceResult<sale_wire::GetTerritoryResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.territory_id)?;
+        let db = self.d1()?;
+        let kind = sales_territories::Kind::Territory;
+        let record = sales_territories::get(&db, &self.tenant, kind, &id)
+            .await
+            .map_err(|_| ConnectError::internal("Sales coverage read failed"))?;
+        let record = record.ok_or_else(|| ConnectError::not_found("SALES_TERRITORY_NOT_FOUND"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let row = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::Territory)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("SALES_COVERAGE_RECEIPT_READ_FAILED"))?;
+                crud_commit_evidence(row, &id, &self.request_id, |state| {
+                    let record = kind.decode(state)?;
+                    Ok((record.id().to_owned(), record.version()))
+                })
+                .map_err(|_| ConnectError::unavailable("SALES_COVERAGE_RECEIPT_DECODE_FAILED"))?
+            }
+        };
+        RpcResponse::ok(sale_wire::GetTerritoryResponse {
+            territory: Some(Self::territory_wire(record)?).into(),
+            confirmed_mutation: confirmed_mutation.into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn list_territories(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::ListTerritoriesRequest>,
+    ) -> ServiceResult<sale_wire::ListTerritoriesResponse> {
+        let size = if req.page.page_size == 0 {
+            25
+        } else {
+            req.page.page_size
+        };
+        if size > 100 {
+            return Err(ConnectError::invalid_argument("page_size exceeds 100"));
+        }
+        if !req.page.page_token.is_empty() {
+            Self::id(&req.page.page_token)?;
+        }
+        let (items, next) = sales_territories::list(
+            &self.d1()?,
+            &self.tenant,
+            sales_territories::Kind::Territory,
+            sales_territories::Filter {
+                after: &req.page.page_token,
+                limit: size as usize,
+                include_archived: req.include_archived,
+                territory_id: None,
+                primary_owner: None,
+            },
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Sales coverage list failed"))?;
+        RpcResponse::ok(sale_wire::ListTerritoriesResponse {
+            territories: items
+                .into_iter()
+                .map(Self::territory_wire)
+                .collect::<std::result::Result<Vec<_>, _>>()?,
+            page_info: Some(core_v2::PageInfo {
+                next_page_token: next.unwrap_or_default(),
+                ..Default::default()
+            })
+            .into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn create_sales_account_assignment(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::CreateSalesAccountAssignmentRequest>,
+    ) -> ServiceResult<sale_wire::CreateSalesAccountAssignmentResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.account_id)?;
+        let (key, expected) = wire_precondition(input.precondition.as_option(), true)?;
+        let cfg = input.configuration.as_option().ok_or_else(|| {
+            ConnectError::invalid_argument("SALES_COVERAGE_CONFIGURATION_REQUIRED")
+        })?;
+        let record = Self::assignment_draft(id, cfg)?;
+        let db = self.d1()?;
+        let saved = sales_territories::mutate(
+            &sales_territories::Context {
+                db: &db,
+                tenant: &self.tenant,
+                actor: &self.actor,
+                request_id: &self.request_id,
+            },
+            record,
+            &key,
+            expected,
+        )
+        .await
+        .map_err(|_| ConnectError::unavailable("SALES_COVERAGE_WRITE_FAILED"))?
+        .map_err(|failure| failure.connect("CreateSalesAccountAssignment", &self.request_id))?;
+        let receipt = self.coverage_receipt(&saved);
+        RpcResponse::ok(sale_wire::CreateSalesAccountAssignmentResponse {
+            assignment: Some(Self::assignment_wire(saved.record)?).into(),
+            receipt: Some(receipt).into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn update_sales_account_assignment(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::UpdateSalesAccountAssignmentRequest>,
+    ) -> ServiceResult<sale_wire::UpdateSalesAccountAssignmentResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.account_id)?;
+        let (key, expected) = wire_precondition(input.precondition.as_option(), false)?;
+        let cfg = input.configuration.as_option().ok_or_else(|| {
+            ConnectError::invalid_argument("SALES_COVERAGE_CONFIGURATION_REQUIRED")
+        })?;
+        let record = Self::assignment_draft(id, cfg)?;
+        let db = self.d1()?;
+        let saved = sales_territories::mutate(
+            &sales_territories::Context {
+                db: &db,
+                tenant: &self.tenant,
+                actor: &self.actor,
+                request_id: &self.request_id,
+            },
+            record,
+            &key,
+            expected,
+        )
+        .await
+        .map_err(|_| ConnectError::unavailable("SALES_COVERAGE_WRITE_FAILED"))?
+        .map_err(|failure| failure.connect("UpdateSalesAccountAssignment", &self.request_id))?;
+        let receipt = self.coverage_receipt(&saved);
+        RpcResponse::ok(sale_wire::UpdateSalesAccountAssignmentResponse {
+            assignment: Some(Self::assignment_wire(saved.record)?).into(),
+            receipt: Some(receipt).into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn get_sales_account_assignment(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::GetSalesAccountAssignmentRequest>,
+    ) -> ServiceResult<sale_wire::GetSalesAccountAssignmentResponse> {
+        let input = req.to_owned_message();
+        let id = Self::id(&input.account_id)?;
+        let db = self.d1()?;
+        let kind = sales_territories::Kind::Assignment;
+        if accounts::load(&db, &self.tenant, &id)
+            .await
+            .map_err(|_| ConnectError::internal("Account read failed"))?
+            .is_none()
+        {
+            return Err(ConnectError::not_found("CUSTOMER_ACCOUNTS_NOT_FOUND"));
+        }
+        let record = sales_territories::get(&db, &self.tenant, kind, &id)
+            .await
+            .map_err(|_| ConnectError::internal("Sales coverage read failed"))?;
+        let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
+            None => None,
+            Some(key) => {
+                let row = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::AccountAssignment)
+                    .await
+                    .map_err(|_| ConnectError::unavailable("SALES_COVERAGE_RECEIPT_READ_FAILED"))?;
+                crud_commit_evidence(row, &id, &self.request_id, |state| {
+                    let record = kind.decode(state)?;
+                    Ok((record.id().to_owned(), record.version()))
+                })
+                .map_err(|_| ConnectError::unavailable("SALES_COVERAGE_RECEIPT_DECODE_FAILED"))?
+            }
+        };
+        RpcResponse::ok(sale_wire::GetSalesAccountAssignmentResponse {
+            assignment: record.map(Self::assignment_wire).transpose()?.into(),
+            confirmed_mutation: confirmed_mutation.into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
+    async fn list_sales_account_assignments(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, sale_wire::ListSalesAccountAssignmentsRequest>,
+    ) -> ServiceResult<sale_wire::ListSalesAccountAssignmentsResponse> {
+        let size = if req.page.page_size == 0 {
+            25
+        } else {
+            req.page.page_size
+        };
+        if size > 100 {
+            return Err(ConnectError::invalid_argument("page_size exceeds 100"));
+        }
+        if !req.page.page_token.is_empty() {
+            Self::id(&req.page.page_token)?;
+        }
+        let after = req.page.page_token.to_owned();
+        let include_archived = req.include_archived;
+        let input = req.to_owned_message();
+        let owner = Self::owner_scope(input.primary_owner_filter.as_option())?;
+        if let Some(id) = &input.territory_id {
+            Self::id(id)?;
+        }
+        let (items, next) = sales_territories::list(
+            &self.d1()?,
+            &self.tenant,
+            sales_territories::Kind::Assignment,
+            sales_territories::Filter {
+                after: &after,
+                limit: size as usize,
+                include_archived,
+                territory_id: input.territory_id.as_deref(),
+                primary_owner: owner.as_ref(),
+            },
+        )
+        .await
+        .map_err(|_| ConnectError::internal("Sales coverage list failed"))?;
+        RpcResponse::ok(sale_wire::ListSalesAccountAssignmentsResponse {
+            assignments: items
+                .into_iter()
+                .map(Self::assignment_wire)
+                .collect::<std::result::Result<Vec<_>, _>>()?,
+            page_info: Some(core_v2::PageInfo {
+                next_page_token: next.unwrap_or_default(),
+                ..Default::default()
+            })
+            .into(),
+            ..Default::default()
+        })
+    }
+
+    #[worker::send]
     async fn create_sales_view(
         &self,
         _ctx: RequestContext,
@@ -1156,5 +1471,129 @@ impl sale_wire::DealService for SalesV2Service {
             .into(),
             ..Default::default()
         })
+    }
+}
+
+impl SalesV2Service {
+    fn coverage_owner(
+        value: Option<&core_v2::ActorOrTeamOwner>,
+    ) -> std::result::Result<crm_sales::SalesOwnerScope, ConnectError> {
+        Self::owner_scope(value)?
+            .ok_or_else(|| ConnectError::invalid_argument("SALES_COVERAGE_OWNER_REQUIRED"))
+    }
+
+    fn territory_draft(
+        id: String,
+        cfg: &sale_wire::TerritoryConfiguration,
+    ) -> std::result::Result<sales_territories::Record, ConnectError> {
+        Ok(sales_territories::Record::Territory(crm_sales::SalesTerritory {
+            territory_id: id,
+            name: cfg.name.clone(),
+            parent_id: cfg.parent_id.clone(),
+            default_owner: Self::coverage_owner(cfg.default_owner.as_option())?,
+            archived: cfg.archived,
+            version: 1,
+        }))
+    }
+
+    fn assignment_draft(
+        id: String,
+        cfg: &sale_wire::SalesAccountAssignmentConfiguration,
+    ) -> std::result::Result<sales_territories::Record, ConnectError> {
+        use crm_sales::SalesOverlayRole as Domain;
+        use sale_wire::SalesOverlayRole as Wire;
+        let overlays = cfg
+            .overlays
+            .iter()
+            .map(|item| {
+                let role = match item.role {
+                    v if v == Wire::SALES_OVERLAY_ROLE_SPECIALIST => Domain::Specialist,
+                    v if v == Wire::SALES_OVERLAY_ROLE_ACCOUNT_SUPPORT => Domain::AccountSupport,
+                    v if v == Wire::SALES_OVERLAY_ROLE_EXECUTIVE_SPONSOR => Domain::ExecutiveSponsor,
+                    _ => return Err(ConnectError::invalid_argument("SALES_OVERLAY_ROLE_INVALID")),
+                };
+                Ok(crm_sales::SalesAccountOverlay {
+                    role,
+                    owner: Self::coverage_owner(item.owner.as_option())?,
+                })
+            })
+            .collect::<std::result::Result<Vec<_>, ConnectError>>()?;
+        Ok(sales_territories::Record::Assignment(
+            crm_sales::SalesAccountAssignment {
+                account_id: id,
+                territory_id: cfg.territory_id.clone(),
+                primary_owner: Self::coverage_owner(cfg.primary_owner.as_option())?,
+                overlays,
+                archived: cfg.archived,
+                version: 1,
+            },
+        ))
+    }
+
+    fn territory_wire(
+        record: sales_territories::Record,
+    ) -> std::result::Result<sale_wire::SalesTerritory, ConnectError> {
+        let sales_territories::Record::Territory(value) = record else {
+            return Err(ConnectError::internal("Sales coverage kind mismatch"));
+        };
+        Ok(sale_wire::SalesTerritory {
+            territory_id: value.territory_id,
+            version: value.version,
+            configuration: Some(sale_wire::TerritoryConfiguration {
+                name: value.name,
+                parent_id: value.parent_id,
+                default_owner: Some(Self::owner_wire(&value.default_owner)).into(),
+                archived: value.archived,
+                ..Default::default()
+            })
+            .into(),
+            ..Default::default()
+        })
+    }
+
+    fn assignment_wire(
+        record: sales_territories::Record,
+    ) -> std::result::Result<sale_wire::SalesAccountAssignment, ConnectError> {
+        use crm_sales::SalesOverlayRole as Domain;
+        use sale_wire::SalesOverlayRole as Wire;
+        let sales_territories::Record::Assignment(value) = record else {
+            return Err(ConnectError::internal("Sales coverage kind mismatch"));
+        };
+        Ok(sale_wire::SalesAccountAssignment {
+            account_id: value.account_id,
+            version: value.version,
+            configuration: Some(sale_wire::SalesAccountAssignmentConfiguration {
+                territory_id: value.territory_id,
+                primary_owner: Some(Self::owner_wire(&value.primary_owner)).into(),
+                overlays: value
+                    .overlays
+                    .into_iter()
+                    .map(|item| sale_wire::SalesAccountOverlay {
+                        owner: Some(Self::owner_wire(&item.owner)).into(),
+                        role: match item.role {
+                            Domain::Specialist => Wire::SALES_OVERLAY_ROLE_SPECIALIST,
+                            Domain::AccountSupport => Wire::SALES_OVERLAY_ROLE_ACCOUNT_SUPPORT,
+                            Domain::ExecutiveSponsor => Wire::SALES_OVERLAY_ROLE_EXECUTIVE_SPONSOR,
+                        }
+                        .into(),
+                        ..Default::default()
+                    })
+                    .collect(),
+                archived: value.archived,
+                ..Default::default()
+            })
+            .into(),
+            ..Default::default()
+        })
+    }
+
+    fn coverage_receipt(&self, saved: &sales_territories::Saved) -> core_v2::MutationReceipt {
+        core_v2::MutationReceipt {
+            request_id: self.request_id.clone(),
+            original_request_id: saved.original_request_id.clone(),
+            resource_version: saved.record.version(),
+            replayed: saved.replayed,
+            ..Default::default()
+        }
     }
 }

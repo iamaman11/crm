@@ -55,6 +55,8 @@ mod sales_deals;
 #[cfg(feature = "native")]
 mod sales_pipelines;
 #[cfg(feature = "native")]
+mod sales_territories;
+#[cfg(feature = "native")]
 mod sales_views;
 
 fn native_request_id() -> Result<String> {
@@ -789,6 +791,54 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     ),
     (
         "/crm.consents.v2.ConsentAuthorizationService/ListConsentAuthorizations",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/CreateTerritory",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/UpdateTerritory",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetTerritory",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListTerritories",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/CreateSalesAccountAssignment",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/UpdateSalesAccountAssignment",
+        RpcPolicy {
+            permission: RpcPermission::Write,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/GetSalesAccountAssignment",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.sales.v2.DealService/ListSalesAccountAssignments",
         RpcPolicy {
             permission: RpcPermission::Read,
         },

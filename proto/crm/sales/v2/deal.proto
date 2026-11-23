@@ -441,7 +441,157 @@ message GetPipelineMetricsResponse {
   SalesAnalysisPeriod analysis_period = 12;
 }
 
+// Sales coverage is independent of customer identity and Access roles.
+message TerritoryConfiguration {
+  string name = 1;
+  optional string parent_id = 2;
+  crm.core.v2.ActorOrTeamOwner default_owner = 3;
+  bool archived = 4;
+}
+
+message SalesTerritory {
+  string territory_id = 1;
+  TerritoryConfiguration configuration = 2;
+  int64 version = 3;
+}
+
+enum SalesOverlayRole {
+  SALES_OVERLAY_ROLE_UNSPECIFIED = 0;
+  SALES_OVERLAY_ROLE_SPECIALIST = 1;
+  SALES_OVERLAY_ROLE_ACCOUNT_SUPPORT = 2;
+  SALES_OVERLAY_ROLE_EXECUTIVE_SPONSOR = 3;
+}
+
+message SalesAccountOverlay {
+  SalesOverlayRole role = 1;
+  crm.core.v2.ActorOrTeamOwner owner = 2;
+}
+
+message SalesAccountAssignmentConfiguration {
+  optional string territory_id = 1;
+  crm.core.v2.ActorOrTeamOwner primary_owner = 2;
+  repeated SalesAccountOverlay overlays = 3;
+  bool archived = 4;
+}
+
+message SalesAccountAssignment {
+  string account_id = 1;
+  SalesAccountAssignmentConfiguration configuration = 2;
+  int64 version = 3;
+}
+
+message CreateTerritoryRequest {
+  string territory_id = 1;
+  TerritoryConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message CreateTerritoryResponse {
+  SalesTerritory territory = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message UpdateTerritoryRequest {
+  string territory_id = 1;
+  TerritoryConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message UpdateTerritoryResponse {
+  SalesTerritory territory = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetTerritoryRequest {
+  string territory_id = 1;
+  optional string receipt_idempotency_key = 2;
+}
+
+message GetTerritoryResponse {
+  SalesTerritory territory = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+
+message ListTerritoriesRequest {
+  crm.core.v2.PageRequest page = 1;
+  bool include_archived = 2;
+}
+
+message ListTerritoriesResponse {
+  repeated SalesTerritory territories = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+message CreateSalesAccountAssignmentRequest {
+  string account_id = 1;
+  SalesAccountAssignmentConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message CreateSalesAccountAssignmentResponse {
+  SalesAccountAssignment assignment = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message UpdateSalesAccountAssignmentRequest {
+  string account_id = 1;
+  SalesAccountAssignmentConfiguration configuration = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+
+message UpdateSalesAccountAssignmentResponse {
+  SalesAccountAssignment assignment = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetSalesAccountAssignmentRequest {
+  string account_id = 1;
+  optional string receipt_idempotency_key = 2;
+}
+
+message GetSalesAccountAssignmentResponse {
+  SalesAccountAssignment assignment = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+
+message ListSalesAccountAssignmentsRequest {
+  crm.core.v2.PageRequest page = 1;
+  bool include_archived = 2;
+  optional string territory_id = 3;
+  crm.core.v2.ActorOrTeamOwner primary_owner_filter = 4;
+}
+
+message ListSalesAccountAssignmentsResponse {
+  repeated SalesAccountAssignment assignments = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
 service DealService {
+  rpc CreateTerritory(CreateTerritoryRequest) returns (CreateTerritoryResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateTerritory(UpdateTerritoryRequest) returns (UpdateTerritoryResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetTerritory(GetTerritoryRequest) returns (GetTerritoryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListTerritories(ListTerritoriesRequest) returns (ListTerritoriesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CreateSalesAccountAssignment(CreateSalesAccountAssignmentRequest) returns (CreateSalesAccountAssignmentResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateSalesAccountAssignment(UpdateSalesAccountAssignmentRequest) returns (UpdateSalesAccountAssignmentResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc GetSalesAccountAssignment(GetSalesAccountAssignmentRequest) returns (GetSalesAccountAssignmentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListSalesAccountAssignments(ListSalesAccountAssignmentsRequest) returns (ListSalesAccountAssignmentsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   rpc CreateSalesView(CreateSalesViewRequest) returns (CreateSalesViewResponse) {
     option idempotency_level = IDEMPOTENT;
   }

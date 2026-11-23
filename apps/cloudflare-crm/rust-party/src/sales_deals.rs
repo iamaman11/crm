@@ -376,7 +376,11 @@ pub(super) async fn probe_receipt_read(
 
 // Owner selection validates against the single Access authority; the same
 // predicate is checked again in the original Deal write, at commit time.
-async fn eligible_owner(db: &D1Database, tenant: &str, owner: &SalesOwnerScope) -> Result<bool> {
+pub(super) async fn eligible_owner(
+    db: &D1Database,
+    tenant: &str,
+    owner: &SalesOwnerScope,
+) -> Result<bool> {
     match owner {
         SalesOwnerScope::Actor(email) => {
             if super::access_members::email(email).ok().as_deref() != Some(email.as_str()) {
@@ -387,7 +391,7 @@ async fn eligible_owner(db: &D1Database, tenant: &str, owner: &SalesOwnerScope) 
         SalesOwnerScope::Team(id) => super::access_teams::eligible(db, tenant, id).await,
     }
 }
-fn owner_guard(owner: Option<&SalesOwnerScope>) -> String {
+pub(super) fn owner_guard(owner: Option<&SalesOwnerScope>) -> String {
     match owner {
         None => String::new(),
         Some(SalesOwnerScope::Actor(_)) => {
@@ -397,7 +401,11 @@ fn owner_guard(owner: Option<&SalesOwnerScope>) -> String {
         Some(SalesOwnerScope::Team(_)) => format!(" AND {}", super::access_teams::ELIGIBLE),
     }
 }
-fn owner_parameters(values: &mut Vec<JsValue>, tenant: &str, owner: Option<&SalesOwnerScope>) {
+pub(super) fn owner_parameters(
+    values: &mut Vec<JsValue>,
+    tenant: &str,
+    owner: Option<&SalesOwnerScope>,
+) {
     if let Some(scope) = owner {
         let id = match scope {
             SalesOwnerScope::Actor(id) | SalesOwnerScope::Team(id) => id,

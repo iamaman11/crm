@@ -2872,6 +2872,43 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      assert.deepEqual(await sql("SELECT version,json_extract(state,'$.owner.actor_id') AS owner,json_extract(state,'$.status') AS status FROM crm_sales_deal_records WHERE tenant=? AND id=?",tenantA,ownedDealId),
        [{version:5,owner:"native-viewer@example.test",status:"open"}]);
      checkpoint("SK-07.C4 archived owner blocked, atomic reopen with replacement and D1 reload");
+
+     // SK-07.D1: administration and customer card use the same Sales owner.
+     await navigate("team","Команда и распределение работы");
+     const coverage=page.getByRole("region",{name:"Территории продаж",exact:true});
+     const territoryName="Browser territory "+runId;
+     await coverage.getByRole("button",{name:"Создать территорию",exact:true}).click();
+     await coverage.getByLabel("Название территории",{exact:true}).fill(territoryName);
+     await coverage.getByLabel("Ответственный территории",{exact:true}).selectOption("actor:native-a@example.test");
+     await mutation(coverage.getByRole("button",{name:"Сохранить территорию",exact:true}),"CreateTerritory");
+     const territoryId=await firstId("crm_sales_territory_records","name",territoryName);
+     await coverage.getByRole("row").filter({hasText:territoryName}).waitFor();
+     await navigate("accounts/"+encodeURIComponent(accountId),"Карточка клиента");
+     const responsibility=page.getByRole("region",{name:"Коммерческая ответственность клиента",exact:true});
+     await responsibility.getByRole("button",{name:"Настроить ответственность",exact:true}).click();
+     await responsibility.getByLabel("Территория клиента",{exact:true}).selectOption(territoryId);
+     await responsibility.getByLabel("Владелец клиентского портфеля",{exact:true}).selectOption("actor:native-a@example.test");
+     await responsibility.getByRole("button",{name:"Добавить участника портфеля",exact:true}).click();
+     await responsibility.getByLabel("Ответственный участник 1",{exact:true}).selectOption("actor:native-viewer@example.test");
+     await mutation(responsibility.getByRole("button",{name:"Сохранить ответственность",exact:true}),"CreateSalesAccountAssignment");
+     await reloadDocument();
+     await responsibility.getByText("Территория: "+territoryName,{exact:true}).waitFor();
+     await responsibility.getByText("Специалист: native-viewer@example.test",{exact:true}).waitFor();
+     assert.equal((await sql("SELECT json_extract(state,'$.territory_id') AS territory FROM crm_sales_account_assignment_records WHERE tenant=? AND id=?",tenantA,accountId))[0].territory,territoryId);
+     await navigate("team","Команда и распределение работы");
+     await coverage.getByRole("row").filter({hasText:territoryName}).getByRole("button",{name:"Клиенты территории",exact:true}).click();
+     await coverage.getByRole("link",{name:"Browser Account "+runId,exact:true}).click();
+     await responsibility.getByText("Территория: "+territoryName,{exact:true}).waitFor();
+     await responsibility.getByRole("button",{name:"Настроить ответственность",exact:true}).click();
+     await responsibility.getByLabel("Архивное назначение",{exact:true}).check();
+     await mutation(responsibility.getByRole("button",{name:"Сохранить ответственность",exact:true}),"UpdateSalesAccountAssignment");
+     await navigate("team","Команда и распределение работы");
+     await coverage.getByRole("row").filter({hasText:territoryName}).getByRole("button",{name:"Изменить территорию",exact:true}).click();
+     await coverage.getByLabel("Архивная территория",{exact:true}).check();
+     await mutation(coverage.getByRole("button",{name:"Сохранить территорию",exact:true}),"UpdateTerritory");
+     await coverage.getByRole("row").filter({hasText:territoryName}).getByText("Архив",{exact:true}).waitFor();
+     checkpoint("SK-07.D1 territory and account responsibility UI, overlay, drill-down, reload and archive");
+
    }
 
    await page.getByLabel("Тема",{exact:true}).selectOption("dark");

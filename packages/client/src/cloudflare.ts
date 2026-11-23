@@ -28,6 +28,8 @@ export type { Member, Team } from "../gen/crm/access/v2/member_pb";
 export type { Interaction } from "../gen/crm/activities/v2/interaction_pb";
 export type { Deal } from "../gen/crm/sales/v2/deal_pb";
 export type { DealEvent } from "../gen/crm/sales/v2/deal_pb";
+export type { SalesTerritory, SalesAccountAssignment } from "../gen/crm/sales/v2/deal_pb";
+export { SalesOverlayRole } from "../gen/crm/sales/v2/deal_pb";
 export type { SalesPipeline, SalesDealView } from "../gen/crm/sales/v2/deal_pb";
 export type { AccountOverview } from "../gen/crm/customer_360/v2/customer_360_pb";
 export type { PrivacyCase } from "../gen/crm/customer_privacy/v2/case_pb";

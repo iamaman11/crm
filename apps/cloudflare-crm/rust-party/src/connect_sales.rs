@@ -4,7 +4,7 @@
 use super::{
     access, access_members, access_teams, accounts, activity_tasks, consents, contact_points,
     data_quality, identity_resolution, parties, party_relationships, sales_deals, sales_pipelines,
-    sales_views,
+    sales_territories, sales_views,
 };
 use axum::Router;
 use buffa_types::google::protobuf::Timestamp;
@@ -152,6 +152,8 @@ enum CrudReceiptOwner {
     Consent,
     Pipeline,
     SalesView,
+    Territory,
+    AccountAssignment,
     Team,
 }
 impl CrudReceiptOwner {
@@ -195,6 +197,14 @@ impl CrudReceiptOwner {
             ),
             Self::Team => concat!(
                 "SELECT state,original_request_id FROM crm_team_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
+            Self::Territory => concat!(
+                "SELECT state,original_request_id FROM crm_sales_territory_receipts",
+                " WHERE tenant=? AND key=?"
+            ),
+            Self::AccountAssignment => concat!(
+                "SELECT state,original_request_id FROM crm_sales_account_assignment_receipts",
                 " WHERE tenant=? AND key=?"
             ),
             Self::SalesView => concat!(

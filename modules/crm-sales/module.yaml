@@ -134,6 +134,46 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.sales.v2.DealService.ListSalesViews
+    - id: sales.territory.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CreateTerritory
+    - id: sales.territory.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.UpdateTerritory
+    - id: sales.territory.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetTerritory
+    - id: sales.territory.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListTerritories
+    - id: sales.account_assignment.create
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.CreateSalesAccountAssignment
+    - id: sales.account_assignment.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.UpdateSalesAccountAssignment
+    - id: sales.account_assignment.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.GetSalesAccountAssignment
+    - id: sales.account_assignment.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.sales.v2.DealService.ListSalesAccountAssignments
   events:
     - id: sales.deal.created
       version: 1.0.0
@@ -154,6 +194,8 @@ provides:
     - sales.lead
     - sales.deal
     - sales.quote
+    - sales.territory
+    - sales.account_assignment
   ui_extensions:
     - id: sales.pipeline.navigation
       type: navigation.item
@@ -173,6 +215,8 @@ storage:
     - sales.lead
     - sales.deal
     - sales.quote
+    - sales.territory
+    - sales.account_assignment
   private_state_namespaces:
     - crm.sales
 security:
@@ -194,3 +238,5 @@ lifecycle:
     - sales.lead
     - sales.deal
     - sales.quote
+    - sales.territory
+    - sales.account_assignment

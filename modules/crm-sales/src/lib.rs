@@ -5,11 +5,13 @@ pub const MODULE_ID: &str = "crm.sales";
 pub mod domain;
 pub mod persistence;
 pub mod pipeline;
+pub mod territories;
 pub mod views;
 
 pub use domain::*;
 pub use persistence::*;
 pub use pipeline::*;
+pub use territories::*;
 pub use views::*;
 
 use crm_module_sdk::{Clock, ModuleExecutionContext, SdkError};

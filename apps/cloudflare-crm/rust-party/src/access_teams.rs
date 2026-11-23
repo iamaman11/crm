@@ -126,8 +126,9 @@ pub(super) const MEMBER_ELIGIBLE: &str = "EXISTS (SELECT 1 FROM crm_access_teams
 // Only trusted SQL expressions from the two Access mutation statements are
 // passed here. Closed work never prevents retaining historical ownership.
 pub(super) fn open_work(tenant: &str, team: &str) -> String {
+    let coverage = super::sales_territories::owner_in_use(tenant, team, true);
     format!(
-        "(EXISTS (SELECT 1 FROM crm_activity_task_records WHERE tenant={tenant} AND json_extract(state,'$.owner.team_id')={team} AND json_extract(state,'$.status')='open') OR EXISTS (SELECT 1 FROM crm_sales_deal_records WHERE tenant={tenant} AND json_extract(state,'$.owner.team_id')={team} AND json_extract(state,'$.status')='open'))"
+        "(EXISTS (SELECT 1 FROM crm_activity_task_records WHERE tenant={tenant} AND json_extract(state,'$.owner.team_id')={team} AND json_extract(state,'$.status')='open') OR EXISTS (SELECT 1 FROM crm_sales_deal_records WHERE tenant={tenant} AND json_extract(state,'$.owner.team_id')={team} AND json_extract(state,'$.status')='open') OR {coverage})"
     )
 }
 pub(super) async fn eligible(db: &D1Database, tenant: &str, id: &str) -> Result<bool> {

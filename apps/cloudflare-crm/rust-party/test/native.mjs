@@ -5477,6 +5477,101 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
      last_member_guard:true,claim_deactivation_race:true,closed_owner_retained:true,typed_reopen_reassign:true,
      reopen_archive_race:true,replay:true,one_event_receipt_audit:true}));
  }
+
+ {
+   // SK-07.D1: signed generated RPCs against the original Sales owners.
+   const suffix=randomUUID(),root="territory-root-"+suffix,child="territory-child-"+suffix;
+   const email="coverage-"+suffix+"@example.test";
+   const human={owner:{case:"assigneeIdentity",value:email}};
+   const primary={owner:{case:"assigneeIdentity",value:"native-a@example.test"}};
+   const pre=(label,version)=>({idempotencyKey:"coverage-"+label+"-"+suffix,...(version===undefined?{}:{expectedVersion:version})});
+   assert.equal((await memberV2("ProvisionMember",admin,{email,role:1,precondition:pre("member")})).status,200);
+   const configuration={name:"Coverage root "+suffix,defaultOwner:primary};
+   const rootCreate={territoryId:root,configuration,precondition:pre("root")};
+   const created=await salesV2("CreateTerritory",admin,rootCreate);
+   assert.equal(created.status,200,describeProtobuf(created.body));
+   assert.equal(created.body.territory?.version,1n);
+   assert.equal((await salesV2("CreateTerritory",admin,rootCreate)).body.receipt?.replayed,true);
+   const childConfig={name:"Coverage child "+suffix,parentId:root,defaultOwner:primary};
+   assert.equal((await salesV2("CreateTerritory",admin,{territoryId:child,configuration:childConfig,precondition:pre("child")})).status,200);
+   const read=await salesV2("GetTerritory",viewer,{territoryId:root,receiptIdempotencyKey:rootCreate.precondition.idempotencyKey});
+   assert.equal(read.status,200);
+   assert.deepEqual(read.body.territory,created.body.territory);
+   assert.equal(read.body.confirmedMutation?.resourceVersion,1n);
+   assert.equal((await salesV2("GetTerritory",tenantB,{territoryId:root})).status,404);
+   assert.equal((await salesV2("ListTerritories",tenantB,{})).body.territories.length,0);
+   assert.equal((await salesV2("ListTerritories",viewer,{page:{pageSize:1}})).body.territories.length,1);
+   assert.equal((await salesV2("UpdateTerritory",admin,{territoryId:root,
+     configuration:{...configuration,parentId:child},precondition:pre("cycle",1n)})).status,409);
+   assert.equal((await salesV2("UpdateTerritory",admin,{territoryId:root,
+     configuration:{...configuration,archived:true},precondition:pre("blocked-parent",1n)})).status,409);
+   const assignmentConfig={territoryId:child,primaryOwner:human,overlays:[{role:1,owner:primary}]};
+   const assignmentInput={accountId,configuration:assignmentConfig,precondition:pre("assignment")};
+   assert.equal((await salesV2("GetSalesAccountAssignment",viewer,{accountId})).body.assignment,undefined);
+   const assignment=await salesV2("CreateSalesAccountAssignment",admin,assignmentInput);
+   assert.equal(assignment.status,200,describeProtobuf(assignment.body));
+   assert.equal(assignment.body.assignment?.version,1n);
+   assert.equal((await salesV2("CreateSalesAccountAssignment",admin,assignmentInput)).body.receipt?.replayed,true);
+   const aRead=await salesV2("GetSalesAccountAssignment",viewer,{accountId,receiptIdempotencyKey:assignmentInput.precondition.idempotencyKey});
+   assert.deepEqual(aRead.body.assignment,assignment.body.assignment);
+   assert.equal(aRead.body.confirmedMutation?.resourceVersion,1n);
+   assert.equal((await salesV2("GetSalesAccountAssignment",tenantB,{accountId})).status,404);
+   assert.equal((await salesV2("ListSalesAccountAssignments",tenantB,{})).body.assignments.length,0);
+   const filtered=await salesV2("ListSalesAccountAssignments",viewer,{territoryId:child,primaryOwnerFilter:human});
+   assert.deepEqual(filtered.body.assignments.map(a=>a.accountId),[accountId]);
+   assert.equal((await salesV2("UpdateTerritory",admin,{territoryId:child,
+     configuration:{...childConfig,archived:true},precondition:pre("blocked-child",1n)})).status,409);
+   assert.equal((await memberV2("UpdateMember",admin,{email,active:false,precondition:pre("blocked-member",1n)})).status,409);
+   assert.equal((await salesV2("UpdateSalesAccountAssignment",admin,{accountId,
+     configuration:{...assignmentConfig,overlays:[{role:1,owner:human}]},precondition:pre("duplicate",1n)})).status,400);
+   const before=await sql("SELECT state,version FROM crm_sales_account_assignment_records WHERE tenant=? AND id=?","tenant-a",accountId);
+   const count=(await sql("SELECT COUNT(*) n FROM crm_sales_account_assignment_receipts WHERE tenant=?","tenant-a"))[0].n;
+   await sql("CREATE TRIGGER fixture_fail_coverage_audit BEFORE INSERT ON crm_audit WHEN NEW.action='sales.account_assignment.update' BEGIN SELECT RAISE(ABORT,'fixture coverage audit rollback'); END;");
+   try{
+     const fail=await salesV2("UpdateSalesAccountAssignment",admin,{accountId,configuration:{...assignmentConfig,archived:true},precondition:pre("fault",1n)});
+     assertUnconfirmed(fail,"SALES_COVERAGE_WRITE_UNCONFIRMED");
+     assert.deepEqual(await sql("SELECT state,version FROM crm_sales_account_assignment_records WHERE tenant=? AND id=?","tenant-a",accountId),before);
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_sales_account_assignment_receipts WHERE tenant=?","tenant-a"))[0].n,count);
+   }finally{await sql("DROP TRIGGER fixture_fail_coverage_audit");}
+   const archived=await salesV2("UpdateSalesAccountAssignment",admin,{accountId,
+     configuration:{...assignmentConfig,archived:true},precondition:pre("archive-assignment",1n)});
+   assert.equal(archived.status,200,describeProtobuf(archived.body));
+   assert.equal(archived.body.assignment?.version,2n);
+   assert.equal((await salesV2("UpdateSalesAccountAssignment",admin,{accountId,
+     configuration:assignmentConfig,precondition:pre("stale",1n)})).status,409);
+   assert.equal((await memberV2("UpdateMember",admin,{email,active:false,precondition:pre("deactivate",1n)})).status,200);
+   assert.equal((await salesV2("UpdateSalesAccountAssignment",admin,{accountId,
+     configuration:assignmentConfig,precondition:pre("inactive-owner",2n)})).status,409);
+   assert.equal((await salesV2("UpdateTerritory",admin,{territoryId:child,
+     configuration:{...childConfig,archived:true},precondition:pre("archive-child",1n)})).status,200);
+   assert.equal((await salesV2("UpdateTerritory",admin,{territoryId:root,
+     configuration:{...configuration,archived:true},precondition:pre("archive-root",1n)})).status,200);
+   assert.equal((await salesV2("ListTerritories",viewer,{})).body.territories.length,0);
+   const archivedTerritories=(await salesV2("ListTerritories",viewer,{includeArchived:true})).body.territories;
+   assert.deepEqual(archivedTerritories.filter(t=>[root,child].includes(t.territoryId)).map(t=>t.configuration.archived),[true,true]);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id IN (?,?) AND action LIKE 'sales.territory.%'","tenant-a",root,child))[0].n,4);
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action LIKE 'sales.account_assignment.%'","tenant-a",accountId))[0].n,2);
+   const raceTeam="coverage-team-"+suffix,raceTerritory="coverage-race-"+suffix;
+   const teamOwner={owner:{case:"teamId",value:raceTeam}};
+   assert.equal((await memberV2("CreateTeam",admin,{teamId:raceTeam,name:"Coverage race "+suffix,
+     roster:{memberEmails:["native-a@example.test"]},precondition:pre("race-team")})).status,200);
+   const raceConfig={name:"Coverage race "+suffix,defaultOwner:teamOwner};
+   const [assigned,teamArchived]=await Promise.all([
+     salesV2("CreateTerritory",admin,{territoryId:raceTerritory,configuration:raceConfig,precondition:pre("race-territory")}),
+     memberV2("UpdateTeam",admin,{teamId:raceTeam,active:false,precondition:pre("race-archive",1n)})
+   ]);
+   assert.equal(Number(assigned.status===200)+Number(teamArchived.status===200),1);
+   if(assigned.status===200){
+     assert.equal(teamArchived.status,409);
+     assert.equal((await salesV2("UpdateTerritory",admin,{territoryId:raceTerritory,
+       configuration:{...raceConfig,archived:true},precondition:pre("race-cleanup",1n)})).status,200);
+     assert.equal((await memberV2("UpdateTeam",admin,{teamId:raceTeam,active:false,precondition:pre("race-archive",1n)})).status,200);
+   }else{
+     assert.equal(assigned.status,409);
+   }
+   console.log(JSON.stringify({event:"crm.native-sk07d1-coverage",result:"PASS",
+     typed_ownership:true,hierarchy:true,tenant_ab:true,archive_guard:true,overlay:true,cas_replay:true,atomic_audit_rollback:true}));
+ }
  assert.deepEqual([...writesWithReceipt].sort(),[...mutationPaths].sort(),
    "every write method must exercise a committed response with a typed receipt");
  assert.deepEqual([...successfulCalls].sort(),[...rpc.registered_methods].sort(),

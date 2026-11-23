@@ -293,8 +293,9 @@ pub(super) async fn update(
     // Deactivating a human cannot strand open shared work in any of their
     // teams. The roster and other eligible members are checked in this CAS.
     let work = super::access_teams::open_work("tm.tenant", "tm.id");
+    let coverage = super::sales_territories::owner_in_use("?8", "?7", false);
     let sql = format!(
-        "UPDATE crm_users SET role=COALESCE(?,role),active=COALESCE(?,active),version=version+1,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE email=? AND tenant_id=? AND version=? AND email<>? AND (role<>'admin' OR (COALESCE(?,role)='admin' AND COALESCE(?,active)=1) OR (SELECT COUNT(*) FROM crm_users WHERE tenant_id=? AND active=1 AND role='admin')>1) AND (active=0 OR COALESCE(?14,active)=1 OR NOT EXISTS (SELECT 1 FROM crm_access_teams AS tm WHERE tm.tenant=?8 AND json_extract(tm.state,'$.active')=1 AND EXISTS (SELECT 1 FROM json_each(tm.state,'$.member_emails') AS target WHERE target.value=?7) AND NOT EXISTS (SELECT 1 FROM json_each(tm.state,'$.member_emails') AS roster JOIN crm_users AS u ON u.tenant_id=tm.tenant AND u.email=roster.value AND u.active=1 WHERE u.email<>?7 AND u.email NOT LIKE 'service:%') AND {work}))"
+        "UPDATE crm_users SET role=COALESCE(?,role),active=COALESCE(?,active),version=version+1,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE email=? AND tenant_id=? AND version=? AND email<>? AND (role<>'admin' OR (COALESCE(?,role)='admin' AND COALESCE(?,active)=1) OR (SELECT COUNT(*) FROM crm_users WHERE tenant_id=? AND active=1 AND role='admin')>1) AND (active=0 OR COALESCE(?14,active)=1 OR NOT EXISTS (SELECT 1 FROM crm_access_teams AS tm WHERE tm.tenant=?8 AND json_extract(tm.state,'$.active')=1 AND EXISTS (SELECT 1 FROM json_each(tm.state,'$.member_emails') AS target WHERE target.value=?7) AND NOT EXISTS (SELECT 1 FROM json_each(tm.state,'$.member_emails') AS roster JOIN crm_users AS u ON u.tenant_id=tm.tenant AND u.email=roster.value AND u.active=1 WHERE u.email<>?7 AND u.email NOT LIKE 'service:%') AND {work})) AND (active=0 OR COALESCE(?14,active)=1 OR NOT {coverage})"
     );
     let write = bind(
         ctx.db,
