@@ -350,16 +350,9 @@ impl AccountV2Service {
             request_id: self.request_id.clone(),
             resource_version: outcome.account.version(),
             replayed: outcome.replayed,
+            original_request_id: outcome.original_request_id.clone(),
             ..Default::default()
         })
-    }
-    fn failed(f: accounts::MutationFailure) -> ConnectError {
-        match f.status {
-            404 => ConnectError::not_found(f.code),
-            409 => ConnectError::aborted(f.code),
-            422 => ConnectError::invalid_argument(f.code),
-            _ => ConnectError::internal(f.code),
-        }
     }
 }
 
@@ -464,17 +457,9 @@ impl ContactPointV2Service {
             request_id: self.request_id.clone(),
             resource_version: outcome.contact_point.version(),
             replayed: outcome.replayed,
+            original_request_id: outcome.original_request_id.clone(),
             ..Default::default()
         })
-    }
-    fn failed(f: contact_points::MutationFailure) -> ConnectError {
-        match f.status {
-            403 => ConnectError::permission_denied(f.code),
-            404 => ConnectError::not_found(f.code),
-            409 => ConnectError::aborted(f.code),
-            422 => ConnectError::invalid_argument(f.code),
-            _ => ConnectError::internal(f.code),
-        }
     }
 }
 

@@ -25,6 +25,15 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
 const cwd=dirname(dirname(fileURLToPath(import.meta.url)));
 let base,fixtureDb;
 const successfulCalls=new Set();
+function assertUnconfirmed(result, domainCode){
+ assert.equal(result.status,503);
+ assert.equal(result.body.code,"unavailable");
+ const detail=decodeDomainErrorDetail(result.body.details.find(d=>d.type==="crm.core.v2.DomainErrorDetail"));
+ assert.equal(detail.commitOutcome,2);
+ assert.equal(detail.domainCode,domainCode);
+ assert.equal(detail.requestId,result.headers.get("x-request-id"));
+}
+
 // Wrangler owns the Worker, local D1 migrations and fixture binding. Every
 // live fixture read/write and the actual Rust Worker use that same D1 binding.
 const statement=(query,...params)=>{
@@ -424,6 +433,7 @@ try{
  const accountReplay=await accountV2("CreateAccount",knownService,accountInput);
  assert.equal(accountReplay.status,200,describeProtobuf(accountReplay.body));
  assert.equal(accountReplay.body.receipt?.replayed,true);
+ assert.equal(accountReplay.body.receipt.originalRequestId,accountCreated.headers.get("x-request-id"));
  assert.equal((await accountV2("CreateAccount",admin,{...accountInput,
    name:"different idempotent body"})).status,409);
  assert.equal((await accountV2("GetAccount",tenantB,{accountId})).status,404);
@@ -446,6 +456,7 @@ try{
  const accountReupdate=await accountV2("UpdateAccount",admin,accountUpdate);
  assert.equal(accountReupdate.status,200,describeProtobuf(accountReupdate.body));
  assert.equal(accountReupdate.body.receipt?.replayed,true);
+ assert.equal(accountReupdate.body.receipt.originalRequestId,accountUpdated.headers.get("x-request-id"));
  assert.equal((await accountV2("UpdateAccount",admin,{...accountUpdate,
    precondition:{expectedVersion:1n,
      idempotencyKey:"candidate-v2-account-stale"}})).status,409);
@@ -484,16 +495,16 @@ try{
  await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
  assert.deepEqual((await accountSnapshot()),beforeAccountDenials,
    "Denied/stale/invalid Account commands cannot change state, receipts or audit");
+ const accountRetryInput={accountId:"account-audit-rollback",name:"Must roll back",primaryPartyId:id,
+   precondition:{idempotencyKey:"account-audit-failed-create"}};
  (await sql("CREATE TRIGGER fixture_fail_account_audit BEFORE INSERT ON crm_audit "+
    "WHEN NEW.subject_id IN ('account-audit-rollback','"+accountId+"') "+
    "BEGIN SELECT RAISE(ABORT,'fixture account audit failure'); END;"));
  try{
-   assert.equal((await accountV2("CreateAccount",admin,{
-     accountId:"account-audit-rollback",name:"Must roll back",primaryPartyId:id,
-     precondition:{idempotencyKey:"account-audit-failed-create"}})).status,409);
-   assert.equal((await accountV2("UpdateAccount",admin,{
+   assertUnconfirmed(await accountV2("CreateAccount",admin,accountRetryInput),"CUSTOMER_ACCOUNTS_WRITE_UNCONFIRMED");
+   assertUnconfirmed(await accountV2("UpdateAccount",admin,{
      ...accountUpdate,name:"Must roll back",
-     precondition:{expectedVersion:2n,idempotencyKey:"account-audit-failed-update"}})).status,409);
+     precondition:{expectedVersion:2n,idempotencyKey:"account-audit-failed-update"}}),"CUSTOMER_ACCOUNTS_WRITE_UNCONFIRMED");
    assert.deepEqual((await accountSnapshot()),beforeAccountDenials,
      "Account audit INSERT failure rolls back state and receipt");
  }finally{await sql("DROP TRIGGER fixture_fail_account_audit");}
@@ -594,6 +605,7 @@ try{
  const contactReplay=await contactV2("CreateContactPoint",knownService,contactInput);
  assert.equal(contactReplay.status,200,describeProtobuf(contactReplay.body));
  assert.equal(contactReplay.body.receipt?.replayed,true);
+ assert.equal(contactReplay.body.receipt.originalRequestId,contactCreated.headers.get("x-request-id"));
  assert.equal((await contactV2("CreateContactPoint",admin,{...contactInput,
    value:"different@example.com"})).status,409);
  assert.equal((await contactV2("GetContactPoint",tenantB,{contactPointId:contactId})).status,404);
@@ -628,6 +640,7 @@ try{
  const contactReupdate=await contactV2("UpdateContactPoint",admin,contactUpdate);
  assert.equal(contactReupdate.status,200,describeProtobuf(contactReupdate.body));
  assert.equal(contactReupdate.body.receipt?.replayed,true);
+ assert.equal(contactReupdate.body.receipt.originalRequestId,contactUpdated.headers.get("x-request-id"));
  assert.equal((await contactV2("UpdateContactPoint",admin,{...contactUpdate,
    precondition:{expectedVersion:1n,
      idempotencyKey:"candidate-v2-contact-stale"}})).status,409);
@@ -662,17 +675,16 @@ try{
  await sql("UPDATE crm_users SET role='admin' WHERE email='service:ci-fixture.access'");
  assert.deepEqual((await contactSnapshot()),beforeContactDenials,
    "Denied, stale and validation errors cannot change contact state, receipts or audit");
+ const contactRetryInput={contactPointId:"contact-audit-rollback",partyId:id,kind:1,value:"rollback@example.org",preferred:false,
+   precondition:{idempotencyKey:"contact-audit-failed-create"}};
  (await sql("CREATE TRIGGER fixture_fail_contact_audit BEFORE INSERT ON crm_audit "+
    "WHEN NEW.subject_id IN ('contact-audit-rollback','"+contactId+"') "+
    "BEGIN SELECT RAISE(ABORT,'fixture contact audit failure'); END;"));
  try{
-   assert.equal((await contactV2("CreateContactPoint",admin,{
-     contactPointId:"contact-audit-rollback",partyId:id,kind:1,
-     value:"rollback@example.org",preferred:false,
-     precondition:{idempotencyKey:"contact-audit-failed-create"}})).status,409);
-   assert.equal((await contactV2("UpdateContactPoint",admin,{
+   assertUnconfirmed(await contactV2("CreateContactPoint",admin,contactRetryInput),"CONTACT_POINTS_WRITE_UNCONFIRMED");
+   assertUnconfirmed(await contactV2("UpdateContactPoint",admin,{
      ...contactUpdate,value:"rollback@example.org",
-     precondition:{expectedVersion:2n,idempotencyKey:"contact-audit-failed-update"}})).status,409);
+     precondition:{expectedVersion:2n,idempotencyKey:"contact-audit-failed-update"}}),"CONTACT_POINTS_WRITE_UNCONFIRMED");
    assert.deepEqual((await contactSnapshot()),beforeContactDenials,
      "Contact audit SQL failure must roll back both state and receipt");
  }finally{await sql("DROP TRIGGER fixture_fail_contact_audit");}
@@ -1643,6 +1655,11 @@ console.log(JSON.stringify({event:"crm.native-g3-consents-v2",result:"PASS",
  const r3Verify={contactPointId:r3Contact,
    precondition:{expectedVersion:1n,idempotencyKey:"r3-verify-"+r3Contact}};
  assert.equal((await contactV2("VerifyOwnEmailContactPoint",viewer,r3Verify)).status,403);
+ await sql("CREATE TRIGGER fixture_fail_verify_audit BEFORE INSERT ON crm_audit "+
+   "WHEN NEW.action='contact_points.verify' BEGIN SELECT RAISE(ABORT,'verification audit unavailable'); END;");
+ try{
+   assertUnconfirmed(await contactV2("VerifyOwnEmailContactPoint",admin,r3Verify),"CONTACT_POINTS_WRITE_UNCONFIRMED");
+ }finally{await sql("DROP TRIGGER fixture_fail_verify_audit");}
  const verified=await contactV2("VerifyOwnEmailContactPoint",admin,r3Verify);
  assert.equal(verified.status,200,describeProtobuf(verified.body));
  assert.equal(verified.body.contactPoint?.verified,true);
@@ -4665,6 +4682,24 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  // Write evidence only after every scenario assertion above has completed.
  // A successful call is transport exercise coverage, not proof of all possible
  // business states. Domain/CAS/tenant assertions remain independently explicit.
+ // Retry the exact previously unconfirmed intents concurrently. Both callers must
+ // see one committed version with the same original request ID and audit row.
+ for(const [call,method,input,subject] of [
+   [accountV2,"CreateAccount",accountRetryInput,accountRetryInput.accountId],
+   [contactV2,"CreateContactPoint",contactRetryInput,contactRetryInput.contactPointId],
+ ]){
+   const replies=await Promise.all([call(method,admin,input),call(method,admin,input)]);
+   for(const reply of replies)assert.equal(reply.status,200,describeProtobuf(reply.body));
+   const receipts=replies.map(reply=>reply.body.receipt);
+   assert.equal(receipts.filter(receipt=>!receipt.replayed).length,1);
+   const original=receipts.find(receipt=>!receipt.replayed).requestId;
+   for(const receipt of receipts){
+     assert.equal(receipt.originalRequestId,original);
+     assert.equal(receipt.resourceVersion,1n);
+   }
+   assert.deepEqual(await sql("SELECT request_id FROM crm_audit WHERE tenant_id=? AND subject_id=?",
+     "tenant-a",subject),[{request_id:original}]);
+ }
  assert.deepEqual([...successfulCalls].sort(),[...rpc.registered_methods].sort(),
    "every compiled RPC must have a successful executed binary call");
  writeFileSync(process.env.CRM_RPC_RUNTIME_PROOF,JSON.stringify({

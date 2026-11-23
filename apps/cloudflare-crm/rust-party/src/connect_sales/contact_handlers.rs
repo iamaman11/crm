@@ -1,6 +1,7 @@
 //! Generated Connect trait for the existing ContactPointV2Service Rust domain owner.
 //! Access, tenant, and the single native router are defined by the parent.
 use super::*;
+use crate::diagnostics;
 
 impl contact_wire::ContactPointService for ContactPointV2Service {
     #[worker::send]
@@ -48,8 +49,9 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::internal("ContactPoint D1 create failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| {
+            diagnostics::mutation_error("CreateContactPoint", &self.request_id, failure)
+        })?;
         RpcResponse::ok(contact_wire::CreateContactPointResponse {
             contact_point: Some(Self::convert(&saved.contact_point)?).into(),
             receipt: Some(self.receipt(&saved)?).into(),
@@ -95,8 +97,9 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::internal("ContactPoint D1 update failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| {
+            diagnostics::mutation_error("UpdateContactPoint", &self.request_id, failure)
+        })?;
         RpcResponse::ok(contact_wire::UpdateContactPointResponse {
             contact_point: Some(Self::convert(&saved.contact_point)?).into(),
             receipt: Some(self.receipt(&saved)?).into(),
@@ -121,8 +124,9 @@ impl contact_wire::ContactPointService for ContactPointV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::internal("Original Contact verification failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| {
+            diagnostics::mutation_error("VerifyOwnEmailContactPoint", &self.request_id, failure)
+        })?;
         RpcResponse::ok(contact_wire::VerifyOwnEmailContactPointResponse {
             contact_point: Some(Self::convert(&saved.contact_point)?).into(),
             receipt: Some(self.receipt(&saved)?).into(),

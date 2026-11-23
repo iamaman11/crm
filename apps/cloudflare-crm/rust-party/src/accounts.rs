@@ -1,10 +1,13 @@
 //! Native D1 storage/HTTP boundary for the ORIGINAL crm-customer-accounts owner.
 //! Account is a commercial entity associated with a Party, never a second Party.
 //! The domain crate alone decides normalization, versions and valid transitions.
+use super::d1_write::{self, Confirmation, Receipt, WriteResult, rejected};
+use super::diagnostics::{MutationFailure, ReceiptUncertainty};
 use crm_customer_accounts::{
     Account, AccountId, AccountPartyAssociation, AccountPartyRole, AccountStatus, CreateAccount,
     PartyReference, UpdateAccount, decode_account_state, encode_account_state,
 };
+use crm_module_sdk::ErrorCategory;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -42,11 +45,6 @@ struct Row {
     id: String,
     state: String,
 }
-#[derive(Deserialize)]
-struct Receipt {
-    digest: String,
-    state: String,
-}
 
 fn hash_input<T: Serialize>(operation: &str, id: &str, input: &T) -> Result<String> {
     let bytes = serde_json::to_vec(&json!([operation, id, input]))
@@ -74,7 +72,7 @@ pub(super) async fn load(db: &D1Database, tenant: &str, id: &str) -> Result<Opti
 async fn prior(db: &D1Database, tenant: &str, key: &str) -> Result<Option<Receipt>> {
     bind(
         db,
-        "SELECT digest, state FROM crm_account_receipts WHERE tenant = ? AND key = ?",
+        "SELECT digest, state, original_request_id FROM crm_account_receipts WHERE tenant = ? AND key = ?",
         &[JsValue::from_str(tenant), JsValue::from_str(key)],
     )?
     .first::<Receipt>(None)
@@ -93,16 +91,33 @@ async fn party_exists(db: &D1Database, tenant: &str, party_id: &str) -> Result<b
 pub(super) struct MutationOutcome {
     pub(super) account: Account,
     pub(super) replayed: bool,
+    pub(super) original_request_id: Option<String>,
 }
-pub(super) struct MutationFailure {
-    pub(super) code: String,
-    pub(super) status: u16,
-}
-fn fail(code: impl Into<String>, status: u16) -> MutationFailure {
-    MutationFailure {
-        code: code.into(),
-        status,
+const UNCONFIRMED: &str = "CUSTOMER_ACCOUNTS_WRITE_UNCONFIRMED";
+
+fn storage_failure(_: worker::Error) -> MutationFailure {
+    MutationFailure::CommitUnconfirmed {
+        code: UNCONFIRMED,
+        reason: ReceiptUncertainty::StorageUnavailable,
     }
+}
+
+fn replay(receipt: Receipt, digest: &str, id: &str) -> WriteResult<MutationOutcome> {
+    if receipt.digest != digest {
+        return Err(rejected("IDEMPOTENCY_CONFLICT", ErrorCategory::Conflict));
+    }
+    let account = decoded(&receipt.state).map_err(|_| MutationFailure::CommitUnconfirmed {
+        code: UNCONFIRMED,
+        reason: ReceiptUncertainty::DecodeFailed,
+    })?;
+    if account.account_id().as_str() != id {
+        return Err(rejected("IDEMPOTENCY_CONFLICT", ErrorCategory::Conflict));
+    }
+    Ok(MutationOutcome {
+        account,
+        replayed: true,
+        original_request_id: receipt.original_request_id,
+    })
 }
 pub(super) async fn create_typed(
     input: CreateInput,
@@ -110,35 +125,34 @@ pub(super) async fn create_typed(
     db: &D1Database,
     actor: &access::Actor,
     trace: &str,
-) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+) -> WriteResult<MutationOutcome> {
     let tenant = &actor.tenant;
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Err(rejected(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCategory::InvalidArgument,
+        ));
     }
-    let digest = hash_input("create", &input.id, &input)?;
-    if let Some(receipt) = prior(db, tenant, key).await? {
-        if receipt.digest != digest {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        let account = decoded(&receipt.state)?;
-        if account.account_id().as_str() != input.id {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        return Ok(Ok(MutationOutcome {
-            account,
-            replayed: true,
-        }));
+    let digest = hash_input("create", &input.id, &input).map_err(storage_failure)?;
+    if let Some(receipt) = prior(db, tenant, key).await.map_err(storage_failure)? {
+        return replay(receipt, &digest, &input.id);
     }
     let id = match AccountId::try_new(&input.id) {
         Ok(v) => v,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => return Err(rejected(e.code, ErrorCategory::InvalidArgument)),
     };
     let party = match PartyReference::try_new(&input.party_id) {
         Ok(v) => v,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => return Err(rejected(e.code, ErrorCategory::InvalidArgument)),
     };
-    if !party_exists(db, tenant, party.as_str()).await? {
-        return Ok(Err(fail("CUSTOMER_ACCOUNTS_PARTY_NOT_FOUND", 422)));
+    if !party_exists(db, tenant, party.as_str())
+        .await
+        .map_err(storage_failure)?
+    {
+        return Err(rejected(
+            "CUSTOMER_ACCOUNTS_PARTY_NOT_FOUND",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     let account = match Account::create(CreateAccount {
         account_id: id,
@@ -150,23 +164,31 @@ pub(super) async fn create_typed(
         occurred_at_unix_nanos: now_nanos(),
     }) {
         Ok(v) => v,
-        Err(e) => return Ok(Err(fail(e.code, 422))),
+        Err(e) => return Err(rejected(e.code, ErrorCategory::InvalidArgument)),
     };
-    let snapshot = state(&account)?;
+    let snapshot = state(&account).map_err(storage_failure)?;
     let stored=bind(db,
-        "INSERT INTO crm_account_records(tenant,id,primary_party,state,version,idem_key,idem_digest,request_id,actor,search_name) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO crm_account_records(tenant,id,primary_party,state,version,idem_key,idem_digest,request_id,actor,search_name) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
         &[JsValue::from_str(tenant),JsValue::from_str(account.account_id().as_str()),
           JsValue::from_str(&input.party_id),JsValue::from_str(&snapshot),
           JsValue::from_f64(account.version() as f64),JsValue::from_str(key),
           JsValue::from_str(&digest),JsValue::from_str(trace),
-           JsValue::from_str(&actor.identity),JsValue::from_str(&crm_core_contracts::nfc_text_key(account.name()))])?.run().await;
-    if stored.is_err() {
-        return Ok(Err(fail("CUSTOMER_ACCOUNTS_CREATE_CONFLICT", 409)));
+           JsValue::from_str(&actor.identity),JsValue::from_str(&crm_core_contracts::nfc_text_key(account.name()))]).map_err(storage_failure)?.run().await;
+    match d1_write::confirm(
+        stored,
+        prior(db, tenant, key),
+        "CUSTOMER_ACCOUNTS_CREATE_CONFLICT",
+        UNCONFIRMED,
+    )
+    .await?
+    {
+        Confirmation::Applied => Ok(MutationOutcome {
+            account,
+            replayed: false,
+            original_request_id: Some(trace.to_owned()),
+        }),
+        Confirmation::Replayed(receipt) => replay(receipt, &digest, &input.id),
     }
-    Ok(Ok(MutationOutcome {
-        account,
-        replayed: false,
-    }))
 }
 pub(super) async fn update_typed(
     input: UpdateInput,
@@ -175,27 +197,22 @@ pub(super) async fn update_typed(
     actor: &access::Actor,
     id: &str,
     trace: &str,
-) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+) -> WriteResult<MutationOutcome> {
     let tenant = &actor.tenant;
     if !(8..=120).contains(&key.len()) {
-        return Ok(Err(fail("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Err(rejected(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCategory::InvalidArgument,
+        ));
     }
-    let digest = hash_input("update", id, &input)?;
-    if let Some(receipt) = prior(db, tenant, key).await? {
-        if receipt.digest != digest {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        let account = decoded(&receipt.state)?;
-        if account.account_id().as_str() != id {
-            return Ok(Err(fail("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        return Ok(Ok(MutationOutcome {
-            account,
-            replayed: true,
-        }));
+    let digest = hash_input("update", id, &input).map_err(storage_failure)?;
+    // Read the receipt after the snapshot so a concurrent replay wins over stale state.
+    let current = load(db, tenant, id).await;
+    if let Some(receipt) = prior(db, tenant, key).await.map_err(storage_failure)? {
+        return replay(receipt, &digest, id);
     }
-    let Some(mut account) = load(db, tenant, id).await? else {
-        return Ok(Err(fail("NOT_FOUND", 404)));
+    let Some(mut account) = current.map_err(storage_failure)? else {
+        return Err(rejected("NOT_FOUND", ErrorCategory::NotFound));
     };
     let status = match input.status {
         AccountStatusInput::Active => AccountStatus::Active,
@@ -208,32 +225,37 @@ pub(super) async fn update_typed(
         party_associations: account.party_associations().to_vec(),
         occurred_at_unix_nanos: now_nanos(),
     }) {
-        return Ok(Err(fail(
+        return Err(rejected(
             e.code.clone(),
             if e.code == "CUSTOMER_ACCOUNTS_VERSION_CONFLICT" {
-                409
+                ErrorCategory::Conflict
             } else {
-                422
+                ErrorCategory::InvalidArgument
             },
-        )));
+        ));
     }
-    let snapshot = state(&account)?;
+    let snapshot = state(&account).map_err(storage_failure)?;
     let changed=bind(db,
         "UPDATE crm_account_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,search_name=? WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&snapshot),JsValue::from_f64(account.version() as f64),
           JsValue::from_str(key),JsValue::from_str(&digest),JsValue::from_str(trace),
           JsValue::from_str(&actor.identity),JsValue::from_str(&crm_core_contracts::nfc_text_key(account.name())),JsValue::from_str(tenant),JsValue::from_str(id),
-          JsValue::from_f64(input.expected_version as f64)])?.run().await;
-    let Ok(result) = changed else {
-        return Ok(Err(fail("CUSTOMER_ACCOUNTS_UPDATE_CONFLICT", 409)));
-    };
-    if result.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
-        return Ok(Err(fail("CUSTOMER_ACCOUNTS_VERSION_CONFLICT", 409)));
+          JsValue::from_f64(input.expected_version as f64)]).map_err(storage_failure)?.run().await;
+    match d1_write::confirm(
+        changed,
+        prior(db, tenant, key),
+        "CUSTOMER_ACCOUNTS_VERSION_CONFLICT",
+        UNCONFIRMED,
+    )
+    .await?
+    {
+        Confirmation::Applied => Ok(MutationOutcome {
+            account,
+            replayed: false,
+            original_request_id: Some(trace.to_owned()),
+        }),
+        Confirmation::Replayed(receipt) => replay(receipt, &digest, id),
     }
-    Ok(Ok(MutationOutcome {
-        account,
-        replayed: false,
-    }))
 }
 pub(super) async fn list_page_typed(
     db: &D1Database,

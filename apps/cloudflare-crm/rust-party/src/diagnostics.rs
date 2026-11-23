@@ -10,6 +10,7 @@ use serde::Serialize;
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(super) enum ReceiptUncertainty {
+    StorageUnavailable,
     #[serde(rename = "RECEIPT_READ_FAILED")]
     ReadFailed,
     #[serde(rename = "RECEIPT_NOT_FOUND")]

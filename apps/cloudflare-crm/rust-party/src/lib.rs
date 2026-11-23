@@ -29,6 +29,8 @@ mod customer_enrichment;
 #[cfg(feature = "native")]
 mod customer_privacy;
 #[cfg(feature = "native")]
+mod d1_write;
+#[cfg(feature = "native")]
 mod data_quality;
 #[cfg(feature = "native")]
 mod diagnostics;

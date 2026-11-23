@@ -1,12 +1,15 @@
 //! Native Worker HTTP/D1 boundary for ORIGINAL crm.contact-points.
 //! Contact Point is a Party-owned endpoint, not a customer or a consent.
 //! Domain invariants and strict persisted codecs remain in crm-contact-points.
+use super::d1_write::{self, Confirmation, Receipt, WriteResult, rejected};
+use super::diagnostics::{MutationFailure, ReceiptUncertainty};
 use super::{access, bind, now_nanos};
 use crm_contact_points::{
     ContactPoint, ContactPointId, ContactPointKind, ContactPointStatus, CreateContactPoint,
     PartyReference, UpdateContactPoint, VerifyContactPoint, decode_contact_point_state,
     encode_contact_point_state,
 };
+use crm_module_sdk::ErrorCategory;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -96,11 +99,6 @@ struct Row {
 struct Stored {
     state: String,
 }
-#[derive(Deserialize)]
-struct Receipt {
-    digest: String,
-    state: String,
-}
 
 // Only Cloudflare Access signed human identities, not service tokens, can
 // assert ownership of the matching email address.
@@ -134,7 +132,7 @@ pub(super) fn decode(value: &str) -> Result<ContactPoint> {
 async fn previous(db: &D1Database, tenant: &str, idem: &str) -> Result<Option<Receipt>> {
     bind(
         db,
-        "SELECT digest, state FROM crm_contact_point_receipts WHERE tenant = ? AND key = ?",
+        "SELECT digest, state, original_request_id FROM crm_contact_point_receipts WHERE tenant = ? AND key = ?",
         &[JsValue::from_str(tenant), JsValue::from_str(idem)],
     )?
     .first::<Receipt>(None)
@@ -166,16 +164,33 @@ async fn party_exists(db: &D1Database, tenant: &str, id: &str) -> Result<bool> {
 pub(super) struct MutationOutcome {
     pub(super) contact_point: ContactPoint,
     pub(super) replayed: bool,
+    pub(super) original_request_id: Option<String>,
 }
-pub(super) struct MutationFailure {
-    pub(super) code: String,
-    pub(super) status: u16,
-}
-fn failure(code: impl Into<String>, status: u16) -> MutationFailure {
-    MutationFailure {
-        code: code.into(),
-        status,
+const UNCONFIRMED: &str = "CONTACT_POINTS_WRITE_UNCONFIRMED";
+
+fn storage_failure(_: worker::Error) -> MutationFailure {
+    MutationFailure::CommitUnconfirmed {
+        code: UNCONFIRMED,
+        reason: ReceiptUncertainty::StorageUnavailable,
     }
+}
+
+fn replay(receipt: Receipt, digest: &str, id: &str) -> WriteResult<MutationOutcome> {
+    if receipt.digest != digest {
+        return Err(rejected("IDEMPOTENCY_CONFLICT", ErrorCategory::Conflict));
+    }
+    let contact_point = decode(&receipt.state).map_err(|_| MutationFailure::CommitUnconfirmed {
+        code: UNCONFIRMED,
+        reason: ReceiptUncertainty::DecodeFailed,
+    })?;
+    if contact_point.contact_point_id().as_str() != id {
+        return Err(rejected("IDEMPOTENCY_CONFLICT", ErrorCategory::Conflict));
+    }
+    Ok(MutationOutcome {
+        contact_point,
+        replayed: true,
+        original_request_id: receipt.original_request_id,
+    })
 }
 pub(super) async fn create_typed(
     input: CreateInput,
@@ -183,35 +198,34 @@ pub(super) async fn create_typed(
     db: &D1Database,
     actor: &access::Actor,
     trace: &str,
-) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+) -> WriteResult<MutationOutcome> {
     let tenant = &actor.tenant;
     if !(8..=120).contains(&idem.len()) {
-        return Ok(Err(failure("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Err(rejected(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCategory::InvalidArgument,
+        ));
     }
-    let hash = digest("create", &input.id, &input)?;
-    if let Some(receipt) = previous(db, tenant, idem).await? {
-        if receipt.digest != hash {
-            return Ok(Err(failure("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        let contact_point = decode(&receipt.state)?;
-        if contact_point.contact_point_id().as_str() != input.id {
-            return Ok(Err(failure("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        return Ok(Ok(MutationOutcome {
-            contact_point,
-            replayed: true,
-        }));
+    let hash = digest("create", &input.id, &input).map_err(storage_failure)?;
+    if let Some(receipt) = previous(db, tenant, idem).await.map_err(storage_failure)? {
+        return replay(receipt, &hash, &input.id);
     }
     let id = match ContactPointId::try_new(&input.id) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(failure(e.code, 422))),
+        Err(e) => return Err(rejected(e.code, ErrorCategory::InvalidArgument)),
     };
     let party = match PartyReference::try_new(&input.party_id) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(failure(e.code, 422))),
+        Err(e) => return Err(rejected(e.code, ErrorCategory::InvalidArgument)),
     };
-    if !party_exists(db, tenant, party.as_str()).await? {
-        return Ok(Err(failure("CONTACT_POINTS_PARTY_NOT_FOUND", 422)));
+    if !party_exists(db, tenant, party.as_str())
+        .await
+        .map_err(storage_failure)?
+    {
+        return Err(rejected(
+            "CONTACT_POINTS_PARTY_NOT_FOUND",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     let point = match ContactPoint::create(CreateContactPoint {
         contact_point_id: id,
@@ -224,23 +238,31 @@ pub(super) async fn create_typed(
         occurred_at_unix_nanos: now_nanos(),
     }) {
         Ok(x) => x,
-        Err(e) => return Ok(Err(failure(e.code, 422))),
+        Err(e) => return Err(rejected(e.code, ErrorCategory::InvalidArgument)),
     };
-    let saved = encode(&point)?;
+    let saved = encode(&point).map_err(storage_failure)?;
     let result=bind(db,
-        "INSERT INTO crm_contact_point_records(tenant,id,party_id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO crm_contact_point_records(tenant,id,party_id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
         &[JsValue::from_str(tenant),JsValue::from_str(point.contact_point_id().as_str()),
           JsValue::from_str(point.party_ref().as_str()),JsValue::from_str(&saved),
           JsValue::from_f64(point.version() as f64),JsValue::from_str(idem),
           JsValue::from_str(&hash),JsValue::from_str(trace),
-           JsValue::from_str(&actor.identity)])?.run().await;
-    if result.is_err() {
-        return Ok(Err(failure("CONTACT_POINTS_CREATE_CONFLICT", 409)));
+           JsValue::from_str(&actor.identity)]).map_err(storage_failure)?.run().await;
+    match d1_write::confirm(
+        result,
+        previous(db, tenant, idem),
+        "CONTACT_POINTS_CREATE_CONFLICT",
+        UNCONFIRMED,
+    )
+    .await?
+    {
+        Confirmation::Applied => Ok(MutationOutcome {
+            contact_point: point,
+            replayed: false,
+            original_request_id: Some(trace.to_owned()),
+        }),
+        Confirmation::Replayed(receipt) => replay(receipt, &hash, &input.id),
     }
-    Ok(Ok(MutationOutcome {
-        contact_point: point,
-        replayed: false,
-    }))
 }
 pub(super) async fn update_typed(
     input: UpdateInput,
@@ -249,27 +271,22 @@ pub(super) async fn update_typed(
     actor: &access::Actor,
     id: &str,
     trace: &str,
-) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+) -> WriteResult<MutationOutcome> {
     let tenant = &actor.tenant;
     if !(8..=120).contains(&idem.len()) {
-        return Ok(Err(failure("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Err(rejected(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCategory::InvalidArgument,
+        ));
     }
-    let hash = digest("update", id, &input)?;
-    if let Some(receipt) = previous(db, tenant, idem).await? {
-        if receipt.digest != hash {
-            return Ok(Err(failure("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        let contact_point = decode(&receipt.state)?;
-        if contact_point.contact_point_id().as_str() != id {
-            return Ok(Err(failure("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        return Ok(Ok(MutationOutcome {
-            contact_point,
-            replayed: true,
-        }));
+    let hash = digest("update", id, &input).map_err(storage_failure)?;
+    // Read the receipt after the snapshot so a concurrent replay wins over stale state.
+    let current = load(db, tenant, id).await;
+    if let Some(receipt) = previous(db, tenant, idem).await.map_err(storage_failure)? {
+        return replay(receipt, &hash, id);
     }
-    let Some(mut point) = load(db, tenant, id).await? else {
-        return Ok(Err(failure("NOT_FOUND", 404)));
+    let Some(mut point) = current.map_err(storage_failure)? else {
+        return Err(rejected("NOT_FOUND", ErrorCategory::NotFound));
     };
     let from = input
         .valid_from_unix_nanos
@@ -286,36 +303,58 @@ pub(super) async fn update_typed(
         valid_until_unix_nanos: until,
         occurred_at_unix_nanos: now_nanos(),
     }) {
-        return Ok(Err(failure(
+        return Err(rejected(
             e.code.clone(),
             if e.code == "CONTACT_POINTS_VERSION_CONFLICT" {
-                409
+                ErrorCategory::Conflict
             } else {
-                422
+                ErrorCategory::InvalidArgument
             },
-        )));
+        ));
     }
-    let saved = encode(&point)?;
+    let saved = encode(&point).map_err(storage_failure)?;
     let result=bind(db,
         "UPDATE crm_contact_point_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='contact_points.update' WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&saved),JsValue::from_f64(point.version() as f64),
           JsValue::from_str(idem),JsValue::from_str(&hash),JsValue::from_str(trace),
           JsValue::from_str(&actor.identity),JsValue::from_str(tenant),JsValue::from_str(id),
-          JsValue::from_f64(input.expected_version as f64)])?.run().await;
-    let Ok(changed) = result else {
-        return Ok(Err(failure("CONTACT_POINTS_UPDATE_CONFLICT", 409)));
-    };
-    if changed.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
-        return Ok(Err(failure("CONTACT_POINTS_VERSION_CONFLICT", 409)));
+          JsValue::from_f64(input.expected_version as f64)]).map_err(storage_failure)?.run().await;
+    match d1_write::confirm(
+        result,
+        previous(db, tenant, idem),
+        "CONTACT_POINTS_VERSION_CONFLICT",
+        UNCONFIRMED,
+    )
+    .await?
+    {
+        Confirmation::Applied => Ok(MutationOutcome {
+            contact_point: point,
+            replayed: false,
+            original_request_id: Some(trace.to_owned()),
+        }),
+        Confirmation::Replayed(receipt) => replay(receipt, &hash, id),
     }
-    Ok(Ok(MutationOutcome {
-        contact_point: point,
-        replayed: false,
-    }))
 }
 // Human verification proves matching Access email. The enrolled dev service
 // admin may also mark a test contact, with DISTINCT test-agent evidence.
 // Both paths use the original ContactPoint owner/CAS and D1 audit trigger.
+fn verified_replay(
+    receipt: Receipt,
+    digest: &str,
+    id: &str,
+    email: Option<&str>,
+) -> WriteResult<MutationOutcome> {
+    let saved = replay(receipt, digest, id)?;
+    if saved.contact_point.kind() != ContactPointKind::Email
+        || email.is_some_and(|email| saved.contact_point.normalized_value() != email)
+    {
+        return Err(rejected(
+            "CONTACT_POINTS_EMAIL_OWNERSHIP_REQUIRED",
+            ErrorCategory::Authorization,
+        ));
+    }
+    Ok(saved)
+}
 pub(super) async fn verify_own_email_typed(
     idem: &str,
     expected_version: i64,
@@ -323,46 +362,45 @@ pub(super) async fn verify_own_email_typed(
     actor: &access::Actor,
     id: &str,
     trace: &str,
-) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+) -> WriteResult<MutationOutcome> {
     let human_email = signed_human_email(&actor.identity);
     let test_agent = actor.is_dev_test_agent();
     if human_email.is_none() && !test_agent {
-        return Ok(Err(failure(
+        return Err(rejected(
             "CONTACT_POINTS_SIGNED_HUMAN_EMAIL_REQUIRED",
-            403,
-        )));
+            ErrorCategory::Authorization,
+        ));
     }
     if !(8..=120).contains(&idem.len()) {
-        return Ok(Err(failure("IDEMPOTENCY_KEY_REQUIRED", 422)));
+        return Err(rejected(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            ErrorCategory::InvalidArgument,
+        ));
     }
     let hash = digest(
         "verify-own-email",
         id,
         &json!([expected_version, &actor.identity]),
-    )?;
-    if let Some(saved_receipt) = previous(db, &actor.tenant, idem).await? {
-        if saved_receipt.digest != hash {
-            return Ok(Err(failure("IDEMPOTENCY_CONFLICT", 409)));
-        }
-        let contact_point = decode(&saved_receipt.state)?;
-        if contact_point.contact_point_id().as_str() != id
-            || contact_point.kind() != ContactPointKind::Email
-            || human_email.is_some_and(|email| contact_point.normalized_value() != email)
-        {
-            return Ok(Err(failure("CONTACT_POINTS_EMAIL_OWNERSHIP_REQUIRED", 403)));
-        }
-        return Ok(Ok(MutationOutcome {
-            contact_point,
-            replayed: true,
-        }));
+    )
+    .map_err(storage_failure)?;
+    // Read the receipt after the snapshot so a concurrent replay wins over stale state.
+    let current = load(db, &actor.tenant, id).await;
+    if let Some(receipt) = previous(db, &actor.tenant, idem)
+        .await
+        .map_err(storage_failure)?
+    {
+        return verified_replay(receipt, &hash, id, human_email);
     }
-    let Some(mut point) = load(db, &actor.tenant, id).await? else {
-        return Ok(Err(failure("NOT_FOUND", 404)));
+    let Some(mut point) = current.map_err(storage_failure)? else {
+        return Err(rejected("NOT_FOUND", ErrorCategory::NotFound));
     };
     if point.kind() != ContactPointKind::Email
         || human_email.is_some_and(|email| point.normalized_value() != email)
     {
-        return Ok(Err(failure("CONTACT_POINTS_EMAIL_OWNERSHIP_REQUIRED", 403)));
+        return Err(rejected(
+            "CONTACT_POINTS_EMAIL_OWNERSHIP_REQUIRED",
+            ErrorCategory::Authorization,
+        ));
     }
     // Dev agent verification is never represented as human email ownership.
     let evidence_source = if test_agent {
@@ -388,34 +426,39 @@ pub(super) async fn verify_own_email_typed(
         evidence_ref: format!("{evidence_source}:{proof}"),
         occurred_at_unix_nanos: now_nanos(),
     }) {
-        return Ok(Err(failure(
+        return Err(rejected(
             e.code.clone(),
             if e.code == "CONTACT_POINTS_VERSION_CONFLICT"
                 || e.code == "CONTACT_POINTS_ALREADY_VERIFIED"
             {
-                409
+                ErrorCategory::Conflict
             } else {
-                422
+                ErrorCategory::InvalidArgument
             },
-        )));
+        ));
     }
-    let saved = encode(&point)?;
+    let saved = encode(&point).map_err(storage_failure)?;
     let result = bind(db,
         "UPDATE crm_contact_point_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=?,last_action='contact_points.verify' WHERE tenant=? AND id=? AND version=?",
         &[JsValue::from_str(&saved),JsValue::from_f64(point.version() as f64),
           JsValue::from_str(idem),JsValue::from_str(&hash),JsValue::from_str(trace),
           JsValue::from_str(&actor.identity),JsValue::from_str(&actor.tenant),
-          JsValue::from_str(id),JsValue::from_f64(expected_version as f64)])?.run().await;
-    let Ok(changed) = result else {
-        return Ok(Err(failure("CONTACT_POINTS_VERIFY_CONFLICT", 409)));
-    };
-    if changed.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
-        return Ok(Err(failure("CONTACT_POINTS_VERSION_CONFLICT", 409)));
+          JsValue::from_str(id),JsValue::from_f64(expected_version as f64)]).map_err(storage_failure)?.run().await;
+    match d1_write::confirm(
+        result,
+        previous(db, &actor.tenant, idem),
+        "CONTACT_POINTS_VERSION_CONFLICT",
+        UNCONFIRMED,
+    )
+    .await?
+    {
+        Confirmation::Applied => Ok(MutationOutcome {
+            contact_point: point,
+            replayed: false,
+            original_request_id: Some(trace.to_owned()),
+        }),
+        Confirmation::Replayed(receipt) => verified_replay(receipt, &hash, id, human_email),
     }
-    Ok(Ok(MutationOutcome {
-        contact_point: point,
-        replayed: false,
-    }))
 }
 
 // One typed list input for the original ContactPoint owner. Keep all

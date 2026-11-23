@@ -1,6 +1,7 @@
 //! Generated Connect trait for the existing AccountV2Service Rust domain owner.
 //! Access, tenant, and the single native router are defined by the parent.
 use super::*;
+use crate::diagnostics;
 
 impl account_wire::AccountService for AccountV2Service {
     #[worker::send]
@@ -24,8 +25,9 @@ impl account_wire::AccountService for AccountV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::internal("Account D1 create failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| {
+            diagnostics::mutation_error("CreateAccount", &self.request_id, failure)
+        })?;
         RpcResponse::ok(account_wire::CreateAccountResponse {
             account: Some(Self::convert(&saved.account)?).into(),
             receipt: Some(self.receipt(&saved)?).into(),
@@ -63,8 +65,9 @@ impl account_wire::AccountService for AccountV2Service {
             &self.request_id,
         )
         .await
-        .map_err(|_| ConnectError::internal("Account D1 update failed"))?
-        .map_err(Self::failed)?;
+        .map_err(|failure| {
+            diagnostics::mutation_error("UpdateAccount", &self.request_id, failure)
+        })?;
         RpcResponse::ok(account_wire::UpdateAccountResponse {
             account: Some(Self::convert(&saved.account)?).into(),
             receipt: Some(self.receipt(&saved)?).into(),

@@ -173,52 +173,6 @@ jobs:
       # Clippy checks WASM compilation, so a separate cargo check repeats the work.
       - name: Run Clippy on the actual Worker for WebAssembly
         run: cargo clippy --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations
-      - name: Test original Rust owners with the Worker dependency features
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          import os
-          import subprocess
-          import tomllib
-          from pathlib import Path
-          report = json.load(open(os.environ["CRM_MODULE_COVERAGE_REPORT"], encoding="utf-8"))
-          worker = Path("apps/cloudflare-crm/rust-party")
-          cargo = tomllib.loads((worker / "Cargo.toml").read_text(encoding="utf-8"))
-          by_path = {(worker / dep["path"]).resolve(): dep
-                     for dep in cargo["dependencies"].values()
-                     if isinstance(dep, dict) and "path" in dep}
-          linked = [module for module in report["modules"] if module["linked"]]
-          if not linked:
-              raise SystemExit("No linked original owners")
-          # Transitive dependencies are compiled, but Cargo does not run their
-          # own tests when testing a consumer. Test the shared foundation too.
-          owner_features = {"crm-core-contracts": [], "crm-module-sdk": []}
-          for module in linked:
-              dep = by_path[Path(module["crate_path"]).resolve()]
-              flags = []
-              if not dep.get("default-features", True):
-                  flags.append("--no-default-features")
-              if dep.get("features"):
-                  flags.extend(["--features", ",".join(dep["features"])])
-              owner_features[module["crate_name"]] = flags
-          # Test every active owner and shared crate with a single Cargo invocation.
-          subprocess.run(["cargo", "test", "--locked", "--workspace", "--all-targets"], check=True)
-          native_graphs = {}
-          for owner, flags in sorted(owner_features.items()):
-              if flags:
-                  subprocess.run(["cargo", "test", "--locked", "-p", owner, "--all-targets", *flags], check=True)
-              native_graphs[owner] = {
-                  "feature_flags": flags,
-                  "normal_build_dev": subprocess.check_output([
-                      "cargo", "tree", "--locked", "-p", owner, *flags,
-                      "--edges", "normal,build,dev", "--charset", "ascii",
-                  ], text=True),
-              }
-          Path("/tmp/crm-native-owner-dependency-trees.json").write_text(
-              json.dumps(native_graphs, sort_keys=True), encoding="utf-8")
-          PY
       # Installer binaries are cached separately from Cargo compilation outputs.
       - name: Cache pinned native Rust tool CLIs
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -301,14 +255,23 @@ jobs:
         working-directory: apps/cloudflare-crm
         shell: bash
         run: bash scripts/prepare-chromium.sh
-      - name: Test signed RPC and generated-client React scenarios under workerd
+      - name: Test Rust owners and signed workerd/D1/Chromium scenarios
         id: crm_native_workerd
         working-directory: apps/cloudflare-crm
         env:
           CRM_SOURCE_SHA: ${{ github.sha }}
           CRM_RPC_RUNTIME_PROOF: /tmp/crm-rpc-runtime.json
+        shell: bash
         run: |
-          node rust-party/test/native.mjs
+          # Host Cargo tests use the root target. Workerd uses the built test Worker and isolated D1.
+          (cd "$GITHUB_WORKSPACE" && python apps/cloudflare-crm/scripts/test-rust-owners.py) &
+          owners_pid=$!
+          browser_status=0
+          node rust-party/test/native.mjs || browser_status=$?
+          owners_status=0
+          wait "$owners_pid" || owners_status=$?
+          echo "workerd exit=$browser_status; Rust owners exit=$owners_status"
+          (( browser_status == 0 && owners_status == 0 ))
       - name: Verify compiled router, executed policy and RPC calls against Buf
         run: |
           set -euo pipefail
