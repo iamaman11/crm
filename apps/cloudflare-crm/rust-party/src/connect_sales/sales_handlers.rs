@@ -1486,14 +1486,16 @@ impl SalesV2Service {
         id: String,
         cfg: &sale_wire::TerritoryConfiguration,
     ) -> std::result::Result<sales_territories::Record, ConnectError> {
-        Ok(sales_territories::Record::Territory(crm_sales::SalesTerritory {
-            territory_id: id,
-            name: cfg.name.clone(),
-            parent_id: cfg.parent_id.clone(),
-            default_owner: Self::coverage_owner(cfg.default_owner.as_option())?,
-            archived: cfg.archived,
-            version: 1,
-        }))
+        Ok(sales_territories::Record::Territory(
+            crm_sales::SalesTerritory {
+                territory_id: id,
+                name: cfg.name.clone(),
+                parent_id: cfg.parent_id.clone(),
+                default_owner: Self::coverage_owner(cfg.default_owner.as_option())?,
+                archived: cfg.archived,
+                version: 1,
+            },
+        ))
     }
 
     fn assignment_draft(
@@ -1509,7 +1511,9 @@ impl SalesV2Service {
                 let role = match item.role {
                     v if v == Wire::SALES_OVERLAY_ROLE_SPECIALIST => Domain::Specialist,
                     v if v == Wire::SALES_OVERLAY_ROLE_ACCOUNT_SUPPORT => Domain::AccountSupport,
-                    v if v == Wire::SALES_OVERLAY_ROLE_EXECUTIVE_SPONSOR => Domain::ExecutiveSponsor,
+                    v if v == Wire::SALES_OVERLAY_ROLE_EXECUTIVE_SPONSOR => {
+                        Domain::ExecutiveSponsor
+                    }
                     _ => return Err(ConnectError::invalid_argument("SALES_OVERLAY_ROLE_INVALID")),
                 };
                 Ok(crm_sales::SalesAccountOverlay {

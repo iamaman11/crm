@@ -90,7 +90,11 @@ impl Record {
         .map_err(|e| worker::Error::RustError(e.to_string()))
     }
 
-    fn revise(self, prior: Option<&Self>, expected: Option<i64>) -> std::result::Result<Self, Failure> {
+    fn revise(
+        self,
+        prior: Option<&Self>,
+        expected: Option<i64>,
+    ) -> std::result::Result<Self, Failure> {
         let result = match (self, prior) {
             (Self::Territory(value), None) => value.revise(None, expected).map(Self::Territory),
             (Self::Territory(value), Some(Self::Territory(old))) => {
@@ -100,7 +104,12 @@ impl Record {
             (Self::Assignment(value), Some(Self::Assignment(old))) => {
                 value.revise(Some(old), expected).map(Self::Assignment)
             }
-            _ => return Err(Failure::domain("SALES_COVERAGE_KIND_INVALID", ErrorCode::Internal)),
+            _ => {
+                return Err(Failure::domain(
+                    "SALES_COVERAGE_KIND_INVALID",
+                    ErrorCode::Internal,
+                ));
+            }
         };
         result.map_err(|e| {
             let code = if e.category == crm_module_sdk::ErrorCategory::Conflict {
@@ -186,7 +195,10 @@ pub(super) async fn mutate(
     );
     let replay = |prior: d1_write::Receipt| {
         if prior.digest != hash {
-            return Ok(Err(Failure::domain("IDEMPOTENCY_CONFLICT", ErrorCode::Aborted)));
+            return Ok(Err(Failure::domain(
+                "IDEMPOTENCY_CONFLICT",
+                ErrorCode::Aborted,
+            )));
         }
         Ok(Ok(Saved {
             record: kind.decode(&prior.state)?,
@@ -239,9 +251,13 @@ pub(super) async fn mutate(
     }
     let table = kind.table();
     let query = if expected.is_none() {
-        format!("INSERT INTO {table}(tenant,id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?1,?2,?3,?4,?5,?6,?7,?8 WHERE ?9=0{guard} ON CONFLICT(tenant,id) DO NOTHING")
+        format!(
+            "INSERT INTO {table}(tenant,id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?1,?2,?3,?4,?5,?6,?7,?8 WHERE ?9=0{guard} ON CONFLICT(tenant,id) DO NOTHING"
+        )
     } else {
-        format!("UPDATE {table} SET state=?3,version=?4,idem_key=?5,idem_digest=?6,request_id=?7,actor=?8 WHERE tenant=?1 AND id=?2 AND version=?9{guard}")
+        format!(
+            "UPDATE {table} SET state=?3,version=?4,idem_key=?5,idem_digest=?6,request_id=?7,actor=?8 WHERE tenant=?1 AND id=?2 AND version=?9{guard}"
+        )
     };
     let write = bind(ctx.db, &query, &values)?.run().await;
     match d1_write::confirm(
@@ -314,5 +330,7 @@ pub(super) async fn list(
 // Only static SQL expressions from the Access CAS statements are accepted.
 pub(super) fn owner_in_use(tenant: &str, id: &str, team: bool) -> String {
     let field = if team { "team" } else { "actor" };
-    format!("(EXISTS (SELECT 1 FROM crm_sales_territory_records t WHERE t.tenant={tenant} AND json_extract(t.state,'$.archived')=0 AND json_extract(t.state,'$.default_owner.{field}')={id}) OR EXISTS (SELECT 1 FROM crm_sales_account_assignment_records a WHERE a.tenant={tenant} AND json_extract(a.state,'$.archived')=0 AND (json_extract(a.state,'$.primary_owner.{field}')={id} OR EXISTS (SELECT 1 FROM json_each(a.state,'$.overlays') o WHERE json_extract(o.value,'$.owner.{field}')={id}))))")
+    format!(
+        "(EXISTS (SELECT 1 FROM crm_sales_territory_records t WHERE t.tenant={tenant} AND json_extract(t.state,'$.archived')=0 AND json_extract(t.state,'$.default_owner.{field}')={id}) OR EXISTS (SELECT 1 FROM crm_sales_account_assignment_records a WHERE a.tenant={tenant} AND json_extract(a.state,'$.archived')=0 AND (json_extract(a.state,'$.primary_owner.{field}')={id} OR EXISTS (SELECT 1 FROM json_each(a.state,'$.overlays') o WHERE json_extract(o.value,'$.owner.{field}')={id}))))"
+    )
 }
