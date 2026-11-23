@@ -40,6 +40,7 @@ impl task_wire::TaskService for TaskV2Service {
                 description: input.description,
                 account_id: input.account_id,
                 deal_id: input.deal_id,
+                assignee_email: input.assignee_email,
                 priority,
                 due_at_unix_nanos: due,
                 reminder_at_unix_nanos: reminder,
@@ -113,11 +114,16 @@ impl task_wire::TaskService for TaskV2Service {
                 _ => return Err(ConnectError::invalid_argument("invalid due_at patch")),
             },
         };
+        let owner=match input.assignee_email {
+            None=>Change::Keep,
+            Some(email)=>Change::Set(email)
+        };
         let saved = activity_tasks::update_typed(
             activity_tasks::UpdateInput {
                 expected_version: version.unwrap_or_default(),
                 subject,
                 description,
+                owner,
                 priority,
                 due_at_unix_nanos,
             },
@@ -359,6 +365,12 @@ impl task_wire::TaskService for TaskV2Service {
             Self::valid_id(id)?;
         }
         let search = wire_search(req.search)?;
+        if req.assigned_to_me && req.assignee_email.is_some(){
+            return Err(ConnectError::invalid_argument("INVALID_ASSIGNEE_FILTERS"));
+        }
+        let owner=if req.assigned_to_me{Some(self.actor.clone())}
+        else{req.assignee_email.map(|v|access_members::email(v)
+            .map_err(|e|e.connect("ListTasks",&self.request_id))).transpose()?};
         let (list, next) = activity_tasks::list_page_typed(
             &self.d1()?,
             &self.tenant,
@@ -375,6 +387,7 @@ impl task_wire::TaskService for TaskV2Service {
                 due_before,
                 sort_by_due: req.sort_by_due,
                 without_due_only: req.without_due_only,
+                owner_identity: owner.as_deref(),
             },
         )
         .await
@@ -393,6 +406,31 @@ impl task_wire::TaskService for TaskV2Service {
             })
             .into(),
             ..response
+        })
+    }
+    #[worker::send]
+    async fn list_task_workload(
+        &self,
+        _ctx:RequestContext,
+        _req:ServiceRequest<'_,task_wire::ListTaskWorkloadRequest>,
+    )->ServiceResult<task_wire::ListTaskWorkloadResponse>{
+        let (buckets,as_of_unix_seconds)=activity_tasks::workload(&self.d1()?,&self.tenant)
+            .await.map_err(|_|ConnectError::internal("Task workload D1 failed"))?;
+        let as_count=|n:i64|u64::try_from(n)
+            .map_err(|_|ConnectError::internal("Invalid Task workload count"));
+        let mut converted=Vec::with_capacity(buckets.len());
+        for b in buckets{
+            converted.push(task_wire::TaskWorkloadBucket{
+                assignee_identity:b.assignee_identity,owner_team_id:b.owner_team_id,
+                open_count:as_count(b.open_count)?,
+                completed_count:as_count(b.completed_count)?,
+                overdue_open_count:as_count(b.overdue_open_count)?,
+                due_next_7_days_count:as_count(b.due_next_7_days_count)?,
+                ..Default::default()
+            });
+        }
+        RpcResponse::ok(task_wire::ListTaskWorkloadResponse{
+            buckets:converted,as_of_unix_seconds,..Default::default()
         })
     }
 }

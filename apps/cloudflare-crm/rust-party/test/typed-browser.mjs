@@ -2694,6 +2694,87 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await page.setViewportSize({width:1280,height:720});
    checkpoint("SK-07 complete portfolio, period comparison, read-only D1, Back/reload and accessible mobile tables");
 
+   // SK-07.B: human roster + original TaskOwner assignment through the same
+   // compiled Rust Access + Activities owners. This is signed CI human proof,
+   // not a claim that our live service principal is a person.
+   const browserStaff="browser-sk07-"+runId+"@example.test";
+   const beforeStaffAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"'"))[0].n;
+   await navigate("team","Команда и распределение работы");
+   await page.getByRole("heading",{name:"Сотрудники и роли",exact:true}).waitFor();
+   await page.getByLabel("Email нового сотрудника",{exact:true}).fill(browserStaff);
+   await page.getByLabel("Роль нового сотрудника",{exact:true}).selectOption("1");
+   await mutation(page.getByRole("button",{name:"Добавить участника",exact:true}),"ProvisionMember");
+   const memberDb=(await sql("SELECT role,active,version FROM crm_users WHERE tenant_id='"+
+     tenantSql+"' AND email='"+browserStaff+"'"))[0];
+   assert.deepEqual(memberDb,{role:"viewer",active:1,version:1});
+   assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"' AND subject_id='"+browserStaff+"' AND action='access.member.provision'"))[0].n,1);
+   assert.ok((await sql("SELECT actor FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"' AND subject_id='"+browserStaff+"'"))[0].actor===adminIdentity);
+   await page.getByRole("row").filter({hasText:browserStaff}).waitFor();
+   await reloadDocument();
+   await page.getByRole("row").filter({hasText:browserStaff}).waitFor();
+   const delegatedTitle="Browser SK07 delegated "+runId;
+   await navigate("tasks","Задачи");
+   await page.getByRole("button",{name:"Новая задача",exact:true}).click();
+   await page.getByLabel("Тема задачи",{exact:true}).fill(delegatedTitle);
+   await selectPagedPicker(page,"Клиент",accountId,"account");
+   await page.getByLabel("Назначить сотруднику",{exact:true}).selectOption(browserStaff);
+   await mutation(page.getByRole("button",{name:"Создать задачу",exact:true}),"CreateTask");
+   const delegatedId=await firstId("crm_activity_task_records","subject",delegatedTitle);
+   assert.ok(delegatedId);
+   assert.equal((await sql("SELECT json_extract(state,'$.owner.actor_id') AS owner "+
+     "FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+delegatedId+"'"))[0].owner,
+     browserStaff,"Original domain state persists the human actor identity");
+   const delegatedCard=page.locator("section").filter({has:page.getByRole("heading",
+     {name:delegatedTitle,exact:true})});
+   await delegatedCard.getByText("Ответственный: "+browserStaff,{exact:true}).waitFor();
+   await page.getByLabel("Ответственный: фильтр",{exact:true}).selectOption(browserStaff);
+   assert.ok(new URL(page.url()).hash.includes("assigneeEmail="+encodeURIComponent(browserStaff)));
+   await page.getByRole("heading",{name:delegatedTitle,exact:true}).waitFor();
+   await reloadDocument();
+   await expect(page.getByLabel("Ответственный: фильтр",{exact:true})).toHaveValue(browserStaff);
+   await delegatedCard.getByRole("button",{name:"Редактировать задачу",exact:true}).click();
+   await page.getByLabel("Переназначить задачу",{exact:true}).selectOption("native-viewer@example.test");
+   await mutation(page.getByRole("button",{name:"Сохранить изменения задачи",exact:true}),"UpdateTask");
+   const delegatedState=(await sql("SELECT version,json_extract(state,'$.owner.actor_id') AS owner "+
+     "FROM crm_activity_task_records WHERE tenant='"+tenantSql+"' AND id='"+delegatedId+"'"))[0];
+   assert.deepEqual(delegatedState,{version:2,owner:"native-viewer@example.test"});
+   assert.deepEqual((await sql("SELECT action FROM crm_audit WHERE tenant_id='"+tenantSql+
+     "' AND subject_id='"+delegatedId+"' ORDER BY rowid")).map(x=>x.action),
+     ["activity_tasks.create","activity_tasks.update"]);
+   await page.getByRole("heading",{name:delegatedTitle,exact:true}).waitFor({state:"hidden"});
+   await navigate("team","Команда и распределение работы");
+   const workforce=page.getByRole("region",{name:"Реальная нагрузка команды"});
+   await workforce.getByText("native-viewer@example.test",{exact:false}).first().waitFor();
+   const staffRow=page.getByRole("row").filter({hasText:browserStaff}).first();
+   await staffRow.getByRole("button",{name:"Изменить доступ"}).click();
+   await page.getByLabel("Активный доступ",{exact:true}).uncheck();
+   await mutation(page.getByRole("button",{name:"Сохранить доступ",exact:true}),"UpdateMember");
+   assert.deepEqual((await sql("SELECT active,version FROM crm_users WHERE tenant_id='"+
+     tenantSql+"' AND email='"+browserStaff+"'")),[{active:0,version:2}]);
+   await page.getByRole("row").filter({hasText:browserStaff}).getByText("Деактивирован",{exact:true}).waitFor();
+   const workforceReadAudit=(await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"'"))[0].n;
+   await reloadDocument();
+   await workforce.getByText("native-viewer@example.test",{exact:false}).first().waitFor();
+   assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_audit WHERE tenant_id='"+
+     tenantSql+"'"))[0].n,workforceReadAudit,"Team/report reload may never create audit");
+   assert.equal(workforceReadAudit-beforeStaffAudit,4,
+     "SK-07 browser: provision + TaskCreate + reassignment + deactivate = four writes");
+   await page.setViewportSize({width:390,height:844});
+   const memberTable=page.getByRole("region",{name:"Участники tenant — таблица"});
+   await memberTable.waitFor();
+   const memberMobile=await memberTable.evaluate(el=>({
+     viewport:window.innerWidth,page:document.documentElement.scrollWidth,
+     local:el.clientWidth,content:el.scrollWidth
+   }));
+   assert.ok(memberMobile.viewport<=391&&memberMobile.page<=391,
+     "SK-07 Team table cannot overflow mobile viewport: "+JSON.stringify(memberMobile));
+   await page.setViewportSize({width:1280,height:720});
+   checkpoint("SK-07.B typed workforce, human membership, owner assignment/reassign, ACL audit, D1, reload and mobile");
+
    await page.getByLabel("Тема",{exact:true}).selectOption("dark");
    assert.equal(await page.locator("html").getAttribute("data-theme"),"dark");
    await reloadDocument();

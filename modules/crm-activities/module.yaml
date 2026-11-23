@@ -79,6 +79,11 @@ provides:
       binding:
         kind: protobuf_rpc
         rpc: crm.activities.v2.TaskService.ListTasks
+    - id: activities.task.workload.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.activities.v2.TaskService.ListTaskWorkload
     - id: activities.interaction.create
       version: 2.0.0
       binding:

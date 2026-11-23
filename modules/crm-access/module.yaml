@@ -1,0 +1,70 @@
+schema_version: crm.module/v1
+module_id: crm.access
+version: 0.1.0
+display_name: CRM Access Membership
+description: The original native signed Cloudflare Access and tenant membership owner with versioned admission, revocation and auditable provisioning.
+owner:
+  team: crm-security
+  contact: crm-owner@example.com
+  codeowners:
+    - '@iamaman11'
+runtime:
+  kind: in_process
+  entrypoint: apps/cloudflare-crm/rust-party
+platform:
+  minimum_version: 0.1.0
+dependencies:
+  required: []
+  optional: []
+  conflicts: []
+provides:
+  capabilities:
+    - id: access.membership.me
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.access.v2.MemberService.GetMyMembership
+    - id: access.membership.list
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.access.v2.MemberService.ListMembers
+    - id: access.membership.get
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.access.v2.MemberService.GetMember
+    - id: access.membership.provision
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.access.v2.MemberService.ProvisionMember
+    - id: access.membership.update
+      version: 2.0.0
+      binding:
+        kind: protobuf_rpc
+        rpc: crm.access.v2.MemberService.UpdateMember
+  events: []
+  objects:
+    - access.member
+  ui_extensions: []
+consumes:
+  capabilities: []
+  events: []
+storage:
+  record_types:
+    - access.member
+  private_state_namespaces:
+    - crm.access.member
+security:
+  data_classes:
+    - personal
+    - confidential
+  network_egress: []
+  secret_handles: []
+lifecycle:
+  upgrade_policy: manual
+  rollback_policy: supported
+  uninstall_policy: retain_business_records
+  retained_record_types:
+    - access.member

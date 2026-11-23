@@ -41,6 +41,8 @@ pub(super) struct CreateInput {
     pub(super) account_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) deal_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) assignee_email: Option<String>,
     pub(super) priority: Priority,
     pub(super) due_at_unix_nanos: Option<i64>,
     pub(super) reminder_at_unix_nanos: Option<i64>,
@@ -76,6 +78,7 @@ pub(super) struct UpdateInput {
     pub(super) expected_version: i64,
     pub(super) subject: Change<String>,
     pub(super) description: Change<String>,
+    pub(super) owner: Change<String>,
     pub(super) priority: Change<Priority>,
     pub(super) due_at_unix_nanos: Change<i64>,
 }
@@ -291,7 +294,22 @@ pub(super) async fn create_typed(
             version: None,
         });
     }
-    let owner = match ActorId::try_new(actor) {
+    // Membership is authoritative in the existing signed Access owner. The
+    // lookup occurs AFTER the original receipt, so replay succeeds even if the
+    // assignee was later deactivated; no new write can target an inactive user.
+    let target=if let Some(requested)=input.assignee_email.as_deref(){
+        let normalized=match super::access_members::email(requested){
+            Ok(value)=>value,
+            Err(_)=>return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_ASSIGNEE_INVALID",ErrorCode::InvalidArgument))),
+        };
+        if !super::access_members::valid_assignee(db,tenant,&normalized).await?{
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_ASSIGNEE_NOT_ENROLLED",ErrorCode::InvalidArgument)));
+        }
+        normalized
+    }else{actor.to_owned()};
+    let owner = match ActorId::try_new(target) {
         Ok(x) => TaskOwner::Actor(x),
         Err(_) => {
             return Ok(Err(MutationFailure::domain(
@@ -353,6 +371,7 @@ pub(super) async fn update_typed(
     if matches!(&input.subject, Change::Keep)
         && matches!(&input.description, Change::Keep)
         && matches!(&input.priority, Change::Keep)
+        && matches!(&input.owner, Change::Keep)
         && matches!(&input.due_at_unix_nanos, Change::Keep)
     {
         return Ok(Err(MutationFailure::domain(
@@ -390,6 +409,28 @@ pub(super) async fn update_typed(
         )));
     };
     let expected_version = input.expected_version;
+    let owner=match input.owner {
+        Change::Keep=>Patch::Keep,
+        Change::Clear=>return Ok(Err(MutationFailure::domain(
+            "ACTIVITIES_TASK_OWNER_REQUIRED",ErrorCode::InvalidArgument))),
+        Change::Set(value)=>{
+            let normalized=match super::access_members::email(&value){
+                Ok(value)=>value,
+                Err(_)=>return Ok(Err(MutationFailure::domain(
+                    "ACTIVITIES_ASSIGNEE_INVALID",ErrorCode::InvalidArgument))),
+            };
+            if !super::access_members::valid_assignee(db,tenant,&normalized).await?{
+                return Ok(Err(MutationFailure::domain(
+                    "ACTIVITIES_ASSIGNEE_NOT_ENROLLED",ErrorCode::InvalidArgument)));
+            }
+            let actor=match ActorId::try_new(normalized){
+                Ok(value)=>value,
+                Err(_)=>return Ok(Err(MutationFailure::domain(
+                    "ACTIVITIES_ASSIGNEE_INVALID",ErrorCode::InvalidArgument))),
+            };
+            Patch::Set(TaskOwner::Actor(actor))
+        }
+    };
     let priority = match input.priority {
         Change::Keep => Patch::Keep,
         Change::Set(value) => Patch::Set(value.into()),
@@ -399,7 +440,7 @@ pub(super) async fn update_typed(
         expected_version,
         subject: input.subject.into_patch(),
         description: input.description.into_patch(),
-        owner: Patch::Keep,
+        owner,
         priority,
         due_at_unix_nanos: input.due_at_unix_nanos.into_patch(),
         occurred_at_unix_nanos: now_nanos(),
@@ -632,6 +673,7 @@ pub(super) struct TaskListFilters<'a> {
     pub(super) due_before: Option<i64>,
     pub(super) sort_by_due: bool,
     pub(super) without_due_only: bool,
+    pub(super) owner_identity: Option<&'a str>,
 }
 pub(super) async fn list_page_typed(
     db: &D1Database,
@@ -651,6 +693,7 @@ pub(super) async fn list_page_typed(
         due_before,
         sort_by_due,
         without_due_only,
+        owner_identity,
     } = filters;
     // Exactly one Task owner. The order/filter decision is made in SQL BEFORE
     // the keyset LIMIT; a browser cannot find due work in an ID-sorted page.
@@ -674,6 +717,12 @@ pub(super) async fn list_page_typed(
     if let Some(id) = account_id {
         query.push_str(" AND account_id=?");
         params.push(JsValue::from_str(id));
+    }
+    if let Some(owner)=owner_identity {
+        // TaskOwner actor identity is a typed original domain property. Filter
+        // before LIMIT and any due cursor, never by a frontend slice.
+        query.push_str(" AND json_extract(t.state,'$.owner.actor_id')=?");
+        params.push(JsValue::from_str(owner));
     }
     if let Some(priority) = priority {
         query.push_str(" AND json_extract(state,'$.priority')=?");
@@ -794,4 +843,27 @@ pub(super) async fn account_id(db: &D1Database, tenant: &str, id: &str) -> Resul
     .first::<TaskAccountRow>(None)
     .await?
     .map(|row| row.account_id))
+}
+
+#[derive(Deserialize)]
+pub(super) struct TaskWorkload {
+    pub(super) assignee_identity: String,
+    pub(super) owner_team_id: String,
+    pub(super) open_count: i64,
+    pub(super) completed_count: i64,
+    pub(super) overdue_open_count: i64,
+    pub(super) due_next_7_days_count: i64,
+}
+pub(super) async fn workload(
+    db:&D1Database,tenant:&str
+)->Result<(Vec<TaskWorkload>,i64)>{
+    let now=now_nanos();
+    let week=now.saturating_add(7*24*3600*1_000_000_000);
+    // This is the ORIGINAL Task owner, aggregating ALL tenant tasks in D1,
+    // independently of pagination, while keeping Actor and Team disjoint.
+    let sql="SELECT COALESCE(json_extract(state,'$.owner.actor_id'),'') AS assignee_identity,COALESCE(json_extract(state,'$.owner.team_id'),'') AS owner_team_id,       SUM(CASE WHEN json_extract(state,'$.status')='open' THEN 1 ELSE 0 END) AS open_count,       SUM(CASE WHEN json_extract(state,'$.status')='completed' THEN 1 ELSE 0 END) AS completed_count,       SUM(CASE WHEN json_extract(state,'$.status')='open' AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)<CAST(? AS INTEGER) THEN 1 ELSE 0 END) AS overdue_open_count,       SUM(CASE WHEN json_extract(state,'$.status')='open' AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)>=CAST(? AS INTEGER) AND CAST(json_extract(state,'$.due_at_unix_nanos') AS INTEGER)<CAST(? AS INTEGER) THEN 1 ELSE 0 END) AS due_next_7_days_count       FROM crm_activity_task_records WHERE tenant=? GROUP BY assignee_identity,owner_team_id ORDER BY assignee_identity,owner_team_id";
+    let result=bind(db,sql,&[JsValue::from_str(&now.to_string()),
+       JsValue::from_str(&now.to_string()),JsValue::from_str(&week.to_string()),
+       JsValue::from_str(tenant)])?.all().await?.results::<TaskWorkload>()?;
+    Ok((result,now/1_000_000_000))
 }

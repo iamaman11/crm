@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package crm.access.v2;
+
+import "crm/core/v2/operation.proto";
+
+// Authoritative membership is crm_users in the SAME tenant-bound D1. Signed
+// Cloudflare Access identity, never caller-supplied actor/tenant, is admission.
+enum MemberRole {
+  MEMBER_ROLE_UNSPECIFIED = 0;
+  MEMBER_ROLE_VIEWER = 1;
+  MEMBER_ROLE_ADMIN = 2;
+}
+
+message Member {
+  string email = 1;
+  MemberRole role = 2;
+  bool active = 3;
+  int64 version = 4;
+}
+
+message GetMyMembershipRequest {}
+message GetMyMembershipResponse {
+  Member member = 1;
+}
+
+message ListMembersRequest {
+  crm.core.v2.PageRequest page = 1;
+  bool include_inactive = 2;
+}
+message ListMembersResponse {
+  repeated Member members = 1;
+  crm.core.v2.PageInfo page_info = 2;
+}
+
+// Invite/pre-provision only. An email becomes a CRM actor only when it later
+// authenticates with a SIGNED human Cloudflare Access JWT for this identity.
+// An administrator cannot mint or impersonate that human session.
+message ProvisionMemberRequest {
+  string email = 1;
+  MemberRole role = 2;
+  crm.core.v2.MutationPrecondition precondition = 3;
+}
+message ProvisionMemberResponse {
+  Member member = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+// Versioned, idempotent membership change. Last active admin and self lockout
+// must be rejected by the original Access owner before any mutation.
+message UpdateMemberRequest {
+  string email = 1;
+  optional MemberRole role = 2;
+  optional bool active = 3;
+  crm.core.v2.MutationPrecondition precondition = 4;
+}
+message UpdateMemberResponse {
+  Member member = 1;
+  crm.core.v2.MutationReceipt receipt = 2;
+}
+
+message GetMemberRequest {
+  string email = 1;
+  optional string receipt_idempotency_key = 2;
+}
+message GetMemberResponse {
+  Member member = 1;
+  crm.core.v2.MutationCommitEvidence confirmed_mutation = 2;
+}
+
+service MemberService {
+  rpc GetMyMembership(GetMyMembershipRequest) returns (GetMyMembershipResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetMember(GetMemberRequest) returns (GetMemberResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ProvisionMember(ProvisionMemberRequest) returns (ProvisionMemberResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  rpc UpdateMember(UpdateMemberRequest) returns (UpdateMemberResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+}

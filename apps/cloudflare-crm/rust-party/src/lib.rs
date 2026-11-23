@@ -11,6 +11,8 @@ mod parties;
 #[cfg(feature = "native")]
 mod access;
 #[cfg(feature = "native")]
+mod access_members;
+#[cfg(feature = "native")]
 mod account_overview;
 #[cfg(feature = "native")]
 mod accounts;
@@ -382,6 +384,26 @@ impl RpcPolicy {
 #[cfg(feature = "native")]
 const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     (
+        "/crm.access.v2.MemberService/GetMyMembership",
+        RpcPolicy { permission: RpcPermission::Read },
+    ),
+    (
+        "/crm.access.v2.MemberService/ListMembers",
+        RpcPolicy { permission: RpcPermission::Read },
+    ),
+    (
+        "/crm.access.v2.MemberService/GetMember",
+        RpcPolicy { permission: RpcPermission::Read },
+    ),
+    (
+        "/crm.access.v2.MemberService/ProvisionMember",
+        RpcPolicy { permission: RpcPermission::Write },
+    ),
+    (
+        "/crm.access.v2.MemberService/UpdateMember",
+        RpcPolicy { permission: RpcPermission::Write },
+    ),
+    (
         "/crm.activities.v2.InteractionService/CreateInteraction",
         RpcPolicy {
             permission: RpcPermission::Write,
@@ -635,6 +657,12 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     ),
     (
         "/crm.activities.v2.TaskService/ListTasks",
+        RpcPolicy {
+            permission: RpcPermission::Read,
+        },
+    ),
+    (
+        "/crm.activities.v2.TaskService/ListTaskWorkload",
         RpcPolicy {
             permission: RpcPermission::Read,
         },

@@ -14,6 +14,7 @@ import {binaryPartyV3,decodePartyV3,partyV3Path,
   binaryContactV2,decodeContactV2,contactV2Path,
   binaryRelationshipV2,decodeRelationshipV2,relationshipV2Path,
   binaryTaskV2,decodeTaskV2,taskV2Path,
+  binaryMemberV2,decodeMemberV2,memberV2Path,
   binaryInteractionV2,decodeInteractionV2,interactionV2Path,
   binaryQualityV2,decodeQualityV2,qualityV2Path,
   binaryIdentityV2,decodeIdentityV2,identityV2Path,
@@ -1022,6 +1023,16 @@ console.log(JSON.stringify({event:"crm.native-g3-relationship-v2",
 
  // Activities v2: real signed workerd binary Protobuf against the ORIGINAL
  // crm-activities Task state, native one-D1 account FK, receipt and audit.
+ const memberV2=async(method,token,payload)=>{
+   const response=await rpcFetch(memberV2Path(method),{method:"POST",
+     headers:{"content-type":"application/proto","connect-protocol-version":"1",
+       ...(token?{"cf-access-jwt-assertion":token}:{})},
+     body:binaryMemberV2(method,payload)});
+   return {status:response.status,headers:response.headers,
+     body:response.status<400
+       ?decodeMemberV2(method,new Uint8Array(await response.arrayBuffer()))
+       :await response.json()};
+ };
  const taskV2=async(method,token,payload)=>{
    const response=await rpcFetch(taskV2Path(method),{method:"POST",
      headers:{"content-type":"application/proto","connect-protocol-version":"1",
@@ -4368,6 +4379,155 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    due_nanosecond_keyset:true,undated:true,tenant_ab:true,viewer_full_fields:true,
    recent_across_accounts:true,account_names:true,invalid_scope_denied:true,
    no_read_audit:true}));
+
+ // SK-07.B: signed human membership, CAS role/deactivation and original
+ // TaskOwner reassignment. No identity headers or service->human impersonation.
+ const beforeMemberRead=(await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n;
+ const myMember=await memberV2("GetMyMembership",admin,{});
+ assert.equal(myMember.status,200,describeProtobuf(myMember.body));
+ assert.equal(myMember.body.member?.email,"native-a@example.test");
+ assert.equal(myMember.body.member?.role,2);
+ assert.equal((await memberV2("GetMyMembership",viewer,{})).body.member?.role,1);
+ assert.equal((await memberV2("GetMyMembership",knownService,{})).body.member?.email,
+   "service:ci-fixture.access","service actor remains a SERVICE");
+ assert.equal((await memberV2("GetMyMembership",tenantB,{})).body.member?.email,"native-b@example.test");
+ const initialRoster=await memberV2("ListMembers",viewer,{page:{pageSize:1}});
+ assert.equal(initialRoster.status,200);
+ assert.equal(initialRoster.body.members.length,1);
+ assert.ok(initialRoster.body.pageInfo?.nextPageToken);
+ assert.equal((await memberV2("GetMember",tenantB,{email:"native-a@example.test"})).status,404);
+ assert.equal((await memberV2("GetMember",viewer,{email:"native-a@example.test"})).status,200);
+ assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id='tenant-a'"))[0].n,
+   beforeMemberRead,"Signed membership reads must not append audit");
+
+ const newStaff="native-staff@example.test";
+ const staffCreate={email:newStaff,role:1,
+   precondition:{idempotencyKey:"sk07-member-create-staff"}};
+ assert.equal((await memberV2("ProvisionMember",viewer,staffCreate)).status,403);
+ assert.equal((await memberV2("ProvisionMember",tenantB,{
+   ...staffCreate,precondition:{idempotencyKey:"sk07-member-tenant-b"}
+ })).status,200,"tenant B may independently invite an email ONLY if globally unused");
+ const staffWrongTenant=(await memberV2("ProvisionMember",admin,staffCreate));
+ assert.equal(staffWrongTenant.status,409,"an email enrolled by tenant B cannot be reparented");
+ // A second independent human is provisioned inside tenant A, not minted as JWT.
+ const assignee="native-assignee@example.test";
+ const staffInput={email:assignee,role:1,
+   precondition:{idempotencyKey:"sk07-member-create-assignee"}};
+ const staffCreated=await memberV2("ProvisionMember",admin,staffInput);
+ assert.equal(staffCreated.status,200,describeProtobuf(staffCreated.body));
+ assert.equal(staffCreated.body.member?.email,assignee);
+ assert.equal(staffCreated.body.member?.active,true);
+ assert.equal(staffCreated.body.member?.version,1n);
+ assert.equal((await memberV2("ProvisionMember",admin,staffInput)).body.receipt?.replayed,true);
+ assert.equal((await memberV2("ProvisionMember",admin,{...staffInput,role:2})).status,409);
+ const memberProof=await memberV2("GetMember",viewer,{email:assignee,
+   receiptIdempotencyKey:staffInput.precondition.idempotencyKey});
+ assert.equal(memberProof.body.confirmedMutation?.originalRequestId,
+   staffCreated.body.receipt?.requestId);
+ assert.equal(memberProof.body.confirmedMutation?.resourceVersion,1n);
+ assert.equal((await memberV2("GetMember",tenantB,{email:assignee})).status,404);
+ assert.equal((await memberV2("ProvisionMember",admin,{
+   email:"service:forged.access",role:2,
+   precondition:{idempotencyKey:"sk07-member-forged-service"}
+ })).status,400);
+
+ // Signed invited HUMAN login really joins the same tenant through Access.
+ const invitedJwt=jwt(assignee);
+ const invitedMe=await memberV2("GetMyMembership",invitedJwt,{});
+ assert.equal(invitedMe.status,200);
+ assert.equal(invitedMe.body.member?.email,assignee);
+ assert.equal((await memberV2("ProvisionMember",invitedJwt,staffCreate)).status,403);
+ const changeMember={email:assignee,role:2,
+   precondition:{idempotencyKey:"sk07-member-promote",expectedVersion:1n}};
+ const promoted=await memberV2("UpdateMember",admin,changeMember);
+ assert.equal(promoted.status,200,describeProtobuf(promoted.body));
+ assert.equal(promoted.body.member?.version,2n);
+ assert.equal(promoted.body.member?.role,2);
+ assert.equal((await memberV2("UpdateMember",admin,changeMember)).body.receipt?.replayed,true);
+ assert.equal((await memberV2("UpdateMember",admin,{
+   ...changeMember,precondition:{idempotencyKey:"sk07-member-stale",expectedVersion:1n}
+ })).status,409);
+ assert.equal((await memberV2("UpdateMember",invitedJwt,{
+   email:assignee,active:false,
+   precondition:{idempotencyKey:"sk07-member-self",expectedVersion:2n}
+ })).status,403,"no self lockout");
+ assert.equal((await memberV2("UpdateMember",admin,{
+   email:"native-b@example.test",active:false,
+   precondition:{idempotencyKey:"sk07-member-foreign",expectedVersion:1n}
+ })).status,409,"cross tenant membership mutation is forbidden");
+
+ // One original Task owner: assign to a signed human, query BEFORE LIMIT,
+ // reassign by original Rust domain Patch<TaskOwner>, CAS and receipts.
+ const delegatedTask="sk07-task-"+randomUUID();
+ const delegatedCreate={taskId:delegatedTask,accountId,subject:"SK07 assigned Task",
+   priority:2,assigneeEmail:assignee,
+   precondition:{idempotencyKey:"sk07-task-create-"+delegatedTask}};
+ const delegated=await taskV2("CreateTask",admin,delegatedCreate);
+ assert.equal(delegated.status,200,describeProtobuf(delegated.body));
+ assert.equal(delegated.body.task?.assigneeIdentity,assignee);
+ const delegatedList=await taskV2("ListTasks",viewer,{
+   assigneeEmail:assignee,page:{pageSize:100}
+ });
+ assert.equal(delegatedList.status,200);
+ assert.ok(delegatedList.body.tasks.some(t=>t.taskId===delegatedTask));
+ assert.equal((await taskV2("ListTasks",invitedJwt,{assignedToMe:true,
+   page:{pageSize:100}})).body.tasks.some(t=>t.taskId===delegatedTask),true);
+ assert.equal((await taskV2("ListTasks",viewer,{assignedToMe:true,
+   assigneeEmail:assignee})).status,400);
+ assert.equal((await taskV2("ListTasks",tenantB,{assigneeEmail:assignee})).body.tasks.length,0);
+ assert.equal((await taskV2("CreateTask",admin,{
+   ...delegatedCreate,taskId:"sk07-task-foreign",
+   assigneeEmail:"native-b@example.test",
+   precondition:{idempotencyKey:"sk07-task-foreign"}
+ })).status,400);
+ const workload=await taskV2("ListTaskWorkload",viewer,{});
+ assert.equal(workload.status,200);
+ assert.ok(workload.body.buckets.some(b=>b.assigneeIdentity===assignee&&b.openCount>0n));
+ assert.ok(workload.body.asOfUnixSeconds>0n);
+ assert.deepEqual((await taskV2("ListTaskWorkload",admin,{})).body.buckets,workload.body.buckets);
+ assert.equal((await taskV2("ListTaskWorkload",tenantB,{})).body.buckets
+   .some(b=>b.assigneeIdentity===assignee),false);
+ const delegationChange={taskId:delegatedTask,assigneeEmail:"native-viewer@example.test",
+   precondition:{idempotencyKey:"sk07-task-reassign",expectedVersion:1n}};
+ const reassign=await taskV2("UpdateTask",admin,delegationChange);
+ assert.equal(reassign.status,200,describeProtobuf(reassign.body));
+ assert.equal(reassign.body.task?.assigneeIdentity,"native-viewer@example.test");
+ assert.equal(reassign.body.task?.version,2n);
+ assert.equal((await taskV2("UpdateTask",admin,delegationChange)).body.receipt?.replayed,true);
+ assert.equal((await taskV2("UpdateTask",admin,{
+   ...delegationChange,precondition:{idempotencyKey:"sk07-task-stale",expectedVersion:1n}
+ })).status,409);
+ const delegatedProof=await taskV2("GetTask",viewer,{
+   taskId:delegatedTask,receiptIdempotencyKey:"sk07-task-reassign"
+ });
+ assert.equal(delegatedProof.body.confirmedMutation?.originalRequestId,
+   reassign.body.receipt?.requestId);
+ assert.equal((await taskV2("ListTasks",viewer,{assignedToMe:true,
+   page:{pageSize:100}})).body.tasks.some(t=>t.taskId===delegatedTask),true);
+ assert.equal((await taskV2("ListTasks",invitedJwt,{assignedToMe:true,
+   page:{pageSize:100}})).body.tasks.some(t=>t.taskId===delegatedTask),false);
+
+ const deactivate=await memberV2("UpdateMember",admin,{email:assignee,active:false,
+   precondition:{idempotencyKey:"sk07-member-deactivate",expectedVersion:2n}});
+ assert.equal(deactivate.status,200,describeProtobuf(deactivate.body));
+ assert.equal(deactivate.body.member?.active,false);
+ assert.equal((await memberV2("GetMyMembership",invitedJwt,{})).status,401);
+ assert.equal((await taskV2("CreateTask",admin,{
+   ...delegatedCreate,taskId:"sk07-task-inactive",assigneeEmail:assignee,
+   precondition:{idempotencyKey:"sk07-task-inactive"}
+ })).status,400);
+ assert.equal((await memberV2("ListMembers",viewer,{includeInactive:true,
+   page:{pageSize:100}})).body.members.some(m=>m.email===assignee&&!m.active),true);
+ const workflowAudit=await sql("SELECT action FROM crm_audit WHERE tenant_id='tenant-a' "+
+   "AND (subject_id=? OR subject_id=?) ORDER BY rowid",assignee,delegatedTask);
+ assert.deepEqual(workflowAudit.map(r=>r.action),[
+   "access.member.provision","access.member.update","activity_tasks.create",
+   "activity_tasks.update","access.member.update"
+ ]);
+ console.log(JSON.stringify({event:"crm.native-sk07b-workforce",result:"PASS",
+   signed_human:true,service_distinct:true,tenant_ab:true,viewer_read_all:true,
+   admin_write_only:true,member_receipts:true,cas:true,replay:true,revocation:true,
+   task_assignee_original_domain:true,mine_signed:true,workload_before_paging:true}));
 
  await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});
  const salesAuditBeforeFilter=(await sql("SELECT COUNT(*) AS n FROM crm_audit"))[0].n;

@@ -34,6 +34,10 @@ message Task {
   // Only the existing Task owner projects a real sales.deal relationship.
   // Empty for ordinary Account tasks. Only a validated Deal link at creation can set it.
   string related_deal_id = 11;
+  // Original domain TaskOwner: signed Access actor or enrolled human; a team
+  // owner is a distinct future assignment kind, never a fabricated user.
+  string assignee_identity = 12;
+  string owner_team_id = 13;
 }
 
 message CreateTaskRequest {
@@ -47,6 +51,9 @@ message CreateTaskRequest {
   crm.core.v2.MutationPrecondition precondition = 8;
   // Optional concrete Deal link, checked against the tenant and Account by the Task owner.
   optional string deal_id = 9;
+  // Only an ACTIVE member in this tenant can be assigned by the administrator.
+  // Absent uses the verified creator; never a caller-supplied actor claim.
+  optional string assignee_email = 10;
 }
 
 message CreateTaskResponse {
@@ -65,6 +72,9 @@ message UpdateTaskRequest {
   optional TaskPriority priority = 4;
   crm.core.v2.TimestampPatch due_at = 5;
   crm.core.v2.MutationPrecondition precondition = 6;
+  // Assign a different eligible human while retaining original domain CAS,
+  // idempotency receipt, immutable history and audit. Absent means Keep.
+  optional string assignee_email = 7;
 }
 
 message UpdateTaskResponse {
@@ -133,12 +143,30 @@ message ListTasksRequest {
   bool sort_by_due = 10;
   // Include only Tasks with no deadline; incompatible with due-range/sort.
   bool without_due_only = 11;
+  // Original Task owner filters before LIMIT. No browser page filtering.
+  optional string assignee_email = 12;
+  // Resolve from the signed Access Actor, never a caller-supplied identity.
+  bool assigned_to_me = 13;
 }
 
 message ListTasksResponse {
   repeated Task tasks = 1;
   crm.core.v2.PageInfo page_info = 2;
   map<string, string> account_names = 3;
+}
+
+message ListTaskWorkloadRequest {}
+message TaskWorkloadBucket {
+  string assignee_identity = 1;
+  string owner_team_id = 2;
+  uint64 open_count = 3;
+  uint64 completed_count = 4;
+  uint64 overdue_open_count = 5;
+  uint64 due_next_7_days_count = 6;
+}
+message ListTaskWorkloadResponse {
+  repeated TaskWorkloadBucket buckets = 1;
+  int64 as_of_unix_seconds = 2;
 }
 
 service TaskService {
@@ -158,6 +186,9 @@ service TaskService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListTaskWorkload(ListTaskWorkloadRequest) returns (ListTaskWorkloadResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 }

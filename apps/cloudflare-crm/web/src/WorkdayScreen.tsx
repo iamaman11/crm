@@ -14,17 +14,18 @@ function localToday():string {
 }
 
 type BucketKind="before"|"today"|"after"|"undated";
-function TaskBucket({title,kind,start,before}:{title:string;kind:BucketKind;
-  start:string;before:string}) {
+function TaskBucket({title,kind,start,before,mine}:{title:string;kind:BucketKind;
+  start:string;before:string;mine:boolean}) {
   const [cursor,setCursor]=useState("");
   const query=useQuery(useCallback((signal:AbortSignal)=>api.tasks.listTasks({
     page:{pageSize:12,pageToken:cursor},
     status:TaskStatus.OPEN,
+    assignedToMe:mine,
     sortByDue:kind!=="undated",
     withoutDueOnly:kind==="undated",
     ...(kind==="today"||kind==="after"?{dueFrom:timestamp(kind==="today"?start:before)}:{}),
     ...(kind==="before"||kind==="today"?{dueBefore:timestamp(kind==="before"?start:before)}:{}),
-  },{signal}),[kind,start,before,cursor]));
+  },{signal}),[kind,start,before,cursor,mine]));
   const tasks=query.data?.tasks??[];
   const next=query.data?.pageInfo?.nextPageToken??"";
   return <section aria-label={title}>
@@ -80,7 +81,7 @@ function RecentInteractions() {
 }
 
 /** SK-06 uses the same generated Task and Interaction clients and original owners. */
-export function WorkdayScreen({day}:{day:string}) {
+export function WorkdayScreen({day,mine=false}:{day:string;mine?:boolean}) {
   const chosen=day||localToday();
   // Browser-local calendar bounds; explicit local date, not a 24h UTC guess.
   // Adjacent local midnights also cover daylight-saving transitions correctly.
@@ -95,22 +96,26 @@ export function WorkdayScreen({day}:{day:string}) {
   return <>
     <PageHeader title="Рабочий день"
       description="Действующие задачи по сроку, связанные клиенты и сделки, последние взаимодействия."/>
+    <p><a href={workdayHref(day,false)}>Общая очередь</a>{" · "}
+      <a href={workdayHref(day,true)}>Моя очередь по подписанной сессии</a>{" · "}
+      <a href="#team">Команда и нагрузка</a></p>
     <p><label>Дата рабочего дня{" "}
       <input type="date" value={chosen} min="2000-01-01" max="2100-12-31"
-        onChange={event=>{if(event.target.value)navigateTo(workdayHref(event.target.value));}}/>
-    </label>{" · "}<a href={workdayHref()}>Сегодня</a></p>
+        onChange={event=>{if(event.target.value)navigateTo(workdayHref(event.target.value,mine));}}/>
+    </label>{" · "}<a href={workdayHref("",mine)}>Сегодня</a></p>
     <p>Время считается по часовому поясу браузера: {Intl.DateTimeFormat().resolvedOptions().timeZone}.
-      Показаны только открытые задачи текущего tenant. Список сортируется и ограничивается
-      исходным владельцем до выдачи, а не по неполной странице в браузере.
-      Это общая доступная очередь, пока не введено реальное назначение сотруднику.</p>
+      Показаны {mine?"только задачи подписанного актора":"все доступные открытые задачи"}
+      текущего tenant. Список сортируется и ограничивается исходным владельцем до выдачи,
+      а не по неполной странице в браузере. Режим «Моя очередь» сверяет настоящую
+      идентичность Cloudflare Access, не строку email из браузера.</p>
     <TaskBucket key={chosen+"/before"} title="До выбранной даты" kind="before"
-      start={bounds.start} before={bounds.before}/>
+      start={bounds.start} before={bounds.before} mine={mine}/>
     <TaskBucket key={chosen+"/today"} title="На выбранную дату" kind="today"
-      start={bounds.start} before={bounds.before}/>
+      start={bounds.start} before={bounds.before} mine={mine}/>
     <TaskBucket key={chosen+"/after"} title="Ближайшие после даты" kind="after"
-      start={bounds.start} before={bounds.before}/>
+      start={bounds.start} before={bounds.before} mine={mine}/>
     <TaskBucket key={chosen+"/undated"} title="Без срока" kind="undated"
-      start={bounds.start} before={bounds.before}/>
+      start={bounds.start} before={bounds.before} mine={mine}/>
     <RecentInteractions/>
     <p><a href="#tasks">Все задачи</a>{" · "}<a href="#sales">Все сделки</a>
       {" · "}<a href="#insights">Аналитика бизнеса и риски</a></p>

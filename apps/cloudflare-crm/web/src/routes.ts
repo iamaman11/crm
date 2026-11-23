@@ -6,6 +6,7 @@ export const sectionLabels={
   relationships:"Связи",
   sales:"Сделки",
   tasks:"Задачи",
+  team:"Команда",
   consents:"Коммуникации",
   review:"Качество и совпадения",
   privacy:"Запросы о данных",
@@ -17,13 +18,13 @@ export type AccountFilterStatus = AccountStatus.ACTIVE | AccountStatus.INACTIVE;
 export type AccountFilters = {search:string;status:AccountFilterStatus|null;cursor:string};
 export type Route =
   | {kind:"insights";start:string;end:string;pipelineId:string;includeArchived:boolean;compare:boolean}
-  | {kind:"workday";day:string}
+  | {kind:"workday";day:string;mine:boolean}
   | ({kind:"accounts"} & AccountFilters)
   | {kind:"account";accountId:string}
   | {kind:"account-create";partyId:string}
   | {kind:"deal";dealId:string}
   | {kind:"search";query:string}
-  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;overdue?:boolean;viewId?:string;pipelineId?:string}
+  | {kind:"section";screen:Section;partyId:string;accountId:string;taskId?:string;dealId?:string;contactPointId?:string;relationshipId?:string;search?:string;overdue?:boolean;viewId?:string;pipelineId?:string;assigneeEmail?:string;mine?:boolean}
   | {kind:"not-found";path:string};
 
 function isSection(path:string):path is Section {return Object.prototype.hasOwnProperty.call(sectionLabels,path);}
@@ -44,8 +45,10 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     const dates=params.getAll("date");
     const day=dates[0]??"";
     let invalid=false;
-    params.forEach((_,key)=>{if(key!=="date")invalid=true;});
-    if(dates.length>1||invalid)return {kind:"not-found",path:source};
+    params.forEach((_,key)=>{if(key!=="date"&&key!=="scope")invalid=true;});
+    const scopes=params.getAll("scope");
+    if(dates.length>1||scopes.length>1||scopes.some(x=>x!=="mine")||invalid)
+      return {kind:"not-found",path:source};
     if(day){
       if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return {kind:"not-found",path:source};
       const [year,month,date]=day.split("-").map(Number);
@@ -55,7 +58,7 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
       if(valid.getUTCFullYear()!==year||valid.getUTCMonth()!==month-1||
         valid.getUTCDate()!==date)return {kind:"not-found",path:source};
     }
-    return {kind:"workday",day};
+    return {kind:"workday",day,mine:scopes[0]==="mine"};
   }
   if(path==="insights"){
     const allowed=new Set(["start","end","pipelineId","includeArchived","compare"]);
@@ -116,7 +119,10 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
         return {kind:"deal",dealId:id};
     }catch {/* Malformed URLs do not reach API. */}
   }
+  if(path==="team"&&question>=0)return {kind:"not-found",path:source};
   if(isSection(path)){
+    const assignees=path==="tasks"?params.getAll("assigneeEmail"):[];
+    const mineFlags=path==="tasks"?params.getAll("mine"):[];
     const ids=path==="tasks"?params.getAll("taskId"):[];
     const deals=path==="tasks"?params.getAll("dealId"):[];
     const searches=path==="sales"||path==="tasks"?params.getAll("search"):[];
@@ -126,13 +132,17 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
     const contacts=path==="contacts"?params.getAll("contactPointId"):[];
     const relations=path==="relationships"?params.getAll("relationshipId"):[];
     const taskId=ids[0]??"",dealId=deals[0]??"";
+    const assigneeEmail=assignees[0]??"";
     const contactPointId=contacts[0]??"",relationshipId=relations[0]??"";
     const partyIds=params.getAll("partyId");
     const partyId=partyIds[0]??"";
     const focusedPartyRecord=contacts.length>0||relations.length>0;
     if(params.getAll("accountId").length>1||partyIds.length>1||ids.length>1||deals.length>1||searches.length>1||
        overdueValues.length>1||overdueValues.some(value=>value!=="1")||
-       (taskId&&overdueValues.length>0)||viewIds.length>1||
+       (taskId&&overdueValues.length>0)||assignees.length>1||mineFlags.length>1||
+       mineFlags.some(value=>value!=="1")||(assigneeEmail&&mineFlags.length>0)||
+       assigneeEmail.length>254||(assigneeEmail&&!assigneeEmail.includes("@"))||
+       viewIds.length>1||
        pipelineIds.length>1||(viewIds.length>0&&pipelineIds.length>0)||
        pipelineIds.some(id=>!id)||
        contacts.length>1||relations.length>1||
@@ -146,6 +156,8 @@ export function parseRoute(hash:string,allowedStatuses:readonly AccountFilterSta
       ...(contactPointId?{contactPointId}:{}),...(relationshipId?{relationshipId}:{}),
       ...(searches[0]?{search:searches[0]}:{}),
       ...(overdueValues.length?{overdue:true}:{}),
+      ...(assigneeEmail?{assigneeEmail}:{}),
+      ...(mineFlags.length?{mine:true}:{}),
       ...(viewIds[0]?{viewId:viewIds[0]}:{}),
       ...(pipelineIds[0]?{pipelineId:pipelineIds[0]}:{})};
   }
@@ -161,8 +173,11 @@ export function intelligenceHref(opts:{start?:string;end?:string;pipelineId?:str
   if(opts.compare&&opts.start&&opts.end)p.set("compare","1");
   return "#insights"+(p.size?"?"+p.toString():"");
 }
-export function workdayHref(day=""):string {
-  return "#workday"+(day?"?"+new URLSearchParams({date:day}).toString():"");
+export function workdayHref(day="",mine=false):string {
+  const p=new URLSearchParams();
+  if(day)p.set("date",day);
+  if(mine)p.set("scope","mine");
+  return "#workday"+(p.size?"?"+p.toString():"");
 }
 export function accountsHref(filters:AccountFilters={search:"",status:null,cursor:""}):string {
   const params=new URLSearchParams();
@@ -201,16 +216,23 @@ export function taskHref(taskId:string,accountId:string):string {
 }
 
 /** One URL-owned Task lookup, preserving an Account or concrete Deal scope. */
-export function taskSearchHref(accountId:string,search:string,dealId="",overdue=false):string {
+export function taskSearchHref(accountId:string,search:string,dealId="",overdue=false,
+  assigneeEmail="",mine=false):string {
   const params=new URLSearchParams();
   if(accountId)params.set("accountId",accountId);
   if(dealId)params.set("dealId",dealId);
   if(search.trim())params.set("search",search.trim());
   if(overdue)params.set("overdue","1");
+  if(assigneeEmail)params.set("assigneeEmail",assigneeEmail);
+  if(mine)params.set("mine","1");
   const query=params.toString();
   return "#tasks"+(query?"?"+query:"");
 }
 
+export function taskAssigneeHref(email:string):string {
+  return "#tasks?"+new URLSearchParams({assigneeEmail:email}).toString();
+}
+export function taskMineHref():string {return "#tasks?mine=1";}
 export function dealTasksHref(dealId:string,accountId:string):string {
   return "#tasks?"+new URLSearchParams({accountId,dealId}).toString();
 }
