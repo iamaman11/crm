@@ -47,8 +47,8 @@ impl task_wire::TaskService for TaskV2Service {
             },
             &key,
             &self.d1()?,
-            &self.tenant,
-            &self.actor,
+            &self.actor.tenant,
+            &self.actor.identity,
             &self.request_id,
         )
         .await
@@ -129,9 +129,9 @@ impl task_wire::TaskService for TaskV2Service {
             },
             &key,
             &self.d1()?,
-            &self.tenant,
+            &self.actor.tenant,
             &id,
-            &self.actor,
+            &self.actor.identity,
             &self.request_id,
         )
         .await
@@ -171,7 +171,6 @@ impl task_wire::TaskService for TaskV2Service {
             },
             &key,
             &self.d1()?,
-            &self.tenant,
             &id,
             &self.actor,
             &self.request_id,
@@ -211,7 +210,6 @@ impl task_wire::TaskService for TaskV2Service {
             },
             &key,
             &self.d1()?,
-            &self.tenant,
             &id,
             &self.actor,
             &self.request_id,
@@ -245,14 +243,14 @@ impl task_wire::TaskService for TaskV2Service {
         let input = req.to_owned_message();
         let id = Self::valid_id(&input.task_id)?;
         let db = self.d1()?;
-        let item = activity_tasks::stored(&db, &self.tenant, &id)
+        let item = activity_tasks::stored(&db, &self.actor.tenant, &id)
             .await
             .map_err(|_| ConnectError::internal("TASK original D1 read failed"))?
             .ok_or_else(|| ConnectError::not_found("ACTIVITIES_TASK_NOT_FOUND"))?;
         let confirmed_mutation = match receipt_key(input.receipt_idempotency_key.as_deref())? {
             None => None,
             Some(key) => {
-                let stored = crud_receipt(&db, &self.tenant, key, CrudReceiptOwner::Task)
+                let stored = crud_receipt(&db, &self.actor.tenant, key, CrudReceiptOwner::Task)
                     .await
                     .map_err(|_| ConnectError::unavailable("TASK_RECEIPT_READ_FAILED"))?;
                 crud_commit_evidence(stored, &id, &self.request_id, |state| {
@@ -369,7 +367,7 @@ impl task_wire::TaskService for TaskV2Service {
             return Err(ConnectError::invalid_argument("INVALID_ASSIGNEE_FILTERS"));
         }
         let owner = if req.assigned_to_me {
-            Some(self.actor.clone())
+            Some(self.actor.identity.clone())
         } else {
             req.assignee_email
                 .map(|v| {
@@ -379,7 +377,7 @@ impl task_wire::TaskService for TaskV2Service {
         };
         let (list, next) = activity_tasks::list_page_typed(
             &self.d1()?,
-            &self.tenant,
+            &self.actor.tenant,
             after,
             size as usize,
             activity_tasks::TaskListFilters {
@@ -420,7 +418,7 @@ impl task_wire::TaskService for TaskV2Service {
         _ctx: RequestContext,
         _req: ServiceRequest<'_, task_wire::ListTaskWorkloadRequest>,
     ) -> ServiceResult<task_wire::ListTaskWorkloadResponse> {
-        let (buckets, as_of_unix_seconds) = activity_tasks::workload(&self.d1()?, &self.tenant)
+        let (buckets, as_of_unix_seconds) = activity_tasks::workload(&self.d1()?, &self.actor.tenant)
             .await
             .map_err(|_| ConnectError::internal("Task workload D1 failed"))?;
         let as_count = |n: i64| {

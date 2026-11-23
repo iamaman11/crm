@@ -4487,6 +4487,12 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.deepEqual((await taskV2("ListTaskWorkload",admin,{})).body.buckets,workload.body.buckets);
  assert.equal((await taskV2("ListTaskWorkload",tenantB,{})).body.buckets
    .some(b=>b.assigneeIdentity===assignee),false);
+ const personalBefore={taskId:delegatedTask,
+   precondition:{expectedVersion:1n,idempotencyKey:"sk07-not-my-task"}};
+ assert.equal((await taskV2("CompleteTask",viewer,personalBefore)).status,403);
+ assert.equal((await taskV2("ScheduleReminder",viewer,{
+   ...personalBefore,reminderAt:{seconds:1860000000n,nanos:0}
+ })).status,403);
  const delegationChange={taskId:delegatedTask,assigneeEmail:"native-viewer@example.test",
    precondition:{idempotencyKey:"sk07-task-reassign",expectedVersion:1n}};
  const reassign=await taskV2("UpdateTask",admin,delegationChange);
@@ -4507,9 +4513,64 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
  assert.equal((await taskV2("ListTasks",invitedJwt,{assignedToMe:true,
    page:{pageSize:100}})).body.tasks.some(t=>t.taskId===delegatedTask),false);
 
- const deactivate=await memberV2("UpdateMember",admin,{email:assignee,active:false,
-   precondition:{idempotencyKey:"sk07-member-deactivate",expectedVersion:2n}});
+ // Personal writes use the signed viewer, not administrator impersonation.
+ const personalReminder={taskId:delegatedTask,reminderAt:{seconds:1860000000n,nanos:0},
+   precondition:{expectedVersion:2n,idempotencyKey:"sk07-own-reminder"}};
+ const reminderOwn=await taskV2("ScheduleReminder",viewer,personalReminder);
+ assert.equal(reminderOwn.status,200,describeProtobuf(reminderOwn.body));
+ assert.equal(reminderOwn.body.task?.version,3n);
+ assert.equal((await taskV2("ScheduleReminder",viewer,personalReminder)).body.receipt?.replayed,true);
+ const personalComplete={taskId:delegatedTask,
+   precondition:{expectedVersion:3n,idempotencyKey:"sk07-own-complete"}};
+ assert.equal((await taskV2("CompleteTask",tenantB,personalComplete)).status,404);
+ assert.equal((await taskV2("UpdateTask",viewer,{
+   ...delegationChange,precondition:{expectedVersion:3n,idempotencyKey:"sk07-no-self-delegate"}
+ })).status,403);
+ const ownDone=await taskV2("CompleteTask",viewer,personalComplete);
+ assert.equal(ownDone.status,200,describeProtobuf(ownDone.body));
+ assert.equal(ownDone.body.task?.status,2);
+ assert.equal(ownDone.body.task?.version,4n);
+ assert.equal((await taskV2("CompleteTask",viewer,personalComplete)).body.receipt?.replayed,true);
+ assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND actor=?",
+   "tenant-a",delegatedTask,"native-viewer@example.test"))[0].n,2);
+
+ // Assignment and revocation contend in the same D1. A successful assignment
+ // must appear before revocation; a rejected command must not write/audit.
+ const raceCreateId="sk07-race-create-"+randomUUID();
+ const raceUpdateId="sk07-race-update-"+randomUUID();
+ const raceBase=await taskV2("CreateTask",admin,{
+   taskId:raceUpdateId,accountId,subject:"SK07 race reassignment base",priority:2,
+   precondition:{idempotencyKey:"sk07-race-base-"+raceUpdateId}
+ });
+ assert.equal(raceBase.status,200,describeProtobuf(raceBase.body));
+ const raceCreate={...delegatedCreate,taskId:raceCreateId,
+   precondition:{idempotencyKey:"sk07-race-assign-"+raceCreateId}};
+ const raceUpdate={taskId:raceUpdateId,assigneeEmail:assignee,
+   precondition:{expectedVersion:1n,idempotencyKey:"sk07-race-assign-"+raceUpdateId}};
+ const [createRace,updateRace,deactivate]=await Promise.all([
+   taskV2("CreateTask",admin,raceCreate),
+   taskV2("UpdateTask",admin,raceUpdate),
+   memberV2("UpdateMember",admin,{email:assignee,active:false,
+     precondition:{idempotencyKey:"sk07-member-deactivate",expectedVersion:2n}})
+ ]);
  assert.equal(deactivate.status,200,describeProtobuf(deactivate.body));
+ const revokedAt=(await sql("SELECT rowid AS seq FROM crm_audit WHERE tenant_id=? AND request_id=?",
+   "tenant-a",deactivate.body.receipt.requestId))[0].seq;
+ for(const [response,taskId,action,method,payload] of [
+   [createRace,raceCreateId,"activity_tasks.create","CreateTask",raceCreate],
+   [updateRace,raceUpdateId,"activity_tasks.update","UpdateTask",raceUpdate]
+ ]){
+   const audit=await sql("SELECT rowid AS seq FROM crm_audit WHERE tenant_id=? AND subject_id=? AND action=?",
+     "tenant-a",taskId,action);
+   if(response.status===200){
+     assert.equal(audit.length,1);
+     assert.ok(audit[0].seq<revokedAt,"assignment committed after member was revoked");
+     assert.equal((await taskV2(method,admin,payload)).body.receipt?.replayed,true);
+   }else{
+     assert.ok([400,409].includes(response.status),describeProtobuf(response.body));
+     assert.equal(audit.length,0,"rejected concurrent assignment wrote audit");
+   }
+ }
  assert.equal(deactivate.body.member?.active,false);
  assert.equal((await memberV2("GetMyMembership",invitedJwt,{})).status,401);
  assert.equal((await taskV2("CreateTask",admin,{
@@ -4522,11 +4583,12 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    "AND (subject_id=? OR subject_id=?) ORDER BY rowid",assignee,delegatedTask);
  assert.deepEqual(workflowAudit.map(r=>r.action),[
    "access.member.provision","access.member.update","activity_tasks.create",
-   "activity_tasks.update","access.member.update"
+   "activity_tasks.update","activity_tasks.reminder_scheduled","activity_tasks.complete","access.member.update"
  ]);
  console.log(JSON.stringify({event:"crm.native-sk07b-workforce",result:"PASS",
    signed_human:true,service_distinct:true,tenant_ab:true,viewer_read_all:true,
-   admin_write_only:true,member_receipts:true,cas:true,replay:true,revocation:true,
+   admin_delegation_only:true,personal_task_write:true,atomic_assignment_revocation:true,
+   member_receipts:true,cas:true,replay:true,revocation:true,
    task_assignee_original_domain:true,mine_signed:true,workload_before_paging:true}));
 
  await typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,adminIdentity:"native-a@example.test"});

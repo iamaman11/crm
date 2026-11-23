@@ -650,13 +650,13 @@ const RPC_POLICIES: &[(&str, RpcPolicy)] = &[
     (
         "/crm.activities.v2.TaskService/ScheduleReminder",
         RpcPolicy {
-            permission: RpcPermission::Write,
+            permission: RpcPermission::SelfWrite,
         },
     ),
     (
         "/crm.activities.v2.TaskService/CompleteTask",
         RpcPolicy {
-            permission: RpcPermission::Write,
+            permission: RpcPermission::SelfWrite,
         },
     ),
     (

@@ -2,7 +2,7 @@ import {useCallback,useState} from "react";
 import {Button,Card,RecordPanel,FormGrid,PageHeader,SelectField,TextField} from "@ultimate-crm/ui";
 import type {Task} from "@ultimate-crm/client/cloudflare";
 import {api,field,newId,timestamp,dateText} from "./api";
-import {TaskPriority,TaskStatus} from "@ultimate-crm/client/cloudflare";
+import {MemberRole,TaskPriority,TaskStatus} from "@ultimate-crm/client/cloudflare";
 import {enumValue} from "./enumFields";
 import {useQuery,useMutation,prepareMutation,MutationNotice,QueryNotice,Paging} from "./hooks";
 import {AccountPicker,AccountName} from "./Pickers";
@@ -25,6 +25,11 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
   const [formAccountId,setFormAccountId]=useState(initialAccountId);
   const [draftId,setDraftId]=useState(newId);
   const [selected,setSelected]=useState<Task>();
+  const me=useQuery(useCallback(async(signal:AbortSignal)=>
+    (await api.members.getMyMembership({}, {signal})).member,[]));
+  const isAdmin=me.data?.active===true&&me.data.role===MemberRole.ADMIN;
+  const canWorkOn=(task:Task)=>isAdmin||(me.data?.active===true&&
+    me.data.role===MemberRole.VIEWER&&humanMember(me.data.email)&&task.assigneeIdentity===me.data.email);
   const membersQuery=useQuery(useCallback(allMembers,[]));
   const members=membersQuery.data?.filter(member=>humanMember(member.email))??[];
   const [editorMode,setEditorMode]=useState<"create"|"edit"|"reminder"|null>(null);
@@ -72,13 +77,14 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
       actions={focusedTaskId
         ?<a href={scopeHref("tasks",initialAccountId||focused.data?.accountId||"")}>К задачам клиента</a>
         :initialDealId?<><a href={dealHref(initialDealId)}>К сделке</a>{" "}
-          <Button disabled={mutation.busy||mutation.pending||!dealContext.data} onClick={()=>{
+          {isAdmin&&<Button disabled={mutation.busy||mutation.pending||!dealContext.data} onClick={()=>{
             const deal=dealContext.data;
             if(!deal)return;
             setSelected(undefined);setFormAccountId(deal.accountId);setEditorMode("create");mutation.changed();
-          }}>Новая задача сделки</Button></>
-        :<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setFormAccountId(accountId);setEditorMode("create");mutation.changed();}}>Новая задача</Button>}/>
+          }}>Новая задача сделки</Button>}</>
+        :isAdmin?<Button disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setFormAccountId(accountId);setEditorMode("create");mutation.changed();}}>Новая задача</Button>:undefined}/>
     <p><a href="#team">Команда, сотрудники и нагрузка</a></p>
+    <QueryNotice query={me}/>
     {initialDealId&&!focusedTaskId&&<>
       <QueryNotice query={dealContext}/>
       {dealContext.data&&<p>Сделка: <strong>{dealContext.data.name}</strong> ·
@@ -130,15 +136,15 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
         t.ownerTeamId?"Команда "+t.ownerTeamId:"неизвестен"}</p>
       {t.relatedDealId&&<p>Связанная сделка: <a href={dealHref(t.relatedDealId)}>Открыть сделку</a></p>}
       {!focusedTaskId&&<p><a href={taskHref(t.taskId,t.accountId)}>Открыть карточку задачи</a></p>}
-      <Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={async()=>{
+      {isAdmin&&<Button variant="secondary" disabled={mutation.busy||mutation.pending} onClick={async()=>{
         try {
           setSelected((await api.tasks.getTask({taskId:t.taskId})).task);
           setEditorMode("edit");mutation.changed();
         } catch(error) {
           await mutation.reportError(error);
         }
-      }}>Редактировать задачу</Button>{" "}
-      {t.status===TaskStatus.OPEN&&<Button variant="secondary" disabled={mutation.busy||mutation.pending}
+      }}>Редактировать задачу</Button>}{" "}
+      {canWorkOn(t)&&t.status===TaskStatus.OPEN&&<Button variant="secondary" disabled={mutation.busy||mutation.pending}
         onClick={async()=>{
           try {
             const task=(await api.tasks.getTask({taskId:t.taskId})).task;
@@ -146,7 +152,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
             setSelected(task);setEditorMode("reminder");mutation.changed();
           }catch(error){await mutation.reportError(error);}
         }}>{t.reminderAt?"Изменить напоминание":"Назначить напоминание"}</Button>}{" "}
-      {t.status===TaskStatus.OPEN&&<Button disabled={mutation.busy||mutation.pending}
+      {canWorkOn(t)&&t.status===TaskStatus.OPEN&&<Button disabled={mutation.busy||mutation.pending}
         onClick={()=>void mutation.runIntent(()=>prepareMutation(api.tasks.completeTask,{
           taskId:t.taskId,
           precondition:{idempotencyKey:mutation.key,expectedVersion:t.version}
@@ -159,7 +165,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
       <Paging next={query.data?.pageInfo?.nextPageToken??""} busy={query.busy}
         onFirst={()=>setCursor("")} onNext={()=>setCursor(query.data?.pageInfo?.nextPageToken??"")}/>
     </>}
-    <RecordPanel open={editorMode==="reminder"&&!!selected} title="Напоминание задачи"
+    <RecordPanel open={editorMode==="reminder"&&!!selected&&canWorkOn(selected)} title="Напоминание задачи"
       onClose={()=>{if(mutation.busy||mutation.pending)return;setEditorMode(null);setSelected(undefined);}}>
       {selected&&<form key={selected.taskId+":"+selected.version.toString()} onChange={mutation.changed}
         onSubmit={e=>{
@@ -184,7 +190,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
       </form>}
       <MutationNotice state={mutation}/>
     </RecordPanel>
-    <RecordPanel open={editorMode==="edit"&&!!selected} title="Изменить задачу" onClose={()=>{if(mutation.busy||mutation.pending)return;setEditorMode(null);setSelected(undefined);}}>{selected&&<>
+    <RecordPanel open={isAdmin&&editorMode==="edit"&&!!selected} title="Изменить задачу" onClose={()=>{if(mutation.busy||mutation.pending)return;setEditorMode(null);setSelected(undefined);}}>{selected&&<>
       <p>Текущий срок: {dateText(selected.dueAt)} · Напоминание: {dateText(selected.reminderAt)}</p>
       <form key={selected.taskId+selected.version.toString()} onChange={mutation.changed} onSubmit={e=>{
         e.preventDefault();
@@ -222,7 +228,7 @@ export function TaskScreen({initialAccountId="",focusedTaskId="",initialDealId="
         <Button type="button" variant="secondary" disabled={mutation.busy||mutation.pending} onClick={()=>{setSelected(undefined);setEditorMode(null);mutation.changed();}}>Отмена</Button>
       </form><MutationNotice state={mutation}/>
     </>}</RecordPanel>
-    <RecordPanel open={editorMode==="create"} title="Новая задача" onClose={()=>{if(!mutation.busy&&!mutation.pending)setEditorMode(null);}}><form key={draftId} onChange={mutation.changed} onSubmit={e=>{
+    <RecordPanel open={isAdmin&&editorMode==="create"} title="Новая задача" onClose={()=>{if(!mutation.busy&&!mutation.pending)setEditorMode(null);}}><form key={draftId} onChange={mutation.changed} onSubmit={e=>{
       e.preventDefault();const data=new FormData(e.currentTarget);
       void mutation.runIntent(()=>{
         const dueAt=timestamp(field(data,"due")),reminderAt=timestamp(field(data,"reminder"));

@@ -2825,6 +2825,26 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    await deniedPage.getByRole("button",{name:"Сохранить участника",exact:true}).click();
    await deniedPage.getByRole("heading",{name:/Недостаточно прав/}).waitFor();
    assert.equal((await sql("SELECT COUNT(*) AS n FROM crm_party_records WHERE tenant='"+tenantSql+"' AND json_extract(state,'$.display_name')='Browser Denied "+runId+"'"))[0].n,0);
+   // Native signed viewer can operate an assigned Task, but cannot delegate
+   // or use the administrator-only creation/edit controls.
+   if(features.includes("native-ci")){
+     await deniedPage.goto(base+"/#tasks?assigneeEmail=native-viewer%40example.test");
+     const mine=deniedPage.locator("section").filter({has:deniedPage.getByRole("heading",
+       {name:delegatedTitle,exact:true})});
+     const done=mine.getByRole("button",{name:"Выполнить задачу",exact:true});
+     await done.waitFor();
+     await expect(deniedPage.getByRole("button",{name:"Новая задача",exact:true})).toHaveCount(0);
+     await expect(mine.getByRole("button",{name:"Редактировать задачу",exact:true})).toHaveCount(0);
+     const completing=deniedPage.waitForResponse(r=>responsePathEndsWith(r,"/CompleteTask")&&r.request().method()==="POST");
+     await done.click();
+     assert.equal((await completing).status(),200);
+     await mine.getByText(/Выполнена/).waitFor();
+     await deniedPage.reload();
+     await mine.getByText(/Выполнена/).waitFor();
+     assert.equal((await sql("SELECT COUNT(*) n FROM crm_audit WHERE tenant_id=? AND subject_id=? AND actor=? AND action=?",
+       tenantA,delegatedId,"native-viewer@example.test","activity_tasks.complete"))[0].n,1);
+     checkpoint("SK-07.B signed viewer completes only own Task, no admin controls, reload and D1 audit");
+   }
    await Promise.all(headerReads);
    await denied.close();
    await restoreViewer();restoreViewer=async()=>{};

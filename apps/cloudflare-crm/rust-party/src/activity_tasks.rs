@@ -296,7 +296,7 @@ pub(super) async fn create_typed(
     }
     // Membership is authoritative in the existing signed Access owner. The
     // lookup occurs AFTER the original receipt, so replay succeeds even if the
-    // assignee was later deactivated; no new write can target an inactive user.
+    // assignee was later deactivated. The INSERT also checks eligibility atomically.
     let target = if let Some(requested) = input.assignee_email.as_deref() {
         let normalized = match super::access_members::email(requested) {
             Ok(value) => value,
@@ -317,7 +317,7 @@ pub(super) async fn create_typed(
     } else {
         actor.to_owned()
     };
-    let owner = match ActorId::try_new(target) {
+    let owner = match ActorId::try_new(target.as_str()) {
         Ok(x) => TaskOwner::Actor(x),
         Err(_) => {
             return Ok(Err(MutationFailure::domain(
@@ -346,11 +346,12 @@ pub(super) async fn create_typed(
         }
     };
     let saved = state(&task)?;
-    let r=bind(db,"INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO NOTHING",
+    let r=bind(db,"INSERT INTO crm_activity_task_records(tenant,id,account_id,state,version,idem_key,idem_digest,request_id,actor) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1) ON CONFLICT(tenant,id) DO NOTHING",
         &[JsValue::from_str(tenant),JsValue::from_str(task.task_id().as_str()),
           JsValue::from_str(account_id.as_str()),JsValue::from_str(&saved),
           JsValue::from_f64(task.version() as f64),JsValue::from_str(key),
-          JsValue::from_str(&digest),JsValue::from_str(trace),JsValue::from_str(actor)])?.run().await;
+          JsValue::from_str(&digest),JsValue::from_str(trace),JsValue::from_str(actor),
+          JsValue::from_str(tenant),JsValue::from_str(&target)])?.run().await;
     finish_write(
         prior(db, tenant, key),
         trace,
@@ -417,6 +418,7 @@ pub(super) async fn update_typed(
         )));
     };
     let expected_version = input.expected_version;
+    let mut assignee = None;
     let owner = match input.owner {
         Change::Keep => Patch::Keep,
         Change::Clear => {
@@ -441,6 +443,7 @@ pub(super) async fn update_typed(
                     ErrorCode::InvalidArgument,
                 )));
             }
+            assignee = Some(normalized.clone());
             let actor = match ActorId::try_new(normalized) {
                 Ok(value) => value,
                 Err(_) => {
@@ -477,13 +480,17 @@ pub(super) async fn update_typed(
         )));
     }
     let saved = state(&task)?;
-    // One CAS write; the existing D1 trigger atomically stores receipt and audit.
+    // One CAS write; an explicit new assignee must still be active at commit.
+    // The existing D1 trigger atomically stores receipt and audit.
     let changed = bind(db,
-        "UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?",
+        "UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=? AND (? IS NULL OR EXISTS (SELECT 1 FROM crm_users WHERE tenant_id=? AND email=? AND active=1))",
         &[JsValue::from_str(&saved), JsValue::from_f64(task.version() as f64),
           JsValue::from_str(key), JsValue::from_str(&digest), JsValue::from_str(trace),
           JsValue::from_str(actor),JsValue::from_str(tenant), JsValue::from_str(id),
-          JsValue::from_f64(expected_version as f64)])?.run().await;
+          JsValue::from_f64(expected_version as f64),
+          assignee.as_deref().map(JsValue::from_str).unwrap_or(JsValue::NULL),
+          JsValue::from_str(tenant),
+          assignee.as_deref().map(JsValue::from_str).unwrap_or(JsValue::NULL)])?.run().await;
     finish_write(
         prior(db, tenant, key),
         trace,
@@ -497,15 +504,29 @@ pub(super) async fn update_typed(
 // The existing Task domain owns all schedule invariants. The SAME D1 UPDATE
 // trigger as UpdateTask atomically writes the original receipt and audit.
 // A same-time no-op has no receipt, version bump or fabricated audit.
+fn may_work_on(task: &Task, principal: &super::access::Actor) -> bool {
+    let owns = match task.owner() {
+        TaskOwner::Actor(owner) => owner.as_str() == principal.identity.as_str(),
+        TaskOwner::Team(_) => false,
+    };
+    principal.role == "admin"
+        || (principal.role == "viewer" && !principal.identity.starts_with("service:") && owns)
+}
+
+// Recheck active membership and personal ownership in the same CAS statement.
+// Reassignment, deactivation or a role change cannot authorize a later write.
+const PERSONAL_TASK_UPDATE: &str = "UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=? AND EXISTS (SELECT 1 FROM crm_users AS m WHERE m.tenant_id=crm_activity_task_records.tenant AND m.email=? AND m.active=1 AND (m.role='admin' OR (m.role='viewer' AND m.email NOT LIKE 'service:%' AND json_extract(crm_activity_task_records.state,'$.owner.actor_id')=m.email)))";
+
 pub(super) async fn schedule_reminder_typed(
     input: ReminderInput,
     key: &str,
     db: &D1Database,
-    tenant: &str,
     id: &str,
-    actor: &str,
+    principal: &super::access::Actor,
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    let tenant = principal.tenant.as_str();
+    let actor = principal.identity.as_str();
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(MutationFailure::domain(
             "IDEMPOTENCY_KEY_REQUIRED",
@@ -513,7 +534,18 @@ pub(super) async fn schedule_reminder_typed(
         )));
     }
     let digest = hash("schedule_reminder", id, &input)?;
-    let current = stored(db, tenant, id).await;
+    let Some(mut task) = stored(db, tenant, id).await? else {
+        return Ok(Err(MutationFailure::domain(
+            "NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
+    };
+    if !may_work_on(&task, principal) {
+        return Ok(Err(MutationFailure::domain(
+            "ACTIVITIES_TASK_FORBIDDEN",
+            ErrorCode::PermissionDenied,
+        )));
+    }
     if let Some(previous) = prior(db, tenant, key).await? {
         if previous.digest != digest {
             return Ok(Err(MutationFailure::domain(
@@ -522,6 +554,12 @@ pub(super) async fn schedule_reminder_typed(
             )));
         }
         let task = decode(&previous.state)?;
+        if !may_work_on(&task, principal) {
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_TASK_FORBIDDEN",
+                ErrorCode::PermissionDenied,
+            )));
+        }
         if task.task_id().as_str() != id {
             return Ok(Err(MutationFailure::domain(
                 "IDEMPOTENCY_CONFLICT",
@@ -535,12 +573,6 @@ pub(super) async fn schedule_reminder_typed(
             changed: true,
         }));
     }
-    let Some(mut task) = current? else {
-        return Ok(Err(MutationFailure::domain(
-            "NOT_FOUND",
-            ErrorCode::NotFound,
-        )));
-    };
     let changed = match task.schedule_reminder(ScheduleReminder {
         expected_version: input.expected_version,
         reminder_at_unix_nanos: input.reminder_at_unix_nanos,
@@ -571,7 +603,7 @@ pub(super) async fn schedule_reminder_typed(
     let saved = state(&task)?;
     let result = bind(
         db,
-        "UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?",
+        PERSONAL_TASK_UPDATE,
         &[
             JsValue::from_str(&saved),
             JsValue::from_f64(task.version() as f64),
@@ -582,6 +614,7 @@ pub(super) async fn schedule_reminder_typed(
             JsValue::from_str(tenant),
             JsValue::from_str(id),
             JsValue::from_f64(input.expected_version as f64),
+            JsValue::from_str(actor),
         ],
     )?
     .run()
@@ -600,11 +633,12 @@ pub(super) async fn complete_typed(
     input: CompleteInput,
     key: &str,
     db: &D1Database,
-    tenant: &str,
     id: &str,
-    actor: &str,
+    principal: &super::access::Actor,
     trace: &str,
 ) -> Result<std::result::Result<MutationOutcome, MutationFailure>> {
+    let tenant = principal.tenant.as_str();
+    let actor = principal.identity.as_str();
     if !(8..=120).contains(&key.len()) {
         return Ok(Err(MutationFailure::domain(
             "IDEMPOTENCY_KEY_REQUIRED",
@@ -612,7 +646,18 @@ pub(super) async fn complete_typed(
         )));
     }
     let digest = hash("complete", id, &input)?;
-    let current = stored(db, tenant, id).await;
+    let Some(mut task) = stored(db, tenant, id).await? else {
+        return Ok(Err(MutationFailure::domain(
+            "NOT_FOUND",
+            ErrorCode::NotFound,
+        )));
+    };
+    if !may_work_on(&task, principal) {
+        return Ok(Err(MutationFailure::domain(
+            "ACTIVITIES_TASK_FORBIDDEN",
+            ErrorCode::PermissionDenied,
+        )));
+    }
     if let Some(p) = prior(db, tenant, key).await? {
         if p.digest != digest {
             return Ok(Err(MutationFailure::domain(
@@ -621,6 +666,12 @@ pub(super) async fn complete_typed(
             )));
         }
         let task = decode(&p.state)?;
+        if !may_work_on(&task, principal) {
+            return Ok(Err(MutationFailure::domain(
+                "ACTIVITIES_TASK_FORBIDDEN",
+                ErrorCode::PermissionDenied,
+            )));
+        }
         if task.task_id().as_str() != id {
             return Ok(Err(MutationFailure::domain(
                 "IDEMPOTENCY_CONFLICT",
@@ -634,12 +685,6 @@ pub(super) async fn complete_typed(
             changed: true,
         }));
     }
-    let Some(mut task) = current? else {
-        return Ok(Err(MutationFailure::domain(
-            "NOT_FOUND",
-            ErrorCode::NotFound,
-        )));
-    };
     let changed = match task.complete(CompleteTask {
         expected_version: input.expected_version,
         occurred_at_unix_nanos: now_nanos(),
@@ -667,11 +712,24 @@ pub(super) async fn complete_typed(
         }));
     }
     let saved = state(&task)?;
-    let r=bind(db,"UPDATE crm_activity_task_records SET state=?,version=?,idem_key=?,idem_digest=?,request_id=?,actor=? WHERE tenant=? AND id=? AND version=?",
-        &[JsValue::from_str(&saved),JsValue::from_f64(task.version() as f64),
-          JsValue::from_str(key),JsValue::from_str(&digest),JsValue::from_str(trace),
-          JsValue::from_str(actor),JsValue::from_str(tenant),JsValue::from_str(id),
-          JsValue::from_f64(input.expected_version as f64)])?.run().await;
+    let r = bind(
+        db,
+        PERSONAL_TASK_UPDATE,
+        &[
+            JsValue::from_str(&saved),
+            JsValue::from_f64(task.version() as f64),
+            JsValue::from_str(key),
+            JsValue::from_str(&digest),
+            JsValue::from_str(trace),
+            JsValue::from_str(actor),
+            JsValue::from_str(tenant),
+            JsValue::from_str(id),
+            JsValue::from_f64(input.expected_version as f64),
+            JsValue::from_str(actor),
+        ],
+    )?
+    .run()
+    .await;
     finish_write(
         prior(db, tenant, key),
         trace,

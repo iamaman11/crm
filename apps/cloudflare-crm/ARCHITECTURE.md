@@ -59,9 +59,12 @@ Access проверяется до dispatch. Tenant/actor/role/server request_id
 доступные по текущему типизированному контракту поля каждой записи своего tenant** —
 наравне с `admin`, без полевого маскирования, скрытия персональных значений или
 отдельной `field visibility` матрицы. Для Get/List/Customer360 нельзя вводить
-разные проекции полей по ролям. `viewer` остаётся только читателем: Write и
-AdminRead RPC определяет существующая compiled Rust policy; доступ к чужому tenant,
-несанкционированному RPC или изменение данных не разрешается. Отсутствующие в
+разные проекции полей по ролям. Обычные Write и AdminRead доступны только `admin`.
+Узкие SelfWrite RPC разрешают только подтверждённое собственное действие: для Task это
+завершение и напоминание своей задачи активным человеческим участником, без создания,
+редактирования, делегирования или чужих задач. Проверка подписанного actor, tenant,
+membership и версии выполняется владельцем, активность/владелец повторно проверяются
+атомарно внутри D1 CAS. Служебный viewer не получает личных прав. Отсутствующие в
 Protobuf бизнес-поля не становятся автоматически новыми публичными API; служебные
 секреты, Access JWT и технические данные не являются бизнес-полями CRM.
 Исторические generic `QueryVisibilityAuthorizer`/field masks — **осознанное C
@@ -106,7 +109,8 @@ Owner обеспечивает CAS, idempotent replay и атомарность 
 
 React использует strict TSX, allowJs=false, noUncheckedIndexedAccess и exactOptionalPropertyTypes.
 Не обходить типы через any/as unknown as или suppressed diagnostics. Общий client — единственный
-business transport. Health/session/doctor/version и bounded CSV download — ограниченные исключения.
+business transport, включая CSV download через generated Connect. Только технические
+health/session/doctor/version остаются отдельными HTTP-маршрутами.
 Общие controls/tokens принадлежат packages/ui; feature layouts используют CSS Modules.
 
 ## 4. Эволюция тестового приложения

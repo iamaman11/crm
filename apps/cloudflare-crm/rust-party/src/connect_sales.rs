@@ -625,8 +625,7 @@ impl MemberV2Service {
 // Same Task codec, D1 table, CAS and receipts as the blocked historical HTTP.
 struct TaskV2Service {
     env: Arc<Env>,
-    tenant: String,
-    actor: String,
+    actor: access::Actor,
     request_id: String,
 }
 
@@ -635,7 +634,7 @@ impl OwnedService for TaskV2Service {
 }
 impl TaskV2Service {
     async fn persisted_account(&self, id: &str) -> std::result::Result<String, ConnectError> {
-        activity_tasks::account_id(&self.d1()?, &self.tenant, id)
+        activity_tasks::account_id(&self.d1()?, &self.actor.tenant, id)
             .await
             .map_err(|_| ConnectError::internal("Task Account read failed"))?
             .ok_or_else(|| ConnectError::internal("Task Account missing"))
@@ -1187,8 +1186,7 @@ pub(super) fn router(
     }))
     .add_service(Arc::new(TaskV2Service {
         env: Arc::clone(&env),
-        tenant: tenant.to_owned(),
-        actor: actor.to_owned(),
+        actor: verified.clone(),
         request_id: request_id.to_owned(),
     }))
     .add_service(Arc::new(InteractionV2Service {
