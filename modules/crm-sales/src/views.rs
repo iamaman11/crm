@@ -24,7 +24,9 @@ impl SalesOwnerScope {
         let value = match self {
             Self::Actor(value) | Self::Team(value) => value,
         };
-        if value.is_empty() || value != value.trim() || value.contains(['/', '\\', '%'])
+        if value.is_empty()
+            || value != value.trim()
+            || value.contains(['/', '\\', '%'])
             || value.chars().any(char::is_control)
         {
             return Err(invalid("SALES_OWNER_INVALID"));
@@ -155,7 +157,9 @@ impl SalesDealView {
         )
         .map_err(|_| invalid("SALES_VIEW_STATE_INVALID"))?;
         if let Some(owner) = &value.owner_filter {
-            owner.validate().map_err(|_| invalid("SALES_VIEW_STATE_INVALID"))?;
+            owner
+                .validate()
+                .map_err(|_| invalid("SALES_VIEW_STATE_INVALID"))?;
         }
         if value.version < 1 {
             return Err(invalid("SALES_VIEW_STATE_INVALID"));
