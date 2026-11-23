@@ -38,7 +38,9 @@ message PageInfo {
 // dual owner; the original domain validates the selected identifier.
 message ActorOrTeamOwner {
   oneof owner {
-    string actor_id = 1;
+    // Business assignment target, NEVER the caller's authenticated identity.
+    // Write owners resolve it against the signed tenant's active human roster.
+    string assignee_identity = 1;
     string team_id = 2;
   }
 }

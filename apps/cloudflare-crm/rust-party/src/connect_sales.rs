@@ -906,7 +906,7 @@ impl SalesV2Service {
             return Ok(None);
         };
         let selection = match value.owner.as_ref() {
-            Some(Owner::ActorId(id)) => crm_sales::SalesOwnerScope::Actor(id.clone()),
+            Some(Owner::AssigneeIdentity(id)) => crm_sales::SalesOwnerScope::Actor(id.clone()),
             Some(Owner::TeamId(id)) => crm_sales::SalesOwnerScope::Team(id.clone()),
             None => return Err(ConnectError::invalid_argument("SALES_OWNER_REQUIRED")),
         };
@@ -919,7 +919,7 @@ impl SalesV2Service {
         use core_v2::{ActorOrTeamOwner, actor_or_team_owner::Owner};
         ActorOrTeamOwner {
             owner: Some(match owner {
-                crm_sales::SalesOwnerScope::Actor(id) => Owner::ActorId(id.clone()),
+                crm_sales::SalesOwnerScope::Actor(id) => Owner::AssigneeIdentity(id.clone()),
                 crm_sales::SalesOwnerScope::Team(id) => Owner::TeamId(id.clone()),
             }),
             ..Default::default()

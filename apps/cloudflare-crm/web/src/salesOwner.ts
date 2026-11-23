@@ -14,12 +14,12 @@ export async function salesOwners(signal:AbortSignal) {
   };
 }
 export function ownerValue(owner:Deal["owner"]):string {
-  if(owner?.owner.case==="actorId")return "actor:"+owner.owner.value;
+  if(owner?.owner.case==="assigneeIdentity")return "actor:"+owner.owner.value;
   if(owner?.owner.case==="teamId")return "team:"+owner.owner.value;
   return "";
 }
 export function ownerWire(value:string) {
-  if(value.startsWith("actor:"))return {owner:{case:"actorId" as const,value:value.slice(6)}};
+  if(value.startsWith("actor:"))return {owner:{case:"assigneeIdentity" as const,value:value.slice(6)}};
   if(value.startsWith("team:"))return {owner:{case:"teamId" as const,value:value.slice(5)}};
   return undefined;
 }

@@ -5267,7 +5267,7 @@ console.log(JSON.stringify({event:"crm.native-g3-sales-v2",result:"PASS",
    });
    assert.equal(salesTeamCreated.status,200,describeProtobuf(salesTeamCreated.body));
    const ownerFilter={owner:{case:"teamId",value:salesTeam}};
-   const actorOwner={owner:{case:"actorId",value:"native-viewer@example.test"}};
+   const actorOwner={owner:{case:"assigneeIdentity",value:"native-viewer@example.test"}};
    const pId="sk07-sales-owner-"+randomUUID();
    const pMade=await salesV2("CreatePipeline",admin,{pipelineId:pId,name:"Owner filter QA "+pId,
      stages:[{stageId:"lead",name:"Lead",probabilityBasisPoints:5000}],
