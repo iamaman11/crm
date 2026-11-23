@@ -10,7 +10,7 @@ import {allMembers,humanMember} from "./memberCatalog";
 import {TeamWorkspace} from "./TeamWorkspace";
 import {TerritoryWorkspace} from "./SalesCoverage";
 import {allTeams} from "./teamCatalog";
-import {ownerValue} from "./ownerCatalog";
+import {ownerChoices,ownerValue} from "./ownerCatalog";
 
 const roleName=(role:MemberRole)=>role===MemberRole.ADMIN?"Администратор":
   role===MemberRole.VIEWER?"Чтение всех полей":"Неизвестная роль";
@@ -139,7 +139,8 @@ export function MemberScreen(){
       <MutationNotice state={mutation}/>
     </section>
     <TeamWorkspace query={teams} members={members} isAdmin={isAdmin} actor={actor} onChanged={workload.reload}/>
-    <TerritoryWorkspace isAdmin={isAdmin}/>
+    <TerritoryWorkspace isAdmin={isAdmin} choices={ownerChoices(members,teams.data??[])}
+      ownersUnavailable={roster.busy||teams.busy||!!roster.error||!!teams.error}/>
     <section aria-label="Реальная нагрузка команды">
       <h2>Распределение и нагрузка</h2>
       <p>Авторитетные числа по всем задачам до LIMIT, включая завершённые.

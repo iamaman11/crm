@@ -2713,6 +2713,10 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
    assert.ok((await sql("SELECT actor FROM crm_audit WHERE tenant_id='"+
      tenantSql+"' AND subject_id='"+browserStaff+"'"))[0].actor===adminIdentity);
    await page.getByRole("row").filter({hasText:browserStaff}).waitFor();
+   const territoryEditor=page.getByRole("form",{name:"Настройка территории"});
+   await page.getByRole("button",{name:"Создать территорию",exact:true}).click();
+   await territoryEditor.getByLabel("Ответственный территории",{exact:true}).selectOption("actor:"+browserStaff);
+   await territoryEditor.getByRole("button",{name:"Отмена",exact:true}).click();
    await reloadDocument();
    await page.getByRole("row").filter({hasText:browserStaff}).waitFor();
    const delegatedTitle="Browser SK07 delegated "+runId;
@@ -2785,6 +2789,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await mutation(teamForm.getByRole("button",{name:"Сохранить команду",exact:true}),"CreateTeam");
      const teamId=(await sql("SELECT id FROM crm_access_teams WHERE tenant=? AND json_extract(state,'$.name')=?",tenantA,teamName))[0].id;
      const teamRow=page.getByRole("row").filter({hasText:teamName});
+     await page.getByRole("button",{name:"Создать территорию",exact:true}).click();
+     await territoryEditor.getByLabel("Ответственный территории",{exact:true}).selectOption("team:"+teamId);
+     await territoryEditor.getByRole("button",{name:"Отмена",exact:true}).click();
      await teamRow.getByRole("link",{name:"Задачи команды",exact:true}).click();
      await page.getByRole("button",{name:"Новая задача",exact:true}).click();
      const poolName="Browser SK07 pool "+runId;
@@ -2858,6 +2865,9 @@ export async function typedBrowser({base,admin,viewer,tenantB,sql,sourceSha,admi
      await teamForm.getByLabel("Активная команда",{exact:true}).uncheck();
      await mutation(teamForm.getByRole("button",{name:"Сохранить команду",exact:true}),"UpdateTeam");
      await teamRow.getByText("Архив",{exact:true}).waitFor();
+     await page.getByRole("button",{name:"Создать территорию",exact:true}).click();
+     await expect(territoryEditor.getByLabel("Ответственный территории",{exact:true}).locator(`option[value="team:${teamId}"]`)).toHaveCount(0);
+     await territoryEditor.getByRole("button",{name:"Отмена",exact:true}).click();
      checkpoint("SK-07.C UI team roster, pool assignment, reload, reassignment and archive");
      await navigate("sales/"+encodeURIComponent(ownedDealId),"Карточка сделки");
      await page.getByRole("button",{name:"Открыть повторно",exact:true}).click();

@@ -36,9 +36,10 @@ function TerritoryOptions({items,current="",exclude=""}:{items:SalesTerritory[];
       </option>)}</>;
 }
 
-export function TerritoryWorkspace({isAdmin}:{isAdmin:boolean}) {
+export function TerritoryWorkspace({isAdmin,choices,ownersUnavailable}:{
+  isAdmin:boolean;choices:Choices;ownersUnavailable:boolean;
+}) {
   const territories=useQuery(useCallback(allTerritories,[]));
-  const owners=useQuery(useCallback(allOwners,[]));
   const [selected,setSelected]=useState("");
   const [ownerFilter,setOwnerFilter]=useState("");
   const [cursor,setCursor]=useState("");
@@ -52,7 +53,6 @@ export function TerritoryWorkspace({isAdmin}:{isAdmin:boolean}) {
     },{signal});
   },[selected,ownerFilter,cursor,includeArchived]));
   const items=territories.data??[];
-  const choices=owners.data?.choices??[];
   const [editing,setEditing]=useState<SalesTerritory>();
   const [creating,setCreating]=useState(false);
   const [id,setId]=useState<SalesTerritory["territoryId"]>(newId);
@@ -77,8 +77,8 @@ export function TerritoryWorkspace({isAdmin}:{isAdmin:boolean}) {
   return <section aria-label="Территории продаж">
     <h2>Территории и клиентские портфели</h2>
     <p>Территория объединяет клиентов и имеет ответственного по умолчанию. Владелец клиентского портфеля назначается в карточке клиента. Изменение портфеля не меняет владельцев существующих сделок.</p>
-    <QueryNotice query={territories}/><QueryNotice query={owners}/>
-    {isAdmin&&<Button disabled={pending||owners.busy||territories.busy} onClick={()=>start()}>Создать территорию</Button>}
+    <QueryNotice query={territories}/>
+    {isAdmin&&<Button disabled={pending||ownersUnavailable||territories.busy} onClick={()=>start()}>Создать территорию</Button>}
     {!territories.busy&&!territories.error&&items.length===0&&<p>Территорий пока нет.</p>}
     <div role="region" aria-label="Территории продаж — таблица" tabIndex={0} style={{maxWidth:"100%",overflowX:"auto"}}>
       <table><thead><tr><th scope="col">Территория</th><th scope="col">Родительская территория</th>
@@ -88,7 +88,7 @@ export function TerritoryWorkspace({isAdmin}:{isAdmin:boolean}) {
           <td>{territoryLabel(items,t.configuration?.parentId)}</td>
           <td>{ownerLabel(t.configuration?.defaultOwner,choices)}</td><td>{t.configuration?.archived?"Архив":"Активна"}</td>
           <td><Button variant="secondary" onClick={()=>{setSelected(t.territoryId);setCursor("");}}>Клиенты территории</Button>{" "}
-            {isAdmin&&<Button variant="secondary" disabled={pending} onClick={()=>start(t)}>Изменить территорию</Button>}</td>
+            {isAdmin&&<Button variant="secondary" disabled={pending||ownersUnavailable} onClick={()=>start(t)}>Изменить территорию</Button>}</td>
         </tr>)}</tbody></table>
     </div>
     {isAdmin&&(creating||editing)&&<form aria-label="Настройка территории" onSubmit={event=>{
@@ -121,7 +121,7 @@ export function TerritoryWorkspace({isAdmin}:{isAdmin:boolean}) {
           setOwner(ownerValue(editing.configuration?.defaultOwner));}
         setArchived(value);mutation.changed();
       }}/> Архивная территория</label></p>}
-      <Button type="submit" disabled={pending||!name.trim()||!owner}>Сохранить территорию</Button>{" "}
+      <Button type="submit" disabled={pending||ownersUnavailable||!name.trim()||!owner}>Сохранить территорию</Button>{" "}
       <Button type="button" variant="secondary" disabled={pending} onClick={close}>Отмена</Button>
     </form>}
     <MutationNotice state={mutation}/>
