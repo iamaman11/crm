@@ -13,7 +13,12 @@ fn invalid(code: &'static str) -> SdkError {
 }
 
 fn conflict(code: &'static str) -> SdkError {
-    SdkError::new(code, ErrorCategory::Conflict, false, "Sales coverage conflict.")
+    SdkError::new(
+        code,
+        ErrorCategory::Conflict,
+        false,
+        "Sales coverage conflict.",
+    )
 }
 
 fn check_id(id: &str) -> Result<(), SdkError> {
