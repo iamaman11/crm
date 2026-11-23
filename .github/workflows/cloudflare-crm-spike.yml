@@ -144,7 +144,7 @@ jobs:
           CRM_PROTO_DESCRIPTOR_FILE: /tmp/crm-proto-descriptors.binpb
         shell: bash
         run: |
-          cargo clippy --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations &
+          cargo clippy --jobs 2 --locked --manifest-path apps/cloudflare-crm/rust-party/Cargo.toml --target wasm32-unknown-unknown --features native -- -D clippy::all -D unfulfilled_lint_expectations &
           clippy_pid=$!
           status=0
           pnpm web:check && git diff --exit-code -- pnpm-lock.yaml || status=$?
