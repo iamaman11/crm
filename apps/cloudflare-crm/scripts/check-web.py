@@ -28,8 +28,8 @@ with TemporaryDirectory() as temporary:
     run(pnpm, "web:generate", image)
     run(node, "scripts/crm-rpc-descriptors.mjs", image)
     run(node, "--test", "scripts/crm-core-v2.test.mjs", "scripts/crm-cutover-contracts.test.mjs",
-        "scripts/crm-rpc-descriptors.test.mjs", "scripts/crm-clean-schema.test.mjs",
-        "scripts/crm-architecture-ast.test.mjs")
+        "scripts/crm-rpc-descriptors.test.mjs", "scripts/crm-clean-schema.test.mjs")
+    run(pnpm, "web:lint")
     for package in ["@ultimate-crm/client", "@ultimate-crm/ui", "cloudflare-crm"]:
         run(pnpm, "--filter", package, "typecheck")
     run(pnpm, "exec", "vitest", "run", "packages/client/src/cloudflare-v2-contract.test.ts",

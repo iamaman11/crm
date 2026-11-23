@@ -11,7 +11,7 @@
     "web:generate": "buf generate --template buf.gen.web.yaml",
     "gen": "pnpm web:generate",
     "web:typecheck": "pnpm web:generate && pnpm -r --if-present typecheck",
-    "web:lint": "pnpm -r --if-present lint",
+    "web:lint": "pnpm exec oxlint -c .oxlintrc.json apps/cloudflare-crm/web/src packages/client/src packages/ui/src",
     "web:test": "pnpm -r --if-present test",
     "web:build": "pnpm web:generate && pnpm --filter cloudflare-crm build",
     "web:check": "python apps/cloudflare-crm/scripts/check-web.py"

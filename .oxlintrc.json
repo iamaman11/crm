@@ -1,0 +1,117 @@
+{
+  "plugins": [
+    "typescript",
+    "import"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "apps/cloudflare-crm/web/src/**/*.ts",
+        "apps/cloudflare-crm/web/src/**/*.tsx"
+      ],
+      "rules": {
+        "typescript/no-explicit-any": "error",
+        "typescript/ban-ts-comment": [
+          "error",
+          {
+            "ts-expect-error": true,
+            "ts-ignore": true,
+            "ts-nocheck": true,
+            "ts-check": true
+          }
+        ],
+        "typescript/no-require-imports": "error",
+        "no-eval": "error",
+        "no-implied-eval": "error",
+        "no-new-func": "error",
+        "import/no-relative-parent-imports": "error",
+        "no-restricted-globals": [
+          "error",
+          "fetch",
+          "XMLHttpRequest",
+          "WebSocket",
+          "EventSource",
+          "eval",
+          "Function",
+          "require"
+        ],
+        "no-restricted-properties": [
+          "error",
+          {
+            "property": "fetch",
+            "message": "CRM browser network access belongs to the generated Connect client only"
+          },
+          {
+            "property": "XMLHttpRequest",
+            "message": "No direct browser transport outside the CRM client"
+          },
+          {
+            "property": "WebSocket",
+            "message": "No direct browser transport outside the CRM client"
+          },
+          {
+            "property": "EventSource",
+            "message": "No direct browser transport outside the CRM client"
+          },
+          {
+            "property": "sendBeacon",
+            "message": "No alternative browser transport"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@ultimate-crm/client",
+                "message": "Use @ultimate-crm/client/cloudflare"
+              }
+            ],
+            "patterns": [
+              {
+                "group": [
+                  "@connectrpc/*",
+                  "@bufbuild/*",
+                  "@ultimate-crm/client/*",
+                  "!@ultimate-crm/client/cloudflare",
+                  "**/packages/client/**",
+                  "**/packages/ui/**",
+                  "**/gateway",
+                  "**/gateway.*",
+                  "**/transport",
+                  "**/transport.*"
+                ],
+                "message": "CRM UI must use its public generated Connect client, not protocol, legacy transport or private workspace source"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/ui/src/**/*.ts",
+        "packages/ui/src/**/*.tsx"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@connectrpc/*",
+                  "@bufbuild/*",
+                  "**/packages/client/**",
+                  "**/gateway",
+                  "**/transport"
+                ],
+                "message": "UI components cannot own the CRM transport"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

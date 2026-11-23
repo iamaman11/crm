@@ -2,12 +2,6 @@
   "schema_version": 1,
   "desired_runtime": "one workers-rs Rust/WASM Worker, embedded Axum 0.8 Connect-Rust/Buffa, one D1",
   "browser_wire_format": "Connect binary Protobuf",
-  "allowed_non_rpc_http": [
-    "/api/health",
-    "/api/doctor",
-    "/api/session",
-    "/api/version"
-  ],
   "integration_runtime": {
     "owner": "Wrangler/createTestHarness(workerd)",
     "fixture_binding": "DB",

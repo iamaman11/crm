@@ -246,7 +246,10 @@ try{
    }
  }
 
- for(const path of ["/api/parties","/api/accounts"]){
+ // Only technical HTTP endpoints remain; business paths must not bypass Connect.
+ for(const path of ["/api/parties","/api/accounts",
+     "/api/customer-data-operations/parties.csv","/api/manual-business",
+     "/api/version/other"]){
    assert.equal((await call(path,admin)).status,404,path);
  }
  for(const path of ["/crm.parties.v2.PartyService/GetParty",
