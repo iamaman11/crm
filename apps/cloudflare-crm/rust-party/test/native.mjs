@@ -1298,7 +1298,8 @@ console.log(JSON.stringify({event:"crm.native-g3-activities-tasks-v2",
     ...scheduleTask,reminderAt:{seconds:1862000000n,nanos:0},
     precondition:{expectedVersion:5n,idempotencyKey:"candidate-reminder-audit-rollback"}
   });
-  assert.equal(denied.status,409,describeProtobuf(denied.body));
+  assert.equal(denied.status,503,describeProtobuf(denied.body));
+  assert.equal(denied.body.message,"ACTIVITIES_TASK_WRITE_UNCONFIRMED");
   assert.deepEqual(await taskActorSnapshot(),beforeReminderFault,
     "Late reminder audit failure must roll back Task state and original receipt");
  }finally{await sql("DROP TRIGGER fixture_fail_reminder_audit");}
