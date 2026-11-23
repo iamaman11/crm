@@ -418,9 +418,10 @@ impl task_wire::TaskService for TaskV2Service {
         _ctx: RequestContext,
         _req: ServiceRequest<'_, task_wire::ListTaskWorkloadRequest>,
     ) -> ServiceResult<task_wire::ListTaskWorkloadResponse> {
-        let (buckets, as_of_unix_seconds) = activity_tasks::workload(&self.d1()?, &self.actor.tenant)
-            .await
-            .map_err(|_| ConnectError::internal("Task workload D1 failed"))?;
+        let (buckets, as_of_unix_seconds) =
+            activity_tasks::workload(&self.d1()?, &self.actor.tenant)
+                .await
+                .map_err(|_| ConnectError::internal("Task workload D1 failed"))?;
         let as_count = |n: i64| {
             u64::try_from(n).map_err(|_| ConnectError::internal("Invalid Task workload count"))
         };
